@@ -75,6 +75,7 @@ func registerRoachmart(r registry.Registry) {
 			Name:    fmt.Sprintf("roachmart/partition=%v", v),
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(9, spec.Geo(), spec.Zones("us-central1-b,us-west1-b,europe-west2-b")),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

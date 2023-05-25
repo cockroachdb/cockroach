@@ -151,6 +151,7 @@ func registerAllocator(r registry.Registry) {
 		Name:    `replicate/up/1to3`,
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
@@ -159,6 +160,7 @@ func registerAllocator(r registry.Registry) {
 		Name:    `replicate/rebalance/3to5`,
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(6),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocator(ctx, t, c, 3, 42.0)
 		},
@@ -168,6 +170,7 @@ func registerAllocator(r registry.Registry) {
 		Owner:   registry.OwnerKV,
 		Timeout: 10 * time.Minute,
 		Cluster: r.MakeClusterSpec(9, spec.CPU(1)),
+		Leases:  registry.MetamorphicLeases,
 		Run:     runWideReplication,
 	})
 }

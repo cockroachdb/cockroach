@@ -30,6 +30,7 @@ func registerDiskFull(r registry.Registry) {
 		Name:    "disk-full",
 		Owner:   registry.OwnerStorage,
 		Cluster: r.MakeClusterSpec(5),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				t.Skip("you probably don't want to fill your local disk")

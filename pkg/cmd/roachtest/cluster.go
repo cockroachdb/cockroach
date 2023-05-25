@@ -660,6 +660,9 @@ type clusterImpl struct {
 	expiration    time.Time
 	encAtRest     bool // use encryption at rest
 
+	// clusterSettings are additional cluster settings set on cluster startup.
+	clusterSettings map[string]string
+
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
 }
@@ -1857,6 +1860,8 @@ func (c *clusterImpl) StartE(
 		install.EnvOption(settings.Env),
 		install.NumRacksOption(settings.NumRacks),
 		install.BinaryOption(settings.Binary),
+		install.ClusterSettingsOption(c.clusterSettings),
+		install.ClusterSettingsOption(settings.ClusterSettings),
 	}
 
 	if err := roachprod.Start(ctx, l, c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {

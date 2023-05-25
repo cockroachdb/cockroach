@@ -191,6 +191,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			Name:    `rebalance/by-load/leases`,
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() && runtime.GOARCH == "arm64" {
 					t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
@@ -222,6 +223,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			Name:    `rebalance/by-load/replicas`,
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					concurrency = 32
@@ -260,6 +262,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			Name:    `rebalance/by-load/replicas/ssds=2`,
 			Owner:   registry.OwnerKV,
 			Cluster: cSpec,
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					t.Fatal("cannot run multi-store in local mode")

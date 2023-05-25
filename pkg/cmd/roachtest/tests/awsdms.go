@@ -192,6 +192,7 @@ func registerAWSDMS(r registry.Registry) {
 		Owner:   registry.OwnerSQLFoundations, // TODO(otan): add a migrations OWNERS team
 		Cluster: r.MakeClusterSpec(1),
 		Tags:    []string{`default`, `awsdms`},
+		Leases:  registry.MetamorphicLeases,
 		Run:     runAWSDMS,
 	})
 }

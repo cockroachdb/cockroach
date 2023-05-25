@@ -28,6 +28,7 @@ func registerSchemaChangeInvertedIndex(r registry.Registry) {
 		Name:    "schemachange/invertedindex",
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(5),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},

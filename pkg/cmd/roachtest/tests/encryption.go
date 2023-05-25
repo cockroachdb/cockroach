@@ -86,6 +86,7 @@ func registerEncryption(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:              fmt.Sprintf("encryption/nodes=%d", n),
 			EncryptionSupport: registry.EncryptionAlwaysEnabled,
+			Leases:            registry.MetamorphicLeases,
 			Owner:             registry.OwnerStorage,
 			Cluster:           r.MakeClusterSpec(n),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

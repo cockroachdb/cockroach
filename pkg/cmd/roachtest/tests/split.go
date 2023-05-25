@@ -151,6 +151,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// This number was determined experimentally. Often, but not always,
 			// more splits will happen.
@@ -196,6 +197,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/uniform/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -215,6 +217,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30, // 10 GB
@@ -236,6 +239,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/sequential/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -260,6 +264,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30, // 10 GB
@@ -278,6 +283,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/spanning/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -305,6 +311,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/ycsb/a/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -327,6 +334,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/ycsb/b/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize: 10 << 30, // 10 GB
@@ -348,6 +356,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/ycsb/d/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -370,6 +379,7 @@ func registerLoadSplits(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/load/ycsb/e/nodes=%d/obj=cpu", numRoachNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:      10 << 30,               // 10 GB
@@ -502,6 +512,7 @@ func registerLargeRange(r registry.Registry) {
 		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(numNodes),
+		Leases:  registry.MetamorphicLeases,
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLargeRangeSplits(ctx, t, c, size)

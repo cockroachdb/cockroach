@@ -182,6 +182,7 @@ func registerSSTableCorruption(r registry.Registry) {
 		Name:    "sstable-corruption/table",
 		Owner:   registry.OwnerStorage,
 		Cluster: r.MakeClusterSpec(3),
+		Leases:  registry.MetamorphicLeases,
 		Timeout: 2 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSSTableCorruption(ctx, t, c)

@@ -120,6 +120,7 @@ func registerMultiTenantTPCH(r registry.Registry) {
 		Name:    "multitenant/tpch",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(1 /* nodeCount */),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultiTenantTPCH(ctx, t, c, false /* enableDirectScans */)
 		},
@@ -128,6 +129,7 @@ func registerMultiTenantTPCH(r registry.Registry) {
 		Name:    "multitenant/tpch_direct_scans",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(1 /* nodeCount */),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultiTenantTPCH(ctx, t, c, true /* enableDirectScans */)
 		},

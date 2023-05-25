@@ -31,6 +31,7 @@ func registerSecure(r registry.Registry) {
 			Tags:    []string{"smoketest", "weekly"},
 			Owner:   registry.OwnerTestEng,
 			Cluster: r.MakeClusterSpec(numNodes),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				settings := install.MakeClusterSettings(install.SecureOption(true))
@@ -46,6 +47,7 @@ func registerSecure(r registry.Registry) {
 		Name:    "smoketest/secure/multitenant",
 		Owner:   registry.OwnerMultiTenant,
 		Cluster: r.MakeClusterSpec(2),
+		Leases:  registry.MetamorphicLeases,
 		Run:     multitenantSmokeTest,
 	})
 }

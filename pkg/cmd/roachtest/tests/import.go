@@ -89,6 +89,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Name:    "import/nodeShutdown/worker",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(4),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
@@ -103,6 +104,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Name:    "import/nodeShutdown/coordinator",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(4),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
@@ -181,6 +183,7 @@ func registerImportTPCC(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
 		Timeout:           5 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runImportTPCC(ctx, t, c, fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
 				5*time.Hour, geoWarehouses)
@@ -213,6 +216,7 @@ func registerImportTPCH(r registry.Registry) {
 			Cluster:           r.MakeClusterSpec(item.nodes),
 			Timeout:           item.timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
+			Leases:            registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tick, perfBuf := initBulkJobPerfArtifacts(t.Name(), item.timeout)
 
@@ -398,6 +402,7 @@ func registerImportDecommissioned(r registry.Registry) {
 		Name:    "import/decommissioned",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(4),
+		Leases:  registry.MetamorphicLeases,
 		Run:     runImportDecommissioned,
 	})
 }

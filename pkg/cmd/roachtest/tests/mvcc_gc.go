@@ -42,6 +42,7 @@ func registerMVCCGC(r registry.Registry) {
 		Owner:   registry.OwnerKV,
 		Timeout: 30 * time.Minute,
 		Cluster: r.MakeClusterSpec(3),
+		Leases:  registry.MetamorphicLeases,
 		Run:     runMVCCGC,
 	})
 }

@@ -42,6 +42,7 @@ func registerTLP(r registry.Registry) {
 		RequiresLicense: true,
 		Tags:            nil,
 		Cluster:         r.MakeClusterSpec(1),
+		Leases:          registry.MetamorphicLeases,
 		NativeLibs:      registry.LibGEOS,
 		Run:             runTLP,
 	})

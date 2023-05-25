@@ -12,6 +12,7 @@ package registry
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"time"
 
@@ -84,6 +85,10 @@ type TestSpec struct {
 	// cannot be run with encryption enabled.
 	EncryptionSupport EncryptionSupport
 
+	// Leases specifies the kind of leases to use for the cluster. Defaults
+	// to epoch leases.
+	Leases LeaseType
+
 	// SkipPostValidations is a bit-set of post-validations that should be skipped
 	// after the test completes. This is useful for tests that are known to be
 	// incompatible with some validations. By default, tests will run all
@@ -148,3 +153,33 @@ func PromSub(raw string) string {
 	invalidPromRE := regexp.MustCompile("[^a-zA-Z0-9_]")
 	return invalidPromRE.ReplaceAllLiteralString(raw, "_")
 }
+
+// LeaseType specifies the type of leases to use for the cluster.
+type LeaseType int
+
+func (l LeaseType) String() string {
+	switch l {
+	case DefaultLeases:
+		return "default"
+	case EpochLeases:
+		return "epoch"
+	case ExpirationLeases:
+		return "expiration"
+	case MetamorphicLeases:
+		return "metamorphic"
+	default:
+		return fmt.Sprintf("leasetype-%d", l)
+	}
+}
+
+const (
+	// DefaultLeases uses the default cluster lease type.
+	DefaultLeases = LeaseType(iota)
+	// EpochLeases uses epoch leases where possible.
+	EpochLeases
+	// ExpirationLeases uses expiration leases for all ranges.
+	ExpirationLeases
+	// MetamorphicLeases randomly chooses epoch or expiration
+	// leases (across the entire cluster)
+	MetamorphicLeases
+)

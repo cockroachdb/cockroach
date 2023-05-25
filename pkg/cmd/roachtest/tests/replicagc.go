@@ -33,6 +33,7 @@ func registerReplicaGC(r registry.Registry) {
 			Name:    fmt.Sprintf("replicagc-changed-peers/restart=%t", restart),
 			Owner:   registry.OwnerReplication,
 			Cluster: r.MakeClusterSpec(6),
+			Leases:  registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runReplicaGCChangedPeers(ctx, t, c, restart)
 			},
