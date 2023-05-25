@@ -294,7 +294,6 @@ values
                      ├── stats: [rows=1]
                      ├── key: ()
                      ├── fd: ()-->(1)
-                     ├── distribution: test
                      ├── scan t93210
                      │    ├── columns: a:1(int!null)
                      │    ├── stats: [rows=1000]
