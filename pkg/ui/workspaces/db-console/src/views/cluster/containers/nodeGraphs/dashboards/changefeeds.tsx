@@ -11,13 +11,20 @@
 import React from "react";
 
 import LineGraph from "src/views/cluster/components/linegraph";
-import { Metric, Axis } from "src/views/shared/components/metricQuery";
+import { Axis, Metric } from "src/views/shared/components/metricQuery";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
-import { GraphDashboardProps } from "./dashboardUtils";
+import {
+  GraphDashboardProps,
+  nodeDisplayName,
+  storeIDsForNode,
+} from "./dashboardUtils";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
-  const { storeSources } = props;
+  const { storeSources, nodeIDs, nodeDisplayNameByID, storeIDsByNodeID } =
+    props;
 
   return [
     <LineGraph
@@ -90,6 +97,39 @@ export default function (props: GraphDashboardProps) {
           title="Retryable Errors"
           nonNegativeRate
         />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Ranges in catchup mode"
+      isKvGraph={false}
+      sources={storeSources}
+      tooltip="Total number of ranges with an active rangefeed that are performing catchup scan"
+    >
+      <Axis units={AxisUnits.Count} label="ranges">
+        <Metric
+          name="cr.node.distsender.rangefeed.catchup_ranges"
+          title="Ranges"
+          aggregator={TimeSeriesQueryAggregator.SUM}
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="RangeFeed catchup scans duration"
+      isKvGraph={false}
+      sources={storeSources}
+    >
+      <Axis units={AxisUnits.Duration} label="duration">
+        {nodeIDs.map(nid => (
+          <Metric
+            key={nid}
+            name="cr.store.kv.rangefeed.catchup_scan_nanos"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            nonNegativeRate
+          />
+        ))}
       </Axis>
     </LineGraph>,
   ];
