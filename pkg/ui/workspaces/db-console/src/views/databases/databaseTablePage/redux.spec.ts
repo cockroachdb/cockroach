@@ -25,7 +25,6 @@ import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
-import { makeTimestamp } from "src/views/databases/utils";
 import moment from "moment-timezone";
 
 function fakeRouteComponentProps(
@@ -296,10 +295,10 @@ describe("Database Table Page", function () {
             },
             stats: {
               total_read_count: new Long(2),
-              last_read: makeTimestamp("2021-11-19T23:01:05.167627Z"),
+              last_read: util.stringToTimestamp("2021-11-19T23:01:05.167627Z"),
               total_rows_read: new Long(0),
               total_write_count: new Long(0),
-              last_write: makeTimestamp("0001-01-01T00:00:00Z"),
+              last_write: util.stringToTimestamp("0001-01-01T00:00:00Z"),
               total_rows_written: new Long(0),
             },
           },
@@ -314,19 +313,19 @@ describe("Database Table Page", function () {
             },
             stats: {
               total_read_count: new Long(0),
-              last_read: makeTimestamp("0001-01-01T00:00:00Z"),
+              last_read: util.stringToTimestamp("0001-01-01T00:00:00Z"),
               total_rows_read: new Long(0),
               total_write_count: new Long(0),
-              last_write: makeTimestamp("0001-01-01T00:00:00Z"),
+              last_write: util.stringToTimestamp("0001-01-01T00:00:00Z"),
               total_rows_written: new Long(0),
             },
           },
           index_name: "index_no_reads_no_resets",
           index_type: "secondary",
-          created_at: makeTimestamp("0001-01-01T00:00:00Z"),
+          created_at: util.stringToTimestamp("0001-01-01T00:00:00Z"),
         },
       ],
-      last_reset: makeTimestamp("0001-01-01T00:00:00Z"),
+      last_reset: util.stringToTimestamp("0001-01-01T00:00:00Z"),
     });
 
     await driver.refreshIndexStats();
@@ -340,7 +339,7 @@ describe("Database Table Page", function () {
           indexName: "jobs_status_created_idx",
           totalReads: 2,
           lastUsed: util.TimestampToMoment(
-            makeTimestamp("2021-11-19T23:01:05.167627Z"),
+            util.stringToTimestamp("2021-11-19T23:01:05.167627Z"),
           ),
           lastUsedType: "read",
           indexRecommendations: [],
@@ -349,13 +348,15 @@ describe("Database Table Page", function () {
           indexName: "index_no_reads_no_resets",
           totalReads: 0,
           lastUsed: util.TimestampToMoment(
-            makeTimestamp("0001-01-01T00:00:00Z"),
+            util.stringToTimestamp("0001-01-01T00:00:00Z"),
           ),
           lastUsedType: "created",
           indexRecommendations: [],
         },
       ],
-      lastReset: util.TimestampToMoment(makeTimestamp("0001-01-01T00:00:00Z")),
+      lastReset: util.TimestampToMoment(
+        util.stringToTimestamp("0001-01-01T00:00:00Z"),
+      ),
     });
   });
 });

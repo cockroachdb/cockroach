@@ -15,6 +15,8 @@ import {
   DatabaseTablePageData,
   util,
   RecommendationType as RecType,
+  getNodesByRegionString,
+  normalizePrivileges,
 } from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
@@ -35,10 +37,8 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import { getNodesByRegionString } from "../utils";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
-import { normalizePrivileges } from "../utils";
 
 const { TableIndexStatsRequest } = cockroach.server.serverpb;
 
