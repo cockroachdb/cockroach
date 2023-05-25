@@ -299,6 +299,6 @@
 # non-volatile and has a single statement in the function body. See
 # IsInlinableUDF for more details.
 [InlineUDF, Normalize]
-(UDF $args:* $private:* & (IsInlinableUDF $args $private))
+(UDFCall $args:* $private:* & (IsInlinableUDF $args $private))
 =>
 (ConvertUDFToSubquery $args $private)
