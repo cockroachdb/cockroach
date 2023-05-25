@@ -1294,7 +1294,8 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 4000, duration: "240m"})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 400, duration: "240m"})
+			// ct.runTPCCWorkload(tpccArgs{warehouses: 10})
 
 			ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
@@ -1302,11 +1303,14 @@ func registerCDC(r registry.Registry) {
 				opts: map[string]string{
 					"metrics_label": "'total'",
 					"ordering":      "'total'",
-					"initial_scan":  "'no'",
+					"initial_scan":  "'yes'",
 					"updated":       "",
 					"resolved":      "'5s'",
+					// "webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
 				},
 			})
+			time.Sleep(240 * time.Minute)
+			// feed.waitForCompletion()
 
 			// ct.newChangefeed(feedArgs{
 			// 	sinkType: kafkaSink,
@@ -1323,7 +1327,7 @@ func registerCDC(r registry.Registry) {
 			// 	initialScanLatency: 30 * time.Minute,
 			// })
 
-			ct.waitForWorkload()
+			// ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{

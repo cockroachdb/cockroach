@@ -914,7 +914,7 @@ func (p OrderedSinkRowSlice) Len() int           { return len(p) }
 func (p OrderedSinkRowSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[i].row.Mvcc.Less(p[j].row.Mvcc) }
 
-// orderedSink collects rows in memory, and upon a call to EmitUpToResolved
+// orderedSink collects rows in memory, and upon a call to Flush
 // sorts the rows and emits the sorted rows to the forwardingBuf
 type orderedSink struct {
 	processorID   int32
@@ -952,51 +952,66 @@ func (s *orderedSink) EmitRow(
 }
 
 // EmitResolvedTimestamp implements the Sink interface.
-func (s *orderedSink) EmitUpToResolved(ctx context.Context) error {
+func (s *orderedSink) Flush(ctx context.Context) error {
 	if len(s.unorderedBuf) == 0 {
 		return nil
 	}
 	sort.Sort(s.unorderedBuf) // Orders from lowest to highest
 
-	orderedUpdate := jobspb.OrderedRows{
-		Rows:              make([]jobspb.OrderedRows_Row, 0, len(s.unorderedBuf)),
-		SourceProcessorID: s.processorID,
-	}
+	// debug(fmt.Sprintf("AGG diff: %d lowestUnordered: %s resolved: %s, highestUnordered: %s", resolved.WallTime-s.unorderedBuf[0].row.Mvcc.WallTime, s.unorderedBuf[0].row.Mvcc, resolved, s.unorderedBuf[len(s.unorderedBuf)-1].row.Mvcc))
+	unorderedStart := 0
 
 	var toRelease kvevent.Alloc
-	defer toRelease.Release(ctx)
+	for {
+		fullyFlushed := true
 
-	// debug(fmt.Sprintf("AGG diff: %d lowestUnordered: %s resolved: %s, highestUnordered: %s", resolved.WallTime-s.unorderedBuf[0].row.Mvcc.WallTime, s.unorderedBuf[0].row.Mvcc, resolved, s.unorderedBuf[len(s.unorderedBuf)-1].row.Mvcc))
+		orderedUpdate := jobspb.OrderedRows{
+			Rows:              make([]jobspb.OrderedRows_Row, 0, len(s.unorderedBuf)),
+			SourceProcessorID: s.processorID,
+		}
 
-	for _, r := range s.unorderedBuf {
-		// debug(fmt.Sprintf("AGG CHECK %s, frontier: %s, backfillts: %s", r.row.Mvcc, s.frontier.Frontier(), s.frontier.BackfillTS()))
-		if s.frontier.Frontier().Less(r.row.Mvcc) && !r.row.Mvcc.Equal(s.frontier.BackfillTS()) {
+		for i := unorderedStart; i < len(s.unorderedBuf); i++ {
+			r := s.unorderedBuf[i]
+			if i >= unorderedStart+100 {
+				fullyFlushed = false
+				break
+			}
+			// }
+			// for i, r := range s.unorderedBuf {
+			// if i >= 100 {
+			// 	fullyFlushed = false
+			// 	break
+			// }
+			// debug(fmt.Sprintf("AGG CHECK %s, frontier: %s, backfillts: %s", r.row.Mvcc, s.frontier.Frontier(), s.frontier.BackfillTS()))
+			if s.frontier.Frontier().Less(r.row.Mvcc) && !r.row.Mvcc.Equal(s.frontier.BackfillTS()) {
+				break
+			}
+			orderedUpdate.Rows = append(orderedUpdate.Rows, r.row)
+			toRelease.Merge(&r.alloc)
+		}
+		unorderedStart += len(orderedUpdate.Rows)
+
+		updateBytes, err := protoutil.Marshal(&orderedUpdate)
+		if err != nil {
+			return err
+		}
+		s.metrics.TotalOrderingForwards.Inc(1)
+		s.metrics.TotalOrderingEventsForwarded.Inc(int64(len(orderedUpdate.Rows)))
+		// debug(fmt.Sprintf("AGG FORWARDING %d, remaining: %d", len(orderedUpdate.Rows), len(s.unorderedBuf)))
+		s.forwardingBuf.Push(rowenc.EncDatumRow{
+			{Datum: tree.DNull}, // resolved span
+			{Datum: tree.DNull}, // topic
+			{Datum: tree.DNull}, // key
+			{Datum: tree.DNull}, // value
+			{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // value
+		})
+
+		if fullyFlushed {
 			break
 		}
-		orderedUpdate.Rows = append(orderedUpdate.Rows, r.row)
-		toRelease.Merge(&r.alloc)
 	}
-	s.unorderedBuf = s.unorderedBuf[len(orderedUpdate.Rows):]
-
-	updateBytes, err := protoutil.Marshal(&orderedUpdate)
-	if err != nil {
-		return err
-	}
-	s.metrics.TotalOrderingForwards.Inc(1)
-	s.metrics.TotalOrderingEventsForwarded.Inc(int64(len(orderedUpdate.Rows)))
-	// debug(fmt.Sprintf("AGG FORWARDING %d, remaining: %d", len(orderedUpdate.Rows), len(s.unorderedBuf)))
-	s.forwardingBuf.Push(rowenc.EncDatumRow{
-		{Datum: tree.DNull}, // resolved span
-		{Datum: tree.DNull}, // topic
-		{Datum: tree.DNull}, // key
-		{Datum: tree.DNull}, // value
-		{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // value
-	})
-	return nil
-}
-
-// Flush implements the Sink interface.
-func (s *orderedSink) Flush(_ context.Context) error {
+	toRelease.Release(ctx)
+	s.unorderedBuf = s.unorderedBuf[unorderedStart:]
 	return nil
 }
 

@@ -607,20 +607,11 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return err
 	}
 
-	// debug("note resolved span")
-	// debug(fmt.Sprintf("advanced: %v, resolved: %s, backfillts: %s", advanced, resolved.Timestamp, ca.frontier.BackfillTS()))
-	if advanced || resolved.Timestamp.Equal(ca.frontier.BackfillTS()) {
-		// debug("advanced || backfillts")
-		if ss, ok := ca.sink.(*safeSink); ok {
-			if ew, ok := ss.wrapped.(*errorWrapperSink); ok {
-				if o, ok := ew.wrapped.(*orderedSink); ok {
-					// debug("emitting up to resolved")
-					err := o.EmitUpToResolved(ca.Ctx())
-					if err != nil {
-						return err
-					}
-				}
-			}
+	// Under total ordering, resolved progress may unblock some messages from being able to be emitted.
+	if ca.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) && (advanced || resolved.Timestamp.Equal(ca.frontier.BackfillTS())) {
+		err := ca.sink.Flush(ca.Ctx())
+		if err != nil {
+			return err
 		}
 	}
 
@@ -1266,7 +1257,7 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
 
 	for _, resolved := range resolvedSpans.ResolvedSpans {
-		debug3(fmt.Sprintf("AGG PROGRESS (%+v)", resolved))
+		// debug3(fmt.Sprintf("AGG PROGRESS (%+v)", resolved))
 		// Inserting a timestamp less than the one the changefeed flow started at
 		// could potentially regress the job progress. This is not expected, but it
 		// was a bug at one point, so assert to prevent regressions.
@@ -1296,8 +1287,8 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 
 	cf.maybeLogBehindSpan(frontierChanged)
 
+	// Under total ordering, resolved progress may unblock some messages from being able to be emitted.
 	if cf.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) && (frontierChanged || resolved.Timestamp == cf.frontier.BackfillTS()) {
-		// debug2(fmt.Sprintf("try flush %s, %s", resolved.Timestamp, cf.frontier.BackfillTS()))
 		err = cf.orderedRowMerger.TryFlush(cf.Ctx())
 		if err != nil {
 			return err
@@ -1799,11 +1790,11 @@ type orderedRowMerger struct {
 }
 
 func (m *orderedRowMerger) Append(rows jobspb.OrderedRows) {
-	wasEmpty := len(m.orderedRows[rows.SourceProcessorID]) == 0
 	defer m.metrics.TotalOrderingFrontierAppends.Inc(1)
 
 	// Prepend newer rows to the back of the queue
 	// debug2(fmt.Sprintf("FRONTIER APPEND OF %d ONTO %d", len(rows.Rows), rows.SourceProcessorID))
+	wasEmpty := len(m.orderedRows[rows.SourceProcessorID]) == 0
 	m.orderedRows[rows.SourceProcessorID] = append(m.orderedRows[rows.SourceProcessorID], rows.Rows...)
 
 	allRows := m.orderedRows[rows.SourceProcessorID]

@@ -63,7 +63,7 @@ func (s *testOrderedSink) popPayload() jobspb.OrderedRows {
 func (s *testOrderedSink) flushToTs(wallTime int64) {
 	_, err := s.frontier.Forward(makeSpan(s.t, "a", "f"), hlc.Timestamp{WallTime: wallTime})
 	require.NoError(s.t, err)
-	require.NoError(s.t, s.EmitUpToResolved(context.Background()))
+	require.NoError(s.t, s.Flush(context.Background()))
 }
 
 func (s *testOrderedSink) flushAndVerify(wallTime int64) int {
@@ -201,7 +201,7 @@ func TestOrderedMerger(t *testing.T) {
 		_, err := sf.Forward(makeSpan(t, start, end), hlc.Timestamp{WallTime: ts})
 		require.NoError(t, err)
 		for i := 0; i < 5; i++ {
-			require.NoError(t, orderedSinks[i].EmitUpToResolved(context.Background()))
+			require.NoError(t, orderedSinks[i].Flush(context.Background()))
 			for !orderedSinks[i].forwardingBuf.IsEmpty() {
 				merger.Append(orderedSinks[i].popPayload())
 			}
@@ -254,7 +254,7 @@ func TestOrderedMerger(t *testing.T) {
 		}
 		orderedSinks[i].emitTs(20100)
 
-		require.NoError(t, orderedSinks[i].EmitUpToResolved(context.Background()))
+		require.NoError(t, orderedSinks[i].Flush(context.Background()))
 		for !orderedSinks[i].forwardingBuf.IsEmpty() {
 			merger.Append(orderedSinks[i].popPayload())
 		}
