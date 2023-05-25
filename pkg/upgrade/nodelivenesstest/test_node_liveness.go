@@ -27,6 +27,22 @@ type NodeLiveness struct {
 	dead map[roachpb.NodeID]struct{}
 }
 
+func (t *NodeLiveness) ScanNodeVitalityFromKV(
+	ctx context.Context,
+) (livenesspb.NodeVitalityMap, error) {
+
+	statuses := make(map[roachpb.NodeID]livenesspb.NodeVitality)
+	for _, l := range t.ls {
+		_, dead := t.dead[l.NodeID]
+		health := livenesspb.VitalityAlive
+		if dead {
+			health = livenesspb.VitalityDead
+		}
+		statuses[l.NodeID] = l.CreateNodeVitality(health, true)
+	}
+	return statuses, nil
+}
+
 // New constructs a new NodeLiveness with the specified number of nodes.
 func New(numNodes int) *NodeLiveness {
 	nl := &NodeLiveness{
@@ -40,11 +56,6 @@ func New(numNodes int) *NodeLiveness {
 		}
 	}
 	return nl
-}
-
-// GetLivenessesFromKV implements the NodeLiveness interface.
-func (t *NodeLiveness) GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error) {
-	return t.ls, nil
 }
 
 // IsLive implements the NodeLiveness interface.

@@ -1018,24 +1018,6 @@ func (nl *NodeLiveness) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 	return statusMap
 }
 
-// GetLivenessesFromKV returns a slice containing the liveness record of all
-// nodes that have ever been a part of the cluster. The records are read from
-// the KV layer in a KV transaction. This is in contrast to GetLivenesses above,
-// which consults a (possibly stale) in-memory cache.
-// TODO(baptist): Remove.
-func (nl *NodeLiveness) GetLivenessesFromKV(ctx context.Context) ([]livenesspb.Liveness, error) {
-	records, err := nl.storage.scan(ctx)
-	if err != nil {
-		return nil, err
-	}
-	livenesses := make([]livenesspb.Liveness, len(records))
-	for i, r := range records {
-		livenesses[i] = r.Liveness
-		nl.cache.maybeUpdate(ctx, r)
-	}
-	return livenesses, nil
-}
-
 // ScanNodeVitalityFromKV returns the status for all the nodes from KV including
 // nodes that have been decommissioned. This method is typically used when the
 // set of results must be accurate as of a point in time. since decisions can be
