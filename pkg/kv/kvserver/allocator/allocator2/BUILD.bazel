@@ -25,6 +25,7 @@ go_test(
     srcs = [
         "constraint_matcher_test.go",
         "constraint_test.go",
+        "load_test.go",
         "memo_helper_test.go",
     ],
     args = ["-test.timeout=295s"],
