@@ -732,7 +732,7 @@ func (b *Builder) buildUDF(
 		bodyProps = make([]*physical.Required, len(stmts))
 
 		for i := range stmts {
-			stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+			stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 			expr, physProps := stmtScope.expr, stmtScope.makePhysicalProps()
 
 			// The last statement produces the output of the UDF.
