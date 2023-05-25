@@ -697,7 +697,7 @@ func (b *Builder) buildUDF(
 	b.insideUDF = true
 	isMultiColDataSource := false
 	for i := range stmts {
-		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+		stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 		expr := stmtScope.expr
 		physProps := stmtScope.makePhysicalProps()
 
