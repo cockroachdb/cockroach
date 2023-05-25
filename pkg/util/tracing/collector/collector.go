@@ -14,7 +14,6 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -23,12 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingservicepb"
 )
-
-// NodeLiveness is the subset of the interface satisfied by CRDB's node liveness
-// component that the tracing service relies upon.
-type NodeLiveness interface {
-	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
-}
 
 // TraceCollector can be used to extract recordings from inflight spans for a
 // given traceID, from all nodes of the cluster.
