@@ -77,7 +77,7 @@ func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) s
 	// overrides the SSD and zones settings from the registry.
 	var finalOpts []spec.Option
 	if r.preferSSD {
-		finalOpts = append(finalOpts, spec.PreferSSD())
+		finalOpts = append(finalOpts, spec.PreferLocalSSD(true))
 	}
 	if r.zones != "" {
 		finalOpts = append(finalOpts, spec.Zones(r.zones))
