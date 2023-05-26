@@ -796,7 +796,8 @@ func decommissionPreCheckReady(resp *serverpb.DecommissionPreCheckResponse) bool
 		return true
 	}
 	for _, nodeCheckResult := range resp.CheckedNodes {
-		if nodeCheckResult.DecommissionReadiness != serverpb.DecommissionPreCheckResponse_READY {
+		if !(nodeCheckResult.DecommissionReadiness == serverpb.DecommissionPreCheckResponse_READY ||
+			nodeCheckResult.DecommissionReadiness == serverpb.DecommissionPreCheckResponse_ALREADY_DECOMMISSIONED) {
 			return false
 		}
 	}
