@@ -134,8 +134,11 @@ func newRemoteSession(l *logger.Logger, command *remoteCommand) *remoteSession {
 }
 
 func (s *remoteSession) errWithDebug(err error) error {
-	if err != nil && s.logfile != "" {
-		err = errors.Wrapf(err, "ssh verbose log retained in %s", filepath.Base(s.logfile))
+	err = rperrors.ClassifyCmdError(err)
+	// The verbose logs are noisy and not useful for most errors, so only
+	// retain them for potential flakes.
+	if errors.Is(err, rperrors.ErrSSH255) && s.logfile != "" {
+		err = errors.Wrap(err, "potential SSH flake; verbose log retained under ssh/")
 		s.logfile = "" // prevent removal on close
 	}
 	return err
@@ -157,7 +160,7 @@ func (s *remoteSession) CombinedOutput(ctx context.Context) ([]byte, error) {
 		s.Close()
 		return nil, ctx.Err()
 	case <-commandFinished:
-		return b, rperrors.ClassifyCmdError(err)
+		return b, err
 	}
 }
 
@@ -174,12 +177,12 @@ func (s *remoteSession) Run(ctx context.Context) error {
 		s.Close()
 		return ctx.Err()
 	case <-commandFinished:
-		return rperrors.ClassifyCmdError(err)
+		return err
 	}
 }
 
 func (s *remoteSession) Start() error {
-	return rperrors.ClassifyCmdError(s.errWithDebug(s.Cmd.Start()))
+	return s.errWithDebug(s.Cmd.Start())
 }
 
 func (s *remoteSession) SetStdin(r io.Reader) {
