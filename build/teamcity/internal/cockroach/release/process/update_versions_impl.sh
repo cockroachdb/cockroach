@@ -12,11 +12,14 @@ if [[ -z "${DRY_RUN}" ]] ; then
 fi
 
 # run git fetch in order to get all remote branches
+git remote -v
+git tag --list
 git fetch --tags -q origin
+git tag --list
 
 # install gh
-wget -O /tmp/gh.tar.gz https://github.com/cli/cli/releases/download/v2.13.0/gh_2.13.0_linux_amd64.tar.gz
-echo "9e833e02428cd49e0af73bc7dc4cafa329fe3ecba1bfe92f0859bf5b11916401  /tmp/gh.tar.gz" | sha256sum -c -
+wget -O /tmp/gh.tar.gz https://github.com/cli/cli/releases/download/v2.29.0/gh_2.29.0_linux_amd64.tar.gz
+echo "9fe05f43a11a7bf8eacf731422452d1997e6708d4160ef0efcb13c103320390e  /tmp/gh.tar.gz" | sha256sum -c -
 tar --strip-components 1 -xf /tmp/gh.tar.gz
 export PATH=$PWD/bin:$PATH
 

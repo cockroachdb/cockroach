@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -87,6 +88,31 @@ func updateReleasesFile(_ *cobra.Command, _ []string) (retErr error) {
 		return err
 	}
 	fmt.Printf("done\n")
+	return nil
+}
+
+func updateReleasesFileImpl() error {
+	log.Printf("downloading release data from %q", releaseDataURL)
+	data, err := downloadReleases()
+	if err != nil {
+		return fmt.Errorf("downloading releases yaml: %w", err)
+	}
+	log.Printf("downloaded release data for %d releases", len(data))
+
+	result := processReleaseData(data)
+	log.Printf("generated data for %d release series", len(result))
+
+	if err := validateReleaseData(result); err != nil {
+		return fmt.Errorf("failed to validate downloaded data: %w", err)
+	}
+	// TODO: do not use binary version, pass it
+	addCurrentRelease(result)
+
+	log.Printf("writing results to %s", releaseDataFile)
+	if err := saveResults(result); err != nil {
+		return fmt.Errorf("saving results: %w", err)
+	}
+	log.Printf("done")
 	return nil
 }
 

@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -141,16 +142,42 @@ func findPreviousRelease(releaseSeries string, ignorePrereleases bool) (string, 
 		versions = filteredVersions
 	}
 	sort.Sort(semver.Collection(versions))
+	fmt.Printf("Found these versions: %+v\n", versions)
 	return versions[len(versions)-1].Original(), nil
 }
 
 // bumpVersion increases the patch release version (the last digit) of a given version
 func bumpVersion(version string) (string, error) {
+	// special case for versions like v23.2.0-alpha.00000000
+	if strings.HasSuffix(version, "-alpha.00000000") {
+		// reset the version to something we can parse and bump
+		version = strings.TrimSuffix(version, ".00000000") + ".0"
+	}
 	semanticVersion, err := semver.NewVersion(version)
 	if err != nil {
 		return "", fmt.Errorf("cannot parse version: %w", err)
 	}
-	nextVersion := semanticVersion.IncPatch()
+	var nextVersion semver.Version
+	if semanticVersion.Prerelease() == "" {
+		// For regular releases we can use IncPatch without any modification
+		nextVersion = semanticVersion.IncPatch()
+	} else {
+		// For pre-releases (alpha, beta, rc), we need to implement our own bumper. It takes the last digit and increments it.
+		pre := semanticVersion.Prerelease()
+		preType, digit, found := strings.Cut(pre, ".")
+		if !found {
+			return "", fmt.Errorf("parsing prerelease %s", semanticVersion.Original())
+		}
+		preVersion, err := strconv.Atoi(digit)
+		if err != nil {
+			return "", fmt.Errorf("atoi prerelease error %s: %w", semanticVersion.Original(), err)
+		}
+		preVersion++
+		nextVersion, err = semanticVersion.SetPrerelease(fmt.Sprintf("%s.%d", preType, preVersion))
+		if err != nil {
+			return "", fmt.Errorf("bumping prerelease %s: %w", semanticVersion.Original(), err)
+		}
+	}
 	return nextVersion.Original(), nil
 }
 
@@ -220,4 +247,28 @@ func findHealthyBuild(potentialRefs []string) (buildInfo, error) {
 		return meta, nil
 	}
 	return buildInfo{}, fmt.Errorf("no ref found")
+}
+
+func branchExists(branch string) (bool, error) {
+	cmd := exec.Command("git", "ls-remote", "--refs", "origin", "refs/heads/"+branch)
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git ls-remote: %w", err)
+	}
+	if len(out) == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
+func fileExists(branch string, f string) (bool, error) {
+	cmd := exec.Command("git", "ls-tree", "origin/"+branch, f)
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git ls-tree: %w", err)
+	}
+	if len(out) == 0 {
+		return false, nil
+	}
+	return true, nil
 }

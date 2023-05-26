@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -65,7 +66,6 @@ func init() {
 	updateVersionsCmd.Flags().StringArrayVar(&updateVersionsFlags.emailAddresses, emailAddresses, []string{}, "email addresses")
 	requiredFlags := []string{
 		releasedVersionFlag,
-		nextVersionFlag,
 		smtpUser,
 		smtpHost,
 		smtpPort,
@@ -95,10 +95,15 @@ type prRepo struct {
 	prBranch       string
 	// commands to run in order to modify the repo
 	commands []*exec.Cmd
+	fn       func(gitDir string) error
 }
 
 func (r prRepo) name() string {
 	return r.owner + "/" + r.repo
+}
+
+func (r prRepo) cloneDir() string {
+	return fmt.Sprintf("%s_%s_%s", r.owner, r.repo, r.branch)
 }
 
 func (r prRepo) pushURL() string {
@@ -109,6 +114,10 @@ func (r prRepo) pushURL() string {
 }
 
 func updateVersions(_ *cobra.Command, _ []string) error {
+	dbUrl := os.Getenv("REGSERVER_DATABASE_URL")
+	if dbUrl == "" {
+		return fmt.Errorf("REGSERVER_DATABASE_URL environemtn variable should be set")
+	}
 	smtpPassword := os.Getenv("SMTP_PASSWORD")
 	if smtpPassword == "" {
 		return fmt.Errorf("SMTP_PASSWORD environment variable should be set")
@@ -117,15 +126,138 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if updateVersionsFlags.nextVersionStr == "" {
+		updateVersionsFlags.nextVersionStr, err = bumpVersion(updateVersionsFlags.releasedVersionStr)
+		if err != nil {
+			return fmt.Errorf("bumping version: %w", err)
+		}
+	}
 	nextVersion, err := parseVersion(updateVersionsFlags.nextVersionStr)
 	if err != nil {
-		return err
+		return fmt.Errorf("parsing next version: %w", err)
 	}
+
 	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return fmt.Errorf("cannot create a temporary directory: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
+
+	latest, err := isLatestStableBranch(releasedVersion)
+	if err != nil {
+		return fmt.Errorf("finding latest: %w", err)
+	}
+	// 1. Update the regserver. This is applicable to all releases, including pre-releases.
+	if err := updateRegserver(dbUrl, releasedVersion); err != nil {
+		return fmt.Errorf("updating regserver: %w", err)
+	}
+	// Repos we want to create PRs against
+	var reposToWorkOn []prRepo
+	// 2. Bump the version. Branches we need to bump the version on:
+	// alpha, beta, rc: master and maybe release-major.minor.0
+	// stable releases: release-major.minor
+	var maybeVersionBumpBranches []string
+	if releasedVersion.Prerelease() == "" {
+		maybeVersionBumpBranches = []string{
+			fmt.Sprintf("release-%d.%d", releasedVersion.Minor(), releasedVersion.Minor()),
+		}
+	} else {
+		// For pre-releases always bump the version on the master branch
+		stabilizationBranch := fmt.Sprintf("release-%d.%d.0", releasedVersion.Minor(), releasedVersion.Minor())
+		stabilizationBranchExists, err := branchExists(stabilizationBranch)
+		if err != nil {
+			return fmt.Errorf("checking stabilization branch: %w", err)
+		}
+		if !stabilizationBranchExists {
+			maybeVersionBumpBranches = []string{
+				"master",
+			}
+		} else {
+			maybeVersionBumpBranches = []string{
+				stabilizationBranch,
+			}
+			// TODO: do we need to update the release-major.minor branch as a part of stabilization period?
+		}
+	}
+
+	for _, br := range maybeVersionBumpBranches {
+		ok, err := fileExists(br, versionFile)
+		if err != nil {
+			return fmt.Errorf("checking version file: %w", err)
+		}
+		if !ok {
+			log.Printf("skipping version bump on the %s branch, because %s does not exist on that branch", br, versionFile)
+			continue
+		}
+		prBranch := fmt.Sprintf("update-versions-%s-%s-%s", br, releasedVersion.Original(), randomString(4))
+		repo := prRepo{
+			owner:          "cockroachdb",
+			repo:           "cockroach",
+			branch:         br,
+			prBranch:       prBranch,
+			githubUsername: "cockroach-teamcity",
+			commitMessage:  updateCommitMessage(releasedVersion, nextVersion),
+			fn: func(gitDir string) error {
+				return updateVersionTxt(gitDir, nextVersion.Original(), versionFile)
+			},
+		}
+		reposToWorkOn = append(reposToWorkOn, repo)
+	}
+
+	// 3. Brew. Update for all stable releases
+	if releasedVersion.Prerelease() == "" {
+		reposToWorkOn = append(reposToWorkOn, prRepo{
+			owner:         "cockroachdb",
+			repo:          "homebrew-tap",
+			branch:        "master",
+			prBranch:      fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
+			commitMessage: updateCommitMessage(releasedVersion, nextVersion),
+			fn: func(gitDir string) error {
+				return updateBrew(gitDir, releasedVersion, latest)
+			},
+		})
+	}
+	// 4. Helm. Only for latest stable releases
+	if latest && releasedVersion.Prerelease() == "" {
+		reposToWorkOn = append(reposToWorkOn, prRepo{
+			owner:         "cockroachdb",
+			repo:          "helm-charts",
+			branch:        "master",
+			prBranch:      fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
+			commitMessage: updateCommitMessage(releasedVersion, nextVersion),
+			fn: func(gitDir string) error {
+				return updateHelm(gitDir, releasedVersion)
+			},
+		})
+	}
+	// 5. Orchestration. Only for latest stable releases
+	if latest && releasedVersion.Prerelease() == "" {
+		reposToWorkOn = append(reposToWorkOn, prRepo{
+			owner:         "cockroachdb",
+			repo:          "cockroach",
+			branch:        "master",
+			prBranch:      fmt.Sprintf("update-orchestration-versions-%s-%s", releasedVersion.Original(), randomString(4)),
+			commitMessage: updateCommitMessage(releasedVersion, nextVersion),
+			fn: func(gitDir string) error {
+				return nil
+			},
+		})
+	}
+	// 6. Predecessor version, aka cockroach_releases.yaml
+	// TODO: potentially move to a nightly job that submits a PR to update the files
+	// TODO: this uses the compiled version instead of releasedVersion, may need to rework
+	if latest && releasedVersion.Prerelease() == "" {
+		reposToWorkOn = append(reposToWorkOn, prRepo{
+			owner:         "cockroachdb",
+			repo:          "cockroach",
+			branch:        "master",
+			prBranch:      fmt.Sprintf("update-orchestration-versions-%s-%s", releasedVersion.Original(), randomString(4)),
+			commitMessage: updateCommitMessage(releasedVersion, nextVersion),
+			fn: func(gitDir string) error {
+				return nil
+			},
+		})
+	}
 
 	var prs []string
 	repos, err := productionRepos(releasedVersion, nextVersion)
@@ -134,8 +266,9 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 	}
 	// The first for loop combines all local commands that we can run without pushing the changes.
 	// This way we can fail early and avoid unnecessary work closing the PRs we were able to create.
+	fmt.Printf("repos to work on: %+v\n", repos)
 	for _, repo := range repos {
-		dest := path.Join(dir, repo.name())
+		dest := path.Join(dir, repo.cloneDir())
 		fmt.Printf("Cloning repo %s to %s\n", repo.name(), dest)
 		if err := cloneRepo(repo, dest); err != nil {
 			return fmt.Errorf("cannot clone %s: %w", repo.name(), err)
@@ -154,9 +287,14 @@ func updateVersions(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	if updateVersionsFlags.dryRun {
+		fmt.Println("Dry run mode in effect, stopping here...")
+		return nil
+	}
+
 	// Now that our local changes are staged, we can try and publish them.
 	for _, repo := range repos {
-		dest := path.Join(dir, repo.name())
+		dest := path.Join(dir, repo.cloneDir())
 		// We avoid creating duplicated PRs to allow this command to be
 		// run multiple times.
 		prDesc, err := prExists(repo, dest, releasedVersion, nextVersion)
@@ -212,18 +350,7 @@ func applyCommands(repo prRepo, dest string) error {
 		cmd.Dir = dest
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			msg := fmt.Sprintf("failed running '%s' with message '%s': %s", cmd.String(), string(out), err)
-			// In dry-run mode, log the error message and continue.  It's
-			// hard to make every command succeed in dry-run mode (as, for
-			// instance, binaries or tags might not exist in remote
-			// repositories). Logging the error message should be sufficient
-			// since the engineer that triggered the dry-run will likely
-			// monitor the output of the build pretty closely.
-			if updateVersionsFlags.dryRun {
-				fmt.Printf("dry-run: %s\n", msg)
-				continue
-			}
-			return fmt.Errorf("%s", msg)
+			return fmt.Errorf("failed running '%s' with message '%s': %w", cmd.String(), string(out), err)
 		}
 		fmt.Printf("ran '%s': %s\n", cmd.String(), string(out))
 	}
@@ -240,10 +367,6 @@ func applyCommands(repo prRepo, dest string) error {
 
 func commitChanges(repo prRepo, dest string) error {
 	parts := []string{"git", "commit", "-a", "-m", repo.commitMessage}
-	if updateVersionsFlags.dryRun {
-		fmt.Printf("dry-run: commitChanges: %s\n", strings.Join(parts, " "))
-		return nil
-	}
 	cmd := exec.Command(parts[0], parts[1:]...)
 	cmd.Dir = dest
 	out, err := cmd.CombinedOutput()
@@ -369,6 +492,10 @@ func productionRepos(released, next *semver.Version) ([]prRepo, error) {
 	if err != nil {
 		return []prRepo{}, fmt.Errorf("cannot get branch info: %w", err)
 	}
+	//currentBranch, err := currentReleaseBranch(released)
+	//if err != nil {
+	//	return []prRepo{}, fmt.Errorf("cannot get current branch info: %w", err)
+	//}
 	nextBranch, err := nextReleaseBranch(released)
 	if err != nil {
 		return []prRepo{}, fmt.Errorf("cannot get next branch info: %w", err)
@@ -413,32 +540,46 @@ func productionRepos(released, next *semver.Version) ([]prRepo, error) {
 
 	repos := []prRepo{updateVersionPr}
 
+	// 22.2
+	// 1. Brew
+	// 2. regserver (separate file and build config)
+	// 3. update predecessor for 23.1, maybe 23.2, and master
+	// 4. maybe version.txt
+
+	// 23.1
+	// 1. Brew
+	// 2. regserver (separate file and build config)
+	// 3. update predecessor for maybe 23.2, and master, has to wait for docs???
+	// 4. Helm
+	// 5. orchestration
+	// 6. version.txt
+	//
 	// Repos to change for the latest stable releases only
-	if latest {
-		repos = append(repos, prRepo{
-			owner:          "cockroachdb",
-			repo:           "homebrew-tap",
-			branch:         "master",
-			githubUsername: "cockroach-teamcity",
-			prBranch:       defaultPrBranch,
-			commitMessage:  updateCommitMessage(released, next),
-			commands: []*exec.Cmd{
-				exec.Command("make", fmt.Sprintf("VERSION=%s", released), "PRODUCT=cockroach"),
-			},
-		})
-		repos = append(repos, prRepo{
-			owner:          "cockroachdb",
-			repo:           "helm-charts",
-			branch:         "master",
-			githubUsername: "cockroach-teamcity",
-			prBranch:       defaultPrBranch,
-			commitMessage:  updateCommitMessage(released, next),
-			commands: []*exec.Cmd{
-				exec.Command("bazel", "build", "//build"),
-				exec.Command("sh", "-c", fmt.Sprintf("$(bazel info bazel-bin)/build/build_/build %s", released.Original())),
-			},
-		})
-	}
+	// if latest {
+	//repos = append(repos, prRepo{
+	//	owner:          "cockroachdb",
+	//	repo:           "homebrew-tap",
+	//	branch:         "master",
+	//	githubUsername: "cockroach-teamcity",
+	//	prBranch:       defaultPrBranch,
+	//	commitMessage:  updateCommitMessage(released, next),
+	//	commands: []*exec.Cmd{
+	//		exec.Command("make", fmt.Sprintf("VERSION=%s", released), "PRODUCT=cockroach"),
+	//	},
+	//})
+	//repos = append(repos, prRepo{
+	//	owner:          "cockroachdb",
+	//	repo:           "helm-charts",
+	//	branch:         "master",
+	//	githubUsername: "cockroach-teamcity",
+	//	prBranch:       defaultPrBranch,
+	//	commitMessage:  updateCommitMessage(released, next),
+	//	commands: []*exec.Cmd{
+	//		exec.Command("bazel", "build", "//build"),
+	//		exec.Command("sh", "-c", fmt.Sprintf("$(bazel info bazel-bin)/build/build_/build %s", released.Original())),
+	//	},
+	//})
+	// }
 	return repos, nil
 }
 
@@ -468,6 +609,21 @@ func nextReleaseBranch(version *semver.Version) (string, error) {
 		return "master", nil
 	}
 	return potentialReleaseBranch, nil
+}
+
+func currentReleaseBranch(version *semver.Version) (string, error) {
+	potentialReleaseBranches := []string{
+		fmt.Sprintf("release-%d.%d.0", version.Major(), version.Minor()),
+		fmt.Sprintf("release-%d.%d", version.Major(), version.Minor()),
+	}
+	for _, potentialReleaseBranch := range potentialReleaseBranches {
+		cmd := exec.Command("git", "rev-parse", "--quiet", "--verify", "origin/"+potentialReleaseBranch)
+		if err := cmd.Run(); err != nil {
+			continue
+		}
+		return potentialReleaseBranch, nil
+	}
+	return "master", nil
 }
 
 func parseVersion(versionStr string) (*semver.Version, error) {
