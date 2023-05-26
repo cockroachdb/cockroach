@@ -12,6 +12,7 @@ import React from "react";
 import moment from "moment-timezone";
 import { createSelector } from "reselect";
 
+import * as protos from "src/js/protos";
 import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
@@ -47,6 +48,12 @@ import {
   WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import _ from "lodash";
+import { isSecondaryTenant } from "src/redux/tenants";
+import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
+import { MonitoringIcon } from "src/views/shared/components/icons/monitoring";
+
+type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 export interface OwnProps extends MetricsDataComponentProps {
   isKvGraph?: boolean;
@@ -271,6 +278,16 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
     return false;
   }
 
+  hasDataPoints = (data: TSResponse): boolean => {
+    let hasData = false;
+    data?.results?.map(result => {
+      if (result?.datapoints?.length > 0) {
+        hasData = true;
+      }
+    });
+    return hasData;
+  };
+
   componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
     if (
       !this.props.data?.results ||
@@ -354,8 +371,25 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    const { title, subtitle, tooltip, data, preCalcGraphSize } = this.props;
-
+    const { title, subtitle, tooltip, data, tenantSource, preCalcGraphSize } =
+      this.props;
+    if (!this.hasDataPoints(data) && isSecondaryTenant(tenantSource)) {
+      return (
+        <div className="linegraph-empty">
+          <div className="header-empty">
+            <Tooltip placement="bottom" title={tooltip}>
+              <span className="title-empty">{title}</span>
+            </Tooltip>
+          </div>
+          <div className="body-empty">
+            <MonitoringIcon />
+            <span className="body-text-empty">
+              {"Metric is not being collected for this tenant."}
+            </span>
+          </div>
+        </div>
+      );
+    }
     return (
       <Visualization
         title={title}

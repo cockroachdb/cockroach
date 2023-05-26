@@ -91,7 +91,7 @@ import {
 } from "src/redux/clusterSettings";
 import { getDataFromServer } from "src/util/dataFromServer";
 import { getCookieValue, SYSTEM_TENANT_NAME } from "src/redux/cookies";
-import { tenantDropdownOptions } from "src/redux/tenants";
+import { isSecondaryTenant, tenantDropdownOptions } from "src/redux/tenants";
 
 interface GraphDashboard {
   label: string;
@@ -352,7 +352,9 @@ export class NodeGraphs extends React.Component<
       tooltipSelection,
       nodeDisplayNameByID,
       storeIDsByNodeID,
-      tenantSource: selectedTenant,
+      tenantSource: isSecondaryTenant(currentTenant)
+        ? currentTenant
+        : selectedTenant,
     };
 
     const forwardParams = {
