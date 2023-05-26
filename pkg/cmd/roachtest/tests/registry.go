@@ -101,6 +101,7 @@ func RegisterTests(r registry.Registry) {
 	registerPop(r)
 	registerProcessLock(r)
 	registerPsycopg(r)
+	registerPruneDanglingSnapshotsAndDisks(r)
 	registerQueue(r)
 	registerQuitTransfersLeases(r)
 	registerRebalanceLoad(r)

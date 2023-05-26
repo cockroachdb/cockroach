@@ -267,6 +267,13 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	initCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
 
+	snapshotDeleteCmd.Flags().BoolVar(&dryrun,
+		"dry-run", false, "dry run (don't perform any actions)")
+	snapshotCmd.AddCommand(snapshotCreateCmd)
+	snapshotCmd.AddCommand(snapshotListCmd)
+	snapshotCmd.AddCommand(snapshotDeleteCmd)
+	snapshotCmd.AddCommand(snapshotApplyCmd)
+
 	rootStorageCmd.AddCommand(rootStorageCollectionCmd)
 	rootStorageCollectionCmd.AddCommand(collectionStartCmd)
 	rootStorageCollectionCmd.AddCommand(collectionStopCmd)

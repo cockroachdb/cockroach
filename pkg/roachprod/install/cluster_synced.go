@@ -562,6 +562,8 @@ func (c *SyncedCluster) Status(ctx context.Context, l *logger.Logger) ([]NodeSta
 vers=$(` + binary + ` version 2>/dev/null | awk '/Build Tag:/ {print $NF}')
 if [ -n "${out}" -a -n "${vers}" ]; then
   echo ${out} | sed "s/cockroach/cockroach-${vers}/g"
+elif [ -n "${vers}" ]; then
+  echo "not-running cockroach-${vers}"
 else
   echo ${out}
 fi
@@ -578,8 +580,12 @@ fi
 		}
 
 		msg := strings.TrimSpace(string(res.CombinedOut))
-		if msg == "" {
+		if msg == "" || strings.HasPrefix(msg, "not-running") {
 			results[i] = NodeStatus{Running: false}
+			if msg != "" {
+				info := strings.Split(msg, " ")
+				results[i].Version = info[1]
+			}
 			return res, nil
 		}
 		info := strings.Split(msg, " ")

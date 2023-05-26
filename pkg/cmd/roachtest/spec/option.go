@@ -17,6 +17,17 @@ type Option interface {
 	apply(spec *ClusterSpec)
 }
 
+type cloudOption string
+
+func (o cloudOption) apply(spec *ClusterSpec) {
+	spec.Cloud = string(o)
+}
+
+// Cloud controls what cloud is used to create the cluster.
+func Cloud(s string) Option {
+	return cloudOption(s)
+}
+
 type nodeCPUOption int
 
 func (o nodeCPUOption) apply(spec *ClusterSpec) {
