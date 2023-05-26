@@ -22,7 +22,7 @@ func generatePanic(tag string) error {
 	// TODO: do not hardcode the URL
 	script := fmt.Sprintf(`
 set -exuo pipefail
-curl --fail --silent --show-error --output /dev/stdout --url https://storage.googleapis.com/cockroach-builds-artifacts-prod/cockroach-%s.linux-amd64.tgz | tar -xz
+curl --retry-connrefused --retry 5 --fail --silent --show-error --output /dev/stdout --url https://storage.googleapis.com/cockroach-builds-artifacts-prod/cockroach-%s.linux-amd64.tgz | tar -xz
 ./cockroach-%s.linux-amd64/cockroach demo --insecure -e "select crdb_internal.force_panic('testing')" || true
 `, tag, tag)
 	cmd := exec.Command("bash", "-c", script)
