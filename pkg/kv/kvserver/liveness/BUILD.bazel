@@ -6,6 +6,7 @@ go_library(
         "cache.go",
         "liveness.go",
         "storage.go",
+        "test_helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness",
     visibility = ["//visibility:public"],

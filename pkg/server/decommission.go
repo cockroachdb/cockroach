@@ -68,7 +68,7 @@ type decommissionPreCheckResult struct {
 // rebalancing.
 func (t *decommissioningNodeMap) makeOnNodeDecommissioningCallback(
 	stores *kvserver.Stores,
-) liveness.OnNodeDecommissionCallback {
+) func(id roachpb.NodeID) {
 	return func(decommissioningNodeID roachpb.NodeID) {
 		ctx := context.Background()
 		t.Lock()

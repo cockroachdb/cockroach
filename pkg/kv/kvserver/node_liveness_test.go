@@ -104,7 +104,7 @@ func TestNodeLiveness(t *testing.T) {
 	pauseNodeLivenessHeartbeatLoops(tc)
 
 	// Advance clock past the liveness threshold to verify IsLive becomes false.
-	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLivenessThreshold().Nanoseconds() + 1)
+	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).TestingGetLivenessThreshold().Nanoseconds() + 1)
 
 	for _, s := range tc.Servers {
 		nl := s.NodeLiveness().(*liveness.NodeLiveness)
@@ -325,7 +325,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 	started.Set(true)
 
 	// Advance clock past the liveness threshold.
-	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLivenessThreshold().Nanoseconds() + 1)
+	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).TestingGetLivenessThreshold().Nanoseconds() + 1)
 
 	// Trigger a manual heartbeat and verify callbacks for each node ID are invoked.
 	for _, s := range tc.Servers {
@@ -398,7 +398,7 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 	// Advance clock past the liveness threshold and force a manual heartbeat on
 	// all node liveness objects, which should update the last up time for each
 	// store.
-	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLivenessThreshold().Nanoseconds() + 1)
+	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).TestingGetLivenessThreshold().Nanoseconds() + 1)
 	expected = manualClock.UnixNano()
 	for _, s := range tc.Servers {
 		nl := s.NodeLiveness().(*liveness.NodeLiveness)
@@ -454,7 +454,7 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 	}
 
 	// Advance clock past liveness threshold & increment epoch.
-	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLivenessThreshold().Nanoseconds() + 1)
+	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).TestingGetLivenessThreshold().Nanoseconds() + 1)
 	if err := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(ctx, oldLiveness.Liveness); err != nil {
 		t.Fatalf("unexpected error incrementing a non-live node: %+v", err)
 	}
@@ -689,7 +689,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	}
 
 	// Advance the clock but only heartbeat node 0.
-	manualClock.Increment(nl.GetLivenessThreshold().Nanoseconds() + 1)
+	manualClock.Increment(nl.TestingGetLivenessThreshold().Nanoseconds() + 1)
 	var livenessRec liveness.Record
 	testutils.SucceedsSoon(t, func() error {
 		lr, ok := nl.GetLiveness(tc.Servers[0].Gossip().NodeID.Get())
@@ -749,7 +749,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 
 	nl := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
 	actualLMapNodes := make(map[roachpb.NodeID]struct{})
-	originalExpiration := testStartTime + nl.GetLivenessThreshold().Nanoseconds()
+	originalExpiration := testStartTime + nl.TestingGetLivenessThreshold().Nanoseconds()
 	for id, l := range nl.GetIsLiveMap() {
 		if a, e := l.Epoch, int64(1); a != e {
 			t.Errorf("liveness record had epoch %d, wanted %d", a, e)
@@ -765,7 +765,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 	}
 
 	// Advance the clock but only heartbeat node 0.
-	manualClock.Increment(nl.GetLivenessThreshold().Nanoseconds() + 1)
+	manualClock.Increment(nl.TestingGetLivenessThreshold().Nanoseconds() + 1)
 	var livenessRecord liveness.Record
 	testutils.SucceedsSoon(t, func() error {
 		livenessRec, ok := nl.GetLiveness(tc.Servers[0].Gossip().NodeID.Get())
@@ -787,7 +787,7 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 		}
 		expectedExpiration := originalExpiration
 		if l.NodeID == 1 {
-			expectedExpiration += nl.GetLivenessThreshold().Nanoseconds() + 1
+			expectedExpiration += nl.TestingGetLivenessThreshold().Nanoseconds() + 1
 		}
 		if a, e := l.Expiration.WallTime, expectedExpiration; a < e {
 			t.Errorf("liveness record had expiration %d, wanted %d", a, e)
@@ -826,7 +826,7 @@ func TestNodeLivenessConcurrentHeartbeats(t *testing.T) {
 	const concurrency = 10
 
 	// Advance clock past the liveness threshold & concurrently heartbeat node.
-	manualClock.Increment(nl.GetLivenessThreshold().Nanoseconds() + 1)
+	manualClock.Increment(nl.TestingGetLivenessThreshold().Nanoseconds() + 1)
 	l, ok := nl.Self()
 	assert.True(t, ok)
 	errCh := make(chan error, concurrency)
@@ -870,7 +870,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 
 	// Advance the clock and this time increment epoch concurrently for node 1.
 	nl := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
-	manualClock.Increment(nl.GetLivenessThreshold().Nanoseconds() + 1)
+	manualClock.Increment(nl.TestingGetLivenessThreshold().Nanoseconds() + 1)
 	l, ok := nl.GetLiveness(tc.Servers[1].Gossip().NodeID.Get())
 	assert.True(t, ok)
 	errCh := make(chan error, concurrency)

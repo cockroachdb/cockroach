@@ -2191,22 +2191,9 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return serverError(ctx, errors.Newf("unknown mode: %v", serveMode))
 	}
 
-	// TODO(knz): update this code when progress is made on
-	// https://github.com/cockroachdb/cockroach/issues/45123
-	l, ok := s.nodeLiveness.GetLiveness(roachpb.NodeID(s.serverIterator.getID()))
-	if !ok {
-		return grpcstatus.Error(codes.Unavailable, "liveness record not found")
-	}
-	if !l.IsLive(s.clock.Now()) {
+	status := s.nodeLiveness.GetNodeVitalityFromCache(roachpb.NodeID(s.serverIterator.getID()))
+	if !status.IsLive(livenesspb.AdminHealthCheck) {
 		return grpcstatus.Errorf(codes.Unavailable, "node is not healthy")
-	}
-	if l.Draining {
-		// l.Draining indicates that the node is draining leases.
-		// This is set when Drain(DrainMode_LEASES) is called.
-		// It's possible that l.Draining is set without
-		// grpc.mode being modeDraining, if a RPC client
-		// has requested DrainMode_LEASES but not DrainMode_CLIENT.
-		return grpcstatus.Errorf(codes.Unavailable, "node is shutting down")
 	}
 
 	if !s.sqlServer.isReady.Get() {
@@ -2909,38 +2896,32 @@ func (s *systemAdminServer) decommissionStatusHelper(
 	}
 
 	var res serverpb.DecommissionStatusResponse
-	livenessMap := map[roachpb.NodeID]livenesspb.Liveness{}
-	{
-		// We use ScanNodeVitalityFromKV to avoid races in which the caller has
-		// just made an update to a liveness record but has not received this
-		// update in its local liveness instance yet. Doing a consistent read
-		// here avoids such issues.
-		//
-		// For an example, see:
-		//
-		// https://github.com/cockroachdb/cockroach/issues/73636
-		ls, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for nodeID, rec := range ls {
-			livenessMap[nodeID] = rec.GenLiveness()
-		}
+	// We use ScanNodeVitalityFromKV to avoid races in which the caller has
+	// just made an update to a liveness record but has not received this
+	// update in its local liveness instance yet. Doing a consistent read
+	// here avoids such issues.
+	//
+	// For an example, see:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/73636
+	vitalityMap, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	for nodeID := range replicaCounts {
-		l, ok := livenessMap[nodeID]
+		l, ok := vitalityMap[nodeID]
 		if !ok {
 			return nil, errors.Newf("unable to get liveness for %d", nodeID)
 		}
 		nodeResp := serverpb.DecommissionStatusResponse_Status{
-			NodeID:           l.NodeID,
-			ReplicaCount:     replicaCounts[l.NodeID],
-			Membership:       l.Membership,
-			Draining:         l.Draining,
-			ReportedReplicas: replicasToReport[l.NodeID],
+			NodeID:           nodeID,
+			ReplicaCount:     replicaCounts[nodeID],
+			Membership:       l.MembershipStatus(),
+			Draining:         l.IsDraining(),
+			ReportedReplicas: replicasToReport[nodeID],
 		}
-		if l.IsLive(s.clock.Now()) {
+		if l.IsLive(livenesspb.DecommissionCheck) {
 			nodeResp.IsLive = true
 		}
 		res.Status = append(res.Status, nodeResp)
