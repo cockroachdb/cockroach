@@ -20,8 +20,10 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/util/ctxgroup",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/version",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

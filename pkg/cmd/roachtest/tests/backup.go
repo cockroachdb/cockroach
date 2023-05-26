@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -151,14 +153,29 @@ func importBankCommand(cockroach string, rows, ranges, csvPort, node int) string
 // waitForPort waits until the given `port` is ready to receive
 // connections on all `nodes` given.
 func waitForPort(
-	ctx context.Context, nodes option.NodeListOption, port int, c cluster.Cluster,
+	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, port int, c cluster.Cluster,
 ) error {
-	if err := retry.WithMaxAttempts(ctx, retry.Options{
-		MaxBackoff: 500 * time.Millisecond,
-	}, 10, func() error {
-		return c.RunE(ctx, nodes, fmt.Sprintf("sudo lsof -i:%d | grep -q LISTEN", port))
-	}); err != nil {
-		return fmt.Errorf("timed out waiting for port %d: %w", port, err)
+	ips, err := c.ExternalIP(ctx, l, nodes)
+	if err != nil {
+		return fmt.Errorf("failed to get nodes external IPs: %w", err)
+	}
+
+	retryConfig := retry.Options{MaxBackoff: 500 * time.Millisecond}
+	for j, ip := range ips {
+		if err := retry.WithMaxAttempts(ctx, retryConfig, 10, func() error {
+			addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
+			conn, err := net.Dial("tcp", addr)
+			if err != nil {
+				return fmt.Errorf("error connecting to node %d (%s): %w", nodes[j], addr, err)
+			}
+
+			if err := conn.Close(); err != nil {
+				return fmt.Errorf("error closing connection to node %d (%s): %w", nodes[j], addr, err)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -168,7 +185,7 @@ func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, 
 	csvPort := 8081
 	csvCmd := importBankCSVServerCommand("./cockroach", csvPort)
 	c.Run(ctx, c.All(), csvCmd+` &> logs/workload-csv-server.log < /dev/null &`)
-	if err := waitForPort(ctx, c.All(), csvPort, c); err != nil {
+	if err := waitForPort(ctx, t.L(), c.All(), csvPort, c); err != nil {
 		t.Fatal(err)
 	}
 	importNode := 1
