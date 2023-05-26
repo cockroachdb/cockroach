@@ -61,8 +61,8 @@ var (
 	// reference error used when cluster creation fails for a test
 	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
 
-	// reference error for any failures during test teardown
-	errDuringTeardown = fmt.Errorf("error during test tear down")
+	// reference error for any failures during post test assertions
+	errDuringPostAssertions = fmt.Errorf("error during post test assertions")
 
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
@@ -1019,11 +1019,11 @@ func (r *testRunner) runTest(
 
 	select {
 	case <-testReturnedCh:
-		s := "success"
+		s := "successfully"
 		if t.Failed() {
-			s = "failure"
+			s = "with failure(s)"
 		}
-		t.L().Printf("tearing down after %s; see teardown.log (subsequent failures may still occur there)", s)
+		t.L().Printf("test completed %s", s)
 	case <-time.After(timeout):
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
@@ -1031,32 +1031,129 @@ func (r *testRunner) runTest(
 		timedOut = true
 	}
 
-	// From now on, all logging goes to teardown.log to give a clear
-	// separation between operations originating from the test vs the
-	// harness.
-	teardownL, err := c.l.ChildLogger("teardown", logger.QuietStderr, logger.QuietStdout)
+	// We still want to run the post-test assertions even if the test timed out as it
+	// might provide useful information about the health of the nodes. An error returned
+	// here may be from a hung task or timeout in which case we will not fail the test.
+	// TODO (miral): consider not running these assertions if the test has already failed
+	l.Printf("running post test assertions; see test-post-assertions.log for details")
+	if err := r.postTestAssertions(ctx, t, c); err != nil {
+		t.L().Printf("error running post test assertions: %v", err)
+	}
+
+	l.Printf("running test teardown; see test-teardown.log for details")
+	return r.teardownTest(ctx, t, c, timedOut)
+}
+
+// The assertions here are executed after each test, and may result in a test failure. Test authors
+// may opt out of these assertions by setting the relevant `SkipPostValidations` flag in the test spec.
+func (r *testRunner) postTestAssertions(ctx context.Context, t *testImpl, c *clusterImpl) error {
+	// Awkward file name to keep it close to test.log.
+	teardownL, err := c.l.ChildLogger("test-post-assertions", logger.QuietStderr, logger.QuietStdout)
 	if err != nil {
 		return err
 	}
-	l, c.l = teardownL, teardownL
+	c.l = teardownL
 	t.ReplaceL(teardownL)
 
-	return r.teardownTest(ctx, t, c, timedOut)
+	postAssertionErr := func(err error) {
+		t.Error(errors.Mark(err, errDuringPostAssertions))
+	}
+
+	postAssertCh := make(chan struct{})
+	_ = r.stopper.RunAsyncTask(ctx, "test-post-assertions", func(ctx context.Context) {
+		defer close(postAssertCh)
+		// When a dead node is detected, the subsequent post validation queries are likely
+		// to hang (reason unclear), and eventually timeout according to the statement_timeout.
+		// If this occurs frequently enough, we can look at skipping post validations on a node
+		// failure (or even on any test failure).
+		if err := c.assertNoDeadNode(ctx, t); err != nil {
+			// Some tests expect dead nodes, so they may opt out of this check.
+			if t.spec.SkipPostValidations&registry.PostValidationNoDeadNodes == 0 {
+				postAssertionErr(err)
+			} else {
+				t.L().Printf("dead node(s) detected but expected")
+			}
+		}
+
+		// We collect all the admin health endpoints in parallel,
+		// and select the first one that succeeds to run the validation queries
+		statuses, err := c.HealthStatus(ctx, t.L(), c.All())
+		if err != nil {
+			postAssertionErr(errors.WithDetail(err, "Unable to check health status"))
+		}
+
+		var db *gosql.DB
+		var validationNode int
+		for _, s := range statuses {
+			if s.Err != nil {
+				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
+				continue
+			}
+
+			if s.Status != http.StatusOK {
+				t.L().Printf("n%d:/health?ready=1 status=%d body=%s", s.Node, s.Status, s.Body)
+				continue
+			}
+
+			if db == nil {
+				db = c.Conn(ctx, t.L(), s.Node)
+				validationNode = s.Node
+			}
+			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
+		}
+
+		// We avoid trying to do this when t.Failed() (and in particular when there
+		// are dead nodes) because for reasons @tbg does not understand this gets
+		// stuck occasionally, which really ruins the roachtest run. The method
+		// below already uses a ctx timeout and SQL statement_timeout, but it does
+		// not seem to be enough.
+		//
+		// TODO(testinfra): figure out why this can still get stuck despite the
+		// above.
+		if db != nil {
+			defer db.Close()
+			t.L().Printf("running validation checks on node %d (<10m)", validationNode)
+			// If this validation fails due to a timeout, it is very likely that
+			// the replica divergence check below will also fail.
+			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
+				if err := c.assertValidDescriptors(ctx, db, t); err != nil {
+					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
+				}
+			}
+			// Detect replica divergence (i.e. ranges in which replicas have arrived
+			// at the same log position with different states).
+			if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
+				if err := c.assertConsistentReplicas(ctx, db, t); err != nil {
+					postAssertionErr(errors.WithDetail(err, "consistency check failed"))
+				}
+			}
+		} else {
+			t.L().Printf("no live node found, skipping validation checks")
+		}
+	})
+
+	timeout := 5 * time.Minute
+	select {
+	case <-postAssertCh:
+	case <-time.After(timeout):
+		return errors.Errorf("post test assertions timed out after %s", timeout)
+	}
+	return nil
 }
 
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) error {
-
-	teardownError := func(err error) {
-		t.Error(errors.Mark(err, errDuringTeardown))
+	// From now on, all logging goes to teardown.log to give a clear separation between
+	// operations originating from the test vs the harness.
+	teardownL, err := c.l.ChildLogger("test-teardown", logger.QuietStderr, logger.QuietStdout)
+	if err != nil {
+		return err
 	}
-	// We still have to collect artifacts and run post-flight checks, and any of
-	// these might hang. So they go into a goroutine and the main goroutine
-	// abandons them after a timeout. We intentionally don't wait for the
-	// goroutines to return, as this too may hang if something doesn't respond to
-	// ctx cancellation.
-
+	c.l = teardownL
+	t.ReplaceL(teardownL)
+	// Collecting artifacts may hang so we run it in a goroutine which is abandoned
+	// after a timeout.
 	artifactsCollectedCh := make(chan struct{})
 	_ = r.stopper.RunAsyncTask(ctx, "collect-artifacts", func(ctx context.Context) {
 		// TODO(tbg): make `t` and `logger` resilient to use-after-Close to avoid
@@ -1103,75 +1200,6 @@ func (r *testRunner) teardownTest(
 			if c.Spec().NodeCount > 0 { // unit tests
 				time.Sleep(3 * time.Second)
 			}
-		}
-
-		// When a dead node is detected, the subsequent post validation queries are likely
-		// to hang (reason unclear), and eventually timeout according to the statement_timeout.
-		// If this occurs frequently enough, we can look at skipping post validations on a node
-		// failure (or even on any test failure).
-		if err := c.assertNoDeadNode(ctx, t); err != nil {
-			// Some tests expect dead nodes, so they may opt out of this check.
-			if t.spec.SkipPostValidations&registry.PostValidationNoDeadNodes == 0 {
-				teardownError(err)
-			} else {
-				t.L().Printf("dead node(s) detected but expected")
-			}
-		}
-
-		// We collect all the admin health endpoints in parallel,
-		// and select the first one that succeeds to run the validation queries
-		statuses, err := c.HealthStatus(ctx, t.L(), c.All())
-		if err != nil {
-			teardownError(errors.WithDetail(err, "Unable to check health status"))
-		}
-
-		var db *gosql.DB
-		var validationNode int
-		for _, s := range statuses {
-			if s.Err != nil {
-				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
-				continue
-			}
-
-			if s.Status != http.StatusOK {
-				t.L().Printf("n%d:/health?ready=1 status=%d body=%s", s.Node, s.Status, s.Body)
-				continue
-			}
-
-			if db == nil {
-				db = c.Conn(ctx, t.L(), s.Node)
-				validationNode = s.Node
-			}
-			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
-		}
-
-		// We avoid trying to do this when t.Failed() (and in particular when there
-		// are dead nodes) because for reasons @tbg does not understand this gets
-		// stuck occasionally, which really ruins the roachtest run. The method
-		// below already uses a ctx timeout and SQL statement_timeout, but it does
-		// not seem to be enough.
-		//
-		// TODO(testinfra): figure out why this can still get stuck despite the
-		// above.
-		if db != nil {
-			defer db.Close()
-			t.L().Printf("running validation checks on node %d (<10m)", validationNode)
-			// If this validation fails due to a timeout, it is very likely that
-			// the replica divergence check below will also fail.
-			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
-				if err := c.assertValidDescriptors(ctx, db, t); err != nil {
-					teardownError(errors.WithDetail(err, "invalid descriptors check failed"))
-				}
-			}
-			// Detect replica divergence (i.e. ranges in which replicas have arrived
-			// at the same log position with different states).
-			if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
-				if err := c.assertConsistentReplicas(ctx, db, t); err != nil {
-					teardownError(errors.WithDetail(err, "consistency check failed"))
-				}
-			}
-		} else {
-			t.L().Printf("no live node found, skipping validation checks")
 		}
 
 		if timedOut || t.Failed() {
