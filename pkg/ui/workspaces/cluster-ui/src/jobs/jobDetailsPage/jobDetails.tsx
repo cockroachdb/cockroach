@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React from "react";
+import React, { useContext } from "react";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row, Tabs } from "antd";
@@ -41,6 +41,8 @@ import classNames from "classnames/bind";
 import { Timestamp } from "../../timestamp";
 import { RequestState } from "../../api";
 import moment from "moment-timezone";
+import { CockroachCloudContext } from "src/contexts";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 
 const { TabPane } = Tabs;
 
@@ -49,6 +51,7 @@ const jobCx = classNames.bind(jobStyles);
 
 enum TabKeysEnum {
   OVERVIEW = "Overview",
+  PROFILER = "Profiler",
 }
 
 export interface JobDetailsStateProps {
@@ -59,15 +62,26 @@ export interface JobDetailsDispatchProps {
   refreshJob: (req: JobRequest) => void;
 }
 
+export interface JobDetailsState {
+  currentTab?: string;
+}
+
 export type JobDetailsProps = JobDetailsStateProps &
   JobDetailsDispatchProps &
   RouteComponentProps<unknown>;
 
-export class JobDetails extends React.Component<JobDetailsProps> {
+export class JobDetails extends React.Component<
+  JobDetailsProps,
+  JobDetailsState
+> {
   refreshDataInterval: NodeJS.Timeout;
 
   constructor(props: JobDetailsProps) {
     super(props);
+    const searchParams = new URLSearchParams(props.history.location.search);
+    this.state = {
+      currentTab: searchParams.get("tab") || "overview",
+    };
   }
 
   private refresh(): void {
@@ -98,6 +112,32 @@ export class JobDetails extends React.Component<JobDetailsProps> {
   }
 
   prevPage = (): void => this.props.history.goBack();
+
+  renderProfilerTabContent = (
+    job: cockroach.server.serverpb.JobResponse,
+  ): React.ReactElement => {
+    const id = job?.id;
+    // This URL results in a cluster-wide CPU profile to be collected for 5
+    // seconds. We set `tagfocus` (tf) to only view the samples corresponding to
+    // this job's execution.
+    const url = `debug/pprof/ui/cpu?node=all&seconds=5&labels=true&tf=job.*${id}`;
+    return (
+      <Row gutter={24}>
+        <Col className="gutter-row" span={24}>
+          <SummaryCard className={cardCx("summary-card")}>
+            <SummaryCardItem
+              label="Cluster-wide CPU Profile"
+              value={<a href={url}>Profile</a>}
+            />
+            <InlineAlert
+              intent="warning"
+              title="This operation buffers profiles in memory for all the nodes in the cluster and can result in increased memory usage."
+            />
+          </SummaryCard>
+        </Col>
+      </Row>
+    );
+  };
 
   renderOverviewTabContent = (
     hasNextRun: boolean,
@@ -193,12 +233,26 @@ export class JobDetails extends React.Component<JobDetailsProps> {
     );
   };
 
+  onTabChange = (tabId: string): void => {
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    searchParams.set("tab", tabId);
+    history.replace({
+      ...history.location,
+      search: searchParams.toString(),
+    });
+    this.setState({
+      currentTab: tabId,
+    });
+  };
+
   render(): React.ReactElement {
     const isLoading = this.props.jobRequest.inFlight;
     const error = this.props.jobRequest.error;
     const job = this.props.jobRequest.data;
     const nextRun = TimestampToMoment(job?.next_run);
     const hasNextRun = nextRun?.isAfter();
+    const { currentTab } = this.state;
     return (
       <div className={jobCx("job-details")}>
         <Helmet title={"Details | Job"} />
@@ -238,10 +292,17 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                 <Tabs
                   className={commonStyles("cockroach--tabs")}
                   defaultActiveKey={TabKeysEnum.OVERVIEW}
+                  onChange={this.onTabChange}
+                  activeKey={currentTab}
                 >
                   <TabPane tab={TabKeysEnum.OVERVIEW} key="overview">
                     {this.renderOverviewTabContent(hasNextRun, nextRun, job)}
                   </TabPane>
+                  {!useContext(CockroachCloudContext) && (
+                    <TabPane tab={TabKeysEnum.PROFILER} key="profiler">
+                      {this.renderProfilerTabContent(job)}
+                    </TabPane>
+                  )}
                 </Tabs>
               </>
             )}
