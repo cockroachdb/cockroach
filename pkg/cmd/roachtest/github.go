@@ -32,15 +32,6 @@ type githubIssues struct {
 	teamLoader   func() (team.Map, error)
 }
 
-type issueCategory int
-
-const (
-	otherErr issueCategory = iota
-	clusterCreationErr
-	sshErr
-	teardownErr
-)
-
 func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssues {
 	return &githubIssues{
 		disable:      disable,
@@ -107,7 +98,7 @@ func (g *githubIssues) shouldPost(t test.Test) (bool, string) {
 }
 
 func (g *githubIssues) createPostRequest(
-	t test.Test, cat issueCategory, message string,
+	t test.Test, firstFailure failure, message string,
 ) issues.PostRequest {
 	var mention []string
 	var projColID int
@@ -119,23 +110,23 @@ func (g *githubIssues) createPostRequest(
 	messagePrefix := ""
 	var infraFlake bool
 	// Overrides to shield eng teams from potential flakes
-	if cat == clusterCreationErr {
+	switch {
+	case failureContainsError(firstFailure, errClusterProvisioningFailed):
 		issueOwner = registry.OwnerDevInf
 		issueName = "cluster_creation"
 		messagePrefix = fmt.Sprintf("test %s was skipped due to ", t.Name())
 		infraFlake = true
-	} else if cat == sshErr {
+	case failureContainsError(firstFailure, rperrors.ErrSSH255):
 		issueOwner = registry.OwnerTestEng
 		issueName = "ssh_problem"
 		messagePrefix = fmt.Sprintf("test %s failed due to ", t.Name())
 		infraFlake = true
-	} else if cat == teardownErr {
-		messagePrefix = fmt.Sprintf("test %s failed during teardown (see teardown.log) due to ", t.Name())
+	case failureContainsError(firstFailure, errDuringPostAssertions):
+		messagePrefix = fmt.Sprintf("test %s failed during post test assertions (see test-post-assertions.log) due to ", t.Name())
 	}
 
-	// Issues posted from roachtest are identifiable as such and
-	// they are also release blockers (this label may be removed
-	// by a human upon closer investigation).
+	// Issues posted from roachtest are identifiable as such, and they are also release blockers
+	// (this label may be removed by a human upon closer investigation).
 	labels := []string{"O-roachtest"}
 	if !spec.NonReleaseBlocker && !infraFlake {
 		labels = append(labels, "release-blocker")
@@ -221,22 +212,10 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 		return nil
 	}
 
-	cat := otherErr
-
-	// Overrides to shield eng teams from potential flakes
-	firstFailure := t.firstFailure()
-	if failureContainsError(firstFailure, errClusterProvisioningFailed) {
-		cat = clusterCreationErr
-	} else if failureContainsError(firstFailure, rperrors.ErrSSH255) {
-		cat = sshErr
-	} else if failureContainsError(firstFailure, errDuringTeardown) {
-		cat = teardownErr
-	}
-
 	return g.issuePoster(
 		context.Background(),
 		l,
 		issues.UnitTestFormatter,
-		g.createPostRequest(t, cat, message),
+		g.createPostRequest(t, t.firstFailure(), message),
 	)
 }
