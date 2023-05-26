@@ -519,7 +519,7 @@ func hasVersionTxt(version *semver.Version) bool {
 func updateCommitMessage(released, next *semver.Version) string {
 	var nextVersionMsg string
 	if hasVersionTxt(released) {
-		nextVersionMsg = ". Next version: %s" + next.String()
+		nextVersionMsg = ". Next version: " + next.String()
 	}
 	return fmt.Sprintf(commitTemplate, released, nextVersionMsg)
 }
