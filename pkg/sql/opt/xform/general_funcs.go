@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/lookupjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -36,6 +37,7 @@ type CustomFuncs struct {
 	norm.CustomFuncs
 	e  *explorer
 	im partialidx.Implicator
+	cb lookupjoin.ConstraintBuilder
 }
 
 // Init initializes a new CustomFuncs with the given explorer.
