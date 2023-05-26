@@ -306,7 +306,7 @@ func TestStmtBufBatching(t *testing.T) {
 	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
 
 	// Go to 2nd batch.
-	if err := buf.seekToNextBatch(); err != nil {
+	if err := buf.seekToNextBatch(false /* requireClientSync */); err != nil {
 		t.Fatal(err)
 	}
 	_, pos, err := buf.CurCmd()
@@ -318,7 +318,7 @@ func TestStmtBufBatching(t *testing.T) {
 	}
 
 	// Go to 3rd batch.
-	if err := buf.seekToNextBatch(); err != nil {
+	if err := buf.seekToNextBatch(false /* requireClientSync */); err != nil {
 		t.Fatal(err)
 	}
 	_, pos, err = buf.CurCmd()
@@ -336,7 +336,7 @@ func TestStmtBufBatching(t *testing.T) {
 	}()
 
 	// Go to 4th batch.
-	if err := buf.seekToNextBatch(); err != nil {
+	if err := buf.seekToNextBatch(false /* requireClientSync */); err != nil {
 		t.Fatal(err)
 	}
 	_, pos, err = buf.CurCmd()
