@@ -16,13 +16,10 @@ import {
   JobResponseWithKey,
 } from "src/api/jobsApi";
 import { DOMAIN_NAME } from "../utils";
+import { RequestState } from "../../api";
+import moment from "moment-timezone";
 
-export type JobState = {
-  data: JobResponse;
-  lastError: Error;
-  valid: boolean;
-  inFlight: boolean;
-};
+export type JobState = RequestState<JobResponse>;
 
 export type JobDetailsReducerState = {
   cachedData: {
@@ -42,24 +39,28 @@ const JobSlice = createSlice({
       state.cachedData[action.payload.key] = {
         data: action.payload.jobResponse,
         valid: true,
-        lastError: null,
+        error: null,
         inFlight: false,
+        lastUpdated: moment.utc(),
       };
     },
     failed: (state, action: PayloadAction<ErrorWithKey>) => {
       state.cachedData[action.payload.key] = {
         data: null,
         valid: false,
-        lastError: action.payload.err,
+        error: action.payload.err,
         inFlight: false,
+        lastUpdated: moment.utc(),
       };
     },
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
+      const lastUpdated = state.cachedData[action.payload.key]?.lastUpdated;
       state.cachedData[action.payload.key] = {
         data: null,
         valid: false,
-        lastError: null,
+        error: null,
         inFlight: false,
+        lastUpdated,
       };
     },
     refresh: (_, _action: PayloadAction<JobRequest>) => {},
