@@ -1104,6 +1104,9 @@ func makeFailerWithoutLocalNoop(
 type Failer interface {
 	fmt.Stringer
 
+	// Mode returns the failure mode of the failer.
+	Mode() failureMode
+
 	// CanUseLocal returns true if the failer can be run with a local cluster.
 	CanUseLocal() bool
 
@@ -1135,7 +1138,8 @@ type PartialFailer interface {
 // noopFailer doesn't do anything.
 type noopFailer struct{}
 
-func (f *noopFailer) String() string                          { return string(failureModeNoop) }
+func (f *noopFailer) Mode() failureMode                       { return failureModeNoop }
+func (f *noopFailer) String() string                          { return string(f.Mode()) }
 func (f *noopFailer) CanUseLocal() bool                       { return true }
 func (f *noopFailer) Setup(context.Context)                   {}
 func (f *noopFailer) Ready(context.Context, cluster.Monitor)  {}
@@ -1157,15 +1161,16 @@ type blackholeFailer struct {
 	output bool
 }
 
-func (f *blackholeFailer) String() string {
+func (f *blackholeFailer) Mode() failureMode {
 	if f.input && !f.output {
-		return string(failureModeBlackholeRecv)
+		return failureModeBlackholeRecv
 	} else if f.output && !f.input {
-		return string(failureModeBlackholeSend)
+		return failureModeBlackholeSend
 	}
-	return string(failureModeBlackhole)
+	return failureModeBlackhole
 }
 
+func (f *blackholeFailer) String() string                         { return string(f.Mode()) }
 func (f *blackholeFailer) CanUseLocal() bool                      { return false } // needs iptables
 func (f *blackholeFailer) Setup(context.Context)                  {}
 func (f *blackholeFailer) Ready(context.Context, cluster.Monitor) {}
@@ -1249,7 +1254,8 @@ type crashFailer struct {
 	startSettings install.ClusterSettings
 }
 
-func (f *crashFailer) String() string                             { return string(failureModeCrash) }
+func (f *crashFailer) Mode() failureMode                          { return failureModeCrash }
+func (f *crashFailer) String() string                             { return string(f.Mode()) }
 func (f *crashFailer) CanUseLocal() bool                          { return true }
 func (f *crashFailer) Setup(_ context.Context)                    {}
 func (f *crashFailer) Ready(_ context.Context, m cluster.Monitor) { f.m = m }
@@ -1275,7 +1281,8 @@ type diskStallFailer struct {
 	staller       diskStaller
 }
 
-func (f *diskStallFailer) String() string    { return string(failureModeDiskStall) }
+func (f *diskStallFailer) Mode() failureMode { return failureModeDiskStall }
+func (f *diskStallFailer) String() string    { return string(f.Mode()) }
 func (f *diskStallFailer) CanUseLocal() bool { return false } // needs dmsetup
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
@@ -1315,10 +1322,11 @@ type pauseFailer struct {
 	c cluster.Cluster
 }
 
-func (f *pauseFailer) String() string              { return string(failureModePause) }
-func (f *pauseFailer) CanUseLocal() bool           { return true }
-func (f *pauseFailer) Setup(ctx context.Context)   {}
-func (f *pauseFailer) Cleanup(ctx context.Context) {}
+func (f *pauseFailer) Mode() failureMode       { return failureModePause }
+func (f *pauseFailer) String() string          { return string(f.Mode()) }
+func (f *pauseFailer) CanUseLocal() bool       { return true }
+func (f *pauseFailer) Setup(context.Context)   {}
+func (f *pauseFailer) Cleanup(context.Context) {}
 
 func (f *pauseFailer) Ready(ctx context.Context, m cluster.Monitor) {
 	// The process pause can trip the disk stall detector, so we disable it.
