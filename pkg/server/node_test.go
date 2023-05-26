@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -756,6 +758,115 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	require.GreaterOrEqual(t, n.metrics.BatchCount.Count(), bCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Get].Count(), getCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Put].Count(), putCurr)
+}
+
+// TestNodeCrossRegionBatchMetrics verifies that node.Batch() correctly updates
+// the cross-region byte count metrics for sent batch requests and received
+// batch responses.
+func TestNodeCrossRegionBatchMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The initial setup ensures the correct configuration for three nodes (with
+	// different localities), single-range, and three replicas (on different
+	// nodes). The zone configuration is also set up so that the leaseholder for
+	// the range resides on server[1].
+	const numNodes = 3
+	const leaseServerIdx = 1
+	serverArgs := make(map[int]base.TestServerArgs)
+	regions := [numNodes]int{1, 2, 3}
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.LeasePreferences = []zonepb.LeasePreference{
+		{
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: fmt.Sprintf("us-east-%v", regions[leaseServerIdx])},
+			},
+		},
+	}
+
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key: "region", Value: fmt.Sprintf("us-east-%v", regions[i]),
+					},
+				},
+			},
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DefaultZoneConfigOverride: &zcfg,
+				},
+			},
+		}
+	}
+
+	ctx := context.Background()
+	var clusterArgs = base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationAuto,
+		ServerArgsPerNode: serverArgs,
+	}
+	tc := serverutils.StartNewTestCluster(t, numNodes, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	testKey := tc.ScratchRange(t)
+	testutils.SucceedsSoon(t, func() (err error) {
+		for i := 0; i < tc.NumServers(); i++ {
+			err = tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+				return store.ForceReplicationScanAndProcess()
+			})
+		}
+		return err
+	})
+
+	type metricsPair struct {
+		request  int64
+		response int64
+	}
+
+	// Record the node metrics before sending the requests for comparison.
+	serversMetricsBeforeRequest := make(map[int]metricsPair)
+	for i := 0; i < tc.NumServers(); i++ {
+		n := tc.Server(i).(*TestServer).GetNode()
+		serversMetricsBeforeRequest[i] = metricsPair{
+			request:  n.metrics.CrossRegionBatchRequestBytes.Count(),
+			response: n.metrics.CrossRegionBatchResponseBytes.Count(),
+		}
+	}
+
+	// In this test, the request is sent from server[0] to the leaseholder
+	// (server[1]) to enforce a cross-region batch request / response. It is
+	// expected that the receiver node metrics, server[1], will be updated, while
+	// the node metrics at server[0] and server[2] remain unchanged.
+	get := &kvpb.GetRequest{
+		RequestHeader: kvpb.RequestHeader{Key: testKey},
+	}
+
+	if _, error := kv.SendWrappedWith(
+		context.Background(), tc.Server(0).DistSenderI().(*kvcoord.DistSender), kvpb.Header{RoutingPolicy: kvpb.RoutingPolicy_LEASEHOLDER}, get,
+	); error != nil {
+		t.Fatal(error)
+	}
+
+	for i := 0; i < tc.NumServers(); i++ {
+		n := tc.Server(i).(*TestServer).GetNode()
+		requestDiff := n.metrics.CrossRegionBatchRequestBytes.Count() - serversMetricsBeforeRequest[i].request
+		responseDiff := n.metrics.CrossRegionBatchResponseBytes.Count() - serversMetricsBeforeRequest[i].response
+
+		if i == leaseServerIdx {
+			// Nodes with the leaseholder receives cross-region batches and should be updated.
+			require.Greater(t, requestDiff, int64(0),
+				fmt.Sprintf("expected cross-region bytes sent to be > 0 but got %v", requestDiff))
+			require.Greater(t, responseDiff, int64(0),
+				fmt.Sprintf("expected cross-region bytes received be > 0 but got %v", responseDiff))
+		} else {
+			// Other nodes metrics should remain unchanged.
+			require.Equal(t, requestDiff, int64(0),
+				fmt.Sprintf("expected cross-region bytes sent to be 0 but got %v", requestDiff))
+			require.Equal(t, responseDiff, int64(0),
+				fmt.Sprintf("expected cross-region bytes received be 0 but got %v", responseDiff))
+		}
+	}
 }
 
 func TestGetTenantWeights(t *testing.T) {
