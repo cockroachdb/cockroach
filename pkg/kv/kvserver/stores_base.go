@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
@@ -91,5 +92,14 @@ func (s *baseStore) SetQueueActive(active bool, queue string) error {
 	}
 
 	kvQueue.SetDisabled(!active)
+	return nil
+}
+
+// GetReplicaMutexForTesting is part of kvserverbase.Store.
+func (s *baseStore) GetReplicaMutexForTesting(rangeID roachpb.RangeID) *syncutil.RWMutex {
+	store := (*Store)(s)
+	if repl := store.GetReplicaIfExists(rangeID); repl != nil {
+		return &repl.mu.RWMutex
+	}
 	return nil
 }
