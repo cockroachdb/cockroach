@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -494,6 +495,8 @@ type NodeLivenessTestingKnobs struct {
 	// StorePoolNodeLivenessFn is the function used by the StorePool to determine
 	// whether a node is live or not.
 	StorePoolNodeLivenessFn storepool.NodeLivenessFunc
+	// IsLiveCallback, will be called when a node becomes live.
+	IsLiveCallback liveness.IsLiveCallback
 }
 
 var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}
