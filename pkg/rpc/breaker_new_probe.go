@@ -153,6 +153,10 @@ func (p *breakerProbe) onHeartbeatFailed(
 		err = errors.AssertionFailedf("unexpected connection shutdown")
 	}
 
+	// There might be other peers in the map that are pending deletion, but which
+	// are no longer seeing activity. To eventually clear them out, we check all
+	// conns when any conn fails. This avoids the need to have an extra goroutine
+	// sitting in all of the goroutine stacks we look at during support.
 	touchOldPeers(p.peers, now)
 
 	// We're a bit careful with the locking here to avoid acquiring p.peers.mu
