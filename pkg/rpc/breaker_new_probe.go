@@ -162,7 +162,7 @@ func (p *breakerProbe) onHeartbeatFailed(
 	// We're a bit careful with the locking here to avoid acquiring p.peers.mu
 	// while holding p.peer.mu.
 	var deleteAfter time.Duration
-	if ts := shouldDeleteAfter(p.peers, p.k, err); ts != 0 {
+	if ts := p.peers.shouldDeleteAfter(p.k, err); ts != 0 {
 		deleteAfter = ts
 	}
 

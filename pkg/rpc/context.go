@@ -2813,11 +2813,11 @@ func hasSiblingConn(peers map[peerKey]*peer, self peerKey) (healthy, ok bool) {
 }
 
 // TODO(during review): move after dust has settled.
-func shouldDeleteAfter(conns *peerMap, myKey peerKey, err error) time.Duration {
-	conns.mu.RLock()
-	defer conns.mu.RUnlock()
+func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration {
+	peers.mu.RLock()
+	defer peers.mu.RUnlock()
 
-	sibHealthy, ok := hasSiblingConn(conns.mu.m, myKey)
+	sibHealthy, ok := hasSiblingConn(peers.mu.m, myKey)
 
 	var deleteAfter time.Duration
 	if kvpb.IsDecommissionedStatusErr(err) {

@@ -24,10 +24,10 @@ type peerMap struct {
 	}
 }
 
-func (m *peerMap) getWithBreaker(k peerKey) (PeerSnap, peerMetrics, *circuit.Breaker, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	p := m.mu.m[k]
+func (peers *peerMap) getWithBreaker(k peerKey) (PeerSnap, peerMetrics, *circuit.Breaker, bool) {
+	peers.mu.RLock()
+	defer peers.mu.RUnlock()
+	p := peers.mu.m[k]
 	if p == nil {
 		return PeerSnap{}, peerMetrics{}, nil, false
 	}
@@ -36,14 +36,14 @@ func (m *peerMap) getWithBreaker(k peerKey) (PeerSnap, peerMetrics, *circuit.Bre
 
 // Conn returns a read-only version of the peer and a boolean indicating
 // whether the peer exists.
-func (m *peerMap) get(k peerKey) (PeerSnap, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.getRLocked(k)
+func (peers *peerMap) get(k peerKey) (PeerSnap, bool) {
+	peers.mu.RLock()
+	defer peers.mu.RUnlock()
+	return peers.getRLocked(k)
 }
 
-func (m *peerMap) getRLocked(k peerKey) (PeerSnap, bool) {
-	p, ok := m.mu.m[k]
+func (peers *peerMap) getRLocked(k peerKey) (PeerSnap, bool) {
+	p, ok := peers.mu.m[k]
 	if !ok {
 		return PeerSnap{}, false
 	}
