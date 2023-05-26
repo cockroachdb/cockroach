@@ -15,6 +15,9 @@ go_library(
         "sentry.go",
         "set_cockroach_version.go",
         "templates.go",
+        "update_brew.go",
+        "update_helm.go",
+        "update_orchestration.go",
         "update_releases.go",
         "update_versions.go",
     ],
@@ -47,6 +50,7 @@ go_test(
     name = "release_test",
     srcs = [
         "blockers_test.go",
+        "git_test.go",
         "sender_test.go",
         "update_releases_test.go",
         "update_versions_test.go",
