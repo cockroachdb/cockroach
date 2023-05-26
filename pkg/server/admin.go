@@ -2175,22 +2175,9 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return serverError(ctx, errors.Newf("unknown mode: %v", serveMode))
 	}
 
-	// TODO(knz): update this code when progress is made on
-	// https://github.com/cockroachdb/cockroach/issues/45123
-	l, ok := s.nodeLiveness.GetLiveness(roachpb.NodeID(s.serverIterator.getID()))
-	if !ok {
-		return grpcstatus.Error(codes.Unavailable, "liveness record not found")
-	}
-	if !l.IsLive(s.clock.Now()) {
+	status := s.nodeLiveness.GetNodeVitalityFromCache(roachpb.NodeID(s.serverIterator.getID()))
+	if !status.IsLive(livenesspb.AdminHealthCheck) {
 		return grpcstatus.Errorf(codes.Unavailable, "node is not healthy")
-	}
-	if l.Draining {
-		// l.Draining indicates that the node is draining leases.
-		// This is set when Drain(DrainMode_LEASES) is called.
-		// It's possible that l.Draining is set without
-		// grpc.mode being modeDraining, if a RPC client
-		// has requested DrainMode_LEASES but not DrainMode_CLIENT.
-		return grpcstatus.Errorf(codes.Unavailable, "node is shutting down")
 	}
 
 	if !s.sqlServer.isReady.Get() {
