@@ -142,6 +142,19 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaCrossRegionBatchRequest = metric.Metadata{
+		Name:        "batch_requests.cross_region",
+		Help:        `Total byte count of cross-region batch requests sent`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCrossRegionBatchResponse = metric.Metadata{
+		Name:        "batch_responses.cross_region",
+		Help:        `Total byte count of cross-region batch requests received`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // Cluster settings.
@@ -182,8 +195,10 @@ type nodeMetrics struct {
 	Err        *metric.Counter
 	DiskStalls *metric.Counter
 
-	BatchCount   *metric.Counter
-	MethodCounts [kvpb.NumMethods]*metric.Counter
+	BatchCount                    *metric.Counter
+	MethodCounts                  [kvpb.NumMethods]*metric.Counter
+	CrossRegionBatchRequestBytes  *metric.Counter
+	CrossRegionBatchResponseBytes *metric.Counter
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
@@ -194,10 +209,12 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
-		Success:    metric.NewCounter(metaExecSuccess),
-		Err:        metric.NewCounter(metaExecError),
-		DiskStalls: metric.NewCounter(metaDiskStalls),
-		BatchCount: metric.NewCounter(metaInternalBatchRPCCount),
+		Success:                       metric.NewCounter(metaExecSuccess),
+		Err:                           metric.NewCounter(metaExecError),
+		DiskStalls:                    metric.NewCounter(metaDiskStalls),
+		BatchCount:                    metric.NewCounter(metaInternalBatchRPCCount),
+		CrossRegionBatchRequestBytes:  metric.NewCounter(metaCrossRegionBatchRequest),
+		CrossRegionBatchResponseBytes: metric.NewCounter(metaCrossRegionBatchResponse),
 	}
 
 	for i := range nm.MethodCounts {
@@ -1235,19 +1252,60 @@ func (n *Node) batchInternal(
 	return br, nil
 }
 
-// incrementBatchCounters increments counters to track the batch and composite
-// request methods.
-func (n *Node) incrementBatchCounters(ba *kvpb.BatchRequest) {
+// The incrementBatchCounters function updates node metrics for batch counts,
+// composite request methods, and cross-region batches.
+//
+// It takes a BatchRequest parameter to extract information about the
+// gatewayNodeID and the byte count of the batch request. It returns (bool,
+// error) indicating whether the batch request is cross-region and if any errors
+// occurred during the process.
+//
+// Note that we are already at the destination range node here. Node first tries
+// to obtain a gateway node descriptor through gossip. If it fails to obtain
+// gossip or the gateway node descriptor, or if the locality of any node does
+// not have a “region” key, the function returns (false, error). If no errors
+// occurred, it checks if the gateway and destination nodes are in different
+// regions. If they are, it updates the cross-region metrics and returns (true,
+// nil); otherwise, it returns (false, nil).
+//
+// isCrossRegion is returned here to avoid redundant checks for cross-region
+// after receiving batch responses.
+func (n *Node) incrementBatchCounters(ba *kvpb.BatchRequest) (bool, error) {
 	n.metrics.BatchCount.Inc(1)
 	for _, ru := range ba.Requests {
 		m := ru.GetInner().Method()
 		n.metrics.MethodCounts[m].Inc(1)
 	}
+
+	gossip := n.storeCfg.Gossip
+	if gossip == nil {
+		return false, errors.New("gossip is not configured")
+	}
+
+	gatewayNodeDesc, err := gossip.GetNodeDescriptor(ba.GatewayNodeID)
+	if err != nil {
+		return false, err
+	}
+
+	isCrossRegion, err := n.Descriptor.Locality.IsCrossRegion(gatewayNodeDesc.Locality)
+	if err != nil {
+		return false, err
+	}
+
+	if isCrossRegion {
+		n.metrics.CrossRegionBatchRequestBytes.Inc(int64(ba.Size()))
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // Batch implements the kvpb.InternalServer interface.
 func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
-	n.incrementBatchCounters(args)
+	isCrossRegionBatchRequest, error := n.incrementBatchCounters(args)
+	if error != nil {
+		log.Eventf(ctx, "%v", error)
+	}
 
 	// NB: Node.Batch is called directly for "local" calls. We don't want to
 	// carry the associated log tags forward as doing so makes adding additional
@@ -1296,6 +1354,9 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 			)
 		}
 		br.Error = kvpb.NewError(err)
+	}
+	if isCrossRegionBatchRequest {
+		n.metrics.CrossRegionBatchResponseBytes.Inc(int64(br.Size()))
 	}
 	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
