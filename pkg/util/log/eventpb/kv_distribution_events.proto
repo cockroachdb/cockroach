@@ -1,0 +1,25 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
+
+import "gogoproto/gogo.proto";
+import "kv/kvserver/rangelog/rangelogpb/range_log.proto";
+import "util/log/logpb/event.proto";
+
+// Category: KV distribution events
+// Channel: KV_DISTRIBUTION
+
+message RangeLogEvent {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  cockroach.kv.rangelog.rangelogpb.RangeLogEvent event = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ""];
+}

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -87,7 +88,8 @@ func (s *Writer) WriteRangeLogEvent(
 			err, "failed to encode rangelog index entries",
 		)
 	}
-	log.KvDistribution.Infof(ctx, "logging RangeLogEvent %v to system.rangelog", event)
+	//log.KvDistribution.Infof(ctx, "logging RangeLogEvent %v to system.rangelog", event)
+	log.StructuredEvent(ctx, eventpb.RangeLogEvent{Event: event})
 	return runner.Run(ctx, ba)
 }
 

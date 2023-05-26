@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/sem/tree",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
