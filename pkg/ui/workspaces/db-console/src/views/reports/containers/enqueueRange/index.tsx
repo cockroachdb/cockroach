@@ -18,6 +18,7 @@ import { cockroach } from "src/js/protos";
 import Print from "src/views/reports/containers/range/print";
 import "./index.styl";
 
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import EnqueueRangeRequest = cockroach.server.serverpb.EnqueueRangeRequest;
 import EnqueueRangeResponse = cockroach.server.serverpb.EnqueueRangeResponse;
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
@@ -33,6 +34,10 @@ const QUEUES = [
   "consistencyChecker",
   "timeSeriesMaintenance",
 ];
+
+const queueOptions = QUEUES.map(q => {
+  return { value: q, label: q };
+});
 
 interface EnqueueRangeProps {
   handleEnqueueRange: (
@@ -52,22 +57,31 @@ interface EnqueueRangeState {
   error: Error;
 }
 
+export type EnqueueRangeAllProps = EnqueueRangeProps & RouteComponentProps;
+
 export class EnqueueRange extends React.Component<
-  EnqueueRangeProps & RouteComponentProps,
+  EnqueueRangeAllProps,
   EnqueueRangeState
 > {
-  state: EnqueueRangeState = {
-    queue: QUEUES[0],
-    rangeID: "",
-    nodeID: "",
-    skipShouldQueue: false,
-    response: null,
-    error: null,
-  };
+  constructor(props: EnqueueRangeAllProps) {
+    super(props);
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    const rangeID = searchParams.get("rangeID") || "";
 
-  handleUpdateQueue = (evt: React.FormEvent<{ value: string }>) => {
+    this.state = {
+      queue: QUEUES[0],
+      rangeID: rangeID,
+      nodeID: "",
+      skipShouldQueue: false,
+      response: null,
+      error: null,
+    };
+  }
+
+  handleUpdateQueue = (selectedOption: DropdownOption) => {
     this.setState({
-      queue: evt.currentTarget.value,
+      queue: selectedOption.value,
     });
   };
 
@@ -213,18 +227,18 @@ export class EnqueueRange extends React.Component<
                 method="post"
               >
                 <label>
-                  Queue:{" "}
-                  <select onChange={this.handleUpdateQueue}>
-                    {QUEUES.map(queue => (
-                      <option key={queue} value={queue}>
-                        {queue}
-                      </option>
-                    ))}
-                  </select>
+                  <span className={"label-text"}>Queue:</span>
+                  <Dropdown
+                    title=""
+                    options={queueOptions}
+                    selected={this.state.queue}
+                    onChange={this.handleUpdateQueue}
+                    className={"dropdown-area"}
+                  />
                 </label>
                 <br />
                 <label>
-                  RangeID:{" "}
+                  <span className={"label-text"}>RangeID:</span>
                   <input
                     type="number"
                     name="rangeID"
@@ -236,7 +250,7 @@ export class EnqueueRange extends React.Component<
                 </label>
                 <br />
                 <label>
-                  NodeID:{" "}
+                  <span className={"label-text"}>NodeID:</span>
                   <input
                     type="number"
                     name="nodeID"
@@ -245,14 +259,16 @@ export class EnqueueRange extends React.Component<
                     value={this.state.nodeID}
                     placeholder="NodeID (optional)"
                   />
-                  &nbsp;If not specified, we'll attempt to enqueue on all the
-                  nodes.
+                  <span className={"label-tooltip"}>
+                    If not specified, we'll attempt to enqueue on all the nodes.
+                  </span>
                 </label>
                 <br />
                 <label>
-                  SkipShouldQueue:{" "}
+                  <span className={"label-text"}>SkipShouldQueue:</span>
                   <input
                     type="checkbox"
+                    className="checkbox-area"
                     checked={this.state.skipShouldQueue}
                     name="skipShouldQueue"
                     onChange={() =>
@@ -263,7 +279,7 @@ export class EnqueueRange extends React.Component<
                   />
                 </label>
                 <br />
-                <input type="submit" className="submit-button" value="Submit" />
+                <input type="submit" className="button-crl" value="Submit" />
               </form>
             </div>
           </section>
