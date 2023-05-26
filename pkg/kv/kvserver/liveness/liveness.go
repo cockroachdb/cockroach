@@ -284,8 +284,8 @@ type NodeLiveness struct {
 	heartbeatPaused       uint32
 	heartbeatToken        chan struct{}
 	metrics               Metrics
-	onNodeDecommissioned  func(livenesspb.Liveness)  // noop if nil
-	onNodeDecommissioning OnNodeDecommissionCallback // noop if nil
+	onNodeDecommissioned  func(id roachpb.NodeID) // noop if nil
+	onNodeDecommissioning func(id roachpb.NodeID) // noop if nil
 	nodeDialer            *nodedialer.Dialer
 	engineSyncs           *singleflight.Group
 
@@ -335,11 +335,10 @@ type NodeLivenessOptions struct {
 	// node was permanently removed from the cluster. This method must be
 	// idempotent as it may be invoked multiple times and defaults to a
 	// noop.
-	// TODO(baptist): Change this to not take the liveness record
-	OnNodeDecommissioned func(livenesspb.Liveness)
+	OnNodeDecommissioned func(id roachpb.NodeID)
 	// OnNodeDecommissioning is invoked when a node is detected to be
 	// decommissioning.
-	OnNodeDecommissioning OnNodeDecommissionCallback
+	OnNodeDecommissioning func(id roachpb.NodeID)
 	Engines               []diskStorage.Engine
 	OnSelfHeartbeat       HeartbeatCallback
 	NodeDialer            *nodedialer.Dialer
@@ -570,7 +569,7 @@ func (nl *NodeLiveness) cacheUpdated(old livenesspb.Liveness, new livenesspb.Liv
 		}
 	}
 	if !old.Membership.Decommissioned() && new.Membership.Decommissioned() && nl.onNodeDecommissioned != nil {
-		nl.onNodeDecommissioned(new)
+		nl.onNodeDecommissioned(new.NodeID)
 	}
 	if !old.Membership.Decommissioning() && new.Membership.Decommissioning() && nl.onNodeDecommissioning != nil {
 		nl.onNodeDecommissioning(new.NodeID)
@@ -629,12 +628,6 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 	return statusChanged, nil
 }
 
-// GetLivenessThreshold returns the maximum duration between heartbeats
-// before a node is considered not-live.
-func (nl *NodeLiveness) GetLivenessThreshold() time.Duration {
-	return nl.livenessThreshold
-}
-
 // IsLive returns whether or not the specified node is considered live based on
 // whether or not its liveness has expired regardless of the liveness status. It
 // is an error if the specified node is not in the local liveness table.
@@ -650,30 +643,6 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	}
 	// NB: We use clock.Now() in order to consider clock signals from other nodes.
 	return liveness.IsLive(nl.clock.Now()), nil
-}
-
-// IsAvailable returns whether or not the specified node is available to serve
-// requests. It checks both the liveness and decommissioned states, but not
-// draining or decommissioning (since it may still be a leaseholder for ranges).
-// Returns false if the node is not in the local liveness table.
-func (nl *NodeLiveness) IsAvailable(nodeID roachpb.NodeID) bool {
-	liveness, ok := nl.GetLiveness(nodeID)
-	return ok && liveness.IsLive(nl.clock.Now()) && !liveness.Membership.Decommissioned()
-}
-
-// IsAvailableNotDraining returns whether or not the specified node is available
-// to serve requests (i.e. it is live and not decommissioned) and is not in the
-// process of draining/decommissioning. Note that draining/decommissioning nodes
-// could still be leaseholders for ranges until drained, so this should not be
-// used when the caller needs to be able to contact leaseholders directly.
-// Returns false if the node is not in the local liveness table.
-func (nl *NodeLiveness) IsAvailableNotDraining(nodeID roachpb.NodeID) bool {
-	liveness, ok := nl.GetLiveness(nodeID)
-	return ok &&
-		liveness.IsLive(nl.clock.Now()) &&
-		!liveness.Membership.Decommissioning() &&
-		!liveness.Membership.Decommissioned() &&
-		!liveness.Draining
 }
 
 // OnNodeDecommissionCallback is a callback that is invoked when a node is
@@ -1337,4 +1306,10 @@ func (nl *NodeLiveness) TestingSetDecommissioningInternal(
 // the registered callbacks if the node became live in the process. For testing.
 func (nl *NodeLiveness) TestingMaybeUpdate(ctx context.Context, newRec Record) {
 	nl.cache.maybeUpdate(ctx, newRec)
+}
+
+// TestingGetLivenessThreshold returns the maximum duration between heartbeats
+// before a node is considered not-live.
+func (nl *NodeLiveness) TestingGetLivenessThreshold() time.Duration {
+	return nl.livenessThreshold
 }
