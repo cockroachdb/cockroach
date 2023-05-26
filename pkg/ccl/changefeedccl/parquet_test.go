@@ -91,6 +91,15 @@ func TestParquetRows(t *testing.T) {
 			var numCols int
 			f, err := os.CreateTemp(os.TempDir(), fileName)
 			require.NoError(t, err)
+			defer func() {
+				if t.Failed() {
+					t.Logf("leaving %s for inspection", f.Name())
+				} else {
+					if err := os.Remove(f.Name()); err != nil {
+						t.Logf("could not cleanup temp file %s: %s", f.Name(), err)
+					}
+				}
+			}()
 
 			numRows := len(tc.inserts)
 			for _, insertStmt := range tc.inserts {
