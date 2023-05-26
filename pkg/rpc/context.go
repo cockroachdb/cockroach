@@ -392,11 +392,12 @@ func newConnectionToNodeID(k peerKey, breakerSignal func() circuitbreaker.Signal
 	return c
 }
 
-// wait blocks on initialHeartbeatDone and returns either an error or the
-// unwrapped grpc connection. If the provided context or signal fire, they
-// will short-circuit the waiting process. The signal may be nil in which
-// case it is ignored.
-func (c *Connection) wait(
+// waitOrDefault blocks on initialHeartbeatDone and returns either an error or
+// the unwrapped grpc connection. If the provided context or signal fire, they
+// will short-circuit the waiting process. The signal may be nil in which case
+// it is ignored. If a non-nil defErr is provided, waitOrDefault will never
+// block but fall back to defErr in this case.
+func (c *Connection) waitOrDefault(
 	ctx context.Context, defErr error, sig circuitbreaker.Signal,
 ) (*grpc.ClientConn, error) {
 	// Check the circuit breaker first. If it is already tripped now, we
@@ -441,7 +442,7 @@ func (c *Connection) wait(
 // Connect returns the underlying grpc.ClientConn after it has been validated,
 // or an error if dialing or validation fails.
 func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
-	return c.wait(ctx, nil /* defErr */, c.breakerSignalFn())
+	return c.waitOrDefault(ctx, nil /* defErr */, c.breakerSignalFn())
 }
 
 type neverTripSignal struct{}
@@ -474,14 +475,14 @@ func (c *Connection) ConnectNoBreaker(ctx context.Context) (*grpc.ClientConn, er
 	// we make sure that calls to ConnectNoBreaker tip the probe off as well,
 	// avoiding this problem.
 	_ = c.Signal().Err()
-	return c.wait(ctx, nil /* defErr */, &neverTripSignal{})
+	return c.waitOrDefault(ctx, nil /* defErr */, &neverTripSignal{})
 }
 
 // Health returns an error indicating the success or failure of the connection's
 // latest heartbeat. Returns ErrNotHeartbeated if the peer was just contacted for
 // the first time and the first heartbeat has not occurred yet.
 func (c *Connection) Health() error {
-	_, err := c.wait(context.Background(), ErrNotHeartbeated, c.breakerSignalFn())
+	_, err := c.waitOrDefault(context.Background(), ErrNotHeartbeated, c.breakerSignalFn())
 	return err
 }
 

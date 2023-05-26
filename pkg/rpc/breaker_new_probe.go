@@ -274,7 +274,7 @@ func (p *breakerProbe) onInitialHeartbeatSucceeded(
 	// ConnectionFailures is not updated here.
 
 	// Close the channel last which is helpful for unit tests that
-	// first wait for a healthy conn to then check metrics.
+	// first waitOrDefault for a healthy conn to then check metrics.
 	p.mu.c.gatedCC.Resolve(cc, nil /* err */)
 
 	logOnHealthy(ctx, p.mu.disconnected, now)
