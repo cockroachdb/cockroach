@@ -2727,6 +2727,7 @@ WHERE
   name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled')
 ----
 name                                                       setting             category  short_desc  extra_desc  vartype
+allow_role_memberships_to_change_during_transaction        off                 NULL      NULL        NULL        string
 alter_primary_region_super_region_override                 off                 NULL      NULL        NULL        string
 application_name                                           ·                   NULL      NULL        NULL        string
 avoid_buffering                                            off                 NULL      NULL        NULL        string
@@ -2874,6 +2875,7 @@ WHERE
   name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled')
 ----
 name                                                       setting             unit  context  enumvals  boot_val            reset_val
+allow_role_memberships_to_change_during_transaction        off                 NULL  user     NULL      off                 off
 alter_primary_region_super_region_override                 off                 NULL  user     NULL      off                 off
 application_name                                           ·                   NULL  user     NULL      ·                   ·
 avoid_buffering                                            off                 NULL  user     NULL      false               false
@@ -3015,6 +3017,7 @@ query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
 ----
 name                                                       source  min_val  max_val  sourcefile  sourceline
+allow_role_memberships_to_change_during_transaction        NULL    NULL     NULL     NULL        NULL
 alter_primary_region_super_region_override                 NULL    NULL     NULL     NULL        NULL
 application_name                                           NULL    NULL     NULL     NULL        NULL
 avoid_buffering                                            NULL    NULL     NULL     NULL        NULL
