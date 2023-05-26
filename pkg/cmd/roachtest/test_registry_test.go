@@ -29,7 +29,8 @@ func TestMakeTestRegistry(t *testing.T) {
 		require.Equal(t, "foo", r.instanceType)
 		require.Equal(t, spec.AWS, r.cloud)
 
-		s := r.MakeClusterSpec(100, spec.Geo(), spec.Zones("zone99"), spec.CPU(12), spec.PreferSSD())
+		s := r.MakeClusterSpec(100, spec.Geo(), spec.Zones("zone99"), spec.CPU(12),
+			spec.PreferLocalSSD(true))
 		require.EqualValues(t, 100, s.NodeCount)
 		require.Equal(t, "foo", s.InstanceType)
 		require.True(t, s.Geo)
