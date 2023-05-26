@@ -91,7 +91,7 @@ import {
 } from "src/redux/clusterSettings";
 import { getDataFromServer } from "src/util/dataFromServer";
 import { getCookieValue } from "src/redux/cookies";
-import { tenantDropdownOptions, isSystemTenant } from "src/redux/tenants";
+import { isSystemTenant, tenantDropdownOptions } from "src/redux/tenants";
 
 interface GraphDashboard {
   label: string;
@@ -322,7 +322,7 @@ export class NodeGraphs extends React.Component<
     const nodeSources = selectedNode !== "" ? [selectedNode] : null;
     const selectedTenant = isSystemTenant(currentTenant)
       ? getMatchParamByName(match, tenantNameAttr) || ""
-      : "";
+      : currentTenant;
     // When "all" is the selected source, some graphs display a line for every
     // node in the cluster using the nodeIDs collection. However, if a specific
     // node is already selected, these per-node graphs should only display data
