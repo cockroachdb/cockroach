@@ -11,8 +11,10 @@
 import { AdminUIState } from "src/redux/state";
 import { createSelector } from "reselect";
 import { cockroach } from "src/js/protos";
+import { LocalSetting } from "./localsettings";
 
 const hotRangesState = (state: AdminUIState) => state.cachedData.hotRanges;
+const localSettingsSelector = (state: AdminUIState) => state.localSettings;
 
 export const hotRangesSelector = createSelector(hotRangesState, hotRanges =>
   Object.values(hotRanges?.data || {})
@@ -42,4 +44,10 @@ export const lastSetAtSelector = createSelector(
 export const isLoadingSelector = createSelector(
   hotRangesState,
   hotRanges => hotRanges?.inFlight,
+);
+
+export const sortSettingLocalSetting = new LocalSetting(
+  "sortSetting/hotRanges",
+  localSettingsSelector,
+  { ascending: true, columnTitle: "qps" },
 );
