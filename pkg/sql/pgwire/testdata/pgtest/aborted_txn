@@ -236,3 +236,116 @@ ReadyForQuery
 {"Type":"NoData"}
 {"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/103936.
+# A simple query should be ignored if it is sent after an extended protocol
+# message that aborts the transaction.
+
+send
+Query {"String": "DROP TABLE IF EXISTS t103936;"}
+Query {"String": "CREATE TABLE t103936 (i INT PRIMARY KEY, j INT UNIQUE);"}
+Query {"String": "BEGIN"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# The first insert should succeed.
+send
+Query {"String": "SAVEPOINT s"}
+Parse {"Name": "stmt_103936", "Query": "INSERT INTO t103936 VALUES ($1, $2)"}
+Bind {"PreparedStatement": "stmt_103936", "Parameters": [{"text": "1"}, {"text": "2"}]}
+Execute
+Query {"String": "RELEASE SAVEPOINT s"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"CommandComplete","CommandTag":"RELEASE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# The second insert should fail with a unique constraint violation.
+send
+Query {"String": "SAVEPOINT s"}
+Bind {"PreparedStatement": "stmt_103936", "Parameters": [{"text": "2"}, {"text": "2"}]}
+Execute
+Query {"String": "SELECT 1"}
+Query {"String": "RELEASE SAVEPOINT s"}
+Sync
+----
+
+# The RELEASE SAVEPOINT and SELECT 1 queries should be ignored and should not
+# return ReadyForQuery. The Sync message should not be ignored.
+until
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"23505","ConstraintName":"t103936_j_key"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+# Get back to a good state.
+send
+Query {"String": "ROLLBACK TO SAVEPOINT s; RELEASE SAVEPOINT s"}
+Query {"String": "ROLLBACK"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"CommandComplete","CommandTag":"RELEASE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# If an error occurs during a simple query, then messages should not be
+# ignored.
+send
+Query {"String": "BEGIN"}
+Bind {"PreparedStatement": "stmt_103936", "Parameters": [{"text": "2"}, {"text": "2"}]}
+Query {"String": "SELECT 1/0"}
+Query {"String": "SELECT 2"}
+Query {"String": "ROLLBACK"}
+Sync
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"22012"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+{"Type":"ErrorResponse","Code":"25P02"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

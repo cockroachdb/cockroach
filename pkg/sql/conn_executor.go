@@ -2119,6 +2119,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			ex.machine.CurState(), pos, cmd)
 	}
 
+	isExtendedProtocolCmd := false
 	var ev fsm.Event
 	var payload fsm.EventPayload
 	var res ResultBase
@@ -2179,6 +2180,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		}
 
 	case ExecPortal:
+		isExtendedProtocolCmd = true
 		// ExecPortal is handled like ExecStmt, except that the placeholder info
 		// is taken from the portal.
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
@@ -2289,15 +2291,18 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		}
 
 	case PrepareStmt:
+		isExtendedProtocolCmd = true
 		ex.curStmtAST = tcmd.AST
 		res = ex.clientComm.CreatePrepareResult(pos)
 		stmtCtx := withStatement(ctx, ex.curStmtAST)
 		ev, payload = ex.execPrepare(stmtCtx, tcmd)
 	case DescribeStmt:
+		isExtendedProtocolCmd = true
 		descRes := ex.clientComm.CreateDescribeResult(pos)
 		res = descRes
 		ev, payload = ex.execDescribe(ctx, tcmd, descRes)
 	case BindStmt:
+		isExtendedProtocolCmd = true
 		res = ex.clientComm.CreateBindResult(pos)
 		ev, payload = ex.execBind(ctx, tcmd)
 	case DeletePreparedStmt:
@@ -2486,7 +2491,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		if err := ex.clientComm.Flush(pos); err != nil {
 			return err
 		}
-		if err := ex.stmtBuf.seekToNextBatch(); err != nil {
+		if err := ex.stmtBuf.seekToNextBatch(isExtendedProtocolCmd); err != nil {
 			return err
 		}
 	case rewind:

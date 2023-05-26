@@ -1088,6 +1088,9 @@ func (ie *InternalExecutor) execInternal(
 			}); err != nil {
 			return nil, err
 		}
+		if err := stmtBuf.Push(ctx, Sync{CameFromClient: false}); err != nil {
+			return nil, err
+		}
 	} else {
 		if err := stmtBuf.Push(
 			ctx,
@@ -1115,9 +1118,9 @@ func (ie *InternalExecutor) execInternal(
 		); err != nil {
 			return nil, err
 		}
-	}
-	if err := stmtBuf.Push(ctx, Sync{}); err != nil {
-		return nil, err
+		if err := stmtBuf.Push(ctx, Sync{CameFromClient: true}); err != nil {
+			return nil, err
+		}
 	}
 	r = &rowsIterator{
 		r:       rw,
