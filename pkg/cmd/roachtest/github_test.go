@@ -12,6 +12,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,18 +104,22 @@ func TestShouldPost(t *testing.T) {
 }
 
 func TestCreatePostRequest(t *testing.T) {
+	createFailure := func(ref error) failure {
+		return failure{squashedErr: ref}
+	}
+
 	testCases := []struct {
 		nonReleaseBlocker      bool
 		clusterCreationFailed  bool
 		loadTeamsFailed        bool
 		localSSD               bool
 		arch                   vm.CPUArch
-		category               issueCategory
+		failure                failure
 		expectedPost           bool
 		expectedReleaseBlocker bool
 		expectedParams         map[string]string
 	}{
-		{true, false, false, false, "", otherErr, true, false,
+		{true, false, false, false, "", createFailure(errors.New("other")), true, false,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -123,7 +130,7 @@ func TestCreatePostRequest(t *testing.T) {
 				"localSSD":  "false",
 			}),
 		},
-		{true, false, false, true, vm.ArchARM64, clusterCreationErr, true, false,
+		{true, false, false, true, vm.ArchARM64, createFailure(errClusterProvisioningFailed), true, false,
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
@@ -138,7 +145,9 @@ func TestCreatePostRequest(t *testing.T) {
 		// !nonReleaseBlocker and issue is an SSH flake. Also ensure that
 		// in the event of a failed cluster creation, nil `vmOptions` and
 		// `clusterImpl` are not dereferenced
-		{false, true, false, false, "", sshErr, true, false,
+		// expectedReleaseBlocker is true on this branch due to a backport, which doesn't include
+		// a change to exclude infra flakes from being labeled as release blockers.
+		{false, true, false, false, "", createFailure(rperrors.ErrSSH255), true, true,
 			prefixAll(map[string]string{
 				"cloud": "gce",
 				"ssd":   "0",
@@ -146,91 +155,91 @@ func TestCreatePostRequest(t *testing.T) {
 			}),
 		},
 		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, "", otherErr, false, false, nil},
-		//Error during teardown
-		{true, false, false, false, "", teardownErr, false, false, nil},
+		{true, false, true, false, "", createFailure(errors.New("other")), false, false, nil},
+		//Error during post test assertions
+		{true, false, false, false, "", createFailure(errDuringPostAssertions), false, false, nil},
 	}
 
 	reg := makeTestRegistry(spec.GCE, "", "", false, false)
-	for _, c := range testCases {
-		clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
+	for idx, c := range testCases {
+		t.Run(fmt.Sprintf("%d", idx+1), func(t *testing.T) {
+			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
 
-		testSpec := &registry.TestSpec{
-			Name:              "github_test",
-			Owner:             OwnerUnitTest,
-			Cluster:           clusterSpec,
-			NonReleaseBlocker: c.nonReleaseBlocker,
-		}
-
-		ti := &testImpl{
-			spec: testSpec,
-			l:    nilLogger(),
-		}
-
-		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64}
-		vo := vm.DefaultCreateOpts()
-		vmOpts := &vo
-
-		if c.clusterCreationFailed {
-			testClusterImpl = nil
-			vmOpts = nil
-		} else if !c.localSSD {
-			// The default is true set in `vm.DefaultCreateOpts`
-			vmOpts.SSDOpts.UseLocalSSD = false
-		}
-
-		teamLoadFn := validTeamsFn
-
-		if c.loadTeamsFailed {
-			teamLoadFn = invalidTeamsFn
-		}
-
-		github := &githubIssues{
-			vmCreateOpts: vmOpts,
-			cluster:      testClusterImpl,
-			teamLoader:   teamLoadFn,
-		}
-
-		if c.loadTeamsFailed {
-			// Assert that if TEAMS.yaml cannot be loaded then function panics.
-			assert.Panics(t, func() { github.createPostRequest(ti, c.category, "message") })
-		} else {
-			req := github.createPostRequest(ti, c.category, "message")
-
-			if c.expectedParams != nil {
-				require.Equal(t, c.expectedParams, req.ExtraParams)
+			testSpec := &registry.TestSpec{
+				Name:              "github_test",
+				Owner:             OwnerUnitTest,
+				Cluster:           clusterSpec,
+				NonReleaseBlocker: c.nonReleaseBlocker,
 			}
 
-			require.True(t, contains(req.ExtraLabels, nil, "O-roachtest"))
-
-			if !c.nonReleaseBlocker {
-				require.True(t, contains(req.ExtraLabels, nil, "release-blocker"))
+			ti := &testImpl{
+				spec: testSpec,
+				l:    nilLogger(),
 			}
 
-			expectedTeam := "@cockroachdb/unowned"
-			expectedName := "github_test"
-			expectedLabel := ""
-			expectedMessagePrefix := ""
+			testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64}
+			vo := vm.DefaultCreateOpts()
+			vmOpts := &vo
 
-			if c.category == clusterCreationErr {
-				expectedTeam = "@cockroachdb/dev-inf"
-				expectedName = "cluster_creation"
-				expectedMessagePrefix = "test github_test was skipped due to "
-			} else if c.category == sshErr {
-				expectedTeam = "@cockroachdb/test-eng"
-				expectedLabel = "T-testeng"
-				expectedName = "ssh_problem"
-				expectedMessagePrefix = "test github_test failed due to "
-			} else if c.category == teardownErr {
-				expectedMessagePrefix = "test github_test failed during teardown (see teardown.log) due to "
+			if c.clusterCreationFailed {
+				testClusterImpl = nil
+				vmOpts = nil
+			} else if !c.localSSD {
+				// The default is true set in `vm.DefaultCreateOpts`
+				vmOpts.SSDOpts.UseLocalSSD = false
 			}
 
-			require.Contains(t, req.MentionOnCreate, expectedTeam)
-			require.Equal(t, expectedName, req.TestName)
-			require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
-			if expectedLabel != "" {
-				require.Contains(t, req.ExtraLabels, expectedLabel)
+			teamLoadFn := validTeamsFn
+
+			if c.loadTeamsFailed {
+				teamLoadFn = invalidTeamsFn
 			}
-		}
+
+			github := &githubIssues{
+				vmCreateOpts: vmOpts,
+				cluster:      testClusterImpl,
+				teamLoader:   teamLoadFn,
+			}
+
+			if c.loadTeamsFailed {
+				// Assert that if TEAMS.yaml cannot be loaded then function panics.
+				assert.Panics(t, func() { github.createPostRequest(ti, c.failure, "message") })
+			} else {
+				req := github.createPostRequest(ti, c.failure, "message")
+
+				if c.expectedParams != nil {
+					require.Equal(t, c.expectedParams, req.ExtraParams)
+				}
+
+				require.True(t, contains(req.ExtraLabels, nil, "O-roachtest"))
+				require.Equal(t, c.expectedReleaseBlocker, contains(req.ExtraLabels, nil, "release-blocker"))
+
+				expectedTeam := "@cockroachdb/unowned"
+				expectedName := "github_test"
+				expectedLabel := ""
+				expectedMessagePrefix := ""
+
+				if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
+					expectedTeam = "@cockroachdb/dev-inf"
+					expectedName = "cluster_creation"
+					expectedMessagePrefix = "test github_test was skipped due to "
+				} else if errors.Is(c.failure.squashedErr, rperrors.ErrSSH255) {
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedLabel = "T-testeng"
+					expectedName = "ssh_problem"
+					expectedMessagePrefix = "test github_test failed due to "
+				} else if errors.Is(c.failure.squashedErr, errDuringPostAssertions) {
+					expectedMessagePrefix = "test github_test failed during post test assertions (see test-post-assertions.log) due to "
+				}
+
+				require.Contains(t, req.MentionOnCreate, expectedTeam)
+				require.Equal(t, expectedName, req.TestName)
+				require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
+				if expectedLabel != "" {
+					require.Contains(t, req.ExtraLabels, expectedLabel)
+				}
+			}
+		})
+
 	}
 }

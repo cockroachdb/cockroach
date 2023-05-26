@@ -52,7 +52,6 @@ go_library(
         "drain.go",
         "drop.go",
         "drt.go",
-        "dummy.go",
         "encryption.go",
         "event_log.go",
         "failover.go",
