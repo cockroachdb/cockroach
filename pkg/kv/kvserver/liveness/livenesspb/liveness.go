@@ -214,6 +214,9 @@ const (
 	Admin
 	DistSQL
 	Upgrade
+	ConsistencyQueue
+	AdminHealthCheck
+	DecommissionCheck
 )
 
 func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
@@ -225,15 +228,13 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 	case Rebalance:
 		return nv.isAlive()
 	case DistSQL:
-		// TODO(erikgrinaker): We may want to use IsAvailableNotDraining instead, to
-		// avoid scheduling long-running flows (e.g. rangefeeds or backups) on nodes
-		// that are being drained/decommissioned. However, these nodes can still be
-		// leaseholders, and preventing processor scheduling on them can cause a
-		// performance cliff for e.g. table reads that then hit the network.
 		return nv.isAliveAndConnected()
 	case Upgrade:
-		//FIXME
 		return nv.isAlive()
+	case ConsistencyQueue:
+		return nv.isAvailableNotDraining()
+	case AdminHealthCheck:
+		return nv.isAvailableNotDraining()
 	}
 	// TODO(baptist): Should be an assertion that we don't know this uasge.
 	return false
@@ -310,6 +311,10 @@ func (nv NodeVitality) IsDecommissioned() bool {
 // check if the entry is valid first.
 func (nv NodeVitality) MembershipStatus() MembershipStatus {
 	return nv.membership
+}
+
+func (nv NodeVitality) IsDraining() bool {
+	return nv.draining
 }
 
 // IsValid returns whether this entry was found.
