@@ -16,7 +16,7 @@ import "antd/lib/row/style";
 import "antd/lib/tabs/style";
 import Long from "long";
 import Helmet from "react-helmet";
-import { RouteComponentProps } from "react-router-dom";
+import { RouteComponentProps, useHistory, useLocation } from "react-router-dom";
 import { JobRequest, JobResponse } from "src/api/jobsApi";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
@@ -47,27 +47,40 @@ const jobCx = classNames.bind(jobStyles);
 
 enum TabKeysEnum {
   OVERVIEW = "Overview",
+  PROFILER = "Profiler",
 }
 
 export interface JobDetailsStateProps {
   job: JobResponse;
   jobError: Error | null;
   jobLoading: boolean;
+  currentTab?: string;
 }
 
 export interface JobDetailsDispatchProps {
   refreshJob: (req: JobRequest) => void;
 }
 
+export interface JobDetailsState {
+  currentTab?: string;
+}
+
 export type JobDetailsProps = JobDetailsStateProps &
   JobDetailsDispatchProps &
   RouteComponentProps<unknown>;
 
-export class JobDetails extends React.Component<JobDetailsProps> {
+export class JobDetails extends React.Component<
+  JobDetailsProps,
+  JobDetailsState
+> {
   refreshDataInterval: NodeJS.Timeout;
 
   constructor(props: JobDetailsProps) {
     super(props);
+    const searchParams = new URLSearchParams(props.history.location.search);
+    this.state = {
+      currentTab: searchParams.get("tab") || "overview",
+    };
   }
 
   private refresh(): void {
@@ -98,6 +111,28 @@ export class JobDetails extends React.Component<JobDetailsProps> {
   }
 
   prevPage = (): void => this.props.history.goBack();
+
+  renderProfilerTabContent = (
+    job: cockroach.server.serverpb.JobResponse,
+  ): React.ReactElement => {
+    const id = job.id;
+    // This URL results in a cluster-wide CPU profile to be collected for 5
+    // seconds. We set `tagfocus` (tf) to only view the samples corresponding to
+    // this job's execution.
+    const url = `debug/pprof/ui/cpu?node=all&seconds=5&labels=true&tf=job.*${id}`;
+    return (
+      <Row gutter={24}>
+        <Col className="gutter-row" span={24}>
+          <SummaryCard className={cardCx("summary-card")}>
+            <SummaryCardItem
+              label="Cluster-wide CPU Profile (profiles all nodes; MEMORY OVERHEAD)"
+              value={<a href={url}>Profile</a>}
+            />
+          </SummaryCard>
+        </Col>
+      </Row>
+    );
+  };
 
   renderOverviewTabContent = (
     hasNextRun: boolean,
@@ -164,12 +199,26 @@ export class JobDetails extends React.Component<JobDetailsProps> {
     );
   };
 
+  onTabChange = (tabId: string): void => {
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+    searchParams.set("tab", tabId);
+    history.replace({
+      ...history.location,
+      search: searchParams.toString(),
+    });
+    this.setState({
+      currentTab: tabId,
+    });
+  };
+
   render(): React.ReactElement {
     const isLoading = !this.props.job || this.props.jobLoading;
     const error = this.props.jobError;
     const job = this.props.job;
     const nextRun = TimestampToMoment(job?.next_run);
     const hasNextRun = nextRun?.isAfter();
+    const { currentTab } = this.state;
     return (
       <div className={jobCx("job-details")}>
         <Helmet title={"Details | Job"} />
@@ -209,9 +258,14 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                 <Tabs
                   className={commonStyles("cockroach--tabs")}
                   defaultActiveKey={TabKeysEnum.OVERVIEW}
+                  onChange={this.onTabChange}
+                  activeKey={currentTab}
                 >
                   <TabPane tab={TabKeysEnum.OVERVIEW} key="overview">
                     {this.renderOverviewTabContent(hasNextRun, nextRun, job)}
+                  </TabPane>
+                  <TabPane tab={TabKeysEnum.PROFILER} key="profiler">
+                    {this.renderProfilerTabContent(job)}
                   </TabPane>
                 </Tabs>
               </>
