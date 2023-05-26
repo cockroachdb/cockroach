@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
@@ -501,17 +500,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		// enqueue the ranges we have that also have a replica on the
 		// decommissioning node.
 		OnNodeDecommissioning: decomNodeMap.makeOnNodeDecommissioningCallback(stores),
-		OnNodeDecommissioned: func(liveness livenesspb.Liveness) {
+		OnNodeDecommissioned: func(id roachpb.NodeID) {
 			if knobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok && knobs.OnDecommissionedCallback != nil {
-				knobs.OnDecommissionedCallback(liveness)
+				knobs.OnDecommissionedCallback(id)
 			}
 			if err := nodeTombStorage.SetDecommissioned(
-				ctx, liveness.NodeID, timeutil.Unix(0, liveness.Expiration.WallTime).UTC(),
+				ctx, id, clock.PhysicalTime().UTC(),
 			); err != nil {
-				log.Fatalf(ctx, "unable to add tombstone for n%d: %s", liveness.NodeID, err)
+				log.Fatalf(ctx, "unable to add tombstone for n%d: %s", id, err)
 			}
 
-			decomNodeMap.onNodeDecommissioned(liveness.NodeID)
+			decomNodeMap.onNodeDecommissioned(id)
 		},
 		Engines: engines,
 		OnSelfHeartbeat: func(ctx context.Context) {

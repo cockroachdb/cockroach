@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -102,7 +101,7 @@ type TestingKnobs struct {
 	BinaryVersionOverride roachpb.Version
 	// An (additional) callback invoked whenever a
 	// node is permanently removed from the cluster.
-	OnDecommissionedCallback func(livenesspb.Liveness)
+	OnDecommissionedCallback func(id roachpb.NodeID)
 	// StickyEngineRegistry manages the lifecycle of sticky in memory engines,
 	// which can be enabled via base.StoreSpec.StickyInMemoryEngineID.
 	//
