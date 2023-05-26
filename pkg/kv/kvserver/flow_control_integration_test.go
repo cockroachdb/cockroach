@@ -478,6 +478,155 @@ ORDER BY name ASC;
 `)
 }
 
+// TestFlowControlAdmissionPostSplitMerge walks through what happens admission
+// happens after undergoes splits/merges. It does this by blocking and later
+// unblocking below-raft admission, verifying:
+// - tokens for the RHS are released at the post-merge subsuming leaseholder,
+// - admission for the RHS post-merge does not cause a double return of tokens,
+// - admission for the LHS can happen post-merge,
+// - admission for the LHS and RHS can happen post-split.
+func TestFlowControlAdmissionPostSplitMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const numNodes = 3
+
+	var disableWorkQueueGranting atomic.Bool
+	disableWorkQueueGranting.Store(true)
+
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
+						UseOnlyForScratchRanges: true,
+					},
+				},
+				AdmissionControl: &admission.TestingKnobs{
+					DisableWorkQueueFastPath: true,
+					DisableWorkQueueGranting: func() bool {
+						return disableWorkQueueGranting.Load()
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	k := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+
+	n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	h := newFlowControlTestHelper(t, tc)
+	h.init()
+	defer h.close("admission_post_split_merge")
+
+	desc, err := tc.LookupRange(k)
+	require.NoError(t, err)
+
+	h.waitForConnectedStreams(ctx, desc.RangeID, 3)
+
+	h.log("sending put request to pre-split range")
+	h.put(ctx, k, 1<<20 /* 1MiB */, admissionpb.NormalPri)
+	h.put(ctx, k.Next(), 1<<20 /* 1MiB */, admissionpb.NormalPri)
+	h.log("sent put request to pre-split range")
+
+	h.comment(`
+-- Flow token metrics from n1 after issuing a regular 2*1MiB 3x replicated write
+-- that are yet to get admitted. We see 2*3*1MiB=6MiB deductions of
+-- {regular,elastic} tokens with no corresponding returns. The 2*1MiB writes
+-- happened on what is soon going to be the LHS and RHS of a range being split.
+`)
+	h.query(n1, `
+  SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+`)
+
+	h.comment(`-- (Splitting range.)`)
+	left, right := tc.SplitRangeOrFatal(t, k.Next())
+	h.waitForConnectedStreams(ctx, right.RangeID, 3)
+
+	h.log("sending 2MiB put request to post-split LHS")
+	h.put(ctx, k, 2<<20 /* 2MiB */, admissionpb.NormalPri)
+	h.log("sent 2MiB put request to post-split LHS")
+
+	h.log("sending 3MiB put request to post-split RHS")
+	h.put(ctx, roachpb.Key(right.StartKey), 3<<20 /* 3MiB */, admissionpb.NormalPri)
+	h.log("sent 3MiB put request to post-split RHS")
+
+	h.comment(`
+-- Flow token metrics from n1 after further issuing 2MiB and 3MiB writes to
+-- post-split LHS and RHS ranges respectively. We should see 15MiB extra tokens
+-- deducted which comes from (2MiB+3MiB)*3=15MiB. So we stand at
+-- 6MiB+15MiB=21MiB now.
+`)
+	h.query(n1, `
+  SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+`)
+
+	h.comment(`-- Observe the newly split off replica, with its own three streams.`)
+	h.query(n1, `
+  SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+`, "range_id", "stream_count")
+
+	h.comment(`-- (Merging ranges.)`)
+	merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
+
+	h.log("sending 4MiB put request to post-merge range")
+	h.put(ctx, roachpb.Key(merged.StartKey), 4<<20 /* 4MiB */, admissionpb.NormalPri)
+	h.log("sent 4MiB put request to post-merged range")
+
+	h.comment(`
+-- Flow token metrics from n1 after issuing 4MiB of regular replicated writes to
+-- the post-merged range. We should see 12MiB extra tokens deducted which comes
+-- from 4MiB*3=12MiB. So we stand at 21MiB+12MiB=33MiB tokens deducted now. The
+-- RHS of the range is gone now, and the previously 3*3MiB=9MiB of tokens
+-- deducted for it are released at the subsuming LHS leaseholder.
+`)
+	h.query(n1, `
+  SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%regular_tokens%'
+ORDER BY name ASC;
+`)
+
+	h.comment(`-- Observe only the merged replica with its own three streams.`)
+	h.query(n1, `
+  SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles
+GROUP BY (range_id)
+ORDER BY streams DESC;
+`, "range_id", "stream_count")
+
+	h.comment(`-- (Allow below-raft admission to proceed.)`)
+	disableWorkQueueGranting.Store(false)
+	h.waitForAllTokensReturned(ctx, 3) // wait for admission
+
+	h.comment(`
+-- Flow token metrics from n1 after work gets admitted. We see all outstanding
+-- {regular,elastic} tokens returned, including those from:
+-- - the LHS before the merge, and
+-- - the LHS and RHS before the original split.
+`)
+	h.query(n1, `
+  SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+`)
+}
+
 // TestFlowControlCrashedNode tests flow token behavior in the presence of
 // crashed nodes.
 func TestFlowControlCrashedNode(t *testing.T) {
