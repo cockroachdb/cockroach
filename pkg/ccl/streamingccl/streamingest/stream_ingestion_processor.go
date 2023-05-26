@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -264,7 +265,7 @@ func newStreamIngestionDataProcessor(
 		trackedSpans = append(trackedSpans, partitionSpec.Spans...)
 	}
 
-	frontier, err := span.MakeFrontierAt(spec.PreviousHighWaterTimestamp, trackedSpans...)
+	frontier, err := span.MakeFrontierAt(spec.PreviousReplicatedTimestamp, trackedSpans...)
 	if err != nil {
 		return nil, err
 	}
@@ -281,8 +282,8 @@ func newStreamIngestionDataProcessor(
 		frontier:          frontier,
 		maxFlushRateTimer: timeutil.NewTimer(),
 		cutoverProvider: &cutoverFromJobProgress{
-			jobID:    jobspb.JobID(spec.JobID),
-			registry: flowCtx.Cfg.JobRegistry,
+			jobID: jobspb.JobID(spec.JobID),
+			db:    flowCtx.Cfg.DB,
 		},
 		cutoverCh:        make(chan struct{}),
 		closePoller:      make(chan struct{}),
@@ -370,16 +371,16 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
 
-		previousHighWater := frontierForSpans(sip.frontier, partitionSpec.Spans...)
+		previousReplicatedTimetamp := frontierForSpans(sip.frontier, partitionSpec.Spans...)
 
 		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), previousHighWater)
+				streamingKnobs.BeforeClientSubscribe(addr, string(token), previousReplicatedTimetamp)
 			}
 		}
 
 		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), token,
-			sip.spec.InitialScanTimestamp, previousHighWater)
+			sip.spec.InitialScanTimestamp, previousReplicatedTimetamp)
 
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
@@ -1155,25 +1156,54 @@ type cutoverProvider interface {
 // custoverFromJobProgress is a cutoverProvider that decides whether the cutover
 // time has been reached based on the progress stored on the job record.
 type cutoverFromJobProgress struct {
-	registry *jobs.Registry
-	jobID    jobspb.JobID
+	db    isql.DB
+	jobID jobspb.JobID
+}
+
+func (c *cutoverFromJobProgress) loadIngestionProgress(
+	ctx context.Context,
+) (*jobspb.StreamIngestionProgress, error) {
+	var (
+		progressBytes []byte
+		exists        bool
+	)
+	if err := c.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := jobs.InfoStorageForJob(txn, c.jobID)
+		var err error
+		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, nil
+	}
+	progress := &jobspb.Progress{}
+	if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
+		return nil, err
+	}
+
+	sp, ok := progress.GetDetails().(*jobspb.Progress_StreamIngest)
+	if !ok {
+		return nil, errors.Newf("unknown progress details type %T in stream ingestion job %d",
+			progress.GetDetails(), c.jobID)
+	}
+	return sp.StreamIngest, nil
 }
 
 func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, error) {
-	j, err := c.registry.LoadJob(ctx, c.jobID)
+	ingestionProgress, err := c.loadIngestionProgress(ctx)
 	if err != nil {
 		return false, err
 	}
-	progress := j.Progress()
-	var sp *jobspb.Progress_StreamIngest
-	var ok bool
-	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-		return false, errors.Newf("unknown progress type %T in stream ingestion job %d",
-			j.Progress().Progress, c.jobID)
+	if ingestionProgress == nil {
+		log.Warningf(ctx, "no legacy job progress recorded yet")
+		return false, nil
 	}
-	// Job has been signaled to complete.
-	if resolvedTimestamp := progress.GetHighWater(); !sp.StreamIngest.CutoverTime.IsEmpty() &&
-		resolvedTimestamp != nil && sp.StreamIngest.CutoverTime.Less(*resolvedTimestamp) {
+
+	cutoverTime := ingestionProgress.CutoverTime
+	replicatedTime := ingestionProgress.ReplicatedTime
+	if !cutoverTime.IsEmpty() && cutoverTime.LessEq(replicatedTime) {
 		return true, nil
 	}
 
