@@ -22,10 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
@@ -53,60 +51,53 @@ import (
 // tables or a cluster backup. Most backups contain a single table whose name
 // matches the backup name. If the backup is expected to contain several tables,
 // the table names will be backupName1, backupName2, ...
-func TestRestoreMidSchemaChange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderRaceWithIssue(t, 56584)
-
+//
+//lint:ignore U1000 unused
+func runTestRestoreMidSchemaChange(t *testing.T, isSchemaOnly, isClusterRestore bool) {
 	var (
 		testdataBase = datapathutils.TestDataPath(t, "restore_mid_schema_change")
 		exportDirs   = testdataBase + "/exports"
 	)
-	testutils.RunTrueAndFalse(t, "schema-only", func(t *testing.T, isSchemaOnly bool) {
-		name := "regular-"
-		if isSchemaOnly {
-			name = "schema-only-"
-		}
-		testutils.RunTrueAndFalse(t, "cluster-restore", func(t *testing.T, isClusterRestore bool) {
-			name = name + "table"
-			if isClusterRestore {
-				name = name + "cluster"
-			}
-			t.Run(name, func(t *testing.T) {
-				// blockLocations indicates whether the backup taken was blocked before or
-				// after the backfill portion of the schema change.
-				for _, blockLocation := range []string{"before", "after"} {
-					t.Run(blockLocation, func(t *testing.T) {
-						versionDirs, err := os.ReadDir(filepath.Join(exportDirs, blockLocation))
+	name := "regular-"
+	if isSchemaOnly {
+		name = "schema-only-"
+	}
+	name = name + "table"
+	if isClusterRestore {
+		name = name + "cluster"
+	}
+	t.Run(name, func(t *testing.T) {
+		// blockLocations indicates whether the backup taken was blocked before or
+		// after the backfill portion of the schema change.
+		for _, blockLocation := range []string{"before", "after"} {
+			t.Run(blockLocation, func(t *testing.T) {
+				versionDirs, err := os.ReadDir(filepath.Join(exportDirs, blockLocation))
+				require.NoError(t, err)
+				for _, clusterVersionDir := range versionDirs {
+					clusterVersion, err := parseMajorVersion(clusterVersionDir.Name())
+					require.NoError(t, err)
+
+					t.Run(clusterVersionDir.Name(), func(t *testing.T) {
+						require.True(t, clusterVersionDir.IsDir())
+						fullClusterVersionDir, err := filepath.Abs(
+							filepath.Join(exportDirs, blockLocation, clusterVersionDir.Name()))
 						require.NoError(t, err)
-						for _, clusterVersionDir := range versionDirs {
-							clusterVersion, err := parseMajorVersion(clusterVersionDir.Name())
+
+						// In each version folder (e.g. "19.2", "20.1"), there is a backup for
+						// each schema change.
+						backupDirs, err := os.ReadDir(fullClusterVersionDir)
+						require.NoError(t, err)
+
+						for _, backupDir := range backupDirs {
+							fullBackupDir, err := filepath.Abs(filepath.Join(fullClusterVersionDir, backupDir.Name()))
 							require.NoError(t, err)
-
-							t.Run(clusterVersionDir.Name(), func(t *testing.T) {
-								require.True(t, clusterVersionDir.IsDir())
-								fullClusterVersionDir, err := filepath.Abs(
-									filepath.Join(exportDirs, blockLocation, clusterVersionDir.Name()))
-								require.NoError(t, err)
-
-								// In each version folder (e.g. "19.2", "20.1"), there is a backup for
-								// each schema change.
-								backupDirs, err := os.ReadDir(fullClusterVersionDir)
-								require.NoError(t, err)
-
-								for _, backupDir := range backupDirs {
-									fullBackupDir, err := filepath.Abs(filepath.Join(fullClusterVersionDir, backupDir.Name()))
-									require.NoError(t, err)
-									t.Run(backupDir.Name(), restoreMidSchemaChange(fullBackupDir, backupDir.Name(),
-										isClusterRestore, isSchemaOnly, clusterVersion))
-								}
-							})
+							t.Run(backupDir.Name(), restoreMidSchemaChange(fullBackupDir, backupDir.Name(),
+								isClusterRestore, isSchemaOnly, clusterVersion))
 						}
 					})
 				}
 			})
-		})
+		}
 	})
 }
 
