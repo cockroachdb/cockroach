@@ -118,7 +118,7 @@ func (q *consistencyQueue) shouldQueue(
 			},
 			isNodeAvailable: func(nodeID roachpb.NodeID) bool {
 				if repl.store.cfg.NodeLiveness != nil {
-					return repl.store.cfg.NodeLiveness.IsAvailableNotDraining(nodeID)
+					return repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nodeID).IsAvailableNotDraining()
 				}
 				// Some tests run without a NodeLiveness configured.
 				return true
