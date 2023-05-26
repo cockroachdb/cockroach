@@ -39,8 +39,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -756,6 +759,224 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	require.GreaterOrEqual(t, n.metrics.BatchCount.Count(), bCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Get].Count(), getCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Put].Count(), putCurr)
+}
+
+// getNodesMetrics retrieves the count of each node metric specified in
+// metricNames associated with the specified serverIdx and returns the result as
+// a map. The keys in the map represent the metric names, and the corresponding
+// values represent the count of the metric. If any of the specified metrics
+// cannot be found or is not a counter, the test will fail.
+//
+// Assumption:
+// - MetricNames should contain string literals representing the metadata names
+// used for metric counters.
+// - Each metric name provided in metricNames must be a counter type, must exist,
+// and should be unique.
+func getNodesMetrics(
+	t *testing.T, tc serverutils.TestClusterInterface, serverIdx int, metricsName []string,
+) map[string]int64 {
+	getFirstCounterNodeMetric := func(metricName string) int64 {
+		ts := tc.Server(serverIdx).(*TestServer)
+		metricsStruct := reflect.ValueOf(ts.node.metrics)
+		for i := 0; i < metricsStruct.NumField(); i++ {
+			field := metricsStruct.Field(i)
+			switch t := field.Interface().(type) {
+			case *metric.Counter:
+				if t.Name == metricName {
+					return t.Count()
+				}
+			}
+		}
+		t.Error("failed to look up node metrics")
+		return -1
+	}
+
+	metrics := map[string]int64{}
+	for i := 0; i < tc.NumServers(); i++ {
+		for _, metricName := range metricsName {
+			metrics[metricName] = getFirstCounterNodeMetric(metricName)
+		}
+	}
+	return metrics
+}
+
+// getNodesMetricsDiff returns the difference between the values of
+// corresponding metrics in two maps.
+// Assumption: beforeMap and afterMap contain the same set of keys.
+func getNodesMetricsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[string]int64 {
+	diffMap := make(map[string]int64)
+	for metricName, beforeValue := range beforeMap {
+		if v, ok := afterMap[metricName]; ok {
+			diffMap[metricName] = v - beforeValue
+		}
+	}
+	return diffMap
+}
+
+// TestCrossRegionCrossZoneNodeMetrics verifies that node.Batch() correctly
+// updates the cross-region, cross-zone byte count metrics for batch requests
+// sent and batch responses received.
+func TestCrossRegionCrossZoneNodeMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The initial setup ensures the correct configuration for three nodes (with
+	// different localities), single-range, and three replicas (on different
+	// nodes).
+	const numNodes = 3
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.NumReplicas = proto.Int32(1)
+
+	var interceptedBatchRequestSize int64
+	var interceptedBatchResponseSize int64
+	var mu syncutil.Mutex
+
+	requestFn := func(ba *kvpb.BatchRequest) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		if ba != nil && ba.Txn != nil {
+			if baTxnName := ba.Txn.Name; baTxnName == "cross-locality-test" {
+				interceptedBatchRequestSize = int64(ba.Size())
+				return true
+			}
+		}
+		return false
+	}
+
+	responseFn := func(br *kvpb.BatchResponse) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		if br != nil && br.Txn != nil {
+			if brTxnName := br.Txn.Name; brTxnName == "cross-locality-test" {
+				interceptedBatchResponseSize = int64(br.Size())
+				return true
+			}
+		}
+		return false
+	}
+
+	serverLocality := [numNodes]roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}, {Key: "az", Value: "us-east-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-2"}}},
+	}
+
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: serverLocality[i],
+			Knobs: base.TestingKnobs{
+				Server: &TestingKnobs{
+					DefaultZoneConfigOverride: &zcfg,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					TestingBatchRequestFilter:  requestFn,
+					TestingBatchResponseFilter: responseFn,
+				},
+			},
+		}
+	}
+
+	ctx := context.Background()
+	var clusterArgs = base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: serverArgs,
+	}
+
+	tc := serverutils.StartNewTestCluster(t, numNodes, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	testKey := tc.ScratchRange(t)
+	//tc.AddVotersOrFatal(t, testKey, tc.Target(1))
+	//tc.AddVotersOrFatal(t, testKey, tc.Target(2))
+	desc := tc.LookupRangeOrFatal(t, testKey)
+	//tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(leaseServerIdx))
+
+	//testutils.SucceedsSoon(t, func() (err error) {
+	//	for i := 0; i < tc.NumServers(); i++ {
+	//		err = tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+	//			return store.ForceReplicationScanAndProcess()
+	//		})
+	//	}
+	//	return err
+	//})
+
+	//leaseHolder, _ := tc.FindRangeLeaseHolder(desc, nil)
+	//actualLeaseHolderNodeID := leaseHolder.NodeID
+	//expectedLeaseHolderNodeID := tc.Server(leaseServerIdx).NodeID()
+	//
+	//// Make sure the leaseholder of the range is now at server[1].
+	//require.Equal(t, expectedLeaseHolderNodeID, actualLeaseHolderNodeID,
+	//	fmt.Sprintf("expected leaseholder to be at %v but is at %v", expectedLeaseHolderNodeID, actualLeaseHolderNodeID),
+	//)
+
+	metrics := []string{"batch_requests.cross_region", "batch_responses.cross_region",
+		"batch_requests.cross_zone", "batch_responses.cross_zone"}
+	senderBefore := getNodesMetrics(t, tc, 0, metrics)
+	firstReceiverBefore := getNodesMetrics(t, tc, 1, metrics)
+	secReceiverBefore := getNodesMetrics(t, tc, 2, metrics)
+
+	// sendBatchToServer is a testing helper that sends a batch request from
+	// server[0] to server[serverIndex] and returns the number of bytes a batch
+	// request sent and a batch response received.
+	sendBatchToServer := func(serverIndex int) (int64, int64) {
+		get := &kvpb.GetRequest{
+			RequestHeader: kvpb.RequestHeader{Key: testKey},
+		}
+		var ba kvpb.BatchRequest
+		ba.GatewayNodeID = tc.Server(0).NodeID()
+		ba.Add(get)
+		ba.RangeID = desc.RangeID
+		ba.Replica.StoreID = tc.Server(serverIndex).GetFirstStoreID()
+		txn := roachpb.MakeTransaction("cross-locality-test", testKey, 0, 0, hlc.Timestamp{WallTime: 1}, 0, 0)
+		ba.Txn = &txn
+		_, err := tc.Server(serverIndex).(*TestServer).GetNode().Batch(ctx, &ba)
+		// response, error := tc.Server(0).DistSenderI().(*kvcoord.DistSender).Send(context.Background(), &ba)
+		require.NoError(t, err)
+		mu.Lock()
+		defer mu.Unlock()
+		return interceptedBatchRequestSize, interceptedBatchResponseSize
+	}
+	// The first batch request is sent to server1, enforcing a cross-region,
+	// within-zone batch request / response.
+	firstBatchRequestSize, firstBatchResponseSize := sendBatchToServer(1)
+	// The second batch request is sent to server2, enforcing a within-region,
+	// cross-zone batch request / response.
+	secBatchRequestSize, secBatchResponseSize := sendBatchToServer(2)
+
+	t.Run("sender", func(t *testing.T) {
+		senderAfter := getNodesMetrics(t, tc, 0, metrics)
+		senderDelta := getNodesMetricsDiff(senderBefore, senderAfter)
+		senderExpected := map[string]int64{
+			"batch_requests.cross_region":  0,
+			"batch_responses.cross_region": 0,
+			"batch_requests.cross_zone":    0,
+			"batch_responses.cross_zone":   0,
+		}
+		require.Equal(t, senderExpected, senderDelta)
+	})
+	t.Run("first receiver", func(t *testing.T) {
+		firstReceiverAfter := getNodesMetrics(t, tc, 1, metrics)
+		firstReceiverDelta := getNodesMetricsDiff(firstReceiverBefore, firstReceiverAfter)
+		firstReceiverExpected := map[string]int64{
+			"batch_requests.cross_region":  firstBatchRequestSize,
+			"batch_responses.cross_region": firstBatchResponseSize,
+			"batch_requests.cross_zone":    0,
+			"batch_responses.cross_zone":   0,
+		}
+		require.Equal(t, firstReceiverExpected, firstReceiverDelta)
+	})
+	t.Run("second receiver", func(t *testing.T) {
+		secReceiverAfter := getNodesMetrics(t, tc, 2, metrics)
+		secReceiverDelta := getNodesMetricsDiff(secReceiverBefore, secReceiverAfter)
+		secReceiverExpected := map[string]int64{
+			"batch_requests.cross_region":  0,
+			"batch_responses.cross_region": 0,
+			"batch_requests.cross_zone":    secBatchRequestSize,
+			"batch_responses.cross_zone":   secBatchResponseSize,
+		}
+		require.Equal(t, secReceiverExpected, secReceiverDelta)
+	})
 }
 
 func TestGetTenantWeights(t *testing.T) {
