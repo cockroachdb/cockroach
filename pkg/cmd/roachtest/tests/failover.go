@@ -77,17 +77,13 @@ func registerFailover(r registry.Registry) {
 			failureModePause,
 		} {
 			failureMode := failureMode // pin loop variable
-			makeSpec := func(nNodes, nCPU int) spec.ClusterSpec {
-				s := r.MakeClusterSpec(nNodes, spec.CPU(nCPU))
+
+			var usePD bool
+			var postValidation registry.PostValidation
 				if failureMode == failureModeDiskStall {
 					// Use PDs in an attempt to work around flakes encountered when using
 					// SSDs. See #97968.
-					s.PreferLocalSSD = false
-				}
-				return s
-			}
-			var postValidation registry.PostValidation = 0
-			if failureMode == failureModeDiskStall {
+				usePD = true
 				postValidation = registry.PostValidationNoDeadNodes
 			}
 			r.Add(registry.TestSpec{
@@ -95,7 +91,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
-				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
+				Cluster:             r.MakeClusterSpec(7, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode, expirationLeases)
 				},
@@ -105,7 +101,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
-				Cluster:             makeSpec(5 /* nodes */, 4 /* cpus */),
+				Cluster:             r.MakeClusterSpec(5, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverLiveness(ctx, t, c, failureMode, expirationLeases)
 				},
@@ -115,7 +111,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
-				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
+				Cluster:             r.MakeClusterSpec(7, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverSystemNonLiveness(ctx, t, c, failureMode, expirationLeases)
 				},
