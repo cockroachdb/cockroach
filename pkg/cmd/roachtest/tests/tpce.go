@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -35,17 +36,21 @@ type tpceSpec struct {
 }
 
 type tpceCmdOptions struct {
-	customers int
-	racks     int
-	duration  time.Duration
-	threads   int
+	customers       int
+	activeCustomers int
+	racks           int
+	duration        time.Duration
+	threads         int
+	skipCleanup     bool
 }
 
 func (to tpceCmdOptions) AddCommandOptions(cmd *roachtestutil.Command) {
 	cmd.MaybeFlag(to.customers != 0, "customers", to.customers)
+	cmd.MaybeFlag(to.activeCustomers != 0, "active-customers", to.activeCustomers)
 	cmd.MaybeFlag(to.racks != 0, "racks", to.racks)
 	cmd.MaybeFlag(to.duration != 0, "duration", to.duration)
 	cmd.MaybeFlag(to.threads != 0, "threads", to.threads)
+	cmd.MaybeFlag(to.skipCleanup, "skip-cleanup", "")
 }
 
 func initTPCESpec(
@@ -95,98 +100,182 @@ func (ts *tpceSpec) run(
 	return c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(ts.loadNode), cmd)
 }
 
-func registerTPCE(r registry.Registry) {
-	type tpceOptions struct {
-		owner     registry.Owner // defaults to test-eng
-		customers int
-		nodes     int
-		cpus      int
-		ssds      int
+type tpceOptions struct {
+	// start is called to stage+start cockroach. If not specified, it defaults
+	// to uploading the default binary to all nodes, and starting it on all but
+	// the last node.
+	start func(context.Context, test.Test, cluster.Cluster)
 
-		tags    map[string]struct{}
-		timeout time.Duration
+	customers int // --customers
+	nodes     int // use to determine where the workload is run from, how data is partitioned, and workload concurrency
+	cpus      int // used to determine workload concurrency
+	ssds      int // used during cluster init and permitted AddSST concurrency
+
+	// Promethues specific flags.
+	//
+	prometheusConfig  *prometheus.Config // overwrites the default prometheus config settings
+	disablePrometheus bool               // forces prometheus to not start up
+
+	// TPC-E init specific flags.
+	//
+	setupType          tpceSetupType
+	estimatedSetupTime time.Duration // used only for logging
+
+	// Workload specific flags.
+	//
+	onlySetup        bool                            // doesn't run the workload
+	workloadDuration time.Duration                   // how long the workload runs for
+	activeCustomers  int                             // --active-customers in the workload
+	threads          int                             // overrides the number of threads used
+	skipCleanup      bool                            // passes --skip-cleanup to the tpc-e workload
+	during           func(ctx context.Context) error // invoked concurrently with the workload
+}
+type tpceSetupType int
+
+const (
+	usingTPCEInit         tpceSetupType = iota
+	usingExistingTPCEData               // skips import
+)
+
+func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptions) {
+	crdbNodes := c.Range(1, opts.nodes)
+	loadNode := opts.nodes + 1
+	racks := opts.nodes
+
+	if opts.start == nil {
+		opts.start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Status("installing cockroach")
+			c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
+
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.StoreCount = opts.ssds
+			settings := install.MakeClusterSettings(install.NumRacksOption(racks))
+			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
+		}
+	}
+	opts.start(ctx, t, c)
+
+	tpceSpec, err := initTPCESpec(ctx, t.L(), c, loadNode, crdbNodes)
+	require.NoError(t, err)
+
+	// Configure to increase the speed of the import.
+	{
+		db := c.Conn(ctx, t.L(), 1)
+		defer db.Close()
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(
+			ctx, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	runTPCE := func(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptions) {
-		roachNodes := c.Range(1, opts.nodes)
-		loadNode := opts.nodes + 1
-		racks := opts.nodes
+	if !opts.disablePrometheus {
+		// TODO(irfansharif): Move this after the import step? The statistics
+		// during import itself is uninteresting and pollutes actual workload
+		// data.
+		var cleanupFunc func()
+		_, cleanupFunc = setupPrometheusForRoachtest(ctx, t, c, opts.prometheusConfig, nil)
+		defer cleanupFunc()
+	}
 
-		t.Status("installing cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
-
-		startOpts := option.DefaultStartOpts()
-		startOpts.RoachprodOpts.StoreCount = opts.ssds
-		settings := install.MakeClusterSettings(install.NumRacksOption(racks))
-		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
-
-		tpceSpec, err := initTPCESpec(ctx, t.L(), c, loadNode, roachNodes)
-		require.NoError(t, err)
-
-		// Configure to increase the speed of the import.
-		func() {
-			db := c.Conn(ctx, t.L(), 1)
-			defer db.Close()
-			if _, err := db.ExecContext(
-				ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := db.ExecContext(
-				ctx, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-			); err != nil {
-				t.Fatal(err)
-			}
-		}()
-
-		m := c.NewMonitor(ctx, roachNodes)
+	if opts.setupType == usingTPCEInit && !t.SkipInit() {
+		m := c.NewMonitor(ctx, crdbNodes)
 		m.Go(func(ctx context.Context) error {
-
-			t.Status("preparing workload")
+			estimatedSetupTimeStr := ""
+			if opts.estimatedSetupTime != 0 {
+				estimatedSetupTimeStr = fmt.Sprintf(" (<%s)", opts.estimatedSetupTime)
+			}
+			t.Status(fmt.Sprintf("initializing %d tpc-e customers%s", opts.customers, estimatedSetupTimeStr))
 			tpceSpec.init(ctx, t, c, tpceCmdOptions{
 				customers: opts.customers,
 				racks:     racks,
 			})
-
-			t.Status("running workload")
-			result, err := tpceSpec.run(ctx, t, c, tpceCmdOptions{
-				customers: opts.customers,
-				racks:     racks,
-				duration:  2 * time.Hour,
-				threads:   opts.nodes * opts.cpus,
-			})
-			if err != nil {
-				t.Fatal(err.Error())
-			}
-			t.L().Printf("workload output:\n%s\n", result.Stdout)
-			if strings.Contains(result.Stdout, "Reported tpsE :    --   (not between 80% and 100%)") {
-				return errors.New("invalid tpsE fraction")
-			}
 			return nil
 		})
-		m.Wait()
+		m.Wait() // for init
+	} else {
+		t.Status("skipping tpc-e init")
+	}
+	if opts.onlySetup {
+		return
 	}
 
-	for _, opts := range []tpceOptions{
-		// Nightly, small scale configurations.
-		{customers: 5_000, nodes: 3, cpus: 4, ssds: 1, timeout: 4 * time.Hour},
-		// Weekly, large scale configurations.
-		{customers: 100_000, nodes: 5, cpus: 32, ssds: 2, tags: registry.Tags("weekly"), timeout: 36 * time.Hour},
-	} {
-		opts := opts
-		owner := registry.OwnerTestEng
-		if opts.owner != "" {
-			owner = opts.owner
+	m := c.NewMonitor(ctx, crdbNodes)
+	m.Go(func(ctx context.Context) error {
+		t.Status("running workload")
+		workloadDuration := opts.workloadDuration
+		if workloadDuration == 0 {
+			workloadDuration = 2 * time.Hour
 		}
-		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", opts.customers, opts.nodes),
-			Owner:   owner,
-			Tags:    opts.tags,
-			Timeout: opts.timeout,
-			Cluster: r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.SSD(opts.ssds)),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runTPCE(ctx, t, c, opts)
-			},
-		})
+		runOptions := tpceCmdOptions{
+			customers: opts.customers,
+			racks:     racks,
+			duration:  workloadDuration,
+			threads:   opts.nodes * opts.cpus,
+		}
+		if opts.activeCustomers != 0 {
+			runOptions.activeCustomers = opts.activeCustomers
+		}
+		if opts.threads != 0 {
+			runOptions.threads = opts.threads
+		}
+		if opts.skipCleanup {
+			runOptions.skipCleanup = opts.skipCleanup
+		}
+		result, err := tpceSpec.run(ctx, t, c, runOptions)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		t.L().Printf("workload output:\n%s\n", result.Stdout)
+		if strings.Contains(result.Stdout, "Reported tpsE :    --   (not between 80% and 100%)") {
+			return errors.New("invalid tpsE fraction")
+		}
+		return nil
+	})
+	if opts.during != nil {
+		m.Go(opts.during)
 	}
+	m.Wait()
+}
+
+func registerTPCE(r registry.Registry) {
+	// Nightly, small scale configuration.
+	smallNightly := tpceOptions{
+		customers: 5_000,
+		nodes:     3,
+		cpus:      4,
+		ssds:      1,
+	}
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", smallNightly.customers, smallNightly.nodes),
+		Owner:   registry.OwnerTestEng,
+		Timeout: 4 * time.Hour,
+		Cluster: r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCE(ctx, t, c, smallNightly)
+		},
+	})
+
+	// Weekly, large sclae configuration.
+	largeWeekly := tpceOptions{
+		customers: 100_000,
+		nodes:     5,
+		cpus:      32,
+		ssds:      2,
+	}
+	r.Add(registry.TestSpec{
+		Name:    fmt.Sprintf("tpce/c=%d/nodes=%d", largeWeekly.customers, largeWeekly.nodes),
+		Owner:   registry.OwnerTestEng,
+		Tags:    registry.Tags("weekly"),
+		Timeout: 36 * time.Hour,
+		Cluster: r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCE(ctx, t, c, largeWeekly)
+		},
+	})
 }

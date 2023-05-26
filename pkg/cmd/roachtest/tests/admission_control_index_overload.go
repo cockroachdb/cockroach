@@ -31,6 +31,9 @@ import (
 // attempts to create a useless secondary index on the table while the workload
 // is running to measure the impact. The index will not be used by any of the
 // queries, but the intent is to measure the impact of the index creation.
+//
+// TODO(irfansharif): Nuke this test once admission-control/index-backfill
+// stabilizes.
 func registerIndexOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "admission-control/index-overload",
