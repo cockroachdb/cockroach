@@ -43,9 +43,9 @@ var (
 		Name: "rpc.connection.healthy_nanos",
 		Help: `Gauge of nanoseconds of healthy connection time
 
-On the prometheus endpoint scraped with ?labels=true, the constituent parts of this metric
-are available on a per-peer basis and one can read off for how long a given peer has been
-connected`,
+On the prometheus endpoint scraped with the cluster setting 'server.child_metrics.enabled' set,
+the constituent parts of this metric are available on a per-peer basis and one can read off
+for how long a given peer has been connected`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -54,9 +54,9 @@ connected`,
 		Name: "rpc.connection.unhealthy_nanos",
 		Help: `Gauge of nanoseconds of unhealthy connection time.
 
-On the prometheus endpoint scraped with ?labels=true, the constituent parts of this metric
-are available on a per-peer basis and one can read off for how long a given peer has been
-unreachable`,
+On the prometheus endpoint scraped with the cluster setting 'server.child_metrics.enabled' set,
+the constituent parts of this metric are available on a per-peer basis and one can read off
+for how long a given peer has been unreachable`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -90,8 +90,8 @@ Decommissioned peers are excluded.
 Dividing this Gauge by rpc.connection.healthy gives an approximation of average
 latency, but the top-level round-trip-latency histogram is more useful. Instead,
 users should consult the label families of this metric if they are available
-(which requires prometheus and scraping with ?labels=true); these provide
-per-peer moving averages.
+(which requires prometheus and the cluster setting 'server.child_metrics.enabled');
+these provide per-peer moving averages.
 
 This metric does not track failed connection. A failed connection's contribution
 is reset to zero.
