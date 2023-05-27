@@ -154,6 +154,7 @@ func runFailoverPartialLeaseGateway(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
 	failer.Setup(ctx)
@@ -306,6 +307,7 @@ func runFailoverPartialLeaseLeader(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
 	failer.Setup(ctx)
@@ -458,6 +460,7 @@ func runFailoverPartialLeaseLiveness(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
 	failer.Setup(ctx)
@@ -598,6 +601,7 @@ func runFailoverNonSystem(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -742,6 +746,7 @@ func runFailoverLiveness(
 	// Create cluster. Don't schedule a backup as this roachtest reports to roachperf.
 	opts := option.DefaultStartOptsNoBackups()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -885,6 +890,7 @@ func runFailoverSystemNonLiveness(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
