@@ -1636,8 +1636,11 @@ func setupPrometheusForRoachtest(
 		t.Fatal(err)
 	}
 	cleanupFunc := func() {
+		if t.IsDebug() {
+			return // nothing to do
+		}
 		if err := c.StopGrafana(ctx, quietLogger, t.ArtifactsDir()); err != nil {
-			t.L().ErrorfCtx(ctx, "Error(s) shutting down prom/grafana %s", err)
+			t.L().ErrorfCtx(ctx, "error(s) shutting down prom/grafana: %s", err)
 		}
 	}
 	return cfg, cleanupFunc
