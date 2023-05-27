@@ -1510,9 +1510,9 @@ func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second) // can take a while to lock
 	defer cancel()
 
-	predicate := `$1 = ANY(replicas)`
+	predicate := `$1::int = ANY(replicas)`
 	if f.onlyLeaseholders {
-		predicate += ` AND lease_holder = $1`
+		predicate += ` AND lease_holder = $1::int`
 	}
 
 	conn := f.c.Conn(ctx, f.t.L(), nodeID)
