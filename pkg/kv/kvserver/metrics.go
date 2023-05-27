@@ -157,6 +157,12 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLeaseLivenessCount = metric.Metadata{
+		Name:        "leases.liveness",
+		Help:        "Number of replica leaseholders for the liveness range(s)",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Storage metrics.
 	metaLiveBytes = metric.Metadata{
@@ -1922,6 +1928,7 @@ type StoreMetrics struct {
 	LeaseTransferErrorCount   *metric.Counter
 	LeaseExpirationCount      *metric.Gauge
 	LeaseEpochCount           *metric.Gauge
+	LeaseLivenessCount        *metric.Gauge
 
 	// Storage metrics.
 	ResolveCommitCount *metric.Counter
@@ -2513,6 +2520,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LeaseTransferErrorCount:   metric.NewCounter(metaLeaseTransferErrorCount),
 		LeaseExpirationCount:      metric.NewGauge(metaLeaseExpirationCount),
 		LeaseEpochCount:           metric.NewGauge(metaLeaseEpochCount),
+		LeaseLivenessCount:        metric.NewGauge(metaLeaseLivenessCount),
 
 		// Intent resolution metrics.
 		ResolveCommitCount: metric.NewCounter(metaResolveCommit),
