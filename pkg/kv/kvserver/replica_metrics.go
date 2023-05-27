@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -27,11 +28,12 @@ import (
 
 // ReplicaMetrics contains details on the current status of the replica.
 type ReplicaMetrics struct {
-	Leader      bool
-	LeaseValid  bool
-	Leaseholder bool
-	LeaseType   roachpb.LeaseType
-	LeaseStatus kvserverpb.LeaseStatus
+	Leader        bool
+	LeaseValid    bool
+	Leaseholder   bool
+	LeaseType     roachpb.LeaseType
+	LeaseStatus   kvserverpb.LeaseStatus
+	LivenessLease bool
 
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
@@ -135,6 +137,8 @@ func calcReplicaMetrics(
 		m.LeaseValid = true
 		leaseOwner = leaseStatus.Lease.OwnedBy(storeID)
 		m.LeaseType = leaseStatus.Lease.Type()
+		m.LivenessLease = leaseOwner &&
+			keys.NodeLivenessSpan.Overlaps(desc.RSpan().AsRawSpanWithNoLocals())
 	}
 	m.Leaseholder = m.LeaseValid && leaseOwner
 	m.Leader = isRaftLeader(raftStatus)

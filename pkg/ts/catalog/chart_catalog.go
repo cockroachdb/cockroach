@@ -1692,6 +1692,7 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"leases.epoch",
 					"leases.expiration",
+					"leases.liveness",
 					"replicas.leaseholders",
 					"replicas.leaders_not_leaseholders",
 					"replicas.leaders_invalid_lease",
