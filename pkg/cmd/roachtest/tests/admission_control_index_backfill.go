@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
+const tpce100kSnapshotPrefix = "tpce-100k"
+
 func registerIndexBackfill(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
 		10, /* nodeCount */
@@ -49,7 +51,7 @@ func registerIndexBackfill(r registry.Registry) {
 		// Tags:            registry.Tags(`weekly`),
 		Cluster:         clusterSpec,
 		RequiresLicense: true,
-		SnapshotPrefix:  "tpce-100k",
+		SnapshotPrefix:  tpce100kSnapshotPrefix,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount
@@ -167,9 +169,9 @@ func registerIndexBackfill(r registry.Registry) {
 					db := c.Conn(ctx, t.L(), 1)
 					defer db.Close()
 
-					// Gently wind up AddSST concurrency, to increase the
-					// likelihood of getting into IO overload regime due to
-					// follower activity.
+					// Crank up AddSST concurrency to increase the likelihood
+					// of getting into IO overload regime due to follower
+					// activity.
 					if _, err := db.ExecContext(ctx,
 						"SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 3",
 					); err != nil {
@@ -212,7 +214,7 @@ func registerIndexBackfill(r registry.Registry) {
 					})
 					m.Wait()
 
-					t.Status("waiting for workload to finish (<%s)", 20*time.Minute)
+					t.Status(fmt.Sprintf("waiting for workload to finish (<%s)", 20*time.Minute))
 					return nil
 				},
 			})
