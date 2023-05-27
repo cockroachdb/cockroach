@@ -26,7 +26,7 @@ import {
   pauseJob,
   resumeJob,
 } from "src/util/docs";
-import { DATE_FORMAT } from "src/util/format";
+import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT } from "src/util/format";
 
 import { HighwaterTimestamp, JobStatusCell } from "../util";
 import { JobDescriptionCell } from "./jobDescriptionCell";
@@ -56,6 +56,7 @@ export const jobsColumnLabels: any = {
   creationTime: "Creation Time",
   lastModifiedTime: "Last Modified Time",
   lastExecutionTime: "Last Execution Time",
+  finishedTime: "Completed Time",
   executionCount: "Execution Count",
   highWaterTimestamp: "High-water Timestamp",
   coordinatorID: "Coordinator Node",
@@ -172,7 +173,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       cell: job => (
         <Timestamp
           time={TimestampToMoment(job?.created)}
-          format={DATE_FORMAT}
+          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
         />
       ),
       sort: job => TimestampToMoment(job?.created).valueOf(),
@@ -194,10 +195,36 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       cell: job => (
         <Timestamp
           time={TimestampToMoment(job?.modified)}
-          format={DATE_FORMAT}
+          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
         />
       ),
       sort: job => TimestampToMoment(job?.modified).valueOf(),
+      showByDefault: true,
+    },
+    {
+      name: "finishedTime",
+      title: (
+        <Tooltip
+          placement="bottom"
+          style="tableTitle"
+          content={
+            <p>
+              Date and time the job was either completed, failed or canceled.
+            </p>
+          }
+        >
+          <>
+            {jobsColumnLabels.finishedTime} <Timezone />
+          </>
+        </Tooltip>
+      ),
+      cell: job => (
+        <Timestamp
+          time={TimestampToMoment(job?.finished)}
+          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
+        />
+      ),
+      sort: job => TimestampToMoment(job?.finished).valueOf(),
       showByDefault: true,
     },
     {
@@ -206,7 +233,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
         <Tooltip
           placement="bottom"
           style="tableTitle"
-          content={<p>Date and time the job was last executed.</p>}
+          content={<p>Date and time of the last attempted job execution.</p>}
         >
           <>
             {jobsColumnLabels.lastExecutionTime} <Timezone />
@@ -216,7 +243,7 @@ export function makeJobsColumns(): ColumnDescriptor<Job>[] {
       cell: job => (
         <Timestamp
           time={TimestampToMoment(job?.last_run)}
-          format={DATE_FORMAT}
+          format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT}
         />
       ),
       sort: job => TimestampToMoment(job?.last_run).valueOf(),
