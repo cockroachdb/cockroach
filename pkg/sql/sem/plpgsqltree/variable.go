@@ -10,14 +10,9 @@
 
 package plpgsqltree
 
-type PLpgSQLDatum interface {
-	plpgsqldatum()
-}
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-type PLpgSQLVariable interface {
-	PLpgSQLDatum
-	pgpgsqlvariable()
-}
+type PLpgSQLVariable = tree.Name
 
 // Scope contains all the variables defined in the DECLARE section of current statement block.
 type VariableScope struct {
