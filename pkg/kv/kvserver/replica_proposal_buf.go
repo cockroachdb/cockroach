@@ -236,6 +236,8 @@ func (b *propBuf) incAllocatedIdx() int {
 func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedRequestToken) error {
 	defer tok.DoneIfNotMoved(ctx)
 
+	log.Eventf(p.ctx, "acquiring proposal buffer read lock for command %s", p.idKey)
+
 	// Hold the read lock while inserting into the proposal buffer. Other
 	// insertion attempts will also grab the read lock, so they can insert
 	// concurrently. Consumers of the proposal buffer will grab the write lock,
@@ -249,6 +251,8 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 		}
 	}
 
+	log.Eventf(p.ctx, "allocating proposal buffer index for command %s", p.idKey)
+
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
 	idx, err := b.allocateIndex(ctx, false /* wLocked */)
@@ -256,9 +260,7 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 		return err
 	}
 
-	if log.V(4) {
-		log.Infof(p.ctx, "submitting proposal %x", p.idKey)
-	}
+	log.Eventf(p.ctx, "submitting proposal for command %s at proposal buffer index %d", p.idKey, idx)
 
 	// Insert the proposal into the buffer's array. The buffer now takes ownership
 	// of the token.
@@ -325,7 +327,9 @@ func (b *propBuf) allocateIndex(ctx context.Context, wLocked bool) (int, error) 
 			// out of potentially many requests holding the shared lock and
 			// trying to insert concurrently. Wait for the buffer to be flushed
 			// by someone else before trying again.
+			log.Event(ctx, "waiting for full buffer")
 			b.full.Wait()
+			log.Event(ctx, "available buffer")
 		}
 	}
 }
@@ -533,7 +537,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// need to be at least as large as the proposal quota size, assuming
 			// that all in-flight proposals are reproposed in a single batch.
 			ents = append(ents, raftpb.Entry{
-				Data: p.encodedCommand,
+				Data:  p.encodedCommand,
+				ID:    p.idKey.String(),
+				Trace: p.Request.IsSingleRequestLeaseRequest(),
 			})
 			log.Eventf(p.ctx, "flushing proposal for command %s to Raft", p.idKey)
 		}

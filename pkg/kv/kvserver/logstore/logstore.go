@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -386,6 +387,10 @@ func logAppend(
 		ent := &entries[i]
 		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, kvpb.RaftIndex(ent.Index))
 
+		if ent.Trace {
+			log.Errorf(ctx, "XXX appending command %s to log at index %d", ent.ID, ent.Index)
+		}
+
 		if err := value.SetProto(ent); err != nil {
 			return RaftState{}, err
 		}
@@ -563,6 +568,10 @@ func LoadEntries(
 				ents = append(ents, ent)
 			}
 			return iterutil.StopIteration()
+		}
+
+		if ent.Trace {
+			log.Errorf(ctx, "XXX loaded command %s from the log at index %d", ent.ID, ent.Index)
 		}
 
 		ents = append(ents, ent)

@@ -271,11 +271,14 @@ func (r *Replica) evalAndPropose(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
+	log.Event(ctx, "acquiring proposal quota")
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
 	if err != nil {
 		return nil, nil, "", nil, kvpb.NewError(err)
 	}
+	log.Event(ctx, "acquired proposal quota")
+
 	// Make sure we clean up the proposal if we fail to insert it into the
 	// proposal buffer successfully. This ensures that we always release any
 	// quota that we acquire.
@@ -454,6 +457,7 @@ func (r *Replica) propose(
 	} else if log.V(4) {
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
+	log.Eventf(p.ctx, "proposing command")
 
 	// Create encoding buffer.
 	preLen := 0
@@ -601,6 +605,11 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 			// this addition.
 			if term := raftGroup.BasicStatus().Term; term > req.Message.Term {
 				req.Message.Term = term
+			}
+		}
+		for _, ent := range req.Message.Entries {
+			if ent.Trace {
+				log.Errorf(context.Background(), "stepping received command %s", ent.ID)
 			}
 		}
 		err := raftGroup.Step(req.Message)

@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -403,6 +404,19 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		},
 		func(ctx context.Context) {
 			defer sp.Finish()
+
+			ctx, sp = p.repl.AmbientContext.Tracer.StartSpanCtx(ctx, "request-lease-async",
+				tracing.WithRecording(tracingpb.RecordingVerbose))
+			start := timeutil.Now()
+			defer func() {
+				threshold := envutil.EnvOrDefaultDuration("COCKROACH_TRACE_LEASE_REQUEST_THRESHOLD", 2*time.Second)
+				if duration := timeutil.Since(start); duration >= threshold {
+					rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
+					log.Errorf(ctx, "XXX lease request took %s\n%s", duration.Round(time.Millisecond), rec)
+				} else {
+					sp.Finish()
+				}
+			}()
 
 			// Grow the goroutine stack, to avoid having to re-grow it during request
 			// processing. This is normally done when processing batch requests via

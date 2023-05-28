@@ -289,6 +289,11 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					for i := range batch.Requests {
 						req := &batch.Requests[i]
 						t.metrics.MessagesRcvd.Inc(1)
+						for _, ent := range req.Message.Entries {
+							if ent.Trace {
+								log.Errorf(ctx, "received command %s", ent.ID)
+							}
+						}
 						if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
 							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
 								return err
@@ -398,7 +403,7 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
 func (t *RaftTransport) processQueue(
-	q *raftSendQueue, stream MultiRaft_RaftMessageBatchClient,
+	q *raftSendQueue, stream MultiRaft_RaftMessageBatchClient, toNodeID roachpb.NodeID,
 ) error {
 	errCh := make(chan error, 1)
 
@@ -459,6 +464,14 @@ func (t *RaftTransport) processQueue(
 					releaseRaftMessageRequest(req)
 				default:
 					budget = -1
+				}
+			}
+
+			for _, req := range batch.Requests {
+				for _, ent := range req.Message.Entries {
+					if ent.Trace {
+						log.Errorf(ctx, "sending outgoing command %s to n%d", ent.ID, toNodeID)
+					}
 				}
 			}
 
@@ -527,6 +540,12 @@ func (t *RaftTransport) SendAsync(
 		ctx := t.AnnotateCtx(context.Background())
 		if !t.startProcessNewQueue(ctx, toNodeID, class) {
 			return false
+		}
+	}
+
+	for _, ent := range req.Message.Entries {
+		if ent.Trace {
+			log.Errorf(t.AnnotateCtx(context.Background()), "enqueueing outgoing command %s to n%s", ent.ID, toNodeID)
 		}
 	}
 
@@ -601,7 +620,7 @@ func (t *RaftTransport) startProcessNewQueue(
 			return
 		}
 
-		if err := t.processQueue(q, stream); err != nil {
+		if err := t.processQueue(q, stream, toNodeID); err != nil {
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
 		}
 	}

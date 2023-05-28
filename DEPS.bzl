@@ -10401,11 +10401,9 @@ def go_deps():
         ],
         build_file_proto_mode = "default",
         importpath = "go.etcd.io/raft/v3",
-        sha256 = "1dbe5ec9490f9de393c6b13fb46859b25f36827a10e2ec66af50432757a20c7a",
-        strip_prefix = "go.etcd.io/raft/v3@v3.0.0-20230524085155-eb88ac531002",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/raft/v3/io_etcd_go_raft_v3-v3.0.0-20230524085155-eb88ac531002.zip",
-        ],
+        vcs = "git",
+        remote = "/home/erik/go/src/github.com/etcd-io/raft",
+        commit = "a06c3e50643223aca47907c78d17c4bf9af74da2",
     )
     go_repository(
         name = "io_goji",

@@ -76,6 +76,13 @@ func (q *raftReceiveQueue) drainLocked() ([]raftRequestInfo, bool) {
 	infos := q.mu.infos
 	q.mu.infos = nil
 	q.acc.Clear(context.Background())
+	for _, info := range infos {
+		for _, ent := range info.req.Message.Entries {
+			if ent.Trace {
+				log.Errorf(context.Background(), "drained received command %s", ent.ID)
+			}
+		}
+	}
 	return infos, true
 }
 
@@ -122,6 +129,11 @@ func (q *raftReceiveQueue) Append(
 		respStream: s,
 		size:       size,
 	})
+	for _, ent := range req.Message.Entries {
+		if ent.Trace {
+			log.Errorf(context.Background(), "enqueued received command %s", ent.ID)
+		}
+	}
 	// The operation that enqueues the first message will
 	// be put in charge of triggering a drain of the queue.
 	return len(q.mu.infos) == 1, size, true
