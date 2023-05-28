@@ -270,7 +270,7 @@ func (r *Replica) evalAndPropose(
 		))
 	}
 	var err error
-	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
+	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, ba, quotaSize)
 	if err != nil {
 		return nil, nil, "", nil, kvpb.NewError(err)
 	}
