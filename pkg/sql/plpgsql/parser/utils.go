@@ -9,10 +9,3 @@
 // licenses/APL.txt.
 
 package parser
-
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
-
-type declareHeader struct {
-	label    string
-	initVars []plpgsqltree.PLpgSQLVariable
-}

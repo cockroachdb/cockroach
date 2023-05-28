@@ -3,12 +3,20 @@ DECLARE
 BEGIN
 x := 1;
 LOOP
-  EXIT WHEN x:= 10;
+  EXIT WHEN x = 10;
   x := x + 1;
 END LOOP;
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+x := 1;
+LOOP
+EXIT WHEN x = 10;
+x := x + 1;
+END LOOP;
+END
+<NOT DONE YET>
 
 
 parse
@@ -17,9 +25,17 @@ BEGIN
 x := 1;
 <<mathing>>
 LOOP
-  EXIT WHEN x:= 10;
+  EXIT WHEN x = 10;
   x := x + 1;
 END LOOP mathing;
 END
 ----
-expected parse error: at or near "loop": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+x := 1;
+LOOP
+EXIT WHEN x = 10;
+x := x + 1;
+END LOOP mathing;
+END
+<NOT DONE YET>
