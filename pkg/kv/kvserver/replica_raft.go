@@ -257,6 +257,7 @@ func (r *Replica) evalAndPropose(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
+	log.VEventf(proposal.ctx, 2, "acquiring proposal quota (%d bytes)", quotaSize)
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
 	if err != nil {
@@ -474,6 +475,7 @@ func (r *Replica) propose(
 	//
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
+	log.VEvent(p.ctx, 2, "submitting proposal to proposal buffer")
 	err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx))
 	if err != nil {
 		return roachpb.NewError(err)
