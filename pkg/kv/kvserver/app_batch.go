@@ -110,7 +110,7 @@ func (b *appBatch) toCheckedCmd(
 ) {
 	cmd.ForcedErrResult = fr
 	if cmd.Rejected() {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedError)
+		log.VEventf(ctx, 1, "applying command %s with forced error: %s", cmd.ID, cmd.ForcedError)
 
 		// Apply an empty command.
 		cmd.Cmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
@@ -118,7 +118,7 @@ func (b *appBatch) toCheckedCmd(
 		cmd.Cmd.LogicalOpLog = nil
 		cmd.Cmd.ClosedTimestamp = nil
 	} else {
-		log.Event(ctx, "applying command")
+		log.Eventf(ctx, "applying command %s", cmd.ID)
 	}
 }
 

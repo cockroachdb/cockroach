@@ -167,8 +167,9 @@ func (r *Replica) evalAndPropose(
 	}
 
 	log.VEventf(proposal.ctx, 2,
-		"proposing command to write %d new keys, %d new values, %d new intents, "+
+		"proposing command %s to write %d new keys, %d new values, %d new intents, "+
 			"write batch size=%d bytes",
+		proposal.idKey,
 		proposal.command.ReplicatedEvalResult.Delta.KeyCount,
 		proposal.command.ReplicatedEvalResult.Delta.ValCount,
 		proposal.command.ReplicatedEvalResult.Delta.IntentCount,
