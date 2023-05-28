@@ -438,4 +438,4 @@ replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
-replace go.etcd.io/raft/v3 v3.0.0-20230524085155-eb88ac531002 => /home/erik/go/src/github.com/etcd-io/raft
+replace go.etcd.io/raft/v3 v3.0.0-20230524085155-eb88ac531002 => /cockroach/raft

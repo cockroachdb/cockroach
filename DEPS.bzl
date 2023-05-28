@@ -10402,7 +10402,7 @@ def go_deps():
         build_file_proto_mode = "default",
         importpath = "go.etcd.io/raft/v3",
         vcs = "git",
-        remote = "/home/erik/go/src/github.com/etcd-io/raft",
+        remote = "/cockroach/raft",
         commit = "a06c3e50643223aca47907c78d17c4bf9af74da2",
     )
     go_repository(
