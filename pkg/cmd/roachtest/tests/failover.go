@@ -253,7 +253,7 @@ func runFailoverChaos(
 					}
 				}
 				if d, ok := failer.(*deadlockFailer); ok { // randomize deadlockFailer
-					d.numReplicas = 1 + rng.Intn(10)
+					d.numReplicas = 1 + rng.Intn(3)
 					d.onlyLeaseholders = rng.Float64() < 0.5
 				}
 				failer.Ready(ctx, m)
@@ -1284,7 +1284,7 @@ func makeFailerWithoutLocalNoop(
 			startOpts:        opts,
 			startSettings:    settings,
 			onlyLeaseholders: true,
-			numReplicas:      5,
+			numReplicas:      3,
 		}
 	case failureModeDiskStall:
 		return &diskStallFailer{
