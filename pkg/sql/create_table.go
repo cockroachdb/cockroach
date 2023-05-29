@@ -1603,7 +1603,7 @@ func NewTableDesc(
 			}
 
 			// Version gates for enabling primary keys for JSONB columns
-			if col.Type.Family() == types.JsonFamily && d.PrimaryKey.IsPrimaryKey && !version.IsActive(clusterversion.V23_2) {
+			if col.Type.Family() == types.JsonFamily && (d.PrimaryKey.IsPrimaryKey || d.Unique.IsUnique) && !version.IsActive(clusterversion.V23_2) {
 				return nil, errors.WithHint(
 					pgerror.Newf(
 						pgcode.InvalidTableDefinition,
