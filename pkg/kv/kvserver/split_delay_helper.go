@@ -156,6 +156,7 @@ func maybeDelaySplitToAvoidSnapshot(ctx context.Context, sdh splitDelayHelperI) 
 
 		for replicaID, pr := range raftStatus.Progress {
 			if pr.State != tracker.StateReplicate {
+				// NB: RecentActive is populated by updateRaftProgressFromActivity().
 				if !pr.RecentActive {
 					if slept < tickDur {
 						// We don't want to delay splits for a follower who hasn't responded within a tick.

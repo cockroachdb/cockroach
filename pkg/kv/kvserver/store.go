@@ -311,7 +311,8 @@ func newRaftConfig(
 		Storage:                   strg,
 		Logger:                    logger,
 
-		PreVote: true,
+		PreVote:     true,
+		CheckQuorum: storeCfg.RaftEnableCheckQuorum,
 	}
 }
 
