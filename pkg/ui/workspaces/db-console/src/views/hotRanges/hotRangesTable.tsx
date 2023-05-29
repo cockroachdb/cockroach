@@ -32,6 +32,9 @@ import {
   uiDebugPages,
 } from "src/util/docs";
 import emptyTableResultsImg from "assets/emptyState/empty-table-results.svg";
+import { sortSettingLocalSetting } from "oss/src/redux/hotRanges";
+import { AdminUIState } from "oss/src/redux/state";
+import { connect } from "react-redux";
 
 const PAGE_SIZE = 50;
 const cx = classNames.bind(styles);
@@ -41,6 +44,8 @@ interface HotRangesTableProps {
   lastUpdate?: string;
   nodeIdToLocalityMap: Map<number, string>;
   clearFilterContainer: React.ReactNode;
+  sortSetting?: SortSetting;
+  onSortChange?: (ss: SortSetting) => void;
 }
 
 const HotRangesTable = ({
@@ -48,14 +53,12 @@ const HotRangesTable = ({
   nodeIdToLocalityMap,
   lastUpdate,
   clearFilterContainer,
+  sortSetting,
+  onSortChange,
 }: HotRangesTableProps) => {
   const [pagination, setPagination] = useState({
     pageSize: PAGE_SIZE,
     current: 1,
-  });
-  const [sortSetting, setSortSetting] = useState<SortSetting>({
-    ascending: false,
-    columnTitle: "qps",
   });
 
   const columns: ColumnDescriptor<cockroach.server.serverpb.HotRangesResponseV2.IHotRange>[] =
@@ -313,12 +316,7 @@ const HotRangesTable = ({
         columns={columns}
         tableWrapperClassName={cx("hotranges-table")}
         sortSetting={sortSetting}
-        onChangeSortSetting={(ss: SortSetting) =>
-          setSortSetting({
-            ascending: ss.ascending,
-            columnTitle: ss.columnTitle,
-          })
-        }
+        onChangeSortSetting={(ss: SortSetting) => onSortChange(ss)}
         pagination={pagination}
         renderNoResult={
           <EmptyTable
@@ -347,4 +345,16 @@ const HotRangesTable = ({
   );
 };
 
-export default HotRangesTable;
+const mapDispatchToProps = {
+  onSortChange: (ss: SortSetting) =>
+    sortSettingLocalSetting.set({
+      ascending: ss.ascending,
+      columnTitle: ss.columnTitle,
+    }),
+};
+
+const mapStateToProps = (state: AdminUIState) => ({
+  sortSetting: sortSettingLocalSetting.selector(state),
+});
+
+export default connect(mapStateToProps, mapDispatchToProps)(HotRangesTable);
