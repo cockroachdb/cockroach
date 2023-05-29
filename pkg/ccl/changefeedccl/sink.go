@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -912,7 +913,7 @@ type OrderedSinkRowSlice []orderedSinkRow
 
 func (p OrderedSinkRowSlice) Len() int           { return len(p) }
 func (p OrderedSinkRowSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[i].row.Mvcc.Less(p[j].row.Mvcc) }
+func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[i].row.Updated.Less(p[j].row.Updated) }
 
 // orderedSink collects rows in memory, and upon a call to Flush
 // sorts the rows and emits the sorted rows to the forwardingBuf
@@ -942,54 +943,66 @@ func (s *orderedSink) EmitRow(
 	s.unorderedBuf = append(s.unorderedBuf, orderedSinkRow{
 		alloc: alloc,
 		row: jobspb.OrderedRows_Row{
-			Key:   key,
-			Value: value,
-			Mvcc:  updated,
+			Key:     key,
+			Value:   value,
+			Updated: updated,
+			Mvcc:    mvcc,
+
+			// Topic is currently unsupported to avoid having to send the entire
+			// cdcevent metadata across the wire.  We'd ideally perform further
+			// refactoring of the sink API to avoid this being necessary.
+			Topic: []byte{},
 		},
 	})
-	// debug(fmt.Sprintf("AGG APPENDING (%+v) (buffered len: %d)", s.unorderedBuf[len(s.unorderedBuf)-1].row, len(s.unorderedBuf)))
 	return nil
 }
+
+// Can't have the payload being sent through distsql being too large
+var maxOrderedRowCount = envutil.EnvOrDefaultInt(
+	"COCKROACH_CHANGEFEED_ORDERED_ROW_COUNT", 100,
+)
 
 // EmitResolvedTimestamp implements the Sink interface.
 func (s *orderedSink) Flush(ctx context.Context) error {
 	if len(s.unorderedBuf) == 0 {
 		return nil
 	}
-	sort.Sort(s.unorderedBuf) // Orders from lowest to highest
-
-	// debug(fmt.Sprintf("AGG diff: %d lowestUnordered: %s resolved: %s, highestUnordered: %s", resolved.WallTime-s.unorderedBuf[0].row.Mvcc.WallTime, s.unorderedBuf[0].row.Mvcc, resolved, s.unorderedBuf[len(s.unorderedBuf)-1].row.Mvcc))
-	unorderedStart := 0
+	sort.Sort(s.unorderedBuf) // Orders from lowest to highest updated timestamp
 
 	var toRelease kvevent.Alloc
-	for {
-		fullyFlushed := true
+	defer toRelease.Release(ctx)
 
+	// Until all messages have reached the frontier (the point where we know our
+	// sorted list isn't missing any events), forward messages to the coordinator
+	// node, and do so while sending payloads that aren't too large.
+	// startIndex := 0
+	for {
 		orderedUpdate := jobspb.OrderedRows{
 			Rows:              make([]jobspb.OrderedRows_Row, 0, len(s.unorderedBuf)),
 			SourceProcessorID: s.processorID,
 		}
 
-		for i := unorderedStart; i < len(s.unorderedBuf); i++ {
-			r := s.unorderedBuf[i]
-			if i >= unorderedStart+100 {
-				fullyFlushed = false
+		// Build up the payload of ordered rows
+		// for i := startIndex; i < len(s.unorderedBuf); i++ {
+		// 	r := s.unorderedBuf[i]
+		// 	if i >= startIndex+maxOrderedRowCount {
+		// 		break
+		// 	}
+		for i, r := range s.unorderedBuf {
+			if i >= maxOrderedRowCount {
 				break
 			}
-			// }
-			// for i, r := range s.unorderedBuf {
-			// if i >= 100 {
-			// 	fullyFlushed = false
-			// 	break
-			// }
-			// debug(fmt.Sprintf("AGG CHECK %s, frontier: %s, backfillts: %s", r.row.Mvcc, s.frontier.Frontier(), s.frontier.BackfillTS()))
-			if s.frontier.Frontier().Less(r.row.Mvcc) && !r.row.Mvcc.Equal(s.frontier.BackfillTS()) {
+			if s.frontier.Frontier().Less(r.row.Updated) && !r.row.Updated.Equal(s.frontier.BackfillTS()) {
 				break
 			}
 			orderedUpdate.Rows = append(orderedUpdate.Rows, r.row)
 			toRelease.Merge(&r.alloc)
 		}
-		unorderedStart += len(orderedUpdate.Rows)
+		if len(orderedUpdate.Rows) == 0 {
+			break
+		}
+		s.unorderedBuf = s.unorderedBuf[len(orderedUpdate.Rows):]
+		// startIndex += len(orderedUpdate.Rows)
 
 		updateBytes, err := protoutil.Marshal(&orderedUpdate)
 		if err != nil {
@@ -997,21 +1010,15 @@ func (s *orderedSink) Flush(ctx context.Context) error {
 		}
 		s.metrics.TotalOrderingForwards.Inc(1)
 		s.metrics.TotalOrderingEventsForwarded.Inc(int64(len(orderedUpdate.Rows)))
-		// debug(fmt.Sprintf("AGG FORWARDING %d, remaining: %d", len(orderedUpdate.Rows), len(s.unorderedBuf)))
 		s.forwardingBuf.Push(rowenc.EncDatumRow{
 			{Datum: tree.DNull}, // resolved span
 			{Datum: tree.DNull}, // topic
 			{Datum: tree.DNull}, // key
 			{Datum: tree.DNull}, // value
-			{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // value
+			{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // orderedRows
 		})
-
-		if fullyFlushed {
-			break
-		}
 	}
-	toRelease.Release(ctx)
-	s.unorderedBuf = s.unorderedBuf[unorderedStart:]
+	// s.unorderedBuf = s.unorderedBuf[startIndex:]
 	return nil
 }
 

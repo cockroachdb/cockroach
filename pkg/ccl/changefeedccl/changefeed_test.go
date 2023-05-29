@@ -364,7 +364,7 @@ func TestChangefeedTotalOrdering(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 
 	sqlDB.ExecMultiple(t,
-		`INSERT INTO foo (a) SELECT * FROM generate_series(1, 10);`,
+		`INSERT INTO foo (a) SELECT * FROM generate_series(1, 1000);`,
 		`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));`,
 		`ALTER TABLE foo SCATTER;`,
 	)
@@ -372,7 +372,7 @@ func TestChangefeedTotalOrdering(t *testing.T) {
 	foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total', resolved='1s', initial_scan='yes'`)
 	defer closeFeed(t, foo)
 	var expectedBackfillMessages []string
-	for i := 1; i <= 10; i++ {
+	for i := 1; i <= 1000; i++ {
 		expectedBackfillMessages = append(expectedBackfillMessages, fmt.Sprintf(
 			`foo: [%d]->{"after": {"a": %d}}`, i, i,
 		))
@@ -385,7 +385,7 @@ func TestChangefeedTotalOrdering(t *testing.T) {
 	// expectResolvedTimestamp(t, foo)
 	// tdebug("got second resolved")
 
-	for i := 11; i <= 20; i++ {
+	for i := 1001; i <= 2000; i++ {
 		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
 	}
 	// sqlDB2 := sqlutils.MakeSQLRunner(cluster.ServerConn(1))
@@ -398,7 +398,7 @@ func TestChangefeedTotalOrdering(t *testing.T) {
 	// }
 
 	var expectedMessages []string
-	for i := 11; i <= 20; i++ {
+	for i := 1001; i <= 2000; i++ {
 		expectedMessages = append(expectedMessages, fmt.Sprintf(
 			`foo: [%d]->{"after": {"a": %d}}`, i, i,
 		))

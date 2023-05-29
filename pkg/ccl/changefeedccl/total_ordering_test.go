@@ -38,8 +38,8 @@ func (s *testOrderedSink) emitTs(wallTime int64) {
 		context.Background(),
 		nil,
 		[]byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"topic:\":\"foo\"}"),
-		zeroTS,
 		hlc.Timestamp{WallTime: wallTime},
+		zeroTS,
 		s.pool.alloc()),
 	)
 }
@@ -75,7 +75,7 @@ func (s *testOrderedSink) flushAndVerify(wallTime int64) int {
 	payload := s.popPayload()
 	lastTs := hlc.Timestamp{}
 	for _, orderedRow := range payload.Rows {
-		tdebug(fmt.Sprintf("GOT %d", orderedRow.Mvcc.WallTime))
+		tdebug(fmt.Sprintf("GOT %d", orderedRow.Updated.WallTime))
 		require.False(s.t, orderedRow.Mvcc.Less(lastTs))
 		lastTs = orderedRow.Mvcc
 	}
@@ -109,7 +109,21 @@ func TestOrderedSink(t *testing.T) {
 	for ts := 1000; ts > 500; ts-- {
 		sink.emitTs(int64(ts))
 	}
-	require.Equal(t, sink.flushAndVerify(1001), 500)
+	sink.flushToTs(1001)
+	require.Equal(t, sink.flushAndVerify(1001), maxOrderedRowCount)
+	for i := 1; i < 5; i++ {
+		payload := sink.popPayload()
+		require.Equal(t, len(payload.Rows), maxOrderedRowCount)
+	}
+	require.True(t, sink.forwardingBuf.IsEmpty())
+
+	for ts := 10000; ts > 1000; ts-- {
+		sink.emitTs(int64(ts))
+	}
+	for i := 1100; i <= 11000; i += 321 {
+		sink.flushAndVerify(int64(i))
+	}
+	require.Equal(t, sink.pool.used(), int64(0))
 }
 
 func makeSpan(t *testing.T, start string, end string) (s roachpb.Span) {
@@ -125,13 +139,16 @@ func makeSpan(t *testing.T, start string, end string) (s roachpb.Span) {
 }
 
 type mockSink struct {
-	t        *testing.T
-	frontier *schemaChangeFrontier
-	emits    int
-	lastMvcc hlc.Timestamp
+	t           *testing.T
+	frontier    *schemaChangeFrontier
+	buffered    int
+	emits       int
+	lastUpdated hlc.Timestamp
 }
 
 func (ms *mockSink) Flush(ctx context.Context) error {
+	ms.emits += ms.buffered
+	ms.buffered = 0
 	return nil
 }
 func (ms *mockSink) getConcreteType() sinkType {
@@ -151,9 +168,9 @@ func (ms *mockSink) EmitRow(
 	alloc kvevent.Alloc,
 ) error {
 	require.True(ms.t, mvcc.LessEq(ms.frontier.Frontier()) || mvcc.Equal(ms.frontier.BackfillTS()))
-	require.False(ms.t, mvcc.Less(ms.lastMvcc), fmt.Sprintf("%s not less than %s", mvcc, ms.lastMvcc))
-	ms.lastMvcc = mvcc
-	ms.emits += 1
+	require.False(ms.t, mvcc.Less(ms.lastUpdated), fmt.Sprintf("%s not less than %s", mvcc, ms.lastUpdated))
+	ms.lastUpdated = mvcc
+	ms.buffered += 1
 	return nil
 }
 
@@ -165,6 +182,7 @@ func TestOrderedMerger(t *testing.T) {
 	require.NoError(t, err)
 
 	rng, _ := randutil.NewTestRand()
+	ctx := context.Background()
 
 	orderedSinks := make([]testOrderedSink, 5)
 	for i := 0; i < 5; i++ {
@@ -189,7 +207,7 @@ func TestOrderedMerger(t *testing.T) {
 		}
 	}
 
-	sink := &mockSink{t: t, lastMvcc: hlc.Timestamp{}, frontier: sf}
+	sink := &mockSink{t: t, lastUpdated: hlc.Timestamp{}, frontier: sf}
 	merger := &orderedRowMerger{
 		orderedRows: make(map[int32][]jobspb.OrderedRows_Row),
 		frontier:    sf,
@@ -203,40 +221,40 @@ func TestOrderedMerger(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			require.NoError(t, orderedSinks[i].Flush(context.Background()))
 			for !orderedSinks[i].forwardingBuf.IsEmpty() {
-				merger.Append(orderedSinks[i].popPayload())
+				require.NoError(t, merger.Append(ctx, orderedSinks[i].popPayload()))
 			}
 		}
 	}
 
 	// Should output results of initial scan
 	forwardFrontier("a", "f", 0)
-	require.NoError(t, merger.TryFlush(context.Background()))
+	require.NoError(t, merger.Flush(ctx))
 	require.Equal(t, sink.emits, 500)
 
 	forwardFrontier("a", "f", 2000)
-	require.NoError(t, merger.TryFlush(context.Background()))
+	require.NoError(t, merger.Flush(ctx))
 	prevEmits := sink.emits
 
-	// Sholud not emit anything if only part of the frontier advanced
+	// Should not emit anything if only part of the frontier advanced
 	forwardFrontier("a", "b", 10000)
-	require.NoError(t, merger.TryFlush(context.Background()))
+	require.NoError(t, merger.Flush(ctx))
 	require.Equal(t, sink.emits, prevEmits)
 
-	// Sholud not emit anything if only part of the frontier advanced
+	// Should not emit anything if only part of the frontier advanced
 	forwardFrontier("c", "f", 10000)
-	require.NoError(t, merger.TryFlush(context.Background()))
+	require.NoError(t, merger.Flush(ctx))
 	require.Equal(t, sink.emits, prevEmits)
 
 	// Should finally be able to emit
 	forwardFrontier("b", "c", 2500)
-	require.NoError(t, merger.TryFlush(context.Background()))
+	require.NoError(t, merger.Flush(ctx))
 	forwardFrontier("b", "c", 5000)
-	require.NoError(t, merger.TryFlush(context.Background()))
+	require.NoError(t, merger.Flush(ctx))
 	require.Greater(t, sink.emits, prevEmits)
 
-	require.NoError(t, merger.TryFlush(context.Background()))
+	require.NoError(t, merger.Flush(ctx))
 	forwardFrontier("a", "f", 11000)
-	require.NoError(t, merger.TryFlush(context.Background()))
+	require.NoError(t, merger.Flush(ctx))
 	require.Zero(t, merger.minHeap.Len())
 	require.Equal(t, sink.emits, 5500)
 
@@ -254,12 +272,12 @@ func TestOrderedMerger(t *testing.T) {
 		}
 		orderedSinks[i].emitTs(20100)
 
-		require.NoError(t, orderedSinks[i].Flush(context.Background()))
+		require.NoError(t, orderedSinks[i].Flush(ctx))
 		for !orderedSinks[i].forwardingBuf.IsEmpty() {
-			merger.Append(orderedSinks[i].popPayload())
+			require.NoError(t, merger.Append(ctx, orderedSinks[i].popPayload()))
 		}
 	}
 	prevEmits = sink.emits
-	require.NoError(t, merger.TryFlush(context.Background()))
+	require.NoError(t, merger.Flush(ctx))
 	require.Equal(t, sink.emits, prevEmits+500)
 }
