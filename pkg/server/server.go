@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverrules"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
@@ -2049,6 +2050,16 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 		s.serverController.sqlMux,
 		s.pgL,
 		&s.cfg.SocketFile,
+	); err != nil {
+		return err
+	}
+
+	if err := structlogging.StartHotRangesLoggingScheduler(
+		ctx,
+		s.stopper,
+		s.status,
+		*s.sqlServer.internalExecutor,
+		s.ClusterSettings(),
 	); err != nil {
 		return err
 	}

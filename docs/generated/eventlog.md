@@ -2801,6 +2801,34 @@ ChangefeedFailed events.
 | `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
 | `Format` | The data format being emitted (ex: JSON, Avro). | no |
 
+### `hot_ranges_stats`
+
+An event of type `hot_ranges_stats`
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `RangeID` |  | no |
+| `Qps` |  | no |
+| `DatabaseName` | DatabaseName is the name of the database in which the index was created. | yes |
+| `TableName` | TableName is the name of the table on which the index was created. | yes |
+| `IndexName` | IndexName is the name of the index within the scope of the given table. | yes |
+| `SchemaName` | SchemaName is the name of the schema in which the index was created. | yes |
+| `LeaseholderNodeID` | LeaseholderNodeID indicates the Node ID that is the current leaseholder for the given range. | no |
+| `WritesPerSecond` | Writes per second is the recent number of keys written per second on this range. | no |
+| `ReadsPerSecond` | Reads per second is the recent number of keys read per second on this range. | no |
+| `WriteBytesPerSecond` | Write bytes per second is the recent number of bytes written per second on this range. | no |
+| `ReadBytesPerSecond` | Read bytes per second is the recent number of bytes read per second on this range. | no |
+| `CPUTimePerSecond` | CPU time per second is the recent cpu usage in nanoseconds of this range. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `recovery_event`
 
 An event of type `recovery_event` is an event that is logged on every invocation of BACKUP,
