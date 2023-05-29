@@ -296,8 +296,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		return truncateDecision{}, nil
 	}
 
-	// For all our followers, overwrite the RecentActive field (which is always
-	// true since we don't use CheckQuorum) with our own activity check.
+	// For all our followers, overwrite the RecentActive field with our own
+	// activity check.
 	r.mu.RLock()
 	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
 	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
@@ -541,6 +541,8 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 		// be split many times over, resulting in a flurry of snapshots with
 		// overlapping bounds that put significant stress on the Raft snapshot
 		// queue.
+		//
+		// NB: RecentActive is populated by updateRaftProgressFromActivity().
 		if progress.RecentActive {
 			if progress.State == tracker.StateProbe {
 				decision.ProtectIndex(input.FirstIndex, truncatableIndexChosenViaProbingFollower)
