@@ -224,6 +224,9 @@ type Overload struct {
 	// Version is the descriptor version of the descriptor used to construct
 	// this version of the function overload. Only used for UDFs.
 	Version uint64
+	// Language is the function language that was used to define the UDF.
+	// This is currently either SQL or PL/pgSQL.
+	Language FunctionLanguage
 }
 
 // params implements the overloadImpl interface.
