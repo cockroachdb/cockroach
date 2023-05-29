@@ -659,6 +659,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_IMMUTABLE,
 				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -671,6 +672,7 @@ func TestToOverload(t *testing.T) {
 				Volatility: volatility.Leakproof,
 				Body:       "ANY QUERIES",
 				IsUDF:      true,
+				Language:   tree.FunctionLangSQL,
 			},
 		},
 		{
@@ -683,6 +685,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_IMMUTABLE,
 				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -694,6 +697,7 @@ func TestToOverload(t *testing.T) {
 				Volatility: volatility.Leakproof,
 				Body:       "ANY QUERIES",
 				IsUDF:      true,
+				Language:   tree.FunctionLangSQL,
 			},
 		},
 		{
@@ -706,6 +710,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_STABLE,
 				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -718,6 +723,7 @@ func TestToOverload(t *testing.T) {
 				Volatility: volatility.Stable,
 				Body:       "ANY QUERIES",
 				IsUDF:      true,
+				Language:   tree.FunctionLangSQL,
 			},
 		},
 		{
@@ -730,6 +736,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_IMMUTABLE,
 				NullInputBehavior: catpb.Function_CALLED_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -743,6 +750,7 @@ func TestToOverload(t *testing.T) {
 				Body:              "ANY QUERIES",
 				IsUDF:             true,
 				CalledOnNullInput: true,
+				Language:          tree.FunctionLangSQL,
 			},
 		},
 		{
@@ -755,6 +763,7 @@ func TestToOverload(t *testing.T) {
 				Volatility:        catpb.Function_STABLE,
 				NullInputBehavior: catpb.Function_RETURNS_NULL_ON_NULL_INPUT,
 				FunctionBody:      "ANY QUERIES",
+				Lang:              catpb.Function_SQL,
 			},
 			expected: tree.Overload{
 				Oid: oid.Oid(100001),
@@ -766,6 +775,7 @@ func TestToOverload(t *testing.T) {
 				Volatility: volatility.Leakproof,
 				Body:       "ANY QUERIES",
 				IsUDF:      true,
+				Language:   tree.FunctionLangSQL,
 			},
 			err: "function 1 is leakproof but not immutable",
 		},

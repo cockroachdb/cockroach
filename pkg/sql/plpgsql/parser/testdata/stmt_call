@@ -8,8 +8,5 @@ END
 DECLARE
 BEGIN
 CALL a function/procedure
-<NOT DONE YET>
 DO a code block
-<NOT DONE YET>
 END
-<NOT DONE YET>
