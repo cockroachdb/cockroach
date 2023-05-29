@@ -75,7 +75,6 @@ import { TransactionViewType } from "./transactionsPageTypes";
 import { isSelectedColumn } from "../columnsSelector/utils";
 import {
   STATS_LONG_LOADING_DURATION,
-  txnRequestSortOptions,
   getSortLabel,
   getSortColumn,
   getSubsetWarning,
@@ -662,7 +661,7 @@ export class TransactionsPage extends React.Component<
     return (
       <>
         <SearchCriteria
-          sortOptions={txnRequestSortOptions}
+          searchType="Transaction"
           topValue={this.state.limit}
           byValue={this.state.reqSortSetting}
           currentScale={this.state.timeScale}

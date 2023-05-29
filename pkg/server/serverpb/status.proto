@@ -1627,12 +1627,23 @@ message StatementsResponse {
 }
 
 enum StatsSortOptions {
+  // Sort options that exist on the top Activity tables.
   SERVICE_LAT = 0;
   CPU_TIME = 1;
   EXECUTION_COUNT = 2;
   P99_STMTS_ONLY = 3;
   CONTENTION_TIME = 4;
   PCT_RUNTIME = 5;
+  // Sort options only available on default stats tables.
+  LATENCY_INFO_P50 = 6;
+  LATENCY_INFO_P90 = 7;
+  LATENCY_INFO_MIN = 8;
+  LATENCY_INFO_MAX = 9;
+  ROWS_PROCESSED = 10;
+  MAX_MEMORY = 11;
+  NETWORK = 12;
+  RETRIES = 13;
+  LAST_EXEC = 14;
 }
 message CombinedStatementsStatsRequest {
   enum StatsType {
