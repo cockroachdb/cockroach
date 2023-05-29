@@ -13,15 +13,19 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3"
 )
 
@@ -389,4 +393,46 @@ func (pr *testClusterPartitionedRange) extend(
 	funcs unreliableRaftHandlerFuncs,
 ) (*testClusterPartitionedRange, error) {
 	return setupPartitionedRangeWithHandlers(tc, rangeID, replicaID, partitionedNode, activated, pr.handlers, funcs)
+}
+
+// dropRaftMessagesFrom sets up a Raft message handler on the given server that
+// drops inbound Raft messages from the given range and replica IDs. Outbound
+// messages are not affected, and must be dropped on the receiver.
+//
+// If cond is given, messages are only dropped when the atomic bool is true.
+// Otherwise, messages are always dropped.
+//
+// This will replace the previous message handler, if any.
+func dropRaftMessagesFrom(
+	t *testing.T,
+	srv *server.TestServer,
+	rangeID roachpb.RangeID,
+	fromReplicaIDs []roachpb.ReplicaID,
+	cond *atomic.Bool,
+) {
+	dropFrom := map[roachpb.ReplicaID]bool{}
+	for _, id := range fromReplicaIDs {
+		dropFrom[id] = true
+	}
+	shouldDrop := func(rID roachpb.RangeID, from roachpb.ReplicaID) bool {
+		return rID == rangeID && (cond == nil || cond.Load()) && dropFrom[from]
+	}
+
+	store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
+	require.NoError(t, err)
+	srv.RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
+		rangeID:            rangeID,
+		RaftMessageHandler: store,
+		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+			dropHB: func(hb *kvserverpb.RaftHeartbeat) bool {
+				return shouldDrop(hb.RangeID, hb.FromReplicaID)
+			},
+			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+				return shouldDrop(req.RangeID, req.FromReplica.ReplicaID)
+			},
+			dropResp: func(resp *kvserverpb.RaftMessageResponse) bool {
+				return shouldDrop(resp.RangeID, resp.FromReplica.ReplicaID)
+			},
+		},
+	})
 }
