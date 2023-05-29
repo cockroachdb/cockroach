@@ -345,7 +345,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"database_name",
 			"schema_name",
 			"obj_name",
-			"error",
+			"crdb_internal.redact(error_redactable) as error_redactable",
 		},
 	},
 	// `statement` column can contain customer URI params such as
