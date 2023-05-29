@@ -680,23 +680,26 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
-	AggMetrics                     *AggMetrics
-	KVFeedMetrics                  kvevent.Metrics
-	SchemaFeedMetrics              schemafeed.Metrics
-	Failures                       *metric.Counter
-	ResolvedMessages               *metric.Counter
-	QueueTimeNanos                 *metric.Counter
-	CheckpointHistNanos            metric.IHistogram
-	FrontierUpdates                *metric.Counter
-	ThrottleMetrics                cdcutils.Metrics
-	ReplanCount                    *metric.Counter
-	ParallelConsumerFlushNanos     metric.IHistogram
-	ParallelConsumerConsumeNanos   metric.IHistogram
-	ParallelConsumerInFlightEvents *metric.Gauge
-	TotalOrderingForwards          *metric.Counter
-	TotalOrderingEventsForwarded   *metric.Counter
-	TotalOrderingFrontierFlushes   *metric.Counter
-	TotalOrderingFrontierAppends   *metric.Counter
+	AggMetrics                        *AggMetrics
+	KVFeedMetrics                     kvevent.Metrics
+	SchemaFeedMetrics                 schemafeed.Metrics
+	Failures                          *metric.Counter
+	ResolvedMessages                  *metric.Counter
+	QueueTimeNanos                    *metric.Counter
+	CheckpointHistNanos               metric.IHistogram
+	FrontierUpdates                   *metric.Counter
+	ThrottleMetrics                   cdcutils.Metrics
+	ReplanCount                       *metric.Counter
+	ParallelConsumerFlushNanos        metric.IHistogram
+	ParallelConsumerConsumeNanos      metric.IHistogram
+	ParallelConsumerInFlightEvents    *metric.Gauge
+	TotalOrderingForwards             *metric.Counter
+	TotalOrderingEventsForwarded      *metric.Counter
+	TotalOrderingFrontierFlushes      *metric.Counter
+	TotalOrderingFrontierAppends      *metric.Counter
+	TotalOrderingCoordinatorNexts     *metric.Counter
+	TotalOrderingAggregatorPops       *metric.Counter
+	TotalOrderingAggregatorRowBufSize *metric.Gauge
 
 	mu struct {
 		syncutil.Mutex
@@ -775,6 +778,30 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		TotalOrderingFrontierAppends: metric.NewCounter(
 			metric.Metadata{
 				Name:        "changefeed.total_ordering_frontier_appends",
+				Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
+				Measurement: "Messages",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
+		TotalOrderingCoordinatorNexts: metric.NewCounter(
+			metric.Metadata{
+				Name:        "changefeed.total_ordering_coordinator_nexts",
+				Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
+				Measurement: "Messages",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
+		TotalOrderingAggregatorPops: metric.NewCounter(
+			metric.Metadata{
+				Name:        "changefeed.total_ordering_aggregator_pops",
+				Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
+				Measurement: "Messages",
+				Unit:        metric.Unit_COUNT,
+			},
+		),
+		TotalOrderingAggregatorRowBufSize: metric.NewGauge(
+			metric.Metadata{
+				Name:        "changefeed.total_ordering_aggregator_row_buf_size",
 				Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
 				Measurement: "Messages",
 				Unit:        metric.Unit_COUNT,

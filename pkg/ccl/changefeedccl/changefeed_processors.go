@@ -518,6 +518,8 @@ func (ca *changeAggregator) close() {
 func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ca.State == execinfra.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
+			ca.metrics.TotalOrderingAggregatorRowBufSize.Update(int64(len(*ca.changedRowBuf)))
+			defer ca.metrics.TotalOrderingAggregatorPops.Inc(1)
 			return ca.ProcessRowHelper(ca.changedRowBuf.Pop()), nil
 		} else if !ca.resolvedSpanBuf.IsEmpty() {
 			return ca.ProcessRowHelper(ca.resolvedSpanBuf.Pop()), nil
@@ -1157,6 +1159,7 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		}
 
 		row, meta := cf.input.Next()
+		cf.metrics.TotalOrderingCoordinatorNexts.Inc(1)
 		if meta != nil {
 			if meta.Err != nil {
 				cf.MoveToDraining(nil /* err */)
