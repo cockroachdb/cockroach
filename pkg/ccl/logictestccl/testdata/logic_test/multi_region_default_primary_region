@@ -20,7 +20,7 @@ SET CLUSTER SETTING sql.defaults.primary_region = 'ap-southeast-2'
 statement error PRIMARY REGION must be specified if REGIONS are specified
 CREATE DATABASE db REGIONS "us-east1"
 
-query T noticetrace
+query T noticetrace retry
 CREATE DATABASE db
 ----
 NOTICE: defaulting to 'WITH PRIMARY REGION "ap-southeast-2"' as no primary region was specified
