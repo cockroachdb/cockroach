@@ -85,6 +85,13 @@ func TestJSONForwardingIndexes(t *testing.T) {
 )`)
 	require.Error(t, err)
 
+	// Creating a table with an index on the JSON column should result in an error.
+	_, err = db.Exec(`CREATE TABLE test.tbl_json_unique(
+    j JSONB,
+    UNIQUE tbl_json_secondary_uidx (j)
+)`)
+	require.Error(t, err)
+
 	// Creating a primary key on a JSON column should result in an error.
 	_, err = db.Exec(`CREATE TABLE test.tbl_json_primary (
 	   key JSONB PRIMARY KEY
@@ -109,6 +116,13 @@ func TestJSONForwardingIndexes(t *testing.T) {
 	_, err = db.Exec(`CREATE TABLE test.tbl_json_secondary(
     j JSONB,
     INDEX tbl_json_secondary_idx (j)
+)`)
+	require.Error(t, err)
+
+	// Creating a table with an index on the JSON column should result in an error.
+	_, err = db.Exec(`CREATE TABLE test.tbl_json_secondary_unique(
+    j JSONB,
+    UNIQUE tbl_json_secondary_uidx (j)
 )`)
 	require.Error(t, err)
 
