@@ -12,8 +12,6 @@ package upgrades
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 func preconditionBeforeStartingAnUpgrade(
@@ -48,10 +47,10 @@ func preconditionBeforeStartingAnUpgrade(
 func preconditionNoInvalidDescriptorsBeforeUpgrading(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	var errMsg strings.Builder
+	var errMsg redact.StringBuilder
 	err := d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData,
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor) error {
-			query := `SELECT * FROM crdb_internal.invalid_objects`
+			query := `SELECT id, database_name, schema_name, obj_name, error_redactable FROM crdb_internal.invalid_objects`
 			rows, err := ie.QueryIterator(
 				ctx, "check-if-there-are-any-invalid-descriptors", txn /* txn */, query)
 			if err != nil {
@@ -68,13 +67,16 @@ func preconditionNoInvalidDescriptorsBeforeUpgrading(
 					tree.Name(tree.MustBeDString(row[3])),
 				)
 				tableID := descpb.ID(tree.MustBeDInt(row[0]))
-				errString := string(tree.MustBeDString(row[4]))
+				// Note: the cast from the `error` column to RedactableString here is only valid because
+				// the `error` column is populated via a RedactableString too. Conversion from string
+				// to RedactableString is not safe in general.
+				errString := redact.RedactableString(tree.MustBeDString(row[4]))
 				// TODO(ssd): Remove in 23.1 once we are sure that the migration which fixes this corruption has run.
-				if veryLikelyKnownUserfileBreakage(ctx, txn, descriptors, tableID, errString) {
-					log.Infof(ctx, "ignoring invalid descriptor %v (%v) with error %q because it looks like known userfile-related corruption",
-						descName.String(), tableID, errString)
+				if veryLikelyKnownUserfileBreakage(ctx, txn, descriptors, tableID, errString.StripMarkers()) {
+					log.Infof(ctx, "ignoring invalid descriptor %v (%v) with error because it looks like known userfile-related corruption: %v",
+						&descName, tableID, errString)
 				} else {
-					errMsg.WriteString(fmt.Sprintf("invalid descriptor: %v (%v) because %v\n", descName.String(), row[0], row[4]))
+					errMsg.Printf("invalid descriptor: %v (%d) because %v\n", &descName, tableID, errString)
 				}
 			}
 			return err
@@ -87,5 +89,5 @@ func preconditionNoInvalidDescriptorsBeforeUpgrading(
 	}
 	return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 		"there exists invalid descriptors as listed below; fix these descriptors "+
-			"before attempting to upgrade again:\n%v", errMsg.String())
+			"before attempting to upgrade again:\n%v", errMsg)
 }

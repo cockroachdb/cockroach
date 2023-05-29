@@ -119,8 +119,8 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 		require.Error(t, err, "upgrade should be refused because precondition is violated.")
 		require.Equal(t, "pq: verifying precondition for version 22.1-2: "+
 			"there exists invalid descriptors as listed below; fix these descriptors before attempting to upgrade again:\n"+
-			"invalid descriptor: defaultdb.public.t (104) because 'relation \"t\" (104): invalid depended-on-by relation back reference: referenced descriptor ID 53: referenced descriptor not found'\n"+
-			"invalid descriptor: defaultdb.public.temp_tbl (104) because 'no matching name info found in non-dropped relation \"t\"'",
+			"invalid descriptor: defaultdb.public.t (104) because relation \"t\" (104): invalid depended-on-by relation back reference: referenced descriptor ID 53: referenced descriptor not found\n"+
+			"invalid descriptor: defaultdb.public.temp_tbl (104) because no matching name info found in non-dropped relation \"t\"",
 			strings.ReplaceAll(err.Error(), "1000022", "22"))
 		// The cluster version should remain at `v0`.
 		ts.tdb.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v0.String()}})
