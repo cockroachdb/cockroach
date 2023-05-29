@@ -8,7 +8,6 @@ DECLARE
 var1 INT8 := 30;
 BEGIN
 END
-<NOT DONE YET>
 
 parse
 DECLARE
@@ -20,7 +19,6 @@ DECLARE
 var1 CONSTANT INT8 collation_name NOT NULL := 30;
 BEGIN
 END
-<NOT DONE YET>
 
 parse
 DECLARE
@@ -32,7 +30,6 @@ DECLARE
 var1 CONSTANT INT8 collation_name NOT NULL := 30;
 BEGIN
 END
-<NOT DONE YET>
 
 parse
 DECLARE

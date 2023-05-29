@@ -10,15 +10,6 @@ CREATE TABLE ab (
   b INT
 )
 
-statement error pq: plpgsql not supported in user-defined functions
-CREATE FUNCTION populate() RETURNS integer AS $$
-DECLARE
-    -- declarations
-BEGIN
-    PERFORM my_function();
-END;
-$$ LANGUAGE plpgsql
-
 statement error pgcode 0A000 unimplemented: C is not yet supported
 CREATE FUNCTION populate() RETURNS integer AS 'dir/funcs', 'populate' LANGUAGE C
 

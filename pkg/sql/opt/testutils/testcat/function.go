@@ -88,7 +88,7 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 	}
 
 	// Retrieve the function body, volatility, and calledOnNullInput.
-	body, v, calledOnNullInput := collectFuncOptions(c.Options)
+	body, v, calledOnNullInput, language := collectFuncOptions(c.Options)
 
 	if tc.udfs == nil {
 		tc.udfs = make(map[string]*tree.ResolvedFunctionDefinition)
@@ -101,6 +101,7 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		Body:              body,
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
+		Language:          language,
 	}
 	if c.ReturnType.IsSet {
 		overload.Class = tree.GeneratorClass
@@ -117,7 +118,7 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 
 func collectFuncOptions(
 	o tree.FunctionOptions,
-) (body string, v volatility.V, calledOnNullInput bool) {
+) (body string, v volatility.V, calledOnNullInput bool, language tree.FunctionLanguage) {
 	// The default volatility is VOLATILE.
 	v = volatility.Volatile
 
@@ -127,6 +128,8 @@ func collectFuncOptions(
 	// The default is CALLED ON NULL INPUT, which is equivalent to
 	// CalledOnNullInput=true in function overloads.
 	calledOnNullInput = true
+
+	language = tree.FunctionLangUnknown
 
 	for _, option := range o {
 		switch t := option.(type) {
@@ -154,6 +157,7 @@ func collectFuncOptions(
 			if t != tree.FunctionLangSQL && t != tree.FunctionLangPLpgSQL {
 				panic(fmt.Errorf("LANGUAGE must be SQL or plpgsql"))
 			}
+			language = t
 
 		default:
 			ctx := tree.NewFmtCtx(tree.FmtSimple)
@@ -168,7 +172,7 @@ func collectFuncOptions(
 		panic(fmt.Errorf("LEAKPROOF functions must be IMMUTABLE"))
 	}
 
-	return body, v, calledOnNullInput
+	return body, v, calledOnNullInput, language
 }
 
 // formatFunction nicely formats a function definition creating in the opt test

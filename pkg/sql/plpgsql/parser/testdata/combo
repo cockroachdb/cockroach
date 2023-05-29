@@ -28,14 +28,11 @@ IF i = idx THEN
 	res := res || val;
 ELSE
 	res := res || arr[i + 1];
-END IF
-<NOT DONE YET>
+END IF;
 i := i + 1;
 IF i >= n THEN
 	EXIT;
-END IF
-<NOT DONE YET>
+END IF;
 END LOOP;
 RETURN res;
 END
-<NOT DONE YET>
