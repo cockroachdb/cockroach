@@ -54,6 +54,7 @@ func (s *PLpgSQLStatementImpl) GetStmtID() uint {
 func (s *PLpgSQLStatementImpl) plpgsqlStmt() {}
 
 // pl_block
+// TODO: not done yet.
 type PLpgSQLStmtBlock struct {
 	PLpgSQLStatementImpl
 	Label      string
@@ -76,7 +77,6 @@ func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 		childStmt.Format(ctx)
 	}
 	ctx.WriteString("END\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 func (s *PLpgSQLStmtBlock) PlpgSQLStatementTag() string {
@@ -148,6 +148,7 @@ func (s *PLpgSQLStmtAssign) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_if
+// TODO: not done yet.
 type PLpgSQLStmtIf struct {
 	PLpgSQLStatementImpl
 	Condition  PLpgSQLExpr
@@ -175,8 +176,7 @@ func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString("\t")
 		elseStmt.Format(ctx)
 	}
-	ctx.WriteString("END IF\n")
-	ctx.WriteString("<NOT DONE YET>\n")
+	ctx.WriteString("END IF;\n")
 }
 
 func (s *PLpgSQLStmtIf) PlpgSQLStatementTag() string {
@@ -230,6 +230,7 @@ func (s *PLpgSQLStmtIfElseIfArm) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_case
+// TODO: not done yet.
 type PLpgSQLStmtCase struct {
 	PLpgSQLStatementImpl
 	// TODO: Change to PLpgSQLExpr
@@ -258,8 +259,6 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 		}
 	}
 	ctx.WriteString("END CASE\n")
-	ctx.WriteString("<NOT DONE YET>\n")
-
 }
 
 func (s *PLpgSQLStmtCase) PlpgSQLStatementTag() string {
@@ -632,6 +631,7 @@ func (s *PLpgSQLStmtRaise) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_assert
+// TODO: not done yet.
 type PLpgSQLStmtAssert struct {
 	PLpgSQLStatementImpl
 	Condition PLpgSQLExpr
@@ -641,7 +641,6 @@ type PLpgSQLStmtAssert struct {
 func (s *PLpgSQLStmtAssert) Format(ctx *tree.FmtCtx) {
 	// TODO: Pretty print the assert condition and message
 	ctx.WriteString("ASSERT\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 func (s *PLpgSQLStmtAssert) PlpgSQLStatementTag() string {
@@ -653,6 +652,7 @@ func (s *PLpgSQLStmtAssert) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_execsql
+// TODO: not done yet.
 type PLpgSQLStmtExecSql struct {
 	PLpgSQLStatementImpl
 	SqlStmt string
@@ -670,7 +670,6 @@ func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString(" STRICT")
 	}
 	ctx.WriteString("\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 func (s *PLpgSQLStmtExecSql) PlpgSQLStatementTag() string {
@@ -682,6 +681,7 @@ func (s *PLpgSQLStmtExecSql) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_dynexecute
+// TODO: not done yet.
 // TODO(chengxiong): query should be a better expression type.
 type PLpgSQLStmtDynamicExecute struct {
 	PLpgSQLStatementImpl
@@ -705,7 +705,6 @@ func (s *PLpgSQLStmtDynamicExecute) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString(" WITH USING")
 	}
 	ctx.WriteString("\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 func (s *PLpgSQLStmtDynamicExecute) PlpgSQLStatementTag() string {
@@ -734,6 +733,7 @@ func (s *PLpgSQLStmtPerform) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_call
+// TODO: not done yet.
 type PLpgSQLStmtCall struct {
 	PLpgSQLStatementImpl
 	Expr   PLpgSQLExpr
@@ -748,8 +748,6 @@ func (s *PLpgSQLStmtCall) Format(ctx *tree.FmtCtx) {
 	} else {
 		ctx.WriteString("DO a code block\n")
 	}
-	ctx.WriteString("<NOT DONE YET>\n")
-
 }
 
 func (s *PLpgSQLStmtCall) PlpgSQLStatementTag() string {
@@ -888,6 +886,7 @@ func (s *PLpgSQLStmtFetch) WalkStmt(visitor PLpgSQLStmtVisitor) {
 }
 
 // stmt_close
+// TODO: not done yet.
 type PLpgSQLStmtClose struct {
 	PLpgSQLStatementImpl
 	CurVar int // TODO: this could just a PLpgSQLVariable
@@ -896,7 +895,6 @@ type PLpgSQLStmtClose struct {
 func (s *PLpgSQLStmtClose) Format(ctx *tree.FmtCtx) {
 	// TODO: Pretty- Print the cursor identifier
 	ctx.WriteString("CLOSE a cursor\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 
 }
 

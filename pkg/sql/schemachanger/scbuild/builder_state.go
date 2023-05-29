@@ -1349,8 +1349,11 @@ func (b *builderState) WrapFunctionBody(
 	lang catpb.Function_Language,
 	refProvider scbuildstmt.ReferenceProvider,
 ) *scpb.FunctionBody {
-	bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
-	bodyStr = b.serializeUserDefinedTypes(bodyStr)
+	if lang != catpb.Function_PLPGSQL {
+		// TODO(drewk): fix this to work with PL/pgSQL.
+		bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
+		bodyStr = b.serializeUserDefinedTypes(bodyStr)
+	}
 	fnBody := &scpb.FunctionBody{
 		FunctionID: fnID,
 		Body:       bodyStr,

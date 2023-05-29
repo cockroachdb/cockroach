@@ -4938,6 +4938,7 @@ value if you rely on the HLC for accuracy.`,
  'external'))`,
 			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id, "service_mode": "external"}'::jsonb)`,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		// This overload is provided for use in tests.
 		tree.Overload{
@@ -4949,6 +4950,7 @@ value if you rely on the HLC for accuracy.`,
 			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'name', $2))`,
 			Info:       `create_tenant(id, name) is an alias for create_tenant('{"id": id, "name": name}'::jsonb)`,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		// This overload is deprecated. Use CREATE TENANT instead.
 		tree.Overload{
@@ -4960,6 +4962,7 @@ value if you rely on the HLC for accuracy.`,
 			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
 DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 	),
 
@@ -4995,6 +4998,7 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Body:       `SELECT crdb_internal.destroy_tenant($1, false)`,
 			Info:       "DO NOT USE -- USE 'DROP TENANT' INSTEAD.",
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6384,6 +6388,7 @@ generate_test_objects(pat, num) is an alias for
 generate_test_objects('{"names":pat, "counts":[num]}'::jsonb)
 `,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6399,6 +6404,7 @@ generate_test_objects(pat, counts) is an alias for
 generate_test_objects('{"names":pat, "counts":counts}'::jsonb)
 `,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{

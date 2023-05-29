@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -640,6 +641,33 @@ func (b *Builder) buildUDF(
 				"return type mismatch in function declared to return %s", rtyp.Name()))
 		}
 	}
+	// If returning a RECORD type, the function return type needs to be
+	// modified because when we first parse the CREATE FUNCTION, the RECORD
+	// is represented as a tuple with any types and execution requires the
+	// types to be concrete in order to decode them correctly. We can
+	// determine the types from the result columns or tuple of the last
+	// statement.
+	finishResolveType := func(lastStmtScope *scope) *types.T {
+		if types.IsRecordType(rtyp) {
+			if len(lastStmtScope.cols) == 1 &&
+				lastStmtScope.cols[0].typ.Family() == types.TupleFamily {
+				// When the final statement returns a single tuple, we can use the
+				// tuple's types as the function return type.
+				rtyp = lastStmtScope.cols[0].typ
+			} else {
+				// Get the types from the individual columns of the last statement.
+				tc := make([]*types.T, len(lastStmtScope.cols))
+				tl := make([]string, len(lastStmtScope.cols))
+				for i, col := range lastStmtScope.cols {
+					tc[i] = col.typ
+					tl[i] = col.name.MetadataName()
+				}
+				rtyp = types.MakeLabeledTuple(tc, tl)
+			}
+			f.SetTypeAnnotation(rtyp)
+		}
+		return rtyp
+	}
 
 	// Build the argument expressions.
 	var args memo.ScalarListExpr
@@ -682,138 +710,51 @@ func (b *Builder) buildUDF(
 		}
 	}
 
-	// Parse the function body.
-	stmts, err := parser.Parse(o.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	// Build an expression for each statement in the function body.
-	body := make([]memo.RelExpr, len(stmts))
-	bodyProps := make([]*physical.Required, len(stmts))
-	isSetReturning := o.Class == tree.GeneratorClass
 	// TODO(mgartner): Once other UDFs can be referenced from within a UDF, a
 	// boolean will not be sufficient to track whether or not we are in a UDF.
 	// We'll need to track the depth of the UDFs we are building expressions
 	// within.
 	b.insideUDF = true
+	isSetReturning := o.Class == tree.GeneratorClass
 	isMultiColDataSource := false
-	for i := range stmts {
-		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-		expr := stmtScope.expr
-		physProps := stmtScope.makePhysicalProps()
 
-		// The last statement produces the output of the UDF.
-		if i == len(stmts)-1 {
-			// Add a LIMIT 1 to the last statement if the UDF is not
-			// set-returning. This is valid because any other rows after the
-			// first can simply be ignored. The limit could be beneficial
-			// because it could allow additional optimization.
-			if !isSetReturning {
-				b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, b.allocScope(), stmtScope)
-				expr = stmtScope.expr
-				// The limit expression will maintain the desired ordering, if any,
-				// so the physical props ordering can be cleared. The presentation
-				// must remain.
-				physProps.Ordering = props.OrderingChoice{}
-			}
-
-			// If returning a RECORD type, the function return type needs to be
-			// modified because when we first parse the CREATE FUNCTION, the RECORD
-			// is represented as a tuple with any types and execution requires the
-			// types to be concrete in order to decode them correctly. We can
-			// determine the types from the result columns or tuple of the last
-			// statement.
-			isSingleTupleResult := len(stmtScope.cols) == 1 && stmtScope.cols[0].typ.Family() == types.TupleFamily
-			if types.IsRecordType(rtyp) {
-				if isSingleTupleResult {
-					// When the final statement returns a single tuple, we can use the
-					// tuple's types as the function return type.
-					rtyp = stmtScope.cols[0].typ
-				} else {
-					// Get the types from the individual columns of the last statement.
-					tc := make([]*types.T, len(stmtScope.cols))
-					tl := make([]string, len(stmtScope.cols))
-					for i, col := range stmtScope.cols {
-						tc[i] = col.typ
-						tl[i] = col.name.MetadataName()
-					}
-					rtyp = types.MakeLabeledTuple(tc, tl)
-				}
-				f.SetTypeAnnotation(rtyp)
-			}
-
-			// Only a single column can be returned from a UDF, unless it is used as a
-			// data source. Data sources may output multiple columns, and if the
-			// statement body produces a tuple it needs to be expanded into columns.
-			// When not used as a data source, combine statements producing multiple
-			// columns into a tuple. If the last statement is already returning a
-			// tuple and the function has a record return type, then we do not need to
-			// wrap the output in another tuple.
-			cols := physProps.Presentation
-			if b.insideDataSource && rtyp.Family() == types.TupleFamily {
-				// When the UDF is used as a data source and expects to output a tuple
-				// type, its output needs to be a row of columns instead of the usual
-				// tuple. If the last statement output a tuple, we need to expand the
-				// tuple into individual columns.
-				isMultiColDataSource = true
-				if isSingleTupleResult {
-					stmtScope = bodyScope.push()
-					elems := make([]scopeColumn, len(rtyp.TupleContents()))
-					for i := range rtyp.TupleContents() {
-						e := b.factory.ConstructColumnAccess(b.factory.ConstructVariable(cols[0].ID), memo.TupleOrdinal(i))
-						col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp.TupleContents()[i], nil, e)
-						elems[i] = *col
-					}
-					expr = b.constructProject(expr, elems)
-					physProps = stmtScope.makePhysicalProps()
-				}
-			} else if len(cols) > 1 || (types.IsRecordType(rtyp) && !isSingleTupleResult) {
-				// Only a single column can be returned from a UDF, unless it is used as a
-				// data source (see comment above). If there are multiple columns, combine
-				// them into a tuple. If the last statement is already returning a tuple
-				// and the function has a record return type, then do not wrap the
-				// output in another tuple.
-				elems := make(memo.ScalarListExpr, len(cols))
-				for i := range cols {
-					elems[i] = b.factory.ConstructVariable(cols[i].ID)
-				}
-				tup := b.factory.ConstructTuple(elems, rtyp)
-				stmtScope = bodyScope.push()
-				col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, tup)
-				expr = b.constructProject(expr, []scopeColumn{*col})
-				physProps = stmtScope.makePhysicalProps()
-			}
-
-			// We must preserve the presentation of columns as physical
-			// properties to prevent the optimizer from pruning the output
-			// column. If necessary, we add an assignment cast to the result
-			// column so that its type matches the function return type. Record return
-			// types do not need an assignment cast, since at this point the return
-			// column is already a tuple.
-			cols = physProps.Presentation
-			if len(cols) > 0 {
-				returnCol := physProps.Presentation[0].ID
-				returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
-				if !types.IsRecordType(rtyp) && !isMultiColDataSource && !returnColMeta.Type.Identical(rtyp) {
-					if !cast.ValidCast(returnColMeta.Type, rtyp, cast.ContextAssignment) {
-						panic(sqlerrors.NewInvalidAssignmentCastError(
-							returnColMeta.Type, rtyp, returnColMeta.Alias))
-					}
-					cast := b.factory.ConstructAssignmentCast(
-						b.factory.ConstructVariable(physProps.Presentation[0].ID),
-						rtyp,
-					)
-					stmtScope = bodyScope.push()
-					col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, cast)
-					expr = b.constructProject(expr, []scopeColumn{*col})
-					physProps = stmtScope.makePhysicalProps()
-				}
-			}
+	// Build an expression for each statement in the function body.
+	var body []memo.RelExpr
+	var bodyProps []*physical.Required
+	switch o.Language {
+	case tree.FunctionLangSQL:
+		// Parse the function body.
+		stmts, err := parser.Parse(o.Body)
+		if err != nil {
+			panic(err)
 		}
-		body[i] = expr
-		bodyProps[i] = physProps
+		body = make([]memo.RelExpr, len(stmts))
+		bodyProps = make([]*physical.Required, len(stmts))
+
+		for i := range stmts {
+			stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+			expr, physProps := stmtScope.expr, stmtScope.makePhysicalProps()
+
+			// The last statement produces the output of the UDF.
+			if i == len(stmts)-1 {
+				rtyp = finishResolveType(stmtScope)
+				expr, physProps, isMultiColDataSource =
+					b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+			}
+			body[i] = expr
+			bodyProps[i] = physProps
+		}
+	case tree.FunctionLangPLpgSQL:
+		// Parse the function body.
+		_, err := plpgsql.Parse(o.Body)
+		if err != nil {
+			panic(err)
+		}
+		panic(unimplemented.New("plpgsql", "plpgsql not supported in user-defined functions"))
+	default:
+		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
+
 	b.insideUDF = false
 
 	udfDef := &memo.UDFDefinition{
@@ -848,6 +789,101 @@ func (b *Builder) buildUDF(
 	}
 
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
+}
+
+// finishBuildLastStmt manages the columns returned by the last statement of a
+// UDF. Depending on the context and return type of the UDF, this may mean
+// expanding a tuple into multiple columns, or combining multiple columns into
+// a tuple.
+func (b *Builder) finishBuildLastStmt(
+	stmtScope *scope, bodyScope *scope, isSetReturning bool, f *tree.FuncExpr,
+) (expr memo.RelExpr, physProps *physical.Required, isMultiColDataSource bool) {
+	expr, physProps = stmtScope.expr, stmtScope.makePhysicalProps()
+	rtyp := f.ResolvedType()
+
+	// Add a LIMIT 1 to the last statement if the UDF is not
+	// set-returning. This is valid because any other rows after the
+	// first can simply be ignored. The limit could be beneficial
+	// because it could allow additional optimization.
+	if !isSetReturning {
+		b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, b.allocScope(), stmtScope)
+		expr = stmtScope.expr
+		// The limit expression will maintain the desired ordering, if any,
+		// so the physical props ordering can be cleared. The presentation
+		// must remain.
+		physProps.Ordering = props.OrderingChoice{}
+	}
+
+	// Only a single column can be returned from a UDF, unless it is used as a
+	// data source. Data sources may output multiple columns, and if the
+	// statement body produces a tuple it needs to be expanded into columns.
+	// When not used as a data source, combine statements producing multiple
+	// columns into a tuple. If the last statement is already returning a
+	// tuple and the function has a record return type, then we do not need to
+	// wrap the output in another tuple.
+	cols := physProps.Presentation
+	isSingleTupleResult := len(stmtScope.cols) == 1 &&
+		stmtScope.cols[0].typ.Family() == types.TupleFamily
+	if b.insideDataSource && rtyp.Family() == types.TupleFamily {
+		// When the UDF is used as a data source and expects to output a tuple
+		// type, its output needs to be a row of columns instead of the usual
+		// tuple. If the last statement output a tuple, we need to expand the
+		// tuple into individual columns.
+		isMultiColDataSource = true
+		if isSingleTupleResult {
+			stmtScope = bodyScope.push()
+			elems := make([]scopeColumn, len(rtyp.TupleContents()))
+			for i := range rtyp.TupleContents() {
+				e := b.factory.ConstructColumnAccess(b.factory.ConstructVariable(cols[0].ID), memo.TupleOrdinal(i))
+				col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp.TupleContents()[i], nil, e)
+				elems[i] = *col
+			}
+			expr = b.constructProject(expr, elems)
+			physProps = stmtScope.makePhysicalProps()
+		}
+	} else if len(cols) > 1 || (types.IsRecordType(rtyp) && !isSingleTupleResult) {
+		// Only a single column can be returned from a UDF, unless it is used as a
+		// data source (see comment above). If there are multiple columns, combine
+		// them into a tuple. If the last statement is already returning a tuple
+		// and the function has a record return type, then do not wrap the
+		// output in another tuple.
+		elems := make(memo.ScalarListExpr, len(cols))
+		for i := range cols {
+			elems[i] = b.factory.ConstructVariable(cols[i].ID)
+		}
+		tup := b.factory.ConstructTuple(elems, rtyp)
+		stmtScope = bodyScope.push()
+		col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, tup)
+		expr = b.constructProject(expr, []scopeColumn{*col})
+		physProps = stmtScope.makePhysicalProps()
+	}
+
+	// We must preserve the presentation of columns as physical
+	// properties to prevent the optimizer from pruning the output
+	// column. If necessary, we add an assignment cast to the result
+	// column so that its type matches the function return type. Record return
+	// types do not need an assignment cast, since at this point the return
+	// column is already a tuple.
+	cols = physProps.Presentation
+	if len(cols) > 0 {
+		returnCol := physProps.Presentation[0].ID
+		returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
+		if !types.IsRecordType(rtyp) && !isMultiColDataSource && !returnColMeta.Type.Identical(rtyp) {
+			if !cast.ValidCast(returnColMeta.Type, rtyp, cast.ContextAssignment) {
+				panic(sqlerrors.NewInvalidAssignmentCastError(
+					returnColMeta.Type, rtyp, returnColMeta.Alias))
+			}
+			cast := b.factory.ConstructAssignmentCast(
+				b.factory.ConstructVariable(physProps.Presentation[0].ID),
+				rtyp,
+			)
+			stmtScope = bodyScope.push()
+			col := b.synthesizeColumn(stmtScope, scopeColName(""), rtyp, nil /* expr */, cast)
+			expr = b.constructProject(expr, []scopeColumn{*col})
+			physProps = stmtScope.makePhysicalProps()
+		}
+	}
+	return expr, physProps, isMultiColDataSource
 }
 
 // buildRangeCond builds a RANGE clause as a simpler expression. Examples:
