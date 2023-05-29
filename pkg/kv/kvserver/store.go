@@ -1230,6 +1230,9 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 		sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
 		sc.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader = true // otherwise lease requests fail
 	}
+	if raftDisableQuiescence {
+		sc.TestingKnobs.DisableQuiescence = true
+	}
 }
 
 // GetStoreConfig exposes the config used for this store.

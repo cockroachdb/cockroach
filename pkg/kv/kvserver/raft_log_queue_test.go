@@ -449,22 +449,18 @@ func TestNewTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Unquiescing can add spurious empty log entries. Just disable it.
-	testingDisableQuiescence = true
-	defer func() {
-		testingDisableQuiescence = false
-	}()
-
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	store, _ := createTestStore(ctx, t,
-		testStoreOpts{
-			// This test was written before test stores could start with more than one
-			// range and was not adapted.
-			createSystemRanges: false,
-		},
-		stopper)
+
+	opts := testStoreOpts{
+		// This test was written before test stores could start with more than one
+		// range and was not adapted.
+		createSystemRanges: false,
+	}
+	cfg := TestStoreConfig(nil /* clock */)
+	cfg.TestingKnobs.DisableQuiescence = true // quiescence adds spurious empty log entries
+	store := createTestStoreWithConfig(ctx, t, stopper, opts, &cfg)
 	store.SetRaftLogQueueActive(false)
 
 	r, err := store.GetReplica(1)
