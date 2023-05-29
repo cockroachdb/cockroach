@@ -958,8 +958,8 @@ func (s *orderedSink) EmitRow(
 }
 
 // Can't have the payload being sent through distsql being too large
-var maxOrderedRowCount = envutil.EnvOrDefaultInt(
-	"COCKROACH_CHANGEFEED_ORDERED_ROW_COUNT", 100,
+var maxOrderedRowsPayloadBytes = envutil.EnvOrDefaultInt(
+	"COCKROACH_CHANGEFEED_ORDERED_ROWS_PAYLOAD_BYTES", 1<<20, // 1 MiB
 )
 
 // EmitResolvedTimestamp implements the Sink interface.
@@ -975,34 +975,26 @@ func (s *orderedSink) Flush(ctx context.Context) error {
 	// Until all messages have reached the frontier (the point where we know our
 	// sorted list isn't missing any events), forward messages to the coordinator
 	// node, and do so while sending payloads that aren't too large.
-	// startIndex := 0
 	for {
 		orderedUpdate := jobspb.OrderedRows{
 			Rows:              make([]jobspb.OrderedRows_Row, 0, len(s.unorderedBuf)),
 			SourceProcessorID: s.processorID,
 		}
-
-		// Build up the payload of ordered rows
-		// for i := startIndex; i < len(s.unorderedBuf); i++ {
-		// 	r := s.unorderedBuf[i]
-		// 	if i >= startIndex+maxOrderedRowCount {
-		// 		break
-		// 	}
-		for i, r := range s.unorderedBuf {
-			if i >= maxOrderedRowCount {
-				break
-			}
-			if s.frontier.Frontier().Less(r.row.Updated) && !r.row.Updated.Equal(s.frontier.BackfillTS()) {
+		rowBytes := 0
+		for _, r := range s.unorderedBuf {
+			pastByteLimit := rowBytes > 0 && rowBytes+r.row.Size() > maxOrderedRowsPayloadBytes
+			pastFrontierLimit := s.frontier.Frontier().Less(r.row.Updated) && !r.row.Updated.Equal(s.frontier.BackfillTS())
+			if pastByteLimit || pastFrontierLimit {
 				break
 			}
 			orderedUpdate.Rows = append(orderedUpdate.Rows, r.row)
+			rowBytes += r.row.Size()
 			toRelease.Merge(&r.alloc)
 		}
 		if len(orderedUpdate.Rows) == 0 {
 			break
 		}
 		s.unorderedBuf = s.unorderedBuf[len(orderedUpdate.Rows):]
-		// startIndex += len(orderedUpdate.Rows)
 
 		updateBytes, err := protoutil.Marshal(&orderedUpdate)
 		if err != nil {
@@ -1018,7 +1010,6 @@ func (s *orderedSink) Flush(ctx context.Context) error {
 			{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // orderedRows
 		})
 	}
-	// s.unorderedBuf = s.unorderedBuf[startIndex:]
 	return nil
 }
 
