@@ -7908,9 +7908,13 @@ func (s *memoryHoggingSink) Dial() error {
 	return nil
 }
 
+func (s *memoryHoggingSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return "", nil
+}
+
 func (s *memoryHoggingSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,

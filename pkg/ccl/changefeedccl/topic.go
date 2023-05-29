@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -56,9 +57,11 @@ type TopicNamer struct {
 
 	// FullNames are generated whenever Name() is actually called (usually during sink.EmitRow).
 	// They do not contain placeholder strings.
-	FullNames map[TopicIdentifier]string
-
-	sliceCache []string
+	mu struct {
+		syncutil.RWMutex
+		FullNames  map[TopicIdentifier]string
+		sliceCache []string
+	}
 }
 
 // TopicNameOption is an optional argument to MakeTopicNamer.
@@ -118,8 +121,8 @@ func MakeTopicNamer(targets changefeedbase.Targets, opts ...TopicNameOption) (*T
 	tn := &TopicNamer{
 		join:         '.',
 		DisplayNames: make(map[changefeedbase.Target]string, targets.Size),
-		FullNames:    make(map[TopicIdentifier]string),
 	}
+	tn.mu.FullNames = make(map[TopicIdentifier]string)
 	for _, opt := range opts {
 		opt.set(tn)
 	}
@@ -143,27 +146,37 @@ func (tn *TopicNamer) Name(td TopicDescriptor) (string, error) {
 	if td == nil {
 		return "foo", nil
 	}
-	if name, ok := tn.FullNames[td.GetTopicIdentifier()]; ok {
+	tn.mu.RLock()
+	if name, ok := tn.mu.FullNames[td.GetTopicIdentifier()]; ok {
+		defer tn.mu.RUnlock()
 		return name, nil
 	}
+	tn.mu.RUnlock()
+	tn.mu.Lock()
+	defer tn.mu.Unlock()
 	name, err := tn.makeName(td.GetTargetSpecification(), td)
-	tn.FullNames[td.GetTopicIdentifier()] = name
+	tn.mu.FullNames[td.GetTopicIdentifier()] = name
 	return name, err
 }
 
 // DisplayNamesSlice gives all topics that are going to be emitted to,
 // suitable for displaying to the user on feed creation.
 func (tn *TopicNamer) DisplayNamesSlice() []string {
-	if len(tn.sliceCache) > 0 {
-		return tn.sliceCache
+	tn.mu.RLock()
+	if len(tn.mu.sliceCache) > 0 {
+		defer tn.mu.RUnlock()
+		return tn.mu.sliceCache
 	}
+	tn.mu.RUnlock()
+	tn.mu.Lock()
+	defer tn.mu.Unlock()
 	for _, n := range tn.DisplayNames {
-		tn.sliceCache = append(tn.sliceCache, n)
+		tn.mu.sliceCache = append(tn.mu.sliceCache, n)
 		if tn.singleName != "" {
-			return tn.sliceCache
+			return tn.mu.sliceCache
 		}
 	}
-	return tn.sliceCache
+	return tn.mu.sliceCache
 }
 
 // Each is a convenience method that iterates a function over DisplayNamesSlice.

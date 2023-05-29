@@ -64,6 +64,8 @@ type sqlSink struct {
 	metrics metricsRecorder
 }
 
+var _ Sink = (*sqlSink)(nil)
+
 func (s *sqlSink) getConcreteType() sinkType {
 	return sinkTypeSQL
 }
@@ -121,21 +123,20 @@ func (s *sqlSink) Dial() error {
 	return nil
 }
 
+func (s *sqlSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return s.topicNamer.Name(topic)
+}
+
 // EmitRow implements the Sink interface.
 func (s *sqlSink) EmitRow(
 	ctx context.Context,
-	topicDescr TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	defer alloc.Release(ctx)
 	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
-
-	topic, err := s.topicNamer.Name(topicDescr)
-	if err != nil {
-		return err
-	}
 
 	// Hashing logic copied from sarama.HashPartitioner.
 	s.hasher.Reset()

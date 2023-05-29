@@ -430,9 +430,14 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		}
 	}
 
+	sinkTopic, err := c.sink.NameTopic(topic)
+	if err != nil {
+		return err
+	}
+
 	if c.encodingFormat == changefeedbase.OptFormatParquet {
 		return c.encodeForParquet(
-			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp, alloc,
+			ctx, updatedRow, prevRow, sinkTopic, schemaTS, updatedRow.MvccTimestamp, alloc,
 		)
 	}
 	var keyCopy, valueCopy []byte
@@ -454,7 +459,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
 
 	if err := c.sink.EmitRow(
-		ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
+		ctx, sinkTopic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
 	); err != nil {
 		return err
 	}
@@ -477,7 +482,7 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
 	prevRow cdcevent.Row,
-	topic TopicDescriptor,
+	topic string,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {

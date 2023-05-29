@@ -101,11 +101,15 @@ func (parquetSink *parquetCloudStorageSink) getConcreteType() sinkType {
 	return parquetSink.wrapped.getConcreteType()
 }
 
+func (parquetSink *parquetCloudStorageSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return parquetSink.wrapped.NameTopic(topic)
+}
+
 // EmitRow does not do anything. It must not be called. It is present so that
 // parquetCloudStorageSink implements the Sink interface.
 func (parquetSink *parquetCloudStorageSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
@@ -144,7 +148,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
 	prevRow cdcevent.Row,
-	topic TopicDescriptor,
+	topic string,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {

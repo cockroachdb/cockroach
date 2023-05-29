@@ -333,19 +333,18 @@ type messageMetadata struct {
 	mvcc          hlc.Timestamp
 }
 
+func (s *kafkaSink) NameTopic(topicDescr TopicDescriptor) (string, error) {
+	return s.topics.Name(topicDescr)
+}
+
 // EmitRow implements the Sink interface.
 func (s *kafkaSink) EmitRow(
 	ctx context.Context,
-	topicDescr TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	topic, err := s.topics.Name(topicDescr)
-	if err != nil {
-		return err
-	}
-
 	msg := &sarama.ProducerMessage{
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),

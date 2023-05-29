@@ -1022,7 +1022,7 @@ message OrderedRows {
   message Row {
     bytes key = 1;
     bytes value = 2;
-    bytes topic = 3;
+    string topic = 3;
     util.hlc.Timestamp updated = 4 [(gogoproto.nullable) = false];
     util.hlc.Timestamp mvcc = 5 [(gogoproto.nullable) = false];
   }

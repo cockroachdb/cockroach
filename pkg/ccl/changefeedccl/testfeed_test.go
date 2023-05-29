@@ -634,7 +634,7 @@ func (s *notifyFlushSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
 	prevRow cdcevent.Row,
-	topic TopicDescriptor,
+	topic string,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {

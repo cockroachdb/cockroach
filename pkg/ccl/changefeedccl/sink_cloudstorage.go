@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
+
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
 	_ "github.com/klauspost/pgzip"
@@ -316,6 +317,8 @@ type cloudStorageSink struct {
 	asyncFlushErr    error             // set by async flusher, prior to closing asyncFlushTermCh
 }
 
+var _ Sink = (*cloudStorageSink)(nil)
+
 type flushRequest struct {
 	file  *cloudStorageSinkFile
 	dest  string
@@ -481,14 +484,19 @@ func makeCloudStorageSink(
 	return s, nil
 }
 
+func (s *cloudStorageSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return s.topicNamer.Name(topic)
+}
+
 func (s *cloudStorageSink) getOrCreateFile(
-	topic TopicDescriptor, eventMVCC hlc.Timestamp,
+	topic string, eventMVCC hlc.Timestamp,
 ) (*cloudStorageSinkFile, error) {
-	name, _ := s.topicNamer.Name(topic)
-	var key cloudStorageSinkKey
-	if topic != nil {
-		key = cloudStorageSinkKey{name, int64(topic.GetVersion())}
-	}
+	// name, _ := s.topicNamer.Name(topic)
+	// var key cloudStorageSinkKey
+	// if topic != nil {
+	// 	key = cloudStorageSinkKey{name, int64(topic.GetVersion())}
+	// }
+	key := cloudStorageSinkKey{topic: topic}
 	if item := s.files.Get(key); item != nil {
 		f := item.(*cloudStorageSinkFile)
 		if eventMVCC.Less(f.oldestMVCC) {
@@ -516,7 +524,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,

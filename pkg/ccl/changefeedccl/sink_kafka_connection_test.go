@@ -51,9 +51,13 @@ func (e *externalConnectionKafkaSink) Close() error {
 
 // EmitRow implements the Sink interface.
 func (e *externalConnectionKafkaSink) EmitRow(
-	_ context.Context, _ TopicDescriptor, _, _ []byte, _, _ hlc.Timestamp, _ kvevent.Alloc,
+	_ context.Context, _ string, _, _ []byte, _, _ hlc.Timestamp, _ kvevent.Alloc,
 ) error {
 	return nil
+}
+
+func (e *externalConnectionKafkaSink) NameTopic(_ TopicDescriptor) (string, error) {
+	return "", nil
 }
 
 // Flush implements the Sink interface.

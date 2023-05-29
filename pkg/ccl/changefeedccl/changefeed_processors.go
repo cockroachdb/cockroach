@@ -277,24 +277,24 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		}
 	}
 
+	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
+		ca.spec.User(), ca.spec.JobID, recorder)
+	if err != nil {
+		err = changefeedbase.MarkRetryableError(err)
+		// Early abort in the case that there is an error creating the sink.
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
 	if opts.TotalOrdering() {
 		sink := &orderedSink{
+			wrapped:     ca.sink,
 			processorID: ca.processorID,
 			metrics:     ca.metrics,
 			frontier:    ca.frontier,
 		}
 		ca.changedRowBuf = &sink.forwardingBuf
 		ca.sink = sink
-	} else {
-		ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-			ca.spec.User(), ca.spec.JobID, recorder)
-		if err != nil {
-			err = changefeedbase.MarkRetryableError(err)
-			// Early abort in the case that there is an error creating the sink.
-			ca.MoveToDraining(err)
-			ca.cancel()
-			return
-		}
 	}
 
 	// This is the correct point to set up certain hooks depending on the sink
@@ -1825,7 +1825,7 @@ func (m *orderedRowMerger) emitUntilFrontier(ctx context.Context) error {
 
 			// TODO: Incorporate memory accounting
 			alloc := kvevent.Alloc{}
-			err := m.sink.EmitRow(ctx, nil, next.row.Key, next.row.Value, next.row.Updated, next.row.Mvcc, alloc)
+			err := m.sink.EmitRow(ctx, next.row.Topic, next.row.Key, next.row.Value, next.row.Updated, next.row.Mvcc, alloc)
 			if err != nil {
 				return err
 			}

@@ -56,7 +56,6 @@ type sinkType int
 
 const (
 	sinkTypeSinklessBuffer sinkType = iota
-	sinkTypeOrdering
 	sinkTypeNull
 	sinkTypeKafka
 	sinkTypeWebhook
@@ -90,11 +89,14 @@ type EventSink interface {
 	// error may be returned if a previously enqueued message has failed.
 	EmitRow(
 		ctx context.Context,
-		topic TopicDescriptor,
+		topic string,
 		key, value []byte,
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
+
+	// NameTopic constructs the formatted topic string for a topic descriptor.
+	NameTopic(topic TopicDescriptor) (string, error)
 
 	// Flush blocks until every message enqueued by EmitRow
 	// has been acknowledged by the sink. If an error is
@@ -396,6 +398,8 @@ type errorWrapperSink struct {
 	wrapped externalResource
 }
 
+var _ Sink = (*errorWrapperSink)(nil)
+
 func (s *errorWrapperSink) getConcreteType() sinkType {
 	return s.wrapped.getConcreteType()
 }
@@ -403,7 +407,7 @@ func (s *errorWrapperSink) getConcreteType() sinkType {
 // EmitRow implements Sink interface.
 func (s errorWrapperSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
@@ -432,6 +436,11 @@ func (s errorWrapperSink) Flush(ctx context.Context) error {
 	return nil
 }
 
+// NameTopic implements Sink interface.
+func (s errorWrapperSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return s.wrapped.(EventSink).NameTopic(topic)
+}
+
 // Close implements Sink interface.
 func (s errorWrapperSink) Close() error {
 	if err := s.wrapped.Close(); err != nil {
@@ -445,7 +454,7 @@ func (s errorWrapperSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
 	prevRow cdcevent.Row,
-	topic TopicDescriptor,
+	topic string,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
@@ -486,6 +495,8 @@ type bufferSink struct {
 	metrics metricsRecorder
 }
 
+var _ EventSink = (*bufferSink)(nil)
+
 func (s *bufferSink) getConcreteType() sinkType {
 	return sinkTypeSinklessBuffer
 }
@@ -493,7 +504,7 @@ func (s *bufferSink) getConcreteType() sinkType {
 // EmitRow implements the Sink interface.
 func (s *bufferSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
@@ -507,7 +518,7 @@ func (s *bufferSink) EmitRow(
 
 	s.buf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
-		{Datum: s.getTopicDatum(topic)},
+		{Datum: s.alloc.NewDString(tree.DString(topic))},
 		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},   // key
 		{Datum: s.alloc.NewDBytes(tree.DBytes(value))}, // value
 	})
@@ -555,15 +566,13 @@ func (s *bufferSink) Dial() error {
 	return nil
 }
 
-// TODO (zinger): Make this a tuple or array datum if it can be
-// done without breaking backwards compatibility.
-func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
+func (s *bufferSink) NameTopic(t TopicDescriptor) (string, error) {
 	name, components := t.GetNameComponents()
 	if len(components) == 0 {
-		return s.alloc.NewDString(tree.DString(name))
+		return string(name), nil
 	}
 	strs := append([]string{string(name)}, components...)
-	return s.alloc.NewDString(tree.DString(strings.Join(strs, ".")))
+	return strings.Join(strs, "."), nil
 }
 
 type nullSink struct {
@@ -604,7 +613,7 @@ func (n *nullSink) pace(ctx context.Context) error {
 // EmitRow implements Sink interface.
 func (n *nullSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
@@ -618,6 +627,10 @@ func (n *nullSink) EmitRow(
 		log.Infof(ctx, "emitting row %s@%s", key, updated.String())
 	}
 	return nil
+}
+
+func (n *nullSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return "", nil
 }
 
 // EmitResolvedTimestamp implements Sink interface.
@@ -680,9 +693,15 @@ func (s *safeSink) Close() error {
 	return s.wrapped.Close()
 }
 
+func (s *safeSink) NameTopic(topic TopicDescriptor) (string, error) {
+	s.Lock()
+	defer s.Unlock()
+	return s.wrapped.NameTopic(topic)
+}
+
 func (s *safeSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
@@ -711,7 +730,7 @@ type SinkWithEncoder interface {
 		ctx context.Context,
 		updatedRow cdcevent.Row,
 		prevRow cdcevent.Row,
-		topic TopicDescriptor,
+		topic string,
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
@@ -924,18 +943,23 @@ type orderedSink struct {
 	alloc         tree.DatumAlloc
 	metrics       *Metrics
 	frontier      *schemaChangeFrontier
+	wrapped       EventSink
 }
 
 var _ EventSink = (*orderedSink)(nil)
 
 func (s *orderedSink) getConcreteType() sinkType {
-	return sinkTypeOrdering
+	return s.wrapped.getConcreteType()
+}
+
+func (s *orderedSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return s.wrapped.NameTopic(topic)
 }
 
 // EmitRow implements the Sink interface.
 func (s *orderedSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
@@ -947,11 +971,7 @@ func (s *orderedSink) EmitRow(
 			Value:   value,
 			Updated: updated,
 			Mvcc:    mvcc,
-
-			// Topic is currently unsupported to avoid having to send the entire
-			// cdcevent metadata across the wire.  We'd ideally perform further
-			// refactoring of the sink API to avoid this being necessary.
-			Topic: []byte{},
+			Topic:   topic,
 		},
 	})
 	return nil

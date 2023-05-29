@@ -22,10 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -210,14 +208,18 @@ func (p *asyncProducerMock) outstanding() int {
 	return len(p.mu.outstanding)
 }
 
-func topic(name string) *tableDescriptorTopic {
-	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()
-	spec := changefeedbase.Target{
-		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           tableDesc.GetID(),
-		StatementTimeName: changefeedbase.StatementTimeName(name),
-	}
-	return &tableDescriptorTopic{Metadata: makeMetadata(tableDesc), spec: spec}
+func topic(name string) string {
+	return name
+	// func topic(name string) *tableDescriptorTopic {
+	// tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()
+	//
+	//	spec := changefeedbase.Target{
+	//		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+	//		TableID:           tableDesc.GetID(),
+	//		StatementTimeName: changefeedbase.StatementTimeName(name),
+	//	}
+	//
+	// return &tableDescriptorTopic{Metadata: makeMetadata(tableDesc), spec: spec}
 }
 
 const noTopicPrefix = ""
@@ -462,15 +464,17 @@ func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	overrideTopic := func(name string) *tableDescriptorTopic {
-		id, _ := strconv.ParseUint(name, 36, 64)
-		td := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
-		spec := changefeedbase.Target{
-			Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-			TableID:           td.GetID(),
-			StatementTimeName: changefeedbase.StatementTimeName(name),
-		}
-		return &tableDescriptorTopic{Metadata: makeMetadata(td), spec: spec}
+	overrideTopic := func(name string) string {
+		return name
+		// overrideTopic := func(name string) *tableDescriptorTopic {
+		// id, _ := strconv.ParseUint(name, 36, 64)
+		// td := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
+		// spec := changefeedbase.Target{
+		// 	Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		// 	TableID:           td.GetID(),
+		// 	StatementTimeName: changefeedbase.StatementTimeName(name),
+		// }
+		// return &tableDescriptorTopic{Metadata: makeMetadata(td), spec: spec}
 	}
 
 	ctx := context.Background()
@@ -486,8 +490,8 @@ func TestSQLSink(t *testing.T) {
 	fooTopic := overrideTopic(`foo`)
 	barTopic := overrideTopic(`bar`)
 	targets := changefeedbase.Targets{}
-	targets.Add(fooTopic.GetTargetSpecification())
-	targets.Add(barTopic.GetTargetSpecification())
+	// targets.Add(fooTopic.GetTargetSpecification())
+	// targets.Add(barTopic.GetTargetSpecification())
 
 	const testTableName = `sink`
 	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets, nilMetricsRecorderBuilder)

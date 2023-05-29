@@ -191,26 +191,25 @@ func (p *deprecatedPubsubSink) Dial() error {
 	return p.client.init()
 }
 
+func (p *deprecatedPubsubSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return p.topicNamer.Name(topic)
+}
+
 // EmitRow pushes a message to event channel where it is consumed by workers
 func (p *deprecatedPubsubSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
+	topic string,
 	key, value []byte,
 	updated hlc.Timestamp,
 	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	p.metrics.recordMessageSize(int64(len(key) + len(value)))
-
-	topicName, err := p.topicNamer.Name(topic)
-	if err != nil {
-		return err
-	}
 	m := pubsubMessage{
 		alloc: alloc, isFlush: false, mvcc: mvcc, message: payload{
 			Key:   key,
 			Value: value,
-			Topic: topicName,
+			Topic: topic,
 		}}
 
 	// calculate index by hashing key
