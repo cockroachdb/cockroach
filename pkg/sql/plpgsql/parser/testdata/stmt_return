@@ -8,7 +8,6 @@ DECLARE
 BEGIN
 RETURN 1 + 2;
 END
-<NOT DONE YET>
 
 parse
 DECLARE
@@ -22,7 +21,6 @@ BEGIN
 x := 1 + 2;
 RETURN x;
 END
-<NOT DONE YET>
 
 
 parse
@@ -35,7 +33,6 @@ DECLARE
 BEGIN
 RETURN (1, 'string');
 END
-<NOT DONE YET>
 
 
 
