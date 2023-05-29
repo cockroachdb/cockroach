@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -69,6 +70,10 @@ var (
 	// ~16 bytes, so Pebble point deletion batches will be bounded at ~1.6MB.
 	raftLogTruncationClearRangeThreshold = kvpb.RaftIndex(util.ConstantWithMetamorphicTestRange(
 		"raft-log-truncation-clearrange-threshold", 100000 /* default */, 1 /* min */, 1e6 /* max */))
+
+	// raftDisableLeaderFollowsLeaseholder disables lease/leader colocation.
+	raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
+		"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
 )
 
 func makeIDKey() kvserverbase.CmdIDKey {
