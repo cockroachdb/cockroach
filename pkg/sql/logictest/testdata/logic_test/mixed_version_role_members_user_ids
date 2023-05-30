@@ -76,6 +76,13 @@ testuser1  testuser2  false
 testuser1  testuser3  false
 testuser2  testuser3  false
 
+query TTB nodeidx=1
+SHOW GRANTS ON ROLE FOR testuser3
+----
+testuser1  testuser2  false
+testuser1  testuser3  false
+testuser2  testuser3  false
+
 upgrade 0
 
 upgrade 2
