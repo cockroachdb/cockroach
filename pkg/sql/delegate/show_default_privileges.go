@@ -31,19 +31,19 @@ func (d *delegator) delegateShowDefaultPrivileges(
 
 	schemaClause := " AND schema_name IS NULL"
 	if n.Schema != "" {
-		schemaClause = fmt.Sprintf(" AND schema_name = %s", lexbase.EscapeSQLString(n.Schema.String()))
+		schemaClause = fmt.Sprintf(" AND schema_name = %s", lexbase.EscapeSQLString(string(n.Schema)))
 	}
 
 	query := fmt.Sprintf(
 		"SELECT role, for_all_roles, object_type, grantee, privilege_type FROM crdb_internal.default_privileges WHERE database_name = %s%s",
-		lexbase.EscapeSQLString(currentDatabase.Normalize()),
+		lexbase.EscapeSQLString(string(currentDatabase)),
 		schemaClause,
 	)
 	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.ValidateGrantOption) {
 		query = fmt.Sprintf(
 			"SELECT role, for_all_roles, object_type, grantee, privilege_type, is_grantable "+
 				"FROM crdb_internal.default_privileges WHERE database_name = %s%s",
-			lexbase.EscapeSQLString(currentDatabase.Normalize()),
+			lexbase.EscapeSQLString(string(currentDatabase)),
 			schemaClause,
 		)
 	}

@@ -265,3 +265,32 @@ NULL  true  tables  foo     DROP        true
 NULL  true  tables  foo     GRANT       true
 NULL  true  tables  foo     ZONECONFIG  true
 NULL  true  types   public  USAGE       false
+
+statement ok
+CREATE DATABASE "MixedCaseDB"
+
+statement ok
+CREATE SCHEMA "MixedCaseDB"."MixedCaseSchema"
+
+statement ok
+USE "MixedCaseDB"
+
+statement ok
+ALTER DEFAULT PRIVILEGES IN SCHEMA "MixedCaseSchema" GRANT SELECT ON TABLES TO foo WITH GRANT OPTION
+
+query TBTTTB colnames
+SHOW DEFAULT PRIVILEGES
+----
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable
+root  false          schemas      root     ALL             true
+root  false          sequences    root     ALL             true
+root  false          tables       root     ALL             true
+root  false          types        public   USAGE           false
+root  false          types        root     ALL             true
+
+
+query TBTTTB colnames
+SHOW DEFAULT PRIVILEGES IN SCHEMA "MixedCaseSchema"
+----
+role  for_all_roles  object_type  grantee  privilege_type  is_grantable
+root  false          tables       foo      SELECT          true
