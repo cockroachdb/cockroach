@@ -21,7 +21,6 @@ import {
 
 import { cockroach } from "src/js/protos";
 import {
-  generateTableID,
   refreshTableDetails,
   refreshNodes,
   refreshIndexStats,
@@ -71,8 +70,8 @@ export const mapStateToProps = createSelector(
     isTenant,
     hasAdminRole,
   ): DatabaseTablePageData => {
-    const details = tableDetails[generateTableID(database, table)];
-    const indexStats = indexUsageStats[generateTableID(database, table)];
+    const details = tableDetails[util.generateTableID(database, table)];
+    const indexStats = indexUsageStats[util.generateTableID(database, table)];
     const lastReset = util.TimestampToMoment(indexStats?.data?.last_reset);
     const indexStatsData = _.flatMap(
       indexStats?.data?.statistics,
