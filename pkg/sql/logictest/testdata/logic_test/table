@@ -587,6 +587,7 @@ index_columns                          NULL
 index_usage_statistics                 NULL
 invalid_objects                        NULL
 jobs                                   NULL
+kv_inherited_role_members              NULL
 kv_node_liveness                       NULL
 kv_node_status                         NULL
 kv_store_status                        NULL

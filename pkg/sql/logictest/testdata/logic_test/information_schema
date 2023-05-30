@@ -427,6 +427,7 @@ crdb_internal       index_columns
 crdb_internal       index_usage_statistics
 crdb_internal       invalid_objects
 crdb_internal       jobs
+crdb_internal       kv_inherited_role_members
 crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
 crdb_internal       kv_store_status
@@ -757,6 +758,7 @@ index_columns
 index_usage_statistics
 invalid_objects
 jobs
+kv_inherited_role_members
 kv_node_liveness
 kv_node_status
 kv_store_status
@@ -1127,6 +1129,7 @@ system         crdb_internal       index_columns                          SYSTEM
 system         crdb_internal       index_usage_statistics                 SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_inherited_role_members              SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_liveness                       SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_status                         SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                        SYSTEM VIEW  NO                  1
@@ -2792,6 +2795,7 @@ NULL     public   system         crdb_internal       index_columns              
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_inherited_role_members              SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NO            YES
@@ -3368,6 +3372,7 @@ NULL     public   system         crdb_internal       index_columns              
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_inherited_role_members              SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NO            YES
