@@ -138,6 +138,11 @@ func TestBackup_base_create_index(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index", newCluster)
 }
+func TestBackup_base_create_index_create_schema_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", newCluster)
+}
 func TestBackup_base_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

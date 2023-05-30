@@ -479,8 +479,7 @@ func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState 
 // dependencies which aren't yet met.
 //
 // In plain english: we can only schedule this node in this stage if all the
-// other nodes which need to be scheduled not after it have already been
-// scheduled.
+// other nodes which need to be scheduled before it have already been scheduled.
 func (sb stageBuilder) hasUnmetInboundDeps(n *screl.Node) (ret bool) {
 	_ = sb.bc.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
 		if ret = sb.isUnmetInboundDep(de); ret {

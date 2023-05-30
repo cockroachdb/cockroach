@@ -61,11 +61,35 @@ func CreateDeclarativeSchemaChangeJobs(
 		if err != nil {
 			return err
 		}
+
+		// If all targets have reached their target status, simply clear the
+		// declarative schema changer state on all descriptors and skip creating a
+		// declarative schema changer job.
+		if areAllTargetsReachedTheirTargetStatus(currentState) {
+			for _, desc := range descs {
+				desc.SetDeclarativeSchemaChangerState(nil)
+			}
+			continue
+		}
+		// If a descriptor has zero targets, and it does not need to be schema
+		// changed, then clear its declarative schema changer state. This can
+		// happen, for example, if a dropped schema clears the schemaID in its
+		// parent database but was excluded from the BACKUP (bc it's in DROP state),
+		// and the parent database will have a non-nil but empty declarative schema
+		// changer state, which we can safely clear out.
+		descsToSchemaChange := screl.AllTargetDescIDs(currentState.TargetState)
+		for _, desc := range descs {
+			if len(desc.GetDeclarativeSchemaChangerState().Targets) == 0 &&
+				!descsToSchemaChange.Contains(desc.GetID()) {
+				desc.SetDeclarativeSchemaChangerState(nil)
+			}
+		}
+
 		const runningStatus = "restored from backup"
 		records = append(records, scexec.MakeDeclarativeSchemaChangeJobRecord(
 			newID,
 			currentState.Statements,
-			!currentState.Revertible, // NonCancelable
+			!currentState.Revertible, /* isNonCancelable */
 			currentState.Authorization,
 			screl.AllTargetDescIDs(currentState.TargetState),
 			runningStatus,
@@ -73,4 +97,15 @@ func CreateDeclarativeSchemaChangeJobs(
 	}
 	_, err := registry.CreateJobsWithTxn(ctx, txn, records)
 	return err
+}
+
+// areAllTargetsReachedTheirTargetStatus determines whether all targets have
+// reached their target status.
+func areAllTargetsReachedTheirTargetStatus(initial scpb.CurrentState) bool {
+	for i, status := range initial.Current {
+		if status != initial.Targets[i].TargetStatus {
+			return false
+		}
+	}
+	return true
 }

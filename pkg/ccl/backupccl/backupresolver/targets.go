@@ -401,7 +401,7 @@ func DescriptorsMatchingTargets(
 			if schemaDesc == nil || !schemaDesc.Public() {
 				if requirePublic {
 					return errors.Wrapf(err, "schema %d was expected to be PUBLIC", id)
-				} else if schemaDesc == nil || !schemaDesc.Offline() {
+				} else if schemaDesc == nil || schemaDesc.Dropped() {
 					// If the schema is not public, but we don't require it to be, ignore
 					// it.
 					return nil

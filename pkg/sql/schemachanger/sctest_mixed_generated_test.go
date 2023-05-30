@@ -140,6 +140,11 @@ func TestValidateMixedVersionElements_create_index(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index", sctest.SingleNodeMixedCluster)
 }
+func TestValidateMixedVersionElements_create_index_create_schema_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", sctest.SingleNodeMixedCluster)
+}
 func TestValidateMixedVersionElements_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

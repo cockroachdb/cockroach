@@ -1054,12 +1054,16 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 		return postCommit, nonRevertible
 	}
 
-	// A function that takes backup at `ord`-th stage while executing `stmts` after
-	// finishing `setup`. It also takes `ord` backups at each of the preceding stage
-	// if it's a revertible stage.
-	// It then restores the backup(s) in various "flavors" (see
-	// comment below for details) and expect the restore to finish the schema change job
-	// as if the backup/restore had never happened.
+	// A function that execute `stmts` (after finishing `setup`) until `ord`-th
+	// stage:
+	// - If a revertible stage, take a backup, inject an error to trigger a
+	//   rollback, and take a backup at each of the reverting stages.
+	// - If a non-revertible stage, take a backup.
+	//
+	// For each backup taken, we later restore them in various "flavors" (restore
+	// database, restore all tables, etc. See comments below for details) and
+	// expect that after the restore, the schema change job (either in reverting
+	// or not) is completed and the database is in an expected state.
 	testBackupRestoreCase := func(
 		t *testing.T, setup, stmts []statements.Statement[tree.Statement], ord int,
 	) {
@@ -1082,8 +1086,7 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				// If this plan contains any backfills, we will not
 				// back up or restore those indexes, so failure can occur
-				if p.Stages[stageIdx].Type() == scop.BackfillType &&
-					hasDMLInSetup {
+				if p.Stages[stageIdx].Type() == scop.BackfillType && hasDMLInSetup {
 					successExpected.Store(false)
 				}
 				// If the plan has no post-commit stages, we'll close the
@@ -1160,13 +1163,19 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 		completedStages := make(map[stageKey]struct{})
 		for i := 0; !done; i++ {
 			// We want to let the stages up to ord continue unscathed. Then, we'll
-			// start taking backups at ord. If ord corresponds to a revertible
-			// stage, we'll inject an error, forcing the schema change to revert.
-			// At each subsequent stage, we also take a backup. At the very end,
-			// we'll have one backup where things should succeed and N backups
-			// where we're reverting. In each case, we want to have the end state
-			// of the restored set of descriptors match what we have in the original
-			// cluster.
+			// start taking backups at ord. If ord corresponds to a revertible stage,
+			// we'll inject an error, forcing the schema change to roll back. At each
+			// subsequent stage during rollback, we also take a backup.
+			// At the very end, we'll have one backup where things should succeed and
+			// N backups where we're reverting. In each case, we want to have the end
+			// state of the restored set of descriptors match what we have in the
+			// original cluster.
+			// Caveat: For the very first backup taken during rollback, all targets
+			// will still have its original, un-reverted target status (simply an
+			// artifact of the job system machinery), and therefore post-restore, the
+			// schema change job is expected to finish forward, instead of reverting.
+			// Thus, technically, there will be 2 backups where things should succeed
+			// and N-1 backups where we're reverting.
 			//
 			// Lastly, we'll hit an ord corresponding to the first non-revertible
 			// stage. At this point, we'll take a backup for each non-revertible
@@ -1215,8 +1224,7 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			//
 			// TODO(ajwerner): Deal with trying to restore just some of the tables.
 			backupURL := fmt.Sprintf("userfile://backups.public.userfiles_$user/data%d", i)
-			tdb.Exec(t, fmt.Sprintf(
-				"BACKUP DATABASE %s INTO '%s'", dbName, backupURL))
+			tdb.Exec(t, fmt.Sprintf("BACKUP DATABASE %s INTO '%s'", dbName, backupURL))
 			backups = append(backups, backup{
 				name:            dbName,
 				isRollback:      rollbackStage > 0,
@@ -1280,17 +1288,26 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			}
 
 			// For the third flavor, we restore all tables in the backup.
-			// Skip it if there is no tables.
+			// Skip it if there is no tables or if there is user-defined schemas to
+			// restore.
+			backupHasUDS := false
 			rows := tdb.QueryStr(t, `
-			SELECT parent_schema_name, object_name
+			SELECT parent_schema_name, object_name, object_type
 			FROM [SHOW BACKUP FROM LATEST IN $1]
-			WHERE database_name = $2 AND object_type = 'table'`, b.url, dbName)
+			WHERE database_name = $2 AND object_type IN ('table', 'schema')`, b.url, dbName)
 			var tablesToRestore []string
 			for _, row := range rows {
-				tablesToRestore = append(tablesToRestore, fmt.Sprintf("%s.%s.%s", dbName, row[0], row[1]))
+				switch row[2] {
+				case "table":
+					tablesToRestore = append(tablesToRestore, fmt.Sprintf("%s.%s.%s", dbName, row[0], row[1]))
+				case "schema":
+					if row[1] != "public" {
+						backupHasUDS = true
+					}
+				}
 			}
 
-			if len(tablesToRestore) > 0 {
+			if len(tablesToRestore) > 0 && !backupHasUDS {
 				flavors = append(flavors, backupConsumptionFlavor{
 					name: "restore all tables in database",
 					restoreSetup: []string{
@@ -1430,7 +1447,7 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 		)
 		for i := 0; i <= n; i++ {
 			if !t.Run(
-				fmt.Sprintf("backup/restore stage %d of %d", i, n),
+				fmt.Sprintf("backup and restore at stage %d of %d", i, n),
 				func(t *testing.T) {
 					maybeRandomlySkip(t)
 					testBackupRestoreCase(t, setup, stmts, i)

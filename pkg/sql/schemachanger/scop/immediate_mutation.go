@@ -161,6 +161,13 @@ type AddDescriptorName struct {
 	Namespace scpb.Namespace
 }
 
+// SetDescriptorName sets the name field of the descriptor.
+type SetDescriptorName struct {
+	immediateMutationOp
+	DescriptorID descpb.ID
+	Name         string
+}
+
 // MakeDeleteOnlyColumnWriteOnly transitions a column addition mutation from
 // DELETE_ONLY to WRITE_ONLY.
 type MakeDeleteOnlyColumnWriteOnly struct {
@@ -797,10 +804,4 @@ type UpdateOwner struct {
 type CreateSchemaDescriptor struct {
 	immediateMutationOp
 	SchemaID descpb.ID
-}
-
-type SetSchemaName struct {
-	immediateMutationOp
-	SchemaID descpb.ID
-	Name     string
 }
