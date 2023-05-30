@@ -144,6 +144,19 @@ upsert descriptor #105
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "3": rowid
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 105
+  +      indexes:
+  +        "1": v2_pkey
+  +      name: v2
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
@@ -218,6 +231,9 @@ upsert descriptor #106
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 106
+  +      name: v3
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
@@ -285,6 +301,19 @@ upsert descriptor #105
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "3": rowid
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 105
+  -      indexes:
+  -        "1": v2_pkey
+  -      name: v2
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE

@@ -13,6 +13,7 @@ package screl
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -80,6 +81,111 @@ func FormatElement(w redact.SafeWriter, e scpb.Element) (err error) {
 		w.SafeString(redact.SafeString(attr.String()))
 		w.SafeString(": ")
 		w.Printf("%v", value)
+		return nil
+	}); err != nil {
+		return err
+	}
+	w.SafeRune('}')
+	return nil
+}
+
+// FormatTargetElement formats the target element into the SafeWriter.
+// This differs from FormatElement in that an attempt is made to decorate
+// the IDs with names.
+func FormatTargetElement(w redact.SafeWriter, ts scpb.TargetState, e scpb.Element) (err error) {
+	w.SafeString(redact.SafeString(reflect.TypeOf(e).Elem().Name()))
+	w.SafeString(":{")
+	maybePrintName := func(name string) {
+		if !strings.HasSuffix(name, "]") {
+			w.UnsafeString(" (")
+			w.UnsafeString(name)
+			w.UnsafeString(")")
+		}
+	}
+	var written int
+	descID := GetDescID(e)
+	if err := Schema.IterateAttributes(e, func(attr rel.Attr, value interface{}) error {
+		switch attr {
+		case ReferencedDescID:
+			if value == descpb.ID(0) {
+				return nil
+			}
+		case TemporaryIndexID, SourceIndexID:
+			if value == descpb.IndexID(0) {
+				return nil
+			}
+		case ColumnID:
+			if value == descpb.ColumnID(0) {
+				return nil
+			}
+		case ConstraintID:
+			if value == descpb.ConstraintID(0) {
+				return nil
+			}
+		}
+		if written > 0 {
+			w.SafeString(", ")
+		}
+		written++
+		w.SafeString(redact.SafeString(attr.String()))
+		w.SafeString(": ")
+		switch attr {
+		case DescID, ReferencedDescID:
+			id, ok := value.(descpb.ID)
+			if !ok {
+				return errors.AssertionFailedf("unexpected type %T for %s value in %T", value, attr, e)
+			}
+			w.SafeUint(redact.SafeUint(id))
+			maybePrintName(ts.Name(id))
+		case ReferencedTypeIDs, ReferencedSequenceIDs, ReferencedFunctionIDs:
+			ids, ok := value.([]descpb.ID)
+			if !ok {
+				return errors.AssertionFailedf("unexpected type %T for %s value in %T", value, attr, e)
+			}
+			w.SafeString("[")
+			for i, id := range ids {
+				if i > 0 {
+					w.SafeString(", ")
+				}
+				w.Printf("%d", id)
+				maybePrintName(ts.Name(id))
+			}
+			w.SafeString("]")
+		case IndexID, TemporaryIndexID, SourceIndexID:
+			indexID, ok := value.(descpb.IndexID)
+			if !ok {
+				return errors.AssertionFailedf("unexpected type %T for %s value in %T", value, attr, e)
+			}
+			w.Printf("%d", indexID)
+			maybePrintName(ts.IndexName(descID, indexID))
+		case ColumnFamilyID:
+			familyID, ok := value.(descpb.FamilyID)
+			if !ok {
+				return errors.AssertionFailedf("unexpected type %T for %s value in %T", value, attr, e)
+			}
+			w.Printf("%d", familyID)
+			maybePrintName(ts.FamilyName(descID, familyID))
+		case ColumnID:
+			columnID, ok := value.(descpb.ColumnID)
+			if !ok {
+				return errors.AssertionFailedf("unexpected type %T for %s value in %T", value, attr, e)
+			}
+			w.Printf("%d", columnID)
+			maybePrintName(ts.ColumnName(descID, columnID))
+		case ConstraintID:
+			constraintID, ok := value.(descpb.ConstraintID)
+			if !ok {
+				return errors.AssertionFailedf("unexpected type %T for %s value in %T", value, attr, e)
+			}
+			w.Printf("%d", constraintID)
+			maybePrintName(ts.ConstraintName(descID, constraintID))
+		default:
+			if str, isStr := value.(string); isStr {
+				w.Printf("%q", str)
+			} else {
+				w.Printf("%v", value)
+			}
+		}
 		return nil
 	}); err != nil {
 		return err

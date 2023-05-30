@@ -162,6 +162,9 @@ upsert descriptor #105
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: t
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
@@ -226,6 +229,19 @@ upsert descriptor #104
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": a
+  +        "2": b
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +        "2": idx
+  +      name: t
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›)
@@ -534,6 +550,19 @@ upsert descriptor #104
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": a
+  -        "2": b
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -        "2": idx
+  -      name: t
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹b›)
@@ -588,6 +617,9 @@ upsert descriptor #105
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: t
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS
