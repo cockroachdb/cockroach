@@ -368,8 +368,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		return
 	}
 
-	var cb lookupjoin.ConstraintBuilder
-	cb.Init(
+	// Initialize the constraint builder.
+	c.cb.Init(
 		c.e.f,
 		c.e.mem.Metadata(),
 		c.e.evalCtx,
@@ -431,7 +431,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
 				input2, scanPrivate2, indexCols2, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols)
 		}
-		lookupConstraint, foundEqualityCols := cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
+		lookupConstraint, foundEqualityCols := c.cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
 		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.
