@@ -368,7 +368,9 @@ func (nl *NodeLiveness) SetDraining(
 	ctx context.Context, drain bool, reporter func(int, redact.SafeString),
 ) error {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.Closer = nl.stopper.ShouldQuiesce()
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		oldLivenessRec, ok := nl.cache.Self()
 		if !ok {
 			// There was a cache miss, let's now fetch the record from KV
@@ -1108,7 +1110,9 @@ func (nl *NodeLiveness) updateLiveness(
 	if err := nl.verifyDiskHealth(ctx); err != nil {
 		return Record{}, err
 	}
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.Closer = nl.stopper.ShouldQuiesce()
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {
@@ -1125,7 +1129,7 @@ func (nl *NodeLiveness) updateLiveness(
 	if err := ctx.Err(); err != nil {
 		return Record{}, err
 	}
-	panic("unreachable; should retry until ctx canceled")
+	return Record{}, errors.New("retry loop ended without error - likely shutting down")
 }
 
 // verifyDiskHealth does a sync write to all disks before updating liveness, so
