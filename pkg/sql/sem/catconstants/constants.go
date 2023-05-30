@@ -191,6 +191,7 @@ const (
 	CrdbInternalSuperRegions
 	CrdbInternalDroppedRelationsViewID
 	CrdbInternalShowTenantCapabilitiesCacheTableID
+	CrdbInternalInheritedRoleMembersTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

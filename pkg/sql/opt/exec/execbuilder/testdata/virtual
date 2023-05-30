@@ -201,14 +201,43 @@ EXPLAIN SHOW GRANTS ON DATABASE t
 distribution: local
 vectorized: true
 ·
-• sort
-│ order: +grantee,+privilege_type
+• root
 │
-└── • render
+├── • sort
+│   │ order: +database_name,+grantee,+privilege_type,+is_grantable
+│   │
+│   └── • distinct
+│       │ distinct on: database_name, grantee, privilege_type, is_grantable
+│       │
+│       └── • render
+│           │
+│           └── • union all
+│               │
+│               ├── • hash join
+│               │   │ equality: (role) = (grantee)
+│               │   │
+│               │   ├── • virtual table
+│               │   │     table: kv_inherited_role_members@primary
+│               │   │
+│               │   └── • scan buffer
+│               │         label: buffer 1 (r)
+│               │
+│               └── • scan buffer
+│                     label: buffer 1 (r)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT * FROM (SELECT database_name, grantee, privilege_type, is_grantable::BOOL FROM "".crdb_internal.cluster_database_privileges) WHERE database_name IN ('t',)
+    │ exec mode: all rows
     │
-    └── • virtual table
-          table: cluster_database_privileges@cluster_database_privileges_database_name_idx
-          spans: [/'t' - /'t']
+    └── • buffer
+        │ label: buffer 1 (r)
+        │
+        └── • render
+            │
+            └── • virtual table
+                  table: cluster_database_privileges@cluster_database_privileges_database_name_idx
+                  spans: [/'t' - /'t']
 
 # Test that the partial indexes in crdb_internal.tables are used only when the
 # partial predicate constraints are satisfied.
