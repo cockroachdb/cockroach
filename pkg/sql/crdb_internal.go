@@ -98,6 +98,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // CrdbInternalName is the name of the crdb_internal schema.
@@ -5629,7 +5630,8 @@ CREATE TABLE crdb_internal.invalid_objects (
   database_name STRING,
   schema_name   STRING,
   obj_name      STRING,
-  error         STRING
+  error         STRING,
+  error_redactable STRING NOT VISIBLE
 )`,
 	populate: func(
 		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
@@ -5677,6 +5679,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 				tree.NewDString(scName),
 				tree.NewDString(objName),
 				tree.NewDString(validationError.Error()),
+				tree.NewDString(string(redact.Sprint(validationError))),
 			)
 		}
 
