@@ -10,9 +10,17 @@
 
 import { DatabasesListResponse, SqlExecutionErrorMessage } from "../api";
 import { DatabasesPageDataDatabase } from "../databasesPage";
-import { combineLoadingErrors, getNodesByRegionString } from "./util";
-import { DatabaseDetailsState } from "../store/databaseDetails/databaseDetails.reducer";
+import {
+  combineLoadingErrors,
+  getNodesByRegionString,
+  normalizePrivileges,
+  normalizeRoles,
+} from "./util";
+import { DatabaseDetailsState } from "../store/databaseDetails";
 import { createSelector } from "@reduxjs/toolkit";
+import { TableDetailsState } from "../store/databaseTableDetails";
+import { generateTableID } from "../util";
+import { DatabaseDetailsPageDataTable } from "src/databaseDetailsPage";
 
 interface DerivedDatabaseDetailsParams {
   dbListResp: DatabasesListResponse;
@@ -82,5 +90,75 @@ const deriveDatabaseDetails = (
     nodes: nodes,
     nodesByRegionString,
     numIndexRecommendations,
+  };
+};
+
+interface DerivedTableDetailsParams {
+  dbName: string;
+  tables: string[];
+  tableDetails: Record<string, TableDetailsState>;
+  nodeRegions: Record<string, string>;
+  isTenant: boolean;
+}
+
+export const deriveTableDetailsMemoized = createSelector(
+  (params: DerivedTableDetailsParams) => params.dbName,
+  (params: DerivedTableDetailsParams) => params.tables,
+  (params: DerivedTableDetailsParams) => params.tableDetails,
+  (params: DerivedTableDetailsParams) => params.nodeRegions,
+  (params: DerivedTableDetailsParams) => params.isTenant,
+  (
+    dbName,
+    tables,
+    tableDetails,
+    nodeRegions,
+    isTenant,
+  ): DatabaseDetailsPageDataTable[] => {
+    tables = tables || [];
+    return tables.map(table => {
+      const tableID = generateTableID(dbName, table);
+      const details = tableDetails[tableID];
+      return deriveDatabaseTableDetails(table, details, nodeRegions, isTenant);
+    });
+  },
+);
+
+const deriveDatabaseTableDetails = (
+  table: string,
+  details: TableDetailsState,
+  nodeRegions: Record<string, string>,
+  isTenant: boolean,
+): DatabaseDetailsPageDataTable => {
+  const results = details?.data?.results;
+  const grants = results?.grantsResp.grants ?? [];
+  const normalizedRoles = normalizeRoles(grants.map(grant => grant.user));
+  const normalizedPrivileges = normalizePrivileges(
+    [].concat(...grants.map(grant => grant.privileges)),
+  );
+  const nodes = results?.stats.replicaData.nodeIDs || [];
+  return {
+    name: table,
+    loading: !!details?.inFlight,
+    loaded: !!details?.valid,
+    lastError: details?.lastError,
+    details: {
+      columnCount: results?.schemaDetails.columns?.length || 0,
+      indexCount: results?.schemaDetails.indexes.length || 0,
+      userCount: normalizedRoles.length,
+      roles: normalizedRoles,
+      grants: normalizedPrivileges,
+      statsLastUpdated:
+        results?.heuristicsDetails.stats_last_created_at || null,
+      hasIndexRecommendations:
+        results?.stats.indexStats.has_index_recommendations || false,
+      totalBytes: results?.stats?.spanStats.total_bytes || 0,
+      liveBytes: results?.stats?.spanStats.live_bytes || 0,
+      livePercentage: results?.stats?.spanStats.live_percentage || 0,
+      replicationSizeInBytes:
+        results?.stats?.spanStats.approximate_disk_bytes || 0,
+      nodes: nodes,
+      rangeCount: results?.stats?.spanStats.range_count || 0,
+      nodesByRegionString: getNodesByRegionString(nodes, nodeRegions, isTenant),
+    },
   };
 };

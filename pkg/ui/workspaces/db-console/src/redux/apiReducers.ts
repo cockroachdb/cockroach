@@ -36,7 +36,8 @@ import { createSelector, ParametricSelector } from "reselect";
 import { AdminUIState } from "./state";
 import { RouteComponentProps } from "react-router";
 
-const { generateStmtDetailsToID, HexStringToInt64String } = util;
+const { generateStmtDetailsToID, HexStringToInt64String, generateTableID } =
+  util;
 
 const SessionsRequest = protos.cockroach.server.serverpb.ListSessionsRequest;
 
@@ -130,12 +131,6 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
 export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
 
 export const refreshHotRanges = hotRangesReducerObj.refresh;
-
-// NOTE: We encode the db and table name so we can combine them as a string.
-// TODO(maxlang): there's probably a nicer way to do this
-export function generateTableID(db: string, table: string) {
-  return `${encodeURIComponent(db)}/${encodeURIComponent(table)}`;
-}
 
 export const tableRequestToID = (
   req:

@@ -34,6 +34,7 @@ import { statementFingerprintInsightsSaga } from "./insights/statementFingerprin
 import { txnStatsSaga } from "./transactionStats";
 import { clusterSettingsSaga } from "./clusterSettings/clusterSettings.saga";
 import { databaseDetailsSaga } from "./databaseDetails";
+import { tableDetailsSaga } from "./databaseTableDetails";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
@@ -48,6 +49,7 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(jobSaga),
     fork(databasesListSaga),
     fork(databaseDetailsSaga),
+    fork(tableDetailsSaga),
     fork(sessionsSaga),
     fork(terminateSaga),
     fork(notifificationsSaga),
