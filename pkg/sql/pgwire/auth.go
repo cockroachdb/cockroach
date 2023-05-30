@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -405,8 +406,9 @@ type AuthConn interface {
 // A single authPipe will serve as both an AuthConn and an authenticator; the
 // two represent the two "ends" of the pipe and we'll pass data between them.
 type authPipe struct {
-	c   *conn // Only used for writing, not for reading.
-	log bool
+	c             *conn // Only used for writing, not for reading.
+	log           bool
+	loggedFailure bool
 
 	connDetails eventpb.CommonConnectionDetails
 	authDetails eventpb.CommonSessionDetails
@@ -519,10 +521,14 @@ func (p *authPipe) LogAuthInfof(ctx context.Context, format string, args ...inte
 func (p *authPipe) LogAuthFailed(
 	ctx context.Context, reason eventpb.AuthFailReason, detailedErr error,
 ) {
-	if p.log {
-		var errStr string
+	if p.log && !p.loggedFailure {
+		// If a failure was already logged, then don't log another one. The
+		// assumption is that if an error is logged deeper in the call stack, the
+		// reason is likely to be more specific than at a higher point in the stack.
+		p.loggedFailure = true
+		var errStr redact.RedactableString
 		if detailedErr != nil {
-			errStr = detailedErr.Error()
+			errStr = redact.Sprint(detailedErr)
 		}
 		ev := &eventpb.ClientAuthenticationFailed{
 			CommonConnectionDetails: p.connDetails,
