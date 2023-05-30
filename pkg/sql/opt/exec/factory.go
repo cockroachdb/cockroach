@@ -335,6 +335,7 @@ type ExecutionStats struct {
 	KVTime                optional.Duration
 	KVContentionTime      optional.Duration
 	KVBytesRead           optional.Uint
+	KVPairsRead           optional.Uint
 	KVRowsRead            optional.Uint
 	KVBatchRequestsIssued optional.Uint
 

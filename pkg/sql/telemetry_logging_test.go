@@ -383,6 +383,7 @@ func TestTelemetryLogging(t *testing.T) {
 				MaxMemUsage:                        9223372036854775807,
 				MaxDiskUsage:                       9223372036854775807,
 				KVBytesRead:                        9223372036854775807,
+				KVPairsRead:                        9223372036854775807,
 				KVRowsRead:                         9223372036854775807,
 				NetworkMessages:                    9223372036854775807,
 				MvccValueBytes:                     9223372036854775807,
@@ -576,6 +577,7 @@ func TestTelemetryLogging(t *testing.T) {
 					require.Equal(t, tc.queryLevelStats.MvccSeeks, sampledQueryFromLog.MvccSeekCount)
 					require.Equal(t, tc.queryLevelStats.MvccValueBytes, sampledQueryFromLog.MvccValueBytes)
 					require.Equal(t, tc.queryLevelStats.MvccSteps, sampledQueryFromLog.MvccStepCount)
+					require.Equal(t, tc.queryLevelStats.KVPairsRead, sampledQueryFromLog.KVPairsRead)
 					require.Equal(t, tc.queryLevelStats.KVBatchRequestsIssued, sampledQueryFromLog.KvGrpcCalls)
 					require.Equal(t, tc.queryLevelStats.KVTime.Nanoseconds(), sampledQueryFromLog.KvTimeNanos)
 

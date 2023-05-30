@@ -264,8 +264,9 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 		// time as "execution time" since "KV time" would only make sense for
 		// tableReaders, and they are less likely to be wrapped than others.
 		s.KV.KVTime.Set(time)
-		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
 		s.KV.BytesRead.Set(uint64(vsc.kvReader.GetBytesRead()))
+		s.KV.KVPairsRead.Set(uint64(vsc.kvReader.GetKVPairsRead()))
+		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
 		s.KV.BatchRequestsIssued.Set(uint64(vsc.kvReader.GetBatchRequestsIssued()))
 		s.KV.ContentionTime.Set(vsc.kvReader.GetContentionTime())
 		scanStats := vsc.kvReader.GetScanStats()
