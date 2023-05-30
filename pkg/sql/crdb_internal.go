@@ -207,6 +207,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalShowTenantCapabilitiesCacheTableID: crdbInternalShowTenantCapabilitiesCache,
+		catconstants.CrdbInternalInheritedRoleMembersTableID:        crdbInternalInheritedRoleMembers,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -8040,5 +8041,61 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 			}
 		}
 		return nil
+	},
+}
+
+var crdbInternalInheritedRoleMembers = virtualSchemaTable{
+	comment: `table listing transitive closure of system.role_members`,
+	schema: `
+CREATE TABLE crdb_internal.kv_inherited_role_members (
+  role               STRING,
+  inheriting_member  STRING,
+  member_is_explicit BOOL,
+  member_is_admin    BOOL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (retErr error) {
+		// This is defined as a table instead of a more straightforward view
+		// because we want the query to run under the node user.
+		const query = `
+WITH RECURSIVE
+	q
+		AS (
+			SELECT
+				"role", member, true AS member_is_explicit, "isAdmin" AS member_is_admin
+			FROM
+				system.role_members
+			UNION ALL
+				SELECT
+					q.role, m.member, false, m."isAdmin"
+				FROM
+					system.role_members AS m INNER JOIN q ON m.role = q.member
+		)
+SELECT
+	*
+FROM
+	q
+`
+		it, err := p.InternalSQLTxn().QueryIteratorEx(
+			ctx,
+			"read-members-recursive",
+			p.InternalSQLTxn().KV(),
+			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			query,
+		)
+		if err != nil {
+			return err
+		}
+		// We have to make sure to close the iterator since we might return from the
+		// for loop early (before Next() returns false).
+		defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			err = addRow(it.Cur()...)
+			if err != nil {
+				return err
+			}
+		}
+		return err
 	},
 }

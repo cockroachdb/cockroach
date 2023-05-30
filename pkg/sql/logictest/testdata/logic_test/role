@@ -195,6 +195,14 @@ testrole  child_role  false    108      109
 testrole  testuser    true     108      100
 testuser  child_role  false    100      109
 
+query TTB colnames
+SHOW GRANTS ON ROLE FOR child_role
+----
+role_name  member      is_admin
+testrole   child_role  false
+testrole   testuser    true
+testuser   child_role  false
+
 statement ok
 SET ROLE child_role
 
