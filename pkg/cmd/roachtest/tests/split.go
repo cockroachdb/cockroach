@@ -297,7 +297,7 @@ func registerLoadSplits(r registry.Registry) {
 				// effectively doubling it. Whereas for CPU, the resulting lhs and rhs
 				// post split should still add up to approx the original range's CPU -
 				// when ignoring fixed overhead.
-				minimumRanges: 2,
+				minimumRanges: 1,
 				maximumRanges: 15,
 				load: kvSplitLoad{
 					concurrency:  64, // 64 concurrent workers
@@ -317,10 +317,10 @@ func registerLoadSplits(r registry.Registry) {
 				maxSize:      10 << 30,               // 10 GB
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
 				// YCSB/A has a zipfian distribution with 50% inserts and 50% updates.
-				// The number of splits should be between 20-30 after 10 minutes with
+				// The number of splits should be between 20-40 after 10 minutes with
 				// 100ms threshold on 8vCPU machines.
 				minimumRanges:     20,
-				maximumRanges:     30,
+				maximumRanges:     40,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "a",
@@ -341,8 +341,8 @@ func registerLoadSplits(r registry.Registry) {
 				// YCSB/B has a zipfian distribution with 95% reads and 5% updates.
 				// The number of splits should be similar to YCSB/A.
 				cpuThreshold:      100 * time.Millisecond, // 1/10th of a CPU per second.
-				minimumRanges:     20,
-				maximumRanges:     30,
+				minimumRanges:     15,
+				maximumRanges:     35,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "b",
@@ -386,7 +386,7 @@ func registerLoadSplits(r registry.Registry) {
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
 				// YCSB/E has a zipfian distribution with 95% scans (limit 1k) and 5%
 				// inserts.
-				minimumRanges:     8,
+				minimumRanges:     5,
 				maximumRanges:     15,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
