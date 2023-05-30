@@ -179,8 +179,7 @@ var WebhookV2Enabled = settings.RegisterBoolSetting(
 	"changefeed.new_webhook_sink_enabled",
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
-	// util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
-	true,
+	util.ConstantWithMetamorphicTestBool("changefeed.new_webhook_sink_enabled", false),
 )
 
 // PubsubV2Enabled determines whether or not the refactored Webhook sink
@@ -531,6 +530,7 @@ func (s *bufferSink) EmitRow(
 		{Datum: s.alloc.NewDString(tree.DString(topic.name))},
 		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},   // key
 		{Datum: s.alloc.NewDBytes(tree.DBytes(value))}, // value
+		{Datum: tree.DNull}, // ordered rows
 	})
 	return nil
 }
@@ -555,6 +555,7 @@ func (s *bufferSink) EmitResolvedTimestamp(
 		{Datum: tree.DNull}, // topic
 		{Datum: tree.DNull}, // key
 		{Datum: s.alloc.NewDBytes(tree.DBytes(payload))}, // value
+		{Datum: tree.DNull}, // ordered rows
 	})
 	return nil
 }
@@ -1038,7 +1039,7 @@ func (s *orderedSink) Flush(ctx context.Context) error {
 			{Datum: tree.DNull}, // topic
 			{Datum: tree.DNull}, // key
 			{Datum: tree.DNull}, // value
-			{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // orderedRows
+			{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // ordered rows
 		})
 	}
 	return nil
@@ -1046,7 +1047,7 @@ func (s *orderedSink) Flush(ctx context.Context) error {
 
 // Close implements the Sink interface.
 func (s *orderedSink) Close() error {
-	return nil
+	return s.wrapped.Close()
 }
 
 // Dial implements the Sink interface.

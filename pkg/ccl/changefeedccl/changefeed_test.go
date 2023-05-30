@@ -352,8 +352,51 @@ func TestChangefeedTotalOrderingInitialScan(t *testing.T) {
 	cdcTestWithSystem(t, testFn, feedTestForceSink("webhook"))
 }
 
-func TestChangefeedTotalOrdering(t *testing.T) {
-	// defer leaktest.AfterTest(t)()
+func TestChangefeedTotalOrderingBasics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// By the time this is available the old sinks won't be enabled
+		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true")
+		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.new_pubsub_sink_enabled = true")
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		for i := 0; i < 1000; i++ {
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+		}
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total', resolved='5s'`)
+		defer closeFeed(t, foo)
+		tdebug("inserts")
+		for i := 1000; i < 2000; i++ {
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+		}
+
+		var expectedBackfillMessages []string
+		for i := 0; i < 1000; i++ {
+			expectedBackfillMessages = append(expectedBackfillMessages, fmt.Sprintf(
+				`foo: [%d]->{"after": {"a": %d}}`, i, i,
+			))
+		}
+		var expectedMessages []string
+		for i := 1000; i < 2000; i++ {
+			expectedMessages = append(expectedMessages, fmt.Sprintf(
+				`foo: [%d]->{"after": {"a": %d}}`, i, i,
+			))
+		}
+
+		assertPayloadsStripTs(t, foo, expectedBackfillMessages)
+		assertPayloadsTotalOrdering(t, foo, expectedMessages)
+		// assertPayloadsStripTs(t, foo, expectedMessages)
+	}
+
+	// enterprise test needs work to sort rows by crdb_internal_mvcc_timestamp
+	cdcTest(t, testFn, feedTestOmitSinks("enterprise"))
+}
+
+func TestChangefeedTotalOrderingMultiNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	cluster, db, cleanup := startTestCluster(t)
@@ -379,53 +422,26 @@ func TestChangefeedTotalOrdering(t *testing.T) {
 	}
 	tdebug("waiting for backfill messages")
 	assertPayloadsStripTs(t, foo, expectedBackfillMessages)
-	// tdebug("waiting for resolved")
-	// expectResolvedTimestamp(t, foo)
-	// tdebug("got first resolved, waiting for second")
-	// expectResolvedTimestamp(t, foo)
-	// tdebug("got second resolved")
 
 	for i := 1001; i <= 2000; i++ {
 		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
 	}
-	// sqlDB2 := sqlutils.MakeSQLRunner(cluster.ServerConn(1))
-	// for i := 2001; i <= 3000; i++ {
-	// 	sqlDB2.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
-	// }
-	// sqlDB3 := sqlutils.MakeSQLRunner(cluster.ServerConn(2))
-	// for i := 3001; i <= 4000; i++ {
-	// 	sqlDB3.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
-	// }
+	sqlDB2 := sqlutils.MakeSQLRunner(cluster.ServerConn(1))
+	for i := 2001; i <= 3000; i++ {
+		sqlDB2.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+	}
+	sqlDB3 := sqlutils.MakeSQLRunner(cluster.ServerConn(2))
+	for i := 3001; i <= 4000; i++ {
+		sqlDB3.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+	}
 
 	var expectedMessages []string
-	for i := 1001; i <= 2000; i++ {
+	for i := 1001; i <= 4000; i++ {
 		expectedMessages = append(expectedMessages, fmt.Sprintf(
 			`foo: [%d]->{"after": {"a": %d}}`, i, i,
 		))
 	}
 	assertPayloadsTotalOrdering(t, foo, expectedMessages)
-	// t.FailNow()
-
-	// testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-	// 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
-	// 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-	// 	foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total'`)
-	// 	defer closeFeed(t, foo)
-	// 	for i := 0; i < 1000; i++ {
-	// 		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
-	// 	}
-
-	// 	var expectedMessages []string
-	// 	for i := 0; i < 1000; i++ {
-	// 		expectedMessages = append(expectedMessages, fmt.Sprintf(
-	// 			`foo: [%d]->{"after": {"a": %d}}`, i, i,
-	// 		))
-	// 	}
-
-	// 	assertPayloadsTotalOrdering(t, foo, expectedMessages)
-	// }
-
-	// cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestChangefeedBasicQuery(t *testing.T) {

@@ -1073,6 +1073,10 @@ func (f *cloudFeedFactory) Feed(
 			parquetPossible = false
 			break
 		}
+		if string(opt.Key) == changefeedbase.OptOrdering && opt.Value.String() == string(changefeedbase.OptOrderingTotal) {
+			parquetPossible = false
+			break
+		}
 		for o := range changefeedbase.InitialScanOnlyUnsupportedOptions {
 			if o == string(opt.Key) {
 				parquetPossible = false

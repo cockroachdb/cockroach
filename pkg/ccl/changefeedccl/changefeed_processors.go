@@ -99,7 +99,7 @@ type timestampLowerBoundOracle interface {
 	inclusiveLowerBoundTS() hlc.Timestamp
 }
 
-type changeAggregatorLowerBoundOracle struct {
+type changefeedLowerBoundOracle struct {
 	sf                         *span.Frontier
 	initialInclusiveLowerBound hlc.Timestamp
 }
@@ -109,7 +109,7 @@ type changeAggregatorLowerBoundOracle struct {
 // changefeed job hasn't yet seen any resolved timestamps) or the successor timestamp to
 // the local span frontier. This convention is chosen to preserve CDC's ordering
 // guarantees. See comment on cloudStorageSink for more details.
-func (o *changeAggregatorLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp {
+func (o *changefeedLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp {
 	if frontier := o.sf.Frontier(); !frontier.IsEmpty() {
 		// We call `Next()` here on the frontier because this allows us
 		// to name files using a timestamp that is an inclusive lower bound
@@ -234,7 +234,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
-	timestampOracle := &changeAggregatorLowerBoundOracle{
+	timestampOracle := &changefeedLowerBoundOracle{
 		sf:                         ca.frontier.SpanFrontier(),
 		initialInclusiveLowerBound: feed.ScanTime,
 	}
@@ -287,6 +287,12 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
+	// This is the correct point to set up certain hooks depending on the sink
+	// type.
+	if b, ok := ca.sink.(*bufferSink); ok {
+		ca.changedRowBuf = &b.buf
+	}
+
 	if opts.TotalOrdering() {
 		sink := &orderedSink{
 			wrapped:     ca.sink,
@@ -296,12 +302,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		}
 		ca.changedRowBuf = &sink.forwardingBuf
 		ca.sink = sink
-	}
-
-	// This is the correct point to set up certain hooks depending on the sink
-	// type.
-	if b, ok := ca.sink.(*bufferSink); ok {
-		ca.changedRowBuf = &b.buf
 	}
 
 	// If the initial scan was disabled the highwater would've already been forwarded
@@ -927,6 +927,10 @@ func newChangeFrontierProcessor(
 		},
 	}
 
+	if cf.isSinkless() {
+		cf.orderedRowMerger.passthroughBuf = &cf.passthroughBuf
+	}
+
 	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		cf.knobs = *cfKnobs
 	}
@@ -1007,9 +1011,6 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// TODO(yevgeniy): Figure out how to inject replication stream metrics.
 	cf.metrics = cf.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 
-	// Pass a nil oracle because this sink is only used to emit resolved timestamps
-	// but the oracle is only used when emitting row updates.
-	var nilOracle timestampLowerBoundOracle
 	var err error
 	sli, err := cf.metrics.getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
 	if err != nil {
@@ -1017,7 +1018,18 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 	cf.sliMetrics = sli
-	cf.sink, err = getAndDialSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
+
+	// Only with totalOrdering does the frontier do any emitting of events other
+	// than resolved timestamps, so the oracle can normally be nil.
+	var timestampOracle timestampLowerBoundOracle
+	if cf.spec.Feed.Opts[changefeedbase.OptOrdering] == string(changefeedbase.OptOrderingTotal) {
+		timestampOracle = &changefeedLowerBoundOracle{
+			sf:                         cf.frontier.SpanFrontier(),
+			initialInclusiveLowerBound: cf.spec.Feed.StatementTime,
+		}
+	}
+
+	cf.sink, err = getAndDialSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, timestampOracle,
 		cf.spec.User(), cf.spec.JobID, sli)
 
 	if err != nil {
@@ -1792,6 +1804,10 @@ type orderedRowMerger struct {
 	// to determine the earliest row across all processors.
 	minHeap RowHeap
 
+	// Set only when using a core changefeed
+	passthroughBuf *encDatumRowBuffer
+	alloc          tree.DatumAlloc
+
 	frontier *schemaChangeFrontier
 	sink     EventSink
 	metrics  *Metrics
@@ -1813,6 +1829,22 @@ func (m *orderedRowMerger) Append(ctx context.Context, rows jobspb.OrderedRows) 
 	return m.emitUntilFrontier(ctx)
 }
 
+func (m *orderedRowMerger) emitRow(ctx context.Context, row jobspb.OrderedRows_Row) error {
+	if m.passthroughBuf != nil {
+		m.passthroughBuf.Push(rowenc.EncDatumRow{
+			{Datum: tree.DNull}, // resolved span
+			{Datum: m.alloc.NewDString(tree.DString(row.TopicName))},
+			{Datum: m.alloc.NewDBytes(tree.DBytes(row.Key))},   // key
+			{Datum: m.alloc.NewDBytes(tree.DBytes(row.Value))}, // value
+			{Datum: tree.DNull}, // ordered rows
+		})
+		return nil
+	} else {
+		// debug2("EMITTING")
+		return m.sink.EmitRow(ctx, row.Key, row.Value, sinkTopic{name: row.TopicName, version: row.TopicVersion}, row.Updated, row.Mvcc, kvevent.Alloc{})
+	}
+}
+
 func (m *orderedRowMerger) emitUntilFrontier(ctx context.Context) error {
 	for {
 		if m.minHeap.Peek() == nil {
@@ -1824,9 +1856,7 @@ func (m *orderedRowMerger) emitUntilFrontier(ctx context.Context) error {
 			next := heap.Pop(&m.minHeap).(RowHeapEntry)
 			m.orderedRows[next.source] = m.orderedRows[next.source][1:]
 
-			// TODO: Incorporate memory accounting
-			alloc := kvevent.Alloc{}
-			err := m.sink.EmitRow(ctx, next.row.Key, next.row.Value, sinkTopic{name: next.row.TopicName, version: next.row.TopicVersion}, next.row.Updated, next.row.Mvcc, alloc)
+			err := m.emitRow(ctx, next.row)
 			if err != nil {
 				return err
 			}
