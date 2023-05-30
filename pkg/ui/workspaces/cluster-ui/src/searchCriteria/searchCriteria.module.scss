@@ -17,10 +17,14 @@
 
   label {
     display: block;
-    margin-bottom: 0px;
+    margin-bottom: 0;
     font-family: $font-family--lato-regular;
     font-size: $font-size--medium;
     font-weight: $font-weight--light;
+
+    :global(.ant-btn) {
+      border-color: $colors--neutral-4;
+    }
   }
 
   ul {
