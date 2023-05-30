@@ -4676,6 +4676,25 @@ func TestMVCCFirstSplitKey(t *testing.T) {
 			},
 		},
 		{
+			// meta1 cannot be split. Previously, this test would cause a panic in
+			// mvccMinSplitKey, called by MVCCFirstSplitKey. The iterator is
+			// initialized with a global key constraint from the endKey
+			// ("\x02\xff\xff"), but we seekGE the start key (MinKey="") which is
+			// local because it is before LocalMax (0x02).
+			keys: []roachpb.Key{
+				roachpb.Key("\x02"),
+				roachpb.Key("\x02\x00"),
+				roachpb.Key("\x02\xff"),
+			},
+			startKey: keys.MinKey,
+			endKey:   keys.Meta1KeyMax,
+			splits: []splitExpect{
+				{desired: keys.MinKey, expected: nil},
+				{desired: roachpb.Key("\x02"), expected: nil},
+				{desired: roachpb.Key("\x02\x00"), expected: nil},
+			},
+		},
+		{
 			// All keys are outside the range, no keys to spit at so expect no
 			// splits.
 			keys: []roachpb.Key{
@@ -4726,6 +4745,7 @@ func TestMVCCFirstSplitKey(t *testing.T) {
 				{desired: roachpb.Key("0"), expected: roachpb.Key("c")},
 				{desired: roachpb.Key("b"), expected: roachpb.Key("c")},
 				{desired: roachpb.Key("c"), expected: roachpb.Key("c")},
+				{desired: keys.MinKey, expected: roachpb.Key("c")},
 				// Desired split key is after the last key in the range (c), shouldn't
 				// split.
 				{desired: roachpb.Key("d"), expected: nil},
