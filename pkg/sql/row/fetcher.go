@@ -100,6 +100,11 @@ type KVBatchFetcherResponse struct {
 	ColBatch coldata.Batch
 	// spanID is the ID associated with the span that generated this response.
 	spanID int
+	// kvPairsRead tracks the number of key-values pairs that were just fetched
+	// (meaning that we needed to issue a BatchRequest to produce this
+	// response). Notably, if we already had some buffered responses from the
+	// previous BatchResponse, this number will remain zero.
+	kvPairsRead int64
 }
 
 // KVBatchFetcher abstracts the logic of fetching KVs in batches.
@@ -129,6 +134,11 @@ type KVBatchFetcher interface {
 	// GetBytesRead returns the number of bytes read by this fetcher. It is safe
 	// for concurrent use and is able to handle a case of uninitialized fetcher.
 	GetBytesRead() int64
+
+	// GetKVPairsRead returns the number of key-value pairs read by this
+	// fetcher throughout its lifetime. It is safe for concurrent use and is
+	// able to handle a case of uninitialized fetcher.
+	GetKVPairsRead() int64
 
 	// GetBatchRequestsIssued returns the number of BatchRequests issued by this
 	// fetcher throughout its lifetime. It is safe for concurrent use and is
@@ -424,6 +434,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 		}
 		rf.kvFetcher = args.StreamingKVFetcher
 	} else if !args.WillUseKVProvider {
+		var kvPairsRead int64
 		var batchRequestsIssued int64
 		fetcherArgs := newTxnKVFetcherArgs{
 			reverse:                    args.Reverse,
@@ -432,6 +443,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			lockTimeout:                args.LockTimeout,
 			acc:                        rf.kvFetcherMemAcc,
 			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,
+			kvPairsRead:                &kvPairsRead,
 			batchRequestsIssued:        &batchRequestsIssued,
 		}
 		if args.Txn != nil {
@@ -1282,6 +1294,15 @@ func (rf *Fetcher) finalizeRow() error {
 // Key returns nil when there are no more rows.
 func (rf *Fetcher) Key() roachpb.Key {
 	return rf.kv.Key
+}
+
+// GetKVPairsRead returns total number of key-value pairs read by the underlying
+// KVFetcher.
+func (rf *Fetcher) GetKVPairsRead() int64 {
+	if rf == nil || rf.kvFetcher == nil || rf.args.WillUseKVProvider {
+		return 0
+	}
+	return rf.kvFetcher.GetKVPairsRead()
 }
 
 // GetBytesRead returns total number of bytes read by the underlying KVFetcher.

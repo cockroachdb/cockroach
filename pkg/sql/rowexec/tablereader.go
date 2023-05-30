@@ -313,6 +313,7 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:           optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),
+			KVPairsRead:         optional.MakeUint(uint64(tr.fetcher.GetKVPairsRead())),
 			TuplesRead:          is.NumTuples,
 			KVTime:              is.WaitTime,
 			ContentionTime:      optional.MakeTimeValue(tr.contentionEventsListener.CumulativeContentionTime),

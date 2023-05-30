@@ -288,6 +288,7 @@ type Streamer struct {
 
 type streamerStatistics struct {
 	atomics struct {
+		kvPairsRead         *int64
 		batchRequestsIssued *int64
 		// resumeBatchRequests tracks the number of BatchRequests created for
 		// the ResumeSpans throughout the lifetime of the Streamer.
@@ -351,8 +352,11 @@ func max(a, b int64) int64 {
 // to interact with the account only after canceling the Streamer (because
 // memory accounts are not thread-safe).
 //
-// batchRequestsIssued should be incremented every time a new BatchRequest is
-// sent.
+// kvPairsRead should be incremented atomically with the sum of NumKeys
+// parameters of all received responses.
+//
+// batchRequestsIssued should be incremented atomically every time a new
+// BatchRequest is sent.
 func NewStreamer(
 	distSender *kvcoord.DistSender,
 	stopper *stop.Stopper,
@@ -361,6 +365,7 @@ func NewStreamer(
 	lockWaitPolicy lock.WaitPolicy,
 	limitBytes int64,
 	acc *mon.BoundAccount,
+	kvPairsRead *int64,
 	batchRequestsIssued *int64,
 	keyLocking lock.Strength,
 ) *Streamer {
@@ -373,9 +378,13 @@ func NewStreamer(
 		budget:     newBudget(acc, limitBytes),
 		keyLocking: keyLocking,
 	}
+	if kvPairsRead == nil {
+		kvPairsRead = new(int64)
+	}
 	if batchRequestsIssued == nil {
 		batchRequestsIssued = new(int64)
 	}
+	s.atomics.kvPairsRead = kvPairsRead
 	s.atomics.batchRequestsIssued = batchRequestsIssued
 	s.coordinator = workerCoordinator{
 		s:                      s,
@@ -861,12 +870,13 @@ func (w *workerCoordinator) logStatistics(ctx context.Context) {
 	avgResponseSize, _ := w.getAvgResponseSize()
 	log.VEventf(
 		ctx, 1,
-		"enqueueCalls=%d enqueuedRequests=%d enqueuedSingleRangeRequests=%d "+
+		"enqueueCalls=%d enqueuedRequests=%d enqueuedSingleRangeRequests=%d kvPairsRead=%d "+
 			"batchRequestsIssued=%d resumeBatchRequests=%d resumeSingleRangeRequests=%d "+
 			"numSpilledResults=%d emptyBatchResponses=%d droppedBatchResponses=%d avgResponseSize=%s",
 		w.s.enqueueCalls,
 		w.s.enqueuedRequests,
 		w.s.enqueuedSingleRangeRequests,
+		atomic.LoadInt64(w.s.atomics.kvPairsRead),
 		atomic.LoadInt64(w.s.atomics.batchRequestsIssued),
 		atomic.LoadInt64(&w.s.atomics.resumeBatchRequests),
 		atomic.LoadInt64(&w.s.atomics.resumeSingleRangeRequests),
@@ -1270,6 +1280,7 @@ func (w *workerCoordinator) performRequestAsync(
 				w.s.results.setError(err)
 				return
 			}
+			atomic.AddInt64(w.s.atomics.kvPairsRead, fp.kvPairsRead)
 
 			// Now adjust the budget based on the actual memory footprint of
 			// non-empty responses as well as resume spans, if any.
@@ -1383,6 +1394,7 @@ type singleRangeBatchResponseFootprint struct {
 	// request (i.e. the pagination of the previous request), it's not included
 	// in this number.
 	numStartedScans int
+	kvPairsRead     int64
 }
 
 func (fp singleRangeBatchResponseFootprint) hasResults() bool {
@@ -1400,6 +1412,7 @@ func calculateFootprint(
 ) (fp singleRangeBatchResponseFootprint, _ error) {
 	for i, resp := range br.Responses {
 		reply := resp.GetInner()
+		fp.kvPairsRead += reply.Header().NumKeys
 		switch req.reqs[i].GetInner().(type) {
 		case *kvpb.GetRequest:
 			get := reply.(*kvpb.GetResponse)

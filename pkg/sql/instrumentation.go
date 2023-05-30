@@ -551,7 +551,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 
 	if queryStats != nil {
 		if queryStats.KVRowsRead != 0 {
-			ob.AddKVReadStats(queryStats.KVRowsRead, queryStats.KVBytesRead, queryStats.KVBatchRequestsIssued)
+			ob.AddKVReadStats(queryStats.KVRowsRead, queryStats.KVBytesRead, queryStats.KVPairsRead, queryStats.KVBatchRequestsIssued)
 		}
 		if queryStats.KVTime != 0 {
 			ob.AddKVTime(queryStats.KVTime)
@@ -715,6 +715,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
 				nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
 				nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
+				nodeStats.KVPairsRead.MaybeAdd(stats.KV.KVPairsRead)
 				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
 				nodeStats.KVBatchRequestsIssued.MaybeAdd(stats.KV.BatchRequestsIssued)
 				nodeStats.StepCount.MaybeAdd(stats.KV.NumInterfaceSteps)
