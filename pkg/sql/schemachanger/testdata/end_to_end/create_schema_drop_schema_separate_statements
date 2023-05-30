@@ -53,7 +53,7 @@ write *eventpb.DropSchema to event log:
     statement: DROP SCHEMA ‹""›.‹sc›
     tag: DROP SCHEMA
     user: root
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 6 MutationType ops
 delete schema namespace entry {100 0 sc} -> 104
 upsert descriptor #100
   ...
