@@ -40,3 +40,9 @@ further information, and in some cases proofs, can be found.
     Proceedings of the ACM SIGMOD International Conference on Management of Data. 
     493-504. 10.1145/2463676.2465314. 
     https://www.researchgate.net/publication/262216932_On_the_correct_and_complete_enumeration_of_the_core_search_space
+
+[9] Denis Hirn and Torsten Grust. (2021).
+    One WITH RECURSIVE is Worth Many GOTOs.
+    In Proceedings of the 2021 International Conference on Management of Data (SIGMOD '21).
+    Association for Computing Machinery, New York, NY, USA, 723–735.
+    https://doi.org/10.1145/3448016.3457272
