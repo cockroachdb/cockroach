@@ -11,11 +11,13 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/sem/tree",
         "//pkg/util/json",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 
