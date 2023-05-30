@@ -177,7 +177,7 @@ func (c *conn) handleAuthentication(
 	// allowed to log in. Now we can delegate to the selected AuthMethod
 	// implementation to complete the authentication.
 	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn); err != nil {
-		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
+		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
 		if pErr := (*security.PasswordUserAuthError)(nil); errors.As(err, &pErr) {
 			err = pgerror.WithCandidateCode(err, pgcode.InvalidPassword)
 		} else {
