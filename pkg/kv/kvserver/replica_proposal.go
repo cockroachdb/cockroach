@@ -366,6 +366,17 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
+	// Log acquisition of meta and liveness range leases. These are critical to
+	// cluster health, so it's useful to know their location over time.
+	if leaseChangingHands && iAmTheLeaseHolder &&
+		r.descRLocked().StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
+		if r.ownsValidLeaseRLocked(ctx, now) {
+			log.Health.Infof(ctx, "acquired system range lease: %s", newLease)
+		} else {
+			log.Health.Warningf(ctx, "applied system range lease after it expired: %s", newLease)
+		}
+	}
+
 	st := r.leaseStatusAtRLocked(ctx, now)
 	if leaseChangingHands && newLease.Type() == roachpb.LeaseExpiration &&
 		r.ownsValidLeaseRLocked(ctx, now) && !r.shouldUseExpirationLeaseRLocked() {
