@@ -620,6 +620,31 @@ func TestRollback_create_index(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index", sctest.SingleNodeCluster)
 }
+func TestEndToEndSideEffects_create_index_create_schema_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_create_index_create_schema_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", sctest.SingleNodeCluster)
+}
+func TestGenerateSchemaChangeCorpus_create_index_create_schema_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.GenerateSchemaChangeCorpus(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", sctest.SingleNodeCluster)
+}
+func TestPause_create_index_create_schema_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Pause(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", sctest.SingleNodeCluster)
+}
+func TestRollback_create_index_create_schema_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", sctest.SingleNodeCluster)
+}
 func TestEndToEndSideEffects_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

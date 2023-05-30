@@ -11,13 +11,10 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 7 elements transitioning toward PUBLIC
+│       ├── • 6 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Schema:{DescID: 105 (sc+)}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • Precedence dependency from PUBLIC SchemaName:{DescID: 105 (sc+)}
-│       │   │   │     rule: "dependents exist before descriptor becomes public"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from PUBLIC Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
 │       │   │   │     rule: "dependents exist before descriptor becomes public"
@@ -33,12 +30,6 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
 │       │   │   │
 │       │   │   └── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105 (sc+), Name: "root"}
 │       │   │         rule: "dependents exist before descriptor becomes public"
-│       │   │
-│       │   ├── • SchemaName:{DescID: 105 (sc+)}
-│       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Schema:{DescID: 105 (sc+)}
-│       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
 │       │   ├── • Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
 │       │   │   │ ABSENT → PUBLIC
@@ -75,9 +66,9 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
 │           ├── • CreateSchemaDescriptor
 │           │     SchemaID: 105
 │           │
-│           ├── • SetSchemaName
+│           ├── • SetNameInDescriptor
+│           │     DescriptorID: 105
 │           │     Name: sc
-│           │     SchemaID: 105
 │           │
 │           ├── • AddDescriptorName
 │           │     Namespace:
@@ -116,12 +107,9 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
     │
     ├── • Stage 1 of 2 in PreCommitPhase
     │   │
-    │   ├── • 7 elements transitioning toward PUBLIC
+    │   ├── • 6 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Schema:{DescID: 105 (sc+)}
-    │   │   │     PUBLIC → ABSENT
-    │   │   │
-    │   │   ├── • SchemaName:{DescID: 105 (sc+)}
     │   │   │     PUBLIC → ABSENT
     │   │   │
     │   │   ├── • Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
@@ -151,13 +139,10 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
     │
     └── • Stage 2 of 2 in PreCommitPhase
         │
-        ├── • 7 elements transitioning toward PUBLIC
+        ├── • 6 elements transitioning toward PUBLIC
         │   │
         │   ├── • Schema:{DescID: 105 (sc+)}
         │   │   │ ABSENT → PUBLIC
-        │   │   │
-        │   │   ├── • Precedence dependency from PUBLIC SchemaName:{DescID: 105 (sc+)}
-        │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
         │   │   ├── • Precedence dependency from PUBLIC Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
         │   │   │     rule: "dependents exist before descriptor becomes public"
@@ -173,12 +158,6 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
         │   │   │
         │   │   └── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105 (sc+), Name: "root"}
         │   │         rule: "dependents exist before descriptor becomes public"
-        │   │
-        │   ├── • SchemaName:{DescID: 105 (sc+)}
-        │   │   │ ABSENT → PUBLIC
-        │   │   │
-        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Schema:{DescID: 105 (sc+)}
-        │   │         rule: "descriptor existence precedes dependents"
         │   │
         │   ├── • Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
         │   │   │ ABSENT → PUBLIC
@@ -215,9 +194,9 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
             ├── • CreateSchemaDescriptor
             │     SchemaID: 105
             │
-            ├── • SetSchemaName
+            ├── • SetNameInDescriptor
+            │     DescriptorID: 105
             │     Name: sc
-            │     SchemaID: 105
             │
             ├── • AddDescriptorName
             │     Namespace:

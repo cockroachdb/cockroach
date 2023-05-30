@@ -34,12 +34,3 @@ func (i *immediateVisitor) CreateSchemaDescriptor(
 	i.CreateDescriptor(mut)
 	return nil
 }
-
-func (i *immediateVisitor) SetSchemaName(ctx context.Context, op scop.SetSchemaName) error {
-	sc, err := i.checkOutSchema(ctx, op.SchemaID)
-	if err != nil {
-		return err
-	}
-	sc.SetName(op.Name)
-	return nil
-}

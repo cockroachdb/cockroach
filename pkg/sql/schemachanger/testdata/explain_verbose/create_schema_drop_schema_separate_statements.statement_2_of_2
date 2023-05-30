@@ -1,0 +1,15 @@
+/* setup */
+
+/* test */
+CREATE SCHEMA sc;
+EXPLAIN (ddl, verbose) DROP SCHEMA sc;
+----
+• Schema change plan for DROP SCHEMA ‹""›.‹sc›; following CREATE SCHEMA ‹defaultdb›.‹sc›;
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│
+└── • PreCommitPhase
+    │
+    └── • Stage 1 of 1 in PreCommitPhase

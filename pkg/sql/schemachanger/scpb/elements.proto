@@ -124,7 +124,6 @@ message ElementProto {
   // Schema elements.
   SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
   SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
-  SchemaName schema_name = 92 [(gogoproto.moretags) = "parent:\"Schema\""];
 
     // SchemaChild elements.
     SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
@@ -715,9 +714,4 @@ message FunctionParamDefaultExpression {
 
 message ElementCreationMetadata {
   bool in_23_1_or_later = 1;
-}
-
-message SchemaName {
-  uint32 schema_id = 1 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  string name = 2;
 }
