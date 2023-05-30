@@ -15,6 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -27,11 +28,12 @@ import (
 
 // ReplicaMetrics contains details on the current status of the replica.
 type ReplicaMetrics struct {
-	Leader      bool
-	LeaseValid  bool
-	Leaseholder bool
-	LeaseType   roachpb.LeaseType
-	LeaseStatus kvserverpb.LeaseStatus
+	Leader        bool
+	LeaseValid    bool
+	Leaseholder   bool
+	LeaseType     roachpb.LeaseType
+	LeaseStatus   kvserverpb.LeaseStatus
+	LivenessLease bool
 
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
@@ -125,12 +127,14 @@ type calcReplicaMetricsInput struct {
 }
 
 func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
-	var validLease, validLeaseOwner bool
+	var validLease, validLeaseOwner, livenessLease bool
 	var validLeaseType roachpb.LeaseType
 	if d.leaseStatus.IsValid() {
 		validLease = true
 		validLeaseOwner = d.leaseStatus.Lease.OwnedBy(d.storeID)
 		validLeaseType = d.leaseStatus.Lease.Type()
+		livenessLease = validLeaseOwner &&
+			keys.NodeLivenessSpan.Overlaps(d.desc.RSpan().AsRawSpanWithNoLocals())
 	}
 
 	rangeCounter, unavailable, underreplicated, overreplicated := calcRangeCounter(
@@ -152,6 +156,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		Leaseholder:     validLeaseOwner,
 		LeaseType:       validLeaseType,
 		LeaseStatus:     d.leaseStatus,
+		LivenessLease:   livenessLease,
 		Quiescent:       d.quiescent,
 		Ticking:         d.ticking,
 		RangeCounter:    rangeCounter,
