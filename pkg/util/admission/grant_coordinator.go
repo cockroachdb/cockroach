@@ -145,6 +145,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 						}
 					}
 
+					systemLoaded = false
 					if systemLoaded {
 						currTickDuration = loadedDuration
 					} else {

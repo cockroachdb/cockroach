@@ -160,6 +160,10 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("print-only-first-tick") {
 					d.ScanArgs(t, "print-only-first-tick", &printOnlyFirstTick)
 				}
+				var systemLoaded bool
+				if d.HasArg("loaded") {
+					d.ScanArgs(t, "loaded", &systemLoaded)
+				}
 
 				ioll.pebbleMetricsTick(ctx, StoreMetrics{
 					Metrics:         &metrics,
@@ -180,8 +184,13 @@ func TestIOLoadListener(t *testing.T) {
 					fmt.Fprintf(&buf, "%s\n", req.buf.String())
 					req.buf.Reset()
 				}
-				for i := 0; i < int(unloadedDuration.ticksInAdjustmentInterval()); i++ {
-					ioll.allocateTokensTick(unloadedDuration)
+
+				var currDuration = unloadedDuration
+				if systemLoaded {
+					currDuration = loadedDuration
+				}
+				for i := 0; i < int(currDuration.ticksInAdjustmentInterval()); i++ {
+					ioll.allocateTokensTick(currDuration)
 					if i == 0 || !printOnlyFirstTick {
 						fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
 					}
