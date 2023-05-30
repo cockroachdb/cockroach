@@ -286,6 +286,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+
 	if opts.TotalOrdering() {
 		sink := &orderedSink{
 			wrapped:     ca.sink,
@@ -1825,7 +1826,7 @@ func (m *orderedRowMerger) emitUntilFrontier(ctx context.Context) error {
 
 			// TODO: Incorporate memory accounting
 			alloc := kvevent.Alloc{}
-			err := m.sink.EmitRow(ctx, next.row.Topic, next.row.Key, next.row.Value, next.row.Updated, next.row.Mvcc, alloc)
+			err := m.sink.EmitRow(ctx, next.row.Key, next.row.Value, sinkTopic{name: next.row.TopicName, version: next.row.TopicVersion}, next.row.Updated, next.row.Mvcc, alloc)
 			if err != nil {
 				return err
 			}

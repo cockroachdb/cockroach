@@ -340,13 +340,13 @@ func (s *kafkaSink) NameTopic(topicDescr TopicDescriptor) (string, error) {
 // EmitRow implements the Sink interface.
 func (s *kafkaSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	msg := &sarama.ProducerMessage{
-		Topic:    topic,
+		Topic:    topic.name,
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
 		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordOneMessage()},

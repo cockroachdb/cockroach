@@ -167,8 +167,8 @@ func freeSinkBatchEvent(b *sinkBatch) {
 // EmitRow implements the Sink interface.
 func (s *batchingSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
@@ -177,7 +177,7 @@ func (s *batchingSink) EmitRow(
 	payload := newRowEvent()
 	payload.key = key
 	payload.val = value
-	payload.topic = topic
+	payload.topic = topic.name
 	payload.mvcc = mvcc
 	payload.alloc = alloc
 
@@ -432,7 +432,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 					isTimerPending = true
 				}
 
-        topic := r.topic
+				topic := r.topic
 				batchBuffer, ok := topicBatches[topic]
 				if !ok {
 					batchBuffer = s.newBatchBuffer(topic)

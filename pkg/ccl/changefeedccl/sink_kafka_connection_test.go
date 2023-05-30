@@ -51,7 +51,7 @@ func (e *externalConnectionKafkaSink) Close() error {
 
 // EmitRow implements the Sink interface.
 func (e *externalConnectionKafkaSink) EmitRow(
-	_ context.Context, _ string, _, _ []byte, _, _ hlc.Timestamp, _ kvevent.Alloc,
+	_ context.Context, _, _ []byte, _ sinkTopic, _, _ hlc.Timestamp, _ kvevent.Alloc,
 ) error {
 	return nil
 }

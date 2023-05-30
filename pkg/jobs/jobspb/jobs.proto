@@ -1022,9 +1022,12 @@ message OrderedRows {
   message Row {
     bytes key = 1;
     bytes value = 2;
-    string topic = 3;
-    util.hlc.Timestamp updated = 4 [(gogoproto.nullable) = false];
-    util.hlc.Timestamp mvcc = 5 [(gogoproto.nullable) = false];
+    string topic_name = 3;
+    uint64 topic_version = 4 [
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.DescriptorVersion"
+    ];
+    util.hlc.Timestamp updated = 5 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp mvcc = 6 [(gogoproto.nullable) = false];
   }
   repeated Row rows = 2 [(gogoproto.nullable) = false];
 }

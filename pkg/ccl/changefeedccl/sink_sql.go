@@ -130,8 +130,8 @@ func (s *sqlSink) NameTopic(topic TopicDescriptor) (string, error) {
 // EmitRow implements the Sink interface.
 func (s *sqlSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
@@ -149,7 +149,7 @@ func (s *sqlSink) EmitRow(
 	}
 
 	var noResolved []byte
-	return s.emit(ctx, topic, partition, key, value, noResolved)
+	return s.emit(ctx, topic.name, partition, key, value, noResolved)
 }
 
 // EmitResolvedTimestamp implements the Sink interface.

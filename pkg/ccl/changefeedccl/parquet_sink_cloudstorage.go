@@ -109,8 +109,8 @@ func (parquetSink *parquetCloudStorageSink) NameTopic(topic TopicDescriptor) (st
 // parquetCloudStorageSink implements the Sink interface.
 func (parquetSink *parquetCloudStorageSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
@@ -148,7 +148,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
 	prevRow cdcevent.Row,
-	topic string,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {

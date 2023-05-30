@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -89,10 +90,10 @@ type EventSink interface {
 	// error may be returned if a previously enqueued message has failed.
 	EmitRow(
 		ctx context.Context,
-		topic string,
 		key, value []byte,
+		topic sinkTopic,
 		updated, mvcc hlc.Timestamp,
-		alloc kvevent.Alloc,
+		loc kvevent.Alloc,
 	) error
 
 	// NameTopic constructs the formatted topic string for a topic descriptor.
@@ -120,6 +121,15 @@ type ResolvedTimestampSink interface {
 // the topics that a changefeed will emit to.
 type SinkWithTopics interface {
 	Topics() []string
+}
+
+type sinkTopic struct {
+	name string
+
+	// Topics are often based on a descriptor like a table name, and different
+	// versions of the same table may be treated differently (see
+	// sink_cloudstorage).
+	version descpb.DescriptorVersion
 }
 
 func getEventSink(
@@ -407,12 +417,12 @@ func (s *errorWrapperSink) getConcreteType() sinkType {
 // EmitRow implements Sink interface.
 func (s errorWrapperSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
+	if err := s.wrapped.(EventSink).EmitRow(ctx, key, value, topic, updated, mvcc, alloc); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -454,7 +464,7 @@ func (s errorWrapperSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
 	prevRow cdcevent.Row,
-	topic string,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
@@ -504,8 +514,8 @@ func (s *bufferSink) getConcreteType() sinkType {
 // EmitRow implements the Sink interface.
 func (s *bufferSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 ) error {
@@ -518,7 +528,7 @@ func (s *bufferSink) EmitRow(
 
 	s.buf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
-		{Datum: s.alloc.NewDString(tree.DString(topic))},
+		{Datum: s.alloc.NewDString(tree.DString(topic.name))},
 		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},   // key
 		{Datum: s.alloc.NewDBytes(tree.DBytes(value))}, // value
 	})
@@ -613,8 +623,8 @@ func (n *nullSink) pace(ctx context.Context) error {
 // EmitRow implements Sink interface.
 func (n *nullSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
 ) error {
@@ -701,14 +711,14 @@ func (s *safeSink) NameTopic(topic TopicDescriptor) (string, error) {
 
 func (s *safeSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	s.Lock()
 	defer s.Unlock()
-	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc)
+	return s.wrapped.EmitRow(ctx, key, value, topic, updated, mvcc, alloc)
 }
 
 func (s *safeSink) Flush(ctx context.Context) error {
@@ -730,7 +740,7 @@ type SinkWithEncoder interface {
 		ctx context.Context,
 		updatedRow cdcevent.Row,
 		prevRow cdcevent.Row,
-		topic string,
+		topic sinkTopic,
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
@@ -959,19 +969,20 @@ func (s *orderedSink) NameTopic(topic TopicDescriptor) (string, error) {
 // EmitRow implements the Sink interface.
 func (s *orderedSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	s.unorderedBuf = append(s.unorderedBuf, orderedSinkRow{
 		alloc: alloc,
 		row: jobspb.OrderedRows_Row{
-			Key:     key,
-			Value:   value,
-			Updated: updated,
-			Mvcc:    mvcc,
-			Topic:   topic,
+			Key:          key,
+			Value:        value,
+			Updated:      updated,
+			Mvcc:         mvcc,
+			TopicName:    topic.name,
+			TopicVersion: topic.version,
 		},
 	})
 	return nil

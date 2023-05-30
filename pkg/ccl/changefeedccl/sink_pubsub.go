@@ -198,8 +198,8 @@ func (p *deprecatedPubsubSink) NameTopic(topic TopicDescriptor) (string, error) 
 // EmitRow pushes a message to event channel where it is consumed by workers
 func (p *deprecatedPubsubSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated hlc.Timestamp,
 	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
@@ -209,7 +209,7 @@ func (p *deprecatedPubsubSink) EmitRow(
 		alloc: alloc, isFlush: false, mvcc: mvcc, message: payload{
 			Key:   key,
 			Value: value,
-			Topic: topic,
+			Topic: topic.name,
 		}}
 
 	// calculate index by hashing key

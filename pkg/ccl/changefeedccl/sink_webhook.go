@@ -632,8 +632,8 @@ func (s *deprecatedWebhookSink) NameTopic(topic TopicDescriptor) (string, error)
 
 func (s *deprecatedWebhookSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {

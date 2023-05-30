@@ -26,14 +26,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,25 +40,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeTopic(name string) string {
-	// func makeTopic(name string) *tableDescriptorTopic {
-	return name
-	// id, _ := strconv.ParseUint(name, 36, 64)
-	// desc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
-	// spec := changefeedbase.Target{
-	// 	Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-	// 	TableID:           desc.GetID(),
-	// 	StatementTimeName: changefeedbase.StatementTimeName(name),
-	// }
-	// return &tableDescriptorTopic{Metadata: makeMetadata(desc), spec: spec}
-}
-
-func makeMetadata(desc catalog.TableDescriptor) cdcevent.Metadata {
-	return cdcevent.Metadata{
-		TableID:   desc.GetID(),
-		TableName: desc.GetName(),
-		Version:   desc.GetVersion(),
-	}
+func makeTopic(name string) sinkTopic {
+	return sinkTopic{name: name}
 }
 
 func TestCloudStorageSink(t *testing.T) {
@@ -217,7 +198,7 @@ func TestCloudStorageSink(t *testing.T) {
 		defer func() { require.NoError(t, s.Close()) }()
 		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`v1`), t1, ts(1), ts(1), zeroAlloc))
 		require.NoError(t, s.Flush(ctx))
 
 		require.Equal(t, []string{
@@ -277,9 +258,9 @@ func TestCloudStorageSink(t *testing.T) {
 				// the ordering among these two files is non deterministic as either of them could
 				// be flushed first (and thus be assigned fileID 0).
 				var pool testAllocPool
-				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1), ts(1), pool.alloc()))
-				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v2`), ts(1), ts(1), pool.alloc()))
-				require.NoError(t, s.EmitRow(ctx, t2, noKey, []byte(`w1`), ts(3), ts(3), pool.alloc()))
+				require.NoError(t, s.EmitRow(ctx, noKey, []byte(`v1`), t1, ts(1), ts(1), pool.alloc()))
+				require.NoError(t, s.EmitRow(ctx, noKey, []byte(`v2`), t1, ts(1), ts(1), pool.alloc()))
+				require.NoError(t, s.EmitRow(ctx, noKey, []byte(`w1`), t2, ts(3), ts(3), pool.alloc()))
 				require.NoError(t, s.Flush(ctx))
 				require.EqualValues(t, 0, pool.used())
 				expected := []string{
@@ -297,7 +278,7 @@ func TestCloudStorageSink(t *testing.T) {
 				require.Equal(t, expected, actual)
 
 				// Without a flush, nothing new shows up.
-				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v3`), ts(3), ts(3), zeroAlloc))
+				require.NoError(t, s.EmitRow(ctx, noKey, []byte(`v3`), t1, ts(3), ts(3), zeroAlloc))
 				actual = slurpDir(t)
 				sort.Strings(actual)
 				require.Equal(t, expected, actual)
@@ -316,9 +297,9 @@ func TestCloudStorageSink(t *testing.T) {
 				// after the rows emitted above.
 				require.True(t, forwardFrontier(sf, testSpan, 4))
 				require.NoError(t, s.Flush(ctx))
-				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v4`), ts(4), ts(4), zeroAlloc))
+				require.NoError(t, s.EmitRow(ctx, noKey, []byte(`v4`), t1, ts(4), ts(4), zeroAlloc))
 				// t1.Version = 2
-				require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v5`), ts(5), ts(5), zeroAlloc))
+				require.NoError(t, s.EmitRow(ctx, noKey, []byte(`v5`), t1, ts(5), ts(5), zeroAlloc))
 				require.NoError(t, s.Flush(ctx))
 				expected = []string{
 					"v4\n",
@@ -362,8 +343,8 @@ func TestCloudStorageSink(t *testing.T) {
 		// Each node writes some data at the same timestamp. When this data is
 		// written out, the files have different names and don't conflict because
 		// the sinks have different job session IDs.
-		require.NoError(t, s1.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1), ts(1), zeroAlloc))
-		require.NoError(t, s2.EmitRow(ctx, t1, noKey, []byte(`w1`), ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s1.EmitRow(ctx, noKey, []byte(`v1`), t1, ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s2.EmitRow(ctx, noKey, []byte(`w1`), t1, ts(1), ts(1), zeroAlloc))
 		require.NoError(t, s1.Flush(ctx))
 		require.NoError(t, s2.Flush(ctx))
 		require.Equal(t, []string{
@@ -397,8 +378,8 @@ func TestCloudStorageSink(t *testing.T) {
 		s1R.(*cloudStorageSink).jobSessionID = "a"
 		s2R.(*cloudStorageSink).jobSessionID = "b"
 		// Each resends the data it did before.
-		require.NoError(t, s1R.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1), ts(1), zeroAlloc))
-		require.NoError(t, s2R.EmitRow(ctx, t1, noKey, []byte(`w1`), ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s1R.EmitRow(ctx, noKey, []byte(`v1`), t1, ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s2R.EmitRow(ctx, noKey, []byte(`w1`), t1, ts(1), ts(1), zeroAlloc))
 		require.NoError(t, s1R.Flush(ctx))
 		require.NoError(t, s2R.Flush(ctx))
 		// s1 data ends up being overwritten, s2 data ends up duplicated.
@@ -440,17 +421,17 @@ func TestCloudStorageSink(t *testing.T) {
 		s2.(*cloudStorageSink).jobSessionID = "b" // Force deterministic job session ID.
 
 		// Good job writes
-		require.NoError(t, s1.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1), ts(1), zeroAlloc))
-		require.NoError(t, s1.EmitRow(ctx, t1, noKey, []byte(`v2`), ts(2), ts(2), zeroAlloc))
+		require.NoError(t, s1.EmitRow(ctx, noKey, []byte(`v1`), t1, ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s1.EmitRow(ctx, noKey, []byte(`v2`), t1, ts(2), ts(2), zeroAlloc))
 		require.NoError(t, s1.Flush(ctx))
 
 		// Zombie job writes partial duplicate data
-		require.NoError(t, s2.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s2.EmitRow(ctx, noKey, []byte(`v1`), t1, ts(1), ts(1), zeroAlloc))
 		require.NoError(t, s2.Flush(ctx))
 
 		// Good job continues. There are duplicates in the data but nothing was
 		// lost.
-		require.NoError(t, s1.EmitRow(ctx, t1, noKey, []byte(`v3`), ts(3), ts(3), zeroAlloc))
+		require.NoError(t, s1.EmitRow(ctx, noKey, []byte(`v3`), t1, ts(3), ts(3), zeroAlloc))
 		require.NoError(t, s1.Flush(ctx))
 		require.Equal(t, []string{
 			"v1\nv2\n",
@@ -480,7 +461,7 @@ func TestCloudStorageSink(t *testing.T) {
 		// Writing more than the max file size chunks the file up and flushes it
 		// out as necessary.
 		for i := int64(1); i <= 5; i++ {
-			require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(fmt.Sprintf(`v%d`, i)), ts(i), ts(i), zeroAlloc))
+			require.NoError(t, s.EmitRow(ctx, noKey, []byte(fmt.Sprintf(`v%d`, i)), t1, ts(i), ts(i), zeroAlloc))
 		}
 		require.NoError(t, waitAsyncFlush(s))
 		require.Equal(t, []string{
@@ -503,7 +484,7 @@ func TestCloudStorageSink(t *testing.T) {
 		// Some more data is written. Some of it flushed out because of the max
 		// file size.
 		for i := int64(6); i < 10; i++ {
-			require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(fmt.Sprintf(`v%d`, i)), ts(i), ts(i), zeroAlloc))
+			require.NoError(t, s.EmitRow(ctx, noKey, []byte(fmt.Sprintf(`v%d`, i)), t1, ts(i), ts(i), zeroAlloc))
 		}
 		require.NoError(t, waitAsyncFlush(s))
 		require.Equal(t, []string{
@@ -627,7 +608,7 @@ func TestCloudStorageSink(t *testing.T) {
 						require.NoError(t, err)
 						require.NoError(t, s.Flush(ctx))
 
-						require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(fmt.Sprintf(`v%d`, i)), hlcTime, hlcTime, zeroAlloc))
+						require.NoError(t, s.EmitRow(ctx, noKey, []byte(fmt.Sprintf(`v%d`, i)), t1, hlcTime, hlcTime, zeroAlloc))
 					}
 
 					require.NoError(t, s.Flush(ctx)) // Flush the last file
@@ -653,8 +634,8 @@ func TestCloudStorageSink(t *testing.T) {
 
 		// Simulate initial scan, which emits data at a timestamp, then an equal
 		// resolved timestamp.
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`is1`), ts(1), ts(1), zeroAlloc))
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`is2`), ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`is1`), t1, ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`is2`), t1, ts(1), ts(1), zeroAlloc))
 		require.NoError(t, s.Flush(ctx))
 		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(1)))
 
@@ -664,13 +645,13 @@ func TestCloudStorageSink(t *testing.T) {
 		// be after the resolved timestamp emitted above.
 		require.True(t, forwardFrontier(sf, testSpan, 2))
 		require.NoError(t, s.Flush(ctx))
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e2`), ts(2), ts(2), zeroAlloc))
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e3prev`), ts(3).Prev(), ts(3).Prev(), zeroAlloc))
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e3`), ts(3), ts(3), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`e2`), t1, ts(2), ts(2), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`e3prev`), t1, ts(3).Prev(), ts(3).Prev(), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`e3`), t1, ts(3), ts(3), zeroAlloc))
 		require.True(t, forwardFrontier(sf, testSpan, 3))
 		require.NoError(t, s.Flush(ctx))
 		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(3)))
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`e3next`), ts(3).Next(), ts(3).Next(), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`e3next`), t1, ts(3).Next(), ts(3).Next(), zeroAlloc))
 		require.NoError(t, s.Flush(ctx))
 		require.NoError(t, s.EmitResolvedTimestamp(ctx, e, ts(4)))
 
@@ -685,7 +666,7 @@ func TestCloudStorageSink(t *testing.T) {
 
 		// Test that files with timestamp lower than the least resolved timestamp
 		// as of file creation time are ignored.
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`noemit`), ts(1).Next(), ts(1).Next(), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`noemit`), t1, ts(1).Next(), ts(1).Next(), zeroAlloc))
 		require.Equal(t, []string{
 			"is1\nis2\n",
 			`{"resolved":"1.0000000000"}`,
@@ -709,13 +690,13 @@ func TestCloudStorageSink(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { require.NoError(t, s.Close()) }()
 
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1), ts(1), zeroAlloc))
-		// t1.Version = 1
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v3`), ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`v1`), t1, ts(1), ts(1), zeroAlloc))
+		t1.version = 1
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`v3`), t1, ts(1), ts(1), zeroAlloc))
 		// Make the first file exceed its file size threshold. This should trigger a flush
 		// for the first file but not the second one.
-		// t1.Version = 0
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`trigger-flush-v1`), ts(1), ts(1), zeroAlloc))
+		t1.version = 0
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`trigger-flush-v1`), t1, ts(1), ts(1), zeroAlloc))
 		require.NoError(t, waitAsyncFlush(s))
 		require.Equal(t, []string{
 			"v1\ntrigger-flush-v1\n",
@@ -723,9 +704,9 @@ func TestCloudStorageSink(t *testing.T) {
 
 		// Now make the file with the newer schema exceed its file size threshold and ensure
 		// that the file with the older schema is flushed (and ordered) before.
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v2`), ts(1), ts(1), zeroAlloc))
-		// t1.Version = 1
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`trigger-flush-v3`), ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`v2`), t1, ts(1), ts(1), zeroAlloc))
+		t1.version = 1
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`trigger-flush-v3`), t1, ts(1), ts(1), zeroAlloc))
 		require.NoError(t, waitAsyncFlush(s))
 		require.Equal(t, []string{
 			"v1\ntrigger-flush-v1\n",
@@ -734,9 +715,9 @@ func TestCloudStorageSink(t *testing.T) {
 		}, slurpDir(t))
 
 		// Calling `Flush()` on the sink should emit files in the order of their schema IDs.
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`w1`), ts(1), ts(1), zeroAlloc))
-		// t1.Version = 0
-		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`x1`), ts(1), ts(1), zeroAlloc))
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`w1`), t1, ts(1), ts(1), zeroAlloc))
+		t1.version = 0
+		require.NoError(t, s.EmitRow(ctx, noKey, []byte(`x1`), t1, ts(1), ts(1), zeroAlloc))
 		require.NoError(t, s.Flush(ctx))
 		require.Equal(t, []string{
 			"v1\ntrigger-flush-v1\n",

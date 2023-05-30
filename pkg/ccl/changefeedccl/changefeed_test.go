@@ -7914,8 +7914,8 @@ func (s *memoryHoggingSink) NameTopic(topic TopicDescriptor) (string, error) {
 
 func (s *memoryHoggingSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {

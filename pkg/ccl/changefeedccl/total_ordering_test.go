@@ -36,8 +36,8 @@ type testOrderedSink struct {
 func (s *testOrderedSink) emitTs(wallTime int64) {
 	require.NoError(s.t, s.EmitRow(
 		context.Background(),
-		"mock",
 		[]byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"topic:\":\"foo\"}"),
+		sinkTopic{name: "mock"},
 		hlc.Timestamp{WallTime: wallTime},
 		zeroTS,
 		s.pool.alloc()),
@@ -77,7 +77,7 @@ func (s *testOrderedSink) flushAndVerify(wallTime int64) int {
 	for _, orderedRow := range payload.Rows {
 		tdebug(fmt.Sprintf("GOT %d", orderedRow.Updated.WallTime))
 		require.False(s.t, orderedRow.Mvcc.Less(lastTs))
-		require.Equal(s.t, "mock", orderedRow.Topic)
+		require.Equal(s.t, "mock", orderedRow.TopicName)
 		lastTs = orderedRow.Mvcc
 	}
 
@@ -160,14 +160,14 @@ func (ms *mockSink) Dial() error {
 }
 func (ms *mockSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	require.True(ms.t, mvcc.LessEq(ms.frontier.Frontier()) || mvcc.Equal(ms.frontier.BackfillTS()))
 	require.False(ms.t, mvcc.Less(ms.lastUpdated), fmt.Sprintf("%s not less than %s", mvcc, ms.lastUpdated))
-	require.Equal(ms.t, "mock", topic)
+	require.Equal(ms.t, "mock", topic.name)
 	ms.lastUpdated = mvcc
 	ms.buffered += 1
 	return nil

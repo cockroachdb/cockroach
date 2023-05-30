@@ -489,14 +489,9 @@ func (s *cloudStorageSink) NameTopic(topic TopicDescriptor) (string, error) {
 }
 
 func (s *cloudStorageSink) getOrCreateFile(
-	topic string, eventMVCC hlc.Timestamp,
+	topic sinkTopic, eventMVCC hlc.Timestamp,
 ) (*cloudStorageSinkFile, error) {
-	// name, _ := s.topicNamer.Name(topic)
-	// var key cloudStorageSinkKey
-	// if topic != nil {
-	// 	key = cloudStorageSinkKey{name, int64(topic.GetVersion())}
-	// }
-	key := cloudStorageSinkKey{topic: topic}
+	key := cloudStorageSinkKey{topic.name, int64(topic.version)}
 	if item := s.files.Get(key); item != nil {
 		f := item.(*cloudStorageSinkFile)
 		if eventMVCC.Less(f.oldestMVCC) {
@@ -524,8 +519,8 @@ func (s *cloudStorageSink) getOrCreateFile(
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
-	topic string,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
