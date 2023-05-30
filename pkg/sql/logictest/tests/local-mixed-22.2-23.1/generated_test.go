@@ -2039,6 +2039,13 @@ func TestLogic_udf_oid_ref(
 	runLogicTest(t, "udf_oid_ref")
 }
 
+func TestLogic_udf_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_plpgsql")
+}
+
 func TestLogic_udf_record(
 	t *testing.T,
 ) {
