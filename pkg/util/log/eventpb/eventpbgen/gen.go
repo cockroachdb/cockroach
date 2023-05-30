@@ -655,7 +655,9 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
    {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
      b = append(b, "\"{{.FieldName}}\":"...)
-     b = strconv.AppendInt(b, int64(m.{{.FieldName}}), 10)
+     // Enums are defined in our code, so are always safe to print without
+     // redaction.
+     b = append(b, m.{{.FieldName}}.String()...)
    {{ if not .AllowZeroValue -}}
    }
    {{- end }}
