@@ -53,7 +53,7 @@ let $temp_schema
 SELECT schema_name FROM [show schemas] WHERE schema_name LIKE '%pg_temp%'
 
 # Check pg_temp grants.
-query TT colnames
+query TT colnames,rowsort
 SELECT grantee, privilege_type FROM [SHOW GRANTS ON SCHEMA $temp_schema]
 ----
 grantee  privilege_type
