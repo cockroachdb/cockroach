@@ -23,7 +23,6 @@ import {
   indexNameAttr,
 } from "src/util/constants";
 import {
-  generateTableID,
   refreshIndexStats,
   refreshNodes,
   refreshUserSQLRoles,
@@ -63,7 +62,7 @@ export const mapStateToProps = createSelector(
     hasAdminRole,
     timeScale,
   ): IndexDetailsPageData => {
-    const stats = indexStats[generateTableID(database, table)];
+    const stats = indexStats[util.generateTableID(database, table)];
     const details = stats?.data?.statistics.filter(
       stat => stat.index_name === index, // index names must be unique for a table
     )[0];
