@@ -361,6 +361,7 @@ func (p *planner) maybeLogStatementInternal(
 				MaxMemUsage:                           queryLevelStats.MaxMemUsage,
 				MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
 				KVBytesRead:                           queryLevelStats.KVBytesRead,
+				KVPairsRead:                           queryLevelStats.KVPairsRead,
 				KVRowsRead:                            queryLevelStats.KVRowsRead,
 				KvTimeNanos:                           queryLevelStats.KVTime.Nanoseconds(),
 				KvGrpcCalls:                           queryLevelStats.KVBatchRequestsIssued,

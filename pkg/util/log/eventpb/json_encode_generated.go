@@ -4506,6 +4506,15 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendInt(b, int64(m.KVBytesRead), 10)
 	}
 
+	if m.KVPairsRead != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KVPairsRead\":"...)
+		b = strconv.AppendInt(b, int64(m.KVPairsRead), 10)
+	}
+
 	if m.KVRowsRead != 0 {
 		if printComma {
 			b = append(b, ',')
