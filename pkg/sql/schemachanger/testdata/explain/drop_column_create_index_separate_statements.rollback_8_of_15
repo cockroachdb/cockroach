@@ -10,18 +10,18 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 5 elements transitioning toward PUBLIC
-      │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 104, ColumnID: 2}
-      │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 104, ColumnID: 4}
-      │    │    ├── VALIDATED  → PUBLIC      SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-      │    │    ├── ABSENT     → PUBLIC      ColumnName:{DescID: 104, Name: j, ColumnID: 2}
-      │    │    └── ABSENT     → PUBLIC      ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 4}
+      │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 104 (t), ColumnID: 2 (j+)}
+      │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr+)}
+      │    │    ├── VALIDATED  → PUBLIC      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx+)}
+      │    │    ├── ABSENT     → PUBLIC      ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
+      │    │    └── ABSENT     → PUBLIC      ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 4 (crdb_internal_idx_expr+)}
       │    ├── 6 elements transitioning toward ABSENT
-      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
-      │    │    ├── WRITE_ONLY → DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-      │    │    └── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey-)}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 3 (t_pkey-)}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
+      │    │    ├── WRITE_ONLY → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
+      │    │    └── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
       │    └── 16 Mutation operations
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
@@ -41,10 +41,10 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 4 elements transitioning toward ABSENT
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 3}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 4}
-           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
-           │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (t_pkey-)}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
+           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
+           │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
            └── 6 Mutation operations
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":4,"TableID":104}

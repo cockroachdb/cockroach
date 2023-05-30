@@ -823,12 +823,16 @@ func (bc buildContext) makeDescriptorStates(cur, next *Stage) map[descpb.ID]*scp
 	// Initialize the descriptor states.
 	ds := make(map[descpb.ID]*scpb.DescriptorState, bc.descIDs.Len())
 	bc.descIDs.ForEach(func(id descpb.ID) {
-		ds[id] = &scpb.DescriptorState{
+		s := &scpb.DescriptorState{
 			Authorization: bc.targetState.Authorization,
 			JobID:         bc.scJobID(),
 			InRollback:    bc.rollback,
 			Revertible:    isRevertible(next),
 		}
+		if nm := scpb.NameMappings(bc.targetState.NameMappings).Find(id); nm != nil {
+			s.NameMapping = *nm
+		}
+		ds[id] = s
 	})
 	mkStmt := func(rank uint32) scpb.DescriptorState_Statement {
 		return scpb.DescriptorState_Statement{

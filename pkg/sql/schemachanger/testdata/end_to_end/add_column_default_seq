@@ -191,6 +191,18 @@ upsert descriptor #106
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": l
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 106
+  +      indexes:
+  +        "2": tbl_pkey
+  +      name: tbl
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
@@ -303,6 +315,9 @@ upsert descriptor #107
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 107
+  +      name: sq1
   +    revertible: true
   +  dependedOnBy:
   +  - byId: true
@@ -624,8 +639,8 @@ upsert descriptor #106
   +  version: "7"
 upsert descriptor #107
   ...
-         userName: root
-       jobId: "1"
+         id: 107
+         name: sq1
   -    revertible: true
      dependedOnBy:
      - byId: true
@@ -706,6 +721,18 @@ upsert descriptor #106
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": l
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 106
+  -      indexes:
+  -        "2": tbl_pkey
+  -      name: tbl
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
@@ -758,6 +785,9 @@ upsert descriptor #107
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping:
+  -      id: 107
+  -      name: sq1
      dependedOnBy:
      - byId: true
   ...

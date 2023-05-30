@@ -60,6 +60,9 @@ upsert descriptor #107
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 107
+  +      name: t
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP TABLE ‹db›.‹sc›.‹t›
@@ -98,6 +101,9 @@ upsert descriptor #107
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      id: 107
+  -      name: t
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: DROP TABLE ‹db›.‹sc›.‹t›

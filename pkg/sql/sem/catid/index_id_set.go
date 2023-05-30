@@ -27,10 +27,10 @@ func MakeIndexIDSet(vals ...IndexID) IndexSet {
 }
 
 // Add adds an index to the set. No-op if the index is already in the set.
-func (s *IndexSet) Add(col IndexID) { s.set.Add(int(col)) }
+func (s *IndexSet) Add(indexID IndexID) { s.set.Add(int(indexID)) }
 
 // Contains returns true if the set contains the index.
-func (s IndexSet) Contains(col IndexID) bool { return s.set.Contains(int(col)) }
+func (s IndexSet) Contains(indexID IndexID) bool { return s.set.Contains(int(indexID)) }
 
 // Empty returns true if the set is empty.
 func (s IndexSet) Empty() bool { return s.set.Empty() }

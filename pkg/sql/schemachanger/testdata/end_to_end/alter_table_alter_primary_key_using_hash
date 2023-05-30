@@ -223,6 +223,22 @@ upsert descriptor #104
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "3": crdb_internal_j_shard_3
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      constraints:
+  +        "2": check_crdb_internal_j_shard_3
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "2": t_pkey
+  +        "4": t_i_key
+  +      name: t
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY
@@ -919,6 +935,22 @@ upsert descriptor #104
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "3": crdb_internal_j_shard_3
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "2": check_crdb_internal_j_shard_3
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "2": t_pkey
+  -        "4": t_i_key
+  -      name: t
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY

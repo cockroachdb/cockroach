@@ -13,185 +13,185 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │
 │       ├── • 23 elements transitioning toward ABSENT
 │       │   │
-│       │   ├── • Namespace:{DescID: 105, Name: t, ReferencedDescID: 100}
+│       │   ├── • Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • Owner:{DescID: 105}
+│       │   ├── • Owner:{DescID: 105 (t-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: admin}
+│       │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: root}
+│       │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • Table:{DescID: 105}
+│       │   ├── • Table:{DescID: 105 (t-)}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (public)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
-│       │   ├── • ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}
+│       │   ├── • ColumnFamily:{DescID: 105 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
 │       │   │   │     rule: "column type removed before column family"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
 │       │   │   │     rule: "column type removed before column family"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │     rule: "column type removed before column family"
 │       │   │   │
-│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │       │   │         rule: "column type removed before column family"
 │       │   │
-│       │   ├── • Column:{DescID: 105, ColumnID: 1}
+│       │   ├── • Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "relation dropped before dependent column"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 105, Name: i, ColumnID: 1}
+│       │   ├── • ColumnName:{DescID: 105 (t-), Name: "i", ColumnID: 1 (i-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 1}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}
+│       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 1}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}
+│       │   ├── • ColumnNotNull:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 0}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "relation dropped before dependent constraint"
 │       │   │
-│       │   ├── • Column:{DescID: 105, ColumnID: 2}
+│       │   ├── • Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "relation dropped before dependent column"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 105, Name: b, ColumnID: 2}
+│       │   ├── • ColumnName:{DescID: 105 (t-), Name: "b", ColumnID: 2 (b-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 2}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}
+│       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedFunctionIDs: [104]}
+│       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (#104)]}
 │       │   │         rule: "column type dependents removed right before column type"
 │       │   │
-│       │   ├── • ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedFunctionIDs: [104]}
+│       │   ├── • ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (#104)]}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 2}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • Column:{DescID: 105, ColumnID: 4294967295}
+│       │   ├── • Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "relation dropped before dependent column"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+│       │   ├── • ColumnName:{DescID: 105 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 4294967295}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 4294967295}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • Column:{DescID: 105, ColumnID: 4294967294}
+│       │   ├── • Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "relation dropped before dependent column"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}
+│       │   ├── • ColumnName:{DescID: 105 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 4294967294}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 4294967294}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}
+│       │   ├── • PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "relation dropped before dependent index"
 │       │   │
-│       │   └── • IndexName:{DescID: 105, Name: t_pkey, IndexID: 1}
+│       │   └── • IndexName:{DescID: 105 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │       ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │       │     rule: "descriptor dropped before dependent element removal"
 │       │       │
-│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}
+│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
 │       │             rule: "index no longer public before dependents, excluding columns"
 │       │
 │       └── • 20 Mutation operations
@@ -290,73 +290,73 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │   │   │
 │   │   ├── • 23 elements transitioning toward ABSENT
 │   │   │   │
-│   │   │   ├── • Namespace:{DescID: 105, Name: t, ReferencedDescID: 100}
+│   │   │   ├── • Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • Owner:{DescID: 105}
+│   │   │   ├── • Owner:{DescID: 105 (t-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • UserPrivileges:{DescID: 105, Name: admin}
+│   │   │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "admin"}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • UserPrivileges:{DescID: 105, Name: root}
+│   │   │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "root"}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • Table:{DescID: 105}
+│   │   │   ├── • Table:{DescID: 105 (t-)}
 │   │   │   │     DROPPED → PUBLIC
 │   │   │   │
-│   │   │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
+│   │   │   ├── • SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (public)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}
+│   │   │   ├── • ColumnFamily:{DescID: 105 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • Column:{DescID: 105, ColumnID: 1}
+│   │   │   ├── • Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │   │   │   │     WRITE_ONLY → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnName:{DescID: 105, Name: i, ColumnID: 1}
+│   │   │   ├── • ColumnName:{DescID: 105 (t-), Name: "i", ColumnID: 1 (i-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}
+│   │   │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}
+│   │   │   ├── • ColumnNotNull:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 0}
 │   │   │   │     VALIDATED → PUBLIC
 │   │   │   │
-│   │   │   ├── • Column:{DescID: 105, ColumnID: 2}
+│   │   │   ├── • Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │   │   │   │     WRITE_ONLY → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnName:{DescID: 105, Name: b, ColumnID: 2}
+│   │   │   ├── • ColumnName:{DescID: 105 (t-), Name: "b", ColumnID: 2 (b-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}
+│   │   │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedFunctionIDs: [104]}
+│   │   │   ├── • ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (#104)]}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • Column:{DescID: 105, ColumnID: 4294967295}
+│   │   │   ├── • Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │   │   │   │     WRITE_ONLY → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+│   │   │   ├── • ColumnName:{DescID: 105 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}
+│   │   │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • Column:{DescID: 105, ColumnID: 4294967294}
+│   │   │   ├── • Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
 │   │   │   │     WRITE_ONLY → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}
+│   │   │   ├── • ColumnName:{DescID: 105 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}
+│   │   │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}
+│   │   │   ├── • PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
 │   │   │   │     VALIDATED → PUBLIC
 │   │   │   │
-│   │   │   └── • IndexName:{DescID: 105, Name: t_pkey, IndexID: 1}
+│   │   │   └── • IndexName:{DescID: 105 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
 │   │   │         ABSENT → PUBLIC
 │   │   │
 │   │   └── • 1 Mutation operation
@@ -368,260 +368,260 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │
 │       ├── • 25 elements transitioning toward ABSENT
 │       │   │
-│       │   ├── • Namespace:{DescID: 105, Name: t, ReferencedDescID: 100}
+│       │   ├── • Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • Owner:{DescID: 105}
+│       │   ├── • Owner:{DescID: 105 (t-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: admin}
+│       │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: root}
+│       │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
-│       │   ├── • Table:{DescID: 105}
+│       │   ├── • Table:{DescID: 105 (t-)}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
+│       │   ├── • SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (public)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
-│       │   ├── • ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}
+│       │   ├── • ColumnFamily:{DescID: 105 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
 │       │   │   │     rule: "column type removed before column family"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
 │       │   │   │     rule: "column type removed before column family"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │     rule: "column type removed before column family"
 │       │   │   │
-│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │       │   │         rule: "column type removed before column family"
 │       │   │
-│       │   ├── • Column:{DescID: 105, ColumnID: 1}
+│       │   ├── • Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
-│       │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}
+│       │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 0}
 │       │   │   │     rule: "column constraint removed right before column reaches delete only"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105, Name: i, ColumnID: 1}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "i", ColumnID: 1 (i-)}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 0}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}
+│       │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 1 (t_pkey-)}
 │       │   │         rule: "dependents removed before column"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 105, Name: i, ColumnID: 1}
+│       │   ├── • ColumnName:{DescID: 105 (t-), Name: "i", ColumnID: 1 (i-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 1}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}
+│       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 1}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}
+│       │   ├── • ColumnNotNull:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 0}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent constraint"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 1}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • Column:{DescID: 105, ColumnID: 2}
+│       │   ├── • Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105, Name: b, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "b", ColumnID: 2 (b-)}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedFunctionIDs: [104]}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (#104)]}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}
+│       │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 105 (t-), ColumnID: 2 (b-), IndexID: 1 (t_pkey-)}
 │       │   │         rule: "dependents removed before column"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 105, Name: b, ColumnID: 2}
+│       │   ├── • ColumnName:{DescID: 105 (t-), Name: "b", ColumnID: 2 (b-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 2}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}
+│       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedFunctionIDs: [104]}
+│       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (#104)]}
 │       │   │         rule: "column type dependents removed right before column type"
 │       │   │
-│       │   ├── • ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedFunctionIDs: [104]}
+│       │   ├── • ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (#104)]}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 2}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • Column:{DescID: 105, ColumnID: 4294967295}
+│       │   ├── • Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │         rule: "dependents removed before column"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+│       │   ├── • ColumnName:{DescID: 105 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 4294967295}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}
+│       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 4294967295}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • Column:{DescID: 105, ColumnID: 4294967294}
+│       │   ├── • Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}
+│       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
-│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │       │   │         rule: "dependents removed before column"
 │       │   │
-│       │   ├── • ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}
+│       │   ├── • ColumnName:{DescID: 105 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 4294967294}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}
+│       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 4294967294}
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
-│       │   ├── • IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}
+│       │   ├── • IndexColumn:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 1 (t_pkey-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 1}
+│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}
+│       │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
 │       │   │         rule: "index drop mutation visible before cleaning up index columns"
 │       │   │
-│       │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}
+│       │   ├── • IndexColumn:{DescID: 105 (t-), ColumnID: 2 (b-), IndexID: 1 (t_pkey-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 105, ColumnID: 2}
+│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}
+│       │   │   └── • Precedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
 │       │   │         rule: "index drop mutation visible before cleaning up index columns"
 │       │   │
-│       │   ├── • PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}
+│       │   ├── • PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent index"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}
+│       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 1 (t_pkey-)}
 │       │   │   │     rule: "dependents removed before index"
 │       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}
+│       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 105 (t-), ColumnID: 2 (b-), IndexID: 1 (t_pkey-)}
 │       │   │   │     rule: "dependents removed before index"
 │       │   │   │
-│       │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 105, Name: t_pkey, IndexID: 1}
+│       │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 105 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
 │       │   │         rule: "dependents removed before index"
 │       │   │
-│       │   └── • IndexName:{DescID: 105, Name: t_pkey, IndexID: 1}
+│       │   └── • IndexName:{DescID: 105 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       ├── • Precedence dependency from DROPPED Table:{DescID: 105}
+│       │       ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │       │     rule: "descriptor dropped before dependent element removal"
 │       │       │
-│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}
+│       │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
 │       │             rule: "index no longer public before dependents, excluding columns"
 │       │
 │       └── • 36 Mutation operations
@@ -797,97 +797,97 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
         │
         ├── • 3 elements transitioning toward ABSENT
         │   │
-        │   ├── • Table:{DescID: 105}
+        │   ├── • Table:{DescID: 105 (t-)}
         │   │   │ DROPPED → ABSENT
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 105, Name: t, ReferencedDescID: 100}
+        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 105}
+        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 105 (t-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: admin}
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105 (t-), Name: "admin"}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: root}
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105 (t-), Name: "root"}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 105}
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 105 (t-)}
         │   │   │     rule: "descriptor dropped in transaction before removal"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 105, ReferencedDescID: 101}
+        │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (public)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnFamily:{DescID: 105, Name: primary, ColumnFamilyID: 0}
+        │   │   ├── • Precedence dependency from ABSENT ColumnFamily:{DescID: 105 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 105, ColumnID: 1}
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105, Name: i, ColumnID: 1}
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "i", ColumnID: 1 (i-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}
+        │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 0}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 105, ColumnID: 2}
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105, Name: b, ColumnID: 2}
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "b", ColumnID: 2 (b-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedFunctionIDs: [104]}
+        │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (#104)]}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 105, ColumnID: 4294967295}
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967295}
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 105, ColumnID: 4294967294}
+        │   │   ├── • Precedence dependency from ABSENT Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105, Name: tableoid, ColumnID: 4294967294}
+        │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 1 (t_pkey-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 105 (t-), ColumnID: 2 (b-), IndexID: 1 (t_pkey-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 105, Name: t_pkey, IndexID: 1}
+        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 105 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
         │   │         rule: "non-data dependents removed before descriptor"
         │   │
-        │   ├── • IndexData:{DescID: 105, IndexID: 1}
+        │   ├── • IndexData:{DescID: 105 (t-), IndexID: 1 (t_pkey-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 1}
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
         │   │   │     rule: "index removed before garbage collection"
         │   │   │
-        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 105, ReferencedDescID: 100}
+        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 105 (t-), ReferencedDescID: 100 (defaultdb)}
         │   │         rule: "schedule all GC jobs for a descriptor in the same stage"
         │   │
-        │   └── • TableData:{DescID: 105, ReferencedDescID: 100}
+        │   └── • TableData:{DescID: 105 (t-), ReferencedDescID: 100 (defaultdb)}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 105}
+        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 105 (t-)}
         │             rule: "table removed right before garbage collection"
         │
         └── • 5 Mutation operations

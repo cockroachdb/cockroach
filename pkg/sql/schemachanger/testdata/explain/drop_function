@@ -25,16 +25,16 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 10 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109, Name: admin}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109, Name: root}
- │         │    ├── PUBLIC → DROPPED Function:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109, ReferencedDescID: 101}
- │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109}
- │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Function:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-)}
+ │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-)}
  │         └── 11 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
  │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
@@ -50,30 +50,30 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 10 elements transitioning toward ABSENT
- │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 109}
- │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109, Name: admin}
- │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109, Name: root}
- │    │    │    ├── DROPPED → PUBLIC Function:{DescID: 109}
- │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 109, ReferencedDescID: 101}
- │    │    │    ├── ABSENT  → PUBLIC FunctionName:{DescID: 109}
- │    │    │    ├── ABSENT  → PUBLIC FunctionVolatility:{DescID: 109}
- │    │    │    ├── ABSENT  → PUBLIC FunctionLeakProof:{DescID: 109}
- │    │    │    ├── ABSENT  → PUBLIC FunctionNullInputBehavior:{DescID: 109}
- │    │    │    └── ABSENT  → PUBLIC FunctionBody:{DescID: 109}
+ │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109 (f-), Name: "admin"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 109 (f-), Name: "root"}
+ │    │    │    ├── DROPPED → PUBLIC Function:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionName:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionVolatility:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionLeakProof:{DescID: 109 (f-)}
+ │    │    │    ├── ABSENT  → PUBLIC FunctionNullInputBehavior:{DescID: 109 (f-)}
+ │    │    │    └── ABSENT  → PUBLIC FunctionBody:{DescID: 109 (f-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 10 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109, Name: admin}
- │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109, Name: root}
- │         │    ├── PUBLIC → DROPPED Function:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109, ReferencedDescID: 101}
- │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109}
- │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109}
- │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 109 (f-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Function:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT  FunctionName:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionVolatility:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionLeakProof:{DescID: 109 (f-)}
+ │         │    ├── PUBLIC → ABSENT  FunctionNullInputBehavior:{DescID: 109 (f-)}
+ │         │    └── PUBLIC → ABSENT  FunctionBody:{DescID: 109 (f-)}
  │         └── 18 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":109}
  │              ├── RemoveObjectParent {"ObjectID":109,"ParentSchemaID":101}
@@ -96,7 +96,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
-           │    └── DROPPED → ABSENT Function:{DescID: 109}
+           │    └── DROPPED → ABSENT Function:{DescID: 109 (f-)}
            └── 8 Mutation operations
                 ├── DeleteDescriptor {"DescriptorID":109}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}

@@ -149,6 +149,9 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: e
   +    revertible: true
      enumMembers:
      - logicalRepresentation: a
@@ -165,6 +168,7 @@ upsert descriptor #105
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
   +    revertible: true
      id: 105
      kind: ALIAS
@@ -182,6 +186,19 @@ upsert descriptor #106
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": k
+  +        "2": v
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 106
+  +      indexes:
+  +        "1": t_pkey
+  +        "2": idx1
+  +      name: t
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE
@@ -403,8 +420,8 @@ begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
 upsert descriptor #104
   ...
-         userName: root
-       jobId: "1"
+         id: 104
+         name: e
   -    revertible: true
      enumMembers:
      - logicalRepresentation: a
@@ -415,8 +432,8 @@ upsert descriptor #104
   +  version: "8"
 upsert descriptor #105
   ...
-         userName: root
        jobId: "1"
+       nameMapping: {}
   -    revertible: true
      id: 105
      kind: ALIAS
@@ -513,6 +530,9 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: e
      enumMembers:
      - logicalRepresentation: a
   ...
@@ -528,6 +548,7 @@ upsert descriptor #105
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
      id: 105
      kind: ALIAS
   ...
@@ -544,6 +565,19 @@ upsert descriptor #106
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k
+  -        "2": v
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 106
+  -      indexes:
+  -        "1": t_pkey
+  -        "2": idx1
+  -      name: t
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE

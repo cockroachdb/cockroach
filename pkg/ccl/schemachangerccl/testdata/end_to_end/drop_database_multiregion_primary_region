@@ -99,6 +99,9 @@ upsert descriptor #104
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: multi_region_test_db
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
@@ -124,6 +127,9 @@ upsert descriptor #105
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: public
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
@@ -147,6 +153,9 @@ upsert descriptor #106
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 106
+  +      name: crdb_internal_region
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
@@ -171,6 +180,9 @@ upsert descriptor #107
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 107
+  +      name: _crdb_internal_region
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
@@ -195,6 +207,9 @@ upsert descriptor #108
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 108
+  +      name: table_regional_by_table
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
@@ -233,6 +248,9 @@ upsert descriptor #108
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      id: 108
+  -      name: table_regional_by_table
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE

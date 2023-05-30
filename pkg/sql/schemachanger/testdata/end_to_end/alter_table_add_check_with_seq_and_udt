@@ -113,6 +113,9 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: s
   +    revertible: true
   +  dependedOnBy:
   +  - byId: true
@@ -131,6 +134,9 @@ upsert descriptor #105
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: typ
   +    revertible: true
      enumMembers:
      - logicalRepresentation: a
@@ -149,6 +155,7 @@ upsert descriptor #106
   +    authorization:
   +      userName: root
   +    jobId: "1"
+  +    nameMapping: {}
   +    revertible: true
      id: 106
      kind: ALIAS
@@ -179,6 +186,20 @@ upsert descriptor #107
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      constraints:
+  +        "2": check_i_j
+  +      families:
+  +        "0": primary
+  +      id: 107
+  +      indexes:
+  +        "1": t_pkey
+  +      name: t
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› >
@@ -243,6 +264,9 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: s
   -    revertible: true
      dependedOnBy:
      - byId: true
@@ -258,6 +282,9 @@ upsert descriptor #105
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: typ
   -    revertible: true
      enumMembers:
      - logicalRepresentation: a
@@ -274,6 +301,7 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    jobId: "1"
+  -    nameMapping: {}
   -    revertible: true
      id: 106
      kind: ALIAS
@@ -297,6 +325,20 @@ upsert descriptor #107
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "2": check_i_j
+  -      families:
+  -        "0": primary
+  -      id: 107
+  -      indexes:
+  -        "1": t_pkey
+  -      name: t
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› >

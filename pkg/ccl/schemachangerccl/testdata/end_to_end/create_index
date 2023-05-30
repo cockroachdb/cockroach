@@ -157,6 +157,20 @@ upsert descriptor #104
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": id
+  +        "2": name
+  +        "3": money
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t1_pkey
+  +        "2": id1
+  +      name: t1
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›,
@@ -457,6 +471,20 @@ upsert descriptor #104
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": id
+  -        "2": name
+  -        "3": money
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t1_pkey
+  -        "2": id1
+  -      name: t1
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›,
