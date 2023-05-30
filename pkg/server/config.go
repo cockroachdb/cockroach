@@ -55,14 +55,14 @@ import (
 
 // Context defaults.
 const (
-	// DefaultCacheSize is the default size of the RocksDB and Pebble caches. We
-	// default the cache size and SQL memory pool size to 128 MiB. Larger values
+	// DefaultCacheSize is the default size of the Pebble cache. We default the
+	// cache size to 128MiB and SQL memory pool size to 256 MiB. Larger values
 	// might provide significantly better performance, but we're not sure what
 	// type of system we're running on (development or production or some shared
 	// environment). Production users should almost certainly override these
 	// settings and we'll warn in the logs about doing so.
-	DefaultCacheSize         = 128 << 20 // 128 MB
-	defaultSQLMemoryPoolSize = 128 << 20 // 128 MB
+	DefaultCacheSize         = 128 << 20 // 128 MiB
+	defaultSQLMemoryPoolSize = 256 << 20 // 256 MiB
 	defaultScanInterval      = 10 * time.Minute
 	defaultScanMinIdleTime   = 10 * time.Millisecond
 	defaultScanMaxIdleTime   = 1 * time.Second
