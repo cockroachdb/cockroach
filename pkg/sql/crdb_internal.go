@@ -207,6 +207,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalShowTenantCapabilitiesCacheTableID: crdbInternalShowTenantCapabilitiesCache,
+		catconstants.CrdbInternalInheritedRoleMembersTableID:        crdbInternalInheritedRoleMembers,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -8034,6 +8035,61 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 					tenantID,
 					tree.NewDString(capabilityID.String()),
 					tree.NewDString(value.String()),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalInheritedRoleMembers = virtualSchemaTable{
+	comment: `table listing transitive closure of system.role_members`,
+	schema: `
+CREATE TABLE crdb_internal.kv_inherited_role_members (
+  role               STRING,
+  inheriting_member  STRING,
+  member_is_explicit BOOL,
+  member_is_admin    BOOL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (retErr error) {
+		explicit := make(map[username.SQLUsername]map[username.SQLUsername]bool)
+		if err := forEachRoleMembership(ctx, p.InternalSQLTxn(), func(role, member username.SQLUsername, isAdmin bool) error {
+			if _, found := explicit[member]; !found {
+				explicit[member] = make(map[username.SQLUsername]bool)
+			}
+			explicit[member][role] = true
+			return nil
+		}); err != nil {
+			return err
+		}
+		members := make([]username.SQLUsername, 0, len(explicit))
+		for m := range explicit {
+			members = append(members, m)
+		}
+		sort.Slice(members, func(i, j int) bool {
+			return members[i].Normalized() < members[j].Normalized()
+		})
+		for _, member := range members {
+			memberOf, err := p.MemberOfWithAdminOption(ctx, member)
+			if err != nil {
+				return err
+			}
+			explicitRoles := explicit[member]
+			roles := make([]username.SQLUsername, 0, len(memberOf))
+			for r := range memberOf {
+				roles = append(roles, r)
+			}
+			sort.Slice(roles, func(i, j int) bool {
+				return roles[i].Normalized() < roles[j].Normalized()
+			})
+			for _, r := range roles {
+				if err := addRow(
+					tree.NewDString(r.Normalized()),
+					tree.NewDString(member.Normalized()),
+					tree.MakeDBool(tree.DBool(explicitRoles[r])),
+					tree.MakeDBool(tree.DBool(memberOf[r])),
 				); err != nil {
 					return err
 				}

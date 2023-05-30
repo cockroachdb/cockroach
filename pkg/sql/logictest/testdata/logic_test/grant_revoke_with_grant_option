@@ -8,7 +8,7 @@ statement ok
 CREATE USER target
 
 # Check privileges that `public` has by default, ignoring types and virtual tables.
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SELECT * FROM [SHOW GRANTS FOR public] WHERE relation_name IS NULL
 ----
 database_name  schema_name         relation_name  grantee  privilege_type  is_grantable
