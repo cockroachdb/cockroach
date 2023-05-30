@@ -588,11 +588,30 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	// include MsgVotes), so don't campaign if we wake up our raft
 	// group.
 	return r.withRaftGroup(false, func(raftGroup *raft.RawNode) (bool, error) {
-		// We're processing a message from another replica which means that the
-		// other replica is not quiesced, so we don't need to wake the leader.
-		// Note that we avoid campaigning when receiving raft messages, because
-		// we expect the originator to campaign instead.
-		r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
+		// If we're not the leader, and we receive a message from a non-leader
+		// replica while quiesced, we wake up the leader too. This prevents spurious
+		// elections.
+		//
+		// This typically happens in the case of a partial network partition where
+		// some other replica is partitioned away from the leader but can reach this
+		// replica. In that case, the partitioned replica will send us a prevote
+		// message, which we'll typically reject (e.g. because it's behind on its
+		// log, or if CheckQuorum+PreVote is enabled because we have a current
+		// leader). However, if we don't also wake the leader, we'll now have two
+		// unquiesced followers, and eventually they'll call an election that
+		// unseats the leader. If this replica wins (often the case since we're
+		// up-to-date on the log), then we'll immediately transfer leadership back
+		// to the leaseholder, i.e. the old leader, and the cycle repeats.
+		//
+		// Note that such partial partitions will typically result in persistent
+		// mass unquiescence due to the continuous prevotes.
+		if r.mu.quiescent {
+			if !r.isRaftLeaderRLocked() && req.FromReplica.ReplicaID != r.mu.leaderID {
+				r.maybeUnquiesceAndWakeLeaderLocked()
+			} else {
+				r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
+			}
+		}
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		if req.Message.Type == raftpb.MsgSnap {
 			// Occasionally a snapshot message may arrive under an outdated term,
