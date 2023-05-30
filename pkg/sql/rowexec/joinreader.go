@@ -1214,6 +1214,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:           optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
+			KVPairsRead:         optional.MakeUint(uint64(jr.fetcher.GetKVPairsRead())),
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
 			ContentionTime:      optional.MakeTimeValue(jr.contentionEventsListener.CumulativeContentionTime),

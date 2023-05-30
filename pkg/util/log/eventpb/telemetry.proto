@@ -156,6 +156,9 @@ message SampledQuery {
   // The number of bytes read at the KV layer for this query.
   int64 kv_bytes_read = 42 [(gogoproto.customname) = "KVBytesRead", (gogoproto.jsontag) = ',omitempty'];
 
+  // The number of key-value pairs read at the KV layer for this query.
+  int64 kv_pairs_read = 75 [(gogoproto.customname) = "KVPairsRead", (gogoproto.jsontag) = ',omitempty'];
+
   // The number of rows read at the KV layer for this query.
   int64 kv_rows_read = 43 [(gogoproto.customname) = "KVRowsRead", (gogoproto.jsontag) = ',omitempty'];
 

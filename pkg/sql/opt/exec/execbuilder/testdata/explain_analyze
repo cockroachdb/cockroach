@@ -94,6 +94,7 @@ regions: <hidden>
 │     KV time: 0µs
 │     KV contention time: 0µs
 │     KV rows read: 4
+│     KV pairs read: 4
 │     KV bytes read: 32 B
 │     KV gRPC calls: 4
 │     estimated max memory allocated: 0 B
@@ -112,6 +113,7 @@ regions: <hidden>
       KV time: 0µs
       KV contention time: 0µs
       KV rows read: 3
+      KV pairs read: 3
       KV bytes read: 24 B
       KV gRPC calls: 3
       estimated max memory allocated: 0 B
