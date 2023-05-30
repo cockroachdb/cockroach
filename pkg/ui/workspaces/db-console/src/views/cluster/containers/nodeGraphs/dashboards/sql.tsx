@@ -47,7 +47,6 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Created SQL Connections"
-      isKvGraph={false}
       sources={nodeSources}
       tooltip={`Counter of the number of SQL connections created ${tooltipSelection}`}
     >
