@@ -746,11 +746,16 @@ func (b *Builder) buildUDF(
 		}
 	case tree.FunctionLangPLpgSQL:
 		// Parse the function body.
-		_, err := plpgsql.Parse(o.Body)
+		stmt, err := plpgsql.Parse(o.Body)
 		if err != nil {
 			panic(err)
 		}
-		panic(unimplemented.New("plpgsql", "plpgsql not supported in user-defined functions"))
+		var plBuilder plpgsqlBuilder
+		plBuilder.init(b, colRefs, o.Types.(tree.ParamTypes), stmt.AST, rtyp)
+		stmtScope := plBuilder.build(stmt.AST, bodyScope)
+		b.finishBuildLastStmt(stmtScope, bodyScope, isSetReturning, f)
+		body = []memo.RelExpr{stmtScope.expr}
+		bodyProps = []*physical.Required{stmtScope.makePhysicalProps()}
 	default:
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
