@@ -1051,10 +1051,11 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	senderMapDelta := getSnapshotMetricsDiff(senderMetricsMapBefore, senderMetricsMapAfter)
 
 	senderMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
-		".recovery":    {sentBytes: snapshotLength, rcvdBytes: 0},
-		".unknown":     {sentBytes: 0, rcvdBytes: 0},
-		"":             {sentBytes: snapshotLength, rcvdBytes: 0},
+		".rebalancing":  {sentBytes: 0, rcvdBytes: 0},
+		".recovery":     {sentBytes: snapshotLength, rcvdBytes: 0},
+		".unknown":      {sentBytes: 0, rcvdBytes: 0},
+		"":              {sentBytes: snapshotLength, rcvdBytes: 0},
+		".cross-region": {sentBytes: 0, rcvdBytes: 0},
 	}
 	require.Equal(t, senderMapExpected, senderMapDelta)
 
@@ -1067,10 +1068,11 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	receiverMapDelta := getSnapshotMetricsDiff(receiverMetricsMapBefore, receiverMetricsMapAfter)
 
 	receiverMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
-		".recovery":    {sentBytes: 0, rcvdBytes: snapshotLength},
-		".unknown":     {sentBytes: 0, rcvdBytes: 0},
-		"":             {sentBytes: 0, rcvdBytes: snapshotLength},
+		".rebalancing":  {sentBytes: 0, rcvdBytes: 0},
+		".recovery":     {sentBytes: 0, rcvdBytes: snapshotLength},
+		".unknown":      {sentBytes: 0, rcvdBytes: 0},
+		"":              {sentBytes: 0, rcvdBytes: snapshotLength},
+		".cross-region": {sentBytes: 0, rcvdBytes: 0},
 	}
 	require.Equal(t, receiverMapExpected, receiverMapDelta)
 }
@@ -2208,8 +2210,8 @@ func getSnapshotBytesMetrics(
 			rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), rcvdMetricStr),
 		}
 	}
-	types := [4]string{".unknown", ".recovery", ".rebalancing", ""}
-	for _, v := range types {
+
+	for _, v := range [5]string{".unknown", ".recovery", ".rebalancing", ".cross-region", ""} {
 		metrics[v] = findSnapshotBytesMetrics(v)
 	}
 	return metrics
@@ -2294,11 +2296,12 @@ func getExpectedSnapshotSizeBytes(
 	return int64(b.Len()), err
 }
 
-// Tests the accuracy of the 'range.snapshots.rebalancing.rcvd-bytes' and
-// 'range.snapshots.rebalancing.sent-bytes' metrics. This test adds a new
-// replica to a cluster, and during the process, a learner snapshot is sent to
-// the new replica.
-func TestRebalancingSnapshotMetrics(t *testing.T) {
+// Tests the accuracy of the
+// 'range.snapshots.[rebalancing|cross-region].rcvd-bytes' and
+// 'range.snapshots.[rebalancing|cross-region].sent-bytes' metrics. This test
+// adds a new replica to a cluster, and during the process, a learner snapshot
+// is sent to the new replica.
+func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2321,11 +2324,36 @@ func TestRebalancingSnapshotMetrics(t *testing.T) {
 		}
 	}
 
+	// The initial setup ensures the correct configuration for three nodes (with
+	// different localities), single-range.
+	const numNodes = 3
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		if i == 2 {
+			serverArgs[i] = base.TestServerArgs{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "zone", Value: fmt.Sprintf("us-east-%va", i)}},
+				},
+				Knobs: knobs,
+			}
+		} else {
+			serverArgs[i] = base.TestServerArgs{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: fmt.Sprintf("us-east-%v", i)}},
+				},
+				Knobs: knobs,
+			}
+		}
+	}
+
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{Knobs: knobs},
-		ReplicationMode: base.ReplicationManual,
-	})
+	tc := testcluster.StartTestCluster(
+		t, numNodes, base.TestClusterArgs{
+			ServerArgsPerNode: serverArgs,
+			ReplicationMode:   base.ReplicationManual,
+		},
+	)
+
 	defer tc.Stopper().Stop(ctx)
 
 	// sendSnapshotFromServer is a testing helper function that sends a learner
@@ -2365,38 +2393,59 @@ func TestRebalancingSnapshotMetrics(t *testing.T) {
 	}
 
 	// Record the snapshot metrics before anything has been sent / received.
-	senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */)
-	receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */)
+	senderBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */)
+	firstReceiverBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */)
+	secReceiverBefore := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */)
 	scratchStartKey := tc.ScratchRange(t)
 
-	// A learner snapshot should have been sent from the sender to the receiver.
-	_, snapshotLength := sendSnapshotToServer(scratchStartKey, 1)
+	// A cross-region learner snapshot should have been sent from the
+	// sender(server[0]) to the server[1] and server[2].
+	newRangeDesc, firstSnapshotLength := sendSnapshotToServer(scratchStartKey, 1)
+	_, secSnapshotLength := sendSnapshotToServer(newRangeDesc.StartKey.AsRawKey(), 2)
+	totalSnapshotLength := firstSnapshotLength + secSnapshotLength
 
-	// Record the snapshot metrics for the sender after a voter has been added.
-	senderMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 0)
-	// Asserts that the learner snapshot (aka rebalancing snapshot) bytes sent
-	// have been recorded, and that it was not double counted in a different
-	// metric.
-	senderMapDelta := getSnapshotMetricsDiff(senderMetricsMapBefore, senderMetricsMapAfter)
-	senderMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: snapshotLength, rcvdBytes: 0},
+	// Compare the snapshot metrics for the sender after sending two snapshots to
+	// server[1] and server[2].
+	senderAfter := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */)
+	senderDelta := getSnapshotMetricsDiff(senderBefore, senderAfter)
+	senderExpected := map[string]snapshotBytesMetrics{
+		".rebalancing": {sentBytes: totalSnapshotLength, rcvdBytes: 0},
 		".recovery":    {sentBytes: 0, rcvdBytes: 0},
 		".unknown":     {sentBytes: 0, rcvdBytes: 0},
-		"":             {sentBytes: snapshotLength, rcvdBytes: 0},
+		// Assert that the cross-region metrics should not be affected by the second
+		// snapshot (since server[2]'s locality does not include a "region" tier
+		// key).
+		".cross-region": {sentBytes: firstSnapshotLength, rcvdBytes: 0},
+		"":              {sentBytes: totalSnapshotLength, rcvdBytes: 0},
 	}
-	require.Equal(t, senderMapExpected, senderMapDelta)
+	require.Equal(t, senderExpected, senderDelta)
 
-	// Record the snapshot metrics for the receiver after a voter has been added.
-	receiverMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 1)
-	// Asserts that the learner snapshot (aka rebalancing snapshot) bytes received
-	// have been recorded, and that it was not double counted in a different
-	// metric.
-	receiverMapDelta := getSnapshotMetricsDiff(receiverMetricsMapBefore, receiverMetricsMapAfter)
-	receiverMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: 0, rcvdBytes: snapshotLength},
+	// Compare the snapshot metrics for server[1] after receiving the first
+	// cross-region and rebalancing snapshot.
+	firstReceiverMetricsAfter := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */)
+	firstReceiverDelta := getSnapshotMetricsDiff(firstReceiverBefore, firstReceiverMetricsAfter)
+	firstReceiverExpected := map[string]snapshotBytesMetrics{
+		".rebalancing":  {sentBytes: 0, rcvdBytes: firstSnapshotLength},
+		".recovery":     {sentBytes: 0, rcvdBytes: 0},
+		".unknown":      {sentBytes: 0, rcvdBytes: 0},
+		".cross-region": {sentBytes: 0, rcvdBytes: firstSnapshotLength},
+		"":              {sentBytes: 0, rcvdBytes: firstSnapshotLength},
+	}
+	require.Equal(t, firstReceiverExpected, firstReceiverDelta)
+
+	// Compare the snapshot metrics for server[2] after receiving the second
+	// snapshot.
+	secReceiverAfter := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */)
+	secReceiverDelta := getSnapshotMetricsDiff(secReceiverBefore, secReceiverAfter)
+	secReceiverExpected := map[string]snapshotBytesMetrics{
+		".rebalancing": {sentBytes: 0, rcvdBytes: secSnapshotLength},
 		".recovery":    {sentBytes: 0, rcvdBytes: 0},
 		".unknown":     {sentBytes: 0, rcvdBytes: 0},
-		"":             {sentBytes: 0, rcvdBytes: snapshotLength},
+		// Assert that the cross-region metrics should not be affected by the second
+		// snapshot (since server[2]'s locality does not include a "region" tier
+		// key).
+		".cross-region": {sentBytes: 0, rcvdBytes: 0},
+		"":              {sentBytes: 0, rcvdBytes: secSnapshotLength},
 	}
-	require.Equal(t, receiverMapExpected, receiverMapDelta)
+	require.Equal(t, secReceiverExpected, secReceiverDelta)
 }

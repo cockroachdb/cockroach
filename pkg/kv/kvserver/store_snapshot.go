@@ -972,6 +972,22 @@ func (s *Store) checkSnapshotOverlapLocked(
 	return nil
 }
 
+func (s *Store) shouldIncrementCrossRegionSnapshotMetrics(
+	ctx context.Context, firstReplica roachpb.ReplicaDescriptor, secReplica roachpb.ReplicaDescriptor,
+) bool {
+	storePool := s.cfg.StorePool
+	if storePool == nil {
+		log.VEventf(ctx, 2, "store pool is nil")
+		return false
+	}
+	isCrossRegion, err := storePool.IsCrossRegion(firstReplica, secReplica)
+	if err != nil {
+		log.VEventf(ctx, 2, "%v", err)
+		return false
+	}
+	return isCrossRegion
+}
+
 // receiveSnapshot receives an incoming snapshot via a pre-opened GRPC stream.
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream incomingSnapshotStream,
@@ -1088,6 +1104,11 @@ func (s *Store) receiveSnapshot(
 
 	recordBytesReceived := func(inc int64) {
 		s.metrics.RangeSnapshotRcvdBytes.Inc(inc)
+
+		if s.shouldIncrementCrossRegionSnapshotMetrics(
+			ctx, header.RaftMessageRequest.FromReplica, header.RaftMessageRequest.ToReplica) {
+			s.metrics.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
+		}
 
 		switch header.Priority {
 		case kvserverpb.SnapshotRequest_RECOVERY:
