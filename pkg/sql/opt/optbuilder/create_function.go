@@ -199,7 +199,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			panic(err)
 		}
 
-		// TODO(drewk): build and check volatility.
+		// TODO(drewk): build and check volatility. We will need to remove the hack
+		// to disable UDFs calling other UDFs before doing this.
 		// Format the statements with qualified datasource names.
 		formatFuncBodyStmt(fmtCtx, stmt.AST, false /* newLine */)
 		afterBuildStmt()

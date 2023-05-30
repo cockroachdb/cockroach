@@ -62,9 +62,13 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		panic(fmt.Errorf("built-in function with name %q already exists", name))
 	}
 	if _, ok := tc.udfs[name]; ok {
-		// TODO(mgartner): The test catalog should support multiple overloads
-		// with the same name if their arguments are different.
-		panic(fmt.Errorf("user-defined function with name %q already exists", name))
+		if c.Replace {
+			delete(tc.udfs, name)
+		} else {
+			// TODO(mgartner): The test catalog should support multiple overloads
+			// with the same name if their arguments are different.
+			panic(fmt.Errorf("user-defined function with name %q already exists", name))
+		}
 	}
 	if c.RoutineBody != nil {
 		panic(fmt.Errorf("routine body of BEGIN ATOMIC is not supported"))
