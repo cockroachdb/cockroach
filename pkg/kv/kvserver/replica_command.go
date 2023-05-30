@@ -3145,12 +3145,28 @@ func (r *Replica) followerSendSnapshot(
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
 
+	maybeIncrementCrossRegionBatchMetrics := func(inc int64) {
+		storePool := r.store.cfg.StorePool
+		if storePool == nil {
+			log.Eventf(ctx, "store pool is nil")
+		} else {
+			isCrossRegion, err := storePool.IsCrossRegion(req.CoordinatorReplica, req.RecipientReplica)
+			if err != nil {
+				log.Eventf(ctx, "%v", err)
+			} else if isCrossRegion {
+				// Increment if the snapshot was sent cross-region.
+				r.store.metrics.RangeSnapShotCrossRegionSentBytes.Inc(inc)
+			}
+		}
+	}
+
 	recordBytesSent := func(inc int64) {
 		// Only counts for delegated bytes if we are not self-delegating.
 		if r.NodeID() != req.CoordinatorReplica.NodeID {
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
+		maybeIncrementCrossRegionBatchMetrics(inc)
 
 		switch header.Priority {
 		case kvserverpb.SnapshotRequest_RECOVERY:

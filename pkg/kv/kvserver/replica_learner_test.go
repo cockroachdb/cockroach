@@ -1051,10 +1051,11 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	senderMapDelta := getSnapshotMetricsDiff(senderMetricsMapBefore, senderMetricsMapAfter)
 
 	senderMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
-		".recovery":    {sentBytes: snapshotLength, rcvdBytes: 0},
-		".unknown":     {sentBytes: 0, rcvdBytes: 0},
-		"":             {sentBytes: snapshotLength, rcvdBytes: 0},
+		".rebalancing":  {sentBytes: 0, rcvdBytes: 0},
+		".recovery":     {sentBytes: snapshotLength, rcvdBytes: 0},
+		".unknown":      {sentBytes: 0, rcvdBytes: 0},
+		"":              {sentBytes: snapshotLength, rcvdBytes: 0},
+		".cross-region": {sentBytes: 0, rcvdBytes: 0},
 	}
 	require.Equal(t, senderMapExpected, senderMapDelta)
 
@@ -1067,10 +1068,11 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	receiverMapDelta := getSnapshotMetricsDiff(receiverMetricsMapBefore, receiverMetricsMapAfter)
 
 	receiverMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
-		".recovery":    {sentBytes: 0, rcvdBytes: snapshotLength},
-		".unknown":     {sentBytes: 0, rcvdBytes: 0},
-		"":             {sentBytes: 0, rcvdBytes: snapshotLength},
+		".rebalancing":  {sentBytes: 0, rcvdBytes: 0},
+		".recovery":     {sentBytes: 0, rcvdBytes: snapshotLength},
+		".unknown":      {sentBytes: 0, rcvdBytes: 0},
+		"":              {sentBytes: 0, rcvdBytes: snapshotLength},
+		".cross-region": {sentBytes: 0, rcvdBytes: 0},
 	}
 	require.Equal(t, receiverMapExpected, receiverMapDelta)
 }
@@ -2208,7 +2210,7 @@ func getSnapshotBytesMetrics(
 			rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), rcvdMetricStr),
 		}
 	}
-	types := [4]string{".unknown", ".recovery", ".rebalancing", ""}
+	types := [5]string{".unknown", ".recovery", ".rebalancing", ".cross-region", ""}
 	for _, v := range types {
 		metrics[v] = findSnapshotBytesMetrics(v)
 	}
@@ -2294,11 +2296,12 @@ func getExpectedSnapshotSizeBytes(
 	return int64(b.Len()), err
 }
 
-// Tests the accuracy of the 'range.snapshots.rebalancing.rcvd-bytes' and
-// 'range.snapshots.rebalancing.sent-bytes' metrics. This test adds a new
-// replica to a cluster, and during the process, a learner snapshot is sent to
-// the new replica.
-func TestRebalancingSnapshotMetrics(t *testing.T) {
+// Tests the accuracy of the
+// 'range.snapshots.[rebalancing|cross-region].rcvd-bytes' and
+// 'range.snapshots.[rebalancing|cross-region].sent-bytes' metrics. This test
+// adds a new replica to a cluster, and during the process, a learner snapshot
+// is sent to the new replica.
+func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2318,21 +2321,45 @@ func TestRebalancingSnapshotMetrics(t *testing.T) {
 		}
 	}
 
+	// The initial setup ensures the correct configuration for three nodes (with
+	// different localities), single-range.
+	const numNodes = 3
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key: "region", Value: fmt.Sprintf("us-east-%v", i),
+					},
+				},
+			},
+			Knobs: knobs,
+		}
+	}
+
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{Knobs: knobs},
-		ReplicationMode: base.ReplicationManual,
-	})
+	tc := testcluster.StartTestCluster(
+		t, numNodes, base.TestClusterArgs{
+			ServerArgsPerNode: serverArgs,
+			ReplicationMode:   base.ReplicationManual,
+		},
+	)
+
 	defer tc.Stopper().Stop(ctx)
 
+	// Note that a range is scratched off from servers[0].
 	scratchStartKey := tc.ScratchRange(t)
 
 	// Record the snapshot metrics before anything has been sent / received.
 	senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */)
 	receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */)
+	dummyNodeMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */)
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
+		// A new replica at servers[1] is now added to the cluster, resulting in a
+		// learner snapshot to be sent cross-region from servers[0] to servers[1].
 		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
 		return err
 	})
@@ -2359,10 +2386,11 @@ func TestRebalancingSnapshotMetrics(t *testing.T) {
 	senderMapDelta := getSnapshotMetricsDiff(senderMetricsMapBefore, senderMetricsMapAfter)
 
 	senderMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: snapshotLength, rcvdBytes: 0},
-		".recovery":    {sentBytes: 0, rcvdBytes: 0},
-		".unknown":     {sentBytes: 0, rcvdBytes: 0},
-		"":             {sentBytes: snapshotLength, rcvdBytes: 0},
+		".rebalancing":  {sentBytes: snapshotLength, rcvdBytes: 0},
+		".recovery":     {sentBytes: 0, rcvdBytes: 0},
+		".unknown":      {sentBytes: 0, rcvdBytes: 0},
+		".cross-region": {sentBytes: snapshotLength, rcvdBytes: 0},
+		"":              {sentBytes: snapshotLength, rcvdBytes: 0},
 	}
 	require.Equal(t, senderMapExpected, senderMapDelta)
 
@@ -2375,10 +2403,24 @@ func TestRebalancingSnapshotMetrics(t *testing.T) {
 	receiverMapDelta := getSnapshotMetricsDiff(receiverMetricsMapBefore, receiverMetricsMapAfter)
 
 	receiverMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing": {sentBytes: 0, rcvdBytes: snapshotLength},
-		".recovery":    {sentBytes: 0, rcvdBytes: 0},
-		".unknown":     {sentBytes: 0, rcvdBytes: 0},
-		"":             {sentBytes: 0, rcvdBytes: snapshotLength},
+		".rebalancing":  {sentBytes: 0, rcvdBytes: snapshotLength},
+		".recovery":     {sentBytes: 0, rcvdBytes: 0},
+		".unknown":      {sentBytes: 0, rcvdBytes: 0},
+		".cross-region": {sentBytes: 0, rcvdBytes: snapshotLength},
+		"":              {sentBytes: 0, rcvdBytes: snapshotLength},
 	}
 	require.Equal(t, receiverMapExpected, receiverMapDelta)
+
+	// Asserts that the dummy node sends/receives no cross-region snapshots, and
+	// its metrics should remain unchanged.
+	dummyNodeMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */)
+	dummyNodeMapDelta := getSnapshotMetricsDiff(dummyNodeMetricsMapBefore, dummyNodeMetricsMapAfter)
+	dummyNodeMapExpected := map[string]snapshotBytesMetrics{
+		".rebalancing":  {sentBytes: 0, rcvdBytes: 0},
+		".recovery":     {sentBytes: 0, rcvdBytes: 0},
+		".unknown":      {sentBytes: 0, rcvdBytes: 0},
+		".cross-region": {sentBytes: 0, rcvdBytes: 0},
+		"":              {sentBytes: 0, rcvdBytes: 0},
+	}
+	require.Equal(t, dummyNodeMapExpected, dummyNodeMapDelta)
 }
