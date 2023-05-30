@@ -11,6 +11,7 @@ package streamproducer
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
@@ -37,22 +38,47 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// An rfFactory constructs a rf.
+type rfFactory interface {
+	New(string, hlc.Timestamp, rangefeed.OnValue, ...rangefeed.Option) rf
+}
+
+// An rf is an iterface for the public methosd of *rangefeed.Rangefeed
+// that we use inside the event stream.
+type rf interface {
+	Start(context.Context, []roachpb.Span) error
+	Close()
+}
+
+// realRangefeedFactory wraps a *rangefeed.Factory in order to
+// translate the return type of New.
+type realRangefeedFactory struct {
+	factory *rangefeed.Factory
+}
+
+func (rrf realRangefeedFactory) New(
+	name string, ts hlc.Timestamp, onValue rangefeed.OnValue, opts ...rangefeed.Option,
+) rf {
+	return rrf.factory.New(name, ts, onValue, opts...)
+}
+
 type eventStream struct {
-	streamID        streampb.StreamID
-	execCfg         *sql.ExecutorConfig
-	spec            streampb.StreamPartitionSpec
-	subscribedSpans roachpb.SpanGroup
-	mon             *mon.BytesMonitor
-	acc             mon.BoundAccount
+	streamID         streampb.StreamID
+	rangefeedFactory rfFactory
+	spec             streampb.StreamPartitionSpec
+	subscribedSpans  roachpb.SpanGroup
+	mon              *mon.BytesMonitor
+	acc              mon.BoundAccount
 
 	data tree.Datums // Data to send to the consumer
 
 	// Fields below initialized when Start called.
-	rf          *rangefeed.RangeFeed          // Currently running rangefeed.
+	rf          rf                            // Currently running rangefeed.
 	streamGroup ctxgroup.Group                // Context group controlling stream execution.
 	doneChan    chan struct{}                 // Channel signaled to close the stream loop.
 	eventsCh    chan kvcoord.RangeFeedMessage // Channel receiving rangefeed events.
 	errCh       chan error                    // Signaled when error occurs in rangefeed.
+	flushErr    chan error                    // Signaled wheen error occurs when flushing
 	streamCh    chan tree.Datums              // Channel signaled to forward datums to consumer.
 	sp          *tracing.Span                 // Span representing the lifetime of the eventStream.
 }
@@ -70,7 +96,7 @@ func (s *eventStream) ResolvedType() *types.T {
 }
 
 // Start implements tree.ValueGenerator interface.
-func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
+func (s *eventStream) Start(ctx context.Context, _ *kv.Txn) error {
 	// ValueGenerator API indicates that Start maybe called again if Next returned
 	// false.  However, this generator never terminates without an error,
 	// so this method should be called once.  Be defensive and return an error
@@ -85,6 +111,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	// the buffer, without waiting, when the channel receiver is not waiting on
 	// the channel.
 	s.errCh = make(chan error, 1)
+	s.flushErr = make(chan error, 1)
 
 	// Events channel gets RangeFeedEvents and is consumed by ValueGenerator.
 	s.eventsCh = make(chan kvcoord.RangeFeedMessage)
@@ -142,7 +169,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	}
 
 	// Start rangefeed, which spins up a separate go routine to perform it's job.
-	s.rf = s.execCfg.RangeFeedFactory.New(
+	s.rf = s.rangefeedFactory.New(
 		fmt.Sprintf("streamID=%d", s.streamID), initialTimestamp, s.onValue, opts...)
 	if err := s.rf.Start(ctx, s.spec.Spans); err != nil {
 		return err
@@ -191,11 +218,17 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 	// ValueGenerator implementation that consumes rangefeed events and forwards them to the
 	// destination cluster consumer.
 	streamCtx, sp := tracing.ChildSpan(ctx, "event stream")
+	flushCh := make(chan *streampb.StreamEvent)
+
 	s.sp = sp
 	s.streamGroup = ctxgroup.WithContext(streamCtx)
 	s.streamGroup.GoCtx(withErrCapture(func(ctx context.Context) error {
-		return s.streamLoop(ctx, frontier)
+		defer close(flushCh)
+		return s.streamLoop(ctx, frontier, flushCh)
 	}))
+	s.streamGroup.GoCtx(func(ctx context.Context) error {
+		return s.flushLoop(ctx, flushCh)
+	})
 
 	// TODO(yevgeniy): Add go routine to monitor stream job liveness.
 	// TODO(yevgeniy): Add validation that partition spans are a subset of stream spans.
@@ -203,13 +236,14 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 
 // Next implements tree.ValueGenerator interface.
 func (s *eventStream) Next(ctx context.Context) (bool, error) {
+	var ok bool
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
 	case err := <-s.errCh:
 		return false, err
-	case s.data = <-s.streamCh:
-		return true, nil
+	case s.data, ok = <-s.streamCh:
+		return ok, nil
 	}
 }
 
@@ -228,6 +262,7 @@ func (s *eventStream) Close(ctx context.Context) {
 		// Note: error in close is normal; we expect to be terminated with context canceled.
 		log.Errorf(ctx, "partition stream %d terminated with error %v", s.streamID, err)
 	}
+	close(s.streamCh)
 	s.sp.Finish()
 }
 
@@ -404,12 +439,56 @@ func (s *eventStream) addSST(
 	return size, nil
 }
 
+var batchPool = sync.Pool{
+	New: func() interface{} { return &streampb.StreamEvent_Batch{} },
+}
+
+func getBatch() *streampb.StreamEvent_Batch {
+	return batchPool.Get().(*streampb.StreamEvent_Batch)
+}
+
+func putBatch(b *streampb.StreamEvent_Batch) {
+	b.KeyValues = b.KeyValues[:0]
+	b.Ssts = b.Ssts[:0]
+	b.DelRanges = b.DelRanges[:0]
+	batchPool.Put(b)
+}
+
+func (s *eventStream) maybeSetFlushError(err error) {
+	select {
+	case s.flushErr <- err:
+	default:
+	}
+}
+
+func (s *eventStream) flushLoop(ctx context.Context, flushCh chan *streampb.StreamEvent) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ev, ok := <-flushCh:
+			if !ok {
+				return nil
+			}
+			if ev.Batch != nil {
+				defer putBatch(ev.Batch)
+			}
+			if err := s.flushEvent(ctx, ev); err != nil {
+				s.maybeSetFlushError(err)
+				return nil
+			}
+		}
+	}
+}
+
 // streamLoop is the main processing loop responsible for reading rangefeed events,
 // accumulating them in a batch, and sending those events to the ValueGenerator.
-func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) error {
+func (s *eventStream) streamLoop(
+	ctx context.Context, frontier *span.Frontier, flushCh chan *streampb.StreamEvent,
+) error {
 	pacer := makeCheckpointPacer(s.spec.Config.MinCheckpointFrequency)
 
-	var batch streampb.StreamEvent_Batch
+	batch := getBatch()
 	batchSize := 0
 	addValue := func(v *kvpb.RangeFeedValue) {
 		keyValue := roachpb.KeyValue{
@@ -428,15 +507,22 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 		return nil
 	}
 
+	sendEvent := func(ev *streampb.StreamEvent) error {
+		select {
+		case flushCh <- ev:
+			return nil
+		case err := <-s.flushErr:
+			return err
+		}
+	}
+
 	maybeFlushBatch := func(force bool) error {
 		if (force && batchSize > 0) || batchSize > int(s.spec.Config.BatchByteSize) {
 			defer func() {
+				batch = getBatch()
 				batchSize = 0
-				batch.KeyValues = batch.KeyValues[:0]
-				batch.Ssts = batch.Ssts[:0]
-				batch.DelRanges = batch.DelRanges[:0]
 			}()
-			return s.flushEvent(ctx, &streampb.StreamEvent{Batch: &batch})
+			return sendEvent(&streampb.StreamEvent{Batch: batch})
 		}
 		return nil
 	}
@@ -454,6 +540,8 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 			return ctx.Err()
 		case <-s.doneChan:
 			return nil
+		case err := <-s.flushErr:
+			return err
 		case ev := <-s.eventsCh:
 			switch {
 			case ev.Val != nil:
@@ -472,12 +560,12 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 						return err
 					}
 					checkpoint := makeCheckpoint(frontier)
-					if err := s.flushEvent(ctx, &streampb.StreamEvent{Checkpoint: &checkpoint}); err != nil {
+					if err := sendEvent(&streampb.StreamEvent{Checkpoint: &checkpoint}); err != nil {
 						return err
 					}
 				}
 			case ev.SST != nil:
-				size, err := s.addSST(ev.SST, ev.RegisteredSpan, &batch)
+				size, err := s.addSST(ev.SST, ev.RegisteredSpan, batch)
 				if err != nil {
 					return err
 				}
@@ -545,7 +633,9 @@ func streamPartition(
 		streamID:        streamID,
 		spec:            spec,
 		subscribedSpans: subscribedSpans,
-		execCfg:         execCfg,
-		mon:             evalCtx.Planner.Mon(),
+		rangefeedFactory: realRangefeedFactory{
+			factory: execCfg.RangeFeedFactory,
+		},
+		mon: evalCtx.Planner.Mon(),
 	}, nil
 }
