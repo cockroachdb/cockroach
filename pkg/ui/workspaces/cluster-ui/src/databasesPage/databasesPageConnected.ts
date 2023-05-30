@@ -43,7 +43,7 @@ import {
 } from "../store/clusterSettings/clusterSettings.selectors";
 import { deriveDatabaseDetailsMemoized } from "../databases";
 
-export const mapStateToProps = (state: AppState): DatabasesPageData => {
+const mapStateToProps = (state: AppState): DatabasesPageData => {
   const databasesListState = databasesListSelector(state);
   const nodeRegions = nodeRegionsByIDSelector(state);
   const isTenant = selectIsTenant(state);
@@ -70,9 +70,7 @@ export const mapStateToProps = (state: AppState): DatabasesPageData => {
   };
 };
 
-export const mapDispatchToProps = (
-  dispatch: Dispatch,
-): DatabasesPageActions => ({
+const mapDispatchToProps = (dispatch: Dispatch): DatabasesPageActions => ({
   refreshDatabases: () => {
     dispatch(databasesListActions.refresh());
   },
