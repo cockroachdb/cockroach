@@ -3151,7 +3151,11 @@ func (r *Replica) followerSendSnapshot(
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
-
+		if isCrossRegion, err := r.store.cfg.StorePool.IsCrossRegion(
+			req.CoordinatorReplica, req.RecipientReplica); isCrossRegion && err == nil {
+			// Increment if the snapshot was sent cross-region.
+			r.store.metrics.RangeSnapShotCrossRegionSentBytes.Inc(inc)
+		}
 		switch header.Priority {
 		case kvserverpb.SnapshotRequest_RECOVERY:
 			r.store.metrics.RangeSnapshotRecoverySentBytes.Inc(inc)
