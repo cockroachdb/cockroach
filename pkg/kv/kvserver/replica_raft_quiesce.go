@@ -34,8 +34,8 @@ import (
 // e.g. on every tick.
 var quiesceAfterTicks = envutil.EnvOrDefaultInt("COCKROACH_QUIESCE_AFTER_TICKS", 6)
 
-// testingDisableQuiescence disables replica quiescence.
-var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
+// raftDisableQuiescence disables raft quiescence.
+var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
 func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) {
 	if !r.mu.quiescent {
@@ -195,6 +195,9 @@ func (r *Replica) canUnquiesceRLocked() bool {
 func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 	ctx context.Context, leaseStatus kvserverpb.LeaseStatus, livenessMap livenesspb.IsLiveMap,
 ) bool {
+	if r.store.cfg.TestingKnobs.DisableQuiescence {
+		return false
+	}
 	status, lagging, ok := shouldReplicaQuiesce(ctx, r, leaseStatus, livenessMap, r.mu.pausedFollowers)
 	if !ok {
 		return false
@@ -291,9 +294,6 @@ func shouldReplicaQuiesce(
 	livenessMap livenesspb.IsLiveMap,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
 ) (*raftSparseStatus, laggingReplicaSet, bool) {
-	if testingDisableQuiescence {
-		return nil, nil, false
-	}
 	if !q.isRaftLeaderRLocked() { // fast path
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")

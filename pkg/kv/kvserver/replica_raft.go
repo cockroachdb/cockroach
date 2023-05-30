@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -69,6 +70,10 @@ var (
 	// ~16 bytes, so Pebble point deletion batches will be bounded at ~1.6MB.
 	raftLogTruncationClearRangeThreshold = kvpb.RaftIndex(util.ConstantWithMetamorphicTestRange(
 		"raft-log-truncation-clearrange-threshold", 100000 /* default */, 1 /* min */, 1e6 /* max */))
+
+	// raftDisableLeaderFollowsLeaseholder disables lease/leader colocation.
+	raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
+		"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
 )
 
 func makeIDKey() kvserverbase.CmdIDKey {
@@ -270,8 +275,9 @@ func (r *Replica) evalAndPropose(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
+	log.VEventf(proposal.ctx, 2, "acquiring proposal quota (%d bytes)", quotaSize)
 	var err error
-	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
+	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, ba, quotaSize)
 	if err != nil {
 		return nil, nil, "", nil, kvpb.NewError(err)
 	}
@@ -504,6 +510,7 @@ func (r *Replica) propose(
 	//
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
+	log.VEvent(p.ctx, 2, "submitting proposal to proposal buffer")
 	err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx))
 	if err != nil {
 		return kvpb.NewError(err)

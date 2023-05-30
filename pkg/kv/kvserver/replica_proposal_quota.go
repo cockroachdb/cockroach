@@ -28,8 +28,14 @@ import (
 )
 
 func (r *Replica) maybeAcquireProposalQuota(
-	ctx context.Context, quota uint64,
+	ctx context.Context, ba *kvpb.BatchRequest, quota uint64,
 ) (*quotapool.IntAlloc, error) {
+	// We don't want to delay lease requests or transfers, in particular
+	// expiration lease extensions. These are small and latency-sensitive.
+	if ba.IsSingleRequestLeaseRequest() || ba.IsSingleTransferLeaseRequest() {
+		return nil, nil
+	}
+
 	r.mu.RLock()
 	quotaPool := r.mu.proposalQuota
 	desc := *r.mu.state.Desc

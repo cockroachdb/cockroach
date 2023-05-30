@@ -535,6 +535,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			ents = append(ents, raftpb.Entry{
 				Data: p.encodedCommand,
 			})
+			log.VEvent(p.ctx, 2, "flushing proposal to Raft")
 		}
 	}
 	if firstErr != nil {

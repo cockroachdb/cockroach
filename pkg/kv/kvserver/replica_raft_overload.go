@@ -124,6 +124,7 @@ func computeExpendableOverloadedFollowers(
 			prs = d.getProgressMap(ctx)
 			nonLive = map[roachpb.ReplicaID]nonLiveReason{}
 			for id, pr := range prs {
+				// NB: RecentActive is populated by updateRaftProgressFromActivity().
 				if !pr.RecentActive {
 					nonLive[roachpb.ReplicaID(id)] = nonLiveReasonInactive
 				}

@@ -217,6 +217,9 @@ type StoreTestingKnobs struct {
 	DisableConsistencyQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
+	// DisableQuiescence disables replica quiescence. This can also be
+	// set via COCKROACH_DISABLE_QUIESCENCE.
+	DisableQuiescence bool
 	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
 	// leadership when it diverges from the range's leaseholder. This can
 	// also be set via COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER.
