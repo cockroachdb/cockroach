@@ -37,6 +37,11 @@ type cache struct {
 	notifyLivenessChanged func(old, new livenesspb.Liveness)
 	mu                    struct {
 		syncutil.RWMutex
+		// lastNodeUpdate stores timestamps of StoreDescriptor updates in Gossip.
+		// This is tracking based on NodeID, so any store that is updated on this
+		// node will update teh lastNodeUpdate. We don't have the ability to handle
+		// "1 stalled store" on a node from a liveness perspective.
+		lastNodeUpdate map[roachpb.NodeID]hlc.Timestamp
 		// nodes stores liveness records read from Gossip
 		nodes map[roachpb.NodeID]Record
 	}
@@ -49,6 +54,8 @@ func newCache(
 	c.gossip = g
 	c.clock = clock
 	c.mu.nodes = make(map[roachpb.NodeID]Record)
+	c.mu.lastNodeUpdate = make(map[roachpb.NodeID]hlc.Timestamp)
+
 	c.notifyLivenessChanged = cbFn
 
 	// NB: we should consider moving this registration to .Start() once we
@@ -59,6 +66,11 @@ func newCache(
 	livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 	c.gossip.RegisterCallback(livenessRegex, c.livenessGossipUpdate)
 
+	// Enable redundant callbacks for the store keys because we use these
+	// callbacks as a clock to determine when a store was last updated even if it
+	// hasn't otherwise changed.
+	storeRegex := gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix)
+	c.gossip.RegisterCallback(storeRegex, c.storeGossipUpdate, gossip.Redundant)
 	return &c
 }
 
@@ -79,6 +91,24 @@ func (c *cache) livenessGossipUpdate(_ string, content roachpb.Value) {
 	}
 
 	c.maybeUpdate(ctx, Record{Liveness: liveness, raw: content.TagAndDataBytes()})
+}
+
+// storeGossipUpdate is the Gossip callback used to keep the nodeDescMap up to date.
+func (c *cache) storeGossipUpdate(_ string, content roachpb.Value) {
+	ctx := context.TODO()
+	var storeDesc roachpb.StoreDescriptor
+	if err := content.GetProto(&storeDesc); err != nil {
+		log.Errorf(ctx, "%v", err)
+		return
+	}
+	nodeID := storeDesc.Node.NodeID
+	if nodeID == 0 {
+		log.Errorf(ctx, "unexpected update for node 0, %v", storeDesc)
+		return
+	}
+	c.mu.Lock()
+	c.mu.lastNodeUpdate[nodeID] = c.clock.Now()
+	c.mu.Unlock()
 }
 
 // maybeUpdate replaces the liveness (if it appears newer) and invokes the
