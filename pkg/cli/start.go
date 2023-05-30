@@ -1264,7 +1264,7 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 	}
 
 	changed := func(flagName string) bool {
-		fl := pf.Lookup(cliflags.ListenAddr.Name)
+		fl := pf.Lookup(flagName)
 		return fl != nil && fl.Changed
 	}
 
