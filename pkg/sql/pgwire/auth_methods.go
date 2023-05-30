@@ -154,7 +154,7 @@ func passwordAuthenticator(
 	expired, hashedPassword, pwRetrievalErr := pwRetrieveFn(ctx)
 
 	// Wait for the password response from the client.
-	pwdData, err := c.GetPwdData()
+	pwdData, err := c.GetPwdData(ctx)
 	if err != nil {
 		c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 		if pwRetrievalErr != nil {
@@ -310,13 +310,16 @@ func scramAuthenticator(
 	handshake := scramServer.NewConversation()
 
 	initial := true
-	for {
+	for i := 0; true; i++ {
+		if p, ok := c.(*authPipe); ok && p.c.authLogEnabled() {
+			log.Infof(ctx, "connID=%s scramAuthenticator loop i=%d handshakeDone=%t", p.c.id, i, handshake.Done())
+		}
 		if handshake.Done() {
 			break
 		}
 
 		// Receive a response from the client.
-		resp, err := c.GetPwdData()
+		resp, err := c.GetPwdData(ctx)
 		if err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 			if pwRetrievalErr != nil {
@@ -390,7 +393,10 @@ func scramAuthenticator(
 			return err
 		}
 	}
-
+	if p, ok := c.(*authPipe); ok && p.c.authLogEnabled() {
+		log.Infof(ctx, "connID=%s scramAuthenticator loop complete handshakeDone=%t handshakeValid=%t",
+			p.c.id, handshake.Done(), handshake.Valid())
+	}
 	// Did authentication succeed?
 	if !handshake.Valid() {
 		return security.NewErrPasswordUserAuthFailed(systemIdentity)
@@ -732,7 +738,7 @@ func authJwtToken(
 			return err
 		}
 		// Wait for the password response from the client.
-		pwdData, err := c.GetPwdData()
+		pwdData, err := c.GetPwdData(ctx)
 		if err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 			return err

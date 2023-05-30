@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,6 +56,7 @@ import (
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
+	"github.com/xdg-go/scram"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -2072,4 +2075,108 @@ func TestConnCloseReleasesReservedMem(t *testing.T) {
 	// Check that no accounted-for memory is leaked, after the connection attempt fails.
 	after := s.PGServer().(*Server).connMonitor.AllocBytes()
 	require.Equal(t, before, after)
+}
+
+type feWrapper struct {
+	*pgproto3.Frontend
+	t *testing.T
+}
+
+func (fe *feWrapper) sendAndReceive(feMessage pgproto3.FrontendMessage) pgproto3.BackendMessage {
+	t := fe.t
+	err := fe.Send(feMessage)
+	require.NoError(t, err)
+	beMessage, err := fe.Receive()
+	require.NoError(t, err)
+	return beMessage
+}
+
+func TestShutdownCancelsAuth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 103108, "test for debugging")
+
+	ctx := context.Background()
+
+	var sleep atomic.Bool
+	// Start test server.
+	clusterSettings := cluster.MakeClusterSettings()
+	logSessionAuth.Override(ctx, &clusterSettings.SV, true)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		AcceptSQLWithoutTLS: true,
+		Settings:            clusterSettings,
+		Knobs: base.TestingKnobs{
+			PGWireTestingKnobs: &sql.PGWireTestingKnobs{
+				AfterReadMsgTestingKnob: func(ctx context.Context) error {
+					if sleep.Load() {
+						time.Sleep(5 * time.Second)
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Create user with testUsername and testPassword.
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	const (
+		testUsername = "testuser"
+		testPassword = "testpass"
+	)
+	sqlDB.Exec(t, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", testUsername, testPassword))
+
+	// Create pgwire front end.
+	conn, err := net.Dial("tcp", s.ServingSQLAddr())
+	require.NoError(t, err)
+	fe := feWrapper{
+		Frontend: pgproto3.NewFrontend(pgproto3.NewChunkReader(conn), conn),
+		t:        t,
+	}
+
+	// Send StartupMessage.
+	const authMechanism = "SCRAM-SHA-256"
+	msg := fe.sendAndReceive(&pgproto3.StartupMessage{
+		ProtocolVersion: version30,
+		Parameters: map[string]string{
+			"user": testUsername,
+		},
+	})
+	require.Contains(t, msg.(*pgproto3.AuthenticationSASL).AuthMechanisms, authMechanism)
+
+	// Create scram client with testUsername and testPassword.
+	scramClient, err := scram.SHA256.NewClient(testUsername, testPassword, "")
+	require.NoError(t, err)
+	scramConversation := scramClient.NewConversation()
+
+	// Send SASLInitialResponse.
+	scramResp, err := scramConversation.Step("client-challenge")
+	require.NoError(t, err)
+	msg = fe.sendAndReceive(&pgproto3.SASLInitialResponse{
+		AuthMechanism: authMechanism,
+		Data:          []byte(scramResp),
+	})
+	serverResponse1 := string(msg.(*pgproto3.AuthenticationSASLContinue).Data)
+	// Verify AuthenticationSASLContinue data.
+	scramResp, err = scramConversation.Step(serverResponse1)
+	require.NoError(t, err)
+
+	sleep.Store(true)
+
+	// Send SASLResponse.
+	msg = fe.sendAndReceive(&pgproto3.SASLResponse{
+		Data: []byte(scramResp),
+	})
+	serverResponse2 := string(msg.(*pgproto3.AuthenticationSASLFinal).Data)
+	// Verify AuthenticationSASLFinal data.
+	scramResp, err = scramConversation.Step(serverResponse2)
+	require.NoError(t, err)
+	require.Empty(t, scramResp)
+	// Back end sends additional message: AuthenticationOk.
+	msg, err = fe.Receive()
+	require.NoError(t, err)
+	require.IsType(t, &pgproto3.AuthenticationOk{}, msg)
+
+	t.Log("sleeping at end of test")
+	time.Sleep(10 * time.Minute)
 }

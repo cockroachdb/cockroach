@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -336,15 +338,15 @@ type authenticatorIO interface {
 	// sendPwdData is used to push authentication data into the authenticator.
 	// This call is blocking; authenticators are supposed to consume data hastily
 	// once they've requested it.
-	sendPwdData(data []byte) error
+	sendPwdData(ctx context.Context, data []byte) error
 	// noMorePwdData is used to inform the authenticator that the client is not
 	// sending any more authentication data. This method can be called multiple
 	// times.
-	noMorePwdData()
+	noMorePwdData(ctx context.Context)
 	// authResult blocks for an authentication decision. This call also informs
 	// the authenticator that no more auth data is coming from the client;
 	// noMorePwdData() is called internally.
-	authResult() error
+	authResult(ctx context.Context) error
 }
 
 // AuthConn is the interface used by the authenticator for interacting with the
@@ -359,7 +361,7 @@ type AuthConn interface {
 	// An error is returned if the client connection dropped or if the client
 	// didn't respect the protocol. After an error has been returned, GetPwdData()
 	// cannot be called any more.
-	GetPwdData() ([]byte, error)
+	GetPwdData(ctx context.Context) ([]byte, error)
 	// AuthOK declares that authentication succeeded and provides a
 	// unqualifiedIntSizer, to be returned by authenticator.authResult(). Future
 	// authenticator.sendPwdData() calls fail.
@@ -432,16 +434,29 @@ func newAuthPipe(
 var _ authenticatorIO = &authPipe{}
 var _ AuthConn = &authPipe{}
 
-func (p *authPipe) sendPwdData(data []byte) error {
+func (p *authPipe) sendPwdData(ctx context.Context, data []byte) error {
+	if p.c.authLogEnabled() {
+		log.Infof(ctx, "connID=%s sendPwdData started data=%s", p.c.id, string(data))
+	}
 	select {
 	case p.ch <- data:
+		if p.c.authLogEnabled() {
+			log.Infof(ctx, "connID=%s sendPwdData data sent", p.c.id)
+		}
 		return nil
 	case <-p.readerDone:
+		if p.c.authLogEnabled() {
+			log.Infof(ctx, "connID=%s sendPwdData reader done ", p.c.id)
+		}
 		return pgwirebase.NewProtocolViolationErrorf("unexpected auth data")
 	}
 }
 
-func (p *authPipe) noMorePwdData() {
+func (p *authPipe) noMorePwdData(ctx context.Context) {
+	if p.c.authLogEnabled() {
+		log.Infof(ctx, "connID=%s noMorePwdData writerDoneIsNil=%t",
+			p.c.id, p.writerDone == nil)
+	}
 	if p.writerDone == nil {
 		return
 	}
@@ -451,11 +466,27 @@ func (p *authPipe) noMorePwdData() {
 }
 
 // GetPwdData is part of the AuthConn interface.
-func (p *authPipe) GetPwdData() ([]byte, error) {
+func (p *authPipe) GetPwdData(ctx context.Context) ([]byte, error) {
+	start := timeutil.Now()
+	if p.c.authLogEnabled() {
+		log.Infof(ctx, "connID=%s GetPwdData started=%s ", p.c.id, start.Format(time.RFC3339Nano))
+	}
 	select {
 	case data := <-p.ch:
+		if p.c.authLogEnabled() {
+			end := timeutil.Now()
+			duration := end.Sub(start)
+			log.Infof(ctx, "connID=%s GetPwdData data received data=%s durationMs=%d durationMin=%d",
+				p.c.id, string(data), duration.Milliseconds(), int64(duration.Minutes()))
+		}
 		return data, nil
 	case <-p.writerDone:
+		if p.c.authLogEnabled() {
+			end := timeutil.Now()
+			duration := end.Sub(start)
+			log.Infof(ctx, "connID=%s GetPwdData writer done durationMs=%d durationMin=%d ",
+				p.c.id, duration.Milliseconds(), int64(duration.Minutes()))
+		}
 		return nil, pgwirebase.NewProtocolViolationErrorf("client didn't send required auth data")
 	}
 }
@@ -524,8 +555,8 @@ func (p *authPipe) LogAuthFailed(
 }
 
 // authResult is part of the authenticator interface.
-func (p *authPipe) authResult() error {
-	p.noMorePwdData()
+func (p *authPipe) authResult(ctx context.Context) error {
+	p.noMorePwdData(ctx)
 	res := <-p.readerDone
 	return res.err
 }

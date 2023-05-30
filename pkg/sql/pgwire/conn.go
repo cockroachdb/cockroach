@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -61,6 +62,8 @@ import (
 // the client through the sql.ClientComm interface, implemented by this conn
 // (code is in command_result.go).
 type conn struct {
+	id uuid.UUID
+
 	conn net.Conn
 
 	sessionArgs sql.SessionArgs
@@ -160,12 +163,12 @@ func (s *Server) serveConn(
 	connStart time.Time,
 	authOpt authOptions,
 ) {
-	if log.V(2) {
-		log.Infof(ctx, "new connection with options: %+v", sArgs)
-	}
 
 	c := newConn(netConn, sArgs, &s.metrics, connStart, &s.execCfg.Settings.SV)
 	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
+	if c.authLogEnabled() {
+		log.Infof(ctx, "connID=%s new connection with options: %+v", c.id, sArgs)
+	}
 	if s.execCfg.PGWireTestingKnobs != nil {
 		c.afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
 	}
@@ -189,6 +192,7 @@ func newConn(
 	sv *settings.Values,
 ) *conn {
 	c := &conn{
+		id:          uuid.FastMakeV4(),
 		conn:        netConn,
 		sessionArgs: sArgs,
 		metrics:     metrics,
@@ -276,7 +280,7 @@ func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) e
 }
 
 func (c *conn) authLogEnabled() bool {
-	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
+	return c.alwaysLogAuthActivity || (c.sv != nil && logSessionAuth.Get(c.sv))
 }
 
 // maxRepeatedErrorCount is the number of times an error can be received
@@ -361,6 +365,10 @@ func (c *conn) serveImpl(
 
 	// We'll build an authPipe to communicate with the authentication process.
 	authPipe := newAuthPipe(c, logAuthn, authOpt, c.sessionArgs.User)
+	if c.authLogEnabled() {
+		log.Infof(ctx, "connID=%s new authPipe=%p user=%s authOpt=%+v",
+			c.id, authPipe, c.sessionArgs.User.Normalized(), authOpt)
+	}
 	var authenticator authenticatorIO = authPipe
 
 	// procCh is the channel on which we'll receive the termination signal from
@@ -419,7 +427,7 @@ func (c *conn) serveImpl(
 	var terminateSeen bool
 	var authDone, ignoreUntilSync bool
 	var repeatedErrorCount int
-	for {
+	for i := 0; true; i++ {
 		breakLoop, isSimpleQuery, err := func() (bool, bool, error) {
 			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
 			c.metrics.BytesInCount.Inc(int64(n))
@@ -460,6 +468,10 @@ func (c *conn) serveImpl(
 				// packet) and instead return a broken pipe or io.EOF error message.
 				return false, isSimpleQuery, errors.Wrap(err, "pgwire: error reading input")
 			}
+			if c.authLogEnabled() && !authDone {
+				log.Infof(ctx, "connID=%s message received i=%d type=%s typeByte=%d msg=%s",
+					c.id, i, string(typ), typ, string(c.readBuf.Msg))
+			}
 			timeReceived := timeutil.Now()
 			log.VEventf(ctx, 2, "pgwire: processing %s", typ)
 
@@ -480,13 +492,13 @@ func (c *conn) serveImpl(
 					// Pass the data to the authenticator. This hopefully causes it to finish
 					// authentication in the background and give us an intSizer when we loop
 					// around.
-					if err = authenticator.sendPwdData(pwd); err != nil {
+					if err = authenticator.sendPwdData(ctx, pwd); err != nil {
 						return false, isSimpleQuery, err
 					}
 					return false, isSimpleQuery, nil
 				}
 				// Wait for the auth result.
-				if err = authenticator.authResult(); err != nil {
+				if err = authenticator.authResult(ctx); err != nil {
 					// The error has already been sent to the client.
 					return true, isSimpleQuery, nil //nolint:returnerrcheck
 				}
@@ -602,7 +614,7 @@ func (c *conn) serveImpl(
 	// In case the authenticator is blocked on waiting for data from the client,
 	// tell it that there's no more data coming. This is a no-op if authentication
 	// was completed already.
-	authenticator.noMorePwdData()
+	authenticator.noMorePwdData(ctx)
 
 	// Wait for the processor goroutine to finish, if it hasn't already. We're
 	// ignoring the error we get from it, as we have no use for it. It might be a
