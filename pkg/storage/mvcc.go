@@ -5971,10 +5971,16 @@ func mvccMinSplitKey(it MVCCIterator, startKey roachpb.Key) (roachpb.Key, error)
 //  4. Not in between the start and end of a row for table ranges.
 //
 // The returned split key is NOT guaranteed to be outside a no-split span, such
-// as Meta1, Meta2Max or Node Liveness.
+// as Meta2Max or Node Liveness.
 func MVCCFirstSplitKey(
 	_ context.Context, reader Reader, desiredSplitKey, startKey, endKey roachpb.RKey,
 ) (roachpb.Key, error) {
+	// If the start key of the range is within the meta1 key space, the range
+	// cannot be split.
+	if startKey.Less(roachpb.RKey(keys.LocalMax)) {
+		return nil, nil
+	}
+
 	it := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: endKey.AsRawKey()})
 	defer it.Close()
 
