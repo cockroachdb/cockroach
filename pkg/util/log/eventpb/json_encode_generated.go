@@ -1046,7 +1046,11 @@ func (m *ClientAuthenticationFailed) AppendJSONFields(printComma bool, b redact.
 		}
 		printComma = true
 		b = append(b, "\"Reason\":"...)
-		b = strconv.AppendInt(b, int64(m.Reason), 10)
+		// Enums are defined in our code, so are always safe to print without
+		// redaction.
+		b = append(b, '"')
+		b = append(b, m.Reason.String()...)
+		b = append(b, '"')
 	}
 
 	if m.Detail != "" {
