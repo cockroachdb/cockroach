@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -365,6 +367,67 @@ func TestIndexBackfillerColumns(t *testing.T) {
 		})
 
 	}
+}
+
+// TestInitIndexesAllowList tests that initIndexes works correctly with
+// "allowList" to populate the "added" field of the index backfiller.
+func TestInitIndexesAllowList(t *testing.T) {
+	desc := &tabledesc.Mutable{}
+	desc.TableDescriptor = descpb.TableDescriptor{
+		Mutations: []descpb.DescriptorMutation{
+			{
+				// candidate 1
+				Descriptor_: &descpb.DescriptorMutation_Index{
+					Index: &descpb.IndexDescriptor{ID: 2},
+				},
+				Direction: descpb.DescriptorMutation_ADD,
+			},
+			{
+				// candidate 2
+				Descriptor_: &descpb.DescriptorMutation_Index{
+					Index: &descpb.IndexDescriptor{ID: 3},
+				},
+				Direction: descpb.DescriptorMutation_ADD,
+			},
+			{
+				// non-candidate: index is being dropped
+				Descriptor_: &descpb.DescriptorMutation_Index{
+					Index: &descpb.IndexDescriptor{ID: 4},
+				},
+				Direction: descpb.DescriptorMutation_DROP,
+			},
+			{
+				// non-candidate: index is temporary index
+				Descriptor_: &descpb.DescriptorMutation_Index{
+					Index: &descpb.IndexDescriptor{ID: 4, UseDeletePreservingEncoding: true},
+				},
+				Direction: descpb.DescriptorMutation_ADD,
+			},
+			{
+				// non-candidate: not an index
+				Descriptor_: &descpb.DescriptorMutation_Column{
+					Column: &descpb.ColumnDescriptor{ID: 2},
+				},
+				Direction: descpb.DescriptorMutation_ADD,
+			},
+		},
+	}
+
+	t.Run("nil allowList", func(t *testing.T) {
+		// A nil allowList means no filtering.
+		ib := &IndexBackfiller{}
+		ib.initIndexes(desc, nil /* allowList */)
+		require.Equal(t, 2, len(ib.added))
+		require.Equal(t, catid.IndexID(2), ib.added[0].GetID())
+		require.Equal(t, catid.IndexID(3), ib.added[1].GetID())
+	})
+
+	t.Run("non-nil allowList", func(t *testing.T) {
+		ib := &IndexBackfiller{}
+		ib.initIndexes(desc, []catid.IndexID{3} /* allowList */)
+		require.Equal(t, 1, len(ib.added))
+		require.Equal(t, catid.IndexID(3), ib.added[0].GetID())
+	})
 }
 
 type fakeColumn struct {

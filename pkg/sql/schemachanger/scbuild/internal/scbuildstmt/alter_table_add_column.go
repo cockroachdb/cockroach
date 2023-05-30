@@ -473,7 +473,7 @@ func getNextStoredIndexColumnOrdinal(allTargets ElementResultSet, idx *scpb.Prim
 func getImplicitSecondaryIndexName(
 	b BuildCtx, descID descpb.ID, indexID descpb.IndexID, numImplicitColumns int,
 ) string {
-	elts := b.QueryByID(descID).Filter(notAbsentTargetFilter)
+	elts := b.QueryByID(descID).Filter(notFilter(absentTargetFilter))
 	var idx *scpb.Index
 	scpb.ForEachSecondaryIndex(elts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndex) {
 		if e.IndexID == indexID {

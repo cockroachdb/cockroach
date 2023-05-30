@@ -302,7 +302,7 @@ func encodeSpec(
 	h *replicationtestutils.ReplicationHelper,
 	srcTenant replicationtestutils.TenantState,
 	initialScanTime hlc.Timestamp,
-	previousHighWater hlc.Timestamp,
+	previousReplicatedTime hlc.Timestamp,
 	tables ...string,
 ) []byte {
 	var spans []roachpb.Span
@@ -313,9 +313,9 @@ func encodeSpec(
 	}
 
 	spec := &streampb.StreamPartitionSpec{
-		InitialScanTimestamp:       initialScanTime,
-		PreviousHighWaterTimestamp: previousHighWater,
-		Spans:                      spans,
+		InitialScanTimestamp:        initialScanTime,
+		PreviousReplicatedTimestamp: previousReplicatedTime,
+		Spans:                       spans,
 		Config: streampb.StreamPartitionSpec_ExecutionConfig{
 			MinCheckpointFrequency: 10 * time.Millisecond,
 		},
@@ -518,17 +518,17 @@ USE d;
 		srcTenant.SQL.Exec(t, fmt.Sprintf("CREATE TABLE %s (id INT PRIMARY KEY, n INT)", table))
 		srcTenant.SQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&clockTime)
 
-		var previousHighWater hlc.Timestamp
+		var previousReplicatedTime hlc.Timestamp
 		initialScanTimestamp := hlc.Timestamp{WallTime: clockTime.UnixNano()}
 		if !initialScan {
-			previousHighWater = hlc.Timestamp{WallTime: clockTime.UnixNano()}
+			previousReplicatedTime = hlc.Timestamp{WallTime: clockTime.UnixNano()}
 		}
 		if addSSTableBeforeRangefeed {
 			srcTenant.SQL.Exec(t, fmt.Sprintf("IMPORT INTO %s CSV DATA ($1)", table), dataSrv.URL)
 		}
 		source, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
 			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp,
-				previousHighWater, table))
+				previousReplicatedTime, table))
 		defer feed.Close(ctx)
 		if !addSSTableBeforeRangefeed {
 			srcTenant.SQL.Exec(t, fmt.Sprintf("IMPORT INTO %s CSV DATA ($1)", table), dataSrv.URL)

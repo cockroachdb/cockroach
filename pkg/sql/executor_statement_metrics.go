@@ -126,20 +126,20 @@ func (ex *connExecutor) recordStatementSummary(
 
 	// Collect the statistics.
 	idleLatRaw := phaseTimes.GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
-	idleLat := idleLatRaw.Seconds()
+	idleLatSec := idleLatRaw.Seconds()
 	runLatRaw := phaseTimes.GetRunLatency()
-	runLat := runLatRaw.Seconds()
-	parseLat := phaseTimes.GetParsingLatency().Seconds()
-	planLat := phaseTimes.GetPlanningLatency().Seconds()
+	runLatSec := runLatRaw.Seconds()
+	parseLatSec := phaseTimes.GetParsingLatency().Seconds()
+	planLatSec := phaseTimes.GetPlanningLatency().Seconds()
 	// We want to exclude any overhead to reduce possible confusion.
 	svcLatRaw := phaseTimes.GetServiceLatencyNoOverhead()
-	svcLat := svcLatRaw.Seconds()
+	svcLatSec := svcLatRaw.Seconds()
 
 	// processing latency: contributing towards SQL results.
-	processingLat := parseLat + planLat + runLat
+	processingLatSec := parseLatSec + planLatSec + runLatSec
 
 	// overhead latency: txn/retry management, error checking, etc
-	execOverhead := svcLat - processingLat
+	execOverheadSec := svcLatSec - processingLatSec
 
 	stmt := &planner.stmt
 	shouldIncludeInLatencyMetrics := shouldIncludeStmtInLatencyMetrics(stmt)
@@ -198,12 +198,12 @@ func (ex *connExecutor) recordStatementSummary(
 		AutoRetryCount:       automaticRetryCount,
 		AutoRetryReason:      ex.state.mu.autoRetryReason,
 		RowsAffected:         rowsAffected,
-		IdleLatency:          idleLat,
-		ParseLatency:         parseLat,
-		PlanLatency:          planLat,
-		RunLatency:           runLat,
-		ServiceLatency:       svcLat,
-		OverheadLatency:      execOverhead,
+		IdleLatencySec:       idleLatSec,
+		ParseLatencySec:      parseLatSec,
+		PlanLatencySec:       planLatSec,
+		RunLatencySec:        runLatSec,
+		ServiceLatencySec:    svcLatSec,
+		OverheadLatencySec:   execOverheadSec,
 		BytesRead:            stats.bytesRead,
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,
@@ -291,10 +291,10 @@ func (ex *connExecutor) recordStatementSummary(
 				"overhead %.2fµs (%.1f%%), "+
 				"session age %.4fs",
 			rowsAffected, automaticRetryCount,
-			parseLat*1e6, 100*parseLat/svcLat,
-			planLat*1e6, 100*planLat/svcLat,
-			runLat*1e6, 100*runLat/svcLat,
-			execOverhead*1e6, 100*execOverhead/svcLat,
+			parseLatSec*1e6, 100*parseLatSec/svcLatSec,
+			planLatSec*1e6, 100*planLatSec/svcLatSec,
+			runLatSec*1e6, 100*runLatSec/svcLatSec,
+			execOverheadSec*1e6, 100*execOverheadSec/svcLatSec,
 			sessionAge,
 		)
 	}

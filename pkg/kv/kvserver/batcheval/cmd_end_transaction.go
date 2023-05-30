@@ -1012,13 +1012,29 @@ func splitTrigger(
 			"unable to compute range key stats delta for RHS")
 	}
 
+	// Retrieve MVCC Stats from the current batch instead of using stats from
+	// execution context. Stats in the context could diverge from storage snapshot
+	// of current request when lease extensions are applied. Lease expiration is
+	// a special case that updates stats without obtaining latches and thus can
+	// execute concurrently with splitTrigger. As a result we must not write
+	// absolute stats values for LHS based on this value, always produce a delta
+	// since underlying stats in storage could change. At the same time it is safe
+	// to write absolute RHS side stats since we hold lock for values, and
+	// "unprotected" lease key don't yet exist until this split operation creates
+	// RHS replica.
+	currentStats, err := MakeStateLoader(rec).LoadMVCCStats(ctx, batch)
+	if err != nil {
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+			"unable to fetch original range mvcc stats for split")
+	}
+
 	h := splitStatsHelperInput{
-		AbsPreSplitBothEstimated: rec.GetMVCCStats(),
-		DeltaBatchEstimated:      bothDeltaMS,
-		DeltaRangeKey:            rangeKeyDeltaMS,
-		AbsPostSplitLeftFn:       makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
-		AbsPostSplitRightFn:      makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
-		ScanRightFirst:           splitScansRightForStatsFirst || emptyRHS,
+		AbsPreSplitBothStored: currentStats,
+		DeltaBatchEstimated:   bothDeltaMS,
+		DeltaRangeKey:         rangeKeyDeltaMS,
+		PostSplitScanLeftFn:   makeScanStatsFn(ctx, batch, ts, &split.LeftDesc, "left hand side"),
+		PostSplitScanRightFn:  makeScanStatsFn(ctx, batch, ts, &split.RightDesc, "right hand side"),
+		ScanRightFirst:        splitScansRightForStatsFirst || emptyRHS,
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
 }

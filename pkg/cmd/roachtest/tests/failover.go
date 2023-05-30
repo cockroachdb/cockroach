@@ -22,8 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,6 +35,26 @@ func registerFailover(r registry.Registry) {
 		var suffix string
 		if expirationLeases {
 			suffix = "/lease=expiration"
+		}
+
+		for _, readOnly := range []bool{false, true} {
+			readOnly := readOnly // pin loop variable
+			suffix := suffix
+			if readOnly {
+				suffix = "/read-only" + suffix
+			} else {
+				suffix = "/read-write" + suffix
+			}
+			r.Add(registry.TestSpec{
+				Name:                "failover/chaos" + suffix,
+				Owner:               registry.OwnerKV,
+				Timeout:             60 * time.Minute,
+				Cluster:             r.MakeClusterSpec(10, spec.CPU(4), spec.PreferLocalSSD(false)),
+				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runFailoverChaos(ctx, t, c, readOnly, expirationLeases)
+				},
+			})
 		}
 
 		r.Add(registry.TestSpec{
@@ -65,26 +87,15 @@ func registerFailover(r registry.Registry) {
 			},
 		})
 
-		for _, failureMode := range []failureMode{
-			failureModeBlackhole,
-			failureModeBlackholeRecv,
-			failureModeBlackholeSend,
-			failureModeCrash,
-			failureModeDiskStall,
-			failureModePause,
-		} {
+		for _, failureMode := range allFailureModes {
 			failureMode := failureMode // pin loop variable
-			makeSpec := func(nNodes, nCPU int) spec.ClusterSpec {
-				s := r.MakeClusterSpec(nNodes, spec.CPU(nCPU))
-				if failureMode == failureModeDiskStall {
-					// Use PDs in an attempt to work around flakes encountered when using
-					// SSDs. See #97968.
-					s.PreferLocalSSD = false
-				}
-				return s
-			}
-			var postValidation registry.PostValidation = 0
+
+			var usePD bool
+			var postValidation registry.PostValidation
 			if failureMode == failureModeDiskStall {
+				// Use PDs in an attempt to work around flakes encountered when using
+				// SSDs. See #97968.
+				usePD = true
 				postValidation = registry.PostValidationNoDeadNodes
 			}
 			r.Add(registry.TestSpec{
@@ -92,7 +103,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
-				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
+				Cluster:             r.MakeClusterSpec(7, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode, expirationLeases)
 				},
@@ -102,7 +113,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
-				Cluster:             makeSpec(5 /* nodes */, 4 /* cpus */),
+				Cluster:             r.MakeClusterSpec(5, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverLiveness(ctx, t, c, failureMode, expirationLeases)
 				},
@@ -112,13 +123,188 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
-				Cluster:             makeSpec(7 /* nodes */, 4 /* cpus */),
+				Cluster:             r.MakeClusterSpec(7, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverSystemNonLiveness(ctx, t, c, failureMode, expirationLeases)
 				},
 			})
 		}
 	}
+}
+
+// runFailoverChaos sets up a 9-node cluster with RF=5 and randomly scattered
+// ranges and replicas, and then runs a random failure on one or two random
+// nodes for 1 minute with 1 minute recovery, for 20 cycles total. Nodes n1-n2
+// are used as SQL gateways, and are not failed to avoid disconnecting the
+// client workload.
+//
+// It runs with either a read-write or read-only KV workload, measuring the pMax
+// unavailability for graphing. The read-only workload is useful to test e.g.
+// recovering nodes stealing Raft leadership away, since this requires the
+// replica to still be up-to-date on the log.
+func runFailoverChaos(
+	ctx context.Context, t test.Test, c cluster.Cluster, readOnly, expLeases bool,
+) {
+	require.Equal(t, 10, c.Spec().NodeCount)
+
+	rng, _ := randutil.NewTestRand()
+
+	// Create cluster, and set up failers for all failure modes.
+	opts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
+
+	failers := []Failer{}
+	for _, failureMode := range allFailureModes {
+		failer := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings)
+		if c.IsLocal() && !failer.CanUseLocal() {
+			t.Status(fmt.Sprintf("skipping failure mode %q on local cluster", failureMode))
+			continue
+		}
+		failer.Setup(ctx)
+		defer failer.Cleanup(ctx)
+		failers = append(failers, failer)
+	}
+
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Start(ctx, t.L(), opts, settings, c.Range(1, 9))
+
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.expiration_leases_only.enabled = $1`,
+		expLeases)
+	require.NoError(t, err)
+
+	// Place 5 replicas of all ranges on n3-n9, keeping n1-n2 as SQL gateways.
+	configureAllZones(t, ctx, conn, zoneConfig{replicas: 5, onlyNodes: []int{3, 4, 5, 6, 7, 8, 9}})
+
+	// Wait for upreplication.
+	require.NoError(t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */))
+
+	// Create the kv database. If this is a read-only workload, populate it with
+	// 100.000 keys.
+	var insertCount int
+	if readOnly {
+		insertCount = 100000
+	}
+	t.Status("creating workload database")
+	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	require.NoError(t, err)
+	c.Run(ctx, c.Node(10), fmt.Sprintf(
+		`./cockroach workload init kv --splits 1000 --insert-count %d {pgurl:1}`, insertCount))
+
+	// Scatter the ranges, then relocate them off of the SQL gateways n1-n2.
+	t.Status("scattering table")
+	_, err = conn.ExecContext(ctx, `ALTER TABLE kv.kv SCATTER`)
+	require.NoError(t, err)
+	relocateRanges(t, ctx, conn, `true`, []int{1, 2}, []int{3, 4, 5, 6, 7, 8, 9})
+
+	// Wait for upreplication of the new ranges.
+	require.NoError(t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */))
+
+	// Start workload on n10 using n1-n2 as gateways.
+	t.Status("running workload")
+	m := c.NewMonitor(ctx, c.Range(1, 9))
+	m.Go(func(ctx context.Context) error {
+		readPercent := 50
+		if readOnly {
+			readPercent = 100
+		}
+		c.Run(ctx, c.Node(10), fmt.Sprintf(
+			`./cockroach workload run kv --read-percent %d --write-seq R%d `+
+				`--duration 45m --concurrency 256 --max-rate 8192 --timeout 1m --tolerate-errors `+
+				`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
+				`{pgurl:1-2}`, readPercent, insertCount))
+		return nil
+	})
+
+	// Start a worker to randomly fail random nodes for 1 minute, with 20 cycles.
+	m.Go(func(ctx context.Context) error {
+		var raftCfg base.RaftConfig
+		raftCfg.SetDefaults()
+
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		for i := 0; i < 20; i++ {
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			// Pick 1 or 2 random nodes and failure modes.
+			nodeFailers := map[int]Failer{}
+			for numNodes := 1 + rng.Intn(2); len(nodeFailers) < numNodes; {
+				var node int
+				for node == 0 || nodeFailers[node] != nil {
+					node = 3 + rng.Intn(7) // n1-n2 are SQL gateways, n10 is workload runner
+				}
+				var failer Failer
+				for failer == nil {
+					failer = failers[rng.Intn(len(failers))]
+					for _, other := range nodeFailers {
+						if !other.CanRunWith(failer.Mode()) || !failer.CanRunWith(other.Mode()) {
+							failer = nil // failers aren't compatible, pick a different one
+							break
+						}
+					}
+				}
+				if d, ok := failer.(*deadlockFailer); ok { // randomize deadlockFailer
+					d.numReplicas = 1 + rng.Intn(3)
+					d.onlyLeaseholders = rng.Float64() < 0.5
+				}
+				failer.Ready(ctx, m)
+				nodeFailers[node] = failer
+			}
+
+			randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
+
+			// Ranges may occasionally escape their constraints. Move them to where
+			// they should be.
+			relocateRanges(t, ctx, conn, `true`, []int{1, 2}, []int{3, 4, 5, 6, 7, 8, 9})
+
+			// Randomly sleep up to the lease renewal interval, to vary the time
+			// between the last lease renewal and the failure. We start the timer
+			// before the range relocation above to run them concurrently.
+			select {
+			case <-randTimer:
+			case <-ctx.Done():
+			}
+
+			for node, failer := range nodeFailers {
+				// If the failer supports partial failures (e.g. partial partitions), do
+				// one with 50% probability against a random node (including SQL
+				// gateways).
+				if partialFailer, ok := failer.(PartialFailer); ok && rng.Float64() < 0.5 {
+					var partialPeer int
+					for partialPeer == 0 || partialPeer == node {
+						partialPeer = 1 + rng.Intn(9)
+					}
+					t.Status(fmt.Sprintf("failing n%d to n%d (%s)", node, partialPeer, failer))
+					partialFailer.FailPartial(ctx, node, []int{partialPeer})
+				} else {
+					t.Status(fmt.Sprintf("failing n%d (%s)", node, failer))
+					failer.Fail(ctx, node)
+				}
+			}
+
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+			for node, failer := range nodeFailers {
+				t.Status(fmt.Sprintf("recovering n%d (%s)", node, failer))
+				failer.Recover(ctx, node)
+			}
+		}
+		return nil
+	})
+	m.Wait()
 }
 
 // runFailoverPartialLeaseGateway tests a partial network partition between a
@@ -161,8 +347,9 @@ func runFailoverPartialLeaseGateway(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -216,7 +403,6 @@ func runFailoverPartialLeaseGateway(
 	// Start a worker to fail and recover partial partitions between n4,n5
 	// (leases) and n6,n7 (gateways), both fully and individually, for 3 cycles.
 	// Leases are only placed on n4.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -245,6 +431,8 @@ func runFailoverPartialLeaseGateway(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -313,8 +501,9 @@ func runFailoverPartialLeaseLeader(
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -384,7 +573,6 @@ func runFailoverPartialLeaseLeader(
 
 	// Start a worker to fail and recover partial partitions between each pair of
 	// n4-n6 for 3 cycles (9 failures total).
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -399,6 +587,8 @@ func runFailoverPartialLeaseLeader(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -465,8 +655,9 @@ func runFailoverPartialLeaseLiveness(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(partialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -518,7 +709,6 @@ func runFailoverPartialLeaseLiveness(
 	// Start a worker to fail and recover partial partitions between n4 (liveness)
 	// and workload leaseholders n5-n7 for 1 minute each, 3 times per node for 9
 	// times total.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -533,6 +723,8 @@ func runFailoverPartialLeaseLiveness(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -606,6 +798,8 @@ func runFailoverNonSystem(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -659,7 +853,6 @@ func runFailoverNonSystem(
 	})
 
 	// Start a worker to fail and recover n4-n6 in order.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -674,6 +867,8 @@ func runFailoverNonSystem(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -745,6 +940,8 @@ func runFailoverLiveness(
 	// Create cluster. Don't schedule a backup as this roachtest reports to roachperf.
 	opts := option.DefaultStartOptsNoBackups()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -804,7 +1001,6 @@ func runFailoverLiveness(
 	})
 
 	// Start a worker to fail and recover n4.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -818,6 +1014,8 @@ func runFailoverLiveness(
 			case <-ctx.Done():
 				return ctx.Err()
 			}
+
+			failer.Ready(ctx, m)
 
 			randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -888,6 +1086,8 @@ func runFailoverSystemNonLiveness(
 	// Create cluster.
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
+	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
 	failer := makeFailer(t, c, failureMode, opts, settings)
 	failer.Setup(ctx)
@@ -947,7 +1147,6 @@ func runFailoverSystemNonLiveness(
 	})
 
 	// Start a worker to fail and recover n4-n6 in order.
-	failer.Ready(ctx, m)
 	m.Go(func(ctx context.Context) error {
 		var raftCfg base.RaftConfig
 		raftCfg.SetDefaults()
@@ -962,6 +1161,8 @@ func runFailoverSystemNonLiveness(
 				case <-ctx.Done():
 					return ctx.Err()
 				}
+
+				failer.Ready(ctx, m)
 
 				randTimer := time.After(randutil.RandDuration(rng, raftCfg.RangeLeaseRenewalDuration()))
 
@@ -1006,10 +1207,22 @@ const (
 	failureModeBlackholeRecv failureMode = "blackhole-recv"
 	failureModeBlackholeSend failureMode = "blackhole-send"
 	failureModeCrash         failureMode = "crash"
+	failureModeDeadlock      failureMode = "deadlock"
 	failureModeDiskStall     failureMode = "disk-stall"
 	failureModePause         failureMode = "pause"
 	failureModeNoop          failureMode = "noop"
 )
+
+var allFailureModes = []failureMode{
+	failureModeBlackhole,
+	failureModeBlackholeRecv,
+	failureModeBlackholeSend,
+	failureModeCrash,
+	failureModeDeadlock,
+	failureModeDiskStall,
+	failureModePause,
+	// failureModeNoop intentionally omitted
+}
 
 // makeFailer creates a new failer for the given failureMode. It may return a
 // noopFailer on local clusters.
@@ -1019,7 +1232,7 @@ func makeFailer(
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
-) failer {
+) Failer {
 	f := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings)
 	if c.IsLocal() && !f.CanUseLocal() {
 		t.Status(fmt.Sprintf(
@@ -1036,7 +1249,7 @@ func makeFailerWithoutLocalNoop(
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
-) failer {
+) Failer {
 	switch failureMode {
 	case failureModeBlackhole:
 		return &blackholeFailer{
@@ -1064,6 +1277,15 @@ func makeFailerWithoutLocalNoop(
 			startOpts:     opts,
 			startSettings: settings,
 		}
+	case failureModeDeadlock:
+		return &deadlockFailer{
+			t:                t,
+			c:                c,
+			startOpts:        opts,
+			startSettings:    settings,
+			onlyLeaseholders: true,
+			numReplicas:      3,
+		}
 	case failureModeDiskStall:
 		return &diskStallFailer{
 			t:             t,
@@ -1085,17 +1307,26 @@ func makeFailerWithoutLocalNoop(
 	}
 }
 
-// failer fails and recovers a given node in some particular way.
-type failer interface {
+// Failer fails and recovers a given node in some particular way.
+type Failer interface {
 	fmt.Stringer
+
+	// Mode returns the failure mode of the failer.
+	Mode() failureMode
 
 	// CanUseLocal returns true if the failer can be run with a local cluster.
 	CanUseLocal() bool
 
+	// CanRunWith returns true if the failer can run concurrently with another
+	// given failure mode on a different cluster node. It is not required to
+	// commute, i.e. A may not be able to run with B even though B can run with A.
+	CanRunWith(other failureMode) bool
+
 	// Setup prepares the failer. It is called before the cluster is started.
 	Setup(ctx context.Context)
 
-	// Ready is called when the cluster is ready, with a running workload.
+	// Ready is called some time before failing each node, when the cluster and
+	// workload is running and after recovering the previous node failure if any.
 	Ready(ctx context.Context, m cluster.Monitor)
 
 	// Cleanup cleans up when the test exits. This is needed e.g. when the cluster
@@ -1109,9 +1340,9 @@ type failer interface {
 	Recover(ctx context.Context, nodeID int)
 }
 
-// partialFailer supports partial failures between specific node pairs.
-type partialFailer interface {
-	failer
+// PartialFailer supports partial failures between specific node pairs.
+type PartialFailer interface {
+	Failer
 
 	// FailPartial fails the node for the given peers.
 	FailPartial(ctx context.Context, nodeID int, peerIDs []int)
@@ -1120,8 +1351,10 @@ type partialFailer interface {
 // noopFailer doesn't do anything.
 type noopFailer struct{}
 
-func (f *noopFailer) String() string                          { return string(failureModeNoop) }
+func (f *noopFailer) Mode() failureMode                       { return failureModeNoop }
+func (f *noopFailer) String() string                          { return string(f.Mode()) }
 func (f *noopFailer) CanUseLocal() bool                       { return true }
+func (f *noopFailer) CanRunWith(failureMode) bool             { return true }
 func (f *noopFailer) Setup(context.Context)                   {}
 func (f *noopFailer) Ready(context.Context, cluster.Monitor)  {}
 func (f *noopFailer) Cleanup(context.Context)                 {}
@@ -1142,16 +1375,18 @@ type blackholeFailer struct {
 	output bool
 }
 
-func (f *blackholeFailer) String() string {
+func (f *blackholeFailer) Mode() failureMode {
 	if f.input && !f.output {
-		return string(failureModeBlackholeRecv)
+		return failureModeBlackholeRecv
 	} else if f.output && !f.input {
-		return string(failureModeBlackholeSend)
+		return failureModeBlackholeSend
 	}
-	return string(failureModeBlackhole)
+	return failureModeBlackhole
 }
 
+func (f *blackholeFailer) String() string                         { return string(f.Mode()) }
 func (f *blackholeFailer) CanUseLocal() bool                      { return false } // needs iptables
+func (f *blackholeFailer) CanRunWith(failureMode) bool            { return true }
 func (f *blackholeFailer) Setup(context.Context)                  {}
 func (f *blackholeFailer) Ready(context.Context, cluster.Monitor) {}
 
@@ -1234,8 +1469,10 @@ type crashFailer struct {
 	startSettings install.ClusterSettings
 }
 
-func (f *crashFailer) String() string                             { return string(failureModeCrash) }
+func (f *crashFailer) Mode() failureMode                          { return failureModeCrash }
+func (f *crashFailer) String() string                             { return string(f.Mode()) }
 func (f *crashFailer) CanUseLocal() bool                          { return true }
+func (f *crashFailer) CanRunWith(failureMode) bool                { return true }
 func (f *crashFailer) Setup(_ context.Context)                    {}
 func (f *crashFailer) Ready(_ context.Context, m cluster.Monitor) { f.m = m }
 func (f *crashFailer) Cleanup(_ context.Context)                  {}
@@ -1249,6 +1486,100 @@ func (f *crashFailer) Recover(ctx context.Context, nodeID int) {
 	f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
 }
 
+// deadlockFailer deadlocks replicas. In addition to deadlocks, this failure
+// mode is representative of all failure modes that leave a replica unresponsive
+// while the node is otherwise still functional.
+type deadlockFailer struct {
+	t                test.Test
+	c                cluster.Cluster
+	m                cluster.Monitor
+	startOpts        option.StartOpts
+	startSettings    install.ClusterSettings
+	onlyLeaseholders bool
+	numReplicas      int
+	locks            map[int][]roachpb.RangeID // track locks by node
+}
+
+func (f *deadlockFailer) Mode() failureMode                          { return failureModeDeadlock }
+func (f *deadlockFailer) String() string                             { return string(f.Mode()) }
+func (f *deadlockFailer) CanUseLocal() bool                          { return true }
+func (f *deadlockFailer) CanRunWith(m failureMode) bool              { return true }
+func (f *deadlockFailer) Setup(context.Context)                      {}
+func (f *deadlockFailer) Ready(_ context.Context, m cluster.Monitor) { f.m = m }
+func (f *deadlockFailer) Cleanup(context.Context)                    {}
+
+func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
+	require.NotZero(f.t, f.numReplicas)
+	if f.locks == nil {
+		f.locks = map[int][]roachpb.RangeID{}
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second) // can take a while to lock
+	defer cancel()
+
+	predicate := `$1::int = ANY(replicas)`
+	if f.onlyLeaseholders {
+		predicate += ` AND lease_holder = $1::int`
+	}
+
+	conn := f.c.Conn(ctx, f.t.L(), nodeID)
+	rows, err := conn.QueryContext(ctx, fmt.Sprintf(
+		`SELECT range_id, crdb_internal.unsafe_lock_replica(range_id, true) FROM [
+			SELECT range_id FROM [SHOW CLUSTER RANGES WITH DETAILS]
+			WHERE %s
+			ORDER BY random()
+			LIMIT $2
+		]`, predicate), nodeID, f.numReplicas)
+	require.NoError(f.t, err)
+	for rows.Next() {
+		var rangeID roachpb.RangeID
+		var locked bool
+		require.NoError(f.t, rows.Scan(&rangeID, &locked))
+		require.True(f.t, locked)
+		f.t.Status(fmt.Sprintf("locked r%d on n%d", rangeID, nodeID))
+		f.locks[nodeID] = append(f.locks[nodeID], rangeID)
+	}
+	require.NoError(f.t, rows.Err())
+}
+
+func (f *deadlockFailer) Recover(ctx context.Context, nodeID int) {
+	if f.locks == nil || len(f.locks[nodeID]) == 0 {
+		return
+	}
+
+	err := func() error {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		conn, err := f.c.ConnE(ctx, f.t.L(), nodeID)
+		if err != nil {
+			return err
+		}
+		for _, rangeID := range f.locks[nodeID] {
+			var unlocked bool
+			err := conn.QueryRowContext(ctx,
+				`SELECT crdb_internal.unsafe_lock_replica($1, false)`, rangeID).Scan(&unlocked)
+			if err != nil {
+				return err
+			} else if !unlocked {
+				return errors.Errorf("r%d was not unlocked", rangeID)
+			} else {
+				f.t.Status(fmt.Sprintf("unlocked r%d on n%d", rangeID, nodeID))
+			}
+		}
+		return nil
+	}()
+	// We may have locked replicas that prevent us from connecting to the node
+	// again, so we fall back to restarting the node.
+	if err != nil {
+		f.t.Status(fmt.Sprintf("failed to unlock replicas on n%d, restarting node: %s", nodeID, err))
+		f.m.ExpectDeath()
+		f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
+		f.c.Start(ctx, f.t.L(), f.startOpts, f.startSettings, f.c.Node(nodeID))
+	}
+	delete(f.locks, nodeID)
+}
+
 // diskStallFailer stalls the disk indefinitely. This should cause the node to
 // eventually self-terminate, but we'd want leases to move off before then.
 type diskStallFailer struct {
@@ -1260,8 +1591,10 @@ type diskStallFailer struct {
 	staller       diskStaller
 }
 
-func (f *diskStallFailer) String() string    { return string(failureModeDiskStall) }
-func (f *diskStallFailer) CanUseLocal() bool { return false } // needs dmsetup
+func (f *diskStallFailer) Mode() failureMode           { return failureModeDiskStall }
+func (f *diskStallFailer) String() string              { return string(f.Mode()) }
+func (f *diskStallFailer) CanUseLocal() bool           { return false } // needs dmsetup
+func (f *diskStallFailer) CanRunWith(failureMode) bool { return true }
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
 	f.staller.Setup(ctx)
@@ -1300,15 +1633,25 @@ type pauseFailer struct {
 	c cluster.Cluster
 }
 
-func (f *pauseFailer) String() string              { return string(failureModePause) }
-func (f *pauseFailer) CanUseLocal() bool           { return true }
-func (f *pauseFailer) Setup(ctx context.Context)   {}
-func (f *pauseFailer) Cleanup(ctx context.Context) {}
+func (f *pauseFailer) Mode() failureMode       { return failureModePause }
+func (f *pauseFailer) String() string          { return string(f.Mode()) }
+func (f *pauseFailer) CanUseLocal() bool       { return true }
+func (f *pauseFailer) Setup(context.Context)   {}
+func (f *pauseFailer) Cleanup(context.Context) {}
 
-func (f *pauseFailer) Ready(ctx context.Context, m cluster.Monitor) {
-	// The process pause can trip the disk stall detector, so we disable it.
+func (f *pauseFailer) CanRunWith(other failureMode) bool {
+	// Since we disable the disk stall detector, we can't run concurrently with
+	// a disk stall on a different node.
+	return other != failureModeDiskStall
+}
+
+func (f *pauseFailer) Ready(ctx context.Context, _ cluster.Monitor) {
+	// The process pause can trip the disk stall detector, so we disable it. We
+	// could let it fire, but we'd like to see if the node can recover from the
+	// pause and keep working.
 	conn := f.c.Conn(ctx, f.t.L(), 1)
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = false`)
+	_, err := conn.ExecContext(ctx,
+		`SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = false`)
 	require.NoError(f.t, err)
 }
 
@@ -1318,6 +1661,13 @@ func (f *pauseFailer) Fail(ctx context.Context, nodeID int) {
 
 func (f *pauseFailer) Recover(ctx context.Context, nodeID int) {
 	f.c.Signal(ctx, f.t.L(), 18, f.c.Node(nodeID)) // SIGCONT
+
+	// Re-enable disk stall detector, in case we do a disk stall failure after
+	// this (e.g. in chaos tests).
+	conn := f.c.Conn(ctx, f.t.L(), 1)
+	_, err := conn.ExecContext(ctx,
+		`SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = true`)
+	require.NoError(f.t, err)
 }
 
 // waitForUpreplication waits for upreplication of ranges that satisfy the

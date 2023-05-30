@@ -580,6 +580,7 @@ The "status" command outputs the binary and PID for the specified nodes:
 			if status.Err != nil {
 				config.Logger.Printf("  %2d: %s %s\n", status.NodeID, status.Err.Error())
 			} else if !status.Running {
+				// TODO(irfansharif): Surface the staged version here?
 				config.Logger.Printf("  %2d: not running\n", status.NodeID)
 			} else {
 				config.Logger.Printf("  %2d: %s %s\n", status.NodeID, status.Version, status.Pid)
@@ -1056,6 +1057,113 @@ var grafanaURLCmd = &cobra.Command{
 	}),
 }
 
+var snapshotCmd = &cobra.Command{
+	Use:   `snapshot`,
+	Short: "snapshot enables creating/listing/deleting/applying cluster snapshots",
+	Args:  cobra.MinimumNArgs(1),
+}
+
+var snapshotCreateCmd = &cobra.Command{
+	Use:   `create <cluster> <name> <description>`,
+	Short: "snapshot a named cluster, using the given snapshot name and description",
+	Args:  cobra.ExactArgs(3),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		cluster := args[0]
+		name := args[1]
+		desc := args[2]
+		snapshots, err := roachprod.CreateSnapshot(context.Background(), config.Logger, cluster, vm.VolumeSnapshotCreateOpts{
+			Name:        name,
+			Description: desc,
+		})
+		if err != nil {
+			return err
+		}
+		for _, snapshot := range snapshots {
+			config.Logger.Printf("created snapshot %s (id: %s)", snapshot.Name, snapshot.ID)
+		}
+		return nil
+	}),
+}
+
+var snapshotListCmd = &cobra.Command{
+	Use:   `list <provider> [<name>]`,
+	Short: "list all snapshots for the given cloud provider, optionally filtering by the given name",
+	Args:  cobra.RangeArgs(1, 2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		var name string
+		if len(args) == 2 {
+			name = args[1]
+		}
+		snapshots, err := roachprod.ListSnapshots(context.Background(), config.Logger, provider,
+			vm.VolumeSnapshotListOpts{
+				NamePrefix: name,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		for _, snapshot := range snapshots {
+			config.Logger.Printf("found snapshot %s (id: %s)", snapshot.Name, snapshot.ID)
+		}
+		return nil
+	}),
+}
+
+var snapshotDeleteCmd = &cobra.Command{
+	Use:   `delete <provider> <name>`,
+	Short: "delete all snapshots for the given cloud provider optionally filtering by the given name",
+	Args:  cobra.ExactArgs(2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+		provider, name := args[0], args[1]
+		snapshots, err := roachprod.ListSnapshots(ctx, config.Logger, provider,
+			vm.VolumeSnapshotListOpts{
+				NamePrefix: name,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, snapshot := range snapshots {
+			config.Logger.Printf("deleting snapshot %s (id: %s)", snapshot.Name, snapshot.ID)
+		}
+		if !dryrun {
+			if err := roachprod.DeleteSnapshots(ctx, config.Logger, provider, snapshots...); err != nil {
+				return err
+			}
+		}
+		config.Logger.Printf("done")
+		return nil
+	}),
+}
+
+var snapshotApplyCmd = &cobra.Command{
+	Use:   `apply <provider> <name> <cluster> `,
+	Short: "apply the named snapshots from the given cloud provider to the named cluster",
+	Args:  cobra.ExactArgs(3),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
+		provider, name, cluster := args[0], args[1], args[2]
+		snapshots, err := roachprod.ListSnapshots(ctx, config.Logger, provider,
+			vm.VolumeSnapshotListOpts{
+				NamePrefix: name,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		return roachprod.ApplySnapshots(ctx, config.Logger, cluster, snapshots, vm.VolumeCreateOpts{
+			Size: 500, // TODO(irfansharif): Make this configurable?
+			Labels: map[string]string{
+				vm.TagUsage: "roachprod",
+			},
+		})
+	}),
+}
+
 var rootStorageCmd = &cobra.Command{
 	Use:   `storage`,
 	Short: "storage enables administering storage related commands and configurations",
@@ -1126,7 +1234,11 @@ var storageSnapshotCmd = &cobra.Command{
 		cluster := args[0]
 		name := args[1]
 		desc := args[2]
-		return roachprod.SnapshotVolume(context.Background(), config.Logger, cluster, name, desc)
+		_, err := roachprod.CreateSnapshot(context.Background(), config.Logger, cluster, vm.VolumeSnapshotCreateOpts{
+			Name:        name,
+			Description: desc,
+		})
+		return err
 	}),
 }
 
@@ -1219,6 +1331,7 @@ func main() {
 		grafanaDumpCmd,
 		grafanaURLCmd,
 		rootStorageCmd,
+		snapshotCmd,
 		fixLongRunningAWSHostnamesCmd,
 	)
 	setBashCompletionFunction()

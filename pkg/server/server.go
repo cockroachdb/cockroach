@@ -514,13 +514,28 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 			decomNodeMap.onNodeDecommissioned(liveness.NodeID)
 		},
+		Engines: engines,
+		OnSelfHeartbeat: func(ctx context.Context) {
+			now := clock.Now()
+			if err := stores.VisitStores(func(s *kvserver.Store) error {
+				return s.WriteLastUpTimestamp(ctx, now)
+			}); err != nil {
+				log.Ops.Warningf(ctx, "writing last up timestamp: %v", err)
+			}
+		},
 	})
+
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
 	nodeLivenessFn := storepool.MakeStorePoolNodeLivenessFunc(nodeLiveness)
-	if nodeLivenessKnobs, ok := cfg.TestingKnobs.NodeLiveness.(kvserver.NodeLivenessTestingKnobs); ok &&
-		nodeLivenessKnobs.StorePoolNodeLivenessFn != nil {
-		nodeLivenessFn = nodeLivenessKnobs.StorePoolNodeLivenessFn
+	if nodeLivenessKnobs, ok := cfg.TestingKnobs.NodeLiveness.(kvserver.NodeLivenessTestingKnobs); ok {
+		if nodeLivenessKnobs.StorePoolNodeLivenessFn != nil {
+			nodeLivenessFn = nodeLivenessKnobs.StorePoolNodeLivenessFn
+		}
+
+		if nodeLivenessKnobs.IsLiveCallback != nil {
+			nodeLiveness.RegisterCallback(nodeLivenessKnobs.IsLiveCallback)
+		}
 	}
 	storePool := storepool.NewStorePool(
 		cfg.AmbientCtx,
@@ -1835,17 +1850,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
-	s.nodeLiveness.Start(workersCtx, liveness.NodeLivenessStartOptions{
-		Engines: s.engines,
-		OnSelfLive: func(ctx context.Context) {
-			now := s.clock.Now()
-			if err := s.node.stores.VisitStores(func(s *kvserver.Store) error {
-				return s.WriteLastUpTimestamp(ctx, now)
-			}); err != nil {
-				log.Ops.Warningf(ctx, "writing last up timestamp: %v", err)
-			}
-		},
-	})
+	s.nodeLiveness.Start(workersCtx)
 
 	// Begin recording status summaries.
 	if err := s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval); err != nil {

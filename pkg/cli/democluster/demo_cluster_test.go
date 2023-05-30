@@ -39,8 +39,8 @@ import (
 func newDemoCtx() *Context {
 	return &Context{
 		NumNodes:            1,
-		SQLPoolMemorySize:   128 << 20, // 128MB, chosen to fit 9 nodes on 2GB machine.
-		CacheSize:           64 << 20,  // 64MB, chosen to fit 9 nodes on 2GB machine.
+		SQLPoolMemorySize:   256 << 20, // 256MiB, chosen to fit 9 nodes on 4GB machine.
+		CacheSize:           64 << 20,  // 64MiB, chosen to fit 9 nodes on 4GB machine.
 		DefaultKeySize:      1024,
 		DefaultCALifetime:   24 * time.Hour,
 		DefaultCertLifetime: 2 * time.Hour,

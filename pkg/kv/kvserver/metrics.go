@@ -767,6 +767,61 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaBatchCommitCount = metric.Metadata{
+		Name:        "storage.batch-commit.count",
+		Help:        "Count of batch commits. See storage.AggregatedBatchCommitStats for details.",
+		Measurement: "Commit Ops",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaBatchCommitDuration = metric.Metadata{
+		Name: "storage.batch-commit.duration",
+		Help: "Cumulative time spent in batch commit. " +
+			"See storage.AggregatedBatchCommitStats for details.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaBatchCommitSemWaitDuration = metric.Metadata{
+		Name: "storage.batch-commit.sem-wait.duration",
+		Help: "Cumulative time spent in semaphore wait, for batch commit. " +
+			"See storage.AggregatedBatchCommitStats for details.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaBatchCommitWALQWaitDuration = metric.Metadata{
+		Name: "storage.batch-commit.wal-queue-wait.duration",
+		Help: "Cumulative time spent waiting for memory blocks in the WAL queue, for batch commit. " +
+			"See storage.AggregatedBatchCommitStats for details.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaBatchCommitMemStallDuration = metric.Metadata{
+		Name: "storage.batch-commit.mem-stall.duration",
+		Help: "Cumulative time spent in a write stall due to too many memtables, for batch commit. " +
+			"See storage.AggregatedBatchCommitStats for details.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaBatchCommitL0StallDuration = metric.Metadata{
+		Name: "storage.batch-commit.l0-stall.duration",
+		Help: "Cumulative time spent in a write stall due to high read amplification in L0, for batch commit. " +
+			"See storage.AggregatedBatchCommitStats for details.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaBatchCommitWALRotDuration = metric.Metadata{
+		Name: "storage.batch-commit.wal-rotation.duration",
+		Help: "Cumulative time spent waiting for WAL rotation, for batch commit. " +
+			"See storage.AggregatedBatchCommitStats for details.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaBatchCommitCommitWaitDuration = metric.Metadata{
+		Name: "storage.batch-commit.commit-wait.duration",
+		Help: "Cumulative time spent waiting for WAL sync, for batch commit. " +
+			"See storage.AggregatedBatchCommitStats for details.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 var (
@@ -2076,6 +2131,14 @@ type StoreMetrics struct {
 	FlushableIngestCount          *metric.Gauge
 	FlushableIngestTableCount     *metric.Gauge
 	FlushableIngestTableSize      *metric.Gauge
+	BatchCommitCount              *metric.Gauge
+	BatchCommitDuration           *metric.Gauge
+	BatchCommitSemWaitDuration    *metric.Gauge
+	BatchCommitWALQWaitDuration   *metric.Gauge
+	BatchCommitMemStallDuration   *metric.Gauge
+	BatchCommitL0StallDuration    *metric.Gauge
+	BatchCommitWALRotWaitDuration *metric.Gauge
+	BatchCommitCommitWaitDuration *metric.Gauge
 
 	RdbCheckpoints *metric.Gauge
 
@@ -2694,6 +2757,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		StorageCompactionsDuration:    metric.NewGauge(metaStorageCompactionsDuration),
 		FlushableIngestTableCount:     metric.NewGauge(metaFlushableIngestTableCount),
 		FlushableIngestTableSize:      metric.NewGauge(metaFlushableIngestTableBytes),
+		BatchCommitCount:              metric.NewGauge(metaBatchCommitCount),
+		BatchCommitDuration:           metric.NewGauge(metaBatchCommitDuration),
+		BatchCommitSemWaitDuration:    metric.NewGauge(metaBatchCommitSemWaitDuration),
+		BatchCommitWALQWaitDuration:   metric.NewGauge(metaBatchCommitWALQWaitDuration),
+		BatchCommitMemStallDuration:   metric.NewGauge(metaBatchCommitMemStallDuration),
+		BatchCommitL0StallDuration:    metric.NewGauge(metaBatchCommitL0StallDuration),
+		BatchCommitWALRotWaitDuration: metric.NewGauge(metaBatchCommitWALRotDuration),
+		BatchCommitCommitWaitDuration: metric.NewGauge(metaBatchCommitCommitWaitDuration),
 
 		// Ingestion metrics
 		IngestCount: metric.NewGauge(metaIngestCount),
@@ -3048,7 +3119,19 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.FlushableIngestCount.Update(int64(m.Flush.AsIngestCount))
 	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
 	sm.FlushableIngestTableSize.Update(int64(m.Flush.AsIngestBytes))
+<<<<<<< HEAD
 	sm.IngestCount.Update(int64(m.Ingest.Count))
+=======
+	sm.BatchCommitCount.Update(int64(m.BatchCommitStats.Count))
+	sm.BatchCommitDuration.Update(int64(m.BatchCommitStats.TotalDuration))
+	sm.BatchCommitSemWaitDuration.Update(int64(m.BatchCommitStats.SemaphoreWaitDuration))
+	sm.BatchCommitWALQWaitDuration.Update(int64(m.BatchCommitStats.WALQueueWaitDuration))
+	sm.BatchCommitMemStallDuration.Update(int64(m.BatchCommitStats.MemTableWriteStallDuration))
+	sm.BatchCommitL0StallDuration.Update(int64(m.BatchCommitStats.L0ReadAmpWriteStallDuration))
+	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
+	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
+
+>>>>>>> master
 	// Update the maximum number of L0 sub-levels seen.
 	sm.l0SublevelsTracker.Lock()
 	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))

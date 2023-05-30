@@ -148,7 +148,12 @@ message TagGroup {
 }
 
 message Tag {
+  // key is the name of the tag. This is a safe value.
   string key = 1;
+  // value is the value of the tag. This is NOT a safe value.
+  // It may contain PII or other sensitive information.
+  // TODO(knz): we should deprecate this field, and define
+  // a new value field with type RedactableString.
   string value = 2;
 }
 

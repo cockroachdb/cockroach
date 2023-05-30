@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -78,6 +79,8 @@ type Context struct {
 	// TxnIsSingleStmt specifies the current implicit transaction consists of only
 	// a single statement.
 	TxnIsSingleStmt bool
+	// TxnIsoLevel is the isolation level of the current transaction.
+	TxnIsoLevel isolation.Level
 
 	Settings *cluster.Settings
 	// ClusterID is the logical cluster ID for this tenant.

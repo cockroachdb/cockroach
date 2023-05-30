@@ -11,7 +11,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
-        "//pkg/util/timeutil",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
     ],

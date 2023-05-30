@@ -150,23 +150,18 @@ func FingerprintTenantAtTimestampNoHistory(
 	return db.QueryStr(t, fingerprintQuery, tenantID)[0][0]
 }
 
-// WaitUntilHighWatermark waits for the ingestion job high watermark to reach the given high watermark.
-func (c *TenantStreamingClusters) WaitUntilHighWatermark(
-	highWatermark hlc.Timestamp, ingestionJobID jobspb.JobID,
+// WaitUntilReplicatedTime waits for the ingestion job high watermark
+// to reach the given target time.
+func (c *TenantStreamingClusters) WaitUntilReplicatedTime(
+	targetTime hlc.Timestamp, ingestionJobID jobspb.JobID,
 ) {
-	testutils.SucceedsSoon(c.T, func() error {
-		progress := jobutils.GetJobProgress(c.T, c.DestSysSQL, ingestionJobID)
-		if progress.GetHighWater() == nil {
-			return errors.Newf("stream ingestion has not recorded any progress yet, waiting to advance pos %s",
-				highWatermark.String())
-		}
-		highwater := *progress.GetHighWater()
-		if highwater.Less(highWatermark) {
-			return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
-				highwater.String(), highWatermark.String())
-		}
-		return nil
-	})
+	WaitUntilReplicatedTime(c.T, targetTime, c.DestSysSQL, ingestionJobID)
+}
+
+// WaitUntilStartTimeReached waits for the ingestion replicated time
+// to reach the recorded start time of the job.
+func (c *TenantStreamingClusters) WaitUntilStartTimeReached(ingestionJobID jobspb.JobID) {
+	WaitUntilStartTimeReached(c.T, c.DestSysSQL, ingestionJobID)
 }
 
 // Cutover sets the cutover timestamp on the replication job causing the job to
@@ -333,12 +328,6 @@ func (c *TenantStreamingClusters) SrcExec(exec srcInitExecFunc) {
 	exec(c.T, c.SrcSysSQL, c.SrcTenantSQL)
 }
 
-// WaitUntilStartTimeReached waits for the ingestion job high watermark to reach
-// the recorded start time of the job.
-func (c *TenantStreamingClusters) WaitUntilStartTimeReached(ingestionJobID jobspb.JobID) {
-	WaitUntilStartTimeReached(c.T, c.DestSysSQL, ingestionJobID)
-}
-
 func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID) {
 	timeout := 45 * time.Second
 	if skip.NightlyStress() {
@@ -358,18 +347,29 @@ func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJo
 			return errors.New("ingestion start time not yet recorded")
 		}
 
-		progress := jobutils.GetJobProgress(t, db, ingestionJobID)
-		if progress.GetHighWater() == nil {
-			return errors.Newf("stream ingestion has not recorded any progress yet, waiting to advance pos %s",
-				startTime.String())
-		}
-		highwater := *progress.GetHighWater()
-		if highwater.Less(startTime) {
-			return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
-				highwater.String(), startTime.String())
-		}
-		return nil
+		return requireReplicatedTime(startTime, jobutils.GetJobProgress(t, db, ingestionJobID))
 	}, timeout)
+}
+
+func WaitUntilReplicatedTime(
+	t *testing.T, targetTime hlc.Timestamp, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		return requireReplicatedTime(targetTime, jobutils.GetJobProgress(t, db, ingestionJobID))
+	})
+}
+
+func requireReplicatedTime(targetTime hlc.Timestamp, progress *jobspb.Progress) error {
+	replicatedTime := replicationutils.ReplicatedTimeFromProgress(progress)
+	if replicatedTime.IsEmpty() {
+		return errors.Newf("stream ingestion has not recorded any progress yet, waiting to advance pos %s",
+			targetTime)
+	}
+	if replicatedTime.Less(targetTime) {
+		return errors.Newf("waiting for stream ingestion job progress %s to advance beyond %s",
+			replicatedTime, targetTime)
+	}
+	return nil
 }
 
 func CreateScatteredTable(t *testing.T, c *TenantStreamingClusters, numNodes int) {

@@ -97,6 +97,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb": {
 						"SnapshotRequest_Type": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset": {
+						"SpanAccess": {},
+						"SpanScope":  {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities": {
 						"ID": {},
 					},

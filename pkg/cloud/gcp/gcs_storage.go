@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"go.opentelemetry.io/otel/attribute"
@@ -341,7 +341,7 @@ func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.Li
 }
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
-	return contextutil.RunWithTimeout(ctx, "delete gcs file",
+	return timeutil.RunWithTimeout(ctx, "delete gcs file",
 		cloud.Timeout.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
@@ -350,7 +350,7 @@ func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 
 func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var r *gcs.Reader
-	if err := contextutil.RunWithTimeout(ctx, "size gcs file",
+	if err := timeutil.RunWithTimeout(ctx, "size gcs file",
 		cloud.Timeout.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			var err error

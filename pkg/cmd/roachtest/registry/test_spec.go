@@ -102,6 +102,11 @@ type TestSpec struct {
 	// True iff results from this test should not be published externally,
 	// e.g. to GitHub.
 	RedactResults bool
+
+	// SnapshotPrefix is set by tests that make use of volume snapshots.
+	// Prefixes must be not only be unique across tests, but one cannot be a
+	// prefix of another.
+	SnapshotPrefix string
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.

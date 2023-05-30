@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
@@ -392,7 +393,7 @@ type EngineIterator interface {
 // a clone of an existing iterator.
 type CloneContext struct {
 	rawIter       pebbleiter.Iterator
-	statsReporter statsReporter
+	statsReporter iterStatsReporter
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.
@@ -1024,13 +1025,43 @@ type WriteBatch interface {
 	// Repr returns the underlying representation of the batch and can be used to
 	// reconstitute the batch on a remote node using Writer.ApplyBatchRepr().
 	Repr() []byte
+	// CommitStats returns stats related to committing the batch. Should be
+	// called after Batch.Commit. If CommitNoSyncWait is used, it should be
+	// called after the call to SyncWait.
+	CommitStats() BatchCommitStats
+}
+
+type BatchCommitStats struct {
+	pebble.BatchCommitStats
+}
+
+// SafeFormat implements redact.SafeFormatter. It does not print the total
+// duration.
+func (stats BatchCommitStats) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Printf("commit-wait %s", stats.CommitWaitDuration)
+	if stats.WALQueueWaitDuration > 0 {
+		p.Printf(" wal-q %s", stats.WALQueueWaitDuration)
+	}
+	if stats.MemTableWriteStallDuration > 0 {
+		p.Printf(" mem-stall %s", stats.MemTableWriteStallDuration)
+	}
+	if stats.L0ReadAmpWriteStallDuration > 0 {
+		p.Printf(" l0-stall %s", stats.L0ReadAmpWriteStallDuration)
+	}
+	if stats.WALRotationDuration > 0 {
+		p.Printf(" wal-rot %s", stats.WALRotationDuration)
+	}
+	if stats.SemaphoreWaitDuration > 0 {
+		p.Printf(" sem %s", stats.SemaphoreWaitDuration)
+	}
 }
 
 // Metrics is a set of Engine metrics. Most are contained in the embedded
 // *pebble.Metrics struct, which has its own documentation.
 type Metrics struct {
 	*pebble.Metrics
-	Iterator AggregatedIteratorStats
+	Iterator         AggregatedIteratorStats
+	BatchCommitStats AggregatedBatchCommitStats
 	// DiskSlowCount counts the number of times Pebble records disk slowness.
 	DiskSlowCount int64
 	// DiskStallCount counts the number of times Pebble observes slow writes
@@ -1090,6 +1121,15 @@ type AggregatedIteratorStats struct {
 	// ExternalSteps, it's a good indication that there's an accumulation of
 	// garbage within the LSM (NOT MVCC garbage).
 	InternalSteps int
+}
+
+// AggregatedBatchCommitStats hold cumulative stats summed over all the
+// batches that committed at the engine. Since these are durations, only the
+// mean (over an interval) can be recovered. We can change some of these to
+// histograms once we know which ones are more useful.
+type AggregatedBatchCommitStats struct {
+	Count uint64
+	BatchCommitStats
 }
 
 // MetricsForInterval is a set of pebble.Metrics that need to be saved in order to

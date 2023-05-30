@@ -54,7 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -399,7 +399,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var cancelQuery context.CancelFunc
 	addActiveQuery := func() {
-		ctx, cancelQuery = contextutil.WithCancel(ctx)
+		ctx, cancelQuery = ctxlog.WithCancel(ctx)
 		ex.incrementStartedStmtCounter(ast)
 		func(st *txnState) {
 			st.mu.Lock()
@@ -2185,7 +2185,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				historicalTs,
 				ex.transitionCtx,
 				ex.QualityOfService(),
-				ex.txnIsolationLevelWithSessionDefault(s.Modes.Isolation),
+				ex.txnIsolationLevelToKV(ctx, s.Modes.Isolation),
 			)
 	case *tree.ShowCommitTimestamp:
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
@@ -2210,7 +2210,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				historicalTs,
 				ex.transitionCtx,
 				ex.QualityOfService(),
-				ex.txnIsolationLevelWithSessionDefault(tree.UnspecifiedIsolation),
+				ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 			)
 	}
 }
@@ -2242,7 +2242,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			historicalTs,
 			ex.transitionCtx,
 			ex.QualityOfService(),
-			ex.txnIsolationLevelWithSessionDefault(tree.UnspecifiedIsolation),
+			ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 		)
 }
 

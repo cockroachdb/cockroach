@@ -17,6 +17,17 @@ type Option interface {
 	apply(spec *ClusterSpec)
 }
 
+type cloudOption string
+
+func (o cloudOption) apply(spec *ClusterSpec) {
+	spec.Cloud = string(o)
+}
+
+// Cloud controls what cloud is used to create the cluster.
+func Cloud(s string) Option {
+	return cloudOption(s)
+}
+
 type nodeCPUOption int
 
 func (o nodeCPUOption) apply(spec *ClusterSpec) {
@@ -179,15 +190,15 @@ func (p clusterReusePolicyOption) apply(spec *ClusterSpec) {
 	spec.ReusePolicy = p.p
 }
 
-type preferSSDOption struct{}
+type preferLocalSSDOption bool
 
-func (*preferSSDOption) apply(spec *ClusterSpec) {
-	spec.PreferLocalSSD = true
+func (o preferLocalSSDOption) apply(spec *ClusterSpec) {
+	spec.PreferLocalSSD = bool(o)
 }
 
-// PreferSSD prefers using local SSD, when possible.
-func PreferSSD() Option {
-	return &preferSSDOption{}
+// PreferLocalSSD specifies whether to prefer using local SSD, when possible.
+func PreferLocalSSD(prefer bool) Option {
+	return preferLocalSSDOption(prefer)
 }
 
 type terminateOnMigrationOption struct{}

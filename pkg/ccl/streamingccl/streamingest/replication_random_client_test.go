@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -48,18 +49,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getHighWaterMark(ingestionJobID int, sqlDB *gosql.DB) (*hlc.Timestamp, error) {
+func getReplicatedTime(ingestionJobID int, sqlDB *gosql.DB) (hlc.Timestamp, error) {
 	var progressBytes []byte
 	if err := sqlDB.QueryRow(
 		`SELECT progress FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJobID,
 	).Scan(&progressBytes); err != nil {
-		return nil, err
+		return hlc.Timestamp{}, err
 	}
-	var payload jobspb.Progress
-	if err := protoutil.Unmarshal(progressBytes, &payload); err != nil {
-		return nil, err
+	var progress jobspb.Progress
+	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+		return hlc.Timestamp{}, err
 	}
-	return payload.GetHighWater(), nil
+	return replicationutils.ReplicatedTimeFromProgress(&progress), nil
 }
 
 func getTestRandomClientURI(tenantID roachpb.TenantID, tenantName roachpb.TenantName) string {
@@ -274,14 +275,14 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	close(canBeCompletedCh)
 
 	// Ensure that the job has made some progress.
-	var highwater hlc.Timestamp
+	var replicatedTime hlc.Timestamp
 	testutils.SucceedsSoon(t, func() error {
-		hw, err := getHighWaterMark(ingestionJobID, conn)
+		var err error
+		replicatedTime, err = getReplicatedTime(ingestionJobID, conn)
 		require.NoError(t, err)
-		if hw == nil {
-			return errors.New("highwatermark is unset, no progress has been reported")
+		if replicatedTime.IsEmpty() {
+			return errors.New("ReplicatedTime is unset, no progress has been reported")
 		}
-		highwater = *hw
 		return nil
 	})
 
@@ -289,7 +290,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	// cancellation, and subsequently rollback data above our frontier timestamp.
 	//
 	// Pick a cutover time just before the latest resolved timestamp.
-	cutoverTime := timeutil.Unix(0, highwater.WallTime).UTC().Add(-1 * time.Microsecond).Round(time.Microsecond)
+	cutoverTime := timeutil.Unix(0, replicatedTime.WallTime).UTC().Add(-1 * time.Microsecond).Round(time.Microsecond)
 	_, err = conn.Exec(`ALTER TENANT "30" COMPLETE REPLICATION TO SYSTEM TIME $1::string`, cutoverTime)
 	require.NoError(t, err)
 

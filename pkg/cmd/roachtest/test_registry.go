@@ -16,6 +16,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -34,11 +35,12 @@ func ownerToAlias(o registry.Owner) team.Alias {
 }
 
 type testRegistryImpl struct {
-	m            map[string]*registry.TestSpec
-	cloud        string
-	instanceType string // optional
-	zones        string
-	preferSSD    bool
+	m                map[string]*registry.TestSpec
+	cloud            string
+	instanceType     string // optional
+	zones            string
+	preferSSD        bool
+	snapshotPrefixes map[string]struct{}
 
 	promRegistry *prometheus.Registry
 }
@@ -48,12 +50,13 @@ func makeTestRegistry(
 	cloud string, instanceType string, zones string, preferSSD bool,
 ) testRegistryImpl {
 	return testRegistryImpl{
-		cloud:        cloud,
-		instanceType: instanceType,
-		zones:        zones,
-		preferSSD:    preferSSD,
-		m:            make(map[string]*registry.TestSpec),
-		promRegistry: prometheus.NewRegistry(),
+		cloud:            cloud,
+		instanceType:     instanceType,
+		zones:            zones,
+		preferSSD:        preferSSD,
+		m:                make(map[string]*registry.TestSpec),
+		snapshotPrefixes: make(map[string]struct{}),
+		promRegistry:     prometheus.NewRegistry(),
 	}
 }
 
@@ -62,6 +65,16 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 	if _, ok := r.m[spec.Name]; ok {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
+	}
+	if spec.SnapshotPrefix != "" {
+		for existingPrefix := range r.snapshotPrefixes {
+			if strings.HasPrefix(existingPrefix, spec.SnapshotPrefix) {
+				fmt.Fprintf(os.Stderr, "snapshot prefix %s shares prefix with another registered prefix %s\n",
+					spec.SnapshotPrefix, existingPrefix)
+				os.Exit(1)
+			}
+		}
+		r.snapshotPrefixes[spec.SnapshotPrefix] = struct{}{}
 	}
 	if err := r.prepareSpec(&spec); err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
@@ -77,7 +90,7 @@ func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) s
 	// overrides the SSD and zones settings from the registry.
 	var finalOpts []spec.Option
 	if r.preferSSD {
-		finalOpts = append(finalOpts, spec.PreferSSD())
+		finalOpts = append(finalOpts, spec.PreferLocalSSD(true))
 	}
 	if r.zones != "" {
 		finalOpts = append(finalOpts, spec.Zones(r.zones))

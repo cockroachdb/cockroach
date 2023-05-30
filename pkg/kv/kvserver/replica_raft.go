@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -69,6 +70,10 @@ var (
 	// ~16 bytes, so Pebble point deletion batches will be bounded at ~1.6MB.
 	raftLogTruncationClearRangeThreshold = kvpb.RaftIndex(util.ConstantWithMetamorphicTestRange(
 		"raft-log-truncation-clearrange-threshold", 100000 /* default */, 1 /* min */, 1e6 /* max */))
+
+	// raftDisableLeaderFollowsLeaseholder disables lease/leader colocation.
+	raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
+		"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
 )
 
 func makeIDKey() kvserverbase.CmdIDKey {
@@ -270,8 +275,9 @@ func (r *Replica) evalAndPropose(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
+	log.VEventf(proposal.ctx, 2, "acquiring proposal quota (%d bytes)", quotaSize)
 	var err error
-	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
+	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, ba, quotaSize)
 	if err != nil {
 		return nil, nil, "", nil, kvpb.NewError(err)
 	}
@@ -504,6 +510,7 @@ func (r *Replica) propose(
 	//
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
+	log.VEvent(p.ctx, 2, "submitting proposal to proposal buffer")
 	err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx))
 	if err != nil {
 		return kvpb.NewError(err)
@@ -687,6 +694,9 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 		} else {
 			p.Printf(", snapshot ignored")
 		}
+	}
+	if !(s.append.PebbleCommitStats == storage.BatchCommitStats{}) {
+		p.Printf(" pebble stats: [%s]", s.append.PebbleCommitStats)
 	}
 }
 
@@ -1515,9 +1525,15 @@ func (r *Replica) maybeCoalesceHeartbeat(
 // replicaSyncCallback implements the logstore.SyncCallback interface.
 type replicaSyncCallback Replica
 
-func (r *replicaSyncCallback) OnLogSync(ctx context.Context, msgs []raftpb.Message) {
+func (r *replicaSyncCallback) OnLogSync(
+	ctx context.Context, msgs []raftpb.Message, commitStats storage.BatchCommitStats,
+) {
+	repl := (*Replica)(r)
 	// Send MsgStorageAppend's responses.
-	(*Replica)(r).sendRaftMessages(ctx, msgs, nil /* blocked */, false /* willDeliverLocal */)
+	repl.sendRaftMessages(ctx, msgs, nil /* blocked */, false /* willDeliverLocal */)
+	if commitStats.TotalDuration > defaultReplicaRaftMuWarnThreshold {
+		log.Infof(repl.raftCtx, "slow non-blocking raft commit: %s", commitStats)
+	}
 }
 
 // sendRaftMessages sends a slice of Raft messages.
@@ -2166,7 +2182,7 @@ func shouldCampaignOnLeaseRequestRedirect(
 	// Store.updateLivenessMap). We only care whether the leader is currently live
 	// according to node liveness because this determines whether it will be able
 	// to acquire an epoch-based lease.
-	return !livenessEntry.Liveness.IsLive(now.GoTime())
+	return !livenessEntry.Liveness.IsLive(now)
 }
 
 func (r *Replica) campaignLocked(ctx context.Context) {

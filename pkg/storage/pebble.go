@@ -773,7 +773,10 @@ type Pebble struct {
 		syncutil.Mutex
 		AggregatedIteratorStats
 	}
-
+	batchCommitStats struct {
+		syncutil.Mutex
+		AggregatedBatchCommitStats
+	}
 	// Relevant options copied over from pebble.Options.
 	unencryptedFS vfs.FS
 	logCtx        context.Context
@@ -1350,6 +1353,19 @@ func (p *Pebble) aggregateIterStats(stats IteratorStats) {
 	p.iterStats.InternalSteps += stats.Stats.ForwardStepCount[pebble.InternalIterCall] + stats.Stats.ReverseStepCount[pebble.InternalIterCall]
 }
 
+func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats) {
+	p.batchCommitStats.Lock()
+	p.batchCommitStats.Count++
+	p.batchCommitStats.TotalDuration += stats.TotalDuration
+	p.batchCommitStats.SemaphoreWaitDuration += stats.SemaphoreWaitDuration
+	p.batchCommitStats.WALQueueWaitDuration += stats.WALQueueWaitDuration
+	p.batchCommitStats.MemTableWriteStallDuration += stats.MemTableWriteStallDuration
+	p.batchCommitStats.L0ReadAmpWriteStallDuration += stats.L0ReadAmpWriteStallDuration
+	p.batchCommitStats.WALRotationDuration += stats.WALRotationDuration
+	p.batchCommitStats.CommitWaitDuration += stats.CommitWaitDuration
+	p.batchCommitStats.Unlock()
+}
+
 // Closed implements the Engine interface.
 func (p *Pebble) Closed() bool {
 	return p.closed
@@ -1785,6 +1801,9 @@ func (p *Pebble) GetMetrics() Metrics {
 	p.iterStats.Lock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats
 	p.iterStats.Unlock()
+	p.batchCommitStats.Lock()
+	m.BatchCommitStats = p.batchCommitStats.AggregatedBatchCommitStats
+	p.batchCommitStats.Unlock()
 	return m
 }
 
@@ -1871,6 +1890,17 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 		}
 		stats.ActiveKeyBytes += sstSizes[pebble.FileNum(u)]
 	}
+
+	// Ensure that encryption percentage does not exceed 100%.
+	frFileLen := uint64(len(fr.Files))
+	if stats.TotalFiles < frFileLen {
+		stats.TotalFiles = frFileLen
+	}
+
+	if stats.TotalBytes < stats.ActiveKeyBytes {
+		stats.TotalBytes = stats.ActiveKeyBytes
+	}
+
 	return stats, nil
 }
 
@@ -1881,7 +1911,7 @@ func (p *Pebble) GetAuxiliaryDir() string {
 
 // NewBatch implements the Engine interface.
 func (p *Pebble) NewBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings, p)
+	return newPebbleBatch(p.db, p.db.NewIndexedBatch(), false /* writeOnly */, p.settings, p, p)
 }
 
 // NewReadOnly implements the Engine interface.
@@ -1891,12 +1921,12 @@ func (p *Pebble) NewReadOnly(durability DurabilityRequirement) ReadWriter {
 
 // NewUnindexedBatch implements the Engine interface.
 func (p *Pebble) NewUnindexedBatch() Batch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), false /* writeOnly */, p.settings, p)
+	return newPebbleBatch(p.db, p.db.NewBatch(), false /* writeOnly */, p.settings, p, p)
 }
 
 // NewWriteBatch implements the Engine interface.
 func (p *Pebble) NewWriteBatch() WriteBatch {
-	return newPebbleBatch(p.db, p.db.NewBatch(), true /* writeOnly */, p.settings, p)
+	return newPebbleBatch(p.db, p.db.NewBatch(), true /* writeOnly */, p.settings, p, p)
 }
 
 // NewSnapshot implements the Engine interface.

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -152,6 +153,10 @@ type StoreTestingKnobs struct {
 	DisableReplicateQueue bool
 	// DisableLoadBasedSplitting turns off LBS so no splits happen because of load.
 	DisableLoadBasedSplitting bool
+	// LoadBasedSplittingOverrideKey returns a key which should be used for load
+	// based splitting, overriding any value returned from the real load based
+	// splitter.
+	LoadBasedSplittingOverrideKey func(rangeID roachpb.RangeID) (splitKey roachpb.Key, useSplitKey bool)
 	// DisableSplitQueue disables the split queue.
 	DisableSplitQueue bool
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
@@ -212,6 +217,9 @@ type StoreTestingKnobs struct {
 	DisableConsistencyQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
+	// DisableQuiescence disables replica quiescence. This can also be
+	// set via COCKROACH_DISABLE_QUIESCENCE.
+	DisableQuiescence bool
 	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
 	// leadership when it diverges from the range's leaseholder. This can
 	// also be set via COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER.
@@ -490,6 +498,8 @@ type NodeLivenessTestingKnobs struct {
 	// StorePoolNodeLivenessFn is the function used by the StorePool to determine
 	// whether a node is live or not.
 	StorePoolNodeLivenessFn storepool.NodeLivenessFunc
+	// IsLiveCallback, will be called when a node becomes live.
+	IsLiveCallback liveness.IsLiveCallback
 }
 
 var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}

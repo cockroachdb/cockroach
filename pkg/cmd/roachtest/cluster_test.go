@@ -58,6 +58,10 @@ type testWrapper struct {
 	l *logger.Logger
 }
 
+func (t testWrapper) SnapshotPrefix() string {
+	return ""
+}
+
 func (t testWrapper) BuildVersion() *version.Version {
 	panic("implement me")
 }

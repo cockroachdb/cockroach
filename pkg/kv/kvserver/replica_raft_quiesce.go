@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/tracker"
 )
 
 // quiesceAfterTicks is the number of ticks without proposals after which ranges
@@ -33,8 +34,8 @@ import (
 // e.g. on every tick.
 var quiesceAfterTicks = envutil.EnvOrDefaultInt("COCKROACH_QUIESCE_AFTER_TICKS", 6)
 
-// testingDisableQuiescence disables replica quiescence.
-var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
+// raftDisableQuiescence disables raft quiescence.
+var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
 func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) {
 	if !r.mu.quiescent {
@@ -194,6 +195,9 @@ func (r *Replica) canUnquiesceRLocked() bool {
 func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 	ctx context.Context, leaseStatus kvserverpb.LeaseStatus, livenessMap livenesspb.IsLiveMap,
 ) bool {
+	if r.store.cfg.TestingKnobs.DisableQuiescence {
+		return false
+	}
 	status, lagging, ok := shouldReplicaQuiesce(ctx, r, leaseStatus, livenessMap, r.mu.pausedFollowers)
 	if !ok {
 		return false
@@ -290,9 +294,6 @@ func shouldReplicaQuiesce(
 	livenessMap livenesspb.IsLiveMap,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
 ) (*raftSparseStatus, laggingReplicaSet, bool) {
-	if testingDisableQuiescence {
-		return nil, nil, false
-	}
 	if !q.isRaftLeaderRLocked() { // fast path
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
@@ -420,7 +421,7 @@ func shouldReplicaQuiesce(
 					rep.ReplicaID, progress)
 			}
 			return nil, nil, false
-		} else if progress.Match != status.Applied {
+		} else if progress.Match != status.Applied || progress.State != tracker.StateReplicate {
 			// Skip any node in the descriptor which is not live. Instead, add
 			// the node to the set of replicas lagging the quiescence index.
 			if l, ok := livenessMap[rep.NodeID]; ok && !l.IsLive {
@@ -432,8 +433,8 @@ func shouldReplicaQuiesce(
 				continue
 			}
 			if log.V(4) {
-				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d)",
-					rep.ReplicaID, progress.Match, status.Applied)
+				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d) or state %s not admissible",
+					rep.ReplicaID, progress.Match, status.Applied, progress.State)
 			}
 			return nil, nil, false
 		}

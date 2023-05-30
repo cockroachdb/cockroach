@@ -60,7 +60,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -1416,7 +1415,7 @@ func (s *adminServer) statsForSpan(
 			func(ctx context.Context) {
 				// Set a generous timeout on the context for each individual query.
 				var spanResponse *roachpb.SpanStatsResponse
-				err := contextutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
+				err := timeutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
 						conn, err := s.serverIterator.dialNode(ctx, serverID(nodeID))
 						if err == nil {
@@ -2183,7 +2182,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 	if !ok {
 		return grpcstatus.Error(codes.Unavailable, "liveness record not found")
 	}
-	if !l.IsLive(s.clock.Now().GoTime()) {
+	if !l.IsLive(s.clock.Now()) {
 		return grpcstatus.Errorf(codes.Unavailable, "node is not healthy")
 	}
 	if l.Draining {
@@ -2212,7 +2211,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 //
 // getLivenessStatusMap() includes removed nodes (dead + decommissioned).
 func getLivenessStatusMap(
-	ctx context.Context, nl *liveness.NodeLiveness, now time.Time, st *cluster.Settings,
+	ctx context.Context, nl *liveness.NodeLiveness, now hlc.Timestamp, st *cluster.Settings,
 ) (map[roachpb.NodeID]livenesspb.NodeLivenessStatus, error) {
 	livenesses, err := nl.GetLivenessesFromKV(ctx)
 	if err != nil {
@@ -2232,7 +2231,7 @@ func getLivenessStatusMap(
 // a slice containing the liveness record of all nodes that have ever been a part of the
 // cluster.
 func getLivenessResponse(
-	ctx context.Context, nl optionalnodeliveness.Interface, now time.Time, st *cluster.Settings,
+	ctx context.Context, nl optionalnodeliveness.Interface, now hlc.Timestamp, st *cluster.Settings,
 ) (*serverpb.LivenessResponse, error) {
 	livenesses, err := nl.GetLivenessesFromKV(ctx)
 	if err != nil {
@@ -2274,7 +2273,7 @@ func (s *systemAdminServer) Liveness(
 ) (*serverpb.LivenessResponse, error) {
 	clock := s.clock
 
-	return getLivenessResponse(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
+	return getLivenessResponse(ctx, s.nodeLiveness, clock.Now(), s.st)
 }
 
 func (s *adminServer) Jobs(
@@ -2718,7 +2717,7 @@ func (s *systemAdminServer) DecommissionPreCheck(
 
 	// Initially evaluate node liveness status, so we filter the nodes to check.
 	var nodesToCheck []roachpb.NodeID
-	livenessStatusByNodeID, err := getLivenessStatusMap(ctx, s.nodeLiveness, s.clock.Now().GoTime(), s.st)
+	livenessStatusByNodeID, err := getLivenessStatusMap(ctx, s.nodeLiveness, s.clock.Now(), s.st)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2927,7 +2926,7 @@ func (s *systemAdminServer) decommissionStatusHelper(
 			Draining:         l.Draining,
 			ReportedReplicas: replicasToReport[l.NodeID],
 		}
-		if l.IsLive(s.clock.Now().GoTime()) {
+		if l.IsLive(s.clock.Now()) {
 			nodeResp.IsLive = true
 		}
 		res.Status = append(res.Status, nodeResp)
@@ -3260,7 +3259,7 @@ func (s *systemAdminServer) EnqueueRange(
 		response.Details = append(response.Details, errDetail)
 	}
 
-	if err := contextutil.RunWithTimeout(ctx, "enqueue range", time.Minute, func(ctx context.Context) error {
+	if err := timeutil.RunWithTimeout(ctx, "enqueue range", time.Minute, func(ctx context.Context) error {
 		return s.server.status.iterateNodes(
 			ctx, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
 			dialFn, nodeFn, responseFn, errorFn,

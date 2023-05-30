@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -662,7 +662,7 @@ func InitHandshake(
 ) error {
 	// TODO(bilal): Allow defaultInitLifespan to be configurable, possibly through
 	// base.Config.
-	return contextutil.RunWithTimeout(ctx, "init handshake", defaultInitLifespan, func(ctx context.Context) error {
+	return timeutil.RunWithTimeout(ctx, "init handshake", defaultInitLifespan, func(ctx context.Context) error {
 		ctx = logtags.AddTag(ctx, "init-tls-handshake", nil)
 		return initHandshakeHelper(ctx, reporter, cfg, token, numExpectedNodes, peers, certsDir, listener)
 	})

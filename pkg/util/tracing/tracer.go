@@ -250,7 +250,7 @@ var _ TracerOption = SpanReusePercentOpt(0)
 // environmental default.
 func WithSpanReusePercent(percent uint32) TracerOption {
 	if percent > 100 {
-		panic(fmt.Sprintf("invalid percent: %d", percent))
+		panic(errors.AssertionFailedf("invalid percent: %d", percent))
 	}
 	return SpanReusePercentOpt(percent)
 }
@@ -750,8 +750,8 @@ func (o useAfterFinishOpt) apply(opt *tracerOptions) {
 // panicOnUseAfterFinish is not set.
 func WithUseAfterFinishOpt(panicOnUseAfterFinish, debugUseAfterFinish bool) TracerOption {
 	if debugUseAfterFinish && !panicOnUseAfterFinish {
-		panic("it is nonsensical to set debugUseAfterFinish when panicOnUseAfterFinish is not set, " +
-			"as the collected stacks will never be used")
+		panic(errors.AssertionFailedf("it is nonsensical to set debugUseAfterFinish when panicOnUseAfterFinish is not set, " +
+			"as the collected stacks will never be used"))
 	}
 	return useAfterFinishOpt{
 		panicOnUseAfterFinish: panicOnUseAfterFinish,
@@ -781,7 +781,7 @@ func (t *Tracer) configure(ctx context.Context, sv *settings.Values, tracingDefa
 		case TracingModeActiveSpansRegistry:
 			t.SetActiveSpansRegistryEnabled(true)
 		default:
-			panic(fmt.Sprintf("unrecognized tracing option: %v", tracingDefault))
+			panic(errors.AssertionFailedf("unrecognized tracing option: %v", tracingDefault))
 		}
 
 		t.SetRedactable(enableRedactable)
@@ -1102,7 +1102,7 @@ func (t *Tracer) startSpanGeneric(
 	ctx context.Context, opName string, opts spanOptions,
 ) (context.Context, *Span) {
 	if opts.RefType != childOfRef && opts.RefType != followsFromRef {
-		panic(fmt.Sprintf("unexpected RefType %v", opts.RefType))
+		panic(errors.AssertionFailedf("unexpected RefType %v", opts.RefType))
 	}
 
 	if !opts.Parent.empty() {
@@ -1114,12 +1114,12 @@ func (t *Tracer) startSpanGeneric(
 		}
 
 		if !opts.RemoteParent.Empty() {
-			panic("can't specify both Parent and RemoteParent")
+			panic(errors.AssertionFailedf("can't specify both Parent and RemoteParent"))
 		}
 		if opts.Parent.i.sterile {
 			// A sterile parent should have been optimized away by
 			// WithParent.
-			panic("invalid sterile parent")
+			panic(errors.AssertionFailedf("invalid sterile parent"))
 		}
 		if s := opts.Parent.Tracer(); s != t {
 			// Creating a child with a different Tracer than the parent is not allowed
@@ -1128,7 +1128,7 @@ func (t *Tracer) startSpanGeneric(
 			// registry if the parent Finish()es before the child, and then it would
 			// be leaked because Finish()ing the child would attempt to remove the
 			// span from the child tracer's registry.
-			panic(fmt.Sprintf(`attempting to start span with parent from different Tracer.
+			panic(errors.AssertionFailedf(`attempting to start span with parent from different Tracer.
 parent operation: %s, tracer created at:
 
 %s
@@ -1232,7 +1232,7 @@ child operation: %s, tracer created at:
 
 			parent := opts.Parent.i.crdb
 			if s.i.crdb == parent {
-				panic(fmt.Sprintf("attempting to link a child to itself: %s", s.i.crdb.operation))
+				panic(errors.AssertionFailedf("attempting to link a child to itself: %s", s.i.crdb.operation))
 			}
 
 			// We're going to hold the parent's lock while we link both the parent
@@ -1504,7 +1504,7 @@ func (t *Tracer) SpanRegistry() *SpanRegistry {
 // Panics if the MaintainAllocationCounters testing knob was not set.
 func (t *Tracer) TestingGetStatsAndReset() (int, int) {
 	if !t.testing.MaintainAllocationCounters {
-		panic("GetStatsAndReset() needs the Tracer to have been configured with MaintainAllocationCounters")
+		panic(errors.AssertionFailedf("GetStatsAndReset() needs the Tracer to have been configured with MaintainAllocationCounters"))
 	}
 	created := atomic.SwapInt32(&t.spansCreated, 0)
 	allocs := atomic.SwapInt32(&t.spansAllocated, 0)
@@ -1662,7 +1662,7 @@ func makeOtelSpan(
 			Attributes:  followsFromAttribute,
 		}))
 	default:
-		panic(fmt.Sprintf("unsupported span reference type: %v", refType))
+		panic(errors.AssertionFailedf("unsupported span reference type: %v", refType))
 	}
 
 	_ /* ctx */, sp := otelTr.Start(ctx, opName, opts...)

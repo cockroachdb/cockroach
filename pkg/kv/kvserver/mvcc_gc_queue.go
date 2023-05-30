@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -852,7 +851,7 @@ func (mgcq *mvccGCQueue) postProcessScheduled(
 	if !mgcq.lastRangeWasHighPriority {
 		// We are most likely processing first range that has a GC hint notifying
 		// that multiple range deletions happen.
-		if err := contextutil.RunWithTimeout(ctx, "gc-check-hinted-hi-pri-replicas", gcHintScannerTimeout, func(ctx context.Context) error {
+		if err := timeutil.RunWithTimeout(ctx, "gc-check-hinted-hi-pri-replicas", gcHintScannerTimeout, func(ctx context.Context) error {
 			mgcq.scanReplicasForHiPriGCHints(ctx, processedReplica.GetRangeID())
 			return ctx.Err()
 		}); err != nil {

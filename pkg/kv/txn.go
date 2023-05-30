@@ -23,12 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -705,11 +705,6 @@ func (txn *Txn) commit(ctx context.Context) error {
 	et := endTxnReq(true, txn.deadline())
 	ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
 	_, pErr := txn.Send(ctx, ba)
-	if pErr == nil {
-		for _, t := range txn.commitTriggers {
-			t(ctx)
-		}
-	}
 	return pErr.GoError()
 }
 
@@ -869,7 +864,7 @@ func (txn *Txn) rollback(ctx context.Context) *kvpb.Error {
 		// CreateTime will give it preference within the tenant.
 		et := endTxnReq(false, hlc.Timestamp{} /* deadline */)
 		ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
-		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
+		_ = timeutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
 			func(ctx context.Context) error {
 				if _, pErr := txn.Send(ctx, ba); pErr != nil {
 					if statusErr, ok := pErr.GetDetail().(*kvpb.TransactionStatusError); ok &&
@@ -1008,7 +1003,8 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 // PrepareForRetry needs to be called before a retry to perform some
 // book-keeping and clear errors when possible.
 func (txn *Txn) PrepareForRetry(ctx context.Context) {
-	// TODO(andrei): I think commit triggers are reset in the wrong place. See #18170.
+	// Reset commit triggers. These must be reconfigured by the client during the
+	// next retry.
 	txn.commitTriggers = nil
 
 	txn.mu.Lock()
@@ -1089,7 +1085,15 @@ func (txn *Txn) Send(
 	sender := txn.mu.sender
 	txn.mu.Unlock()
 	br, pErr := txn.db.sendUsingSender(ctx, ba, sender)
+
 	if pErr == nil {
+		// Invoking the commit triggers here ensures they run even in the case when a
+		// commit request is issued manually (not via Commit).
+		if et, ok := ba.GetArg(kvpb.EndTxn); ok && et.(*kvpb.EndTxnRequest).Commit {
+			for _, t := range txn.commitTriggers {
+				t(ctx)
+			}
+		}
 		return br, nil
 	}
 

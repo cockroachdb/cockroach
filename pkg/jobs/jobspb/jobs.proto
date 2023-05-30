@@ -151,6 +151,11 @@ message StreamIngestionProgress {
   // consistent state as of the CutoverTime.
   util.hlc.Timestamp cutover_time = 1 [(gogoproto.nullable) = false];
 
+  // ReplicatedTime is the ingestion frontier. This is the canonical
+  // value of the frontier. The HighWater in the job progress is for
+  // informational purposes only.
+  util.hlc.Timestamp replicated_time = 7 [(gogoproto.nullable) = false];
+
   // ReplicationStatus is the status of the tenant that has a replication
   // (ingestion) job.
   uint32 replication_status = 6 [

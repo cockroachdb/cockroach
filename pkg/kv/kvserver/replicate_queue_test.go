@@ -1059,7 +1059,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 						},
 						NodeLiveness: kvserver.NodeLivenessTestingKnobs{
 							StorePoolNodeLivenessFn: func(
-								id roachpb.NodeID, now time.Time, duration time.Duration,
+								id roachpb.NodeID, now hlc.Timestamp, duration time.Duration,
 							) livenesspb.NodeLivenessStatus {
 								val := livenessTrap.Load()
 								if val == nil {

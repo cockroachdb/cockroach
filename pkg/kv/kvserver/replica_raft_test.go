@@ -17,11 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 	"go.etcd.io/raft/v3/tracker"
@@ -98,7 +100,18 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 			PebbleBegin:       ts(3),
 			PebbleEnd:         ts(4),
 			PebbleBytes:       1024 * 5,
-			Sync:              true,
+			PebbleCommitStats: storage.BatchCommitStats{
+				BatchCommitStats: pebble.BatchCommitStats{
+					TotalDuration:               100 * time.Millisecond,
+					SemaphoreWaitDuration:       2 * time.Millisecond,
+					WALQueueWaitDuration:        5 * time.Millisecond,
+					MemTableWriteStallDuration:  8 * time.Millisecond,
+					L0ReadAmpWriteStallDuration: 11 * time.Millisecond,
+					WALRotationDuration:         14 * time.Millisecond,
+					CommitWaitDuration:          17 * time.Millisecond,
+				},
+			},
+			Sync: true,
 		},
 		tSnapBegin: ts(4),
 		tSnapEnd:   ts(5),

@@ -56,9 +56,6 @@ type CachedData struct {
 	// PrepareMetadata is set for prepare queries. In this case the memo contains
 	// unassigned placeholders. For non-prepared queries, it is nil.
 	PrepareMetadata *PrepareMetadata
-	// IsCorrelated memoizes whether the query contained correlated
-	// subqueries during planning (prior to de-correlation).
-	IsCorrelated bool
 }
 
 func (cd *CachedData) memoryEstimate() int64 {

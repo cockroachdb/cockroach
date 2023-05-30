@@ -68,7 +68,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
@@ -312,7 +311,8 @@ func newRaftConfig(
 		Storage:                   strg,
 		Logger:                    logger,
 
-		PreVote: true,
+		PreVote:     true,
+		CheckQuorum: storeCfg.RaftEnableCheckQuorum,
 	}
 }
 
@@ -1227,9 +1227,12 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
-	if envutil.EnvOrDefaultBool("COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false) {
+	if raftDisableLeaderFollowsLeaseholder {
 		sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
 		sc.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader = true // otherwise lease requests fail
+	}
+	if raftDisableQuiescence {
+		sc.TestingKnobs.DisableQuiescence = true
 	}
 }
 
@@ -1290,7 +1293,10 @@ func NewStore(
 		allocatorStorePool = cfg.StorePool
 		storePoolIsDeterministic = allocatorStorePool.IsDeterministic()
 
-		s.rebalanceObjManager = newRebalanceObjectiveManager(ctx, s.cfg.Settings,
+		s.rebalanceObjManager = newRebalanceObjectiveManager(
+			ctx,
+			s.cfg.AmbientCtx,
+			s.cfg.Settings,
 			func(ctx context.Context, obj LBRebalancingObjective) {
 				s.VisitReplicas(func(r *Replica) (wantMore bool) {
 					r.loadBasedSplitter.SetSplitObjective(
@@ -1812,7 +1818,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 	transferTimeout := leaseTransferWait.Get(&s.cfg.Settings.SV)
 
 	drainLeasesOp := "transfer range leases"
-	if err := contextutil.RunWithTimeout(ctx, drainLeasesOp, transferTimeout,
+	if err := timeutil.RunWithTimeout(ctx, drainLeasesOp, transferTimeout,
 		func(ctx context.Context) error {
 			opts := retry.Options{
 				InitialBackoff: 10 * time.Millisecond,
@@ -1843,7 +1849,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			// err, take it into account here.
 			return errors.CombineErrors(err, ctx.Err())
 		}); err != nil {
-		if tErr := (*contextutil.TimeoutError)(nil); errors.As(err, &tErr) && tErr.Operation() == drainLeasesOp {
+		if tErr := (*timeutil.TimeoutError)(nil); errors.As(err, &tErr) && tErr.Operation() == drainLeasesOp {
 			// You expect this message when shutting down a server in an unhealthy
 			// cluster, or when draining all nodes with replicas for some range at the
 			// same time. If we see it on healthy ones, there's likely something to fix.

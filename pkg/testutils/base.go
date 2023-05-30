@@ -11,6 +11,8 @@
 package testutils
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -26,8 +28,9 @@ func NewNodeTestBaseContext() *base.Config {
 // NewTestBaseContext creates a secure base context for user.
 func NewTestBaseContext(user username.SQLUsername) *base.Config {
 	cfg := &base.Config{
-		Insecure: false,
-		User:     user,
+		Insecure:             false,
+		User:                 user,
+		RPCHeartbeatInterval: time.Millisecond,
 	}
 	FillCerts(cfg)
 	return cfg

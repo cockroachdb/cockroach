@@ -20,6 +20,7 @@ export enum ExecutionStatus {
   Waiting = "Waiting",
   Executing = "Executing",
   Preparing = "Preparing",
+  Idle = "Idle",
 }
 export type ExecutionType = "statement" | "transaction";
 

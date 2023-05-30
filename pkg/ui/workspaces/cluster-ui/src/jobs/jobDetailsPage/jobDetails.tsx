@@ -25,8 +25,8 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
   TimestampToMoment,
   idAttr,
-  DATE_FORMAT_24_TZ,
   getMatchParamByName,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util";
 
 import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
@@ -39,6 +39,8 @@ import jobStyles from "src/jobs/jobs.module.scss";
 
 import classNames from "classnames/bind";
 import { Timestamp } from "../../timestamp";
+import { RequestState } from "../../api";
+import moment from "moment-timezone";
 
 const { TabPane } = Tabs;
 
@@ -50,9 +52,7 @@ enum TabKeysEnum {
 }
 
 export interface JobDetailsStateProps {
-  job: JobResponse;
-  jobError: Error | null;
-  jobLoading: boolean;
+  jobRequest: RequestState<JobResponse>;
 }
 
 export interface JobDetailsDispatchProps {
@@ -71,7 +71,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
   }
 
   private refresh(): void {
-    if (isTerminalState(this.props.job?.status)) {
+    if (isTerminalState(this.props.jobRequest.data?.status)) {
       clearInterval(this.refreshDataInterval);
       return;
     }
@@ -84,7 +84,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
   }
 
   componentDidMount(): void {
-    if (!this.props.job) {
+    if (!this.props.jobRequest.data) {
       this.refresh();
     }
     // Refresh every 10s.
@@ -102,8 +102,12 @@ export class JobDetails extends React.Component<JobDetailsProps> {
   renderOverviewTabContent = (
     hasNextRun: boolean,
     nextRun: moment.Moment,
-    job: cockroach.server.serverpb.JobResponse,
+    job: JobResponse,
   ): React.ReactElement => {
+    if (!job) {
+      return null;
+    }
+
     return (
       <Row gutter={24}>
         <Col className="gutter-row" span={24}>
@@ -119,7 +123,10 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                 <SummaryCardItem
                   label="Next Planned Execution Time"
                   value={
-                    <Timestamp time={nextRun} format={DATE_FORMAT_24_TZ} />
+                    <Timestamp
+                      time={nextRun}
+                      format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                    />
                   }
                 />
               </>
@@ -129,16 +136,38 @@ export class JobDetails extends React.Component<JobDetailsProps> {
               value={
                 <Timestamp
                   time={TimestampToMoment(job.created)}
-                  format={DATE_FORMAT_24_TZ}
+                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                 />
               }
             />
+            {job.modified && (
+              <SummaryCardItem
+                label="Last Modified Time"
+                value={
+                  <Timestamp
+                    time={TimestampToMoment(job.modified)}
+                    format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                  />
+                }
+              />
+            )}
+            {job.finished && (
+              <SummaryCardItem
+                label="Completed Time"
+                value={
+                  <Timestamp
+                    time={TimestampToMoment(job.finished)}
+                    format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
+                  />
+                }
+              />
+            )}
             <SummaryCardItem
               label="Last Execution Time"
               value={
                 <Timestamp
                   time={TimestampToMoment(job.last_run)}
-                  format={DATE_FORMAT_24_TZ}
+                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
                 />
               }
             />
@@ -165,9 +194,9 @@ export class JobDetails extends React.Component<JobDetailsProps> {
   };
 
   render(): React.ReactElement {
-    const isLoading = !this.props.job || this.props.jobLoading;
-    const error = this.props.jobError;
-    const job = this.props.job;
+    const isLoading = this.props.jobRequest.inFlight;
+    const error = this.props.jobRequest.error;
+    const job = this.props.jobRequest.data;
     const nextRun = TimestampToMoment(job?.next_run);
     const hasNextRun = nextRun?.isAfter();
     return (
@@ -199,7 +228,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
                   <Row gutter={24}>
                     <Col className="gutter-row" span={24}>
                       <SqlBox
-                        value={job.description}
+                        value={job?.description ?? "Job not found."}
                         size={SqlBoxSize.custom}
                         format={true}
                       />
