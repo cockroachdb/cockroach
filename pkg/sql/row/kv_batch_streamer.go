@@ -213,5 +213,6 @@ func (f *txnKVStreamer) reset(ctx context.Context) {
 func (f *txnKVStreamer) Close(ctx context.Context) {
 	f.reset(ctx)
 	f.streamer.Close(ctx)
-	*f = txnKVStreamer{}
+	// Preserve observability-related fields.
+	*f = txnKVStreamer{kvBatchFetcherHelper: f.kvBatchFetcherHelper}
 }

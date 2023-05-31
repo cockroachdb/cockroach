@@ -136,7 +136,8 @@ type KVBatchFetcher interface {
 	GetBatchRequestsIssued() int64
 
 	// Close releases the resources of this KVBatchFetcher. Must be called once
-	// the fetcher is no longer in use.
+	// the fetcher is no longer in use. Note that observability-related methods
+	// can still be safely called after Close.
 	Close(ctx context.Context)
 }
 
