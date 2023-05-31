@@ -57,6 +57,7 @@ func (z *zipper) close() error {
 // responsible for locking the zipper beforehand.
 // Unsafe for concurrent use otherwise.
 func (z *zipper) createLocked(name string, mtime time.Time) (io.Writer, error) {
+	z.AssertHeld()
 	if mtime.IsZero() {
 		mtime = timeutil.Now()
 	}
@@ -374,7 +375,7 @@ func (z *zipReporter) start(format string, args ...interface{}) *zipReporter {
 // flowLocked is used internally by the reporter when progress on a
 // unit of work can be followed with additional output.
 //
-// zipReporterMu is held.
+// zipReportingMu is held.
 func (z *zipReporter) flowLocked() {
 	if !z.flowing {
 		// Prevent multi-line output.
@@ -387,8 +388,9 @@ func (z *zipReporter) flowLocked() {
 // resumeLocked is used internally by the reporter when progress
 // on a unit of work is resuming.
 //
-// zipReporterMu is held.
+// zipReportingMu is held.
 func (z *zipReporter) resumeLocked() {
+	zipReportingMu.AssertHeld()
 	if !z.flowing || z.newline {
 		fmt.Print(z.prefix + ":")
 	}
@@ -401,8 +403,9 @@ func (z *zipReporter) resumeLocked() {
 // message that needs to stand out on its own is about to be printed,
 // to complete any ongoing output and start a new line.
 //
-// zipReporterMu is held.
+// zipReportingMu is held.
 func (z *zipReporter) completeprevLocked() {
+	zipReportingMu.AssertHeld()
 	if z.flowing && !z.newline {
 		fmt.Println()
 		z.newline = true
@@ -412,8 +415,9 @@ func (z *zipReporter) completeprevLocked() {
 // endlLocked is used internally by the reported when
 // completing a message that needs to stand out on its own.
 //
-// zipReporterMu is held.
+// zipReportingMu is held.
 func (z *zipReporter) endlLocked() {
+	zipReportingMu.AssertHeld()
 	fmt.Println()
 	if z.flowing {
 		z.newline = true
