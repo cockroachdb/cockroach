@@ -10,6 +10,7 @@ filegroup(
 go_library(
     name = "importer",
     srcs = [
+        "export_base.go",
         "exportcsv.go",
         "exportparquet.go",
         "import_job.go",
@@ -110,6 +111,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logutil",
+        "//pkg/util/parquet",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
@@ -238,6 +240,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
+        "//pkg/util/parquet",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/retry",
@@ -250,7 +253,6 @@ go_test(
         "//pkg/workload/workloadsql",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_fraugster_parquet_go//:parquet-go",
         "@com_github_fraugster_parquet_go//parquet",
         "@com_github_go_sql_driver_mysql//:mysql",
         "@com_github_gogo_protobuf//proto",

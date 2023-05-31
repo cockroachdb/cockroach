@@ -13,8 +13,6 @@ package importer_test
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -24,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -35,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	crlparquet "github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquet"
 	"github.com/stretchr/testify/require"
 )
@@ -84,25 +83,7 @@ func validateParquetFile(
 	require.NoError(t, err)
 
 	require.Equal(t, 1, len(paths))
-	r, err := os.Open(paths[0])
-	if err != nil {
-		return err
-	}
-	defer r.Close()
 
-	fr, err := goparquet.NewFileReader(r)
-	if err != nil {
-		return err
-	}
-	t.Logf("Schema: %s", fr.GetSchemaDefinition())
-
-	cols := fr.GetSchemaDefinition().RootColumn.Children
-
-	if test.colFieldRepType != nil {
-		for i, col := range cols {
-			require.Equal(t, *col.SchemaElement.RepetitionType, test.colFieldRepType[i])
-		}
-	}
 	// Get the datums returned by the SELECT statement called in the EXPORT
 	// PARQUET statement to validate the data in the parquet file.
 	validationStmt := strings.SplitN(test.stmt, "FROM ", 2)[1]
@@ -117,39 +98,22 @@ func validateParquetFile(
 		validationStmt)
 	require.NoError(t, err)
 
-	for j, col := range cols {
-		require.Equal(t, col.SchemaElement.Name, test.cols[j].Name)
-	}
+	meta, readDatums, err := crlparquet.ReadFile(paths[0])
+	require.NoError(t, err)
+
+	require.Equal(t, len(test.cols), meta.NumCols)
+	require.Equal(t, len(test.datums), meta.NumRows)
+
 	i := 0
-	for {
-		row, err := fr.NextRow()
-		if err == io.EOF {
-			break
-		}
+	for _, row := range readDatums {
 		if err != nil {
 			return fmt.Errorf("reading record failed: %w", err)
 		}
-		for j := 0; j < len(cols); j++ {
-			if test.datums[i][j].ResolvedType() == types.Unknown {
-				// If we expect a null value, the row created by the parquet reader
-				// will not have the associated column.
-				_, ok := row[cols[j].SchemaElement.Name]
-				require.Equal(t, ok, false)
-				continue
-			}
-			parquetCol, err := importer.NewParquetColumn(test.cols[j].Typ, "", false)
-			if err != nil {
-				return err
-			}
-			datum, err := parquetCol.DecodeFn(row[cols[j].SchemaElement.Name])
-			if err != nil {
-				return err
-			}
-
+		for j := 0; j < len(test.cols); j++ {
 			// If we're encoding a DOidWrapper, then we want to cast the wrapped
 			// datum. Note that we don't use eval.UnwrapDatum since we're not
 			// interested in evaluating the placeholders.
-			validateDatum(t, tree.UnwrapDOidWrapper(test.datums[i][j]), tree.UnwrapDOidWrapper(datum), test.cols[j].Typ)
+			validateDatum(t, tree.UnwrapDOidWrapper(test.datums[i][j]), tree.UnwrapDOidWrapper(row[j]), test.cols[j].Typ)
 		}
 		i++
 	}
@@ -172,6 +136,14 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 		// Only the value of the json object matters, not that additional properties
 		require.Equal(t, expected.(*tree.DJSON).JSON.String(),
 			actual.(*tree.DJSON).JSON.String())
+	case types.EnumFamily:
+		// Only the value of the enum string matters, not that additional properties
+		require.Equal(t, expected.(*tree.DEnum).LogicalRep,
+			actual.(*tree.DEnum).LogicalRep)
+	case types.CollatedStringFamily:
+		// Only the value of the collated string matters, not that additional properties
+		require.Equal(t, expected.(*tree.DCollatedString).Contents,
+			actual.(*tree.DCollatedString).Contents)
 	case types.FloatFamily:
 		if typ.Equal(types.Float4) && expected.(*tree.DFloat).String() != "NaN" {
 			// CRDB currently doesn't truncate non NAN float4's correctly, so this
@@ -204,6 +176,11 @@ func TestRandomParquetExports(t *testing.T) {
 		DefaultTestTenant: base.TestTenantDisabled,
 		UseDatabase:       dbName,
 		ExternalIODir:     dir,
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				Export: &importer.ExportTestingKnobs{EnableParquetTestMetadata: true},
+			},
+		},
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -301,6 +278,11 @@ func TestBasicParquetTypes(t *testing.T) {
 		DefaultTestTenant: base.TestTenantDisabled,
 		UseDatabase:       dbName,
 		ExternalIODir:     dir,
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				Export: &importer.ExportTestingKnobs{EnableParquetTestMetadata: true},
+			},
+		},
 	})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
@@ -339,7 +321,7 @@ INDEX (y))`)
 							FROM foo`,
 			colFieldRepType: []parquet.FieldRepetitionType{
 				parquet.FieldRepetitionType_OPTIONAL,
-				parquet.FieldRepetitionType_REQUIRED,
+				parquet.FieldRepetitionType_OPTIONAL,
 				parquet.FieldRepetitionType_OPTIONAL,
 			},
 		},

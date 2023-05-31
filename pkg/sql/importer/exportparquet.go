@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	crlparquet "github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -84,8 +87,7 @@ func (c *parquetExporter) ResetBuffer() {
 func (c *parquetExporter) Len() int {
 	return c.buf.Len()
 }
-
-func (c *parquetExporter) FileName(spec execinfrapb.ExportSpec, part string) string {
+func fileName(spec execinfrapb.ExportSpec, part string) string {
 	pattern := exportParquetFilePatternDefault
 	if spec.NamePattern != "" {
 		pattern = spec.NamePattern
@@ -164,19 +166,6 @@ func (pc *ParquetColumn) GetEncoder() (func(datum tree.Datum) (interface{}, erro
 		return nil, errors.Errorf("Parquet column does not have an encode function")
 	}
 	return pc.encodeFn, nil
-}
-
-// newParquetColumns creates a list of parquet columns, given the input relation's column types.
-func newParquetColumns(typs []*types.T, sp execinfrapb.ExportSpec) ([]ParquetColumn, error) {
-	parquetColumns := make([]ParquetColumn, len(typs))
-	for i := 0; i < len(typs); i++ {
-		parquetCol, err := NewParquetColumn(typs[i], sp.ColNames[i], sp.Format.Parquet.ColNullability[i])
-		if err != nil {
-			return nil, err
-		}
-		parquetColumns[i] = parquetCol
-	}
-	return parquetColumns, nil
 }
 
 // populateLogicalStringCol is a helper function for populating parquet schema
@@ -741,22 +730,48 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 		sp.input.Start(ctx)
 		input := execinfra.MakeNoMetadataRowSource(sp.input, output)
 		alloc := &tree.DatumAlloc{}
+		datumRowAlloc := make([]tree.Datum, len(sp.spec.ColNames))
 
-		exporter, err := newParquetExporter(sp.spec, typs)
+		buf := bytes.NewBuffer([]byte{})
+		sch, err := crlparquet.NewSchema(sp.spec.ColNames, typs)
 		if err != nil {
 			return err
 		}
+		var compression crlparquet.CompressionCodec
+		switch sp.spec.Format.Compression {
+		case roachpb.IOFileFormat_Snappy:
+			compression = crlparquet.CompressionSnappy
+		case roachpb.IOFileFormat_Gzip:
+			compression = crlparquet.CompressionGZIP
+		case roachpb.IOFileFormat_Auto, roachpb.IOFileFormat_None:
+			compression = crlparquet.CompressionNone
+		default:
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"parquet writer does not support compression format %s", sp.spec.Format.Compression)
+		}
 
-		parquetRow := make(map[string]interface{}, len(typs))
 		chunk := 0
 		done := false
 		for {
 			var rows int64
-			exporter.ResetBuffer()
+			buf.Reset()
+			var writer *crlparquet.Writer
+			if sp.flowCtx.TestingKnobs().Export != nil &&
+				sp.flowCtx.TestingKnobs().Export.(*ExportTestingKnobs).EnableParquetTestMetadata {
+				writer, err = crlparquet.NewWriterWithReaderMeta(sch, buf, crlparquet.WithCompressionCodec(compression))
+				if err != nil {
+					return err
+				}
+			} else {
+				writer, err = crlparquet.NewWriter(sch, buf, crlparquet.WithCompressionCodec(compression))
+				if err != nil {
+					return err
+				}
+			}
 			for {
 				// If the bytes.Buffer sink exceeds the target size of a Parquet file, we
 				// flush before exporting any additional rows.
-				if int64(exporter.buf.Len()) >= sp.spec.ChunkSize {
+				if int64(buf.Len()) >= sp.spec.ChunkSize {
 					break
 				}
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
@@ -771,41 +786,29 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 					break
 				}
 				rows++
-
+				datumRowAlloc = datumRowAlloc[:0]
 				for i, ed := range row {
-					if ed.IsNull() {
-						parquetRow[exporter.parquetColumns[i].name] = nil
-					} else {
+					if !ed.IsNull() {
 						if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
 							return err
 						}
-
-						// If we're encoding a DOidWrapper, then we want to cast
-						// the wrapped datum. Note that we don't use
-						// eval.UnwrapDatum since we're not interested in
-						// evaluating the placeholders.
-						edNative, err := exporter.parquetColumns[i].encodeFn(tree.UnwrapDOidWrapper(ed.Datum))
-						if err != nil {
-							return err
-						}
-						parquetRow[exporter.parquetColumns[i].name] = edNative
 					}
+					// If we're encoding a DOidWrapper, then we want to cast
+					// the wrapped datum. Note that we don't use
+					// eval.UnwrapDatum since we're not interested in
+					// evaluating the placeholders.
+					datumRowAlloc = append(datumRowAlloc, tree.UnwrapDOidWrapper(ed.Datum))
 				}
-				if err := exporter.Write(parquetRow); err != nil {
+				if err := writer.AddRow(datumRowAlloc); err != nil {
 					return err
 				}
 			}
 			if rows < 1 {
 				break
 			}
-			if err := exporter.Flush(); err != nil {
-				return errors.Wrap(err, "failed to flush parquet exporter")
-			}
-
-			// Close exporter to ensure buffer and any compression footer is flushed.
-			err = exporter.Close()
-			if err != nil {
-				return errors.Wrapf(err, "failed to close exporting exporter")
+			// Flushes data to the buffer.
+			if err := writer.Close(); err != nil {
+				return errors.Wrap(err, "failed to close parquet writer")
 			}
 
 			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User())
@@ -820,11 +823,11 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 
 			part := fmt.Sprintf("n%d.%d", uniqueID, chunk)
 			chunk++
-			filename := exporter.FileName(sp.spec, part)
+			filename := fileName(sp.spec, part)
 
-			size := exporter.Len()
+			size := buf.Len()
 
-			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(exporter.Bytes())); err != nil {
+			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(buf.Bytes())); err != nil {
 				return err
 			}
 			res := rowenc.EncDatumRow{
