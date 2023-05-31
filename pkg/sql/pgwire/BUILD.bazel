@@ -94,6 +94,7 @@ go_test(
     size = "medium",
     srcs = [
         "auth_test.go",
+        "authpipe_test.go",
         "conn_test.go",
         "encoding_test.go",
         "helpers_test.go",
