@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"math"
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -281,15 +282,19 @@ func TestNewHistogramRotate(t *testing.T) {
 		// Windowed histogram is initially empty.
 		h.Inspect(func(interface{}) {}) // triggers ticking
 		_, sum := h.TotalWindowed()
-		require.Zero(t, sum)
+		if i == 0 {
+			require.Zero(t, sum)
+		} else {
+			// When there are multiple windows, start with previously recorded values.
+			require.Equal(t, sum, float64(12345))
+		}
 		// But cumulative histogram has history (if i > 0).
 		count, _ := h.Total()
 		require.EqualValues(t, i, count)
-
 		// Add a measurement and verify it's there.
 		{
 			h.RecordValue(12345)
-			f := float64(12345)
+			f := float64(12345) + sum
 			_, wSum := h.TotalWindowed()
 			require.Equal(t, wSum, f)
 		}
@@ -297,4 +302,72 @@ func TestNewHistogramRotate(t *testing.T) {
 		setNow(time.Duration(i+1) * 10 * time.Second)
 		// Go to beginning.
 	}
+}
+
+func TestHistogramWindowMerge(t *testing.T) {
+	u := func(v int) *uint64 {
+		n := uint64(v)
+		return &n
+	}
+
+	h := NewHistogram(HistogramOptions{
+		Mode:     HistogramModePrometheus,
+		Metadata: Metadata{},
+		Duration: time.Minute,
+		Buckets:  IOLatencyBuckets,
+	})
+
+	measurements := []int64{200000000, 0, 4000000, 5000000, 10000000, 20000000,
+		25000000, 30000000, 40000000, 90000000}
+	w := 4
+	var expSum float64
+
+	for i := 0; i < w; i++ {
+		h.Inspect(func(interface{}) {}) // triggers ticking
+		for j, m := range measurements {
+			h.RecordValue(m)
+			if j == 0 {
+				require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+				require.Equal(t, 235983346.678219, h.ValueAtQuantileWindowed(
+					99)) // value immediately greater than measurements[0]
+			}
+			expSum += float64(m)
+		}
+		// Tick. This rotates the histogram.
+		setNow(time.Duration(i+1) * 10 * time.Second)
+		// Go to beginning.
+	}
+
+	act := *h.ToPrometheusMetric().Histogram
+	var buckets []*prometheusgo.Bucket
+	count := 0
+	j := 0
+	var expQuantileValues []float64
+	sort.Slice(measurements, func(i, j int) bool {
+		return measurements[i] < measurements[j]
+	})
+	for i := range IOLatencyBuckets {
+		if j < len(measurements) && IOLatencyBuckets[i] > float64(measurements[j]) {
+			count = count + 4
+			j += 1
+			expQuantileValues = append(expQuantileValues, IOLatencyBuckets[i])
+		}
+		buckets = append(buckets, &prometheusgo.Bucket{CumulativeCount: u(count),
+			UpperBound: &IOLatencyBuckets[i]})
+	}
+	exp := prometheusgo.Histogram{
+		SampleCount: u(len(measurements) * w),
+		SampleSum:   &expSum,
+		Bucket:      buckets,
+	}
+
+	if !reflect.DeepEqual(act, exp) {
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	}
+
+	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+	require.Equal(t, expQuantileValues[0], h.ValueAtQuantileWindowed(10))
+	require.Equal(t, expQuantileValues[4], h.ValueAtQuantileWindowed(50))
+	require.Equal(t, expQuantileValues[7], h.ValueAtQuantileWindowed(80))
+	require.Equal(t, expQuantileValues[9], h.ValueAtQuantileWindowed(99.99))
 }
