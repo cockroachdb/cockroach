@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bitmap"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -75,6 +76,16 @@ type singleRangeBatch struct {
 	// subRequestIdx is only allocated in InOrder mode when
 	// Hints.SingleRowLookup is false and some Scan requests were enqueued.
 	subRequestIdx []int32
+	// isScanStarted tracks whether we have already received at least one
+	// response for the corresponding ScanRequest (i.e. whether the ScanRequest
+	// has been started). In particular, if enqueuedReqs[i] is a
+	// ScanRequest, then isScanStarted.IsSet(i) will return true once at least
+	// one ScanResponse was received while evaluating enqueuedReqs[i].
+	//
+	// This bitmap is preserved and "accumulated" across singleRangeBatches.
+	//
+	// isScanStarted is only allocated if at least one Scan request was enqueued.
+	isScanStarted *bitmap.Bitmap
 	// numGetsInReqs tracks the number of Get requests in reqs.
 	numGetsInReqs int64
 	// reqsReservedBytes tracks the memory reservation against the budget for
@@ -82,8 +93,8 @@ type singleRangeBatch struct {
 	reqsReservedBytes int64
 	// overheadAccountedFor tracks the memory reservation against the budget for
 	// the overhead of the reqs slice (i.e. of kvpb.RequestUnion objects) as
-	// well as the positions and the subRequestIdx slices. Since we reuse these
-	// slices for the resume requests, this can be released only when the
+	// well as positions, subRequestIdx, and isScanStarted. Since we reuse these
+	// things for the resume requests, this can be released only when the
 	// BatchResponse doesn't have any resume spans.
 	overheadAccountedFor int64
 	// minTargetBytes, if positive, indicates the minimum TargetBytes limit that
