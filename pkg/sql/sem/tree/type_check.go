@@ -2347,8 +2347,6 @@ func typeCheckComparisonOp(
 		// a::TEXT @@ b::TEXT             |  to_tsvector(a) @@ plainto_tsquery(b)
 		// a::TEXT @@ b::TSQUERY          |  to_tsvector(a) @@ b
 		// a::TSQUERY @@ b::TEXT          |  a @@ to_tsvector(b)
-		// a::TSVECTOR @@ b::TEXT         |  a @@ b::TSQUERY
-		// a::TEXT @@ b::TSVECTOR         |  a::TSQUERY @@ b
 		if leftFamily == types.StringFamily {
 			if rightFamily == types.StringFamily || rightFamily == types.TSQueryFamily {
 				leftExprs := make(Exprs, 1)
