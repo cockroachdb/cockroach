@@ -1006,31 +1006,74 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	// TODO(92961): Allow CTEs in generated statements in UDF bodies.
 	// TODO(93049): Allow UDFs to call other UDFs, as well as create other UDFs.
 	oldDisableWith := s.disableWith
+	oldDisableMutations := s.disableMutations
 	defer func() {
 		s.disableWith = oldDisableWith
 		s.disableUDFs = false
+		s.disableMutations = oldDisableMutations
 	}()
 	s.disableWith = true
 	s.disableUDFs = true
+	s.disableMutations = (funcVol != tree.FunctionVolatile) || s.disableMutations
 	for i := 0; i < stmtCnt; i++ {
-		// UDFs currently only support SELECT statements.
-		// TODO(87289): Add mutations to the generated statements.
 		var stmt tree.Statement
 		if i == stmtCnt-1 {
 			// The return type of the last statement should match the function return
 			// type.
-			if stmt, _, ok = s.makeSelect([]*types.T{rtyp}, refs); !ok {
-				return nil, false
+			// If mutations are enabled, also use anything from mutatingTableExprs -- needs returning
+			if s.disableMutations || funcVol != tree.FunctionVolatile || s.coin() {
+				if stmt, _, ok = s.makeSelect([]*types.T{rtyp}, refs); !ok {
+					return nil, false
+				}
+			} else {
+				var expr tree.TableExpr
+				var rrefs colRefs
+				switch s.d6() {
+				case 1, 2:
+					expr, rrefs, ok = s.makeInsertReturning(refs)
+				case 3, 4:
+					expr, rrefs, ok = s.makeDeleteReturning(refs)
+				case 5, 6:
+					expr, rrefs, ok = s.makeUpdateReturning(refs)
+				}
+				if !ok {
+					return nil, false
+				}
+				stmt = expr.(*tree.StatementSource).Statement
+				// If the rtype isn't a RECORD, change it to rrefs or RECORD depending
+				// how many columns there are to avoid return type mismatch errors.
+				if rtyp != types.AnyTuple {
+					if len(rrefs) == 1 && s.coin() {
+						rtyp = rrefs[0].typ
+					} else {
+						rtyp = types.AnyTuple
+					}
+					rtype.Type = rtyp
+				}
 			}
 		} else {
-			if stmt, _, ok = s.makeSelect(nil /* desiredTypes */, refs); !ok {
-				continue
+			if s.disableMutations || funcVol != tree.FunctionVolatile || s.coin() {
+				if stmt, _, ok = s.makeSelect(nil /* desiredTypes */, refs); !ok {
+					continue
+				}
+			} else {
+				switch s.d6() {
+				case 1, 2:
+					stmt, _, ok = s.makeInsert(refs)
+				case 3, 4:
+					stmt, _, ok = s.makeDelete(refs)
+				case 5, 6:
+					stmt, _, ok = s.makeUpdate(refs)
+				}
+				if !ok {
+					continue
+				}
 			}
 		}
 		stmts = append(stmts, tree.AsStringWithFlags(stmt, tree.FmtParsable))
 	}
 	if len(stmts) > 0 {
-		opts = append(opts, tree.FunctionBodyStr(strings.Join(stmts, "\n")))
+		opts = append(opts, tree.FunctionBodyStr(strings.Join(stmts, ";\n")))
 	}
 
 	stmt := &tree.CreateFunction{

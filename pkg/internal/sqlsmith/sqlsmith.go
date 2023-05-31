@@ -86,6 +86,7 @@ type Smither struct {
 	disableLimits              bool
 	disableWindowFuncs         bool
 	disableAggregateFuncs      bool
+	disableMutations           bool
 	simpleDatums               bool
 	avoidConsts                bool
 	outputSort                 bool
@@ -275,6 +276,7 @@ var DisableEverything = simpleOption("disable every kind of statement", func(s *
 var DisableMutations = simpleOption("disable mutations", func(s *Smither) {
 	s.stmtWeights = nonMutatingStatements
 	s.tableExprWeights = nonMutatingTableExprs
+	s.disableMutations = true
 })
 
 // SetComplexity configures the Smither's complexity, in other words the
