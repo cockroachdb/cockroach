@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"math"
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -285,16 +286,103 @@ func TestNewHistogramRotate(t *testing.T) {
 		// But cumulative histogram has history (if i > 0).
 		count, _ := h.Total()
 		require.EqualValues(t, i, count)
-
 		// Add a measurement and verify it's there.
 		{
 			h.RecordValue(12345)
-			f := float64(12345)
+			f := float64(12345) + sum
 			_, wSum := h.TotalWindowed()
 			require.Equal(t, wSum, f)
 		}
 		// Tick. This rotates the histogram.
 		setNow(time.Duration(i+1) * 10 * time.Second)
+		// Go to beginning.
+	}
+}
+
+func TestHistogramWindowed(t *testing.T) {
+	defer TestingSetNow(nil)()
+	setNow(0)
+
+	duration := 10 * time.Second
+
+	h := NewHistogram(HistogramOptions{
+		Mode:     HistogramModePrometheus,
+		Metadata: Metadata{},
+		Duration: duration,
+		Buckets:  IOLatencyBuckets,
+	})
+
+	measurements := []int64{200000000, 0, 4000000, 5000000, 10000000, 20000000,
+		25000000, 30000000, 40000000, 90000000}
+
+	// here we sort the measurements so we can calculate the expected quantile
+	// values for a given windowed histogram. These should be the same for all
+	// windows w > 0 before observations and for all windows w after observations.
+	sortedMeasurements := make([]int64, len(measurements))
+	copy(sortedMeasurements, measurements)
+	sort.Slice(sortedMeasurements, func(i, j int) bool {
+		return sortedMeasurements[i] < sortedMeasurements[j]
+	})
+
+	count := 0
+	j := 0
+	var expQuantileValues []float64
+	for i := range IOLatencyBuckets {
+		if j < len(sortedMeasurements) && IOLatencyBuckets[i] > float64(
+			sortedMeasurements[j]) {
+			count += 1
+			j += 1
+			expQuantileValues = append(expQuantileValues, IOLatencyBuckets[i])
+		}
+	}
+
+	w := 4
+	var expHist []prometheusgo.Histogram
+	var expSum float64
+	var expCount uint64
+	for i := 0; i < w; i++ {
+		h.Inspect(func(interface{}) {}) // triggers ticking
+		// We want to check the sum, count, and quantile values of the current
+		// window after it has merged with the previous one, and before any
+		// observations have been recorded.
+		if i > 0 {
+			expSum = *expHist[i-1].SampleSum
+			expCount = *expHist[i-1].SampleCount
+			require.Equal(t, expSum/float64(expCount), h.MeanWindowed())
+			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+			require.Equal(t, expQuantileValues[0], h.ValueAtQuantileWindowed(10))
+			require.Equal(t, expQuantileValues[4], h.ValueAtQuantileWindowed(50))
+			require.Equal(t, expQuantileValues[7], h.ValueAtQuantileWindowed(80))
+			require.Equal(t, expQuantileValues[9], h.ValueAtQuantileWindowed(99.99))
+		} else {
+			// If there is no previous window, we should be unable to calculate mean
+			// or quantile without any observations.
+			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(99.99))
+			if !math.IsNaN(h.MeanWindowed()) {
+				t.Fatalf("mean should be undefined with no observations")
+			}
+		}
+		for _, m := range measurements {
+			h.RecordValue(m)
+			expCount += 1
+			expSum += float64(m)
+		}
+		expHist = append(expHist, prometheusgo.Histogram{
+			SampleCount: &expCount,
+			SampleSum:   &expSum,
+		})
+
+		// Values should all be the same, since we have observed and counted the
+		// same values on each window iteration.
+		require.Equal(t, expSum/float64(expCount), h.MeanWindowed())
+		require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+		require.Equal(t, expQuantileValues[0], h.ValueAtQuantileWindowed(10))
+		require.Equal(t, expQuantileValues[4], h.ValueAtQuantileWindowed(50))
+		require.Equal(t, expQuantileValues[7], h.ValueAtQuantileWindowed(80))
+		require.Equal(t, expQuantileValues[9], h.ValueAtQuantileWindowed(99.99))
+
+		// Tick. This rotates the histogram.
+		setNow(time.Duration(i+1) * (duration / 2))
 		// Go to beginning.
 	}
 }
