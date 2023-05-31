@@ -55,3 +55,13 @@ statement error BATCH SIZE <size> DELETE must specify size between \[1, 1000000\
 BATCH SIZE 1000001 DELETE FROM invalid_max_size_tbl;
 
 subtest end
+
+subtest limit_clause
+
+statement ok
+CREATE TABLE limit_clause_tbl (id INT PRIMARY KEY);
+
+statement error DELETE statement cannot use both BATCH and LIMIT
+BATCH DELETE FROM limit_clause_tbl LIMIT 1;
+
+subtest end
