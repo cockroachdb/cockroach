@@ -1762,6 +1762,11 @@ func ApplySnapshots(
 		res := &install.RunResultDetails{Node: node}
 
 		volumeOpts := opts // make a copy
+		volumeOpts.Labels = map[string]string{}
+		for k, v := range opts.Labels {
+			volumeOpts.Labels[k] = v
+		}
+
 		cVM := &c.VMs[i]
 		if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
 			volumeOpts.Zone = cVM.Zone
@@ -1782,9 +1787,6 @@ func ApplySnapshots(
 				}
 			}
 
-			if volumeOpts.Labels == nil {
-				volumeOpts.Labels = map[string]string{}
-			}
 			volumeOpts.Labels[vm.TagCluster] = clusterName
 			volumeOpts.Labels[vm.TagLifetime] = cVM.Lifetime.String()
 			volumeOpts.Labels[vm.TagRoachprod] = "true"

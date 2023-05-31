@@ -379,6 +379,9 @@ func (p *Provider) ListVolumeSnapshots(
 
 	var snapshots []vm.VolumeSnapshot
 	for _, snapshotJson := range snapshotsJSONResponse {
+		if !strings.HasPrefix(snapshotJson.Name, vslo.NamePrefix) {
+			continue
+		}
 		snapshots = append(snapshots, vm.VolumeSnapshot{
 			ID:   snapshotJson.ID,
 			Name: snapshotJson.Name,
