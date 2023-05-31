@@ -8,10 +8,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/streamingccl/streamclient",
+        "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
+        "//pkg/sql/isql",
         "//pkg/storage",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/sqlutils",
