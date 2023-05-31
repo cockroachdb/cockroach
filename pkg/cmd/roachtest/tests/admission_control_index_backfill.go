@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
+const tpce100kSnapshotPrefix = "tpce-100k"
+
 func registerIndexBackfill(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
 		10, /* nodeCount */
@@ -49,24 +51,10 @@ func registerIndexBackfill(r registry.Registry) {
 		// Tags:            registry.Tags(`weekly`),
 		Cluster:         clusterSpec,
 		RequiresLicense: true,
-		SnapshotPrefix:  "tpce-100k",
+		SnapshotPrefix:  tpce100kSnapshotPrefix,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount
-
-			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
-				WithNodeExporter(c.Range(1, crdbNodes).InstallNodes()).
-				WithCluster(c.Range(1, crdbNodes).InstallNodes()).
-				WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana").
-				WithScrapeConfigs(
-					prometheus.MakeWorkloadScrapeConfig("workload", "/",
-						makeWorkloadScrapeNodes(
-							c.Node(workloadNode).InstallNodes()[0],
-							[]workloadInstance{{nodes: c.Node(workloadNode)}},
-						),
-					),
-				)
 
 			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
 				// TODO(irfansharif): Search by taking in the other parts of the
@@ -132,22 +120,39 @@ func registerIndexBackfill(r registry.Registry) {
 					len(snapshots), t.SnapshotPrefix())
 
 				if !t.SkipInit() {
-					// Creating and attaching volumes takes some time. This test is
-					// written to be re-entrant.
+					// Creating and attaching volumes takes some time. This test
+					// is written to be re-entrant. Assume the user passing in
+					// --skip-init knows this particular test behavior.
 					if err := c.ApplySnapshots(ctx, snapshots); err != nil {
 						t.Fatal(err)
 					}
 				}
 			}
 
-			// Run the foreground TPC-E workload. Run a large index backfill
-			// while it's running.
+			promCfg := &prometheus.Config{}
+			promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
+				WithNodeExporter(c.Range(1, crdbNodes).InstallNodes()).
+				WithCluster(c.Range(1, crdbNodes).InstallNodes()).
+				WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana").
+				WithScrapeConfigs(
+					prometheus.MakeWorkloadScrapeConfig("workload", "/",
+						makeWorkloadScrapeNodes(
+							c.Node(workloadNode).InstallNodes()[0],
+							[]workloadInstance{{nodes: c.Node(workloadNode)}},
+						),
+					),
+				)
+
+			// Run the foreground TPC-E workload for 20k customers for 1hr. Run
+			// large index backfills while it's running.
 			runTPCE(ctx, t, c, tpceOptions{
 				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
 					c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-					for i := 1; i <= crdbNodes; i++ {
-						c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Node(i))
+					startOpts := option.DefaultStartOptsNoBackups()
+					startOpts.RoachprodOpts.Sequential = false // the cluster's already bootstrapped
+					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
+					if err := c.StartE(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes)); err != nil {
+						t.Fatal(err)
 					}
 				},
 				customers:        100_000,
@@ -161,24 +166,55 @@ func registerIndexBackfill(r registry.Registry) {
 				prometheusConfig: promCfg,
 				workloadDuration: time.Hour,
 				during: func(ctx context.Context) error {
-					t.Status(fmt.Sprintf("recording baseline performance (<%s)",
-						5*time.Minute))
-					time.Sleep(5 * time.Minute)
-
 					db := c.Conn(ctx, t.L(), 1)
 					defer db.Close()
-					// Choose an index creation that takes ~30 minutes.
-					t.Status(fmt.Sprintf("starting index creation (<%s)", 30*time.Minute))
+
+					// Crank up AddSST concurrency to increase the likelihood
+					// of getting into IO overload regime due to follower
+					// activity.
 					if _, err := db.ExecContext(ctx,
-						fmt.Sprintf("CREATE INDEX index_%s ON tpce.cash_transaction (ct_dts)",
-							timeutil.Now().Format("20060102_T150405"),
-						),
+						"SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 3",
 					); err != nil {
-						t.Fatalf("failed to create index: %v", err)
+						t.Fatal(err)
 					}
 
-					t.Status("index creation complete, waiting for workload to finish (<%s)",
-						25*time.Minute)
+					// Defeat https://github.com/cockroachdb/cockroach/issues/98311.
+					if _, err := db.ExecContext(ctx,
+						"SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false;",
+					); err != nil {
+						t.Fatal(err)
+					}
+
+					t.Status(fmt.Sprintf("recording baseline performance (<%s)", 5*time.Minute))
+					time.Sleep(5 * time.Minute)
+
+					// Choose index creations that would take ~30 minutes each.
+					// Offset them by 5 minutes.
+					m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
+					m.Go(func(ctx context.Context) error {
+						t.Status(fmt.Sprintf("starting first index creation (<%s)", 30*time.Minute))
+						_, err := db.ExecContext(ctx,
+							fmt.Sprintf("CREATE INDEX index_%s ON tpce.cash_transaction (ct_dts)",
+								timeutil.Now().Format("20060102_T150405"),
+							),
+						)
+						t.Status("finished first index creation")
+						return err
+					})
+					m.Go(func(ctx context.Context) error {
+						time.Sleep(5 * time.Minute)
+						t.Status(fmt.Sprintf("starting second index creation (<%s)", 30*time.Minute))
+						_, err := db.ExecContext(ctx,
+							fmt.Sprintf("CREATE INDEX index_%s ON tpce.holding_history (hh_before_qty)",
+								timeutil.Now().Format("20060102_T150405"),
+							),
+						)
+						t.Status("finished second index creation")
+						return err
+					})
+					m.Wait()
+
+					t.Status(fmt.Sprintf("waiting for workload to finish (<%s)", 20*time.Minute))
 					return nil
 				},
 			})
