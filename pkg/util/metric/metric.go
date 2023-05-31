@@ -97,10 +97,12 @@ type WindowedHistogram interface {
 	Total() (int64, float64)
 	// MeanWindowed returns the average of the samples in the current window.
 	MeanWindowed() float64
-	// Mean returns the average of the sample in teh cumulative histogram.
+	// Mean returns the average of the sample in the cumulative histogram.
 	Mean() float64
 	// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
 	// interpolated value at that quantile for the windowed histogram.
+	// Methods implementing this interface should the merge buckets, sums,
+	// and counts of previous and current windows.
 	ValueAtQuantileWindowed(q float64) float64
 }
 
@@ -368,15 +370,23 @@ func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return m
 }
 
-// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the right type.
+// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
+// right type.
 func (h *Histogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
-	m := &prometheusgo.Metric{}
-	if err := h.windowed.cur.Write(m); err != nil {
+	cur := &prometheusgo.Metric{}
+	prev := &prometheusgo.Metric{}
+	if err := h.windowed.cur.Write(cur); err != nil {
 		panic(err)
 	}
-	return m
+	if h.windowed.prev != nil {
+		if err := h.windowed.prev.Write(prev); err != nil {
+			panic(err)
+		}
+		MergeWindowedHistogram(cur.Histogram, prev.Histogram)
+	}
+	return cur
 }
 
 // GetMetadata returns the metric's metadata including the Prometheus
@@ -428,7 +438,8 @@ func (h *Histogram) MeanWindowed() float64 {
 //  2. Since the prometheus client library ensures buckets are in a strictly
 //     increasing order at creation, we do not sort them.
 func (h *Histogram) ValueAtQuantileWindowed(q float64) float64 {
-	return ValueAtQuantileWindowed(h.ToPrometheusMetricWindowed().Histogram, q)
+	return ValueAtQuantileWindowed(h.ToPrometheusMetricWindowed().Histogram,
+		q)
 }
 
 var _ PrometheusExportable = (*ManualWindowHistogram)(nil)
@@ -592,15 +603,32 @@ func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return m
 }
 
+// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
+// right type.
+func (mwh *ManualWindowHistogram) ToPrometheusMetricWindowed() *prometheusgo.
+Metric {
+	cur := &prometheusgo.Metric{}
+	if err := mwh.mu.cum.Write(cur); err != nil {
+		panic(err)
+	}
+	if mwh.mu.prev != nil {
+		MergeWindowedHistogram(cur.Histogram, mwh.mu.prev)
+	}
+	return cur
+}
+
 // TotalWindowed implements the WindowedHistogram interface.
 func (mwh *ManualWindowHistogram) TotalWindowed() (int64, float64) {
 	mwh.mu.RLock()
 	defer mwh.mu.RUnlock()
-	return int64(mwh.mu.cur.GetSampleCount()), mwh.mu.cur.GetSampleSum()
+	pHist := mwh.ToPrometheusMetricWindowed().Histogram
+	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
 }
 
 // Total implements the WindowedHistogram interface.
 func (mwh *ManualWindowHistogram) Total() (int64, float64) {
+	mwh.mu.RLock()
+	defer mwh.mu.RUnlock()
 	h := mwh.ToPrometheusMetric().Histogram
 	return int64(h.GetSampleCount()), h.GetSampleSum()
 }
@@ -608,10 +636,13 @@ func (mwh *ManualWindowHistogram) Total() (int64, float64) {
 func (mwh *ManualWindowHistogram) MeanWindowed() float64 {
 	mwh.mu.RLock()
 	defer mwh.mu.RUnlock()
-	return mwh.mu.cur.GetSampleSum() / float64(mwh.mu.cur.GetSampleCount())
+	pHist := mwh.ToPrometheusMetricWindowed().Histogram
+	return pHist.GetSampleSum() / float64(pHist.GetSampleCount())
 }
 
 func (mwh *ManualWindowHistogram) Mean() float64 {
+	mwh.mu.RLock()
+	defer mwh.mu.RUnlock()
 	h := mwh.ToPrometheusMetric().Histogram
 	return h.GetSampleSum() / float64(h.GetSampleCount())
 }
@@ -626,7 +657,7 @@ func (mwh *ManualWindowHistogram) ValueAtQuantileWindowed(q float64) float64 {
 	if mwh.mu.cur == nil {
 		return 0
 	}
-	return ValueAtQuantileWindowed(mwh.mu.cur, q)
+	return ValueAtQuantileWindowed(mwh.ToPrometheusMetricWindowed().Histogram, q)
 }
 
 // A Counter holds a single mutable atomic value.
@@ -879,6 +910,21 @@ func (g *GaugeFloat64) GetMetadata() Metadata {
 	baseMetadata := g.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
 	return baseMetadata
+}
+
+// MergeWindowedHistogram adds the bucket counts, sample count, and sample sum
+// from the previous windowed histogram to those of the current windowed
+// histogram.
+// NB: Buckets on each histogram must be the same
+func MergeWindowedHistogram(cur *prometheusgo.Histogram, prev *prometheusgo.Histogram) {
+	for i, bucket := range cur.Bucket {
+		count := *bucket.CumulativeCount + *prev.Bucket[i].CumulativeCount
+		*bucket.CumulativeCount = count
+	}
+	sampleCount := *cur.SampleCount + *prev.SampleCount
+	*cur.SampleCount = sampleCount
+	sampleSum := *cur.SampleSum + *prev.SampleSum
+	*cur.SampleSum = sampleSum
 }
 
 // ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
