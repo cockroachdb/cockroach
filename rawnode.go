@@ -73,6 +73,8 @@ func (rn *RawNode) Tick() {
 //
 // WARNING: Be very careful about using this method as it subverts the Raft
 // state machine. You should probably be using Tick instead.
+//
+// DEPRECATED: This method will be removed in a future release.
 func (rn *RawNode) TickQuiesced() {
 	rn.raft.electionElapsed++
 }
