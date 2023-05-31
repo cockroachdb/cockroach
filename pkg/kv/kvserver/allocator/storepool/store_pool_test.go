@@ -55,7 +55,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 0 }, /* NodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -125,7 +125,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -421,7 +421,7 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -444,7 +444,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -550,7 +550,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, _, _, sp, _ := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -581,7 +581,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -609,14 +609,14 @@ func TestStorePoolSuspected(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDeadOff, false, /* deterministic */
+		liveness.TestTimeUntilNodeDeadOff, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 
 	now := sp.clock.Now()
-	timeUntilStoreDead := liveness.TimeUntilStoreDead.Get(&sp.st.SV)
-	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
+	timeUntilStoreDead := liveness.TimeUntilNodeDead.Get(&sp.st.SV)
+	timeAfterStoreSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
 
 	// Verify a store that we haven't seen yet is unknown status.
 	detail := sp.GetStoreDetailLocked(0)
@@ -692,7 +692,7 @@ func TestGetLocalities(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -774,7 +774,7 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
