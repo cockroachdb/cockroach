@@ -18,14 +18,9 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-const (
-	// HdrHistogramMaxLatency is the maximum value tracked in latency histograms. Higher
-	// values will be recorded as this value instead.
-	HdrHistogramMaxLatency = 10 * time.Second
-
-	// The number of histograms to keep in rolling window.
-	hdrHistogramHistWrapNum = 2 // TestSampleInterval is passed to histograms during tests which don't
-)
+// HdrHistogramMaxLatency is the maximum value tracked in latency histograms. Higher
+// values will be recorded as this value instead.
+const HdrHistogramMaxLatency = 10 * time.Second
 
 // A HdrHistogram collects observed values by keeping bucketed counts. For
 // convenience, internally two sets of buckets are kept: A cumulative set (i.e.
@@ -64,12 +59,12 @@ func NewHdrHistogram(
 		Metadata: metadata,
 		maxVal:   maxVal,
 	}
-	wHist := hdrhistogram.NewWindowed(hdrHistogramHistWrapNum, 0, maxVal, sigFigs)
+	wHist := hdrhistogram.NewWindowed(WindowedHistogramWrapNum, 0, maxVal, sigFigs)
 	h.mu.cumulative = hdrhistogram.New(0, maxVal, sigFigs)
 	h.mu.sliding = wHist
 	h.mu.tickHelper = &tickHelper{
 		nextT:        now(),
-		tickInterval: duration / hdrHistogramHistWrapNum,
+		tickInterval: duration / WindowedHistogramWrapNum,
 		onTick: func() {
 			wHist.Rotate()
 		},
@@ -171,15 +166,19 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 
 // TotalWindowed implements the WindowedHistogram interface.
 func (h *HdrHistogram) TotalWindowed() (int64, float64) {
-	pHist := h.ToPrometheusMetricWindowed().Histogram
-	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	hist := h.mu.sliding.Merge()
+	totalSum := float64(hist.TotalCount()) * hist.Mean()
+	return hist.TotalCount(), totalSum
 }
 
 func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
 	hist := &prometheusgo.Histogram{}
 
 	maybeTick(h.mu.tickHelper)
-	bars := h.mu.sliding.Current.Distribution()
+	mergedHist := h.mu.sliding.Merge()
+	bars := mergedHist.Distribution()
 	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
 
 	var cumCount uint64
@@ -202,7 +201,6 @@ func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
 	}
 	hist.SampleCount = &cumCount
 	hist.SampleSum = &sum // can do better here; we approximate in the loop
-
 	return &prometheusgo.Metric{
 		Histogram: hist,
 	}
@@ -233,13 +231,12 @@ func (h *HdrHistogram) ValueAtQuantileWindowed(q float64) float64 {
 func (h *HdrHistogram) Mean() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
 	return h.mu.cumulative.Mean()
 }
 
 func (h *HdrHistogram) MeanWindowed() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
-	return h.mu.sliding.Current.Mean()
+	hist := h.mu.sliding.Merge()
+	return hist.Mean()
 }
