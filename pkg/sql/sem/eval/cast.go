@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -617,7 +618,7 @@ func performCastWithoutPrecisionTruncation(
 			if t == nil {
 				return tree.DNull, nil
 			}
-			g, err := geo.ParseGeographyFromGeoJSON([]byte(*t))
+			g, err := geo.ParseGeographyFromGeoJSON(encoding.UnsafeConvertStringToBytes(*t))
 			if err != nil {
 				return nil, err
 			}
@@ -665,7 +666,7 @@ func performCastWithoutPrecisionTruncation(
 			if t == nil {
 				return tree.DNull, nil
 			}
-			g, err := geo.ParseGeometryFromGeoJSON([]byte(*t))
+			g, err := geo.ParseGeometryFromGeoJSON(encoding.UnsafeConvertStringToBytes(*t))
 			if err != nil {
 				return nil, err
 			}

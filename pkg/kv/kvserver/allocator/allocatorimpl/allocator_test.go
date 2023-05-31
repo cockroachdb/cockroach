@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2330,7 +2331,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, storePool, nl := storepool.CreateTestStorePool(ctx, st,
-		storepool.TestTimeUntilStoreDeadOff, true, /* deterministic */
+		liveness.TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
@@ -2719,7 +2720,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, storePool, nl := storepool.CreateTestStorePool(ctx, st,
-		storepool.TestTimeUntilStoreDeadOff, true, /* deterministic */
+		liveness.TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
@@ -2787,7 +2788,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, clock, storePool, nl := storepool.CreateTestStorePool(ctx, st,
-		storepool.TestTimeUntilStoreDeadOff, true, /* deterministic */
+		liveness.TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
@@ -5575,7 +5576,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, storePool, _ := storepool.CreateTestStorePool(ctx, st,
-		storepool.TestTimeUntilStoreDeadOff, true, /* deterministic */
+		liveness.TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
 	defer stopper.Stop(ctx)
@@ -7721,7 +7722,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	stopper, _, _, sp, _ := storepool.CreateTestStorePool(ctx, st,
-		storepool.TestTimeUntilStoreDeadOff, false, /* deterministic */
+		liveness.TestTimeUntilStoreDeadOff, false, /* deterministic */
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(st, false /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
@@ -8445,7 +8446,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
-	storepool.TimeUntilStoreDead.Override(ctx, &st.SV, storepool.TestTimeUntilStoreDeadOff)
+	liveness.TimeUntilStoreDead.Override(ctx, &st.SV, liveness.TestTimeUntilStoreDeadOff)
 
 	const generations = 100
 	const nodes = 20
@@ -8903,7 +8904,7 @@ func exampleRebalancing(
 	// adding / rebalancing ranges of random sizes.
 	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
-	storepool.TimeUntilStoreDead.Override(ctx, &st.SV, storepool.TestTimeUntilStoreDeadOff)
+	liveness.TimeUntilStoreDead.Override(ctx, &st.SV, liveness.TestTimeUntilStoreDeadOff)
 
 	const nodes = 20
 

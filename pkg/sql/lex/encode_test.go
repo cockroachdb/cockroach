@@ -64,7 +64,7 @@ func TestByteArrayDecoding(t *testing.T) {
 			if s.auto {
 				dec, err = lex.DecodeRawBytesToByteArrayAuto([]byte(s.in))
 			} else {
-				dec, err = lex.DecodeRawBytesToByteArray(s.in, s.inFmt)
+				dec, err = lex.DecodeRawBytesToByteArray([]byte(s.in), s.inFmt)
 			}
 			if s.err != "" {
 				if err == nil {
@@ -124,7 +124,7 @@ func TestByteArrayEncoding(t *testing.T) {
 						enc = enc[2:]
 					}
 
-					dec, err := lex.DecodeRawBytesToByteArray(enc, format)
+					dec, err := lex.DecodeRawBytesToByteArray([]byte(enc), format)
 					if err != nil {
 						t.Fatal(err)
 					}
