@@ -633,7 +633,7 @@ func (b *Builder) buildUDF(
 		if err != nil {
 			panic(err)
 		}
-		if !funcReturnType.Equivalent(rtyp) {
+		if !funcReturnType.Identical(rtyp) {
 			panic(pgerror.Newf(
 				pgcode.InvalidFunctionDefinition,
 				"return type mismatch in function declared to return %s", rtyp.Name()))
