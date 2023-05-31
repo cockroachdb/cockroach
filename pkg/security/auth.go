@@ -143,7 +143,11 @@ func Contains(sl []string, s string) bool {
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
 func UserAuthCertHook(
-	insecureMode bool, tlsState *tls.ConnectionState, tenantID roachpb.TenantID,
+	insecureMode bool,
+	tlsState *tls.ConnectionState,
+	tenantID roachpb.TenantID,
+	certManager *CertificateManager,
+	cache *ClientCertExpirationCache,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
@@ -177,14 +181,24 @@ func UserAuthCertHook(
 			return nil
 		}
 
+		peerCert := tlsState.PeerCertificates[0]
+
 		// The client certificate should not be a tenant client type. For now just
 		// check that it doesn't have OU=Tenants. It would make sense to add
 		// explicit OU=Users to all client certificates and to check for match.
-		if IsTenantCertificate(tlsState.PeerCertificates[0]) {
+		if IsTenantCertificate(peerCert) {
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
 		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID) {
+			if certManager != nil {
+				cache.MaybeUpsert(
+					ctx,
+					systemIdentity.Normalized(),
+					peerCert.NotAfter.Unix(),
+					certManager.certMetrics.ClientExpiration,
+				)
+			}
 			return nil
 		}
 		return errors.WithDetailf(errors.Errorf("certificate authentication failed for user %q", systemIdentity),
