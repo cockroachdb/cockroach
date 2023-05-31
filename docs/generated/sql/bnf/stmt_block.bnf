@@ -198,7 +198,7 @@ create_stmt ::=
 	| create_schedule_stmt
 
 delete_stmt ::=
-	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause opt_batch_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
 
 drop_stmt ::=
 	drop_ddl_stmt
@@ -601,6 +601,11 @@ create_schedule_stmt ::=
 
 opt_with_clause ::=
 	with_clause
+	| 
+
+opt_batch_clause ::=
+	'BATCH'
+	| 'BATCH' 'SIZE' iconst64
 	| 
 
 table_expr_opt_alias_idx ::=
@@ -1037,6 +1042,7 @@ unreserved_keyword ::=
 	| 'BACKUP'
 	| 'BACKUPS'
 	| 'BACKWARD'
+	| 'BATCH'
 	| 'BEFORE'
 	| 'BEGIN'
 	| 'BINARY'
@@ -1378,6 +1384,7 @@ unreserved_keyword ::=
 	| 'SHARED'
 	| 'SHOW'
 	| 'SIMPLE'
+	| 'SIZE'
 	| 'SKIP'
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'SKIP_MISSING_FOREIGN_KEYS'
@@ -1794,6 +1801,9 @@ with_clause ::=
 	'WITH' cte_list
 	| 'WITH' 'RECURSIVE' cte_list
 
+iconst64 ::=
+	'ICONST'
+
 table_name_opt_idx ::=
 	opt_only table_name opt_index_flags opt_descendant
 
@@ -1881,9 +1891,6 @@ var_name ::=
 
 restore_options_list ::=
 	( restore_options ) ( ( ',' restore_options ) )*
-
-iconst64 ::=
-	'ICONST'
 
 opt_scrub_options_clause ::=
 	'WITH' 'OPTIONS' scrub_option_list

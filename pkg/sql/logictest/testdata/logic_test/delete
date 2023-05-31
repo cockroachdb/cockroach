@@ -589,3 +589,23 @@ SELECT a FROM t99630a@idx WHERE a > 0
 ----
 
 subtest end
+
+subtest batch
+
+statement ok
+CREATE TABLE delete_batch_tbl (id INT PRIMARY KEY);
+
+statement error BATCH DELETE not implemented
+BATCH DELETE FROM delete_batch_tbl;
+
+subtest end
+
+subtest batch_size
+
+statement ok
+CREATE TABLE delete_batch_size_tbl (id INT PRIMARY KEY);
+
+statement error BATCH DELETE SIZE not implemented
+BATCH SIZE 10 DELETE FROM delete_batch_size_tbl;
+
+subtest end

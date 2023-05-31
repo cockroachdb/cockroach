@@ -38,6 +38,16 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 			"DELETE statement requires LIMIT when ORDER BY is used"))
 	}
 
+	// TODO(ecwall): remove when BATCH DELETE is supported
+	if del.Batch != nil {
+		if del.Batch.HasSize() {
+			panic(pgerror.Newf(pgcode.Syntax,
+				"BATCH DELETE SIZE not implemented"))
+		}
+		panic(pgerror.Newf(pgcode.Syntax,
+			"BATCH DELETE not implemented"))
+	}
+
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(del.Table, privilege.DELETE)
 
