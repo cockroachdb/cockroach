@@ -5,10 +5,10 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [cluster] creating output file /dev/null... done
 [cluster] establishing RPC connection to ...
 [cluster] using SQL address: ...
-[cluster] requesting data for debug/events... received response... converting to JSON... writing binary output: debug/events.json... done
-[cluster] requesting data for debug/rangelog... received response... converting to JSON... writing binary output: debug/rangelog.json... done
-[cluster] requesting data for debug/settings... received response... converting to JSON... writing binary output: debug/settings.json... done
-[cluster] requesting data for debug/reports/problemranges... received response... converting to JSON... writing binary output: debug/reports/problemranges.json... done
+[cluster] requesting data for debug/events... received response... writing JSON output: debug/events.json... done
+[cluster] requesting data for debug/rangelog... received response... writing JSON output: debug/rangelog.json... done
+[cluster] requesting data for debug/settings... received response... writing JSON output: debug/settings.json... done
+[cluster] requesting data for debug/reports/problemranges... received response... writing JSON output: debug/reports/problemranges.json... done
 [cluster] retrieving SQL data for "".crdb_internal.create_function_statements... writing output: debug/crdb_internal.create_function_statements.json... done
 [cluster] retrieving SQL data for "".crdb_internal.create_schema_statements... writing output: debug/crdb_internal.create_schema_statements.json... done
 [cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/crdb_internal.create_statements.json... done
@@ -72,9 +72,9 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [cluster] retrieving SQL data for system.tenant_tasks... writing output: debug/system.tenant_tasks.json... done
 [cluster] retrieving SQL data for system.tenant_usage... writing output: debug/system.tenant_usage.json... done
 [cluster] retrieving SQL data for system.tenants... writing output: debug/system.tenants.json... done
-[cluster] requesting nodes... received response... converting to JSON... writing binary output: debug/nodes.json... done
-[cluster] requesting liveness... received response... converting to JSON... writing binary output: debug/liveness.json... done
-[node 1] node status... converting to JSON... writing binary output: debug/nodes/1/status.json... done
+[cluster] requesting nodes... received response... writing JSON output: debug/nodes.json... done
+[cluster] requesting liveness... received response... writing JSON output: debug/liveness.json... done
+[node 1] node status... writing JSON output: debug/nodes/1/status.json... done
 [node 1] using SQL connection URL: postgresql://...
 [node 1] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/1/crdb_internal.active_range_feeds.json... done
 [node 1] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/1/crdb_internal.feature_usage.json... done
@@ -98,9 +98,9 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 1] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/1/crdb_internal.node_transactions.json... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_execution_insights... writing output: debug/nodes/1/crdb_internal.node_txn_execution_insights.json... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/1/crdb_internal.node_txn_stats.json... done
-[node 1] requesting data for debug/nodes/1/details... received response... converting to JSON... writing binary output: debug/nodes/1/details.json... done
-[node 1] requesting data for debug/nodes/1/gossip... received response... converting to JSON... writing binary output: debug/nodes/1/gossip.json... done
-[node 1] requesting data for debug/nodes/1/enginestats... received response... converting to JSON... writing binary output: debug/nodes/1/enginestats.json... done
+[node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
+[node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
+[node 1] requesting data for debug/nodes/1/enginestats... received response... writing JSON output: debug/nodes/1/enginestats.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
 [node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
@@ -113,7 +113,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 1] requesting log file ...
 [node 1] 1 log file ...
 [node 1] [log file ...
-[node 2] node status... converting to JSON... writing binary output: debug/nodes/2/status.json... done
+[node 2] node status... writing JSON output: debug/nodes/2/status.json... done
 [node 2] using SQL connection URL: postgresql://...
 [node 2] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/2/crdb_internal.active_range_feeds.json...
 [node 2] retrieving SQL data for crdb_internal.active_range_feeds: last request failed: dial tcp ...
@@ -208,7 +208,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 2] requesting log file ...
 [node 2] requesting log file ...
 [node 2] requesting log file ...
-[node 3] node status... converting to JSON... writing binary output: debug/nodes/3/status.json... done
+[node 3] node status... writing JSON output: debug/nodes/3/status.json... done
 [node 3] using SQL connection URL: postgresql://...
 [node 3] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/3/crdb_internal.active_range_feeds.json... done
 [node 3] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/3/crdb_internal.feature_usage.json... done
@@ -232,9 +232,9 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [node 3] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/3/crdb_internal.node_transactions.json... done
 [node 3] retrieving SQL data for crdb_internal.node_txn_execution_insights... writing output: debug/nodes/3/crdb_internal.node_txn_execution_insights.json... done
 [node 3] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/3/crdb_internal.node_txn_stats.json... done
-[node 3] requesting data for debug/nodes/3/details... received response... converting to JSON... writing binary output: debug/nodes/3/details.json... done
-[node 3] requesting data for debug/nodes/3/gossip... received response... converting to JSON... writing binary output: debug/nodes/3/gossip.json... done
-[node 3] requesting data for debug/nodes/3/enginestats... received response... converting to JSON... writing binary output: debug/nodes/3/enginestats.json... done
+[node 3] requesting data for debug/nodes/3/details... received response... writing JSON output: debug/nodes/3/details.json... done
+[node 3] requesting data for debug/nodes/3/gossip... received response... writing JSON output: debug/nodes/3/gossip.json... done
+[node 3] requesting data for debug/nodes/3/enginestats... received response... writing JSON output: debug/nodes/3/enginestats.json... done
 [node 3] requesting stacks... received response... writing binary output: debug/nodes/3/stacks.txt... done
 [node 3] requesting stacks with labels... received response... writing binary output: debug/nodes/3/stacks_with_labels.txt... done
 [node 3] requesting heap profile... received response... writing binary output: debug/nodes/3/heap.pprof... done
