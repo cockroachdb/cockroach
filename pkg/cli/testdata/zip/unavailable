@@ -11,7 +11,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null --timeout=.5s
 [cluster] requesting data for debug/rangelog... received response...
 [cluster] requesting data for debug/rangelog: last request failed: ...
 [cluster] requesting data for debug/rangelog: creating error output: debug/rangelog.json.err.txt... done
-[cluster] requesting data for debug/reports/problemranges... received response... converting to JSON... writing binary output: debug/reports/problemranges.json... done
+[cluster] requesting data for debug/reports/problemranges... received response... writing JSON output: debug/reports/problemranges.json... done
 [cluster] retrieving SQL data for "".crdb_internal.create_function_statements... writing output: debug/crdb_internal.create_function_statements.txt...
 [cluster] retrieving SQL data for "".crdb_internal.create_function_statements: last request failed: ...
 [cluster] retrieving SQL data for "".crdb_internal.create_function_statements: creating error output: debug/crdb_internal.create_function_statements.txt.err.txt... done
@@ -204,7 +204,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null --timeout=.5s
 [cluster] requesting liveness... received response...
 [cluster] requesting liveness: last request failed: ...
 [cluster] requesting liveness: creating error output: debug/liveness.json.err.txt... done
-[node 1] node status... converting to JSON... writing binary output: debug/nodes/1/status.json... done
+[node 1] node status... writing JSON output: debug/nodes/1/status.json... done
 [node 1] using SQL connection URL: postgresql://...
 [node 1] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/1/crdb_internal.active_range_feeds.txt... done
 [node 1] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/1/crdb_internal.feature_usage.txt... done
@@ -228,9 +228,9 @@ debug zip --concurrency=1 --cpu-profile-duration=0 /dev/null --timeout=.5s
 [node 1] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/1/crdb_internal.node_transactions.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_execution_insights... writing output: debug/nodes/1/crdb_internal.node_txn_execution_insights.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/1/crdb_internal.node_txn_stats.txt... done
-[node 1] requesting data for debug/nodes/1/details... received response... converting to JSON... writing binary output: debug/nodes/1/details.json... done
-[node 1] requesting data for debug/nodes/1/gossip... received response... converting to JSON... writing binary output: debug/nodes/1/gossip.json... done
-[node 1] requesting data for debug/nodes/1/enginestats... received response... converting to JSON... writing binary output: debug/nodes/1/enginestats.json... done
+[node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
+[node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
+[node 1] requesting data for debug/nodes/1/enginestats... received response... writing JSON output: debug/nodes/1/enginestats.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
 [node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done

@@ -89,12 +89,22 @@ func (z *zipper) createJSON(s *zipReporter, name string, m interface{}) (err err
 	if !strings.HasSuffix(name, ".json") {
 		return s.fail(errors.Errorf("%s does not have .json suffix", name))
 	}
-	s.progress("converting to JSON")
-	b, err := json.MarshalIndent(m, "", "  ")
+	s.progress("writing JSON output: %s", name)
+
+	z.Lock()
+	defer z.Unlock()
+	// Stream directly to file to avoid buffering large amounts of JSON in memory.
+	w, err := z.createLocked(name, time.Time{})
 	if err != nil {
 		return s.fail(err)
 	}
-	return z.createRaw(s, name, b)
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(m); err != nil {
+		return s.fail(err)
+	}
+	s.done()
+	return nil
 }
 
 // createError reports an error payload.
