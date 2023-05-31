@@ -33,6 +33,11 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 		panic(pgerror.DangerousStatementf("DELETE without WHERE clause"))
 	}
 
+	if del.Batch != nil && del.Limit != nil {
+		panic(pgerror.Newf(pgcode.Syntax,
+			"DELETE statement cannot use both BATCH and LIMIT"))
+	}
+
 	if del.OrderBy != nil && del.Limit == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"DELETE statement requires LIMIT when ORDER BY is used"))

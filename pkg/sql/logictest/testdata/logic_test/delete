@@ -609,3 +609,13 @@ statement error BATCH DELETE SIZE not implemented
 BATCH SIZE 10 DELETE FROM delete_batch_size_tbl;
 
 subtest end
+
+subtest batch_limit
+
+statement ok
+CREATE TABLE delete_batch_limit_tbl (id INT PRIMARY KEY);
+
+statement error DELETE statement cannot use both BATCH and LIMIT
+BATCH DELETE FROM delete_batch_limit_tbl LIMIT 1;
+
+subtest end
