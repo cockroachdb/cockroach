@@ -284,6 +284,9 @@ type TestingKnobs struct {
 	// Changefeed contains testing knobs specific to the changefeed system.
 	Changefeed base.ModuleTestingKnobs
 
+	// Export contains testing knobs for `EXPORT INTO ...`.
+	Export base.ModuleTestingKnobs
+
 	// Flowinfra contains testing knobs specific to the flowinfra system
 	Flowinfra base.ModuleTestingKnobs
 
