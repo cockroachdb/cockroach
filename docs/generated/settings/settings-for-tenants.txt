@@ -52,6 +52,7 @@ server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client con
 server.auth_log.sql_sessions.enabled	boolean	false	if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)	tenant-rw
 server.authentication_cache.enabled	boolean	true	enables a cache used during authentication to avoid lookups to system tables when retrieving per-user authentication-related information	tenant-rw
 server.child_metrics.enabled	boolean	false	enables the exporting of child metrics, additional prometheus time series with extra labels	tenant-rw
+server.client_cert_expiration_cache.capacity	integer	1000	the maximum number of client cert expirations stored	tenant-rw
 server.clock.forward_jump_check_enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic	tenant-rw
 server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.	tenant-rw
 server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog	tenant-rw
