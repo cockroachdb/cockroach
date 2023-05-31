@@ -112,6 +112,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1767,6 +1768,8 @@ type StreamingTestingKnobs struct {
 	// CutoverProgressShouldUpdate overrides the standard logic
 	// for whether the job record is updated on a progress update.
 	CutoverProgressShouldUpdate func() bool
+
+	DistSQLRetryPolicy *retry.Options
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
