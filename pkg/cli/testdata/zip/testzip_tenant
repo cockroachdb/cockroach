@@ -90,14 +90,14 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for system.tenants... writing output: debug/system.tenants.txt...
 [cluster] retrieving SQL data for system.tenants: last request failed: ERROR: relation "system.tenants" does not exist (SQLSTATE 42P01)
 [cluster] retrieving SQL data for system.tenants: creating error output: debug/system.tenants.txt.err.txt... done
-[cluster] requesting nodes... received response... converting to JSON... writing binary output: debug/nodes.json... done
+[cluster] requesting nodes... received response... writing JSON output: debug/nodes.json... done
 [cluster] requesting liveness... received response...
 [cluster] requesting liveness: last request failed: rpc error: ...
 [cluster] requesting liveness: creating error output: debug/liveness.json.err.txt... done
 [cluster] requesting CPU profiles
 [cluster] profiles generated
 [cluster] profile for node 1... writing binary output: debug/nodes/1/cpu.pprof... done
-[node 1] node status... converting to JSON... writing binary output: debug/nodes/1/status.json... done
+[node 1] node status... writing JSON output: debug/nodes/1/status.json... done
 [node 1] using SQL connection URL: postgresql://...
 [node 1] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/1/crdb_internal.active_range_feeds.txt... done
 [node 1] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/1/crdb_internal.feature_usage.txt... done
@@ -125,7 +125,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] retrieving SQL data for crdb_internal.node_transaction_statistics... writing output: debug/nodes/1/crdb_internal.node_transaction_statistics.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/1/crdb_internal.node_transactions.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/1/crdb_internal.node_txn_stats.txt... done
-[node 1] requesting data for debug/nodes/1/details... received response... converting to JSON... writing binary output: debug/nodes/1/details.json... done
+[node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response...
 [node 1] requesting data for debug/nodes/1/gossip: last request failed: rpc error: ...
 [node 1] requesting data for debug/nodes/1/gossip: creating error output: debug/nodes/1/gossip.json.err.txt... done
