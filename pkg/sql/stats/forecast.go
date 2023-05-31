@@ -53,13 +53,12 @@ const minGoodnessOfFit = 0.95
 // Whether a forecast is produced for a set of columns depends on how well the
 // observed statistics for that set of columns fit a linear regression model.
 // This means a forecast will not necessarily be produced for every set of
-// columns in the table. Any forecasts produced will have the same CreatedAt
-// time, which will be up to a week after the latest observed statistics (and
-// could be in the past, present, or future relative to the current time). Any
-// forecasts produced will not necessarily have the same RowCount or be
-// consistent with the other forecasts produced. (For example, DistinctCount in
-// the forecast for columns {a, b} could very well end up less than
-// DistinctCount in the forecast for column {a}.)
+// columns in the table. Any forecasts produced will not necessarily have the
+// same CreatedAt time (and could be in the past, present, or future relative to
+// the current time). Any forecasts produced will not necessarily have the same
+// RowCount or be consistent with the other forecasts produced. (For example,
+// DistinctCount in the forecast for columns {a, b} could very well end up less
+// than DistinctCount in the forecast for column {a}.)
 //
 // ForecastTableStatistics is deterministic: given the same observations it will
 // return the same forecasts.
@@ -68,13 +67,6 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 	if len(observed) < minObservationsForForecast {
 		return nil
 	}
-
-	// To make forecasts deterministic, we must choose a time to forecast at based
-	// on only the observed statistics. We choose the time of the latest
-	// statistics + the average time between automatic stats collections, which
-	// should be roughly when the next automatic stats collection will occur.
-	latest := observed[0].CreatedAt
-	at := latest.Add(avgRefreshTime(observed))
 
 	// Group observed statistics by column set, and remove statistics with
 	// inverted histograms.
@@ -97,8 +89,23 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 		observedByCols[colKey] = append(obs, stat)
 	}
 
+	if len(observedByCols) == 0 {
+		// No suitable stats.
+		return nil
+	}
+	avgRefresh := avgRefreshTime(observed)
+
 	forecasts := make([]*TableStatistic, 0, len(forecastCols))
 	for _, colKey := range forecastCols {
+		// To make forecasts deterministic, we must choose a time to forecast at
+		// based on only the observed statistics. We choose the time of the latest
+		// statistics + the average time between automatic stats collections, which
+		// should be roughly when the next automatic stats collection will
+		// occur. This will be the same time for all columns that had the same
+		// latest collection time.
+		latest := observedByCols[colKey][0].CreatedAt
+		at := latest.Add(avgRefresh)
+
 		forecast, err := forecastColumnStatistics(ctx, observedByCols[colKey], at, minGoodnessOfFit)
 		if err != nil {
 			log.VEventf(
