@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -191,7 +192,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
-		failer := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings)
+		failer := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings, rng)
 		if c.IsLocal() && !failer.CanUseLocal() {
 			t.L().Printf("skipping failure mode %q on local cluster", failureMode)
 			continue
@@ -358,7 +359,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -490,7 +491,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -622,7 +623,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -737,7 +738,7 @@ func runFailoverNonSystem(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureMode, opts, settings)
+	failer := makeFailer(t, c, failureMode, opts, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -845,7 +846,7 @@ func runFailoverLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureMode, opts, settings)
+	failer := makeFailer(t, c, failureMode, opts, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -957,7 +958,7 @@ func runFailoverSystemNonLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureMode, opts, settings)
+	failer := makeFailer(t, c, failureMode, opts, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -1070,8 +1071,9 @@ func makeFailer(
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
+	rng *rand.Rand,
 ) Failer {
-	f := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings)
+	f := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings, rng)
 	if c.IsLocal() && !f.CanUseLocal() {
 		t.L().Printf(
 			`failure mode %q not supported on local clusters, using "noop" failure mode instead`,
@@ -1087,6 +1089,7 @@ func makeFailerWithoutLocalNoop(
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
+	rng *rand.Rand,
 ) Failer {
 	switch failureMode {
 	case failureModeBlackhole:
