@@ -378,13 +378,24 @@ func setupDecommissionBench(
 			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 	}
-
-	t.Status(fmt.Sprintf("initializing cluster with %d warehouses", benchSpec.warehouses))
-	c.Run(ctx, c.Node(pinnedNode), importCmd)
-
 	{
 		db := c.Conn(ctx, t.L(), pinnedNode)
 		defer db.Close()
+
+		// Note that we are waiting for 3 replicas only. We can't assume 5 replicas
+		// here because 5 only applies to system ranges so we will never reach this
+		// number globally. We also don't know if all upreplication succeeded, but
+		// at least we should have 2 voter replicas running by the time this method
+		// succeeds and that should be enough to make progress. Without this check
+		// import can saturate snapshots and leave underreplicated system ranges
+		// struggling.
+		// See GH issue #101532 for longer term solution.
+		if err := WaitForReplication(ctx, t, db, 3); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Status(fmt.Sprintf("initializing cluster with %d warehouses", benchSpec.warehouses))
+		c.Run(ctx, c.Node(pinnedNode), importCmd)
 
 		if benchSpec.snapshotRate != 0 {
 			for _, stmt := range []string{
