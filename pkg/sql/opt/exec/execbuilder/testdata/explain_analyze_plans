@@ -65,7 +65,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 10 (80 B, 10 gRPC calls)
+rows decoded from KV: 10 (80 B, 10 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -93,7 +93,7 @@ regions: <hidden>
     │     actual row count: 5
     │     KV time: 0µs
     │     KV contention time: 0µs
-    │     KV rows read: 5
+    │     KV rows decoded: 5
     │     KV bytes read: 40 B
     │     KV gRPC calls: 5
     │     estimated max memory allocated: 0 B
@@ -107,7 +107,7 @@ regions: <hidden>
           actual row count: 5
           KV time: 0µs
           KV contention time: 0µs
-          KV rows read: 5
+          KV rows decoded: 5
           KV bytes read: 40 B
           KV gRPC calls: 5
           estimated max memory allocated: 0 B
@@ -115,7 +115,7 @@ regions: <hidden>
           table: kw@kw_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsm2Fv2kgTx98_n2K1r1LV1KxtUmKpEi3qc0qvgYoklaoTihx7jlg2NrUXSK7Kx7ovcJ_sZLs0gGGXpfTWwfsO27th_JvZ-bOzk284_RpiG1--__i-e4WC2atAQ85sdBLMXwUv0P8H_QsUzNCH_nkPBXPU7-VD0BuUPUe_DfrXn9C7L_lNrOEo9qDnjCHF9h-YYA0bWMMm1rCFNdzCQw1PktiFNI2TbMi3fMK5d4_tpob9aDKl2e2hht04AWx_w9SnIWAbXzm3IQzA8SDRm1jDHlDHD_OvCWadYHYzCeABa7gbh9NxlNoos-Zy4mQfG3pmxe-fEfXHYKPmP3-nxbUbRxQi6sdR6VESz1OUgOPZiBR3bh8oLG610bvi5mjwqYtcJwzTH-Mmjp8sT7343O2ilMIEufE0ougE7qnuR_SFjZr5qxQDAIJtA8bOPRrDOE4ekBOGsetQ8GzUzG24dah7BymKp3QypTbKxue2L24QPHzUcHFVIF8gvX1Ad056twqzk40fajilzgiwTR61_Xx0uuajeSeYs3ykE-Wlvb1kbPXS09-JEw8S8Nb_zsvsi3catcHhF5CM4EPsR5DoZG1VhvAnPemQly_eJP7orviINdzP3rZDtE7mbLgHd1p2LItk9iz9GiIK4wny_DRA09QZwd6gnyCaIqH-djRKYOTQONFJq-QbDfcLjtmrYg2_7X256fWvbnrXHz-edEjG4fL64qRjZJ-6_eve1ffPW4D84vCxfi582HiM5s_huby-uDnPAJnZ1QAiD5I8glDH0DvmAaE9AWntAGQabUKykUYvbsQT3ViLk33Nbm01-3TFbLJ7siaCgqobDd1UyfoQkirgpdeikqq8dChJJXIklRyVpHJCfVlST49LUoXDhyOp5LlLqrF71jNEtcls6JbKeofQJgEvtUW1SXnpUNpkyNEm46i0iRPqy9r0-ri0STh8ONpkPHdtMnfPeqaoNlkNvaWy3iG0ScBLZ6LapLx0KG0y5WiTeVTaxAn1ZW1qH5c2CYcPR5vM565N1u5ZzxLVplZD5bxDKJOAj1qCytTQCXIiDxEU0ztIlL8OoVGWHI2yjkqjOEG_rFFnx6VRwuHD0SjruWsU5-R0AOkkjlJYOzbb_JebGS3wRlDQTeNp4sKnJHbzryku-_m8vMjqQUqLp0ZxcR4tHqXUoaxjt1-5iJpF0tjd-vZW6yOg8zgJUOhQiNyHH-Yv7s8dn66-mAcpJL4T-n855bdeTPsuDC74s_y1lx4tFOLHs_ydF0_HkGYo1icfHgkxJTMhDCbtgzAhwkxUnJQXvuw4kcKECCRDo3LJkG19e6v1tXXoWjL875lISYYcJipOeMmwJkyMdSbNZSarSJrrk00mUKtKPys3LBG29aRZR23kMGkpJqW0oeKkzKSWcWIxU-kakvXJLeZk43Q1EVfuV-npngWGIw4HNpLtu9Hn4FDpBYYKerSeBQbOwpcdJ1L2Xq_3LDAccZiwkWzfjVYjGbKtl15gqKBH61lg4Cx82XEiJRm2mT9sz9gFhrM9CwxHHGNsJIyqRTWKLhzza7lxZDOpZ4GBw6SWcUJKp3msCkM95IWInObVJU5EzggVE05BoxpbEJ79sp1aycUvu_ogJ9JLR3qq_MBhUsvNKocJo6pRkYzIsV-2U-VkRM7il12CkBPppdPKld_NxGIXIUjpYE9VIThM6tk8wYOyfYNWjdoMx_56FiJ4UGTvuuVAYbcryGYiR3pVD4Qok3puWlVrhTiUqrfL8BZ_PZ2qGiFEmdRz06r6K8ShVL1nhrf46-lUdjcE4bRDENUPUUa6d0NEjaHI3qBVEQqjvFGR8ozqidjw_2uqJ6LMpNo9EVVkIrsSIWft7N0TUWMoKlKEyhvV2IwY1e6JkJMRVU-EKJN6ViJ4UFSkCJU3KpIR2T0RBqcnwlA9EWWkqidCHIrsDVoVodSz0YIHperdM4bqiRg-Dh__928AAAD__2mHirI=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsm-Fu2kgQx7_fU6z2U6qamrVNSixVokW9U3oNVCSpVJ1Q5NhzxLKxqb1AclUe617gnuxk-2gBwy5L6K2D9xv2rsP4N7PzZ2cn33D6NcQ2vnz_8X33CgWzV4GGnNnoJJi_Cl6gXwf9CxTM0If-eQ8Fc9Tv5VPQG5SNo98G_etP6N2X_CbWcBR70HPGkGL7D0ywhg2sYRNr2MIabuGhhidJ7EKaxkk25Vv-wLl3j-2mhv1oMqXZ7aGG3TgBbH_D1KchYBtfObchDMDxINGbWMMeUMcP868JZp1gdjMJ4AFruBuH03GU2iiz5nLiZB8bembF758R9cdgo-Y_f6fFtRtHFCLqx1FpKInnKfLAjT3wbESKm7cPFFKUgOPZqI3eFTdHg09d5DphmH6fN3H8ZDEvu3XxudtFKYUJcuNpRNEJ3FPdj-gLGzXztykmAATbJoydezSGcZw8ICcMY9ehmVnN3IZbh7p3kKJ4SidTaqNsfm7-4gbBw0cNF1cF9QXV2wd056R3qzw72fyhhlPqjADb5FHbz02na26ad4I5y006UY56iqOMrY768XfixIMEvPW_8zL74p1mbfD5BSQj-BD7ESQ6WVubIfxJTzrk5Ys3iT-6Kz5iDfezt-0QrZP5G-7BnZZ9yyKZjaVfQ0RhPEGenwZomjoj2Bv0D4imSLS_HY0SGDk0TnTSKvlGw_2CY_aqWMNve19uev2rm971x48nHZJxuLy-OOkY2adu_7p39d_nLUB-cvhYTwsfNh6j-TQ8l9cXN-cZIDO7GkDkQZJHEOoYesc8ILQfQFo7AJlGm5BspNGLG_FEN9biZF-zW1vNPl0xm-yer4mgrOpGQzdVvj6QsAo46rWosCpHHVBYiRxhJUclrJxoXxbW0-MSVuHw4Qgree7Cauye-AxRhTIbuqUS34EUSsBRbVGFUo46oEIZchTKOCqF4kT7skK9Pi6FEg4fjkIZz12hzN0TnymqUFZDb6nEdyCFEnDUmahCKUcdUKFMOQplHpVCcaJ9WaHax6VQwuHDUSjzuSuUtXvis0QVqtVQae9A-iTgppagPjV0gpzIQwTF9A4S5bIDKZUlR6mso1IqTtwvK9XZcSmVcPhwlMp67krFOVEdQDqJoxTWjtM2_-VmRgu8ERR003iauPApid38a4rLfv5cXnb1IKXFqFFcnEeLoZQ6lHUc9zMXUbNIGrtb395qfQR0HicBCh0Kkfvw3fzF_bnj09UX8yCFxHdC_y-n_NaLx3JzE3DBn-WvvTS0UIjvY_k7L0bHkGYo1h8-PBJiSmZCGEzaB2FChJmoOCkvfNlxIoUJEUiGRuWSIdv69lbra-vQtWT4_zORkgw5TFSc8JJhTZgY60yay0xWkTTXHzaZQK0q_azcsETY1pNmHbWRw6SlmJTShoqTMpNaxonFTKVrSNYfbjEfNk5XE3HlfpWe7llgOOJwYCPZvht9Dg6VXmCooEfrWWDgLHzZcSJl7_V6zwLDEYcJG8n23Wg1kiHbeukFhgp6tJ4FBs7Clx0nUpJhm_nD9oxdYDjbs8BwxDHGRsKoWlSj6MIxv5YbRzaTehYYOExqGSekdJrHqjDUQ16IyGleXeJE5IxQMeEUNKqxBeHZL9uplVz8sqsPciK9dKSnyg8cJrXcrHKYMKoaFcmIHPtlO1VORuQsftklCDmRXjqtXPndTCx2EYKUDvZUFYLDpJ7NEzwo2zdo1ajNcOyvZyGCB0X2rlsOFHa7gmwmcqRX9UCIMqnnplW1VohDqXq7DG_x19OpqhFClEk9N62qv0IcStV7ZniLv55OZXdDEE47BFH9EGWkezdE1BiK7A1aFaEwyhsVKc-onogN_7-meiLKTKrdE1FFJrIrEXLWzt49ETWGoiJFqLxRjc2IUe2eCDkZUfVEiDKpZyWCB0VFilB5oyIZkd0TYXB6IgzVE1FGqnoixKHI3qBVEUo9Gy14UKrePWOonojh4_Dxl38DAAD__5cglmo=
 
 # This query verifies stats collection for the hashJoiner, distinct and sorter.
 query T
@@ -125,7 +125,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 10 (80 B, 10 gRPC calls)
+rows decoded from KV: 10 (80 B, 10 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -161,7 +161,7 @@ regions: <hidden>
         │     actual row count: 5
         │     KV time: 0µs
         │     KV contention time: 0µs
-        │     KV rows read: 5
+        │     KV rows decoded: 5
         │     KV bytes read: 40 B
         │     KV gRPC calls: 5
         │     estimated max memory allocated: 0 B
@@ -175,7 +175,7 @@ regions: <hidden>
               actual row count: 5
               KV time: 0µs
               KV contention time: 0µs
-              KV rows read: 5
+              KV rows decoded: 5
               KV bytes read: 40 B
               KV gRPC calls: 5
               estimated max memory allocated: 0 B
@@ -183,7 +183,7 @@ regions: <hidden>
               table: kw@kw_pkey
               spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsW-9uo8YX_f57itF82tUPLwxgx0FaKVrvVs22G6-caKWqsioC0xiBwcuM46RRHqsv0CerwCWOjZlrHDdMPXwLf8a5c86dey5n4AGz7xF28OWnnz8NrtDH88ur84vBFXoTLt4t3qIfRsMvKLxFn4fnFyhcoOEFCm_fheg9yq6j4ejjpxH68Et-hDUcJz69cKeUYedXTLCGTaxhC2vYxhru4rGGZ2niUcaSNLvlIR9w7t9hx9BwEM_mPDs91rCXpBQ7D5gHPKLYwVfudURH1PVpqhtYwz7lbhDl_ya8PQtvf5uF9B5reJBE82nMHBRiDV_O3OzPjp5F8dM3xIMpdZDx159seewlMacxD5K4dClNFgyl1PUdRJZnru85LU710YflyZvR1wHy3ChiT_fN3CB9PvTLt8EAMU5nyEvmMUdv6B3Xg5i_dZCRT2V5A6Vh1Q1T9w5N6TRJ75EbRYnncuo7yMhjuHa5N6EMJXM-m3MHZffnsRcnCB4_anh5tIS8gPT6Hk1cNlkH8yy7f6xhxt0bih3yqO3HUW-Do8VZuChxtFhxpJOWpb1ZMitZWv3OPE5Sn6bUX_ulcTYSumUL1T-6bPI5CWKa6mRjOUb0d_7mjLx9nwY3k_wvrOFhNsmzjGB6R715mUwRetk19j1CnE5nyA9YiObMvaF7g7sCzqqT3h8DxoPY4zrpltiQYl71ksZ-QdKI0DENOdFZzbxbh_XLJOU01c0S5_-XbVq9HQjdRmc-l62cXiSdZKZbG4RWTBqMvFsZ-cla5GR3lSE1OwHd7OhWqzKH6AVqsHRStxdoWTpUL0BeuRcgx9ILAOm96gV6cqrdS3qBekkj7AWInOhU9QIA60UvUOJc8l7A3L1Wm3UV1erodlurD6GoNVjq11XUlqVDKar5yopqHouiAum9UtQTOTXjJYpaL2mEimrKiU6VogKsF4pa4lxyRbV2r9VWXUW1O3q3rdWHUNQaLJ3WVdSWpUMpqvXKimodi6IC6b1S1L6cmvESRa2XNEJFteREp0pRAdYLRS1xLrmi2rvXaruuonY7baU-hJ7W4KhbU087OkFu7COCEj6hacvXIZTVfmVltY9FWYFEXynrqZza8RJlrZc0QmW15USnSlkB1gtlLXEuubICG9wjymZJzOhmNdj6y0ZGOPVv6DI7WDJPPfo1Tbz83ywPh_m43Ez3KePLq-by4DwuLjHuctF28r-JnIHzard79KeV0ceUL5I0RJHLaezdP4VfnF-4AV-fmE8ZTQM3Cv5wy7Muhv0jZx4NbvNpP7tU6NrTtXzOxdUpZRkUm4MPDwnpNowJEWDSPwgmpC4mJmnzpITJiYqYkBrF0JSuGIqjP62MXllCN4rh62PSSDEEkpy0eQIUQ0UwMTcxMZ5jYq1BYmwOtoSA2jK1lVuWiDh6omS_AGCiZL8gxsS0WkxKmCj5TGYLS2lXXEq7wsG9dTw3B_fERXy9khnStbQne7oTR5xLYkiql9d_gdDG3QkJGVXTnQAwabrbaOTBrb-nO3HEaSKGpNrykKMYiqNv3J2QkFE13QkAk6bdiUaK4amwsSWGuKcmYve72p844iwDMBG4HnKYNlD8TfcMMpKqpkUBgaKkR0FKHvh6RTWBiiq2i3sqNuwE8MKUTDMxJmouPcBbr3ZF5HiOgfK8aQdDysWvZjtScsJbDwPARM33NsSYCKwRSSoikOdN2xjNVEQAlKZ9jGYyXby9R3pA213a4GuNDAATNV_fgECpbkckcXfE8StqZACgqPk0Vdo7XK-ofaCiltz21sggJbe9NTIATJpeejLmiZqvd0CLR6p9lT3iV9LIMOt8N6fIowyASdNGRiMVEcBEzXc8oMVT7Y7IURGh-JU0Mkzx_qEJ7B-apf3D1sgAMFHTyIBAUbMdEYMicEfkcHeg-Jt-mmqG1NIO4npFtYGKKv7qREkjwyy57VIZGTJioubSE2OippEBLR412xEAFKn2VbbFD2whKPnQLsakaSOjmTwH9g_VNDKAxdP0ax5SglLtjkhSEcX7hyawf2iKv9ZR08gAvnRTs3MAQFHTyAC-dVPyNQ8IFKk--t_WT4k_1rOAj_Wskt2uoJExfvzf3wEAAP__rx5dkA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsW-1uo0YU_d-nGM2vXRUvDGDHQVopWm-qZtuNV060UlVZFYFpjMDgZcZx0iiP1Rfok1VgEa-NmWtiN0w9_Atfzp1z7txzOcM8YvYtwg6-Ov_1fHCNPl5cXV9cDq7Rm3DxbvEW_TQafkbhHfo0vLhE4QINL1F49y5E71F2HQ1HH89H6MNv-RHWcJz49NKdUoad3zHBGjaxhi2sYRtruIvHGp6liUcZS9Lslsf8gQv_HjuGhoN4NufZ6bGGvSSl2HnEPOARxQ6-dm8iOqKuT1PdwBr2KXeDKP834d1ZePfHLKQPWMODJJpPY-agEGv4auZmf3b0LIpfviIeTKmDjH_-ZstjL4k5jXmQxKVLabJgyKde4lPfQWR58uaBU4ZS6voO6qMPy5O3oy8D5LlRxJ7vm7lBWtyXnfr8dTBAjNMZ8pJ5zNEbes_1IOZvHWTko1neQGlYdcPUvUdTOk3SB-RGUeK5PAvLyGO4cbk3oQwlcz6bcwdl9-fhFycIHj9peHm0RL1A9eYBTVw2WcfzLLt_rGHG3VuKHfKkvYym3gZNi7NwUaJpsaJJJy1R-xBlVhK1-p15nKQ-Tam_9kvj7Enoli1s_-yyyackiGmqk41JGdE_-Zsz8vZ9GtxO8r-whofZIM8yjuk99eZlPkXoZdfYtwhxOp0hP2AhmjP3lr4Y3BVwVp0M_xgwHsQe10m3xIYU46qXNPYeSSNCxzTkRGc18m4d1q-SlNNUN0uc_yjbsHo7ELqNznwsWzm9TDrJTLc2CK0YNBh5tzLyk7XIye5CQ2r2A7rZ0a1WaA7UEdQg6qRuR9ASdcCOgLxyR0COpSMAMnzVEfTk1Lx9OoJ6SSPsCIic6FR1BADrRUdQ4lzyjsDcvVybdXXV6uh2W64PpKs1iOrX1dWWqAPqqvnKumoei64CGb7S1RM5lWMfXa2XNEJdNeVEp0pXAdYLXS1xLrmuWruXa6uurtodvduW6wPpag2iTuvqakvUAXXVemVdtY5FV4EMX-lqX07l2EdX6yWNUFctOdGp0lWA9UJXS5xLrqv27uXarqur3U5brA-kqjVo6tZU1Y5OkBv7iKCET2jaUnYgfbVfWV_tY9FXINdX-noqp4Lso6_1kkaor7ac6FTpK8B6oa8lziXXV2Dhe0TZLIkZ3awGW3_ZyAin_i1dZgdL5qlHv6SJl_-b5eEwfy63133K-PKquTy4iItLjLtctMz8XyJn4Lza7R79aWX0MeWLJA1R5HIaew_P4RfnF27A1wfmU0bTwI2Cv9zyqIvH8nBT6tHgLh_2d5cKXXu-lo-5uDqlLINi8-HDQ0K6DWNCBJj0D4IJqYuJSdo8KWFyoiImpEYxNKUrhuLoTyujV5bQjWL4-pg0UgyBJCdtngDFUBFMzE1MjO8xsdYgMTYftoSA2jK1lVumiDh6omS_AGCiZL8gxsS0WkxKmCj5TmYLS2lXXEq7wod763huPtwTF_H1SmZI19KevNCdOOJcEkNSPb3-D4Q27k5IyKia7gSASdPdRiMvbv0XuhNHnCZiSKotDzmKoTj6xt0JCRlV050AMGnanWikGJ4KG1tiiHtqIna_q_2JI84yABOB6yGHaQPF33TPICOpaloUEChKehSk5IGvV1QTqKhiu7inYsNOAC9MyTQTY6Lm1AO89WpXRI73GCjPm3YwpJz8arYjJSe89TAATNT8bkOMicAakaQiAnnetI3RTEUEQGnax2gm08XLe6QHtN2lBb7WyAAwUfPzDQiU6nZEEndHHL-iRgYAippvU6W1w_WK2gcqasltb40MUnLbWyMDwKTpqSdjnqj5eQc0eaRaV3lB_EoaGWadfXOKvMoAmDRtZDRSEQFM1PzGA5o81e6IHBURil9JI8MUrx-awPqhWVo_bI0MABM1jQwIFDXbETEoAndEDncHir_pt6lmSC2tIK5XVBuoqOJdJ0oaGWbJbZfKyJAREzWnnhgTNY0MaPKo2Y4AoEi1rrItfmAJQcmXdjEmTRsZzeQ5sH6oppEBTJ6mP_OQEpRqd0SSiihePzSB9UNTvFtHTSMD2OmmZucAgKKmkQHsdVPyMw8IFKk2_W_rp8Sb9Sxgs55VstsVNDLGTz_8GwAA__9bQmlI
 
 # This query verifies stats collection for WITH ORDINALITY and the hashJoiner.
 query T
@@ -193,7 +193,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 10 (80 B, 10 gRPC calls)
+rows decoded from KV: 10 (80 B, 10 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -216,7 +216,7 @@ regions: <hidden>
 │         actual row count: 5
 │         KV time: 0µs
 │         KV contention time: 0µs
-│         KV rows read: 5
+│         KV rows decoded: 5
 │         KV bytes read: 40 B
 │         KV gRPC calls: 5
 │         estimated max memory allocated: 0 B
@@ -235,7 +235,7 @@ regions: <hidden>
           actual row count: 5
           KV time: 0µs
           KV contention time: 0µs
-          KV rows read: 5
+          KV rows decoded: 5
           KV bytes read: 40 B
           KV gRPC calls: 5
           estimated max memory allocated: 0 B
@@ -243,7 +243,7 @@ regions: <hidden>
           table: kv@kv_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsUk1v00AQvfMrRnMCtCi243DYk0soaqBtqjQqQihCG-8otWzvurvrkKjKz-IP8MuQvRSStAkNHzeO8-a93Tdv5hbtTYEcL49Pj_tjeA5vRsMzyOfwfjA-geHo9eD86HQw_gBHlyDYjsYUGSot6VyUZJF_xBAnDCujU7JWmwa6bQkDuUAeMMxUVbsGnjBMtSHkt-gyVxByHItpQSMSkkwnQIaSnMiK9tl8nuTzT1VOS2TY10VdKsshZzBHhpeVaKoXyPDdFbisJA7B1y_W16lWjpTLtLrXMvqzBUNCcuh5ZLp0dAfFAbzy6Gx00YdUFIX9QaxEZta1Z1f9PlhHFaS6Vg6e0sJ1MuWecQjaYTyBKN9FKMUCSiq1WYIoCp0KR5KD9zAVLr0mC7p2Ve04NPzW_B3Qw8mKoa--p2udmBHycMUev4GhkZkSReaWnXBzAbSgtL4f4h8Yiw4xtn4a0f_T-Dun0f3N0-j-69OIdxr76adW2kgyJDfMTBrlrygPTHci7PVbnSkynXhzumFjNQlZErGky5KYJT2WvES2a-x9u2p69qYAR2UFMrM51FbM6NGrjHZH1jtklyOylVaWtqN78OWgyYvkjHz-VtcmpQuj0_YbXw5bXQtIss53Q18MlG81BtfF4V5xvCEOt8XRXnF3_8_dA36OtsXxXnFv6-fJ6sm3AAAA__9e3mbn
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsUk1v00AQvfMrRnMCtCi243DYk0soaqBtqjQqQihCG-8otWzvurvrkCjKz-IP8MuQvRSatAkNHzeO8-a93TdvZoX2pkCOl8enx_0xPIc3o-EZ5HN4PxifwHD0enB-dDoYf4CjSxBsR2OKDJWWdC5Kssg_YogThpXRKVmrTQOtWsJALpAHDDNV1a6BJwxTbQj5Cl3mCkKOYzEtaERCkukEyFCSE1nRPpvPk3z-qcppiQz7uqhLZTnkDObI8LISTfUCGb67ApeVxCH4-sX6OtXKkXKZVvdaRn-2ICnVkiSHngenS0cWDAnJIQ7glUdno4s-pKIo7A9iJTJzS2ygs6t-H6yjClJdKwdPaeE6mXLPOATtPJ5AlO8ilGIBJZXaLEEUhU6Fa3x5D1Ph0muyoGtX1Y5Dw2_93wI9nKwZ-up7wNaJGSEP1-zxSxgamSlRZG7ZCTd3QAtK6_s5_oGx6BBjd68j-n8df-06ur95Hd1_fR3xTmM__dRKG0mG5IaZSaP8FeWB6U6EvX6rM0WmE29ON2ysJiFLIpZ0WRKzpMeSl8h2jb1vV03P3hTgqKxAZjaH2ooZPXqV0e7IeofsckS20srSdnQPvhw0eZGckc_f6tqkdGF02n7jy2GrawFJ1vlu6IuB8q3G4F1xuFccb4jDbXG0V9zd_3P3gJ-jbXG8V9zb-nmyfvItAAD__9mnaT8=
 
 # Verify that EXPLAIN ANALYZE on an unsupported query doesn't return an error.
 statement ok
@@ -274,7 +274,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 5 (40 B, 5 gRPC calls)
+rows decoded from KV: 5 (40 B, 5 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -292,7 +292,7 @@ regions: <hidden>
       actual row count: 5
       KV time: 0µs
       KV contention time: 0µs
-      KV rows read: 5
+      KV rows decoded: 5
       KV bytes read: 40 B
       KV gRPC calls: 5
       estimated max memory allocated: 0 B
@@ -300,7 +300,7 @@ regions: <hidden>
       table: kv@kv_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzslstu2zoQhvfnKQazsgEaknw5KLRKa6RF0KYOnMBdFEbBiAOXkEQqJOVLAz9WX6BPVoiK0thJHHuvnTkXc_j9Pzy-R3uXYYzX51_OxzfAl4tO2oXJ7HwKnS58nE4uIV0iQ6UFfeU5WYy_Y4QM-8hwgAyHyHCEc4aF0QlZq01Vcu8bLsQa45ChVEXpqvCcYaINYXyPTrqMMMYbfpvRlLggE4TIUJDjMvPXpMuzdPmjSGmDDMc6K3NlY0iR4XXBq4-9oJri8wyczCmG8M9vW58TrRwpJ7V6ljJ6ZcEQFzFEdeR246gJvYMPdXAxvRpDwrPMPtYVXJqnrZez8RisowISXSoHHVq7QCrXjSH0T6kLiNLXCnK-hpxybTbAs0wn3JGIIfQz3HKX_CQLunRF6WKo6v3sTSDC-ZZhfXpgax1fEMbRlr3C_x_2UmkjyJDYQT7fvqDQN6mEXpEJRrvyvJ996pxFXWQ4qeY5q7SgNSXlc-6HHlrl7F0GjvIChLQplJYv6GgOo1c59Hc4RMf7MDrRh0G_FwxaJ77lxP7xCvRPVWDQC4atAm8pMDhegcGpCgx7_geiVeCgAsPjFRieqsCo1_I_ZRu-wH9KttDK0t5WfPmbw2pbklhQvVqtLk1CV0Yn_pr6OPF9PiDIujob1YcL5VN-wKfN0cHm_3eaw_3m_ik3-6f4V6Eit9ImhYw7Usnm0SRNfMWl27WPIEtG8kz-4s-91bQ9GCwhuaQHpzSpxmlNrnZbk83JVn8DnhaERxthF8mgRbKPZNgi2UcyapFs59v__gYAAP__LTOZkQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzslstu2zoQhvfnKQazsgEaknw5KLRKa6RF0KYOnMBdFEbBiAOXkEQqJOVLAz9WX6BPVoiq0ti5VN5rZ87FHP7fD4_v0d5lGOP1-afz6Q3w9aqX9mG2OJ9Drw_v57NLSNfIUGlBn3lOFuOvGCHDITIcIcMxMpzgkmFhdELWalOV3PuGC7HFOGQoVVG6KrxkmGhDGN-jky4jjPGG32Y0Jy7IBCEyFOS4zPw16fosXX8rUtohw6nOylzZGFJkeF3w6uMgqKb4uAAnc4oh_PXT1udEK0fKSa2epIzeWBCUaEEihqgO3u4cWTDERQxv4F0dXM2vppDwLLMPdQWXpqmrQpeL6RSsowISXSoHPdq6QCrXjyH0r6kLiNKXCnK-hZxybXbAs0wn3FVjhX6GW-6S72RBl64oXQxVvR-_CUS43DOsT3_ktY6vCONoz15A8Ff5UmkjyJA4UH25fwbSF6mE3pAJJoeE3i4-9M6iPjKcVfOcVThoS0n5VPrXHlrl7F0GjvIChLQplJavqLUOkxd1GB7oELW3YnSiFYPhIBh1ZmxhxmF7CMNTIYwGwbiD0ALCqD2E0akQxgP_M9FB-BeEcXsI41MhTAYdghM34zMI5mQLrSwdbcjnvzmsNieJFdVr1urSJHRldOKvqY8z3-cDgqyrs1F9uFA-5Qd83By92vz_QXN43Dw85Wb_FP8qVOQ22qSQcUcq2T34pIlvuHSHDhJkyUieyR_8qb2aNg_JUEJy3ZisSTVOa3K125psTrb6S_C4IGxthENJRp0kx5KMO0mOJZl0kuyX-_9-BwAA__9o8p9t
 
 # Very simple query to make it easier to spot regressions when rewriting results
 # in test files.
@@ -321,7 +321,7 @@ regions: <hidden>
   actual row count: 0
   KV time: 0µs
   KV contention time: 0µs
-  KV rows read: 0
+  KV rows decoded: 0
   KV bytes read: 0 B
   KV gRPC calls: 0
   estimated max memory allocated: 0 B
@@ -329,7 +329,7 @@ regions: <hidden>
   table: kv@kv_pkey
   spans: [/0 - /0]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkdHKEzEQhe99imGuFALd3gYEcVnxR2vLttQLWSTNDnVJNonJbG0p-1i-gE8muylVkcJ_l_PNOZNh5orpu0WJ2-pjVe7AwLt6vQJzgs_vq7oCA6-hQIHOt_RJ9ZRQfsElNgJD9JpS8nFC19nw1J5RFgI7FwaecCNQ-0gor8gdW0KJO3WwVJNqKS6mxi2x6uzc1pzemNPXYOiCAktvh94lCQYFboOanotijnzYA3c9SSh-_UxZa--YHHfe_VeK_keCSKqVcAsfLkx3BG8zPNabErSyNt19QXXx7-hqX5aQmAJoPziGl3TmRef4lYQ8WDYQmUeGXp2hp97HCyhrvVZM9xkOivU3SuAHDgPnH-fZ_4BmFJjVbbmJ1ZFQLkfx_APUlIJ3if7Z_aPOxdgIpPZI-cjJD1HTJno9f5Ples7NoKXEubrM4snl0tiML34HAAD__9UkxJk=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkcGKFDEQhu8-RVEnhcD0XAOC2LS46LpL77IepJFMUoxNp5OYqh5nGPqxfAGfTLqzjIgMeMv_1V-Vn6oz8nePGh-aj039CAO8a-9uYTjA5_dN28AAr6FChSE6-mRGYtRfcIudwpSjJeaYF3ReDTfuiLpS2Ic0yYI7hTZmQn1G6cUTanw0O08tGUd5swx2JKb369jh8GY4fE0DnVBhHf00BtYwoMKHZJbnplpbPjyB9CNpqH795KJtDEJB-hj-KeX4g8GRjY6chuf-3UmIIZNZELwtcN_e12CN93zxJdPniw8V3j7VNbBQAhunIPCSjrLpg7zSULIVA9FwzTCaI4w0xnwC4320RuiSYWfEfiOGOEmapPy4xv8DullhUc_7ZTF7Qr2d1f_foCVOMTD9tf5rk6u5U0huT-XOHKds6T5Hu35T5N3atwJHLKW6LeImlNLczS9-BwAA__95TcXF
 
 # Test a query that has a subquery and a postquery.
 statement ok
@@ -344,7 +344,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 2 (16 B, 2 gRPC calls)
+rows decoded from KV: 2 (16 B, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -379,7 +379,7 @@ regions: <hidden>
 │             actual row count: 1
 │             KV time: 0µs
 │             KV contention time: 0µs
-│             KV rows read: 1
+│             KV rows decoded: 1
 │             KV bytes read: 8 B
 │             KV gRPC calls: 1
 │             estimated max memory allocated: 0 B
@@ -401,7 +401,7 @@ regions: <hidden>
             │ actual row count: 0
             │ KV time: 0µs
             │ KV contention time: 0µs
-            │ KV rows read: 1
+            │ KV rows decoded: 1
             │ KV bytes read: 8 B
             │ KV gRPC calls: 1
             │ estimated max memory allocated: 0 B
@@ -423,6 +423,6 @@ regions: <hidden>
                       estimated row count: 1
                       label: buffer 1
 ·
-Diagram 1 (subquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJysU91q20wQvf-eYpgrGzZYcvig6CqpccHEkYPtGEoxYbMalCXS7nZ31NgNfqy-QJ-sSIrSiBC3pb2S9syc3XPm5xHD5wITnKWr6XINs3S9AHWniww25_Pr6QoGsYDBajqfTtZQajNwQ_iwXFyCk54MD4co0NiMUllSwOQTxijwf9wKdN4qCsH6Gn5skmbZDpNIoDau4hreClTWEyaPyJoLwgRTe2LdaIwCM2Kpi-ZS2pGqWFsDrEtKIPr-LaDAW8nqjgLYil3FCUQo0NuHn0CM24PA9vT0XmCZEyanB_FCU3xc01reFrQkmZEfRX1lbRnO2s-Nu6c9CpzYoipNSMChwJWT9e8JCpzrUjPUFbrY9J1cbEBZw2Rem7zYQOPJk8ySjny7Z-qgd_C-BfPl1QSULIrwnOek9i-pl5vJBAKTA2UrwzCgHY-04WECUWOtTSC6fyuhlDsoqbR-D7IorJJMWQJRo-Ev-hH_ST_O89xTLtn6Udxvx3n68SZdrG_S6_l8cBbX0_nvZ2fc0_qLeV5ScNYE6ul86-bosBVIWU7tzgRbeUVX3qrmmfa4aHgNkFHgNnraHmamDdUCX5Ljo-TxcfL4KDnqkxsrjSs0xA_W30MhmYzaP1e-wx-k5n5PMgrktSz0V_m6YR3taRkU6S_0NNVdqNuKLtZuRhctKQSZ9xKi3x2E7eG_HwEAAP__oKKyjw==
+Diagram 1 (subquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJysU-Fq2zAQ_r-nOO5XAiqxUwbDv9qFDEJTpyRpYIxQVPlwRW1Jk85rspLH2gvsyYbtuaspzTa2X7a-u0_67r67RwyfC0xwlq6myzXM0vUC1J0uMticz6-nKxjEAgar6Xw6WUOpzcAN4cNycQlOejI8HKJAYzNKZUkBk08Yo8C3uBXovFUUgvU1_NgkzbIdJpFAbVzFNbwVqKwnTB6RNReECab2xLrRGAVmxFIXzaW0I1WxtgZYl5RA9P1bQIG3ktUdBbAVu4oTiFCgtw-_gBi3B4Ht6ed7gWVOmJwexDNN8XFNa3lb0JJkRn4U9ZW1bThrPzfunvYocGKLqjQhAYcCV07WvycocK5LzVB36GLTr-RiA8oaJvOyyIsNNDVlpGxGWdLxb_dMATzJLIF38L4F8-XVBJQsivCU56T2XV4NXW4mEwhMDpStDMOAdjzShocJRE11bQLR_WsJpdxBSaX1e5BFYZXkWlbUaPgHS-K_seQ8zz3lkq0fxX1HztOPN-lifZNez-eDs7ge0P8_PuOe1t-M9JKCsyZQT-drN0eHrUDKcmrXJtjKK7ryVjXPtMdFw2uAjAK30dP2MDNtqBb4nBwfJY-Pk8dHyVGf3JTSVIWG-MH6eygkk1H7p853-IPU3Pcko0Bey0J_lS8N62iNSZ4U6S_dQnShbiu6WLsZXbSkEGTeS4j-dBC2hzc_AgAA__9ZlbO7
 Diagram 2 (main-query): https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj89K80AUxfffU1zOqoWBL9nOTiRCoLbSVjeSRZxc2oF0bpy5wULJY_kCPpk0I4gLweX53Tl_5oL02sOiXu-q7Z7q9X5D7uj7jp5uVo_VjhalocWuWlW3ezr5sBiWdLfd3NPQRg66XMIgSMfr9sQJ9hklGoMhiuOUJF7RZX5Qd2fYwsCHYdQrbgycRIa9QL32DIteXNuTkzEoFf8LGHSsre_nYD6zG9VLIPUntlR8vCcYvLTqjpxIRh1GtXR1RXn7BiWaySCrr96k7YFhy8n8fduW0yAh8Y9RvyUXU2PA3YHz_5OM0fFDFDfXZLmZfTPoOGm-llnUIZ-mZvr3GQAA__9Sm4hi
-Diagram 3 (postquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lNFq2zAUhu_3FIdzlYAgdtKLoat2IQW3qVMSNzcjDNU-bbXKkibJLKHksfYCe7Jhq92alWTLYFfm_Dr_8Sf9sp_Qf1HIMcsXk3kBWV7MoHyQqoLl2fRmsoBeyqC3mEwn4wJqqXu2D-fz2RVY4UiHfh8ZalNRLmryyD9iiiuG1pmSvDeulZ66hqxaI08YSm2b0MorhqVxhPwJgwyKkKMypVDgS6Hhtrm7IwfJIEGGFQUhVTd-1gQOp0NkSGsqmyCNhiBr4pB8_-aR4a0I5QN5ME2wbW_rd-brLyHF1ZZhrJ45fBD3hDzdsr9nPZcqkCM3SHcBo87hNIVsAfmsgPxmOv0vvMNjeC-M1HMSFbnBcJe42FjiMJ2cF3CWFxlczLIcGcaAT-Pjk32kDTKcGvPYWPhspAaj210iw7FRTa09B4vPDNDuoEV_qX0QSu1u_HL5pi6NDqTfntHlshsIjkQVp14u4XYT6EV6Dx-ieD-_HkMplPI_-6yQ7rX1ajkegw9koTSNDtCjdRhIHfr8-bbFBqLHfQ17kqzFGmqqjduAUO1VDlRxSDq0P6ac7E15dEzK8Qsi54wDeRdPLR2MdgP_15u4n_HkGMY5eWu0px2ofZOT7YohVfcU_yTeNK6ka2fK7jWxnHW-TqjIh7iaxiLTcakFfG1OD5qHh83Dg-bRYfPooPnkN_Nq--5HAAAA__95O9fn
+Diagram 3 (postquery): https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lEFu2zwQhff_KQazsgECluwsfnCV1HAAJY4U2Io3hVEw1CRhQ5EqSaE2Ah-rF-jJColJWzew2xToSpjHeaOPfJSe0H_SyDHLl7NFCVleFiAflK5gdTa_mS1hkDIYLGfz2bSEWplBM4TzRXEFjXBkwnCIDI2tKBc1eeTvMcU1w8ZZSd5b10lPfUNWbZAnDJVp2tDJa4bSOkL-hEEFTchRWyk0eCkM3LZ3d-QgGSXIsKIglO7HF23gcDpGhrQh2QZlDQRVE4fk6xePDG9FkA_kwbah6Xo7v7OffwgprncMY_XM4YO4J-Tpjv0567nSgRy5UboPGHUOpylkS8iLEvKb-fyf8I7fwnthlVmQqMiNxvvE5bYhDvPZeQlneZnBRZHlyDAGfBofH5pH2iLDubWPbQMfrTJgTbdLZDi1uq2N59DgMwN0O-jQX2ofhNb7G79cvaqlNYHM6zO6XPUDoSJpK6ri4MsV3G4DeXAkKg7_w7so3i-upyCF1v57XyOUe-nrpKvVdAo-UAPStibAgDZhpEwY8ucLFxuIHg81HAizFhuoqbZuC0J3tzl0tEmP9tugk4NBT94SdPyIyDnrQN3Fg0tHk_3M__YyHmY8eQvjgnxjjac9qEOTk92aIVX3FH8m3rZO0rWzsn9NLIve1wsV-RBX01hkJi51gD-b06Pm8XHz-Kh5ctw8OWo--cW83v33LQAA__-P39kT

@@ -115,7 +115,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 1 (8 B, 1 gRPC calls)
+rows decoded from KV: 1 (8 B, 1 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -126,7 +126,7 @@ regions: <hidden>
   actual row count: 1
   KV time: 0µs
   KV contention time: 0µs
-  KV rows read: 1
+  KV rows decoded: 1
   KV bytes read: 8 B
   KV gRPC calls: 1
   estimated max memory allocated: 0 B
@@ -151,7 +151,7 @@ regions: <hidden>
   actual row count: 0
   KV time: 0µs
   KV contention time: 0µs
-  KV rows read: 0
+  KV rows decoded: 0
   KV bytes read: 0 B
   KV gRPC calls: 0
   estimated max memory allocated: 0 B

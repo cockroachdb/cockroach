@@ -418,7 +418,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			e.ob.AddField("KV contention time", string(humanizeutil.Duration(s.KVContentionTime.Value())))
 		}
 		if s.KVRowsRead.HasValue() {
-			e.ob.AddField("KV rows read", string(humanizeutil.Count(s.KVRowsRead.Value())))
+			e.ob.AddField("KV rows decoded", string(humanizeutil.Count(s.KVRowsRead.Value())))
 		}
 		if s.KVPairsRead.HasValue() {
 			pairs := s.KVPairsRead.Value()

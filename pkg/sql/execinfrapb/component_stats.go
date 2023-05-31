@@ -144,7 +144,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		fn("KV contention time", humanizeutil.Duration(s.KV.ContentionTime.Value()))
 	}
 	if s.KV.TuplesRead.HasValue() {
-		fn("KV rows read", humanizeutil.Count(s.KV.TuplesRead.Value()))
+		fn("KV rows decoded", humanizeutil.Count(s.KV.TuplesRead.Value()))
 	}
 	if s.KV.BytesRead.HasValue() {
 		fn("KV bytes read", humanize.IBytes(s.KV.BytesRead.Value()))
