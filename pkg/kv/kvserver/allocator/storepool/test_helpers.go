@@ -84,7 +84,7 @@ func CreateTestStorePool(
 	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	mnl := NewMockNodeLiveness(defaultNodeStatus)
 
-	liveness.TimeUntilStoreDead.Override(ctx, &st.SV, timeUntilStoreDeadValue)
+	liveness.TimeUntilNodeDead.Override(ctx, &st.SV, timeUntilStoreDeadValue)
 	storePool := NewStorePool(
 		ambientCtx,
 		st,

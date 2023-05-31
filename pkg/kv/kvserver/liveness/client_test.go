@@ -245,7 +245,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 				// doesn't allow durations below 1m15s, which is much too long
 				// for a test.
 				// We do this in every SucceedsSoon attempt, so we'll be good.
-				liveness.TimeUntilStoreDead.Override(ctx, &firstServer.ClusterSettings().SV, liveness.TestTimeUntilStoreDead)
+				liveness.TimeUntilNodeDead.Override(ctx, &firstServer.ClusterSettings().SV, liveness.TestTimeUntilNodeDead)
 
 				log.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
 				resp, err := admin.Liveness(ctx, &serverpb.LivenessRequest{})
