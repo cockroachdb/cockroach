@@ -114,7 +114,8 @@ num=4
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
 # ---------------------------------------------------------------------------------
 # req4 will scan the lock table with a Skip wait policy. It will not need to wait.
@@ -191,7 +192,8 @@ num=4
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
 # ---------------------------------------------------------------------------------
 # req5 is the same as req4, except is has a timestamp equal to txn1's to
@@ -243,4 +245,5 @@ num=4
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "f"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, seq: 0
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
