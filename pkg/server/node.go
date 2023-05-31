@@ -1636,12 +1636,11 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		f := n.stores.RangeFeed(req, &sink)
 		f.WhenReady(func(err error) {
 			if err == nil {
-				// RangeFeed usually finishes with an error.  However, if future
-				// completes with nil error (which could happen e.g. during processor
-				// shutdown), treat it as a normal stream termination so that the caller
-				// restarts.
-				// TODO(101330): Add an explicit retry reason instead of REPLICA_REMOVED.
-				err = kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
+				cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED
+				if !n.storeCfg.Settings.Version.IsActive(stream.Context(), clusterversion.V23_2) {
+					cause = kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED
+				}
+				err = kvpb.NewRangeFeedRetryError(cause)
 			}
 
 			e := &kvpb.MuxRangeFeedEvent{
