@@ -50,12 +50,12 @@ var _ AllocatorStorePool = &OverrideStorePool{}
 func OverrideNodeLivenessFunc(
 	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, realNodeLivenessFunc NodeLivenessFunc,
 ) NodeLivenessFunc {
-	return func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	return func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilNodeDead time.Duration) livenesspb.NodeLivenessStatus {
 		if override, ok := overrides[nid]; ok {
 			return override
 		}
 
-		return realNodeLivenessFunc(nid, now, timeUntilStoreDead)
+		return realNodeLivenessFunc(nid, now, timeUntilNodeDead)
 	}
 }
 
