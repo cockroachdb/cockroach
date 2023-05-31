@@ -1047,17 +1047,15 @@ func (f *cloudFeedFactory) Feed(
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
-	if createStmt.Select != nil {
-		createStmt.Options = append(createStmt.Options,
-			// Normally, cloud storage requires key_in_value; but if we use bare envelope,
-			// this option is not required.  However, we need it to make this
-			// test feed work -- so, set it.
-			tree.KVOption{Key: changefeedbase.OptKeyInValue},
-		)
-	}
+
+	// Determine if we can enable the parquet format if the changefeed is not
+	// being created with incompatible options. If it can be enabled, we will use
+	// parquet format with a probability of 0.4.
+	parquetPossible := true
 
 	formatSpecified := false
 	explicitEnvelope := false
+	explicitParquet := false
 	for _, opt := range createStmt.Options {
 		if string(opt.Key) == changefeedbase.OptFormat {
 			formatSpecified = true
@@ -1067,22 +1065,13 @@ func (f *cloudFeedFactory) Feed(
 		}
 	}
 
-	if !formatSpecified {
-		// Determine if we can enable the parquet format if the changefeed is not
-		// being created with incompatible options. If it can be enabled, we will use
-		// parquet format with a probability of 0.4.
-		parquetPossible := includeParquestTestMetadata
-		for _, opt := range createStmt.Options {
-			for o := range changefeedbase.ParquetFormatUnsupportedOptions {
-				if o == string(opt.Key) {
-					parquetPossible = false
-					break
-				}
+		if string(opt.Key) == changefeedbase.OptFormat {
+			if tree.AsStringWithFlags(opt.Value, tree.FmtBareStrings) == string(changefeedbase.OptFormatParquet) {
+				explicitParquet = true
+			} else {
+				parquetPossible = false
+				break
 			}
-		}
-		randNum := rand.Intn(5)
-		if randNum < 3 {
-			parquetPossible = false
 		}
 		if parquetPossible {
 			createStmt.Options = append(
@@ -1093,6 +1082,28 @@ func (f *cloudFeedFactory) Feed(
 				},
 			)
 		}
+	}
+	randNum := rand.Intn(5)
+	if randNum < 5 {
+		parquetPossible = false
+	}
+	if createStmt.Select != nil && !explicitParquet {
+		createStmt.Options = append(createStmt.Options,
+			// Normally, cloud storage requires key_in_value; but if we use bare envelope,
+			// this option is not required.  However, we need it to make this
+			// test feed work -- so, set it.
+			tree.KVOption{Key: changefeedbase.OptKeyInValue},
+		)
+	}
+	if parquetPossible && !explicitParquet {
+		log.Infof(context.Background(), "using parquet format")
+		createStmt.Options = append(
+			createStmt.Options,
+			tree.KVOption{
+				Key:   changefeedbase.OptFormat,
+				Value: tree.NewStrVal(string(changefeedbase.OptFormatParquet)),
+			},
+		)
 	}
 
 	feedDir := feedSubDir()

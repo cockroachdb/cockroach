@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -88,6 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -268,6 +270,66 @@ AS SELECT *, event_op() AS op  FROM foo`)
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+func TestChangefeedProtoOutput(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	protoToJson := withValueTransform(func(in []byte) (out []byte, _ error) {
+		var msg pbtypes.Struct
+		if err := protoutil.Unmarshal(in, &msg); err != nil {
+			return nil, err
+		}
+
+		j, err := protoreflect.MessageToJSON(&msg, protoreflect.FmtFlags{})
+		if err != nil {
+			return nil, err
+		}
+		return []byte(tree.AsString(tree.NewDJSON(j))), nil
+	})
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+
+		// Protocol encoded messages are []byte arrays.
+		// It is possible to use JSON output format with proto encoded bytes.
+		// It does impose additional overhead to escape binary data, and subsequently unescape it.
+		// CSV format works similarly.
+		// Parquet format is best suited for binary data.
+		foo := feed(t, f, `
+CREATE CHANGEFEED WITH format='parquet' 
+AS SELECT crdb_internal.row_to_proto(foo) FROM foo`)
+		defer closeFeed(t, foo)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{`foo: [0]->{"a": 0, "b": "updated"}`}, protoToJson)
+
+		//sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		//assertPayloads(t, foo, []string{
+		//	`foo: [1]->{"a": 1, "b": "a", "cdc_prev": null, "op": "insert"}`,
+		//	`foo: [2]->{"a": 2, "b": "b", "cdc_prev": null, "op": "insert"}`,
+		//})
+		//
+		//sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		//assertPayloads(t, foo, []string{
+		//	`foo: [2]->{"a": 2, "b": "c", "cdc_prev": {"a": 2, "b": "b"}, "op": "update"}`,
+		//	`foo: [3]->{"a": 3, "b": "d", "cdc_prev": null, "op": "insert"}`,
+		//})
+		//
+		//// Deleted rows with bare envelope are emitted with only
+		//// the key columns set.
+		//sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		//assertPayloads(t, foo, []string{
+		//	`foo: [1]->{"a": 1, "b": null, "cdc_prev": {"a": 1, "b": "a"}, "op": "delete"}`,
+		//})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
 
 func TestToJSONAsChangefeed(t *testing.T) {
@@ -958,7 +1020,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
-			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				t.Fatal(err)
@@ -7882,8 +7944,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 				observedError = withTimeout(
 					nada, expectTimeout,
 					func(ctx context.Context) error {
-						return assertPayloadsBaseErr(
-							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false)
+						return assertPayloadsBaseErr(ctx, nada, []string{`nada: [2]->{"after": {}}`})
 					})
 				return nil
 			}, 20*expectTimeout))
