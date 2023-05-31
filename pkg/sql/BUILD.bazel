@@ -386,6 +386,7 @@ go_library(
         "//pkg/sql/catalog/zone",
         "//pkg/sql/clusterunique",
         "//pkg/sql/colexec",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/colfetcher",
         "//pkg/sql/colflow",
         "//pkg/sql/colmem",
