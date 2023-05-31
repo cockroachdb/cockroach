@@ -128,6 +128,10 @@ func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 			purgatory:            store.metrics.SplitQueuePurgatory,
 		},
 	)
+	sq.SetDisabled(!kvserverbase.SplitQueueEnabled.Get(&store.cfg.Settings.SV))
+	kvserverbase.SplitQueueEnabled.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
+		sq.SetDisabled(!kvserverbase.SplitQueueEnabled.Get(&store.cfg.Settings.SV))
+	})
 	return sq
 }
 

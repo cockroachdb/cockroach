@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -59,6 +60,10 @@ func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 			processingNanos:      store.metrics.RaftSnapshotQueueProcessingNanos,
 		},
 	)
+	rq.SetDisabled(!kvserverbase.RaftSnapshotQueueEnabled.Get(&store.cfg.Settings.SV))
+	kvserverbase.RaftSnapshotQueueEnabled.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
+		rq.SetDisabled(!kvserverbase.RaftSnapshotQueueEnabled.Get(&store.cfg.Settings.SV))
+	})
 	return rq
 }
 

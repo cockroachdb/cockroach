@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -1221,6 +1223,77 @@ func TestBaseQueueDisable(t *testing.T) {
 
 	if pc := testQueue.getProcessed(); pc > 0 {
 		t.Errorf("expected processed count of 0; got %d", pc)
+	}
+}
+
+// TestQueueDisable verifies that setting the set of queue.enabled cluster
+// settings actually disables the base queue. This test works alongside
+// TestBaseQueueDisable to verify the entire disable workflow.
+func TestQueueDisable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	testCases := []struct {
+		name           string
+		clusterSetting *settings.BoolSetting
+		queue          *baseQueue
+	}{
+		{
+			name:           "Merge Queue",
+			clusterSetting: kvserverbase.MergeQueueEnabled,
+			queue:          tc.store.mergeQueue.baseQueue,
+		},
+		{
+			name:           "Replicate Queue",
+			clusterSetting: kvserverbase.ReplicateQueueEnabled,
+			queue:          tc.store.replicateQueue.baseQueue,
+		},
+		{
+			name:           "Replica GC Queue",
+			clusterSetting: kvserverbase.ReplicaGCQueueEnabled,
+			queue:          tc.store.replicaGCQueue.baseQueue,
+		},
+		{
+			name:           "Raft Log Queue",
+			clusterSetting: kvserverbase.RaftLogQueueEnabled,
+			queue:          tc.store.raftLogQueue.baseQueue,
+		},
+		{
+			name:           "Raft Snapshot Queue",
+			clusterSetting: kvserverbase.RaftSnapshotQueueEnabled,
+			queue:          tc.store.raftSnapshotQueue.baseQueue,
+		},
+		{
+			name:           "Consistency Queue",
+			clusterSetting: kvserverbase.ConsistencyQueueEnabled,
+			queue:          tc.store.consistencyQueue.baseQueue,
+		},
+		{
+			name:           "Split Queue",
+			clusterSetting: kvserverbase.SplitQueueEnabled,
+			queue:          tc.store.splitQueue.baseQueue,
+		},
+		{
+			name:           "MVCC GC Queue",
+			clusterSetting: kvserverbase.MVCCGCQueueEnabled,
+			queue:          tc.store.mvccGCQueue.baseQueue,
+		},
+	}
+
+	// Disable and verify all queues are disabled
+	for _, testCase := range testCases {
+		testCase.clusterSetting.Override(ctx, &tc.store.ClusterSettings().SV, false)
+		testCase.queue.mu.Lock()
+		disabled := testCase.queue.mu.disabled
+		testCase.queue.mu.Unlock()
+		if disabled != true {
+			t.Errorf("%s should be disabled", testCase.name)
+		}
 	}
 }
 

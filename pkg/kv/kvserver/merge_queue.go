@@ -125,21 +125,16 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 			purgatory:            store.metrics.MergeQueuePurgatory,
 		},
 	)
+	mq.SetDisabled(!kvserverbase.MergeQueueEnabled.Get(&store.cfg.Settings.SV))
+	kvserverbase.MergeQueueEnabled.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
+		mq.SetDisabled(!kvserverbase.MergeQueueEnabled.Get(&store.cfg.Settings.SV))
+	})
 	return mq
-}
-
-func (mq *mergeQueue) enabled() bool {
-	st := mq.store.ClusterSettings()
-	return kvserverbase.MergeQueueEnabled.Get(&st.SV)
 }
 
 func (mq *mergeQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
-	if !mq.enabled() {
-		return false, 0
-	}
-
 	desc := repl.Desc()
 
 	if desc.EndKey.Equal(roachpb.RKeyMax) {
@@ -243,10 +238,6 @@ func (mq *mergeQueue) requestRangeStats(
 func (mq *mergeQueue) process(
 	ctx context.Context, lhsRepl *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
-	if !mq.enabled() {
-		log.VEventf(ctx, 2, "skipping merge: queue has been disabled")
-		return false, nil
-	}
 
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
