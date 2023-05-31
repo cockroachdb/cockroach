@@ -166,7 +166,7 @@ func (zc *debugZipContext) collectClusterData(
 			return err
 		}); requestErr != nil {
 			if err := zc.z.createError(s, zc.prefix+tenantRangesName, requestErr); err != nil {
-				return &serverpb.NodesListResponse{}, nil, errors.Wrap(err, "fetching tenant ranges")
+				return &serverpb.NodesListResponse{}, nil, s.fail(err)
 			}
 		} else {
 			s.done()
