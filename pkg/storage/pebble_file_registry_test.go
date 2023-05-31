@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"testing"
 
@@ -383,6 +384,29 @@ func TestFileRegistry(t *testing.T) {
 				require.NoError(t, f.Close())
 			}
 			return buf.String()
+		case "list":
+			type fileEntry struct {
+				name  string
+				entry *enginepb.FileEntry
+			}
+			var fileEntries []fileEntry
+			for name, entry := range registry.List() {
+				fileEntries = append(fileEntries, fileEntry{
+					name:  name,
+					entry: entry,
+				})
+			}
+			sort.Slice(fileEntries, func(i, j int) bool {
+				return fileEntries[i].name < fileEntries[j].name
+			})
+			var b bytes.Buffer
+			for _, fe := range fileEntries {
+				b.WriteString(fmt.Sprintf(
+					"name=%s,type=%s,settings=%s\n",
+					fe.name, fe.entry.EnvType.String(), string(fe.entry.EncryptionSettings),
+				))
+			}
+			return b.String()
 		default:
 			panic("unrecognized command " + d.Cmd)
 		}

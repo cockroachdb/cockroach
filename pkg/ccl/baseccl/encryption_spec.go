@@ -37,8 +37,8 @@ type StoreEncryptionSpec struct {
 	RotationPeriod time.Duration
 }
 
-// Convert to a serialized EncryptionOptions protobuf.
-func (es StoreEncryptionSpec) toEncryptionOptions() ([]byte, error) {
+// ToEncryptionOptions convert to a serialized EncryptionOptions protobuf.
+func (es StoreEncryptionSpec) ToEncryptionOptions() ([]byte, error) {
 	opts := EncryptionOptions{
 		KeySource: EncryptionKeySource_KeyFiles,
 		KeyFiles: &EncryptionKeyFiles{
@@ -206,7 +206,7 @@ func PopulateStoreSpecWithEncryption(
 
 			// Tell the store we absolutely need the file registry.
 			storeSpecs.Specs[i].UseFileRegistry = true
-			opts, err := es.toEncryptionOptions()
+			opts, err := es.ToEncryptionOptions()
 			if err != nil {
 				return err
 			}
@@ -235,7 +235,7 @@ func EncryptionOptionsForStore(
 
 	for _, es := range encryptionSpecs.Specs {
 		if es.Path == path {
-			return es.toEncryptionOptions()
+			return es.ToEncryptionOptions()
 		}
 	}
 
