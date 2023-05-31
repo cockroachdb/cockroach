@@ -133,9 +133,9 @@ message ClientAuthenticationFailed {
   CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSessionDetails session = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The reason for the authentication failure.
-  AuthFailReason reason = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  AuthFailReason reason = 4 [(gogoproto.jsontag) = ",includeempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The detailed error for the authentication failure.
-  string detail = 5 [(gogoproto.jsontag) = ",omitempty"];
+  string detail = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
   // The authentication method used.
   string method = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
