@@ -84,6 +84,13 @@ func (s *testOrderedSink) flushAndVerify(wallTime int64) int {
 	return len(payload.Rows)
 }
 
+func getSliMetrics(t *testing.T) *sliMetrics {
+	metrics := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics)
+	sliMetrics, err := metrics.getSLIMetrics(defaultSLIScope)
+	require.NoError(t, err)
+	return sliMetrics
+}
+
 func TestOrderedSink(t *testing.T) {
 	sf, err := makeSchemaChangeFrontier(hlc.Timestamp{}, makeSpan(t, "a", "f"))
 	require.NoError(t, err)
@@ -92,7 +99,7 @@ func TestOrderedSink(t *testing.T) {
 		orderedSink: orderedSink{
 			processorID: 42,
 			wrapped:     &mockSink{},
-			metrics:     MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics),
+			metrics:     getSliMetrics(t),
 			frontier:    sf,
 		}, t: t}
 
@@ -192,6 +199,7 @@ func TestOrderedMerger(t *testing.T) {
 			orderedSink: orderedSink{
 				processorID: int32(i),
 				frontier:    sf,
+				metrics:     getSliMetrics(t),
 			}, t: t}
 
 		for j := 0; j < 100; j++ {
@@ -213,7 +221,7 @@ func TestOrderedMerger(t *testing.T) {
 		orderedRows:        make(map[int32][]jobspb.OrderedRows_Row),
 		bufferedBytesLimit: 1 << 30,
 		frontier:           sf,
-		metrics:            MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics),
+		metrics:            getSliMetrics(t),
 		sink:               sink,
 	}
 
@@ -295,6 +303,7 @@ func TestOrderedMergerBytesLimit(t *testing.T) {
 	orderer := testOrderedSink{
 		orderedSink: orderedSink{
 			frontier: sfAgg,
+			metrics:  getSliMetrics(t),
 		}, t: t}
 
 	sfCoord, err := makeSchemaChangeFrontier(hlc.Timestamp{}, makeSpan(t, "a", "f"))
@@ -304,7 +313,7 @@ func TestOrderedMergerBytesLimit(t *testing.T) {
 	merger := &orderedRowMerger{
 		orderedRows: make(map[int32][]jobspb.OrderedRows_Row),
 		frontier:    sfCoord,
-		metrics:     MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics),
+		metrics:     getSliMetrics(t),
 		sink:        sink,
 	}
 

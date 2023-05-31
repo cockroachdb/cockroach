@@ -301,7 +301,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		sink := &orderedSink{
 			wrapped:     ca.sink,
 			processorID: ca.processorID,
-			metrics:     ca.metrics,
+			metrics:     ca.sliMetrics,
 			frontier:    ca.frontier,
 		}
 		ca.orderedRowsBuf = &sink.forwardingBuf
@@ -925,20 +925,6 @@ func newChangeFrontierProcessor(
 		slowLogEveryN: log.Every(slowSpanMaxFrequency),
 	}
 
-	opts := changefeedbase.MakeStatementOptions(spec.Feed.Opts)
-	if opts.TotalOrdering() {
-		memLimit := changefeedbase.PerChangefeedMemLimit.Get(&flowCtx.Cfg.Settings.SV)
-		cf.orderedRowMerger = &orderedRowMerger{
-			orderedRows:        make(map[int32][]jobspb.OrderedRows_Row),
-			bufferedBytesLimit: int(memLimit),
-			frontier:           sf,
-			metrics:            flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics),
-		}
-		if cf.isSinkless() {
-			cf.orderedRowMerger.passthroughBuf = &cf.passthroughBuf
-		}
-	}
-
 	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		cf.knobs = *cfKnobs
 	}
@@ -962,6 +948,7 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
+	opts := changefeedbase.MakeStatementOptions(cf.spec.Feed.Opts)
 	freq, emitResolved, err := opts.GetResolvedTimestampInterval()
 	if err != nil {
 		return nil, err
@@ -1050,8 +1037,20 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	}
 
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
-	if cf.orderedRowMerger != nil {
-		cf.orderedRowMerger.sink = cf.sink
+
+	opts := changefeedbase.MakeStatementOptions(cf.spec.Feed.Opts)
+	if opts.TotalOrdering() {
+		memLimit := changefeedbase.PerChangefeedMemLimit.Get(&cf.flowCtx.Cfg.Settings.SV)
+		cf.orderedRowMerger = &orderedRowMerger{
+			orderedRows:        make(map[int32][]jobspb.OrderedRows_Row),
+			bufferedBytesLimit: int(memLimit),
+			frontier:           cf.frontier,
+			sink:               cf.sink,
+			metrics:            cf.sliMetrics,
+		}
+		if cf.isSinkless() {
+			cf.orderedRowMerger.passthroughBuf = &cf.passthroughBuf
+		}
 	}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
@@ -1817,9 +1816,13 @@ type orderedRowMerger struct {
 	orderedRows map[int32][]jobspb.OrderedRows_Row
 
 	// minHeap is a min heap storing the head of every orderedRows list in order
-	// to determine the earliest row across all processors.
+	// to determine the earliest row across all processors.  Entries in the
+	// minHeap still remain in the orderedRows list, as that allows us to just
+	// check the first element of an orderedRows entry for a processor to know if
+	// that processor already has its element in the min heap or not.
 	minHeap RowHeap
 
+	rowsBuffered       int
 	bytesBuffered      int
 	bufferedBytesLimit int
 
@@ -1829,29 +1832,32 @@ type orderedRowMerger struct {
 
 	frontier *schemaChangeFrontier
 	sink     EventSink
-	metrics  *Metrics
+	metrics  *sliMetrics
 }
 
 func (m *orderedRowMerger) Append(ctx context.Context, rows jobspb.OrderedRows) error {
-	defer m.metrics.TotalOrderingFrontierAppends.Inc(1)
-
-	wasEmpty := len(m.orderedRows[rows.SourceProcessorID]) == 0
+	backfillTs := m.frontier.BackfillTS()
 
 	for _, row := range rows.Rows {
 		m.bytesBuffered += row.Size()
+		m.rowsBuffered += 1
+
+		// If the row is part of an ongoing backfill it can be directly emitted
+		// without wasting cycles on the minHeap Push/Pop.
+		if row.Updated.Equal(backfillTs) {
+			err := m.emitRow(ctx, row)
+			if err != nil {
+				return err
+			}
+		} else {
+			if len(m.orderedRows[rows.SourceProcessorID]) == 0 {
+				heap.Push(&m.minHeap, RowHeapEntry{source: rows.SourceProcessorID, row: row})
+			}
+			m.orderedRows[rows.SourceProcessorID] = append(m.orderedRows[rows.SourceProcessorID], row)
+		}
 	}
 	if m.bytesBuffered > m.bufferedBytesLimit {
 		return errors.Newf("ordered row buffer exceeded maximum byte limit (%d > %d)", m.bytesBuffered, m.bufferedBytesLimit)
-	}
-
-	// Append newer rows to the back of the queue.
-	m.orderedRows[rows.SourceProcessorID] = append(m.orderedRows[rows.SourceProcessorID], rows.Rows...)
-
-	// Add the first element of the list to the minHeap if its the new earliest
-	// row for the processor.
-	allRows := m.orderedRows[rows.SourceProcessorID]
-	if wasEmpty && len(allRows) > 0 {
-		heap.Push(&m.minHeap, RowHeapEntry{source: rows.SourceProcessorID, row: allRows[0]})
 	}
 
 	return m.emitUntilFrontier(ctx)
@@ -1860,6 +1866,7 @@ func (m *orderedRowMerger) Append(ctx context.Context, rows jobspb.OrderedRows) 
 func (m *orderedRowMerger) emitRow(ctx context.Context, row jobspb.OrderedRows_Row) error {
 	defer func() {
 		m.bytesBuffered -= row.Size()
+		m.rowsBuffered -= 1
 	}()
 
 	if m.passthroughBuf != nil {
@@ -1876,15 +1883,17 @@ func (m *orderedRowMerger) emitRow(ctx context.Context, row jobspb.OrderedRows_R
 	}
 }
 
+// emitUntilFrontier emits all rows buffered in the orderedRowMerger that are
+// valid to be Emitted to the sink, i.e. either they do not exceed the frontier
+// or they are for an ongoing backfill.
 func (m *orderedRowMerger) emitUntilFrontier(ctx context.Context) error {
+	defer m.metrics.TotalOrderingBufferedFrontierEvents.Update(int64(m.rowsBuffered))
+
 	for {
 		if m.minHeap.Peek() == nil {
 			break
 		}
 
-		// If the frontier has passed nextTs then all events up to it have been
-		// observed and nextTs is guaranteed to be the lowest timestamp event
-		// possible and can be emitted.
 		nextTs := m.minHeap.Peek().row.Updated
 		if nextTs.LessEq(m.frontier.Frontier()) || nextTs.Equal(m.frontier.BackfillTS()) {
 			next := heap.Pop(&m.minHeap).(RowHeapEntry)

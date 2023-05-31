@@ -971,7 +971,7 @@ type orderedSink struct {
 	forwardingBuf encDatumAllocRowBuffer
 	unorderedBuf  OrderedSinkRowSlice
 	alloc         tree.DatumAlloc
-	metrics       *Metrics
+	metrics       *sliMetrics
 	frontier      *schemaChangeFrontier
 	wrapped       EventSink
 }
@@ -1015,6 +1015,8 @@ var maxOrderedRowsPayloadBytes = envutil.EnvOrDefaultInt(
 
 // Flush implements the Sink interface.
 func (s *orderedSink) Flush(ctx context.Context) error {
+	defer s.metrics.TotalOrderingBufferedAggEvents.Update(int64(len(s.unorderedBuf)))
+
 	if len(s.unorderedBuf) == 0 {
 		return nil
 	}
@@ -1049,10 +1051,6 @@ func (s *orderedSink) Flush(ctx context.Context) error {
 		updateBytes, err := protoutil.Marshal(&orderedUpdate)
 		if err != nil {
 			return err
-		}
-		if s.metrics != nil {
-			s.metrics.TotalOrderingForwards.Inc(1)
-			s.metrics.TotalOrderingEventsForwarded.Inc(int64(len(orderedUpdate.Rows)))
 		}
 
 		datumRow := rowenc.EncDatumRow{
