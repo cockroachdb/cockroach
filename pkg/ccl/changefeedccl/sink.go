@@ -496,6 +496,25 @@ func (b *encDatumRowBuffer) Pop() rowenc.EncDatumRow {
 	return ret
 }
 
+type allocRow struct {
+	row   rowenc.EncDatumRow
+	alloc kvevent.Alloc
+}
+type encDatumAllocRowBuffer []allocRow
+
+func (b *encDatumAllocRowBuffer) IsEmpty() bool {
+	return b == nil || len(*b) == 0
+}
+func (b *encDatumAllocRowBuffer) Push(r rowenc.EncDatumRow, alloc kvevent.Alloc) {
+	*b = append(*b, allocRow{r, alloc})
+}
+func (b *encDatumAllocRowBuffer) Pop(ctx context.Context) rowenc.EncDatumRow {
+	ret := (*b)[0]
+	*b = (*b)[1:]
+	ret.alloc.Release(ctx)
+	return ret.row
+}
+
 type bufferSink struct {
 	buf     encDatumRowBuffer
 	alloc   tree.DatumAlloc
@@ -949,7 +968,7 @@ func (p OrderedSinkRowSlice) Less(i, j int) bool { return p[i].row.Updated.Less(
 // sorts the rows and emits the sorted rows to the forwardingBuf
 type orderedSink struct {
 	processorID   int32
-	forwardingBuf encDatumRowBuffer
+	forwardingBuf encDatumAllocRowBuffer
 	unorderedBuf  OrderedSinkRowSlice
 	alloc         tree.DatumAlloc
 	metrics       *Metrics
@@ -994,24 +1013,23 @@ var maxOrderedRowsPayloadBytes = envutil.EnvOrDefaultInt(
 	"COCKROACH_CHANGEFEED_ORDERED_ROWS_PAYLOAD_BYTES", 1<<20, // 1 MiB
 )
 
-// EmitResolvedTimestamp implements the Sink interface.
+// Flush implements the Sink interface.
 func (s *orderedSink) Flush(ctx context.Context) error {
 	if len(s.unorderedBuf) == 0 {
 		return nil
 	}
 	sort.Sort(s.unorderedBuf) // Orders from lowest to highest updated timestamp
 
-	var toRelease kvevent.Alloc
-	defer toRelease.Release(ctx)
-
 	// Until all messages have reached the frontier (the point where we know our
 	// sorted list isn't missing any events), forward messages to the coordinator
 	// node, and do so while sending payloads that aren't too large.
 	for {
+		var toRelease kvevent.Alloc
 		orderedUpdate := jobspb.OrderedRows{
 			Rows:              make([]jobspb.OrderedRows_Row, 0, len(s.unorderedBuf)),
 			SourceProcessorID: s.processorID,
 		}
+
 		rowBytes := 0
 		for _, r := range s.unorderedBuf {
 			pastByteLimit := rowBytes > 0 && rowBytes+r.row.Size() > maxOrderedRowsPayloadBytes
@@ -1032,15 +1050,20 @@ func (s *orderedSink) Flush(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		s.metrics.TotalOrderingForwards.Inc(1)
-		s.metrics.TotalOrderingEventsForwarded.Inc(int64(len(orderedUpdate.Rows)))
-		s.forwardingBuf.Push(rowenc.EncDatumRow{
+		if s.metrics != nil {
+			s.metrics.TotalOrderingForwards.Inc(1)
+			s.metrics.TotalOrderingEventsForwarded.Inc(int64(len(orderedUpdate.Rows)))
+		}
+
+		datumRow := rowenc.EncDatumRow{
 			{Datum: tree.DNull}, // resolved span
 			{Datum: tree.DNull}, // topic
 			{Datum: tree.DNull}, // key
 			{Datum: tree.DNull}, // value
 			{Datum: s.alloc.NewDBytes(tree.DBytes(updateBytes))}, // ordered rows
-		})
+		}
+
+		s.forwardingBuf.Push(datumRow, toRelease)
 	}
 	return nil
 }

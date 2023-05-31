@@ -37,7 +37,8 @@ type TestingKnobs struct {
 	PubsubClientSkipClientCreation bool
 	// FilterSpanWithMutation is a filter returning true if the resolved span event should
 	// be skipped. This method takes a pointer in case resolved spans need to be mutated.
-	FilterSpanWithMutation func(resolved *jobspb.ResolvedSpan) bool
+	FilterSpanWithMutation     func(resolved *jobspb.ResolvedSpan) bool
+	FilterFrontierResolvedSpan func() bool
 	// FeedKnobs are kvfeed testing knobs.
 	FeedKnobs kvfeed.TestingKnobs
 	// NullSinkIsExternalIOAccounted controls whether we record

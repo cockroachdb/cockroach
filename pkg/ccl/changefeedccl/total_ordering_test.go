@@ -45,7 +45,7 @@ func (s *testOrderedSink) emitTs(wallTime int64) {
 }
 
 func (s *testOrderedSink) popPayload() jobspb.OrderedRows {
-	row := s.forwardingBuf.Pop()
+	row := s.forwardingBuf.Pop(context.Background())
 	require.True(s.t, row[0].IsNull())
 	require.True(s.t, row[1].IsNull())
 	require.True(s.t, row[2].IsNull())
@@ -192,7 +192,6 @@ func TestOrderedMerger(t *testing.T) {
 			orderedSink: orderedSink{
 				processorID: int32(i),
 				frontier:    sf,
-				metrics:     MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics),
 			}, t: t}
 
 		for j := 0; j < 100; j++ {
@@ -211,12 +210,14 @@ func TestOrderedMerger(t *testing.T) {
 
 	sink := &mockSink{t: t, lastUpdated: hlc.Timestamp{}, frontier: sf}
 	merger := &orderedRowMerger{
-		orderedRows: make(map[int32][]jobspb.OrderedRows_Row),
-		frontier:    sf,
-		metrics:     MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics),
-		sink:        sink,
+		orderedRows:        make(map[int32][]jobspb.OrderedRows_Row),
+		bufferedBytesLimit: 1 << 30,
+		frontier:           sf,
+		metrics:            MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics),
+		sink:               sink,
 	}
 
+	// Forwards the frontier and has all sinks flush their results to the merger.
 	forwardFrontier := func(start string, end string, ts int64) {
 		_, err := sf.Forward(makeSpan(t, start, end), hlc.Timestamp{WallTime: ts})
 		require.NoError(t, err)
@@ -260,7 +261,8 @@ func TestOrderedMerger(t *testing.T) {
 	require.Zero(t, merger.minHeap.Len())
 	require.Equal(t, sink.emits, 5500)
 
-	// Should handle a backfill where events are arriving at .Prev of the walltime
+	// Should handle a backfill where events are arriving at .Next of the resolved
+	// timestamp.
 	_, err = sf.ForwardResolvedSpan(jobspb.ResolvedSpan{
 		Span:         makeSpan(t, "a", "f"),
 		Timestamp:    hlc.Timestamp{WallTime: 20000}.Prev(),
@@ -282,4 +284,47 @@ func TestOrderedMerger(t *testing.T) {
 	prevEmits = sink.emits
 	require.NoError(t, merger.Flush(ctx))
 	require.Equal(t, sink.emits, prevEmits+500)
+	require.Equal(t, merger.bytesBuffered, 0)
+}
+
+func TestOrderedMergerBytesLimit(t *testing.T) {
+	ctx := context.Background()
+	sfAgg, err := makeSchemaChangeFrontier(hlc.Timestamp{}, makeSpan(t, "a", "b"))
+	require.NoError(t, err)
+
+	orderer := testOrderedSink{
+		orderedSink: orderedSink{
+			frontier: sfAgg,
+		}, t: t}
+
+	sfCoord, err := makeSchemaChangeFrontier(hlc.Timestamp{}, makeSpan(t, "a", "f"))
+	require.NoError(t, err)
+
+	sink := &mockSink{t: t, lastUpdated: hlc.Timestamp{}, frontier: sfCoord}
+	merger := &orderedRowMerger{
+		orderedRows: make(map[int32][]jobspb.OrderedRows_Row),
+		frontier:    sfCoord,
+		metrics:     MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics),
+		sink:        sink,
+	}
+
+	var payloads []jobspb.OrderedRows
+	payloadBytes := 0
+	for i := 1; i <= 3; i++ {
+		ts := int64(100 * i)
+		orderer.emitTs(ts)
+		_, err := sfAgg.Forward(makeSpan(t, "a", "b"), hlc.Timestamp{WallTime: ts})
+		require.NoError(t, err)
+		require.NoError(t, orderer.Flush(ctx))
+		payload := orderer.popPayload()
+		for _, row := range payload.Rows {
+			payloadBytes += row.Size()
+		}
+		payloads = append(payloads, payload)
+	}
+
+	merger.bufferedBytesLimit = payloadBytes - 1
+	require.NoError(t, merger.Append(ctx, payloads[0]))
+	require.NoError(t, merger.Append(ctx, payloads[1]))
+	require.Error(t, merger.Append(ctx, payloads[2]))
 }

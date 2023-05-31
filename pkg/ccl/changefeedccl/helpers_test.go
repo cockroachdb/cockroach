@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-
 	// Imported to allow locality-related table mutations
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
@@ -200,7 +199,11 @@ func checkTotalOrdering(payloads []cdctest.TestFeedMessage) (bool, error) {
 }
 
 func assertPayloadsBase(
-	t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool, ordering changefeedbase.OrderingType,
+	t testing.TB,
+	f cdctest.TestFeed,
+	expected []string,
+	stripTs bool,
+	ordering changefeedbase.OrderingType,
 ) {
 	t.Helper()
 	timeout := assertPayloadsTimeout()
@@ -219,7 +222,11 @@ func assertPayloadsBase(
 }
 
 func assertPayloadsBaseErr(
-	ctx context.Context, f cdctest.TestFeed, expected []string, stripTs bool, ordering changefeedbase.OrderingType,
+	ctx context.Context,
+	f cdctest.TestFeed,
+	expected []string,
+	stripTs bool,
+	ordering changefeedbase.OrderingType,
 ) error {
 	actual, err := readNextMessages(ctx, f, len(expected))
 	if err != nil {

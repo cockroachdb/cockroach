@@ -72,6 +72,10 @@ type changeAggregator struct {
 	// If sink is a bufferSink, it must be emptied before these are sent.
 	resolvedSpanBuf encDatumRowBuffer
 
+	// orderedRowsBuf, if non-nil, contains batches of changed rows to be emitted.
+	// Anything in `resolvedSpanBuf` is dependent on these having been emitted.
+	orderedRowsBuf *encDatumAllocRowBuffer
+
 	// recentKVCount contains the number of emits since the last time a resolved
 	// span was forwarded to the frontier
 	recentKVCount uint64
@@ -300,7 +304,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 			metrics:     ca.metrics,
 			frontier:    ca.frontier,
 		}
-		ca.changedRowBuf = &sink.forwardingBuf
+		ca.orderedRowsBuf = &sink.forwardingBuf
 		ca.sink = sink
 	}
 
@@ -519,9 +523,9 @@ func (ca *changeAggregator) close() {
 func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ca.State == execinfra.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
-			ca.metrics.TotalOrderingAggregatorRowBufSize.Update(int64(len(*ca.changedRowBuf)))
-			defer ca.metrics.TotalOrderingAggregatorPops.Inc(1)
 			return ca.ProcessRowHelper(ca.changedRowBuf.Pop()), nil
+		} else if !ca.orderedRowsBuf.IsEmpty() {
+			return ca.ProcessRowHelper(ca.orderedRowsBuf.Pop(ca.Ctx())), nil
 		} else if !ca.resolvedSpanBuf.IsEmpty() {
 			return ca.ProcessRowHelper(ca.resolvedSpanBuf.Pop()), nil
 		}
@@ -604,7 +608,6 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return nil
 	}
 
-	// debug(fmt.Sprintf("AGG FORWARDING RESOLVED SPAN %s", resolved))
 	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
@@ -920,15 +923,20 @@ func newChangeFrontierProcessor(
 		input:         input,
 		frontier:      sf,
 		slowLogEveryN: log.Every(slowSpanMaxFrequency),
-		orderedRowMerger: &orderedRowMerger{
-			orderedRows: make(map[int32][]jobspb.OrderedRows_Row),
-			frontier:    sf,
-			metrics:     flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics),
-		},
 	}
 
-	if cf.isSinkless() {
-		cf.orderedRowMerger.passthroughBuf = &cf.passthroughBuf
+	opts := changefeedbase.MakeStatementOptions(spec.Feed.Opts)
+	if opts.TotalOrdering() {
+		memLimit := changefeedbase.PerChangefeedMemLimit.Get(&flowCtx.Cfg.Settings.SV)
+		cf.orderedRowMerger = &orderedRowMerger{
+			orderedRows:        make(map[int32][]jobspb.OrderedRows_Row),
+			bufferedBytesLimit: int(memLimit),
+			frontier:           sf,
+			metrics:            flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics),
+		}
+		if cf.isSinkless() {
+			cf.orderedRowMerger.passthroughBuf = &cf.passthroughBuf
+		}
 	}
 
 	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -953,7 +961,6 @@ func newChangeFrontierProcessor(
 	); err != nil {
 		return nil, err
 	}
-	opts := changefeedbase.MakeStatementOptions(cf.spec.Feed.Opts)
 
 	freq, emitResolved, err := opts.GetResolvedTimestampInterval()
 	if err != nil {
@@ -1043,7 +1050,9 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	}
 
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
-	cf.orderedRowMerger.sink = cf.sink
+	if cf.orderedRowMerger != nil {
+		cf.orderedRowMerger.sink = cf.sink
+	}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.spec.JobID != 0 {
@@ -1208,6 +1217,10 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 }
 
 func (cf *changeFrontier) noteOrderedRows(d rowenc.EncDatum) error {
+	if cf.orderedRowMerger == nil {
+		return nil
+	}
+
 	if err := d.EnsureDecoded(changefeedResultTypes[4], &cf.a); err != nil {
 		return err
 	}
@@ -1273,7 +1286,6 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
 
 	for _, resolved := range resolvedSpans.ResolvedSpans {
-		// debug3(fmt.Sprintf("AGG PROGRESS (%+v)", resolved))
 		// Inserting a timestamp less than the one the changefeed flow started at
 		// could potentially regress the job progress. This is not expected, but it
 		// was a bug at one point, so assert to prevent regressions.
@@ -1296,6 +1308,10 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 }
 
 func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
+	if cf.knobs.FilterFrontierResolvedSpan != nil && cf.knobs.FilterFrontierResolvedSpan() {
+		return nil
+	}
+
 	frontierChanged, err := cf.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
@@ -1796,13 +1812,16 @@ func (f *schemaChangeFrontier) hasLaggingSpans(
 // orderedRowMerger takes payloads of ordered rows (ascending) for different
 // processors and flushes out elements to an underlying sink in timestamp order.
 type orderedRowMerger struct {
-	// orderedRows stores a map of processorID -> sorted descending list of pending
-	// rows to be emitted.  This is only used when we require total ordering.
+	// orderedRows stores a map of processorID -> sorted ascending list of pending
+	// rows to be emitted.
 	orderedRows map[int32][]jobspb.OrderedRows_Row
 
-	// minHeap is a min heap storing the tail of every orderedRows list in order
+	// minHeap is a min heap storing the head of every orderedRows list in order
 	// to determine the earliest row across all processors.
 	minHeap RowHeap
+
+	bytesBuffered      int
+	bufferedBytesLimit int
 
 	// Set only when using a core changefeed
 	passthroughBuf *encDatumRowBuffer
@@ -1816,11 +1835,20 @@ type orderedRowMerger struct {
 func (m *orderedRowMerger) Append(ctx context.Context, rows jobspb.OrderedRows) error {
 	defer m.metrics.TotalOrderingFrontierAppends.Inc(1)
 
-	// Prepend newer rows to the back of the queue
-	// debug2(fmt.Sprintf("FRONTIER APPEND OF %d ONTO %d", len(rows.Rows), rows.SourceProcessorID))
 	wasEmpty := len(m.orderedRows[rows.SourceProcessorID]) == 0
+
+	for _, row := range rows.Rows {
+		m.bytesBuffered += row.Size()
+	}
+	if m.bytesBuffered > m.bufferedBytesLimit {
+		return errors.Newf("ordered row buffer exceeded maximum byte limit (%d > %d)", m.bytesBuffered, m.bufferedBytesLimit)
+	}
+
+	// Append newer rows to the back of the queue.
 	m.orderedRows[rows.SourceProcessorID] = append(m.orderedRows[rows.SourceProcessorID], rows.Rows...)
 
+	// Add the first element of the list to the minHeap if its the new earliest
+	// row for the processor.
 	allRows := m.orderedRows[rows.SourceProcessorID]
 	if wasEmpty && len(allRows) > 0 {
 		heap.Push(&m.minHeap, RowHeapEntry{source: rows.SourceProcessorID, row: allRows[0]})
@@ -1830,6 +1858,10 @@ func (m *orderedRowMerger) Append(ctx context.Context, rows jobspb.OrderedRows) 
 }
 
 func (m *orderedRowMerger) emitRow(ctx context.Context, row jobspb.OrderedRows_Row) error {
+	defer func() {
+		m.bytesBuffered -= row.Size()
+	}()
+
 	if m.passthroughBuf != nil {
 		m.passthroughBuf.Push(rowenc.EncDatumRow{
 			{Datum: tree.DNull}, // resolved span
@@ -1840,7 +1872,6 @@ func (m *orderedRowMerger) emitRow(ctx context.Context, row jobspb.OrderedRows_R
 		})
 		return nil
 	} else {
-		// debug2("EMITTING")
 		return m.sink.EmitRow(ctx, row.Key, row.Value, sinkTopic{name: row.TopicName, version: row.TopicVersion}, row.Updated, row.Mvcc, kvevent.Alloc{})
 	}
 }
@@ -1850,8 +1881,11 @@ func (m *orderedRowMerger) emitUntilFrontier(ctx context.Context) error {
 		if m.minHeap.Peek() == nil {
 			break
 		}
+
+		// If the frontier has passed nextTs then all events up to it have been
+		// observed and nextTs is guaranteed to be the lowest timestamp event
+		// possible and can be emitted.
 		nextTs := m.minHeap.Peek().row.Updated
-		// debug2(fmt.Sprintf("NextTS: %s, frontier: %s, backfillTs: %s", nextTs, m.frontier.Frontier(), m.frontier.BackfillTS()))
 		if nextTs.LessEq(m.frontier.Frontier()) || nextTs.Equal(m.frontier.BackfillTS()) {
 			next := heap.Pop(&m.minHeap).(RowHeapEntry)
 			m.orderedRows[next.source] = m.orderedRows[next.source][1:]
@@ -1864,7 +1898,6 @@ func (m *orderedRowMerger) emitUntilFrontier(ctx context.Context) error {
 			// The next earliest value for that aggregator can now be added to the minHeap
 			remainingRows := m.orderedRows[next.source]
 			if len(remainingRows) > 0 {
-				// debug2(fmt.Sprintf("Replacing with %s from %d", remainingRows[0].Updated next.source))
 				heap.Push(&m.minHeap, RowHeapEntry{source: next.source, row: remainingRows[0]})
 			}
 		} else {

@@ -266,78 +266,26 @@ func TestChangefeedTotalOrderingInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t)
-	skip.UnderShort(t)
-
-	rnd, _ := randutil.NewTestRand()
 	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		valRange := []int{1, 1000}
 		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo (a) SELECT * FROM generate_series(%d, %d)`, valRange[0], valRange[1]))
-
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			s.SystemServer.DB(), s.Codec, "d", "foo")
-		tableSpan := fooDesc.PrimaryIndexSpan(s.Codec)
+		sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 1000)`)
 
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 
-		// Ensure Scan Requests are always small enough that we receive multiple
-		// resolved events during a backfill
-		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
-			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(100)
-			return nil
-		}
-
-		// Emit resolved events for majority of spans.  Be extra paranoid and ensure that
-		// we have at least 1 span for which we don't emit resolved timestamp (to force checkpointing).
-		haveGaps := false
-		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) bool {
-			if r.Span.Equal(tableSpan) {
-				// Do not emit resolved events for the entire table span.
-				// We "simulate" large table by splitting single table span into many parts, so
-				// we want to resolve those sub-spans instead of the entire table span.
-				// However, we have to emit something -- otherwise the entire changefeed
-				// machine would not work.
-				r.Span.EndKey = tableSpan.Key.Next()
-				return false
-			}
-			if haveGaps {
-				return rnd.Intn(10) > 7
-			}
-			haveGaps = true
+		// Disallow any processing of resolved spans on the frontier to simulate
+		// not being able to note progress on an aggregator.
+		knobs.FilterFrontierResolvedSpan = func() bool {
 			return true
 		}
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH ordering='total'`)
+		defer closeFeed(t, foo)
 
-		// Checkpoint progress frequently, and set the checkpoint size limit.
-		changefeedbase.FrontierCheckpointFrequency.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 1)
-
-		registry := s.Server.JobRegistry().(*jobs.Registry)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms',ordering='total'`)
-		defer func() {
-			closeFeed(t, foo)
-		}()
-
-		jobFeed := foo.(cdctest.EnterpriseTestFeed)
-		loadProgress := func() jobspb.Progress {
-			jobID := jobFeed.JobID()
-			job, err := registry.LoadJob(context.Background(), jobID)
-			require.NoError(t, err)
-			return job.Progress()
-		}
-
-		// Wait for non-nil checkpoint.
-		testutils.SucceedsSoon(t, func() error {
-			progress := loadProgress()
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-				return nil
-			}
-			return errors.New("waiting for checkpoint")
-		})
-
+		// On initial scan, the feed should emit events regardless of never
+		// observing resolved progress on the frontier as all events are expected to
+		// have the same timestamp.
 		foundMsg := false
 		for msg, err := foo.Next(); msg != nil; msg, err = foo.Next() {
 			require.NoError(t, err)
@@ -349,7 +297,8 @@ func TestChangefeedTotalOrderingInitialScan(t *testing.T) {
 		require.True(t, foundMsg)
 	}
 
-	cdcTestWithSystem(t, testFn, feedTestForceSink("webhook"))
+	// enterprise test needs work to sort rows by crdb_internal_mvcc_timestamp
+	cdcTestWithSystem(t, testFn, feedTestOmitSinks("enterprise"))
 }
 
 func TestChangefeedTotalOrderingBasics(t *testing.T) {
@@ -359,7 +308,7 @@ func TestChangefeedTotalOrderingBasics(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-		// By the time this is available the old sinks won't be enabled
+		// By the time this is available the old sinks won't be enabled.
 		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true")
 		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.new_pubsub_sink_enabled = true")
 
@@ -369,7 +318,6 @@ func TestChangefeedTotalOrderingBasics(t *testing.T) {
 		}
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total', resolved='5s'`)
 		defer closeFeed(t, foo)
-		tdebug("inserts")
 		for i := 1000; i < 2000; i++ {
 			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
 		}
@@ -389,7 +337,6 @@ func TestChangefeedTotalOrderingBasics(t *testing.T) {
 
 		assertPayloadsStripTs(t, foo, expectedBackfillMessages)
 		assertPayloadsTotalOrdering(t, foo, expectedMessages)
-		// assertPayloadsStripTs(t, foo, expectedMessages)
 	}
 
 	// enterprise test needs work to sort rows by crdb_internal_mvcc_timestamp
@@ -420,7 +367,6 @@ func TestChangefeedTotalOrderingMultiNode(t *testing.T) {
 			`foo: [%d]->{"after": {"a": %d}}`, i, i,
 		))
 	}
-	tdebug("waiting for backfill messages")
 	assertPayloadsStripTs(t, foo, expectedBackfillMessages)
 
 	for i := 1001; i <= 2000; i++ {
