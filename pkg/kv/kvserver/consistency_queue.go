@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -100,6 +101,7 @@ func newConsistencyQueue(store *Store) *consistencyQueue {
 			pending:              store.metrics.ConsistencyQueuePending,
 			processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
 			processTimeoutFunc:   makeRateLimitedTimeoutFunc(consistencyCheckRate),
+			disabledConfig:       kvserverbase.ConsistencyQueueEnabled,
 		},
 	)
 	return q
