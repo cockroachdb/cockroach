@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"sort"
 	"sync"
 	"time"
 
@@ -529,17 +528,10 @@ func (zc *debugZipContext) collectPerNodeData(
 			}
 		} else {
 			s.done()
-			nodePrinter.info("%d ranges found", len(ranges.Ranges))
-			sort.Slice(ranges.Ranges, func(i, j int) bool {
-				return ranges.Ranges[i].State.Desc.RangeID <
-					ranges.Ranges[j].State.Desc.RangeID
-			})
-			for _, r := range ranges.Ranges {
-				s := nodePrinter.start("writing range %d", r.State.Desc.RangeID)
-				name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
-				if err := zc.z.createJSON(s, name+".json", r); err != nil {
-					return err
-				}
+			s := nodePrinter.start("writing ranges")
+			name := fmt.Sprintf("%s/ranges.json", prefix)
+			if err := zc.z.createJSON(s, name, ranges.Ranges); err != nil {
+				return err
 			}
 		}
 	}
