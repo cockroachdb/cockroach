@@ -456,13 +456,11 @@ func (p *authPipe) sendPwdData(data []byte) error {
 }
 
 func (p *authPipe) noMorePwdData() {
-	if p.writerDone == nil {
-		return
-	}
 	// A reader blocked in GetPwdData() gets unblocked with an error.
 	close(p.writerDone)
-	p.writerDone = nil
 }
+
+const writerDoneError = "client didn't send required auth data"
 
 // GetPwdData is part of the AuthConn interface.
 func (p *authPipe) GetPwdData() ([]byte, error) {
@@ -470,7 +468,7 @@ func (p *authPipe) GetPwdData() ([]byte, error) {
 	case data := <-p.ch:
 		return data, nil
 	case <-p.writerDone:
-		return nil, pgwirebase.NewProtocolViolationErrorf("client didn't send required auth data")
+		return nil, pgwirebase.NewProtocolViolationErrorf(writerDoneError)
 	}
 }
 
