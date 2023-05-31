@@ -41,7 +41,7 @@ func CreateTestAllocatorWithKnobs(
 ) (*stop.Stopper, *gossip.Gossip, *storepool.StorePool, Allocator, *timeutil.ManualTime) {
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, manual, storePool, _ := storepool.CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDeadOff, deterministic,
+		liveness.TestTimeUntilNodeDeadOff, deterministic,
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(st, deterministic, func(id roachpb.NodeID) (time.Duration, bool) {

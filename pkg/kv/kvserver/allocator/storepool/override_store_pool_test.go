@@ -37,19 +37,19 @@ func TestOverrideStorePoolStatusString(t *testing.T) {
 	const nodeCount = 5
 
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 
 	livenessOverrides := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
-	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilNodeDead time.Duration) livenesspb.NodeLivenessStatus {
 		if overriddenLiveness, ok := livenessOverrides[nid]; ok {
 			return overriddenLiveness
 		}
 
-		return mnl.NodeLivenessFunc(nid, now, timeUntilStoreDead)
+		return mnl.NodeLivenessFunc(nid, now, timeUntilNodeDead)
 	}, func() int {
 		excluded := 0
 		for _, overriddenLiveness := range livenessOverrides {
@@ -118,19 +118,19 @@ func TestOverrideStorePoolDecommissioningReplicas(t *testing.T) {
 	const nodeCount = 5
 
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 
 	livenessOverrides := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
-	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilNodeDead time.Duration) livenesspb.NodeLivenessStatus {
 		if overriddenLiveness, ok := livenessOverrides[nid]; ok {
 			return overriddenLiveness
 		}
 
-		return mnl.NodeLivenessFunc(nid, now, timeUntilStoreDead)
+		return mnl.NodeLivenessFunc(nid, now, timeUntilNodeDead)
 	}, func() int {
 		excluded := 0
 		for _, overriddenLiveness := range livenessOverrides {
@@ -235,19 +235,19 @@ func TestOverrideStorePoolGetStoreList(t *testing.T) {
 
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 
 	livenessOverrides := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
-	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+	sp := NewOverrideStorePool(testStorePool, func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilNodeDead time.Duration) livenesspb.NodeLivenessStatus {
 		if overriddenLiveness, ok := livenessOverrides[nid]; ok {
 			return overriddenLiveness
 		}
 
-		return mnl.NodeLivenessFunc(nid, now, timeUntilStoreDead)
+		return mnl.NodeLivenessFunc(nid, now, timeUntilNodeDead)
 	}, func() int {
 		excluded := 0
 		for _, overriddenLiveness := range livenessOverrides {
