@@ -100,7 +100,9 @@ func runClearRange(
 		// This slows down merges, so it might hide some races.
 		//
 		// NB: the below invocation was found to actually make it to the server at the time of writing.
-		settings.Env = append(settings.Env, []string{"COCKROACH_CONSISTENCY_AGGRESSIVE=true", "COCKROACH_ENFORCE_CONSISTENT_STATS=true"}...)
+		// NB: We omit "COCKROACH_ENFORCE_CONSISTENT_STATS=true" on the
+		// release-23.1 branch due to #93896.
+		settings.Env = append(settings.Env, []string{"COCKROACH_CONSISTENCY_AGGRESSIVE=true"}...)
 	}
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
