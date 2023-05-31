@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -351,7 +353,9 @@ func newCopyMachine(
 	c.maxRowMem = kvserverbase.MaxCommandSize.Get(c.p.execCfg.SV()) / 3
 
 	if c.canSupportVectorized(tableDesc) {
-		c.initVectorizedCopy(ctx, typs)
+		if err := c.initVectorizedCopy(ctx, typs); err != nil {
+			return nil, err
+		}
 	} else {
 		c.copyBatchRowSize = CopyBatchRowSize
 		c.vectorized = false
@@ -384,7 +388,7 @@ func (c *copyMachine) canSupportVectorized(table catalog.TableDescriptor) bool {
 	return len(table.EnforcedOutboundForeignKeys()) == 0
 }
 
-func (c *copyMachine) initVectorizedCopy(ctx context.Context, typs []*types.T) {
+func (c *copyMachine) initVectorizedCopy(ctx context.Context, typs []*types.T) error {
 	if buildutil.CrdbTestBuild {
 		// We have to honor metamorphic default in testing, the transaction
 		// commit tests rely on it, specifically they override it to
@@ -434,7 +438,11 @@ func (c *copyMachine) initVectorizedCopy(ctx context.Context, typs []*types.T) {
 	c.accHelper.Init(alloc, c.maxRowMem, typs, false /*alwaysReallocate*/)
 	// Start with small number of rows, compromise between going too big and
 	// overallocating memory and avoiding some doubling growth batches.
-	c.batch, _ = c.accHelper.ResetMaybeReallocate(c.typs, c.batch, 64)
+	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+		c.batch, _ = c.accHelper.ResetMaybeReallocate(c.typs, c.batch, 64)
+	}); err != nil {
+		return err
+	}
 	initialMemUsage := c.rowsMemAcc.Used()
 	if initialMemUsage > c.maxRowMem {
 		// Some tests set the max raft command size lower and if the metamorphic
@@ -455,6 +463,7 @@ func (c *copyMachine) initVectorizedCopy(ctx context.Context, typs []*types.T) {
 	for i := range typs {
 		c.valueHandlers[i] = coldataext.MakeVecHandler(c.batch.ColVec(i))
 	}
+	return nil
 }
 
 func (c *copyMachine) numInsertedRows() int {
@@ -637,7 +646,18 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		}
 		var batchDone bool
 		if !brk && c.vectorized {
-			batchDone = c.accHelper.AccountForSet(c.batch.Length() - 1)
+			if err := colexecerror.CatchVectorizedRuntimeError(func() {
+				batchDone = c.accHelper.AccountForSet(c.batch.Length() - 1)
+			}); err != nil {
+				if sqlerrors.IsOutOfMemoryError(err) {
+					// Getting the COPY to complete is a hail mary but the
+					// vectorized inserter will fall back to inserting a row at
+					// a time so give it a shot.
+					batchDone = true
+				} else {
+					return err
+				}
+			}
 		}
 		// If we have a full batch of rows or we have exceeded maxRowMem process
 		// them. Only set finalBatch to true if this is the last
@@ -1110,7 +1130,11 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	// We're done reset for next batch.
 	if c.vectorized {
 		var realloc bool
-		c.batch, realloc = c.accHelper.ResetMaybeReallocate(c.typs, c.batch, 0 /* tuplesToBeSet*/)
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			c.batch, realloc = c.accHelper.ResetMaybeReallocate(c.typs, c.batch, 0 /* tuplesToBeSet*/)
+		}); err != nil {
+			return err
+		}
 		if realloc {
 			for i := range c.typs {
 				c.valueHandlers[i] = coldataext.MakeVecHandler(c.batch.ColVec(i))
