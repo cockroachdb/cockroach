@@ -170,9 +170,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 					// immediately without waiting. If the conflict is a lock then
 					// push the lock holder's transaction using a PUSH_TOUCH to
 					// determine whether the lock is abandoned or whether its holder
-					// is still active. If the conflict is a reservation holder,
-					// raise an error immediately, we know the reservation holder is
-					// active.
+					// is still active. If the conflict is a concurrent transaction that
+					// is being sequence through the lock table that has claimed the lock,
+					// raise an error immediately -- we know the request is active.
 					if state.held {
 						err = w.pushLockTxn(ctx, req, state)
 					} else {
@@ -203,10 +203,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 				livenessPush := state.kind == waitForDistinguished
 				deadlockPush := true
 
-				// If the conflict is a reservation holder and not a held lock then
-				// there's no need to perform a liveness push - the request must be
-				// alive or its context would have been canceled and it would have
-				// exited its lock wait-queues.
+				// If the conflict is a claimant transaction that hasn't acquired the
+				// lock yet there's no need to perform a liveness push - the request
+				// must be alive or its context would have been canceled and it would
+				// have exited its lock wait-queues.
 				if !state.held {
 					livenessPush = false
 				}
@@ -214,7 +214,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// For non-transactional requests, there's no need to perform
 				// deadlock detection because a non-transactional request can
 				// not be part of a dependency cycle. Non-transactional requests
-				// cannot hold locks or reservations.
+				// cannot hold locks (and by extension, claim them).
 				if req.Txn == nil {
 					deadlockPush = false
 				}
@@ -310,10 +310,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 				return w.pushLockTxn(ctx, req, state)
 
 			case waitSelf:
-				// Another request from the same transaction is the reservation
-				// holder of this lock wait-queue. This can only happen when the
-				// request's transaction is sending multiple requests concurrently.
-				// Proceed with waiting without pushing anyone.
+				// Another request from the same transaction has claimed the lock (but
+				// not yet acquired it). This can only happen when the request's
+				// transaction is sending multiple requests concurrently. Proceed with
+				// waiting without pushing anyone.
 
 			case waitQueueMaxLengthExceeded:
 				// The request attempted to wait in a lock wait-queue whose length was
@@ -368,14 +368,14 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// through intent resolution. The request has a dependency on the
 				// entire conflicting transaction.
 				//
-				// However, if the request is conflicting with another request (a
-				// reservation holder) then it pushes the reservation holder
-				// asynchronously while continuing to listen to state transition in
-				// the lockTable. This allows the request to cancel its push if the
-				// conflicting reservation exits the lock wait-queue without leaving
-				// behind a lock. In this case, the request has a dependency on the
-				// conflicting request but not necessarily the entire conflicting
-				// transaction.
+				// However, if the request is conflicting with another request (that has
+				// claimed the lock, but not yet acquired it) then it pushes the
+				// claimant transaction asynchronously while continuing to listen to
+				// state transition in the lockTable. This allows the request to cancel
+				// its push if the conflicting claimant transaction exits the lock
+				// wait-queue without leaving behind a lock. In this case, the request
+				// has a dependency on the conflicting request but not necessarily the
+				// entire conflicting transaction.
 				if timerWaitingState.held {
 					return w.pushLockTxn(ctx, req, timerWaitingState)
 				}
@@ -407,8 +407,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// Resolve the conflict without waiting. If the conflict is a lock
 				// then push the lock holder's transaction using a PUSH_TOUCH to
 				// determine whether the lock is abandoned or whether its holder is
-				// still active. If the conflict is a reservation holder, raise an
-				// error immediately, we know the reservation holder is active.
+				// still active. If the conflict is a claimant transaction, raise an
+				// error immediately, we know the transaction that has claimed (but not
+				// yet acquired) the lock active.
 				if timerWaitingState.held {
 					return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
 				}
@@ -707,7 +708,7 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 
 	// Even if the push succeeded and aborted the other transaction to break a
 	// deadlock, there's nothing for the pusher to clean up. The conflicting
-	// request will quickly exit the lock wait-queue and release its reservation
+	// request will quickly exit the lock wait-queue and release its claim
 	// once it notices that it is aborted and the pusher will be free to proceed
 	// because it was not waiting on any locks. If the pusher's request does end
 	// up hitting a lock which the pushee fails to clean up, it will perform the
@@ -744,16 +745,15 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 	// Example:
 	//
 	//  req(1, txn1), req(1, txn2) are both waiting on a lock held by txn3, and
-	//  they respectively hold a reservation on key "a" and key "b". req(2, txn2)
-	//  queues up behind the reservation on key "a" and req(2, txn1) queues up
-	//  behind the reservation on key "b". Now the dependency cycle between txn1
-	//  and txn2 only involves requests, but some of the requests here also
-	//  depend on a lock. So when both txn1, txn2 are aborted, the req(1, txn1),
-	//  req(1, txn2) are guaranteed to eventually notice through self-directed
-	//  QueryTxn requests and will exit the lockTable, allowing req(2, txn1) and
-	//  req(2, txn2) to get the reservation and now they no longer depend on each
-	//  other.
-	//
+	//  they respectively hold a claim (but not the lock itself) on key "a" and
+	//  key "b". req(2, txn2) queues up behind the claim on key "a" and req(2,
+	//  txn1) queues up behind the claim on key "b". Now the dependency cycle
+	//  between txn1 and txn2 only involves requests, but some of the requests
+	//  here also depend on a lock. So when both txn1, txn2 are aborted, the
+	//  req(1, txn1), req(1, txn2) are guaranteed to eventually notice through
+	//  self-directed QueryTxn requests and will exit the lockTable, allowing
+	//  req(2, txn1) and req(2, txn2) to claim the lock and now they no longer
+	//  depend on each other.
 	return nil
 }
 
@@ -970,7 +970,7 @@ const tagWaitKey = "wait_key"
 const tagWaitStart = "wait_start"
 
 // tagLockHolderTxn is the tracing span tag indicating the ID of the txn holding
-// the lock (or a reservation on the lock) that the request is currently waiting
+// the lock (or has claimed the lock) that the request is currently waiting
 // on.
 const tagLockHolderTxn = "holder_txn"
 

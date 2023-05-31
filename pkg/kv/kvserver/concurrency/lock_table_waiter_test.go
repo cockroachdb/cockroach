@@ -337,8 +337,9 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 				return
 			}
 
-			// Non-transactional requests without a timeout do not push
-			// reservations, only locks. They wait for doneWaiting.
+			// Non-transactional requests without a timeout do not push transactions
+			// that have claimed a lock; they only push lock holders. Instead, they
+			// wait for doneWaiting.
 			if req.Txn == nil && !lockHeld {
 				defer notifyUntilDone(t, g)()
 				err := w.WaitOn(ctx, req, g)
@@ -498,7 +499,7 @@ func testErrorWaitPush(
 	testutils.RunTrueAndFalse(t, "lockHeld", func(t *testing.T, lockHeld bool) {
 		testutils.RunTrueAndFalse(t, "pusheeActive", func(t *testing.T, pusheeActive bool) {
 			if !lockHeld && !pusheeActive {
-				// !lockHeld means a lock reservation, so is only possible when
+				// !lockHeld means a lock claim, so is only possible when
 				// pusheeActive is true.
 				skip.IgnoreLint(t, "incompatible params")
 			}
@@ -658,7 +659,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					skip.IgnoreLint(t, "incompatible params")
 				}
 				if !lockHeld && !pusheeActive {
-					// !lockHeld means a lock reservation, so is only possible when
+					// !lockHeld means a lock is claimed, so is only possible when
 					// pusheeActive is true.
 					skip.IgnoreLint(t, "incompatible params")
 				}

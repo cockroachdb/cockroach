@@ -84,8 +84,8 @@ release txn=txn1 span=a
 ----
 num=1
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
@@ -106,8 +106,8 @@ print
 ----
 num=1
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, seq: 0
    queued writers:
+    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3

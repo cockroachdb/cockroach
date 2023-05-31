@@ -142,7 +142,8 @@ debug-lock-table
 ----
 num=2
  lock: "k2"
-  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 11.000000000,0, seq: 0
+   queued writers:
+    active: false req: 3, txn: 00000003-0000-0000-0000-000000000000
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
@@ -165,7 +166,7 @@ sequence req=reqNoWait2
 [6] sequence reqNoWait2: acquiring latches
 [6] sequence reqNoWait2: scanning lock table for conflicting locks
 [6] sequence reqNoWait2: waiting in lock wait-queues
-[6] sequence reqNoWait2: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"k2"› (queuedWriters: 1, queuedReaders: 0)
+[6] sequence reqNoWait2: lock wait-queue event: wait for (distinguished) txn 00000003 running request @ key ‹"k2"› (queuedWriters: 2, queuedReaders: 0)
 [6] sequence reqNoWait2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
 [6] sequence reqNoWait2: sequencing complete, returned error: conflicting intents on ‹"k2"› [reason=wait_policy]
 
@@ -206,7 +207,8 @@ debug-lock-table
 ----
 num=3
  lock: "k2"
-  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 11.000000000,0, seq: 0
+   queued writers:
+    active: false req: 3, txn: 00000003-0000-0000-0000-000000000000
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:

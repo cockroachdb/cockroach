@@ -339,8 +339,8 @@ update txn=txn1 ts=19,1 epoch=1 span=a
 ----
 num=1
  lock: "a"
-  res: req: 3, txn: 00000000-0000-0000-0000-000000000003, ts: 14.000000000,1, seq: 0
    queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 5, txn: none
    distinguished req: 5
 
