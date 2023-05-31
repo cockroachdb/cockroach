@@ -6316,7 +6316,7 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				}); err != nil {
 					return nil, err
 				} else if replicaMu == nil {
-					return nil, kvpb.NewRangeNotFoundError(rangeID, 0)
+					return tree.DBoolFalse, nil // return false for easier race handling in tests
 				}
 
 				log.Warningf(ctx, "crdb_internal.unsafe_lock_replica on r%d with lock=%t", rangeID, lock)

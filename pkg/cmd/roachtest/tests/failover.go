@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -157,7 +159,7 @@ func runFailoverChaos(
 
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
-		failer := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings)
+		failer := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings, rng)
 		if c.IsLocal() && !failer.CanUseLocal() {
 			t.Status(fmt.Sprintf("skipping failure mode %q on local cluster", failureMode))
 			continue
@@ -253,7 +255,7 @@ func runFailoverChaos(
 					}
 				}
 				if d, ok := failer.(*deadlockFailer); ok { // randomize deadlockFailer
-					d.numReplicas = 1 + rng.Intn(3)
+					d.numReplicas = 1 + rng.Intn(5)
 					d.onlyLeaseholders = rng.Float64() < 0.5
 				}
 				failer.Ready(ctx, m)
@@ -349,7 +351,7 @@ func runFailoverPartialLeaseGateway(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -503,7 +505,7 @@ func runFailoverPartialLeaseLeader(
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -657,7 +659,7 @@ func runFailoverPartialLeaseLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings).(PartialFailer)
+	failer := makeFailer(t, c, failureModeBlackhole, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -801,7 +803,7 @@ func runFailoverNonSystem(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureMode, opts, settings)
+	failer := makeFailer(t, c, failureMode, opts, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -943,7 +945,7 @@ func runFailoverLiveness(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureMode, opts, settings)
+	failer := makeFailer(t, c, failureMode, opts, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -1089,7 +1091,7 @@ func runFailoverSystemNonLiveness(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureMode, opts, settings)
+	failer := makeFailer(t, c, failureMode, opts, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -1232,8 +1234,9 @@ func makeFailer(
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
+	rng *rand.Rand,
 ) Failer {
-	f := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings)
+	f := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings, rng)
 	if c.IsLocal() && !f.CanUseLocal() {
 		t.Status(fmt.Sprintf(
 			`failure mode %q not supported on local clusters, using "noop" failure mode instead`,
@@ -1249,6 +1252,7 @@ func makeFailerWithoutLocalNoop(
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
+	rng *rand.Rand,
 ) Failer {
 	switch failureMode {
 	case failureModeBlackhole:
@@ -1281,10 +1285,11 @@ func makeFailerWithoutLocalNoop(
 		return &deadlockFailer{
 			t:                t,
 			c:                c,
+			rng:              rng,
 			startOpts:        opts,
 			startSettings:    settings,
 			onlyLeaseholders: true,
-			numReplicas:      3,
+			numReplicas:      5,
 		}
 	case failureModeDiskStall:
 		return &diskStallFailer{
@@ -1493,20 +1498,50 @@ type deadlockFailer struct {
 	t                test.Test
 	c                cluster.Cluster
 	m                cluster.Monitor
+	rng              *rand.Rand
 	startOpts        option.StartOpts
 	startSettings    install.ClusterSettings
 	onlyLeaseholders bool
 	numReplicas      int
-	locks            map[int][]roachpb.RangeID // track locks by node
+
+	locks  map[int][]roachpb.RangeID // track locks by node
+	ranges map[int][]roachpb.RangeID // ranges present on nodes
+	leases map[int][]roachpb.RangeID // range leases present on nodes
 }
 
-func (f *deadlockFailer) Mode() failureMode                          { return failureModeDeadlock }
-func (f *deadlockFailer) String() string                             { return string(f.Mode()) }
-func (f *deadlockFailer) CanUseLocal() bool                          { return true }
-func (f *deadlockFailer) CanRunWith(m failureMode) bool              { return true }
-func (f *deadlockFailer) Setup(context.Context)                      {}
-func (f *deadlockFailer) Ready(_ context.Context, m cluster.Monitor) { f.m = m }
-func (f *deadlockFailer) Cleanup(context.Context)                    {}
+func (f *deadlockFailer) Mode() failureMode             { return failureModeDeadlock }
+func (f *deadlockFailer) String() string                { return string(f.Mode()) }
+func (f *deadlockFailer) CanUseLocal() bool             { return true }
+func (f *deadlockFailer) CanRunWith(m failureMode) bool { return true }
+func (f *deadlockFailer) Setup(context.Context)         {}
+func (f *deadlockFailer) Cleanup(context.Context)       {}
+
+func (f *deadlockFailer) Ready(ctx context.Context, m cluster.Monitor) {
+	f.m = m
+
+	// In chaos tests, other nodes will be failing concurrently. We therefore
+	// can't run SHOW CLUSTER RANGES WITH DETAILS in Fail(), since it needs to
+	// read from all ranges. Instead, we fetch a snapshot of replicas and leases
+	// now, and if any replicas should move we'll skip them later.
+	conn := f.c.Conn(ctx, f.t.L(), 1)
+	rows, err := conn.QueryContext(ctx,
+		`SELECT range_id, replicas, lease_holder FROM [SHOW CLUSTER RANGES WITH DETAILS]`)
+	require.NoError(f.t, err)
+
+	f.ranges = map[int][]roachpb.RangeID{}
+	f.leases = map[int][]roachpb.RangeID{}
+	for rows.Next() {
+		var rangeID roachpb.RangeID
+		var replicas []int64
+		var leaseHolder int
+		require.NoError(f.t, rows.Scan(&rangeID, (*pq.Int64Array)(&replicas), &leaseHolder))
+		f.leases[leaseHolder] = append(f.leases[leaseHolder], rangeID)
+		for _, nodeID := range replicas {
+			f.ranges[int(nodeID)] = append(f.ranges[int(nodeID)], rangeID)
+		}
+	}
+	require.NoError(f.t, rows.Err())
+}
 
 func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
 	require.NotZero(f.t, f.numReplicas)
@@ -1517,29 +1552,29 @@ func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second) // can take a while to lock
 	defer cancel()
 
-	predicate := `$1::int = ANY(replicas)`
+	var ranges []roachpb.RangeID
 	if f.onlyLeaseholders {
-		predicate += ` AND lease_holder = $1::int`
+		ranges = append(ranges, f.leases[nodeID]...)
+	} else {
+		ranges = append(ranges, f.ranges[nodeID]...)
 	}
+	f.rng.Shuffle(len(ranges), func(i, j int) {
+		ranges[i], ranges[j] = ranges[j], ranges[i]
+	})
 
 	conn := f.c.Conn(ctx, f.t.L(), nodeID)
-	rows, err := conn.QueryContext(ctx, fmt.Sprintf(
-		`SELECT range_id, crdb_internal.unsafe_lock_replica(range_id, true) FROM [
-			SELECT range_id FROM [SHOW CLUSTER RANGES WITH DETAILS]
-			WHERE %s
-			ORDER BY random()
-			LIMIT $2
-		]`, predicate), nodeID, f.numReplicas)
-	require.NoError(f.t, err)
-	for rows.Next() {
-		var rangeID roachpb.RangeID
+
+	for i := 0; i < len(ranges) && len(f.locks[nodeID]) < f.numReplicas; i++ {
+		rangeID := ranges[i]
 		var locked bool
-		require.NoError(f.t, rows.Scan(&rangeID, &locked))
-		require.True(f.t, locked)
-		f.t.Status(fmt.Sprintf("locked r%d on n%d", rangeID, nodeID))
-		f.locks[nodeID] = append(f.locks[nodeID], rangeID)
+		require.NoError(f.t, conn.QueryRowContext(ctx,
+			`SELECT crdb_internal.unsafe_lock_replica($1::int, true)`, rangeID).Scan(&locked))
+		if locked {
+			f.locks[nodeID] = append(f.locks[nodeID], rangeID)
+			f.t.Status(fmt.Sprintf("locked r%d on n%d", rangeID, nodeID))
+		}
 	}
-	require.NoError(f.t, rows.Err())
+	require.Len(f.t, f.locks[nodeID], f.numReplicas, "couldn't lock requested number of replicas")
 }
 
 func (f *deadlockFailer) Recover(ctx context.Context, nodeID int) {
