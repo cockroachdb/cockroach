@@ -1228,14 +1228,19 @@ func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName st
 type streamIngesitonJobInfo struct {
 	status         string
 	errMsg         string
-	replicatedTime time.Time
+	replicatedTime hlc.Timestamp
 	finishedTime   time.Time
 }
 
 // GetHighWater returns the replicated time. The GetHighWater name is
 // retained here as this is implementing the jobInfo interface used by
 // the latency verifier.
-func (c *streamIngesitonJobInfo) GetHighWater() time.Time    { return c.replicatedTime }
+func (c *streamIngesitonJobInfo) GetHighWater() time.Time {
+	if c.replicatedTime.IsEmpty() {
+		return time.Time{}
+	}
+	return c.replicatedTime.GoTime()
+}
 func (c *streamIngesitonJobInfo) GetFinishedTime() time.Time { return c.finishedTime }
 func (c *streamIngesitonJobInfo) GetStatus() string          { return c.status }
 func (c *streamIngesitonJobInfo) GetError() string           { return c.status }
@@ -1262,7 +1267,7 @@ func getStreamIngestionJobInfo(db *gosql.DB, jobID int) (jobInfo, error) {
 	return &streamIngesitonJobInfo{
 		status:         status,
 		errMsg:         payload.Error,
-		replicatedTime: replicationutils.ReplicatedTimeFromProgress(&progress).GoTime(),
+		replicatedTime: replicationutils.ReplicatedTimeFromProgress(&progress),
 		finishedTime:   time.UnixMicro(payload.FinishedMicros),
 	}, nil
 }
