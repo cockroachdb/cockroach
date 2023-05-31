@@ -1031,18 +1031,16 @@ func (m *ClientAuthenticationFailed) AppendJSONFields(printComma bool, b redact.
 
 	printComma, b = m.CommonSessionDetails.AppendJSONFields(printComma, b)
 
-	if m.Reason != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"Reason\":"...)
-		// Enums are defined in our code, so are always safe to print without
-		// redaction.
-		b = append(b, '"')
-		b = append(b, m.Reason.String()...)
-		b = append(b, '"')
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"Reason\":"...)
+	// Enums are defined in our code, so are always safe to print without
+	// redaction.
+	b = append(b, '"')
+	b = append(b, m.Reason.String()...)
+	b = append(b, '"')
 
 	if m.Detail != "" {
 		if printComma {
