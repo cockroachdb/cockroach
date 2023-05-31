@@ -17,6 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+const (
+	batchMinSize = 1
+	batchMaxSize = 1_000_000
+)
+
 // buildDelete builds a memo group for a DeleteOp expression, which deletes all
 // rows projected by the input expression. All columns from the deletion table
 // are projected, including mutation columns (the optimizer may later prune the
@@ -36,6 +41,22 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	if del.OrderBy != nil && del.Limit == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"DELETE statement requires LIMIT when ORDER BY is used"))
+	}
+
+	// TODO(ecwall): remove when BATCH DELETE is supported
+	batch := del.Batch
+	if batch != nil {
+		if batch.HasSize {
+			// Size must be positive if specified.
+			if batch.Size < batchMinSize || batch.Size > batchMaxSize {
+				panic(pgerror.Newf(pgcode.Syntax,
+					"BATCH SIZE <size> DELETE must specify size between [%d, %d]", batchMinSize, batchMaxSize))
+			}
+			panic(pgerror.Newf(pgcode.Syntax,
+				"BATCH SIZE <size> DELETE not implemented"))
+		}
+		panic(pgerror.Newf(pgcode.Syntax,
+			"BATCH DELETE not implemented"))
 	}
 
 	// Find which table we're working on, check the permissions.

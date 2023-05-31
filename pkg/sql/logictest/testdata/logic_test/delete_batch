@@ -1,0 +1,57 @@
+subtest default_size
+
+statement ok
+CREATE TABLE default_size_tbl (id INT PRIMARY KEY);
+
+statement error BATCH DELETE not implemented
+BATCH DELETE FROM default_size_tbl;
+
+subtest end
+
+subtest valid_min_size
+
+statement ok
+CREATE TABLE valid_min_size_tbl (id INT PRIMARY KEY);
+
+statement error BATCH SIZE <size> DELETE not implemented
+BATCH SIZE 1 DELETE FROM valid_min_size_tbl;
+
+subtest valid_max_size
+
+statement ok
+CREATE TABLE valid_max_size_tbl (id INT PRIMARY KEY);
+
+statement error BATCH SIZE <size> DELETE not implemented
+BATCH SIZE 1000000 DELETE FROM valid_max_size_tbl;
+
+subtest end
+
+subtest invalid_min_size_zero
+
+statement ok
+CREATE TABLE invalid_min_size_zero_tbl (id INT PRIMARY KEY);
+
+statement error BATCH SIZE <size> DELETE must specify size between \[1, 1000000\]
+BATCH SIZE 0 DELETE FROM invalid_min_size_zero_tbl;
+
+subtest end
+
+subtest invalid_min_size_negative
+
+statement ok
+CREATE TABLE invalid_min_size_negative_tbl (id INT PRIMARY KEY);
+
+statement error BATCH SIZE <size> DELETE must specify size between \[1, 1000000\]
+BATCH SIZE -1 DELETE FROM invalid_min_size_negative_tbl;
+
+subtest end
+
+subtest invalid_max_size
+
+statement ok
+CREATE TABLE invalid_max_size_tbl (id INT PRIMARY KEY);
+
+statement error BATCH SIZE <size> DELETE must specify size between \[1, 1000000\]
+BATCH SIZE 1000001 DELETE FROM invalid_max_size_tbl;
+
+subtest end
