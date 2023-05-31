@@ -1040,14 +1040,16 @@ func (m *ClientAuthenticationFailed) AppendJSONFields(printComma bool, b redact.
 
 	printComma, b = m.CommonSessionDetails.AppendJSONFields(printComma, b)
 
-	if m.Reason != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"Reason\":"...)
-		b = strconv.AppendInt(b, int64(m.Reason), 10)
+	if printComma {
+		b = append(b, ',')
 	}
+	printComma = true
+	b = append(b, "\"Reason\":"...)
+	// Enums are defined in our code, so are always safe to print without
+	// redaction.
+	b = append(b, '"')
+	b = append(b, m.Reason.String()...)
+	b = append(b, '"')
 
 	if m.Detail != "" {
 		if printComma {
@@ -1055,9 +1057,7 @@ func (m *ClientAuthenticationFailed) AppendJSONFields(printComma bool, b redact.
 		}
 		printComma = true
 		b = append(b, "\"Detail\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.Detail)))))
-		b = append(b, redact.EndMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Detail)))
 		b = append(b, '"')
 	}
 
