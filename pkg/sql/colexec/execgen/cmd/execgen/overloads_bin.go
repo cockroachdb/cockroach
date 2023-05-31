@@ -684,7 +684,7 @@ if _j == nil {
 			if _text == nil {
 				_outNulls.SetNull(%[2]s)
 			} else {
-				%[1]s.Set(%[2]s, []byte(*_text))
+				%[1]s.Set(%[2]s, encoding.UnsafeConvertStringToBytes(*_text))
 			}`, vecVariable, idxVariable))
 		case treebin.Minus:
 			return fmt.Sprintf(`
@@ -736,7 +736,7 @@ if _j == nil {
 			if _text == nil {
 				_outNulls.SetNull(%[2]s)
 			} else {
-				%[1]s.Set(%[2]s, []byte(*_text))
+				%[1]s.Set(%[2]s, encoding.UnsafeConvertStringToBytes(*_text))
 			}`, vecVariable, idxVariable))
 		case treebin.Minus:
 			return fmt.Sprintf(`
@@ -787,7 +787,7 @@ if _path == nil {
     if _text == nil {
         _outNulls.SetNull(%[2]s)
     } else {
-        %[1]s.Set(%[2]s, []byte(*_text))
+        %[1]s.Set(%[2]s, encoding.UnsafeConvertStringToBytes(*_text))
     }
 `, vecVariable, idxVariable))
 		default:

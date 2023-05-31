@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -36,7 +37,7 @@ func TestOverrideStorePoolStatusString(t *testing.T) {
 	const nodeCount = 5
 
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
-		TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -117,7 +118,7 @@ func TestOverrideStorePoolDecommissioningReplicas(t *testing.T) {
 	const nodeCount = 5
 
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
-		TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -234,7 +235,7 @@ func TestOverrideStorePoolGetStoreList(t *testing.T) {
 
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
-		TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)

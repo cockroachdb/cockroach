@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// The structure definitions in this file have been cross-checked against go1.19.
+// The structure definitions in this file have been cross-checked against go1.20.
 // Before allowing newer versions, please check that the structures
 // still match with those in go/src/runtime.
 
-//go:build gc && go1.19 && !go1.20
-// +build gc,go1.19,!go1.20
+//go:build gc && go1.20 && !go1.21
+// +build gc,go1.20,!go1.21
 
 package goschedstats
 
@@ -41,6 +41,28 @@ type pageCache struct {
 	scav  uint64  // 64-bit bitmap representing scavenged pages (1 means scavenged)
 }
 
+// A _defer holds an entry on the list of deferred calls.
+// If you add a field here, add code to clear it in deferProcStack.
+// This struct must match the code in cmd/compile/internal/ssagen/ssa.go:deferstruct
+// and cmd/compile/internal/ssagen/ssa.go:(*state).call.
+// Some defers will be allocated on the stack and some on the heap.
+// All defers are logically part of the stack, so write barriers to
+// initialize them are not required. All defers must be manually scanned,
+// and for heap defers, marked.
+type _defer struct {
+	// The rest of the fields aren't important.
+}
+
+// Per-thread (in Go, per-P) cache for small objects.
+// This includes a small object cache and local allocation stats.
+// No locking needed because it is per-thread (per-P).
+//
+// mcaches are allocated from non-GC'd memory, so any heap pointers
+// must be specially handled.
+type mcache struct {
+	// The rest of the fields aren't important.
+}
+
 type p struct {
 	id          int32
 	status      uint32 // one of pidle/prunning/...
@@ -49,12 +71,12 @@ type p struct {
 	syscalltick uint32     // incremented on every system call
 	sysmontick  sysmontick // last tick observed by sysmon
 	m           muintptr   // back-link to associated m (nil if idle)
-	mcache      uintptr
+	mcache      *mcache
 	pcache      pageCache
 	raceprocctx uintptr
 
-	deferpool    []uintptr // pool of available defer structs (see panic.go)
-	deferpoolbuf [32]uintptr
+	deferpool    []*_defer // pool of available defer structs (see panic.go)
+	deferpoolbuf [32]*_defer
 
 	// Cache of goroutine ids, amortizes accesses to runtime·sched.goidgen.
 	goidcache    uint64
@@ -73,30 +95,41 @@ type p struct {
 	// unit and eliminates the (potentially large) scheduling
 	// latency that otherwise arises from adding the ready'd
 	// goroutines to the end of the run queue.
+	//
+	// Note that while other P's may atomically CAS this to zero,
+	// only the owner P can CAS it to a valid G.
 	runnext guintptr
 
 	// The rest of the fields aren't important.
 }
 
+type lockRankStruct struct{}
+
+// Mutual exclusion locks.  In the uncontended case,
+// as fast as spin locks (just a few user-level instructions),
+// but on the contention path they sleep in the kernel.
+// A zeroed Mutex is unlocked (no need to initialize each lock).
+// Initialization is helpful for static lock ranking, but not required.
 type mutex struct {
 	// Empty struct if lock ranking is disabled, otherwise includes the lock rank
-	//lockRankStruct
+	lockRankStruct
 	// Futex-based impl treats it as uint32 key,
 	// while sema-based impl as M* waitm.
 	// Used to be a union, but unions break precise GC.
 	key uintptr
 }
 
+// A gQueue is a dequeue of Gs linked through g.schedlink. A G can only
+// be on one gQueue or gList at a time.
 type gQueue struct {
 	head guintptr
 	tail guintptr
 }
 
 type schedt struct {
-	// accessed atomically. keep at top to ensure alignment on 32-bit systems.
-	goidgen   uint64
-	lastpoll  uint64 // time of last network poll, 0 if currently polling
-	pollUntil uint64 // time to which current poll is sleeping
+	goidgen   atomic.Uint64
+	lastpoll  atomic.Int64 // time of last network poll, 0 if currently polling
+	pollUntil atomic.Int64 // time to which current poll is sleeping
 
 	lock mutex
 
@@ -111,11 +144,12 @@ type schedt struct {
 	nmsys        int32    // number of system m's not counted for deadlock
 	nmfreed      int64    // cumulative number of freed m's
 
-	ngsys uint32 // number of system goroutines; updated atomically
+	ngsys atomic.Int32 // number of system goroutines
 
-	pidle      puintptr // idle p's
-	npidle     uint32
-	nmspinning uint32 // See "Worker thread parking/unparking" comment in proc.go.
+	pidle        puintptr // idle p's
+	npidle       atomic.Int32
+	nmspinning   atomic.Int32  // See "Worker thread parking/unparking" comment in proc.go.
+	needspinning atomic.Uint32 // See "Delicate dance" comment in proc.go. Boolean. Must hold sched.lock to set to 1.
 
 	// Global runnable queue.
 	runq     gQueue

@@ -1264,10 +1264,11 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 		testserver.PollListenURLTimeoutOpt(120),
 	}
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
-		// If we're using a cockroach-short binary, that means it was locally
-		// built, so we need to opt-in to development upgrades.
+		// If we're using a cockroach-short binary, that means it was
+		// locally built, so we need to opt-out of version offsetting to
+		// better simulate a real upgrade path.
 		opts = append(opts, testserver.EnvVarOpt([]string{
-			"COCKROACH_UPGRADE_TO_DEV_VERSION=true",
+			"COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true",
 		}))
 	}
 

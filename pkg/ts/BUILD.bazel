@@ -25,7 +25,7 @@ go_library(
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

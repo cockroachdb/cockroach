@@ -436,20 +436,20 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "str", Typ: types.Bytes}, {Name: "enc", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				str := []byte(tree.MustBeDBytes(args[0]))
+				str := string(tree.MustBeDBytes(args[0]))
 				enc := CleanEncodingName(string(tree.MustBeDString(args[1])))
 				switch enc {
 				// All the following are aliases to each other in PostgreSQL.
 				case "utf8", "unicode", "cp65001":
-					if !utf8.Valid(str) {
+					if !utf8.Valid(encoding.UnsafeConvertStringToBytes(str)) {
 						return nil, newDecodeError("UTF8")
 					}
-					return tree.NewDString(string(str)), nil
+					return tree.NewDString(str), nil
 
 					// All the following are aliases to each other in PostgreSQL.
 				case "latin1", "iso88591", "cp28591":
 					var buf strings.Builder
-					for _, c := range str {
+					for _, c := range encoding.UnsafeConvertStringToBytes(str) {
 						buf.WriteRune(rune(c))
 					}
 					return tree.NewDString(buf.String()), nil
@@ -1170,11 +1170,11 @@ var regularBuiltins = map[string]builtinDefinition{
 					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for decode()")
 				}
-				res, err := lex.DecodeRawBytesToByteArray(data, be)
+				res, err := lex.DecodeRawBytesToByteArray(encoding.UnsafeConvertStringToBytes(data), be)
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDBytes(tree.DBytes(res)), nil
+				return tree.NewDBytes(tree.DBytes(encoding.UnsafeConvertBytesToString(res))), nil
 			},
 			Info:       "Decodes `data` using `format` (`hex` / `escape` / `base64`).",
 			Volatility: volatility.Immutable,
