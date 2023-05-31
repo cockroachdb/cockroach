@@ -515,8 +515,6 @@ func (s *cloudStorageSink) getOrCreateFile(
 	return f, nil
 }
 
-var emits = 0
-
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
@@ -525,7 +523,6 @@ func (s *cloudStorageSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	emits += 1
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
@@ -639,9 +636,7 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return err
 	}
 	s.files.Clear(true /* addNodesToFreeList */)
-	if s.timestampOracle != nil {
-		s.setDataFileTimestamp()
-	}
+	s.setDataFileTimestamp()
 	return s.waitAsyncFlush(ctx)
 }
 

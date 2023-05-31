@@ -738,8 +738,8 @@ type changeFrontier struct {
 	frontier *schemaChangeFrontier
 	// encoder is the Encoder to use for resolved timestamp serialization.
 	encoder Encoder
-	// sink is the Sink to write resolved timestamps to. Rows are never written
-	// by changeFrontier.
+	// sink is the Sink to write resolved timestamps to. Rows are only sent by the
+	// changeFrontier when using ordering=total.
 	sink Sink
 	// freqEmitResolved, if >= 0, is a lower bound on the duration between
 	// resolved timestamp emits.
@@ -1809,7 +1809,10 @@ func (f *schemaChangeFrontier) hasLaggingSpans(
 }
 
 // orderedRowMerger takes payloads of ordered rows (ascending) for different
-// processors and flushes out elements to an underlying sink in timestamp order.
+// processors and flushes out elements to an underlying sink in timestamp order
+// by storing the sorted rows for each processor in separate lists and keeping a
+// min heap of the earliest entry in each row to determine the earliest across
+// all nodes .
 type orderedRowMerger struct {
 	// orderedRows stores a map of processorID -> sorted ascending list of pending
 	// rows to be emitted.

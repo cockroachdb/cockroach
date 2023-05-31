@@ -934,7 +934,7 @@ func (s StatementOptions) KeyOnly() bool {
 	return s.m[OptEnvelope] == string(OptEnvelopeKeyOnly)
 }
 
-// KeyOnly returns true if we are using the 'key_only' envelope.
+// TotalOrdering returns true if we are using ordering='total'
 func (s StatementOptions) TotalOrdering() bool {
 	return s.m[OptOrdering] == string(OptOrderingTotal)
 }

@@ -1294,40 +1294,23 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 400, duration: "240m"})
-			// ct.runTPCCWorkload(tpccArgs{warehouses: 10})
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
-			ct.newChangefeed(feedArgs{
+			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
 				opts: map[string]string{
-					"metrics_label": "'total'",
-					"ordering":      "'total'",
-					"initial_scan":  "'yes'",
-					"updated":       "",
-					"resolved":      "'5s'",
-					// "webhook_sink_config": `'{"Flush": { "Messages": 100, "Frequency": "5s" } }'`,
+					"ordering":     "'total'",
+					"initial_scan": "'yes'",
+					"updated":      "",
+					"resolved":     "'5s'",
 				},
 			})
-			time.Sleep(240 * time.Minute)
-			// feed.waitForCompletion()
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
 
-			// ct.newChangefeed(feedArgs{
-			// 	sinkType: kafkaSink,
-			// 	targets:  allTpccTargets,
-			// 	opts: map[string]string{
-			// 		"metrics_label": "'key'",
-			// 		"ordering":      "'key'",
-			// 		"initial_scan":  "'no'",
-			// 		"updated":       "",
-			// 		"resolved":      "'5s'",
-			// 	},
-			// })
-			// ct.runFeedLatencyVerifier(feed, latencyTargets{
-			// 	initialScanLatency: 30 * time.Minute,
-			// })
-
-			// ct.waitForWorkload()
+			ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -2436,8 +2419,6 @@ func setupKafka(
 		c.Run(ctx, kafka.nodes, `echo "advertised.listeners=PLAINTEXT://`+kafka.consumerURL(ctx)+`" >> `+
 			filepath.Join(kafka.configDir(), "server.properties"))
 	}
-	// c.Run(ctx, kafka.nodes, `echo "max.request.size=4024" >> `+
-	// 	filepath.Join(kafka.configDir(), "server.properties"))
 
 	kafka.start(ctx, "kafka")
 	return kafka, func() { kafka.stop(ctx) }

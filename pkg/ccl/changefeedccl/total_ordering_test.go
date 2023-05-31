@@ -66,7 +66,7 @@ func (s *testOrderedSink) flushToTs(wallTime int64) {
 	require.NoError(s.t, s.Flush(context.Background()))
 }
 
-func (s *testOrderedSink) flushAndVerify(wallTime int64) int {
+func (s *testOrderedSink) flushAndVerify(wallTime int64) (numFlushed int) {
 	s.flushToTs(wallTime)
 
 	if s.forwardingBuf.IsEmpty() {
@@ -75,7 +75,6 @@ func (s *testOrderedSink) flushAndVerify(wallTime int64) int {
 	payload := s.popPayload()
 	lastTs := hlc.Timestamp{}
 	for _, orderedRow := range payload.Rows {
-		tdebug(fmt.Sprintf("GOT %d", orderedRow.Updated.WallTime))
 		require.False(s.t, orderedRow.Mvcc.Less(lastTs))
 		require.Equal(s.t, "mock", orderedRow.TopicName)
 		lastTs = orderedRow.Mvcc
