@@ -145,7 +145,15 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 						}
 					}
 
-					systemLoaded = false
+					sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
+						gc := (*GrantCoordinator)(unsafeGc)
+						gc.allocateIOTokensTick(currTickDuration)
+						// true indicates that iteration should continue after the
+						// current entry has been processed.
+						return true
+					})
+
+					systemLoaded = true
 					if systemLoaded {
 						currTickDuration = loadedDuration
 					} else {
@@ -155,14 +163,6 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					ticks = 0
 					currTime = time.Now()
 				}
-
-				sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
-					gc := (*GrantCoordinator)(unsafeGc)
-					gc.allocateIOTokensTick(currTickDuration)
-					// true indicates that iteration should continue after the
-					// current entry has been processed.
-					return true
-				})
 			case <-sgc.closeCh:
 				done = true
 			}
