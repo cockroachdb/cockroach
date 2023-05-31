@@ -3197,61 +3197,77 @@ subtest udt_alter
 statement ok
 CREATE TABLE t_alter (
   a INT PRIMARY KEY,
-  b INT
+  b TEXT,
+  c INT
 )
 
 statement ok
-CREATE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS 'SELECT 1, 2;'
+CREATE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS $$
+  SELECT 1, 'foobar', 2
+$$
 
 query T
 SELECT f_rtbl();
 ----
-(1,2)
+(1,foobar,2)
 
 statement ok
-ALTER TABLE t_alter DROP COLUMN b;
+ALTER TABLE t_alter DROP COLUMN c;
 
 statement error pq: return type mismatch in function declared to return t_alter
 SELECT f_rtbl();
 
 statement ok
-ALTER TABLE t_alter ADD COLUMN b INT;
+ALTER TABLE t_alter ADD COLUMN c INT;
 
 query T
 SELECT f_rtbl();
 ----
-(1,2)
+(1,foobar,2)
 
 statement ok
 SET enable_experimental_alter_column_type_general=true
 
 statement ok
-ALTER TABLE t_alter ALTER b TYPE FLOAT;
+ALTER TABLE t_alter ALTER c TYPE FLOAT;
 
 statement error pq: return type mismatch in function declared to return t_alter
 SELECT f_rtbl();
 
 statement ok
-ALTER TABLE t_alter ALTER b TYPE INT;
+ALTER TABLE t_alter ALTER c TYPE INT;
 
 query T
 SELECT f_rtbl();
 ----
-(1,2)
+(1,foobar,2)
 
 statement ok
-ALTER TABLE t_alter ADD COLUMN c INT;
+ALTER TABLE t_alter ALTER b TYPE CHAR(3)
+
+statement error pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ALTER b TYPE TEXT
+
+statement ok
+ALTER TABLE t_alter ADD COLUMN d INT;
 
 statement error pq: return type mismatch in function declared to return record
-CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS 'SELECT 1, 2;'
+CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS $$
+  SELECT 1, 'foobar', 2
+$$
 
 statement ok
-CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS 'SELECT 1, 2, 3;'
+CREATE OR REPLACE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS $$
+  SELECT 1, 'foobar', 2, 3
+$$
 
 query T
 SELECT f_rtbl();
 ----
-(1,2,3)
+(1,foobar,2,3)
 
 subtest regression_94146
 
