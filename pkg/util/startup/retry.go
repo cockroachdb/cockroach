@@ -60,6 +60,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -191,5 +193,8 @@ func inStartup() bool {
 
 // IsRetryableReplicaError returns true for replica availability errors.
 func IsRetryableReplicaError(err error) bool {
-	return errors.HasType(err, (*roachpb.ReplicaUnavailableError)(nil)) || errors.HasType(err, (*roachpb.AmbiguousResultError)(nil))
+	return errors.HasType(err, (*roachpb.ReplicaUnavailableError)(nil)) ||
+		errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) ||
+		// See https://github.com/cockroachdb/cockroach/issues/104016#issuecomment-1569719273.
+		pgerror.GetPGCode(err) == pgcode.RangeUnavailable
 }
