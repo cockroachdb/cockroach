@@ -559,6 +559,10 @@ message RangeFeedRetryError {
     REASON_SLOW_CONSUMER = 5;
     // No leaseholder exists or could be created, so closed timestamps won't be emitted.
     REASON_NO_LEASEHOLDER = 6;
+    // Replica decided that rangefeed is no longer used and closed it. This
+    // should not happen unless it was explicitly requested by client and in
+    // that case client is free not to retry.
+    REASON_RANGEFEED_CLOSED = 7;
   }
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }
