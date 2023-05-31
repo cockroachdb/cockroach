@@ -1061,13 +1061,11 @@ func (f *cloudFeedFactory) Feed(
 	// being created with incompatible options. If it can be enabled, we will use
 	// parquet format with a probability of 0.4.
 	parquetPossible := true
-
 	explicitEnvelope := false
 	for _, opt := range createStmt.Options {
 		if string(opt.Key) == changefeedbase.OptEnvelope {
 			explicitEnvelope = true
 		}
-
 		if string(opt.Key) == changefeedbase.OptFormat &&
 			opt.Value.String() != string(changefeedbase.OptFormatParquet) {
 			parquetPossible = false
@@ -1246,59 +1244,50 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 		return errors.Errorf("could not find column names in parquet metadata")
 	}
 
-	primaryKeys := strings.Split(primaryKeyColumnsString, ",")
-	columns := strings.Split(columnsNamesString, ",")
-
-	columnNameSet := make(map[string]struct{})
-	primaryKeyColumnSet := make(map[string]struct{})
-
-	for _, key := range primaryKeys {
-		primaryKeyColumnSet[key] = struct{}{}
+	primaryKeysNamesOrdered, primaryKeyColumnSet, err := deserializeMap(primaryKeyColumnsString)
+	if err != nil {
+		return err
 	}
-
-	// Drop parquetCrdbEventTypeColName.
-	for _, key := range columns[:len(columns)-1] {
-		columnNameSet[key] = struct{}{}
+	valueColumnNamesOrdered, columnNameSet, err := deserializeMap(columnsNamesString)
+	if err != nil {
+		return err
 	}
 
 	for _, row := range datums {
-		isDeleted := false
-
-		// Remove parquetCrdbEventTypeColName from the column names list. Values
-		// for this column will still be present in datum rows.
-		rowCopy := make([]string, len(columns)-1)
-		copy(rowCopy, columns[:len(columns)-1])
+		rowCopy := make([]string, len(valueColumnNamesOrdered)-1)
+		copy(rowCopy, valueColumnNamesOrdered[:len(valueColumnNamesOrdered)-1])
 		rowJSONBuilder, err := json.NewFixedKeysObjectBuilder(rowCopy)
 		if err != nil {
 			return err
 		}
 
-		keyJSONBuilder := json.NewArrayBuilder(len(primaryKeys))
-		for colIdx, v := range row {
-			k := columns[colIdx]
-			if k == parquetCrdbEventTypeColName {
-				if *v.(*tree.DString) == *parquetEventDelete.DString() {
+		keyJSONBuilder := json.NewArrayBuilder(len(primaryKeysNamesOrdered))
+
+		isDeleted := false
+
+		for _, primaryKeyColumnName := range primaryKeysNamesOrdered {
+			datum := row[primaryKeyColumnSet[primaryKeyColumnName]]
+			j, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
+			if err != nil {
+				return err
+			}
+			keyJSONBuilder.Add(j)
+
+		}
+		for _, valueColumnName := range valueColumnNamesOrdered {
+			if valueColumnName == parquetCrdbEventTypeColName {
+				if *(row[columnNameSet[valueColumnName]].(*tree.DString)) == *parquetEventDelete.DString() {
 					isDeleted = true
 				}
-				continue
+				break
 			}
-
-			if _, ok := columnNameSet[k]; ok {
-				j, err := tree.AsJSON(v, sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				if err := rowJSONBuilder.Set(k, j); err != nil {
-					return err
-				}
+			datum := row[columnNameSet[valueColumnName]]
+			j, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
+			if err != nil {
+				return err
 			}
-
-			if _, ok := primaryKeyColumnSet[k]; ok {
-				j, err := tree.AsJSON(v, sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				keyJSONBuilder.Add(j)
+			if err := rowJSONBuilder.Set(valueColumnName, j); err != nil {
+				return err
 			}
 		}
 
