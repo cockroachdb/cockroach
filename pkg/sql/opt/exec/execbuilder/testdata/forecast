@@ -1604,6 +1604,252 @@ RESET enable_zigzag_join
 statement ok
 RESET optimizer_use_forecasts
 
+# Test for issue #103958.
+
+statement ok
+CREATE TABLE t_103958 (a INT PRIMARY KEY, b INT)
+
+statement ok
+ALTER TABLE t_103958 INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2023-01-01 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 3,
+          "columns": [
+              "a",
+              "b"
+          ],
+          "created_at": "2023-01-01 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 2,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2023-01-01 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2023-01-02 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 3,
+          "columns": [
+              "a",
+              "b"
+          ],
+          "created_at": "2023-01-02 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 2,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2023-01-02 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2023-01-03 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 3,
+          "columns": [
+              "a",
+              "b"
+          ],
+          "created_at": "2023-01-03 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 2,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2023-01-03 00:00:00",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2023-01-04 00:00:00",
+          "distinct_count": 1000,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1000
+      },
+      {
+          "avg_size": 2,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2023-01-04 00:00:00",
+          "distinct_count": 2,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1000
+      },
+      {
+          "avg_size": 3,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2023-01-05 00:00:00",
+          "distinct_count": 2000,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 2000
+      },
+      {
+          "avg_size": 2,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2023-01-05 00:00:00",
+          "distinct_count": 3,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 2000
+      },
+      {
+          "avg_size": 3,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2023-01-06 00:00:00",
+          "distinct_count": 3000,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 3000
+      },
+      {
+          "avg_size": 2,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2023-01-06 00:00:00",
+          "distinct_count": 4,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 3000
+      }
+  ]'
+
+query TTTIIII
+SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+FROM [SHOW STATISTICS FOR TABLE t_103958 WITH FORECAST]
+----
+__auto__      {a}    2023-01-01 00:00:00 +0000 +0000  1     1     0  1
+__auto__      {a,b}  2023-01-01 00:00:00 +0000 +0000  1     1     0  3
+__auto__      {b}    2023-01-01 00:00:00 +0000 +0000  1     1     0  2
+__auto__      {a}    2023-01-02 00:00:00 +0000 +0000  1     1     0  1
+__auto__      {a,b}  2023-01-02 00:00:00 +0000 +0000  1     1     0  3
+__auto__      {b}    2023-01-02 00:00:00 +0000 +0000  1     1     0  2
+__auto__      {a}    2023-01-03 00:00:00 +0000 +0000  1     1     0  1
+__auto__      {a,b}  2023-01-03 00:00:00 +0000 +0000  1     1     0  3
+__auto__      {b}    2023-01-03 00:00:00 +0000 +0000  1     1     0  2
+__forecast__  {a,b}  2023-01-04 00:00:00 +0000 +0000  1     1     0  3
+__auto__      {a}    2023-01-04 00:00:00 +0000 +0000  1000  1000  0  1
+__auto__      {b}    2023-01-04 00:00:00 +0000 +0000  1000  2     0  2
+__auto__      {a}    2023-01-05 00:00:00 +0000 +0000  2000  2000  0  3
+__auto__      {b}    2023-01-05 00:00:00 +0000 +0000  2000  3     0  2
+__auto__      {a}    2023-01-06 00:00:00 +0000 +0000  3000  3000  0  3
+__auto__      {b}    2023-01-06 00:00:00 +0000 +0000  3000  4     0  2
+
+query T
+SELECT jsonb_pretty(stat)
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t_103958 WITH FORECAST]
+)
+WHERE stat->>'name' = '__forecast__'
+----
+{
+    "avg_size": 3,
+    "columns": [
+        "a",
+        "b"
+    ],
+    "created_at": "2023-01-04 00:00:00",
+    "distinct_count": 1,
+    "histo_col_type": "",
+    "name": "__forecast__",
+    "null_count": 0,
+    "row_count": 1
+}
+
+query T
+EXPLAIN SELECT * FROM t_103958
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3,000 (100% of the table; stats collected <hidden> ago)
+  table: t_103958@t_103958_pkey
+  spans: FULL SCAN
+
 # Finally, restore forecasts setting to its previous value.
 statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
