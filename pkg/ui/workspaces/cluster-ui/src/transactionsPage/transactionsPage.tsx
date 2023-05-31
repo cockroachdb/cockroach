@@ -578,7 +578,7 @@ export class TransactionsPage extends React.Component<
                     ...pagination,
                     total: transactionsToDisplay.length,
                   }}
-                  pageName={"Statements"}
+                  pageName={"Transactions"}
                   search={search}
                 />
               </p>
@@ -591,7 +591,7 @@ export class TransactionsPage extends React.Component<
               >
                 <ClearStats
                   resetSQLStats={this.resetSQLStats}
-                  tooltipType="statement"
+                  tooltipType="transaction"
                 />
               </PageConfigItem>
             )}
