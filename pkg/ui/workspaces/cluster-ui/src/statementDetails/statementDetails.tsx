@@ -15,6 +15,7 @@ import "antd/lib/row/style";
 import "antd/lib/tabs/style";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert, Text } from "@cockroachlabs/ui-components";
+import { Anchor } from "src/anchor";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { isNil } from "lodash";
 import Long from "long";
@@ -36,6 +37,7 @@ import {
   RenderCount,
   TimestampToMoment,
   unique,
+  batchStatements,
 } from "src/util";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Button } from "src/button";
@@ -69,6 +71,7 @@ import {
   generateExecuteAndPlanningTimeseries,
   generateRowsProcessedTimeseries,
   generateCPUTimeseries,
+  generateClientWaitTimeseries,
 } from "./timeseriesUtils";
 import { Delayed } from "../delayed";
 import moment from "moment-timezone";
@@ -609,12 +612,7 @@ export class StatementDetails extends React.Component<
       generateExecuteAndPlanningTimeseries(statsPerAggregatedTs);
     const executionAndPlanningOps: Partial<Options> = {
       axes: [{}, { label: "Time Spent" }],
-      series: [
-        {},
-        { label: "Execution" },
-        { label: "Planning" },
-        { label: "Idle" },
-      ],
+      series: [{}, { label: "Execution" }, { label: "Planning" }],
       width: cardWidth,
     };
 
@@ -658,6 +656,15 @@ export class StatementDetails extends React.Component<
     const cpuOps: Partial<Options> = {
       axes: [{}, { label: "CPU Time" }],
       series: [{}, { label: "CPU Time" }],
+      legend: { show: false },
+      width: cardWidth,
+    };
+
+    const clientWaitTimeseries: AlignedData =
+      generateClientWaitTimeseries(statsPerAggregatedTs);
+    const clientWaitOps: Partial<Options> = {
+      axes: [{}, { label: "Time Spent" }],
+      series: [{}, { label: "Client Wait Time" }],
       legend: { show: false },
       width: cardWidth,
     };
@@ -831,6 +838,31 @@ export class StatementDetails extends React.Component<
                 alignedData={cpuTimeseries}
                 uPlotOptions={cpuOps}
                 tooltip={unavailableTooltip}
+                yAxisUnits={AxisUnits.Duration}
+              />
+            </Col>
+          </Row>
+          <Row gutter={24}>
+            <Col className="gutter-row" span={12}>
+              <BarGraphTimeSeries
+                title="Client Wait Time"
+                tooltip={
+                  <>
+                    {"The wait time for this statement on the client. This time measures the time spent waiting " +
+                      "for the client to send the statement while holding the transaction open. A high wait time " +
+                      "indicates that you should revisit the entire transaction and "}
+                    <Anchor
+                      href={batchStatements}
+                      className={cx("crl-anchor")}
+                      target="_blank"
+                    >
+                      batch your statements
+                    </Anchor>
+                    {"."}
+                  </>
+                }
+                alignedData={clientWaitTimeseries}
+                uPlotOptions={clientWaitOps}
                 yAxisUnits={AxisUnits.Duration}
               />
             </Col>
