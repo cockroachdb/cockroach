@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -167,7 +168,7 @@ func checkHBASyntaxBeforeUpdatingSetting(values *settings.Values, s string) erro
 			switch t := entry.Address.(type) {
 			case *net.IPNet:
 			case hba.AnyAddr:
-			case hba.String:
+			case rulebasedscanner.String:
 				addrOk = t.IsKeyword("all")
 			default:
 				addrOk = false
@@ -230,9 +231,9 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 		entries := make([]hba.Entry, 1, len(conf.Entries)+1)
 		entries[0] = hba.Entry{
 			ConnType: hba.ConnInternalLoopback,
-			User:     []hba.String{{Value: "all", Quoted: false}},
+			User:     []rulebasedscanner.String{{Value: "all", Quoted: false}},
 			Address:  hba.AnyAddr{},
-			Method:   hba.String{Value: "trust"},
+			Method:   rulebasedscanner.String{Value: "trust"},
 			Input:    "loopback all all all trust       # built-in CockroachDB default",
 		}
 		entries = append(entries, conf.Entries...)
@@ -257,39 +258,39 @@ func ParseAndNormalize(val string) (*hba.Conf, error) {
 
 var insecureEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
-	User:     []hba.String{{Value: "all", Quoted: false}},
+	User:     []rulebasedscanner.String{{Value: "all", Quoted: false}},
 	Address:  hba.AnyAddr{},
-	Method:   hba.String{Value: "--insecure"},
+	Method:   rulebasedscanner.String{Value: "--insecure"},
 }
 
 var sessionRevivalEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
-	User:     []hba.String{{Value: "all", Quoted: false}},
+	User:     []rulebasedscanner.String{{Value: "all", Quoted: false}},
 	Address:  hba.AnyAddr{},
-	Method:   hba.String{Value: "session_revival_token"},
+	Method:   rulebasedscanner.String{Value: "session_revival_token"},
 }
 
 var jwtAuthEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
-	User:     []hba.String{{Value: "all", Quoted: false}},
+	User:     []rulebasedscanner.String{{Value: "all", Quoted: false}},
 	Address:  hba.AnyAddr{},
-	Method:   hba.String{Value: "jwt_token"},
+	Method:   rulebasedscanner.String{Value: "jwt_token"},
 }
 
 var rootEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
-	User:     []hba.String{{Value: username.RootUser, Quoted: false}},
+	User:     []rulebasedscanner.String{{Value: username.RootUser, Quoted: false}},
 	Address:  hba.AnyAddr{},
-	Method:   hba.String{Value: "cert-password"},
+	Method:   rulebasedscanner.String{Value: "cert-password"},
 	Input:    "host  all root all cert-password # CockroachDB mandatory rule",
 }
 
 var _, localhostCidrBytes, _ = net.ParseCIDR("127.0.0.1/32")
 var rootLocalEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
-	User:     []hba.String{{Value: username.RootUser, Quoted: false}},
+	User:     []rulebasedscanner.String{{Value: username.RootUser, Quoted: false}},
 	Address:  localhostCidrBytes,
-	Method:   hba.String{Value: "cert-password"},
+	Method:   rulebasedscanner.String{Value: "cert-password"},
 	Input:    "host all root 127.0.0.1/32 cert-password # Alternative to the CockroachDB mandatory rule",
 }
 

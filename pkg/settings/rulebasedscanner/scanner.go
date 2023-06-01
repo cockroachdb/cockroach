@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package hba
+package rulebasedscanner
 
 import (
 	"regexp"
@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// This file contains a scanner for the pg_hba.conf token syntax.
+// This file contains a scanner for the pg_hba.conf token syntax (rule-based).
 //
 // The algorithm used here is as follows: first the input is split
 // into lines. Then each line is scanned using a rule-based algorithm.
@@ -109,13 +109,13 @@ func init() {
 	}
 }
 
-// nextToken reads the next token from buf. A token is a simple or
+// NextToken reads the next token from buf. A token is a simple or
 // quoted string. If there is no token (e.g. just whitespace), the
 // returned token is empty. trailingComma indicates whether the token
 // is immediately followed by a comma.
 //
 // Inspired from pg's src/backend/libpq/hba.c, next_token().
-func nextToken(buf string) (remaining string, tok String, trailingComma bool, err error) {
+func NextToken(buf string) (remaining string, tok String, trailingComma bool, err error) {
 	remaining = buf
 	var l lex
 outer:
@@ -147,7 +147,7 @@ func nextFieldExpand(buf string) (remaining string, field []String, err error) {
 	for {
 		var trailingComma bool
 		var tok String
-		remaining, tok, trailingComma, err = nextToken(remaining)
+		remaining, tok, trailingComma, err = NextToken(remaining)
 		if tok.Empty() || err != nil {
 			return
 		}
@@ -159,15 +159,15 @@ func nextFieldExpand(buf string) (remaining string, field []String, err error) {
 	return
 }
 
-// tokenize splits the input into tokens.
+// Tokenize splits the input into tokens.
 //
 // Inspired from pg's src/backend/libpq/hba.c, tokenize_file().
-func tokenize(input string) (res scannedInput, err error) {
+func Tokenize(input string) (res ScannedInput, err error) {
 	inputLines := strings.Split(input, "\n")
 
 	for lineIdx, lineS := range inputLines {
-		var currentLine hbaLine
-		currentLine.input = strings.TrimSpace(lineS)
+		var currentLine Line
+		currentLine.Input = strings.TrimSpace(lineS)
 		for remaining := lineS; remaining != ""; {
 			var currentField []String
 			remaining, currentField, err = nextFieldExpand(remaining)
@@ -175,12 +175,12 @@ func tokenize(input string) (res scannedInput, err error) {
 				return res, errors.Wrapf(err, "line %d", lineIdx+1)
 			}
 			if len(currentField) > 0 {
-				currentLine.tokens = append(currentLine.tokens, currentField)
+				currentLine.Tokens = append(currentLine.Tokens, currentField)
 			}
 		}
-		if len(currentLine.tokens) > 0 {
-			res.lines = append(res.lines, currentLine)
-			res.linenos = append(res.linenos, lineIdx+1)
+		if len(currentLine.Tokens) > 0 {
+			res.Lines = append(res.Lines, currentLine)
+			res.Linenos = append(res.Linenos, lineIdx+1)
 		}
 	}
 	return res, err

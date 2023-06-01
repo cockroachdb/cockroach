@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package hba
+package rulebasedscanner
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ func TestSpecialCharacters(t *testing.T) {
 	}
 
 	for _, tc := range testData {
-		_, err := tokenize(tc.input)
+		_, err := Tokenize(tc.input)
 		if err == nil || err.Error() != tc.expErr {
 			t.Errorf("expected:\n%s\ngot:\n%v", tc.expErr, err)
 		}
@@ -45,7 +45,7 @@ func TestScanner(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "scan"), func(t *testing.T, td *datadriven.TestData) string {
 		switch td.Cmd {
 		case "token":
-			remaining, tok, trailingComma, err := nextToken(td.Input)
+			remaining, tok, trailingComma, err := NextToken(td.Input)
 			if err != nil {
 				return fmt.Sprintf("error: %v", err)
 			}
@@ -59,7 +59,7 @@ func TestScanner(t *testing.T) {
 			return fmt.Sprintf("%+v\n%q", field, remaining)
 
 		case "file":
-			tokens, err := tokenize(td.Input)
+			tokens, err := Tokenize(td.Input)
 			if err != nil {
 				return fmt.Sprintf("error: %v", err)
 			}
