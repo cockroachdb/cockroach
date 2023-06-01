@@ -83,13 +83,7 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 	); err != nil {
 		panic(pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue))
 	}
-	if tempSequenceOpts.Virtual ||
-		len(tempSequenceOpts.AsIntegerType) > 0 {
-		panic(scerrors.NotImplementedErrorf(n, "create sequence specifying"+
-			"unsupported sequence options"))
-	}
-
-	// 6. Finally, create and add constituent elements to builder state.
+	// Generate the sequence elements.
 	sequenceID := b.GenerateUniqueDescID()
 	sequenceElem := &scpb.Sequence{
 		SequenceID:  sequenceID,
@@ -99,10 +93,19 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		sequenceElem.OptionalRestartWith = &scpb.Sequence_RestartWith{RestartWith: *restartWith}
 	}
 	b.Add(sequenceElem)
-	b.Add(&scpb.TableName{
-		TableID: sequenceID,
-		Name:    string(n.Name.ObjectName),
-	})
+	// Setup any options on the sequence.
+	sequenceOptions := &scpb.SequenceOptions{
+		SequenceID:    sequenceID,
+		Start:         tempSequenceOpts.Start,
+		Increment:     tempSequenceOpts.Increment,
+		Max:           tempSequenceOpts.MaxValue,
+		Min:           tempSequenceOpts.MinValue,
+		CacheSize:     tempSequenceOpts.CacheSize,
+		Virtual:       tempSequenceOpts.Virtual,
+		AsIntegerType: tempSequenceOpts.AsIntegerType,
+	}
+	b.Add(sequenceOptions)
+	// Add the single column for a sequence.
 	b.Add(&scpb.Column{
 		TableID:  sequenceID,
 		ColumnID: tabledesc.SequenceColumnID,
@@ -143,30 +146,20 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		Kind:          scpb.IndexColumn_KEY,
 		Direction:     catenumpb.IndexColumn_ASC,
 	})
+	// Setup the namespace entry.
 	b.Add(&scpb.Namespace{
 		DatabaseID:   dbElem.DatabaseID,
 		SchemaID:     schemaElem.SchemaID,
 		DescriptorID: sequenceID,
 		Name:         string(n.Name.ObjectName),
 	})
-
-	sequenceOptions := &scpb.SequenceOptions{
-		SequenceID: sequenceID,
-		Start:      tempSequenceOpts.Start,
-		Increment:  tempSequenceOpts.Increment,
-		Max:        tempSequenceOpts.MaxValue,
-		Min:        tempSequenceOpts.MinValue,
-		CacheSize:  tempSequenceOpts.CacheSize,
-	}
-
-	b.Add(sequenceOptions)
-	b.LogEventForExistingTarget(sequenceElem)
-
+	// Setup ownership elements.
 	ownerElem, userPrivsElems :=
 		b.BuildUserPrivilegesFromDefaultPrivileges(dbElem, schemaElem, sequenceID, privilege.Sequences, owner)
 	b.Add(ownerElem)
 	for _, userPrivsElem := range userPrivsElems {
 		b.Add(userPrivsElem)
 	}
+	// Log the creation of this sequence.
 	b.LogEventForExistingTarget(sequenceElem)
 }

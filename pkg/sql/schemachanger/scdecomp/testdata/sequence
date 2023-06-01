@@ -33,6 +33,16 @@ ElementState:
     isTemporary: false
     sequenceId: 104
   Status: PUBLIC
+- SequenceOptions:
+    asIntegerType: ""
+    cacheSize: "1"
+    increment: "1"
+    max: "9223372036854775807"
+    min: "1"
+    sequenceId: 104
+    start: "1"
+    virtual: false
+  Status: PUBLIC
 - TableData:
     databaseId: 100
     tableId: 104
@@ -77,6 +87,16 @@ ElementState:
 - Sequence:
     isTemporary: false
     sequenceId: 106
+  Status: PUBLIC
+- SequenceOptions:
+    asIntegerType: ""
+    cacheSize: "1"
+    increment: "1"
+    max: "9223372036854775807"
+    min: "1"
+    sequenceId: 106
+    start: "1"
+    virtual: false
   Status: PUBLIC
 - TableData:
     databaseId: 100
@@ -701,6 +721,16 @@ ElementState:
 - Sequence:
     isTemporary: false
     sequenceId: 104
+  Status: PUBLIC
+- SequenceOptions:
+    asIntegerType: ""
+    cacheSize: "1"
+    increment: "1"
+    max: "9223372036854775807"
+    min: "1"
+    sequenceId: 104
+    start: "1"
+    virtual: false
   Status: PUBLIC
 - TableData:
     databaseId: 100

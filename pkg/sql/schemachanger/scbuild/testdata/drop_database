@@ -77,6 +77,8 @@ DROP DATABASE db1 CASCADE
   {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 107}, ABSENT], PUBLIC]
   {sequenceId: 107}
+- [[SequenceOptions:{DescID: 107}, ABSENT], PUBLIC]
+  {cacheSize: "1", increment: "1", max: "9223372036854775807", min: "1", sequenceId: 107, start: "1"}
 - [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {childObjectId: 107, schemaId: 105}
 - [[TableData:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -153,6 +155,8 @@ DROP DATABASE db1 CASCADE
   {descriptorId: 108, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 108}, ABSENT], PUBLIC]
   {sequenceId: 108}
+- [[SequenceOptions:{DescID: 108}, ABSENT], PUBLIC]
+  {cacheSize: "1", increment: "1", max: "9223372036854775807", min: "1", sequenceId: 108, start: "1"}
 - [[SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC]
   {childObjectId: 108, schemaId: 106}
 - [[TableData:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC]

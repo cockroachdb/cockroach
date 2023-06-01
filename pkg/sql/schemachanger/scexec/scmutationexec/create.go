@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 )
 
@@ -28,12 +29,23 @@ func (i *immediateVisitor) MarkDescriptorAsPublic(
 	return nil
 }
 
-func (i *immediateVisitor) AddDescriptorName(_ context.Context, op scop.AddDescriptorName) error {
+func (i *immediateVisitor) AddDescriptorName(ctx context.Context, op scop.AddDescriptorName) error {
 	nameDetails := descpb.NameInfo{
 		ParentID:       op.Namespace.DatabaseID,
 		ParentSchemaID: op.Namespace.SchemaID,
 		Name:           op.Namespace.Name,
 	}
 	i.AddName(op.Namespace.DescriptorID, nameDetails)
+	desc, err := i.checkOutDescriptor(ctx, op.Namespace.DescriptorID)
+	if err != nil {
+		return err
+	}
+
+	switch t := desc.(type) {
+	case *tabledesc.Mutable:
+		t.ParentID = op.Namespace.DatabaseID
+		t.UnexposedParentSchemaID = op.Namespace.SchemaID
+		t.SetName(op.Namespace.Name)
+	}
 	return nil
 }

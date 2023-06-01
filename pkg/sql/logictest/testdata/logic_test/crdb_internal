@@ -856,7 +856,7 @@ start_pretty    end_pretty
 /Table/112/1/3  /Table/112/2/1
 /Table/112/2/1  /Table/112/2/2
 /Table/112/2/2  /Table/112/2/3
-/Table/112/2/3  /Max
+/Table/112/2/3  /Table/113/1
 
 # The cleanup we expect in the following truncate requires that the GCJob runs.
 # To avoid this taking 30 seconds, we lower the job adoption interval.
@@ -890,7 +890,7 @@ start_pretty    end_pretty
 /Table/112/3/3  /Table/112/4/1
 /Table/112/4/1  /Table/112/4/2
 /Table/112/4/2  /Table/112/4/3
-/Table/112/4/3  /Max
+/Table/112/4/3  /Table/113/1
 
 statement ok
 DROP TABLE foo

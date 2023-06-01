@@ -123,6 +123,9 @@ type ImmediateMutationVisitor interface {
 	UpdateOwner(context.Context, UpdateOwner) error
 	CreateSchemaDescriptor(context.Context, CreateSchemaDescriptor) error
 	SetSchemaName(context.Context, SetSchemaName) error
+	CreateSequenceDescriptor(context.Context, CreateSequenceDescriptor) error
+	CreateOrUpdateSequenceOptions(context.Context, CreateOrUpdateSequenceOptions) error
+	InitSequence(context.Context, InitSequence) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -628,4 +631,19 @@ func (op CreateSchemaDescriptor) Visit(ctx context.Context, v ImmediateMutationV
 // Visit is part of the ImmediateMutationOp interface.
 func (op SetSchemaName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.SetSchemaName(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op CreateSequenceDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.CreateSequenceDescriptor(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op CreateOrUpdateSequenceOptions) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.CreateOrUpdateSequenceOptions(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op InitSequence) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.InitSequence(ctx, op)
 }

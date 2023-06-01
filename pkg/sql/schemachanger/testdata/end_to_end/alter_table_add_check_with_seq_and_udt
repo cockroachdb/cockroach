@@ -34,13 +34,13 @@ upsert descriptor #104
   +  dependedOnBy:
   +  - byId: true
   +    id: 107
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 104
   ...
        start: "1"
      unexposedParentSchemaId: 101
-  -  version: "1"
-  +  version: "2"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
   ...
          withGrantOption: "2"
@@ -117,13 +117,13 @@ upsert descriptor #104
   +  dependedOnBy:
   +  - byId: true
   +    id: 107
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 104
   ...
        start: "1"
      unexposedParentSchemaId: 101
-  -  version: "1"
-  +  version: "2"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
    type:
      arrayTypeId: 106
@@ -249,8 +249,8 @@ upsert descriptor #104
   ...
        start: "1"
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "4"
+  +  version: "5"
 upsert descriptor #105
    type:
      arrayTypeId: 106

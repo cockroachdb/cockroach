@@ -50,6 +50,8 @@ func (i *immediateVisitor) CreateOrUpdateSequenceOptions(
 	sc.SequenceOpts.MaxValue = op.Max
 	sc.SequenceOpts.Start = op.Start
 	sc.SequenceOpts.CacheSize = op.CacheSize
+	sc.SequenceOpts.Virtual = op.Virtual
+	sc.SequenceOpts.AsIntegerType = op.AsIntegerType
 	return nil
 }
 
@@ -64,14 +66,5 @@ func (i *immediateVisitor) InitSequence(ctx context.Context, op scop.InitSequenc
 	}
 	startVal = startVal - sc.SequenceOpts.Increment
 	i.ImmediateMutationStateUpdater.InitSequence(sc.ID, startVal)
-	return nil
-}
-
-func (i *immediateVisitor) SetTableName(ctx context.Context, op scop.SetTableName) error {
-	sc, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	sc.SetName(op.Name)
 	return nil
 }

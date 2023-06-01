@@ -804,3 +804,26 @@ type SetSchemaName struct {
 	SchemaID descpb.ID
 	Name     string
 }
+
+type CreateSequenceDescriptor struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+}
+
+type CreateOrUpdateSequenceOptions struct {
+	immediateMutationOp
+	SequenceID    descpb.ID
+	Increment     int64
+	Max           int64
+	Min           int64
+	Start         int64
+	CacheSize     int64
+	Virtual       bool
+	AsIntegerType string
+}
+
+type InitSequence struct {
+	immediateMutationOp
+	SequenceID  descpb.ID
+	RestartWith *int64
+}

@@ -229,11 +229,23 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	switch {
 	case tbl.IsSequence():
 		w.ev(descriptorStatus(tbl), &scpb.Sequence{
-			SequenceID:  tbl.GetID(),
-			IsTemporary: tbl.IsTemporary(),
+			SequenceID:          tbl.GetID(),
+			IsTemporary:         tbl.IsTemporary(),
+			OptionalRestartWith: nil, /* Only used during creation. */
 		})
 		if opts := tbl.GetSequenceOpts(); opts != nil {
 			w.backRefs.Add(opts.SequenceOwner.OwnerTableID)
+			w.ev(descriptorStatus(tbl),
+				&scpb.SequenceOptions{
+					SequenceID:    tbl.GetID(),
+					Increment:     opts.Increment,
+					Min:           opts.MinValue,
+					Max:           opts.MaxValue,
+					Start:         opts.Start,
+					CacheSize:     opts.CacheSize,
+					Virtual:       opts.Virtual,
+					AsIntegerType: opts.AsIntegerType,
+				})
 		}
 	case tbl.IsView():
 		w.ev(descriptorStatus(tbl), &scpb.View{

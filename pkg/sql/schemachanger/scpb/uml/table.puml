@@ -309,7 +309,19 @@ SecondaryIndexPartial :  Expression
 object Sequence
 
 Sequence :  SequenceID
+Sequence :  OptionalRestartWith
 Sequence :  IsTemporary
+
+object SequenceOptions
+
+SequenceOptions :  SequenceID
+SequenceOptions :  Increment
+SequenceOptions :  Max
+SequenceOptions :  Min
+SequenceOptions :  Start
+SequenceOptions :  CacheSize
+SequenceOptions :  Virtual
+SequenceOptions :  AsIntegerType
 
 object SequenceOwner
 
@@ -475,6 +487,7 @@ Schema <|-- SchemaParent
 Table <|-- SecondaryIndex
 View <|-- SecondaryIndex
 SecondaryIndex <|-- SecondaryIndexPartial
+Sequences <|-- SequenceOptions
 Column <|-- SequenceOwner
 Table <|-- TableComment
 View <|-- TableComment

@@ -92,13 +92,13 @@ upsert descriptor #105
   -  dependedOnBy:
   -  - byId: true
   -    id: 109
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "4"
+  +  version: "5"
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -208,13 +208,13 @@ upsert descriptor #105
   +    authorization:
   +      userName: root
   +    jobId: "1"
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "4"
+  +  version: "5"
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -325,13 +325,13 @@ upsert descriptor #105
   -    authorization:
   -      userName: root
   -    jobId: "1"
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
-  -  version: "3"
-  +  version: "4"
+  -  version: "5"
+  +  version: "6"
 upsert descriptor #106
   ...
      createAsOfTime:

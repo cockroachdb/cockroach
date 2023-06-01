@@ -22,12 +22,14 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.SequenceOptions) *scop.CreateOrUpdateSequenceOptions {
 					return &scop.CreateOrUpdateSequenceOptions{
-						SequenceID: this.SequenceID,
-						Increment:  this.Increment,
-						Min:        this.Min,
-						Max:        this.Max,
-						Start:      this.Start,
-						CacheSize:  this.CacheSize,
+						SequenceID:    this.SequenceID,
+						Increment:     this.Increment,
+						Min:           this.Min,
+						Max:           this.Max,
+						Start:         this.Start,
+						CacheSize:     this.CacheSize,
+						Virtual:       this.Virtual,
+						AsIntegerType: this.AsIntegerType,
 					}
 				}),
 			),
