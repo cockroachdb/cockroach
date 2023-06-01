@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +38,7 @@ import (
 // interrupt the function.
 func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	const localFoo = "nodelocal://1/foo"
@@ -129,6 +131,7 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 // that we've already seen before.
 func TestRunGenerativeSplitAndScatterRandomizedDestOnFailScatter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
 	const localFoo = "nodelocal://0/foo"
