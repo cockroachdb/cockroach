@@ -400,6 +400,7 @@ type AuthConn interface {
 	LogAuthFailed(ctx context.Context, reason eventpb.AuthFailReason, err error)
 	// LogAuthOK logs when the authentication handshake has completed.
 	LogAuthOK(ctx context.Context)
+	GetTenantSpecificMetrics() *tenantSpecificMetrics
 }
 
 // authPipe is the implementation for the authenticator and AuthConn interfaces.
@@ -445,6 +446,10 @@ func newAuthPipe(
 
 var _ authenticatorIO = &authPipe{}
 var _ AuthConn = &authPipe{}
+
+func (p *authPipe) GetTenantSpecificMetrics() *tenantSpecificMetrics {
+	return p.c.metrics
+}
 
 func (p *authPipe) sendPwdData(data []byte) error {
 	select {

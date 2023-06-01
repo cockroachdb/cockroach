@@ -232,7 +232,11 @@ func IsTenantCertificate(cert *x509.Certificate) bool {
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
 func UserAuthPasswordHook(
-	insecureMode bool, passwordStr string, hashedPassword password.PasswordHash,
+	insecureMode bool,
+	passwordStr string,
+	hashedPassword password.PasswordHash,
+	preAcquireSem func(),
+	postReleaseSem func(),
 ) UserAuthHook {
 	return func(ctx context.Context, systemIdentity username.SQLUsername, clientConnection bool) error {
 		if systemIdentity.Undefined() {
@@ -252,7 +256,7 @@ func UserAuthPasswordHook(
 			return NewErrPasswordUserAuthFailed(systemIdentity)
 		}
 		ok, err := password.CompareHashAndCleartextPassword(ctx,
-			hashedPassword, passwordStr, GetExpensiveHashComputeSem(ctx))
+			hashedPassword, passwordStr, GetExpensiveHashComputeSemWithHooks(ctx, preAcquireSem, postReleaseSem))
 		if err != nil {
 			return err
 		}

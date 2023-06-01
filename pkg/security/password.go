@@ -209,8 +209,7 @@ var expensiveHashComputeSemOnce struct {
 // Otherwise, a default is computed from the configure GOMAXPROCS.
 var envMaxHashComputeConcurrency = envutil.EnvOrDefaultInt("COCKROACH_MAX_PW_HASH_COMPUTE_CONCURRENCY", 0)
 
-// GetExpensiveHashComputeSem retrieves the hashing semaphore.
-func GetExpensiveHashComputeSem(ctx context.Context) password.HashSemaphore {
+func maybeInitializeSem(ctx context.Context) {
 	expensiveHashComputeSemOnce.once.Do(func() {
 		var n int
 		if envMaxHashComputeConcurrency >= 1 {
@@ -228,11 +227,36 @@ func GetExpensiveHashComputeSem(ctx context.Context) password.HashSemaphore {
 		log.VInfof(ctx, 1, "configured maximum hashing concurrency: %d", n)
 		expensiveHashComputeSemOnce.sem = quotapool.NewIntPool("password_hashes", uint64(n))
 	})
+}
+
+// GetExpensiveHashComputeSem retrieves the hashing semaphore.
+func GetExpensiveHashComputeSem(ctx context.Context) password.HashSemaphore {
+	maybeInitializeSem(ctx)
 	return func(ctx context.Context) (func(), error) {
 		alloc, err := expensiveHashComputeSemOnce.sem.Acquire(ctx, 1)
 		if err != nil {
 			return nil, err
 		}
 		return alloc.Release, nil
+	}
+}
+
+// GetExpensiveHashComputeSemWithHooks retrieves the hashing semaphore and
+// allows pre and post hooks to be specified.
+func GetExpensiveHashComputeSemWithHooks(
+	ctx context.Context, preAcquireHook func(), postReleaseHook func(),
+) password.HashSemaphore {
+	maybeInitializeSem(ctx)
+	return func(ctx context.Context) (func(), error) {
+		preAcquireHook()
+		alloc, err := expensiveHashComputeSemOnce.sem.Acquire(ctx, 1)
+		if err != nil {
+			return nil, err
+		}
+		cleanup := func() {
+			alloc.Release()
+			postReleaseHook()
+		}
+		return cleanup, nil
 	}
 }
