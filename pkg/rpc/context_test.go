@@ -2607,14 +2607,20 @@ func checkMetrics(m *Metrics, healthy, unhealthy int64, checkDurations bool) err
 		return nil
 	}
 
-	if hf := m.ConnectionHealthyFor.Value(); (healthy > 0) != (hf != 0) {
+	// HealthyFor is nonzero if and only if there is at least one healthy connection, since it's
+	// the sum of the connections' HealthyFor, and on a connection this is nonzero if and only
+	// if the connection is healthy.
+	if hf := m.ConnectionHealthyFor.Value(); (hf > 0) != (healthy > 0) {
 		return errors.Errorf("#healthy is %d but ConnectionHealthyFor is %v", healthy, hf)
 	}
-	if uf := m.ConnectionUnhealthyFor.Value(); (unhealthy > 0) != (uf != 0) {
+	// UnhealthyFor is nonzero if and only if there is at least one unhealthy connection, for the
+	// same reasons as above.
+	if uf := m.ConnectionUnhealthyFor.Value(); (uf > 0) != (unhealthy > 0) {
 		return errors.Errorf("#unhealthy is %d but ConnectionUnHealthyFor is %v", unhealthy, uf)
 	}
 
-	if v := m.ConnectionAvgRoundTripLatency.Value(); (healthy > 0) != (v > 0) {
+	// Similar to the two above, only healthy connections should maintain the avg round-trip latency.
+	if v := m.ConnectionAvgRoundTripLatency.Value(); (v > 0) != (healthy > 0) {
 		return errors.Errorf("ConnectionAvgRoundTripLatency = %v", v)
 	}
 
