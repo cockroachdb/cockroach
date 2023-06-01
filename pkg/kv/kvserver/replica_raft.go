@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -78,6 +79,18 @@ var (
 	raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
 		"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
 )
+
+// raftCampaignWait is the maximum duration to randomly wait when explicitly
+// campaigning and requesting waiting via campaignWaitLocked(). This avoids ties
+// when many replicas campaign simultaneously.
+//
+// This waiting may be done while holding raftMu, so it needs to be short enough
+// to not excessively delay raft processing, but long enough to avoid election
+// ties even on high-latency networks.
+//
+// This does not affect Raft's standard elections, which always wait a random
+// duration in the interval [electionTimeout, 2*electionTimeout).
+const raftCampaignWait = 50 * time.Millisecond
 
 func makeIDKey() kvserverbase.CmdIDKey {
 	idKeyBuf := make([]byte, 0, raftlog.RaftCommandIDLen)
@@ -1166,12 +1179,21 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
 		if stats.apply.numConfChangeEntries > 0 {
-			// If the raft leader got removed, campaign the first remaining voter.
+			// If the raft leader got removed, the remaining voters should campaign.
+			// With PreVote+CheckQuorum, followers will not grant prevotes if they
+			// have heard from a leader in the past election timeout interval, but
+			// a quorum transitioning to (pre)candidate can still hold an election
+			// immediately.
+			//
+			// To avoid election ties, wait a random duration first. The replica mutex
+			// is released while waiting, but we hold onto the raft mutex, which in
+			// particular means that any further (pre)vote requests that arrive while
+			// waiting won't be processed until we've transitioned to pre-candidate.
 			//
 			// NB: this must be called after Advance() above since campaigning is
 			// a no-op in the presence of unapplied conf changes.
 			if shouldCampaignAfterConfChange(ctx, r.store.StoreID(), r.descRLocked(), raftGroup) {
-				r.campaignLocked(ctx)
+				r.campaignWaitLocked(ctx)
 			}
 		}
 
@@ -2051,6 +2073,10 @@ func (s pendingCmdSlice) Less(i, j int) bool {
 // leader awoken). See handleRaftReady for an instance of where this value
 // varies.
 //
+// If mayCampaignOnWake is true, then a lazily initialized Raft group will
+// campaign when created. If the replica unquiesces then it will always campaign
+// when appropriate, regardless of this parameter.
+//
 // Requires that Replica.mu is held.
 //
 // If this Replica is in the process of being removed this method will return
@@ -2183,9 +2209,19 @@ func shouldCampaignOnWake(
 	return !livenessEntry.IsLive
 }
 
-// maybeCampaignOnWakeLocked is called when the range wakes from a
-// dormant state (either the initial "raftGroup == nil" state or after
-// being quiescent) and campaigns for raft leadership if appropriate.
+// maybeCampaignOnWakeLocked is called when the range wakes from a dormant state
+// (either the initial "raftGroup == nil" state or after being quiescent) and
+// campaigns for raft leadership if appropriate.
+//
+// If PreVote and CheckQuorum are enabled, prevotes will not be granted if the
+// voter has heard from a leader in the past election timeout interval. This
+// prevents spurious elections, and with partial or asymmetric network
+// partition, stealing leadership away to a node that the leaseholder may not be
+// able to reach, which would cause permanent unavailability. This may delay an
+// election when unquiescing, since Raft time does not pass when quiesced.
+// However, only followers enforce the recent leader condition, so if a quorum
+// of followers consider the leader dead and choose to become pre-candidates and
+// campaign then they can hold an election immediately.
 func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	// Raft panics if a node that is not currently a member of the
 	// group tries to campaign. This method should never be called
@@ -2222,6 +2258,14 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 // calling a Raft pre-vote election, the follower can determine whether it is
 // behind on its log without risking disruption. If not, it will eventually
 // become leader and can proceed with a future attempt to acquire the lease.
+//
+// With CheckQuorum, which in etcd/raft also enables the PreVote recent leader
+// condition, prevotes will not be granted by followers who have heard from the
+// leader in the last election timeout interval. However, (pre)candidates will
+// grant prevotes despite a recent leader, so if a quorum of followers choose to
+// campaign (i.e. a quorum of followers call this function with a non-live
+// leader), then they will be able to hold an election without waiting out the
+// election timeout.
 func shouldCampaignOnLeaseRequestRedirect(
 	raftStatus raft.BasicStatus,
 	livenessMap livenesspb.IsLiveMap,
@@ -2274,12 +2318,61 @@ func shouldCampaignOnLeaseRequestRedirect(
 	return !livenessEntry.Liveness.IsLive(now)
 }
 
+// campaignLocked campaigns for raft leadership, using PreVote and, if
+// CheckQuorum is enabled, the recent leader condition. In other words, voters
+// will not grant prevotes if we're behind on the log and, with CheckQuorum, if
+// they've heard from a leader in the past election timeout interval.
+//
+// The CheckQuorum condition can delay elections, particularly with quiesced
+// ranges that don't tick. However, it is necessary to avoid spurious elections
+// and stolen leaderships during partial/asymmetric network partitions, which
+// can lead to permanent unavailability if the leaseholder can no longer reach
+// the leader.
+//
+// Only followers enforce the CheckQuorum recent leader condition though, so if
+// a quorum of followers consider the leader dead and choose to become
+// pre-candidates and campaign then they will grant prevotes and can hold an
+// election without waiting out the election timeout.
+//
+// This should only be called when there is very strong reason to believe the
+// current leader is dead, since it may otherwise lead to unavailability as
+// described above.
 func (r *Replica) campaignLocked(ctx context.Context) {
 	log.VEventf(ctx, 3, "campaigning")
 	if err := r.mu.internalRaftGroup.Campaign(); err != nil {
 		log.VEventf(ctx, 1, "failed to campaign: %s", err)
 	}
 	r.store.enqueueRaftUpdateCheck(r.RangeID)
+}
+
+// campaignWaitLocked campaigns for raft leadership, but only after waiting a
+// random duration up to raftCampaignWait to avoid election ties when many
+// replicas are likely to campaign at the same time. The replica mutex is
+// released while waiting.
+func (r *Replica) campaignWaitLocked(ctx context.Context) {
+	err := func() error {
+		r.mu.Unlock()
+		defer r.mu.Lock()
+
+		delay := (time.Duration(randutil.FastUint32()) * time.Millisecond) % raftCampaignWait
+		log.VEventf(ctx, 3, "waiting %s to campaign", delay)
+
+		timer := timeutil.NewTimer()
+		timer.Reset(delay)
+		defer timer.Stop()
+
+		select {
+		case <-timer.C:
+			timer.Read = true
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}()
+	if err != nil {
+		log.VEventf(ctx, 3, "failed to campaign: %s", err)
+	}
+	r.campaignLocked(ctx)
 }
 
 // a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
@@ -2588,19 +2681,15 @@ func shouldCampaignAfterConfChange(
 		return false
 	}
 	if !desc.IsInitialized() {
-		// We don't have an initialized, so we can't figure out who is supposed
-		// to campaign. It's possible that it's us and we're waiting for the
-		// initial snapshot, but it's hard to tell. Don't do anything.
+		// Without a descriptor, we can't tell if the leader was removed.
 		return false
 	}
-	// If the leader is no longer in the descriptor but we are the first voter,
-	// campaign.
-	_, leaderStillThere := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead))
-	if !leaderStillThere && storeID == desc.Replicas().VoterDescriptors()[0].StoreID {
-		log.VEventf(ctx, 3, "leader got removed by conf change")
-		return true
+	if _, ok := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead)); ok {
+		// The leader is still in the descriptor.
+		return false
 	}
-	return false
+	log.VEventf(ctx, 3, "leader got removed by conf change")
+	return true
 }
 
 // printRaftTail pretty-prints the tail of the log and returns it as a string,

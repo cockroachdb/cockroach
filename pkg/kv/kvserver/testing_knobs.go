@@ -245,6 +245,10 @@ type StoreTestingKnobs struct {
 	// spin attempting to acquire a split or merge lock on a RHS which will
 	// always fail and is generally not safe but is useful for testing.
 	DisableEagerReplicaRemoval bool
+	// DisableLivenessMapConnHealth disables the ConnHealth check in
+	// updateIsLiveMap, which is useful in tests where we manipulate the node's
+	// liveness record but still keep the connection alive.
+	DisableLivenessMapConnHealth bool
 	// RefreshReasonTicksPeriod overrides the default period over which
 	// pending commands are refreshed. The period is specified as a multiple
 	// of Raft group ticks.

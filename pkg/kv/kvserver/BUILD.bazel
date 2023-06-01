@@ -209,6 +209,7 @@ go_library(
         "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
+        "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/shuffle",
         "//pkg/util/slidingwindow",
