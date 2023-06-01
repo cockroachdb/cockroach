@@ -14,10 +14,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -164,6 +166,39 @@ func GetStreamIngestionStatsNoHeartbeat(
 
 func ReplicatedTimeFromProgress(p *jobspb.Progress) hlc.Timestamp {
 	return p.Details.(*jobspb.Progress_StreamIngest).StreamIngest.ReplicatedTime
+}
+
+// LoadIngestionProgress loads the latest persisted stream ingestion progress.
+// The method returns nil if the progress does not exist yet.
+func LoadIngestionProgress(
+	ctx context.Context, db isql.DB, jobID jobspb.JobID,
+) (*jobspb.StreamIngestionProgress, error) {
+	var (
+		progressBytes []byte
+		exists        bool
+	)
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := jobs.InfoStorageForJob(txn, jobID)
+		var err error
+		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, nil
+	}
+	progress := &jobspb.Progress{}
+	if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
+		return nil, err
+	}
+
+	sp, ok := progress.GetDetails().(*jobspb.Progress_StreamIngest)
+	if !ok {
+		return nil, errors.Newf("unknown progress details type %T in stream ingestion job %d",
+			progress.GetDetails(), jobID)
+	}
+	return sp.StreamIngest, nil
 }
 
 func GetStreamIngestionStats(

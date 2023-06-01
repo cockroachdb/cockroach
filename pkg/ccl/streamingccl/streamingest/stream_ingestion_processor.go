@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1160,39 +1159,8 @@ type cutoverFromJobProgress struct {
 	jobID jobspb.JobID
 }
 
-func (c *cutoverFromJobProgress) loadIngestionProgress(
-	ctx context.Context,
-) (*jobspb.StreamIngestionProgress, error) {
-	var (
-		progressBytes []byte
-		exists        bool
-	)
-	if err := c.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := jobs.InfoStorageForJob(txn, c.jobID)
-		var err error
-		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, nil
-	}
-	progress := &jobspb.Progress{}
-	if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
-		return nil, err
-	}
-
-	sp, ok := progress.GetDetails().(*jobspb.Progress_StreamIngest)
-	if !ok {
-		return nil, errors.Newf("unknown progress details type %T in stream ingestion job %d",
-			progress.GetDetails(), c.jobID)
-	}
-	return sp.StreamIngest, nil
-}
-
 func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, error) {
-	ingestionProgress, err := c.loadIngestionProgress(ctx)
+	ingestionProgress, err := replicationutils.LoadIngestionProgress(ctx, c.db, c.jobID)
 	if err != nil {
 		return false, err
 	}
