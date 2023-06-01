@@ -36,30 +36,33 @@ func registerFailover(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:    "failover/partial/lease-gateway" + suffix,
-			Owner:   registry.OwnerKV,
-			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(8, spec.CPU(4)),
+			Name:      "failover/partial/lease-gateway" + suffix,
+			Owner:     registry.OwnerKV,
+			Benchmark: true,
+			Timeout:   30 * time.Minute,
+			Cluster:   r.MakeClusterSpec(8, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverPartialLeaseGateway(ctx, t, c, expirationLeases)
 			},
 		})
 
 		r.Add(registry.TestSpec{
-			Name:    "failover/partial/lease-leader" + suffix,
-			Owner:   registry.OwnerKV,
-			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(7, spec.CPU(4)),
+			Name:      "failover/partial/lease-leader" + suffix,
+			Owner:     registry.OwnerKV,
+			Benchmark: true,
+			Timeout:   30 * time.Minute,
+			Cluster:   r.MakeClusterSpec(7, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverPartialLeaseLeader(ctx, t, c, expirationLeases)
 			},
 		})
 
 		r.Add(registry.TestSpec{
-			Name:    "failover/partial/lease-liveness" + suffix,
-			Owner:   registry.OwnerKV,
-			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(8, spec.CPU(4)),
+			Name:      "failover/partial/lease-liveness" + suffix,
+			Owner:     registry.OwnerKV,
+			Benchmark: true,
+			Timeout:   30 * time.Minute,
+			Cluster:   r.MakeClusterSpec(8, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverPartialLeaseLiveness(ctx, t, c, expirationLeases)
 			},
@@ -84,28 +87,34 @@ func registerFailover(r registry.Registry) {
 				return s
 			}
 			r.Add(registry.TestSpec{
-				Name:    fmt.Sprintf("failover/non-system/%s%s", failureMode, suffix),
-				Owner:   registry.OwnerKV,
-				Timeout: 30 * time.Minute,
-				Cluster: makeSpec(7 /* nodes */, 4 /* cpus */),
+				Name:      fmt.Sprintf("failover/non-system/%s%s", failureMode, suffix),
+				Owner:     registry.OwnerKV,
+				Benchmark: true,
+				Timeout:   30 * time.Minute,
+				Cluster:   makeSpec(7 /* nodes */, 4 /* cpus */),
+
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode, expirationLeases)
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:    fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
-				Owner:   registry.OwnerKV,
-				Timeout: 30 * time.Minute,
-				Cluster: makeSpec(5 /* nodes */, 4 /* cpus */),
+				Name:      fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
+				Owner:     registry.OwnerKV,
+				Benchmark: true,
+				Timeout:   30 * time.Minute,
+				Cluster:   makeSpec(5 /* nodes */, 4 /* cpus */),
+
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverLiveness(ctx, t, c, failureMode, expirationLeases)
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:    fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
-				Owner:   registry.OwnerKV,
-				Timeout: 30 * time.Minute,
-				Cluster: makeSpec(7 /* nodes */, 4 /* cpus */),
+				Name:      fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
+				Owner:     registry.OwnerKV,
+				Benchmark: true,
+				Timeout:   30 * time.Minute,
+				Cluster:   makeSpec(7 /* nodes */, 4 /* cpus */),
+
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverSystemNonLiveness(ctx, t, c, failureMode, expirationLeases)
 				},

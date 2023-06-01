@@ -778,7 +778,9 @@ func (r *testRunner) runWorker(
 			}
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
-			getPerfArtifacts(ctx, l, c, t)
+			if t.spec.Benchmark {
+				getPerfArtifacts(ctx, l, c, t)
+			}
 			if debugMode == DebugKeepAlways {
 				c.Save(ctx, "cluster saved since --debug-always set", l)
 				c = nil

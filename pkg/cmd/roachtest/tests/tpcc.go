@@ -1115,6 +1115,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	r.Add(registry.TestSpec{
 		Name:              name,
 		Owner:             owner,
+		Benchmark:         true,
 		Cluster:           nodes,
 		Tags:              b.Tags,
 		EncryptionSupport: encryptionSupport,
