@@ -27,24 +27,12 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
-type breakerProbe struct {
-	*peer
-	k            peerKey
-	remoteClocks *RemoteClockMonitor
-	opts         ContextOptions
-	// NB: lock order: peers.mu then peers.mu.m[k].mu (but better to avoid
-	// overlapping critical sections)
-	peers             *peerMap
-	dial              func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error)
-	heartbeatInterval time.Duration
-	heartbeatTimeout  time.Duration
-}
-
-func (p *breakerProbe) disabled() bool {
+// TODO(during review): when dust has settled, rename to breakerDisabled().
+func (p *peer) disabled() bool {
 	return !enableRPCCircuitBreakers.Get(&p.opts.Settings.SV)
 }
 
-func (p *breakerProbe) launch(ctx context.Context, report func(error), done func()) {
+func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 	// Acquire mu just to show that we can, as the caller is supposed
 	// to not hold the lock.
 	p.mu.Lock()
@@ -79,7 +67,7 @@ func (p *breakerProbe) launch(ctx context.Context, report func(error), done func
 	}
 }
 
-func (p *breakerProbe) run(ctx context.Context, report func(error), done func()) {
+func (p *peer) run(ctx context.Context, report func(error), done func()) {
 	var t timeutil.Timer
 	defer t.Stop()
 	defer done()
@@ -140,7 +128,7 @@ func (p *breakerProbe) run(ctx context.Context, report func(error), done func())
 	}
 }
 
-func (p *breakerProbe) onHeartbeatFailed(
+func (p *peer) onHeartbeatFailed(
 	ctx context.Context, err error, now time.Time, report func(err error),
 ) {
 	prevErr := p.b.Signal().Err()
@@ -215,7 +203,7 @@ func (p *breakerProbe) onHeartbeatFailed(
 	p.ConnectionFailures.Inc(1)
 }
 
-func (p *breakerProbe) maybeDelete(now time.Time) {
+func (p *peer) maybeDelete(now time.Time) {
 	// If the peer can be deleted, delete it now.
 	//
 	// Also delete unconditionally if circuit breakers are (now) disabled. We want
@@ -248,7 +236,7 @@ func (p *breakerProbe) maybeDelete(now time.Time) {
 	p.peers.mu.Unlock()
 }
 
-func (p *breakerProbe) onInitialHeartbeatSucceeded(
+func (p *peer) onInitialHeartbeatSucceeded(
 	ctx context.Context, now time.Time, cc *grpc.ClientConn, report func(err error),
 ) {
 	// First heartbeat succeeded. By convention we update the breaker
@@ -280,7 +268,7 @@ func (p *breakerProbe) onInitialHeartbeatSucceeded(
 	logOnHealthy(ctx, p.mu.disconnected, now)
 }
 
-func (p *breakerProbe) onSubsequentHeartbeatSucceeded(_ context.Context, now time.Time) {
+func (p *peer) onSubsequentHeartbeatSucceeded(_ context.Context, now time.Time) {
 	// Gauge updates.
 	// ConnectionHealthy is already one.
 	// ConnectionUnhealthy is already zero.
@@ -293,7 +281,7 @@ func (p *breakerProbe) onSubsequentHeartbeatSucceeded(_ context.Context, now tim
 	// ConnectionFailures is not updated here.
 }
 
-func (p *breakerProbe) runOnce(ctx context.Context, report func(error)) error {
+func (p *peer) runOnce(ctx context.Context, report func(error)) error {
 	cc, err := p.dial(ctx, p.k.TargetAddr, p.k.Class)
 	if err != nil {
 		return err

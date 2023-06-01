@@ -30,6 +30,11 @@ import (
 // can be re-established.
 type peer struct {
 	peerMetrics
+	k                 peerKey
+	opts              *ContextOptions
+	heartbeatInterval time.Duration
+	heartbeatTimeout  time.Duration
+	dial              func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error)
 	// b maintains connection health. This breaker's async probe is always
 	// active - it is the heartbeat loop and manages `mu.c.` (including
 	// recreating it after the connection fails and has to be redialed).
@@ -56,6 +61,10 @@ type peer struct {
 		// is never mutated in place.
 		PeerSnap
 	}
+	remoteClocks *RemoteClockMonitor
+	// NB: lock order: peers.mu then peers.mu.m[k].mu (but better to avoid
+	// overlapping critical sections)
+	peers *peerMap
 }
 
 // PeerSnap is the state of a peer.
@@ -155,27 +164,24 @@ func (rpcCtx *Context) newPeer(k peerKey) *peer {
 	p := &peer{
 		peerMetrics:        rpcCtx.metrics.acquire(k),
 		logDisconnectEvery: log.Every(time.Minute),
-	}
-	var b *circuit.Breaker
-	probe := breakerProbe{
-		peer:         p,
-		k:            k,
-		remoteClocks: rpcCtx.RemoteClocks,
-		opts:         rpcCtx.ContextOptions,
-		peers:        &rpcCtx.peers,
+		k:                  k,
+		remoteClocks:       rpcCtx.RemoteClocks,
+		opts:               &rpcCtx.ContextOptions,
+		peers:              &rpcCtx.peers,
 		dial: func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error) {
 			return rpcCtx.grpcDialRaw(ctx, target, class, rpcCtx.testingDialOpts...)
 		},
 		heartbeatInterval: rpcCtx.heartbeatInterval,
 		heartbeatTimeout:  rpcCtx.heartbeatTimeout,
 	}
+	var b *circuit.Breaker
 
 	ctx := rpcCtx.makeDialCtx(k.TargetAddr, k.NodeID, k.Class)
 	b = circuit.NewBreaker(circuit.Options{
 		Name: "breaker", // log tags already represent `k`
 		AsyncProbe: func(report func(error), done func()) {
 			pprof.Do(ctx, pprof.Labels("tags", logtags.FromContext(ctx).String()), func(ctx context.Context) {
-				probe.launch(ctx, report, done)
+				p.launch(ctx, report, done)
 			})
 		},
 		// Use a noop EventHandler; we do our own logging in the probe since we'll
