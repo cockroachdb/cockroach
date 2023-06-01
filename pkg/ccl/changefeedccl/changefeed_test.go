@@ -6088,6 +6088,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 				DistSQL: &execinfra.TestingKnobs{
 					DrainFast: true,
 					Changefeed: &TestingKnobs{
+						EnableParquetMetadata: true,
 						// Filter out draining nodes; normally we rely on dist sql planner
 						// to do that for us.
 						FilterDrainingNodes: func(
