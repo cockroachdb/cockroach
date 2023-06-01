@@ -146,7 +146,8 @@ func (c *TenantStreamingClusters) RequireDestinationFingerprintAtTimestamp(
 func FingerprintTenantAtTimestampNoHistory(
 	t sqlutils.Fataler, db *sqlutils.SQLRunner, tenantID uint64, timestamp string,
 ) string {
-	fingerprintQuery := fmt.Sprintf("SELECT * FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), 0::TIMESTAMPTZ, false) AS OF SYSTEM TIME %s", timestamp)
+	fingerprintQuery := fmt.Sprintf("SELECT * FROM crdb_internal.fingerprint(crdb_internal."+
+		"tenant_span($1::INT), 0::DECIMAL, false) AS OF SYSTEM TIME %s", timestamp)
 	return db.QueryStr(t, fingerprintQuery, tenantID)[0][0]
 }
 
