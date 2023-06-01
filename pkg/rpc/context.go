@@ -441,7 +441,11 @@ func (c *Connection) waitOrDefault(
 }
 
 // Connect returns the underlying grpc.ClientConn after it has been validated,
-// or an error if dialing or validation fails.
+// or an error if dialing or validation fails. Connect implements circuit
+// breaking, i.e. there is a circuit breaker for each peer and if the breaker is
+// tripped (which happens when a heartbeat fails), Connect will fail-fast with
+// an error. In rare cases, this behavior is undesired and ConnectNoBreaker may
+// be used instead.
 func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	return c.waitOrDefault(ctx, nil /* defErr */, c.breakerSignalFn())
 }
@@ -457,8 +461,9 @@ func (s *neverTripSignal) C() <-chan struct{} {
 }
 
 // ConnectNoBreaker is like Connect but bypasses the circuit breaker, meaning
-// that it will latch onto an existing connection attempt even if previous
-// attempts have not succeeded.
+// that it will latch onto (or start) an existing connection attempt even if
+// previous attempts have not succeeded. This may be preferable to Connect
+// if the caller is already certain that a peer is available.
 func (c *Connection) ConnectNoBreaker(ctx context.Context) (*grpc.ClientConn, error) {
 	// For ConnectNoBreaker we don't use the default Signal but pass a dummy one
 	// that never trips. (The probe tears down the Conn on quiesce so we don't rely
