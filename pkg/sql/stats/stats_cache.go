@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -823,7 +824,12 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 
 	if forecast {
 		forecasts := ForecastTableStatistics(ctx, statsList)
-		statsList = append(forecasts, statsList...)
+		statsList = append(statsList, forecasts...)
+		// Some forecasts could have a CreatedAt time before or after some collected
+		// stats, so make sure the list is sorted in descending CreatedAt order.
+		sort.SliceStable(statsList, func(i, j int) bool {
+			return statsList[i].CreatedAt.After(statsList[j].CreatedAt)
+		})
 	}
 
 	return statsList, nil

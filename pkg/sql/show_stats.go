@@ -14,6 +14,7 @@ import (
 	"context"
 	encjson "encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -236,14 +237,24 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 				if withForecast {
 					forecasts := stats.ForecastTableStatistics(ctx, statsList)
+					forecastRows := make([]tree.Datums, 0, len(forecasts))
 					// Iterate in reverse order to match the ORDER BY "columnIDs".
 					for i := len(forecasts) - 1; i >= 0; i-- {
 						forecastRow, err := tableStatisticProtoToRow(&forecasts[i].TableStatisticProto, partialStatsVerActive)
 						if err != nil {
 							return nil, err
 						}
-						rows = append(rows, forecastRow)
+						forecastRows = append(forecastRows, forecastRow)
 					}
+					rows = append(forecastRows, rows...)
+					// Some forecasts could have a CreatedAt time before or after some
+					// collected stats, so make sure the list is sorted in ascending
+					// CreatedAt order.
+					sort.SliceStable(rows, func(i, j int) bool {
+						iTime := rows[i][createdAtIdx].(*tree.DTimestamp).Time
+						jTime := rows[j][createdAtIdx].(*tree.DTimestamp).Time
+						return iTime.Before(jTime)
+					})
 				}
 			}
 
