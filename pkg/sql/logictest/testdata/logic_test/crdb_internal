@@ -1244,7 +1244,8 @@ SELECT crdb_internal.unsafe_clear_gossip_info('unknown key')
 ----
 false
 
-# Verify users with VIEWCLUSTERSETTING, MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING can view non sql.defaults cluster settings.
+# Verify users with VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING can view non sql.defaults cluster settings.
+# Verify users with MODIFYSQLCLUSTERSETTING can only view sql.defaults cluster settings.
 
 user root
 
@@ -1323,9 +1324,15 @@ user testuser
 
 skipif config local-mixed-22.2-23.1
 query T
-SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('sql.defaults.zigzag_join.enabled')
 ----
 true
+
+skipif config local-mixed-22.2-23.1
+query T
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
+
 
 user root
 

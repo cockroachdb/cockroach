@@ -2066,9 +2066,11 @@ CREATE TABLE crdb_internal.cluster_settings (
   description   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasAdmin, adminErr := p.HasAdminRole(ctx)
+		hasSqlModify, sqlModifyErr := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User())
 		if hasPriv, err := func() (bool, error) {
-			if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
-				return false, err
+			if adminErr != nil {
+				return false, adminErr
 			} else if hasAdmin {
 				return true, nil
 			}
@@ -2077,8 +2079,8 @@ CREATE TABLE crdb_internal.cluster_settings (
 			} else if hasModify {
 				return true, nil
 			}
-			if hasSqlModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User()); err != nil {
-				return false, err
+			if sqlModifyErr != nil {
+				return false, sqlModifyErr
 			} else if hasSqlModify {
 				return true, nil
 			}
@@ -2106,6 +2108,10 @@ CREATE TABLE crdb_internal.cluster_settings (
 					"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
+			// If the user has specifically MODIFYSQLCLUSTERSETTING, hide non-sql.defaults settings.
+			if !hasAdmin && hasSqlModify && !strings.HasPrefix(k, "sql.defaults") {
+				continue
+			}
 			setting, _ := settings.LookupForLocalAccess(k, p.ExecCfg().Codec.ForSystemTenant())
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public

@@ -88,7 +88,7 @@ user testuser
 statement error only users with the MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
 SET CLUSTER SETTING sql.defaults.default_int_size = 4
 
-# Users with MODIFYSQLCLUSTERSETTING system privilege should be able to see all cluster settings and modify only sql.defaults settings.
+# Users with MODIFYSQLCLUSTERSETTING system privilege should be able to see and modify only sql.defaults settings.
 user root
 
 skipif config local-mixed-22.2-23.1
@@ -100,6 +100,10 @@ user testuser
 skipif config local-mixed-22.2-23.1
 statement ok
 SHOW CLUSTER SETTINGS
+
+skipif config local-mixed-22.2-23.1
+statement error pq: users with the MODIFYSQLCLUSTERSETTING privilege are not allowed to show cluster setting 'diagnostics.reporting.enabled'
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
 
 skipif config local-mixed-22.2-23.1
 statement ok

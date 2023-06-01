@@ -105,8 +105,8 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 
 	// The "set" action requires MODIFYCLUSTERSETTING or at least MODIFYSQLCLUSTERSETTING if
 	// the setting is a sql.defaults setting.
+	isSqlSetting := strings.HasPrefix(name, "sql.defaults")
 	if action == "set" && !hasModify {
-		isSqlSetting := strings.HasPrefix(name, "sql.defaults")
 		if hasSqlModify && isSqlSetting {
 			return nil
 		} else if !isSqlSetting {
@@ -132,6 +132,10 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only users with %s, %s or %s privileges are allowed to %s cluster setting '%s'",
 			privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, privilege.VIEWCLUSTERSETTING, action, name)
+	} else if action == "show" && !hasModify && hasSqlModify && !isSqlSetting {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"users with the %s privilege are not allowed to %s cluster setting '%s'",
+			privilege.MODIFYSQLCLUSTERSETTING, action, name)
 	}
 	return nil
 }
