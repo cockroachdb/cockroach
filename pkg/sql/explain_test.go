@@ -323,11 +323,10 @@ func TestExplainStatsCollected(t *testing.T) {
 	}
 }
 
-// TestExplainMVCCSteps makes sure that the MVCC stats are properly collected
-// during explain analyze. This can't be a normal logic test because the MVCC
-// stats are marked as nondeterministic (they change depending on number of
-// nodes in the query).
-func TestExplainMVCCSteps(t *testing.T) {
+// TestExplainKVInfo makes sure that miscellaneous KV-level stats are properly
+// collected during EXPLAIN ANALYZE. This can't be a normal logic test because
+// KV-level stats are marked as non-deterministic.
+func TestExplainKVInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -338,6 +337,8 @@ func TestExplainMVCCSteps(t *testing.T) {
 	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
+	r.Exec(t, "CREATE TABLE ab (a PRIMARY KEY, b) AS SELECT g, g FROM generate_series(1,1000) g(g)")
+	r.Exec(t, "CREATE TABLE bc (b PRIMARY KEY, c) AS SELECT g, g FROM generate_series(1,1000) g(g)")
 
 	for _, vectorize := range []bool{true, false} {
 		if vectorize {
@@ -345,50 +346,68 @@ func TestExplainMVCCSteps(t *testing.T) {
 		} else {
 			r.Exec(t, "SET vectorize = off")
 		}
-		r.Exec(t, "DROP TABLE IF EXISTS ab")
-		r.Exec(t, "DROP TABLE IF EXISTS bc")
-		r.Exec(t, "CREATE TABLE ab (a PRIMARY KEY, b) AS SELECT g, g FROM generate_series(1,1000) g(g)")
-		r.Exec(t, "CREATE TABLE bc (b PRIMARY KEY, c) AS SELECT g, g FROM generate_series(1,1000) g(g)")
+		for _, streamer := range []bool{true, false} {
+			if streamer {
+				r.Exec(t, "SET streamer_enabled = true")
+			} else {
+				r.Exec(t, "SET streamer_enabled = false")
+			}
 
-		scanQuery := "SELECT count(*) FROM ab"
-		expectedSteps, expectedSeeks := 1000, 1
-		foundSteps, foundSeeks := getMVCCStats(t, r, scanQuery)
+			scanQuery := "SELECT count(*) FROM ab"
+			info := getKVInfo(t, r, scanQuery)
 
-		assert.Equal(t, expectedSteps, foundSteps)
-		assert.Equal(t, expectedSeeks, foundSeeks)
-		assert.Equal(t, expectedSteps, foundSteps)
-		assert.Equal(t, expectedSeeks, foundSeeks)
+			assert.Equal(t, 1000, info.counters[rowsRead])
+			assert.LessOrEqual(t, 31 /* KiB */, info.counters[bytesRead])
+			assert.Equal(t, 1, info.counters[gRPCCalls])
+			assert.Equal(t, 1000, info.counters[stepCount])
+			assert.Equal(t, 1, info.counters[seekCount])
 
-		// Update all rows.
-		r.Exec(t, "UPDATE ab SET b=b+1 WHERE true")
+			lookupJoinQuery := "SELECT count(*) FROM ab INNER LOOKUP JOIN bc ON ab.b = bc.b"
+			info = getKVInfo(t, r, lookupJoinQuery)
 
-		expectedSteps, expectedSeeks = 1000, 1
-		foundSteps, foundSeeks = getMVCCStats(t, r, scanQuery)
-
-		assert.Equal(t, expectedSteps, foundSteps)
-		assert.Equal(t, expectedSeeks, foundSeeks)
-
-		// Check that the lookup join (which is executed via a row-by-row
-		// processor wrapped into the vectorized flow when vectorize=true)
-		// correctly propagates the scan stats.
-		lookupJoinQuery := "SELECT count(*) FROM ab INNER LOOKUP JOIN bc ON ab.b = bc.b"
-		foundSteps, foundSeeks = getMVCCStats(t, r, lookupJoinQuery)
-		// We're mainly interested in the fact whether the propagation takes
-		// place, so one of the values being positive is sufficient.
-		assert.Greater(t, foundSteps+foundSeeks, 0)
+			assert.Equal(t, 1000, info.counters[rowsRead])
+			assert.LessOrEqual(t, 13 /* KiB */, info.counters[bytesRead])
+			assert.Equal(t, 1, info.counters[gRPCCalls])
+			assert.Equal(t, 0, info.counters[stepCount])
+			assert.Equal(t, 1000, info.counters[seekCount])
+		}
 	}
 }
 
-// getMVCCStats returns the number of MVCC steps and seeks found in the EXPLAIN
-// ANALYZE of the given query from the top-most operator in the plan (i.e. if
-// there are multiple operators exposing the scan stats, then the first info
-// that appears in the EXPLAIN output is used).
-func getMVCCStats(t *testing.T, r *sqlutils.SQLRunner, query string) (foundSteps, foundSeeks int) {
-	rows := r.Query(t, "EXPLAIN ANALYZE(VERBOSE) "+query)
+const (
+	rowsRead = iota
+	bytesRead
+	gRPCCalls
+	stepCount
+	seekCount
+	numKVCounters
+)
+
+type kvInfo struct {
+	counters [numKVCounters]int
+}
+
+var patterns [numKVCounters]*regexp.Regexp
+
+func init() {
+	patterns[rowsRead] = regexp.MustCompile(`KV rows read: (\d+)`)
+	patterns[bytesRead] = regexp.MustCompile(`KV bytes read: (\d+) \w+`)
+	patterns[gRPCCalls] = regexp.MustCompile(`KV gRPC calls: (\d+)`)
+	patterns[stepCount] = regexp.MustCompile(`MVCC step count \(ext/int\): (\d+)/[\d+]`)
+	patterns[seekCount] = regexp.MustCompile(`MVCC seek count \(ext/int\): (\d+)/[\d+]`)
+}
+
+// getKVInfo returns miscellaneous KV-level stats found in the EXPLAIN ANALYZE
+// of the given query from the top-most operator in the plan (i.e. if there are
+// multiple operators exposing the scan stats, then the first info that appears
+// in the EXPLAIN output is used).
+func getKVInfo(t *testing.T, r *sqlutils.SQLRunner, query string) kvInfo {
+	rows := r.Query(t, "EXPLAIN ANALYZE (VERBOSE) "+query)
 	var output strings.Builder
 	var str string
 	var err error
-	var stepsSet, seeksSet bool
+	var info kvInfo
+	var counterSet [numKVCounters]bool
 	for rows.Next() {
 		if err := rows.Scan(&str); err != nil {
 			t.Fatal(err)
@@ -398,19 +417,17 @@ func getMVCCStats(t *testing.T, r *sqlutils.SQLRunner, query string) (foundSteps
 		str = strings.TrimSpace(str)
 		// Numbers are printed with commas to indicate 1000s places, remove them.
 		str = strings.ReplaceAll(str, ",", "")
-		stepRe := regexp.MustCompile(`MVCC step count \(ext/int\): (\d+)/(\d+)`)
-		stepMatches := stepRe.FindStringSubmatch(str)
-		if len(stepMatches) == 3 && !stepsSet {
-			foundSteps, err = strconv.Atoi(stepMatches[1])
-			assert.NoError(t, err)
-			stepsSet = true
-		}
-		seekRe := regexp.MustCompile(`MVCC seek count \(ext/int\): (\d+)/(\d+)`)
-		seekMatches := seekRe.FindStringSubmatch(str)
-		if len(seekMatches) == 3 && !seeksSet {
-			foundSeeks, err = strconv.Atoi(seekMatches[1])
-			assert.NoError(t, err)
-			seeksSet = true
+		for i := 0; i < numKVCounters; i++ {
+			if counterSet[i] {
+				continue
+			}
+			matches := patterns[i].FindStringSubmatch(str)
+			if len(matches) == 2 {
+				info.counters[i], err = strconv.Atoi(matches[1])
+				assert.NoError(t, err)
+				counterSet[i] = true
+				break
+			}
 		}
 	}
 	if err := rows.Close(); err != nil {
@@ -420,7 +437,7 @@ func getMVCCStats(t *testing.T, r *sqlutils.SQLRunner, query string) (foundSteps
 		fmt.Println("Explain output:")
 		fmt.Println(output.String())
 	}
-	return foundSteps, foundSeeks
+	return info
 }
 
 // TestExplainAnalyzeWarnings verifies that warnings are printed whenever the
