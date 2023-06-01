@@ -33,7 +33,7 @@ END
 ----
 DECLARE
 BEGIN
-RETURN (1, "string");
+RETURN (1, 'string');
 END
 <NOT DONE YET>
 

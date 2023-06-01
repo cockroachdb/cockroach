@@ -49,4 +49,4 @@ DECLARE
 BEGIN
 END
 ----
-expected parse error: at or near ";": syntax error: unimplemented: this syntax
+expected parse error: at or near "scroll": syntax error: unimplemented: this syntax
