@@ -37,6 +37,7 @@ go_test(
         "autocommit_extended_protocol_test.go",
         "bank_test.go",
         "copy_file_upload_test.go",
+        "drop_role_concurrent_session_test.go",
         "empty_query_test.go",
         "enum_test.go",
         "hash_sharded_test.go",
