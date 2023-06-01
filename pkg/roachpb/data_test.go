@@ -447,6 +447,41 @@ func TestTransactionBumpEpoch(t *testing.T) {
 	}
 }
 
+func TestTransactionBumpReadTimestamp(t *testing.T) {
+	ts9 := makeTS(9, 1)
+	ts10 := makeTS(10, 1)
+	ts11 := makeTS(11, 1)
+	ts12 := makeTS(12, 1)
+	ts13 := makeTS(13, 1)
+	origReadTs := ts10
+	origWriteTs := ts12
+
+	testCases := []struct {
+		bumpTs     hlc.Timestamp
+		expReadTs  hlc.Timestamp
+		expWriteTs hlc.Timestamp
+	}{
+		{ts9, origReadTs, origWriteTs},
+		{ts10, origReadTs, origWriteTs},
+		{ts11, ts11, origWriteTs},
+		{ts12, ts12, origWriteTs},
+		{ts13, ts13, ts13},
+	}
+	for _, c := range testCases {
+		t.Run(c.bumpTs.String(), func(t *testing.T) {
+			var txn Transaction
+			txn.ReadTimestamp = origReadTs
+			txn.WriteTimestamp = origWriteTs
+			txn.WriteTooOld = true
+
+			txn.BumpReadTimestamp(c.bumpTs)
+			require.Equal(t, c.expReadTs, txn.ReadTimestamp)
+			require.Equal(t, c.expWriteTs, txn.WriteTimestamp)
+			require.False(t, txn.WriteTooOld)
+		})
+	}
+}
+
 // TestTransactionObservedTimestamp verifies that txn.{Get,Update}ObservedTimestamp work as
 // advertised.
 func TestTransactionObservedTimestamp(t *testing.T) {
@@ -762,7 +797,7 @@ func TestTransactionRestart(t *testing.T) {
 
 func TestTransactionRefresh(t *testing.T) {
 	txn := nonZeroTxn
-	txn.Refresh(makeTS(25, 1))
+	txn.BumpReadTimestamp(makeTS(25, 1))
 
 	expTxn := nonZeroTxn
 	expTxn.WriteTimestamp = makeTS(25, 1)
