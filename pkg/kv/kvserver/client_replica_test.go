@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
@@ -35,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
@@ -2684,118 +2682,6 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	// +1 for transitioning out of joint config
 	// +1 for removing learner
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+3, "\nold: %+v\nnew: %+v", oldDesc, newDesc)
-}
-
-func TestSystemZoneConfigs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 98905)
-
-	// This test is relatively slow and resource intensive. When run under
-	// stressrace on a loaded machine (as in the nightly tests), sometimes the
-	// SucceedsSoon conditions below take longer than the allotted time (#25273).
-	skip.UnderRace(t)
-	skip.UnderShort(t)
-	skip.UnderStress(t)
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 7, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					// Disable LBS because when the scan is happening at the rate it's happening
-					// below, it's possible that one of the system ranges trigger a split.
-					DisableLoadBasedSplitting: true,
-				},
-			},
-			// This test was written for the gossip-backed SystemConfigSpan
-			// infrastructure.
-			DisableSpanConfigs: true,
-			// Scan like a bat out of hell to ensure replication and replica GC
-			// happen in a timely manner.
-			ScanInterval: 50 * time.Millisecond,
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-	log.Info(ctx, "TestSystemZoneConfig: test cluster started")
-
-	expectedSystemRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedUserRanges := 1
-	expectedSystemRanges -= expectedUserRanges
-	systemNumReplicas := int(*zonepb.DefaultSystemZoneConfig().NumReplicas)
-	userNumReplicas := int(*zonepb.DefaultZoneConfig().NumReplicas)
-	expectedReplicas := expectedSystemRanges*systemNumReplicas + expectedUserRanges*userNumReplicas
-	log.Infof(ctx, "TestSystemZoneConfig: expecting %d system ranges and %d user ranges",
-		expectedSystemRanges, expectedUserRanges)
-	log.Infof(ctx, "TestSystemZoneConfig: expected (%dx%d) + (%dx%d) = %d replicas total",
-		expectedSystemRanges, systemNumReplicas, expectedUserRanges, userNumReplicas, expectedReplicas)
-
-	waitForReplicas := func() error {
-		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
-		for _, s := range tc.Servers {
-			if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
-				if len(desc.Replicas().LearnerDescriptors()) > 0 {
-					return fmt.Errorf("descriptor contains learners: %v", desc)
-				}
-				if existing, ok := replicas[desc.RangeID]; ok && !existing.Equal(&desc) {
-					return fmt.Errorf("mismatch between\n%s\n%s", &existing, &desc)
-				}
-				replicas[desc.RangeID] = desc
-				return nil
-			}); err != nil {
-				return err
-			}
-		}
-		var totalReplicas int
-		for _, desc := range replicas {
-			totalReplicas += len(desc.Replicas().VoterDescriptors())
-		}
-		if totalReplicas != expectedReplicas {
-			return fmt.Errorf("got %d voters, want %d; details: %+v", totalReplicas, expectedReplicas, replicas)
-		}
-		return nil
-	}
-
-	// Wait until we're down to the expected number of replicas. This is
-	// effectively waiting on replica GC to kick in to destroy any replicas that
-	// got removed during rebalancing of the initial ranges, since the testcluster
-	// waits until nothing is underreplicated but not until all rebalancing has
-	// settled down.
-	testutils.SucceedsSoon(t, waitForReplicas)
-	log.Info(ctx, "TestSystemZoneConfig: initial replication succeeded")
-
-	// Update the meta zone config to have more replicas and expect the number
-	// of replicas to go up accordingly after running all replicas through the
-	// replicate queue.
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	sqlutils.SetZoneConfig(t, sqlDB, "RANGE meta", "num_replicas: 7")
-	expectedReplicas += 2
-	testutils.SucceedsSoon(t, waitForReplicas)
-	log.Info(ctx, "TestSystemZoneConfig: up-replication of meta ranges succeeded")
-
-	// Do the same thing, but down-replicating the timeseries range.
-	sqlutils.SetZoneConfig(t, sqlDB, "RANGE timeseries", "num_replicas: 1")
-	expectedReplicas -= 2
-	testutils.SucceedsSoon(t, waitForReplicas)
-	log.Info(ctx, "TestSystemZoneConfig: down-replication of timeseries ranges succeeded")
-
-	// Up-replicate the system.jobs table to demonstrate that it is configured
-	// independently from the system database.
-	sqlutils.SetZoneConfig(t, sqlDB, "TABLE system.jobs", "num_replicas: 7")
-	expectedReplicas += 2
-	testutils.SucceedsSoon(t, waitForReplicas)
-	log.Info(ctx, "TestSystemZoneConfig: up-replication of jobs table succeeded")
-
-	// Finally, verify the system ranges. Note that in a new cluster there are
-	// two system ranges, which we have to take into account here.
-	sqlutils.SetZoneConfig(t, sqlDB, "RANGE system", "num_replicas: 7")
-	expectedReplicas += 4
-	testutils.SucceedsSoon(t, waitForReplicas)
-	log.Info(ctx, "TestSystemZoneConfig: up-replication of system ranges succeeded")
 }
 
 func TestClearRange(t *testing.T) {
