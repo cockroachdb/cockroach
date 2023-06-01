@@ -6,14 +6,14 @@
 
 # Summary
 
-Looking to add the ability for users to query sstable metrics via their CockroachDB shell. This will be implemented using a set-generating function (SRF) and will be used as follows.
+Adding the ability for operators to query sstable metrics which is useful for debugging storage issues pertaining to a specific key range. This will be implemented using a set-generating function (SRF) and will be used as follows.
 
 ```
-SELECT crdb_internal.engine_stats('start-key', 'end-key')
+SELECT * FROM crdb_internal.engine_stats('start-key', 'end-key')
 
 or 
 
-SELECT crdb_internal.engine_stats('start-key', 'end-key', store-id)
+SELECT * FROM crdb_internal.engine_stats(node-id, store-id, 'start-key', 'end-key')
 ```
 
 # Technical design
@@ -22,13 +22,13 @@ Audience: CockroachDB team members
 
 ## Cockroach Side
 
-The proposed solution is creating a new SRF which will be added to the existing [built-in generators](https://github.com/cockroachdb/cockroach/blob/3526c9ca65a94bd751b23a65b3c96a1513c961bc/pkg/sql/sem/builtins/generator_builtins.go#L107). This SRF will need to send an RPC to each node in order to retrieve all the relevant SSTables. This can be achieved by calling [Dial](https://github.com/cockroachdb/cockroach/blob/7d8e56533549abedd7ceceeafc469ca4e224e4ed/pkg/rpc/nodedialer/nodedialer.go#L101) for each seperate node inside of a function that is part of `evalCtx`. This function will call out to the [StorageEngineClient](https://github.com/cockroachdb/cockroach/blob/213da1f9fb591d90dcea6590b31da8c55b0756f9/pkg/kv/kvserver/storage_engine_client.go#LL23) and be handled in the [stores server](https://github.com/cockroachdb/cockroach/blob/5b6302b2ed2a83f49b55329ce3cac5f6135d0aea/pkg/kv/kvserver/stores_server.go#L24) (see Pebble side). 
+The proposed solution is creating a new SRF which will be added to the existing [built-in generators](https://github.com/cockroachdb/cockroach/blob/3526c9ca65a94bd751b23a65b3c96a1513c961bc/pkg/sql/sem/builtins/generator_builtins.go#L107). This SRF will have two overloads (for the two variants above). The latter one only talks to one node, while the other will need to send an RPC to each node in order to retrieve all the relevant SSTables. This can be achieved by calling [Dial](https://github.com/cockroachdb/cockroach/blob/7d8e56533549abedd7ceceeafc469ca4e224e4ed/pkg/rpc/nodedialer/nodedialer.go#L101) for each separate node inside of a function that is part of `evalCtx`. This function will call out to the [StorageEngineClient](https://github.com/cockroachdb/cockroach/blob/213da1f9fb591d90dcea6590b31da8c55b0756f9/pkg/kv/kvserver/storage_engine_client.go#LL23) and be handled in the [stores server](https://github.com/cockroachdb/cockroach/blob/5b6302b2ed2a83f49b55329ce3cac5f6135d0aea/pkg/kv/kvserver/stores_server.go#L24) (see Pebble side). 
 
-The SRF will be structured similar to [json_populate_record](https://github.com/cockroachdb/cockroach/blob/f97d24aa661d8e1561f27a740325ebdabd62c926/pkg/sql/sem/builtins/generator_builtins.go#L383-L385) i.e. using a generator to return each output row. All necessary data should be available on `FileMetadata`.
+The SRF will be structured similar to [json_populate_record](https://github.com/cockroachdb/cockroach/blob/f97d24aa661d8e1561f27a740325ebdabd62c926/pkg/sql/sem/builtins/generator_builtins.go#L383-L385) i.e. using a generator to return each output row.
 
 ## Pebble Side
 
-Inside the store's server code is where Pebble will be used, specifically [DB.SSTables](https://github.com/cockroachdb/pebble/blob/25a8e9bb8d9586e5090979f24dec11712e9f4b3c/db.go#L1912). When calling `DB.SSTables` we will need to specify a `SSTableOption` which will be a function allowing us to filter SSTables for the key range specified by the user. Note for this step, we will use `FileMetadata` instead of `getTableProperties` to avoid reading metadata from storage and putting it in a cache. 
+Inside the store's server code is where Pebble will be used, specifically [DB.SSTables](https://github.com/cockroachdb/pebble/blob/25a8e9bb8d9586e5090979f24dec11712e9f4b3c/db.go#L1912). When calling `DB.SSTables` we will need to specify a `SSTableOption` which will be a function allowing us to filter SSTables for the key range specified by the user. Note that filtering can be performed based on the `FileMetadata` alone, which allows us to skip unnecessary `getTableProperties` calls (which can read metadata from storage and affect caches).
 
 # Unresolved questions
 
