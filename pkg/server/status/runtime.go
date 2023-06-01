@@ -479,8 +479,10 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get process CPU usage: %v", err)
 	}
-	cgroupCPU, _ := cgroups.GetCgroupCPU()
-	cpuShare := cgroupCPU.CPUShares()
+	cpuCapacity, err := getCPUCapacity()
+	if err != nil {
+		log.Ops.Errorf(ctx, "unable to get CPU capacity: %v", err)
+	}
 	cpuUsageStats, err := cpu.Times(false /* percpu */)
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get system CPU usage: %v", err)
@@ -560,7 +562,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		hostSrate = float64(hostStime-rsr.last.hostStime) / dur
 	}
 
-	combinedNormalizedProcPerc := (procSrate + procUrate) / cpuShare
+	combinedNormalizedProcPerc := (procSrate + procUrate) / cpuCapacity
 	combinedNormalizedHostPerc := (hostSrate + hostUrate) / float64(numHostCPUs)
 	gcPauseRatio := float64(uint64(gc.PauseTotal)-rsr.last.gcPauseTime) / dur
 	runnableSum := goschedstats.CumulativeNormalizedRunnableGoroutines()
@@ -758,4 +760,24 @@ func GetProcCPUTime(ctx context.Context) (userTimeMillis, sysTimeMillis int64, e
 		return 0, 0, err
 	}
 	return int64(cpuTime.User), int64(cpuTime.Sys), nil
+}
+
+// getCPUCapacity returns the number of logical CPU processors available for
+// use by the process. The capacity accounts for cgroup constraints, GOMAXPROCS
+// and the number of host processors.
+func getCPUCapacity() (float64, error) {
+	numProcs := float64(runtime.GOMAXPROCS(0 /* read only */))
+	cgroupCPU, err := cgroups.GetCgroupCPU()
+	if err != nil {
+		// Return the GOMAXPROCS value if unable to read the cgroup settings, in
+		// practice this is not likely to occur.
+		return numProcs, err
+	}
+	cpuShare := cgroupCPU.CPUShares()
+	// Take the minimum of the CPU shares and the GOMAXPROCS value. The most CPU
+	// the process could use is the lesser of the two.
+	if cpuShare > numProcs {
+		return numProcs, nil
+	}
+	return cpuShare, nil
 }
