@@ -170,6 +170,7 @@ describe("Database Table Page", function () {
       {
         databaseName: "DATABASE",
         name: "TABLE",
+        schemaName: "",
         showNodeRegionsSection: false,
         details: {
           loading: false,
@@ -188,12 +189,15 @@ describe("Database Table Page", function () {
           nodesByRegionString: "",
         },
         automaticStatsCollectionEnabled: true,
+        indexUsageStatsEnabled: true,
+        showIndexRecommendations: true,
+        hasAdminRole: false,
         indexStats: {
           loading: false,
           loaded: false,
           lastError: undefined,
           stats: [],
-          lastReset: null,
+          lastReset: util.minDate,
         },
       },
       false,
@@ -347,16 +351,12 @@ describe("Database Table Page", function () {
         {
           indexName: "index_no_reads_no_resets",
           totalReads: 0,
-          lastUsed: util.TimestampToMoment(
-            util.stringToTimestamp("0001-01-01T00:00:00Z"),
-          ),
+          lastUsed: util.minDate,
           lastUsedType: "created",
           indexRecommendations: [],
         },
       ],
-      lastReset: util.TimestampToMoment(
-        util.stringToTimestamp("0001-01-01T00:00:00Z"),
-      ),
+      lastReset: util.minDate,
     });
   });
 });
