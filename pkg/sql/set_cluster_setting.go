@@ -73,15 +73,12 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 		return err
 	} else if ok {
 		hasModify = true
-		hasSqlModify = true
-		hasView = true
 	}
 	if !hasSqlModify {
 		if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User()); err != nil {
 			return err
 		} else if ok {
 			hasSqlModify = true
-			hasView = true
 		}
 	}
 	if !hasView {
@@ -99,17 +96,30 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 			return err
 		}
 		hasModify = hasModify || ok
-		hasSqlModify = hasSqlModify || ok
+	}
+	if !hasView {
+		ok, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
+		if err != nil {
+			return err
+		}
 		hasView = hasView || ok
 	}
 
-	// The "set" action requires MODIFYCLUSTERSETTING or at least MODIFYSQLCLUSTERSETTING if
-	// the setting is a sql.defaults setting.
-	if action == "set" && !hasModify {
-		isSqlSetting := strings.HasPrefix(name, "sql.defaults")
-		if hasSqlModify && isSqlSetting {
-			return nil
-		} else if !isSqlSetting {
+	isSqlSetting := strings.HasPrefix(name, "sql.defaults")
+	// If the user has modify they can do either action to any setting regardless of
+	// whether they have the other 2 settings.
+	if hasModify {
+		return nil
+	}
+	// If the user has sql modify they can do either action as long as its a sql.defaults
+	// setting.
+	if hasSqlModify && isSqlSetting {
+		return nil
+	}
+	// From this point, the user does not have modify or has sql modify but it is not a
+	// sql.defaults setting so we can expect an error if the user wants to edit.
+	if action == "set" {
+		if !isSqlSetting {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"only users with the %s privilege are allowed to %s cluster setting '%s'",
 				privilege.MODIFYCLUSTERSETTING, action, name)
@@ -119,16 +129,13 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 			privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, action, name)
 	}
 
-	if !hasView {
-		ok, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
-		if err != nil {
-			return err
-		}
-		hasView = hasView || ok
-	}
-
-	// The "show" action requires either either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges.
+	// From this point, if the user does not have view then we can expect an error.
 	if action == "show" && !hasView {
+		if !isSqlSetting {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with %s or %s privileges are allowed to %s cluster setting '%s'",
+				privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING, action, name)
+		}
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only users with %s, %s or %s privileges are allowed to %s cluster setting '%s'",
 			privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, privilege.VIEWCLUSTERSETTING, action, name)
