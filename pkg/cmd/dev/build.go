@@ -108,7 +108,6 @@ var buildTargetMapping = map[string]string{
 	"smithcmp":             "//pkg/cmd/smithcmp:smithcmp",
 	"smithtest":            "//pkg/cmd/smithtest:smithtest",
 	"staticcheck":          "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
-	"stress":               stressTarget,
 	"swagger":              "@com_github_go_swagger_go_swagger//cmd/swagger:swagger",
 	"tests":                "//pkg:all_tests",
 	"workload":             "//pkg/cmd/workload:workload",
