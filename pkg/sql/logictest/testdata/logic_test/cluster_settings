@@ -78,7 +78,7 @@ WHERE variable IN ('sql.defaults.default_int_size')
 ----
 sql.defaults.default_int_size  4
 
-# Users with MODIFYCLUSTERSETTING cannot set non sql.default settings if sql.full_modify_cluster_setting.enabled is false.
+# Users with MODIFYCLUSTERSETTING cannot view or set non sql.default settings if sql.full_modify_cluster_setting.enabled is false.
 
 user root
 
@@ -89,6 +89,9 @@ user testuser
 
 statement error pq: users with the MODIFYCLUSTERSETTING privilege need the cluster setting sql.auth.modify_cluster_setting_applies_to_all.enabled to be set to true to set cluster setting 'diagnostics.reporting.enabled'
 SET CLUSTER SETTING diagnostics.reporting.enabled = false
+
+statement error pq: users with the MODIFYCLUSTERSETTING privilege need the cluster setting sql.auth.modify_cluster_setting_applies_to_all.enabled to be set to true to show cluster setting 'diagnostics.reporting.enabled'
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
 
 user root
 

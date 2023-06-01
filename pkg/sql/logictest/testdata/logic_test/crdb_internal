@@ -1215,7 +1215,7 @@ SELECT crdb_internal.unsafe_clear_gossip_info('unknown key')
 ----
 false
 
-# Verify users with VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING can view non sql.defaults cluster settings.
+# Verify users with VIEWCLUSTERSETTING can view non sql.defaults cluster settings.
 
 user root
 
@@ -1237,12 +1237,24 @@ REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
 statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
 
+# Verify users with MODIFYCLUSTERSETTING can view non sql.defaults cluster setting only if sql.full_modify_cluster_setting.enabled is true.
 user testuser
 
 query T
 SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
 ----
 true
+
+user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.modify_cluster_setting_applies_to_all.enabled = false
+
+user testuser
+
+query T
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
 
 user root
 
