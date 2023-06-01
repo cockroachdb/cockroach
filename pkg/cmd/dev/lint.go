@@ -44,6 +44,10 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 	timeout := mustGetFlagDuration(cmd, timeoutFlag)
 	short := mustGetFlagBool(cmd, shortFlag)
 
+	if len(pkgs) > 0 && pkgs[0] == "short" {
+		return fmt.Errorf("invalid package name: %q; did you mean to type '--short'?", pkgs[0])
+	}
+
 	var args []string
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
