@@ -154,14 +154,14 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.out = w
 	if s.conf.enc != nil {
-		var err error
-		w, err = storageccl.EncryptingWriter(w, s.conf.enc.Key)
+		e, err := storageccl.EncryptingWriter(w, s.conf.enc.Key)
 		if err != nil {
 			return err
 		}
+		s.out = e
 	}
-	s.out = w
 	s.sst = storage.MakeBackupSSTWriter(ctx, s.dest.Settings(), s.out)
 
 	return nil
