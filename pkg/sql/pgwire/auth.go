@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -401,8 +402,11 @@ type authPipe struct {
 	authMethod  string
 
 	ch chan []byte
+
+	// closeWriterDoneOnce wraps close(writerDone) to prevent a panic if
+	// noMorePwdData is called multiple times.
+	closeWriterDoneOnce sync.Once
 	// writerDone is a channel closed by noMorePwdData().
-	// Nil if noMorePwdData().
 	writerDone chan struct{}
 	readerDone chan authRes
 }
@@ -442,13 +446,13 @@ func (p *authPipe) sendPwdData(data []byte) error {
 }
 
 func (p *authPipe) noMorePwdData() {
-	if p.writerDone == nil {
-		return
-	}
-	// A reader blocked in GetPwdData() gets unblocked with an error.
-	close(p.writerDone)
-	p.writerDone = nil
+	p.closeWriterDoneOnce.Do(func() {
+		// A reader blocked in GetPwdData() gets unblocked with an error.
+		close(p.writerDone)
+	})
 }
+
+const writerDoneError = "client didn't send required auth data"
 
 // GetPwdData is part of the AuthConn interface.
 func (p *authPipe) GetPwdData() ([]byte, error) {
@@ -456,7 +460,7 @@ func (p *authPipe) GetPwdData() ([]byte, error) {
 	case data := <-p.ch:
 		return data, nil
 	case <-p.writerDone:
-		return nil, pgwirebase.NewProtocolViolationErrorf("client didn't send required auth data")
+		return nil, pgwirebase.NewProtocolViolationErrorf(writerDoneError)
 	}
 }
 
