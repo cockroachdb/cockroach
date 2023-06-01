@@ -890,59 +890,91 @@ func TestTermWithUnstableSnapshot(t *testing.T) {
 }
 
 func TestSlice(t *testing.T) {
-	var i uint64
 	offset := uint64(100)
 	num := uint64(100)
 	last := offset + num
 	half := offset + num/2
 	halfe := pb.Entry{Index: half, Term: half}
 
-	storage := NewMemoryStorage()
-	storage.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: offset}})
-	for i = 1; i < num/2; i++ {
-		storage.Append([]pb.Entry{{Index: offset + i, Term: offset + i}})
-	}
-	l := newLog(storage, raftLogger)
-	for i = num / 2; i < num; i++ {
-		l.append(pb.Entry{Index: offset + i, Term: offset + i})
+	entries := func(from, to uint64) []pb.Entry {
+		res := make([]pb.Entry, 0, to-from)
+		for i := from; i < to; i++ {
+			res = append(res, pb.Entry{Index: i, Term: i})
+		}
+		return res
 	}
 
-	tests := []struct {
-		from  uint64
-		to    uint64
-		limit uint64
+	storage := NewMemoryStorage()
+	require.NoError(t, storage.ApplySnapshot(pb.Snapshot{
+		Metadata: pb.SnapshotMetadata{Index: offset}}))
+	require.NoError(t, storage.Append(entries(offset+1, half)))
+	l := newLog(storage, raftLogger)
+	l.append(entries(half, last)...)
+
+	for _, tt := range []struct {
+		lo  uint64
+		hi  uint64
+		lim uint64
 
 		w      []pb.Entry
 		wpanic bool
 	}{
-		// test no limit
-		{offset - 1, offset + 1, noLimit, nil, false},
-		{offset, offset + 1, noLimit, nil, false},
-		{half - 1, half + 1, noLimit, []pb.Entry{{Index: half - 1, Term: half - 1}, {Index: half, Term: half}}, false},
-		{half, half + 1, noLimit, []pb.Entry{{Index: half, Term: half}}, false},
-		{last - 1, last, noLimit, []pb.Entry{{Index: last - 1, Term: last - 1}}, false},
-		{last, last + 1, noLimit, nil, true},
+		// ErrCompacted.
+		{lo: offset - 1, hi: offset + 1, lim: noLimit, w: nil},
+		{lo: offset, hi: offset + 1, lim: noLimit, w: nil},
+		// panics
+		{lo: half, hi: half - 1, lim: noLimit, wpanic: true}, // lo and hi inversion
+		{lo: last, hi: last + 1, lim: noLimit, wpanic: true}, // hi is out of bounds
 
-		// test limit
-		{half - 1, half + 1, 0, []pb.Entry{{Index: half - 1, Term: half - 1}}, false},
-		{half - 1, half + 1, uint64(halfe.Size() + 1), []pb.Entry{{Index: half - 1, Term: half - 1}}, false},
-		{half - 2, half + 1, uint64(halfe.Size() + 1), []pb.Entry{{Index: half - 2, Term: half - 2}}, false},
-		{half - 1, half + 1, uint64(halfe.Size() * 2), []pb.Entry{{Index: half - 1, Term: half - 1}, {Index: half, Term: half}}, false},
-		{half - 1, half + 2, uint64(halfe.Size() * 3), []pb.Entry{{Index: half - 1, Term: half - 1}, {Index: half, Term: half}, {Index: half + 1, Term: half + 1}}, false},
-		{half, half + 2, uint64(halfe.Size()), []pb.Entry{{Index: half, Term: half}}, false},
-		{half, half + 2, uint64(halfe.Size() * 2), []pb.Entry{{Index: half, Term: half}, {Index: half + 1, Term: half + 1}}, false},
-	}
+		// No limit.
+		{lo: offset + 1, hi: offset + 1, lim: noLimit, w: nil},
+		{lo: offset + 1, hi: half - 1, lim: noLimit, w: entries(offset+1, half-1)},
+		{lo: offset + 1, hi: half, lim: noLimit, w: entries(offset+1, half)},
+		{lo: offset + 1, hi: half + 1, lim: noLimit, w: entries(offset+1, half+1)},
+		{lo: offset + 1, hi: last, lim: noLimit, w: entries(offset+1, last)},
+		{lo: half - 1, hi: half, lim: noLimit, w: entries(half-1, half)},
+		{lo: half - 1, hi: half + 1, lim: noLimit, w: entries(half-1, half+1)},
+		{lo: half - 1, hi: last, lim: noLimit, w: entries(half-1, last)},
+		{lo: half, hi: half + 1, lim: noLimit, w: entries(half, half+1)},
+		{lo: half, hi: last, lim: noLimit, w: entries(half, last)},
+		{lo: last - 1, hi: last, lim: noLimit, w: entries(last-1, last)},
 
-	for j, tt := range tests {
-		t.Run(fmt.Sprint(j), func(t *testing.T) {
+		// At least one entry is always returned.
+		{lo: offset + 1, hi: last, lim: 0, w: entries(offset+1, offset+2)},
+		{lo: half - 1, hi: half + 1, lim: 0, w: entries(half-1, half)},
+		{lo: half, hi: last, lim: 0, w: entries(half, half+1)},
+		{lo: half + 1, hi: last, lim: 0, w: entries(half+1, half+2)},
+		// Low limit.
+		{lo: offset + 1, hi: last, lim: uint64(halfe.Size() - 1), w: entries(offset+1, offset+2)},
+		{lo: half - 1, hi: half + 1, lim: uint64(halfe.Size() - 1), w: entries(half-1, half)},
+		{lo: half, hi: last, lim: uint64(halfe.Size() - 1), w: entries(half, half+1)},
+		// Just enough for one limit.
+		{lo: offset + 1, hi: last, lim: uint64(halfe.Size()), w: entries(offset+1, offset+2)},
+		{lo: half - 1, hi: half + 1, lim: uint64(halfe.Size()), w: entries(half-1, half)},
+		{lo: half, hi: last, lim: uint64(halfe.Size()), w: entries(half, half+1)},
+		// Not enough for two limit.
+		{lo: offset + 1, hi: last, lim: uint64(halfe.Size() + 1), w: entries(offset+1, offset+2)},
+		{lo: half - 1, hi: half + 1, lim: uint64(halfe.Size() + 1), w: entries(half-1, half)},
+		{lo: half, hi: last, lim: uint64(halfe.Size() + 1), w: entries(half, half+1)},
+		// Enough for two limit.
+		{lo: offset + 1, hi: last, lim: uint64(halfe.Size() * 2), w: entries(offset+1, offset+3)},
+		{lo: half - 2, hi: half + 1, lim: uint64(halfe.Size() * 2), w: entries(half-2, half)},
+		{lo: half - 1, hi: half + 1, lim: uint64(halfe.Size() * 2), w: entries(half-1, half+1)},
+		{lo: half, hi: last, lim: uint64(halfe.Size() * 2), w: entries(half, half+2)},
+		// Not enough for three.
+		{lo: half - 2, hi: half + 1, lim: uint64(halfe.Size()*3 - 1), w: entries(half-2, half)},
+		// Enough for three.
+		{lo: half - 1, hi: half + 2, lim: uint64(halfe.Size() * 3), w: entries(half-1, half+2)},
+	} {
+		t.Run("", func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
 					require.True(t, tt.wpanic)
 				}
 			}()
-			g, err := l.slice(tt.from, tt.to, entryEncodingSize(tt.limit))
-			require.False(t, tt.from <= offset && err != ErrCompacted)
-			require.False(t, tt.from > offset && err != nil)
+			g, err := l.slice(tt.lo, tt.hi, entryEncodingSize(tt.lim))
+			require.False(t, tt.lo <= offset && err != ErrCompacted)
+			require.False(t, tt.lo > offset && err != nil)
 			require.Equal(t, tt.w, g)
 		})
 	}
