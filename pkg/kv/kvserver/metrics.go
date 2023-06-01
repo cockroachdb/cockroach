@@ -2763,6 +2763,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		StorageCompactionsPinnedKeys:  metric.NewGauge(metaStorageCompactionsKeysPinnedCount),
 		StorageCompactionsPinnedBytes: metric.NewGauge(metaStorageCompactionsKeysPinnedBytes),
 		StorageCompactionsDuration:    metric.NewGauge(metaStorageCompactionsDuration),
+		FlushableIngestCount:          metric.NewGauge(metaFlushableIngestCount),
 		FlushableIngestTableCount:     metric.NewGauge(metaFlushableIngestTableCount),
 		FlushableIngestTableSize:      metric.NewGauge(metaFlushableIngestTableBytes),
 		BatchCommitCount:              metric.NewGauge(metaBatchCommitCount),
@@ -3127,9 +3128,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.FlushableIngestCount.Update(int64(m.Flush.AsIngestCount))
 	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
 	sm.FlushableIngestTableSize.Update(int64(m.Flush.AsIngestBytes))
-<<<<<<< HEAD
 	sm.IngestCount.Update(int64(m.Ingest.Count))
-=======
 	sm.BatchCommitCount.Update(int64(m.BatchCommitStats.Count))
 	sm.BatchCommitDuration.Update(int64(m.BatchCommitStats.TotalDuration))
 	sm.BatchCommitSemWaitDuration.Update(int64(m.BatchCommitStats.SemaphoreWaitDuration))
@@ -3139,7 +3138,6 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
 
->>>>>>> master
 	// Update the maximum number of L0 sub-levels seen.
 	sm.l0SublevelsTracker.Lock()
 	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
