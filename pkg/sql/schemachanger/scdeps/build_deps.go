@@ -129,17 +129,41 @@ func (d *buildDeps) MayResolveSchema(
 func (d *buildDeps) MustResolvePrefix(
 	ctx context.Context, name tree.ObjectNamePrefix,
 ) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
-	if !name.ExplicitCatalog {
-		name.CatalogName = tree.Name(d.schemaResolver.CurrentDatabase())
-		name.ExplicitCatalog = true
-	}
-
+	const withOffline = false
 	if name.ExplicitSchema {
-		db, sc := d.MayResolveSchema(ctx, name, false /* withOffline */)
-		if sc == nil {
-			panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
+		if name.ExplicitCatalog {
+			db, sc := d.MayResolveSchema(ctx, name, withOffline)
+			if sc == nil || db == nil {
+				panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
+			}
+			return db, sc
 		}
-		return db, sc
+
+		// Two parts: D.T.
+		// Try to use the current database, and be satisfied if it's sufficient to find the object.
+		db, sc := d.MayResolveSchema(ctx, tree.ObjectNamePrefix{
+			CatalogName:     tree.Name(d.CurrentDatabase()),
+			SchemaName:      name.SchemaName,
+			ExplicitCatalog: true,
+			ExplicitSchema:  true,
+		},
+			withOffline)
+		if db != nil && sc != nil {
+			return db, sc
+		}
+
+		// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
+		db, sc = d.MayResolveSchema(ctx, tree.ObjectNamePrefix{
+			CatalogName:     name.SchemaName,
+			SchemaName:      tree.PublicSchemaName,
+			ExplicitCatalog: true,
+			ExplicitSchema:  true,
+		},
+			withOffline)
+		if db != nil && sc != nil {
+			return db, sc
+		}
+		panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
 	}
 
 	path := d.sessionData.SearchPath
@@ -152,7 +176,6 @@ func (d *buildDeps) MustResolvePrefix(
 			return db, sc
 		}
 	}
-
 	panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
 }
 
