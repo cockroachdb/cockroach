@@ -936,6 +936,13 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 	}
 
+	for _, s := range udf.Body {
+		if s.Relational().CanMutate {
+			b.ContainsMutation = true
+			break
+		}
+	}
+
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
 	// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
 	planGen := b.buildRoutinePlanGenerator(
