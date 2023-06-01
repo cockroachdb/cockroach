@@ -268,8 +268,9 @@ func registerAllocationBench(r registry.Registry) {
 func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchSpec) {
 	specOptions := []spec.Option{spec.CPU(allocSpec.cpus)}
 	r.Add(registry.TestSpec{
-		Name:  fmt.Sprintf("allocbench/nodes=%d/cpu=%d/%s", allocSpec.nodes, allocSpec.cpus, allocSpec.load.desc),
-		Owner: registry.OwnerKV,
+		Name:      fmt.Sprintf("allocbench/nodes=%d/cpu=%d/%s", allocSpec.nodes, allocSpec.cpus, allocSpec.load.desc),
+		Owner:     registry.OwnerKV,
+		Benchmark: true,
 		Cluster: r.MakeClusterSpec(
 			allocSpec.nodes+1,
 			specOptions...,

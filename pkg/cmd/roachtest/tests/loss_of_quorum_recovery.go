@@ -71,6 +71,7 @@ func registerLOQRecovery(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:                s.testName(""),
 			Owner:               registry.OwnerReplication,
+			Benchmark:           true,
 			Tags:                registry.Tags(`default`),
 			Cluster:             spec,
 			Leases:              registry.MetamorphicLeases,
@@ -83,6 +84,7 @@ func registerLOQRecovery(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:                s.testName("half-online"),
 			Owner:               registry.OwnerReplication,
+			Benchmark:           true,
 			Tags:                registry.Tags(`default`),
 			Cluster:             spec,
 			Leases:              registry.MetamorphicLeases,
