@@ -24,9 +24,9 @@ type TableDetailsWithKey = {
 };
 
 export type TableDetailsState = {
-  data: SqlApiResponse<TableDetailsResponse>;
+  data?: SqlApiResponse<TableDetailsResponse>;
   // Captures thrown errors.
-  lastError: Error;
+  lastError?: Error;
   valid: boolean;
   inFlight: boolean;
 };

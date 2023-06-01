@@ -11,6 +11,7 @@
 import { DatabasesListResponse, SqlExecutionErrorMessage } from "../api";
 import { DatabasesPageDataDatabase } from "../databasesPage";
 import {
+  buildIndexStatToRecommendationsMap,
   combineLoadingErrors,
   getNodesByRegionString,
   normalizePrivileges,
@@ -19,8 +20,16 @@ import {
 import { DatabaseDetailsState } from "../store/databaseDetails";
 import { createSelector } from "@reduxjs/toolkit";
 import { TableDetailsState } from "../store/databaseTableDetails";
-import { generateTableID } from "../util";
+import { generateTableID, longToInt, TimestampToMoment } from "../util";
 import { DatabaseDetailsPageDataTable } from "src/databaseDetailsPage";
+import { DatabaseTablePageDataDetails, IndexStat } from "../databaseTablePage";
+import { IndexStatsState } from "../store/indexStats";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { RecommendationType as RecType } from "../indexDetailsPage";
+import { TableIndexStatsResponse } from "../api/indexDetailsApi";
+type IndexUsageStatistic =
+  cockroach.server.serverpb.TableIndexStatsResponse.IExtendedCollectedIndexUsageStatistics;
+const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 interface DerivedDatabaseDetailsParams {
   dbListResp: DatabasesListResponse;
@@ -160,5 +169,109 @@ const tableCombiner = (
       rangeCount: results?.stats?.spanStats.range_count || 0,
       nodesByRegionString: getNodesByRegionString(nodes, nodeRegions, isTenant),
     },
+  };
+};
+
+interface DerivedTablePageDetailsParams {
+  details: TableDetailsState;
+  nodeRegions: Record<string, string>;
+  isTenant: boolean;
+}
+
+export const deriveTablePageDetailsMemoized = createSelector(
+  (params: DerivedTablePageDetailsParams) => params.details,
+  (params: DerivedTablePageDetailsParams) => params.nodeRegions,
+  (params: DerivedTablePageDetailsParams) => params.isTenant,
+  (details, nodeRegions, isTenant): DatabaseTablePageDataDetails => {
+    const results = details?.data?.results;
+    const grants = results?.grantsResp.grants || [];
+    const normalizedGrants =
+      grants.map(grant => ({
+        user: grant.user,
+        privileges: normalizePrivileges(grant.privileges),
+      })) || [];
+    const nodes = results?.stats.replicaData.nodeIDs || [];
+    return {
+      loading: !!details?.inFlight,
+      loaded: !!details?.valid,
+      lastError: details?.lastError,
+      createStatement: results?.createStmtResp.create_statement || "",
+      replicaCount: results?.stats.replicaData.replicaCount || 0,
+      indexNames: results?.schemaDetails.indexes || [],
+      grants: normalizedGrants,
+      statsLastUpdated:
+        results?.heuristicsDetails.stats_last_created_at || null,
+      totalBytes: results?.stats.spanStats.total_bytes || 0,
+      liveBytes: results?.stats.spanStats.live_bytes || 0,
+      livePercentage: results?.stats.spanStats.live_percentage || 0,
+      sizeInBytes: results?.stats.spanStats.approximate_disk_bytes || 0,
+      rangeCount: results?.stats.spanStats.range_count || 0,
+      nodesByRegionString: getNodesByRegionString(nodes, nodeRegions, isTenant),
+    };
+  },
+);
+
+interface DerivedIndexDetailsParams {
+  database: string;
+  table: string;
+  indexUsageStats: Record<string, IndexStatsState>;
+}
+
+export const deriveIndexDetailsMemoized = createSelector(
+  (params: DerivedIndexDetailsParams) => params.database,
+  (params: DerivedIndexDetailsParams) => params.table,
+  (params: DerivedIndexDetailsParams) => params.indexUsageStats,
+  (database, table, indexUsageStats): IndexStat[] => {
+    const indexStats = indexUsageStats[generateTableID(database, table)];
+    const lastReset = TimestampToMoment(indexStats?.data?.last_reset);
+    const stats = indexStats?.data?.statistics || [];
+    const recommendations = indexStats?.data?.index_recommendations || [];
+    const recsMap = buildIndexStatToRecommendationsMap(stats, recommendations);
+    return stats.map(indexStat => {
+      const indexRecs = recsMap[indexStat?.statistics.key.index_id] || [];
+      return deriveIndexDetails(indexStat, lastReset, indexRecs);
+    });
+  },
+);
+
+const deriveIndexDetails = (
+  indexStat: IndexUsageStatistic,
+  lastReset: moment.Moment,
+  recommendations: cockroach.sql.IIndexRecommendation[],
+): IndexStat => {
+  const lastRead = TimestampToMoment(indexStat.statistics?.stats?.last_read);
+  let lastUsed, lastUsedType;
+  if (indexStat.created_at !== null) {
+    lastUsed = TimestampToMoment(indexStat.created_at);
+    lastUsedType = "created";
+  } else {
+    lastUsed = lastReset;
+    lastUsedType = "reset";
+  }
+  if (lastReset.isAfter(lastUsed)) {
+    lastUsed = lastReset;
+    lastUsedType = "reset";
+  }
+  if (lastRead.isAfter(lastUsed)) {
+    lastUsed = lastRead;
+    lastUsedType = "read";
+  }
+  const indexRecommendations = recommendations.map(indexRec => {
+    let type: RecType = "Unknown";
+    switch (RecommendationType[indexRec.type].toString()) {
+      case "DROP_UNUSED":
+        type = "DROP_UNUSED";
+    }
+    return {
+      type: type,
+      reason: indexRec.reason,
+    };
+  });
+  return {
+    indexName: indexStat.index_name,
+    totalReads: longToInt(indexStat.statistics?.stats?.total_read_count),
+    lastUsed: lastUsed,
+    lastUsedType: lastUsedType,
+    indexRecommendations,
   };
 };
