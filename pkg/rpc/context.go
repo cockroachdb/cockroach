@@ -365,17 +365,19 @@ type Connection struct {
 	// but they may be read widely (many callers hold a *Connection).
 
 	// The following fields are populated on instantiation.
-	k               peerKey
-	breakerSignalFn func() circuitbreaker.Signal // breaker.Signal
-	// connFuture is signaled with success (revealing the clientConn) once the initial
-	// heartbeat failed. If we fail to create a ClientConn or the ClientConn fails
-	// its first heartbeat, it's signaled with an error.
+	k peerKey
+	// breakerSignalFn is (*Breaker).Signal of the surrounding `*peer`. We consult
+	// this in Connect() to abort dial attempts when the breaker is tripped.
+	breakerSignalFn func() circuitbreaker.Signal
+	// connFuture is signaled with success (revealing the clientConn) once the
+	// initial heartbeat succeeds. If we fail to create a ClientConn or the
+	// ClientConn fails its first heartbeat, it's signaled with an error.
 	//
 	// connFuture can be signaled (like any mutation, from the probe only) without
 	// holding the surrounding mutex.
 	//
-	// Ultimately, it is always signaled with either, regardless of
-	// system shutdown, etc.
+	// It always has to be signaled eventually, regardless of the stopper
+	// draining, etc, since callers might be blocking on it.
 	connFuture connFuture
 }
 
