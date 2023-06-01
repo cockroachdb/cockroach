@@ -1,0 +1,3 @@
+echo
+----
+db0.AdminChangeReplicas(ctx, tk(1), getRangeDesc(ctx, tk(1), db0), kvpb.ReplicationChange{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}}) // trying to add a voter to a store that already has a VOTER_FULL

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -39,7 +40,11 @@ func TestApplier(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		// Disable replication to avoid AdminChangeReplicas complaining about
+		// replication queues being active.
+		ReplicationMode: base.ReplicationManual,
+	})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
@@ -187,6 +192,9 @@ func TestApplier(t *testing.T) {
 		},
 		{
 			"addsstable", step(addSSTable(sstFile.Data(), sstSpan, sstTS, sstValueHeader.KVNemesisSeq.Get(), true)),
+		},
+		{
+			"change-replicas", step(changeReplicas(k1, kvpb.ReplicationChange{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}})),
 		},
 	}
 
