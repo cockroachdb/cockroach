@@ -198,6 +198,67 @@ NOT((a = 3) AND (b = 4))
 [ - ]
 Remaining filter: (a != 3) OR (b != 4)
 
+# We can derive predicates with combination of equality and inequalities.
+index-constraints vars=(a int, b int, c int as (a+5) stored) index=(a, c, b)
+(a=3 AND b>4) OR (a=5 AND b>6)
+----
+[/3/8/5 - /3/8]
+[/5/10/7 - /5/10]
+Remaining filter: (a = 3) OR ((a = 5) AND (b > 6))
+
+# We derive a predicate for single-key spans when ORed with non-single-key
+# spans.
+index-constraints vars=(a int, b int, c int as (a+b) stored) index=(a, c)
+(a=3 AND b=4) OR (a >= 5 AND b=6)
+----
+[/3/7 - /3/7]
+[/5 - ]
+Remaining filter: ((a = 3) AND (b = 4)) OR ((a >= 5) AND (b = 6))
+
+# We can derive a predicate on c based on two columns, a and b.
+index-constraints vars=(a int, b int, c int as (a+b) stored) index=(c, a, b)
+(a=3 AND b=4) OR (a=5 AND b=6)
+----
+[/7/3/4 - /7/3/4]
+[/11/5/6 - /11/5/6]
+
+# A BETWEEN clause representing a single value can be used to derive
+# predicates.
+index-constraints vars=(a int, b int, c int as (a+5) stored) index=(c)
+a BETWEEN 3 AND 3
+----
+[/8 - /8]
+Remaining filter: (a >= 3) AND (a <= 3)
+
+# A BETWEEN clause representing a single value in a conjunction can be used to
+# derive predicates.
+index-constraints vars=(a int, b int, c int as (a+b) stored) index=(c, a, b)
+(a BETWEEN 3 AND 3 AND b=4) OR (a=5 AND b=6)
+----
+[/7/3/4 - /7/3/4]
+[/11/5/6 - /11/5/6]
+
+# More deeply nested terms don't prevent derivation.
+index-constraints vars=(a int, b int, c int as (a+b) stored) index=(c)
+((a=3 AND b=4) OR (a=5 AND b=8)) AND ((a=1 AND b=2) OR (a=2 AND b=5))
+----
+[/7 - /7]
+Remaining filter: (((a = 3) AND (b = 4)) OR ((a = 5) AND (b = 8))) AND (((a = 1) AND (b = 2)) OR ((a = 2) AND (b = 5)))
+
+# A boolean column reference as a predicate allows derivation.
+index-constraints vars=(a bool, b int, c int as (CASE WHEN a THEN b+1 ELSE b-1 END) stored) index=(c, b)
+a AND b=4
+----
+[/5/4 - /5/4]
+Remaining filter: a
+
+# A negated boolean column reference as a predicate allows derivation.
+index-constraints vars=(a bool, b int, c int as (CASE WHEN a THEN b+1 ELSE b-1 END) stored) index=(c, b)
+NOT a AND b=4
+----
+[/3/4 - /3/4]
+Remaining filter: NOT a
+
 # -------------------------------------------------------
 # End unit tests for computed column predicate derivation
 # -------------------------------------------------------
