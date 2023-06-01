@@ -99,6 +99,12 @@ var charts = []sectionDescription{
 				Aggregator:  DescribeAggregator_MAX,
 				Metrics:     []string{"security.certificate.expiration.client-tenant"},
 			},
+			{
+				Title:       "Client Cert Expiration",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_MAX,
+				Metrics:     []string{"security.certificate.expiration.client"},
+			},
 		},
 	},
 	{

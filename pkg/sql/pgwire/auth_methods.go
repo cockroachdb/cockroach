@@ -427,7 +427,19 @@ func authCert(
 		tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
 			tlsState.PeerCertificates[0].Subject.CommonName,
 		).Normalize()
-		hook, err := security.UserAuthCertHook(false /*insecure*/, &tlsState, execCfg.RPCContext.TenantID)
+
+		cm, err := execCfg.RPCContext.SecurityContext.GetCertificateManager()
+		if err != nil {
+			log.Ops.Warningf(ctx, "failed to get cert manager info: %v", err)
+		}
+
+		hook, err := security.UserAuthCertHook(
+			false, /*insecure*/
+			&tlsState,
+			execCfg.RPCContext.TenantID,
+			cm,
+			execCfg.ClientCertExpirationCache,
+		)
 		if err != nil {
 			return err
 		}

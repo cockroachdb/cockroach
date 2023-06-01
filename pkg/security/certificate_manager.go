@@ -26,58 +26,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var (
-	metaCAExpiration = metric.Metadata{
-		Name:        "security.certificate.expiration.ca",
-		Help:        "Expiration for the CA certificate. 0 means no certificate or error.",
-		Measurement: "Certificate Expiration",
-		Unit:        metric.Unit_TIMESTAMP_SEC,
-	}
-	metaClientCAExpiration = metric.Metadata{
-		Name:        "security.certificate.expiration.client-ca",
-		Help:        "Expiration for the client CA certificate. 0 means no certificate or error.",
-		Measurement: "Certificate Expiration",
-		Unit:        metric.Unit_TIMESTAMP_SEC,
-	}
-	metaUICAExpiration = metric.Metadata{
-		Name:        "security.certificate.expiration.ui-ca",
-		Help:        "Expiration for the UI CA certificate. 0 means no certificate or error.",
-		Measurement: "Certificate Expiration",
-		Unit:        metric.Unit_TIMESTAMP_SEC,
-	}
-	metaNodeExpiration = metric.Metadata{
-		Name:        "security.certificate.expiration.node",
-		Help:        "Expiration for the node certificate. 0 means no certificate or error.",
-		Measurement: "Certificate Expiration",
-		Unit:        metric.Unit_TIMESTAMP_SEC,
-	}
-	metaNodeClientExpiration = metric.Metadata{
-		Name:        "security.certificate.expiration.node-client",
-		Help:        "Expiration for the node's client certificate. 0 means no certificate or error.",
-		Measurement: "Certificate Expiration",
-		Unit:        metric.Unit_TIMESTAMP_SEC,
-	}
-	metaUIExpiration = metric.Metadata{
-		Name:        "security.certificate.expiration.ui",
-		Help:        "Expiration for the UI certificate. 0 means no certificate or error.",
-		Measurement: "Certificate Expiration",
-		Unit:        metric.Unit_TIMESTAMP_SEC,
-	}
-
-	metaTenantCAExpiration = metric.Metadata{
-		Name:        "security.certificate.expiration.ca-client-tenant",
-		Help:        "Expiration for the Tenant Client CA certificate. 0 means no certificate or error.",
-		Measurement: "Certificate Expiration",
-		Unit:        metric.Unit_TIMESTAMP_SEC,
-	}
-	metaTenantExpiration = metric.Metadata{
-		Name:        "security.certificate.expiration.client-tenant",
-		Help:        "Expiration for the Tenant Client certificate. 0 means no certificate or error.",
-		Measurement: "Certificate Expiration",
-		Unit:        metric.Unit_TIMESTAMP_SEC,
-	}
-)
-
 // CertificateManager lives for the duration of the process and manages certificates and keys.
 // It reloads all certificates when triggered and construct tls.Config objects for
 // servers or clients.
@@ -106,7 +54,7 @@ type CertificateManager struct {
 
 	// The metrics struct is initialized at init time and metrics do their
 	// own locking.
-	certMetrics CertificateMetrics
+	certMetrics Metrics
 
 	// mu protects all remaining fields.
 	mu syncutil.RWMutex
@@ -138,20 +86,6 @@ type CertificateManager struct {
 	tenantConfig *tls.Config
 }
 
-// CertificateMetrics holds metrics about the various certificates.
-// These are initialized when the certificate manager is created and updated
-// on reload.
-type CertificateMetrics struct {
-	CAExpiration         *metric.Gauge
-	ClientCAExpiration   *metric.Gauge
-	UICAExpiration       *metric.Gauge
-	NodeExpiration       *metric.Gauge
-	NodeClientExpiration *metric.Gauge
-	UIExpiration         *metric.Gauge
-	TenantCAExpiration   *metric.Gauge
-	TenantExpiration     *metric.Gauge
-}
-
 func makeCertificateManager(
 	certsDir string, tlsSettings TLSSettings, opts ...Option,
 ) *CertificateManager {
@@ -164,16 +98,7 @@ func makeCertificateManager(
 		Locator:          certnames.MakeLocator(certsDir),
 		tenantIdentifier: o.tenantIdentifier,
 		tlsSettings:      tlsSettings,
-		certMetrics: CertificateMetrics{
-			CAExpiration:         metric.NewGauge(metaCAExpiration),
-			ClientCAExpiration:   metric.NewGauge(metaClientCAExpiration),
-			UICAExpiration:       metric.NewGauge(metaUICAExpiration),
-			NodeExpiration:       metric.NewGauge(metaNodeExpiration),
-			NodeClientExpiration: metric.NewGauge(metaNodeClientExpiration),
-			UIExpiration:         metric.NewGauge(metaUIExpiration),
-			TenantCAExpiration:   metric.NewGauge(metaTenantCAExpiration),
-			TenantExpiration:     metric.NewGauge(metaTenantExpiration),
-		},
+		certMetrics:      makeMetrics(),
 	}
 }
 
@@ -225,7 +150,7 @@ func (cm *CertificateManager) IsForTenant() bool {
 }
 
 // Metrics returns the metrics struct.
-func (cm *CertificateManager) Metrics() CertificateMetrics {
+func (cm *CertificateManager) Metrics() Metrics {
 	return cm.certMetrics
 }
 
