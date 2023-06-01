@@ -2708,6 +2708,7 @@ Note that because stats are scoped to the lifetime of the process, counters
 | `FlushIngestCount` |  | no |
 | `FlushIngestTableCount` |  | no |
 | `FlushIngestTableBytes` |  | no |
+| `IngestCount` | ingest_count is the number of successful ingest operations (counter). | no |
 | `MemtableSize` | memtable_size is the total size allocated to all memtables and (large) batches, in bytes (gauge). | no |
 | `MemtableCount` | memtable_count is the count of memtables (gauge). | no |
 | `MemtableZombieCount` | memtable_zombie_count is the count of memtables no longer referenced by the current DB state, but still in use by an iterator (gauge). | no |

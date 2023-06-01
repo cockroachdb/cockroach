@@ -449,6 +449,14 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	//Ingest metrics
+	metaIngestCount = metric.Metadata{
+		Name:        "storage.ingest.count",
+		Help:        "Number of successful ingestions performed",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Pebble metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
 		Name:        "rocksdb.block.cache.hits",
@@ -2325,6 +2333,9 @@ type StoreMetrics struct {
 	MaxLockWaitDurationNanos       *metric.Gauge
 	MaxLockWaitQueueWaitersForLock *metric.Gauge
 
+	// Ingestion metrics
+	IngestCount *metric.Gauge
+
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos *metric.Gauge
 
@@ -2764,6 +2775,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BatchCommitWALRotWaitDuration: metric.NewGauge(metaBatchCommitWALRotDuration),
 		BatchCommitCommitWaitDuration: metric.NewGauge(metaBatchCommitCommitWaitDuration),
 
+		// Ingestion metrics
+		IngestCount: metric.NewGauge(metaIngestCount),
+
 		RdbCheckpoints: metric.NewGauge(metaRdbCheckpoints),
 
 		// Disk health metrics.
@@ -3114,6 +3128,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.FlushableIngestCount.Update(int64(m.Flush.AsIngestCount))
 	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
 	sm.FlushableIngestTableSize.Update(int64(m.Flush.AsIngestBytes))
+	sm.IngestCount.Update(int64(m.Ingest.Count))
 	sm.BatchCommitCount.Update(int64(m.BatchCommitStats.Count))
 	sm.BatchCommitDuration.Update(int64(m.BatchCommitStats.TotalDuration))
 	sm.BatchCommitSemWaitDuration.Update(int64(m.BatchCommitStats.SemaphoreWaitDuration))
@@ -3122,7 +3137,6 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitL0StallDuration.Update(int64(m.BatchCommitStats.L0ReadAmpWriteStallDuration))
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
-
 	// Update the maximum number of L0 sub-levels seen.
 	sm.l0SublevelsTracker.Lock()
 	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
