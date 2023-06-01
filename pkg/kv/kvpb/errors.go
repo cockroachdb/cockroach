@@ -99,8 +99,8 @@ const (
 	// allow RollbackToSavepoint() to be called after such errors. In particular,
 	// this is useful for SQL which wants to allow rolling back to a savepoint
 	// after ConditionFailedErrors (uniqueness violations) and WriteIntentError
-	// (lock not available errors). With continuing after errors its important for
-	// the coordinator to track the timestamp at which intents might have been
+	// (lock not available errors). With continuing after errors it's important
+	// for the coordinator to track the timestamp at which intents might have been
 	// written.
 	//
 	// Note that all the lower scores also are unambiguous in this sense, so this

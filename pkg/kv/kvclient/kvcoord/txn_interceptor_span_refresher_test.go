@@ -1215,7 +1215,7 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		br.Txn.Refresh(refreshTS1) // server-side refresh
+		br.Txn.BumpReadTimestamp(refreshTS1) // server-side refresh
 		return br, nil
 	})
 
@@ -1273,7 +1273,7 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
-		br.Txn.Refresh(refreshTS2) // server-side refresh
+		br.Txn.BumpReadTimestamp(refreshTS2) // server-side refresh
 		return br, nil
 	})
 
@@ -1348,7 +1348,7 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 
 		// Return an error that contains a server-side refreshed transaction.
 		txn := ba.Txn.Clone()
-		txn.Refresh(refreshTS3) // server-side refresh
+		txn.BumpReadTimestamp(refreshTS3) // server-side refresh
 		pErr := kvpb.NewErrorWithTxn(&kvpb.ConditionFailedError{}, txn)
 		return nil, pErr
 	})

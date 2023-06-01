@@ -2867,7 +2867,7 @@ func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 
 	// Put again after advancing the txn's timestamp to the WriteTooOld error's
 	// timestamp and verify no WriteTooOldError.
-	txn.Refresh(wtoErr.ActualTimestamp)
+	txn.BumpReadTimestamp(wtoErr.ActualTimestamp)
 	txn.Sequence++
 	err = MVCCPut(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, value3, txn)
 	require.NoError(t, err)
