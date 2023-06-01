@@ -24,10 +24,20 @@ import (
 )
 
 // A peer is a remote node that we are trying to maintain a healthy RPC
-// connection (for a given connection class not known to the peer itself)
-// to. If no healthy connection exists, the peer tracks the time of
-// disconnect and maintains a circuit breaker that resets once the connection
-// can be re-established.
+// connection (for a given connection class not known to the peer itself) to. It
+// maintains metrics on our connection state to the peer (see the embedded
+// peerMetrics) and maintains a circuit breaker whose probe is the heartbeat
+// loop; the breaker trips whenever a heartbeat fails and resets whenever a
+// heartbeat succeeds.
+// Usually, the probe is always active (either attempting to heal the connection
+// or maintaining its health), but when a peer looks likely to be obsolete (for
+// example, remote node is noticed as having been decommissioned) as indicated
+// by the `deleteAfter` field being nonzero, the probe only runs on-demand, that
+// is, whenever usage of the `peer` is detected (this is done by the circuit
+// breaker); see (*peerMap).shouldDeleteAfter.
+// When the current time has surpassed `deleteAfter`, the peer will be taken out
+// of its surrounding rpc.Context and will no longer probe; see
+// (*peer).maybeDelete.
 type peer struct {
 	peerMetrics
 	k                 peerKey
