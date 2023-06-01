@@ -8616,7 +8616,7 @@ func TestRefreshFromBelowGCThreshold(t *testing.T) {
 			}
 		}
 		txn := roachpb.MakeTransaction("test", keyA, 0, 0, ts2, 0, 0)
-		txn.Refresh(ts4)
+		txn.BumpReadTimestamp(ts4)
 
 		for _, testCase := range []struct {
 			gc     hlc.Timestamp

@@ -299,7 +299,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	}
 	refreshFrom := txn.ReadTimestamp
 	refreshToTxn := txn.Clone()
-	refreshToTxn.Refresh(refreshTS)
+	refreshToTxn.BumpReadTimestamp(refreshTS)
 	switch refreshToTxn.Status {
 	case roachpb.PENDING:
 	case roachpb.STAGING:
@@ -502,7 +502,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 
 	refreshFrom := ba.Txn.ReadTimestamp
 	refreshToTxn := ba.Txn.Clone()
-	refreshToTxn.Refresh(ba.Txn.WriteTimestamp)
+	refreshToTxn.BumpReadTimestamp(ba.Txn.WriteTimestamp)
 	log.VEventf(ctx, 2, "preemptively refreshing to timestamp %s before issuing %s",
 		refreshToTxn.ReadTimestamp, ba)
 
