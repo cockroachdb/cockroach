@@ -191,26 +191,29 @@ func passwordAuthenticator(
 	}
 
 	// Now check the cleartext password against the retrieved credentials.
-	err = security.UserAuthPasswordHook(
+	if err := security.UserAuthPasswordHook(
 		false /*insecure*/, passwordStr, hashedPassword,
-	)(ctx, systemIdentity, clientConnection)
-
-	if err == nil {
-		// Password authentication succeeded using cleartext.  If the stored hash
-		// was encoded using crdb-bcrypt, we might want to upgrade it to SCRAM
-		// instead. Conversely, if the stored hash was encoded using SCRAM, we might
-		// want to downgrade it to crdb-bcrypt.
-		//
-		// This auto-conversion is a CockroachDB-specific feature, which pushes
-		// clusters upgraded from a previous version into using SCRAM-SHA-256, and
-		// makes it easy to rollback from SCRAM-SHA-256 if there are issues.
-		sql.MaybeConvertStoredPasswordHash(ctx,
-			execCfg,
-			systemIdentity,
-			passwordStr, hashedPassword)
+	)(ctx, systemIdentity, clientConnection); err != nil {
+		if errors.HasType(err, &security.PasswordUserAuthError{}) {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
+		}
+		return err
 	}
 
-	return err
+	// Password authentication succeeded using cleartext.  If the stored hash
+	// was encoded using crdb-bcrypt, we might want to upgrade it to SCRAM
+	// instead. Conversely, if the stored hash was encoded using SCRAM, we might
+	// want to downgrade it to crdb-bcrypt.
+	//
+	// This auto-conversion is a CockroachDB-specific feature, which pushes
+	// clusters upgraded from a previous version into using SCRAM-SHA-256, and
+	// makes it easy to rollback from SCRAM-SHA-256 if there are issues.
+	sql.MaybeConvertStoredPasswordHash(ctx,
+		execCfg,
+		systemIdentity,
+		passwordStr, hashedPassword)
+
+	return nil
 }
 
 func passwordString(pwdData []byte) (string, error) {
@@ -294,9 +297,9 @@ func scramAuthenticator(
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_EXPIRED, nil)
 			return creds, errExpiredPassword
 		} else if hashedPassword.Method() != password.HashSCRAMSHA256 {
-			const credentialsNotSCRAM = "user password hash not in SCRAM format"
-			c.LogAuthInfof(ctx, credentialsNotSCRAM)
-			return creds, errors.New(credentialsNotSCRAM)
+			credentialsNotSCRAMErr := errors.New("user password hash not in SCRAM format")
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, credentialsNotSCRAMErr)
+			return creds, credentialsNotSCRAMErr
 		}
 
 		// The method check above ensures this cast is always valid.
@@ -376,7 +379,7 @@ func scramAuthenticator(
 		// Feed the client message to the state machine.
 		got, err := handshake.Step(string(input))
 		if err != nil {
-			c.LogAuthInfof(ctx, "scram handshake error: %v", err)
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, errors.Wrap(err, "scram handshake error"))
 			break
 		}
 		// Decide which response to send to the client.
@@ -427,7 +430,19 @@ func authCert(
 		tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
 			tlsState.PeerCertificates[0].Subject.CommonName,
 		).Normalize()
-		hook, err := security.UserAuthCertHook(false /*insecure*/, &tlsState, execCfg.RPCContext.TenantID)
+
+		cm, err := execCfg.RPCContext.SecurityContext.GetCertificateManager()
+		if err != nil {
+			log.Ops.Warningf(ctx, "failed to get cert manager info: %v", err)
+		}
+
+		hook, err := security.UserAuthCertHook(
+			false, /*insecure*/
+			&tlsState,
+			execCfg.RPCContext.TenantID,
+			cm,
+			execCfg.ClientCertExpirationCache,
+		)
 		if err != nil {
 			return err
 		}
@@ -610,7 +625,7 @@ func authTrust(
 // never allow the client.
 func authReject(
 	_ context.Context,
-	_ AuthConn,
+	c AuthConn,
 	_ tls.ConnectionState,
 	_ *sql.ExecutorConfig,
 	_ *hba.Entry,
@@ -618,8 +633,10 @@ func authReject(
 ) (*AuthBehaviors, error) {
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
-	b.SetAuthenticator(func(_ context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
-		return errors.New("authentication rejected by configuration")
+	b.SetAuthenticator(func(ctx context.Context, _ username.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
+		err := errors.New("authentication rejected by configuration")
+		c.LogAuthFailed(ctx, eventpb.AuthFailReason_LOGIN_DISABLED, err)
+		return err
 	})
 	return b, nil
 }

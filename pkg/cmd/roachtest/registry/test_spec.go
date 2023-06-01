@@ -106,6 +106,10 @@ type TestSpec struct {
 	// SnapshotPrefix is set by tests that make use of volume snapshots.
 	// Prefixes must be not only be unique across tests, but one cannot be a
 	// prefix of another.
+	//
+	// TODO(irfansharif): Search by taking in the other parts of the snapshot
+	// fingerprint, i.e. the node count, the version, etc. that appear in the
+	// infix. This will get rid of this awkward prefix naming restriction.
 	SnapshotPrefix string
 }
 

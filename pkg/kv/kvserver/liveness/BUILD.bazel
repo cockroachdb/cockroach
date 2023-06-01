@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "liveness",
     srcs = [
+        "cache.go",
         "liveness.go",
         "storage.go",
     ],
@@ -18,6 +19,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/util/grpcutil",
@@ -49,7 +51,6 @@ go_test(
         "//pkg/base",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/plan",
-        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

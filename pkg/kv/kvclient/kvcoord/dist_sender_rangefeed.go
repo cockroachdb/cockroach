@@ -556,7 +556,8 @@ func handleRangefeedError(ctx context.Context, err error) (rangefeedErrorInfo, e
 		case kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 			kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
 			kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
-			kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER:
+			kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER,
+			kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED:
 			// Try again with same descriptor. These are transient
 			// errors that should not show up again.
 			return rangefeedErrorInfo{}, nil

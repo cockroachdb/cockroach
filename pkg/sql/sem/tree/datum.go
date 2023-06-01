@@ -374,11 +374,11 @@ func ParseDBool(s string) (*DBool, error) {
 // the beginning), and the escaped format, which supports "\\" and
 // octal escapes.
 func ParseDByte(s string) (*DBytes, error) {
-	res, err := lex.DecodeRawBytesToByteArrayAuto([]byte(s))
+	res, err := lex.DecodeRawBytesToByteArrayAuto(encoding.UnsafeConvertStringToBytes(s))
 	if err != nil {
 		return nil, MakeParseError(s, types.Bytes, err)
 	}
-	return NewDBytes(DBytes(res)), nil
+	return NewDBytes(DBytes(encoding.UnsafeConvertBytesToString(res))), nil
 }
 
 // ParseDUuidFromString parses and returns the *DUuid Datum value represented
@@ -1359,6 +1359,13 @@ func (d *DString) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
 }
 
+// UnsafeBytes returns the raw bytes avoiding allocation. It is "Unsafe" because
+// the contract is that callers must not to mutate the bytes but there is
+// nothing stopping that from happening.
+func (d *DString) UnsafeBytes() []byte {
+	return encoding.UnsafeConvertStringToBytes(string(*d))
+}
+
 // DCollatedString is the Datum for strings with a locale. The struct members
 // are intended to be immutable.
 type DCollatedString struct {
@@ -1513,6 +1520,13 @@ func (d *DCollatedString) IsComposite() bool {
 	return true
 }
 
+// UnsafeContentBytes returns the raw bytes avoiding allocation. It is "unsafe"
+// because the contract is that callers must not to mutate the bytes but there
+// is nothing stopping that from happening.
+func (d *DCollatedString) UnsafeContentBytes() []byte {
+	return encoding.UnsafeConvertStringToBytes(d.Contents)
+}
+
 // DBytes is the bytes Datum. The underlying type is a string because we want
 // the immutability, but this may contain arbitrary bytes.
 type DBytes string
@@ -1645,6 +1659,13 @@ func (d *DBytes) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
 }
 
+// UnsafeBytes returns the raw bytes avoiding allocation. It is "unsafe" because
+// the contract is that callers must not to mutate the bytes but there is
+// nothing stopping that from happening.
+func (d *DBytes) UnsafeBytes() []byte {
+	return encoding.UnsafeConvertStringToBytes(string(*d))
+}
+
 // DEncodedKey is a special Datum of types.EncodedKey type, used to pass through
 // encoded key data. It is similar to DBytes, except when it comes to
 // encoding/decoding. It is currently used to pass around inverted index keys,
@@ -1715,6 +1736,13 @@ func (d *DEncodedKey) Format(ctx *FmtCtx) {
 // Size implements the Datum interface.
 func (d *DEncodedKey) Size() uintptr {
 	return unsafe.Sizeof(*d) + uintptr(len(*d))
+}
+
+// UnsafeBytes returns the raw bytes avoiding allocation. It is "unsafe" because
+// the contract is that callers must not to mutate the bytes but there is
+// nothing stopping that from happening.
+func (d *DEncodedKey) UnsafeBytes() []byte {
+	return encoding.UnsafeConvertStringToBytes(string(*d))
 }
 
 // DUuid is the UUID Datum.

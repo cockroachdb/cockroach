@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-//
+
 // The structure definitions in this file have been cross-checked against go1.19.
 // Before allowing newer versions, please check that the structures
 // still match with those in go/src/runtime.

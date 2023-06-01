@@ -194,7 +194,7 @@ func (f *fileUploadMachine) run(ctx context.Context) error {
 func (f *fileUploadMachine) writeFile(ctx context.Context, finalBatch bool) error {
 	for i := 0; i < f.c.rows.Len(); i++ {
 		r := f.c.rows.At(i)
-		b := []byte(*r[0].(*tree.DBytes))
+		b := r[0].(*tree.DBytes).UnsafeBytes()
 		n, err := f.w.Write(b)
 		if err != nil {
 			return err

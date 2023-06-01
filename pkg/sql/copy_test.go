@@ -39,7 +39,6 @@ func TestCopyLogging(t *testing.T) {
 	for _, strings := range [][]string{
 		{`SET CLUSTER SETTING sql.trace.log_statement_execute = true`},
 		{`SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true`},
-		{`SET CLUSTER SETTING sql.log.unstructured_entries.enabled = true`, `SET CLUSTER SETTING sql.trace.log_statement_execute = true`},
 		{`SET CLUSTER SETTING sql.log.admin_audit.enabled = true`},
 	} {
 		t.Run(strings[0], func(t *testing.T) {

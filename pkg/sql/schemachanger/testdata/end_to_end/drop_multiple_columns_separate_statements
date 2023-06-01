@@ -378,6 +378,20 @@ upsert descriptor #104
   +      userName: root
   +    currentStatuses: <redacted>
   +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": crdb_internal_column_2_name_placeholder
+  +        "4": crdb_internal_column_4_name_placeholder
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "3": t_pkey
+  +        "4": crdb_internal_index_4_name_placeholder
+  +      name: t
   +    relevantStatements:
   +    - statement:
   +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
@@ -890,6 +904,20 @@ upsert descriptor #104
   -      userName: root
   -    currentStatuses: <redacted>
   -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": crdb_internal_column_2_name_placeholder
+  -        "4": crdb_internal_column_4_name_placeholder
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "3": t_pkey
+  -        "4": crdb_internal_index_4_name_placeholder
+  -      name: t
   -    relevantStatements:
   -    - statement:
   -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE

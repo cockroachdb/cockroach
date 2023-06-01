@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
@@ -41,13 +42,13 @@ type Entry struct {
 	ConnType ConnType
 	// Database is the list of databases to match. An empty list means
 	// "match any database".
-	Database []String
+	Database []rulebasedscanner.String
 	// User is the list of users to match. An empty list means "match
 	// any user".
-	User []String
+	User []rulebasedscanner.String
 	// Address is either AnyAddr, *net.IPNet or (unsupported) String for a hostname.
 	Address interface{}
-	Method  String
+	Method  rulebasedscanner.String
 	// MethodFn is populated during name resolution of Method.
 	MethodFn     interface{}
 	Options      [][2]string
@@ -292,7 +293,7 @@ func (h Entry) OptionsString() string {
 	sp := ""
 	for i, opt := range h.Options {
 		sb.WriteString(sp)
-		sb.WriteString(String{Value: opt[0] + "=" + opt[1], Quoted: h.OptionQuotes[i]}.String())
+		sb.WriteString(rulebasedscanner.String{Value: opt[0] + "=" + opt[1], Quoted: h.OptionQuotes[i]}.String())
 		sp = " "
 	}
 	return sb.String()
@@ -301,28 +302,6 @@ func (h Entry) OptionsString() string {
 // String implements the fmt.Stringer interface.
 func (h Entry) String() string {
 	return Conf{Entries: []Entry{h}}.String()
-}
-
-// String is a possibly quoted string.
-type String struct {
-	Value  string
-	Quoted bool
-}
-
-// String implements the fmt.Stringer interface.
-func (s String) String() string {
-	if s.Quoted {
-		return `"` + s.Value + `"`
-	}
-	return s.Value
-}
-
-// Empty returns true iff s is the unquoted empty string.
-func (s String) Empty() bool { return s.IsKeyword("") }
-
-// IsKeyword returns whether s is the non-quoted string v.
-func (s String) IsKeyword(v string) bool {
-	return !s.Quoted && s.Value == v
 }
 
 // ParseAndNormalize parses the HBA configuration from the provided
@@ -350,7 +329,7 @@ outer:
 		entry.Database = nil
 
 		// Normalize the 'all' keyword into AnyAddr.
-		if addr, ok := entry.Address.(String); ok && addr.IsKeyword("all") {
+		if addr, ok := entry.Address.(rulebasedscanner.String); ok && addr.IsKeyword("all") {
 			entry.Address = AnyAddr{}
 		}
 

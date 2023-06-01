@@ -106,6 +106,14 @@ type internedConstraint struct {
 	value stringCode
 }
 
+func (ic internedConstraint) unintern(interner *stringInterner) roachpb.Constraint {
+	return roachpb.Constraint{
+		Type:  ic.typ,
+		Key:   interner.toString(ic.key),
+		Value: interner.toString(ic.value),
+	}
+}
+
 func (ic internedConstraint) less(b internedConstraint) bool {
 	if ic.typ != b.typ {
 		return ic.typ < b.typ
@@ -230,11 +238,7 @@ func (icc internedConstraintsConjunction) unintern(
 	var cc roachpb.ConstraintsConjunction
 	cc.NumReplicas = icc.numReplicas
 	for _, c := range icc.constraints {
-		cc.Constraints = append(cc.Constraints, roachpb.Constraint{
-			Type:  c.typ,
-			Key:   interner.toString(c.key),
-			Value: interner.toString(c.value),
-		})
+		cc.Constraints = append(cc.Constraints, c.unintern(interner))
 	}
 	return cc
 }
@@ -954,10 +958,107 @@ func (rac *rangeAnalyzedConstraints) notEnoughVoters() bool {
 	return len(rac.replicas[voterIndex]) < int(rac.numNeededReplicas[voterIndex])
 }
 
+func (rac *rangeAnalyzedConstraints) notEnoughNonVoters() bool {
+	return len(rac.replicas[nonVoterIndex]) < int(rac.numNeededReplicas[nonVoterIndex])
+}
+
+func (rac *rangeAnalyzedConstraints) expectEnoughNonVoters(enough bool) error {
+	if rac.notEnoughNonVoters() == enough {
+		return errors.AssertionFailedf(
+			"expected enough=%v non-voters but have %d/%d",
+			enough, len(rac.replicas[nonVoterIndex]), int(rac.numNeededReplicas[nonVoterIndex]),
+		)
+	}
+	return nil
+}
+
+func (rac *rangeAnalyzedConstraints) expectEnoughVoters(enough bool) error {
+	if rac.notEnoughVoters() == enough {
+		return errors.AssertionFailedf(
+			"expected enough=%v voters but have %d/%d",
+			enough, len(rac.replicas[voterIndex]), int(rac.numNeededReplicas[voterIndex]),
+		)
+	}
+	return nil
+}
+
+func (rac *rangeAnalyzedConstraints) expectEnoughVotersAndNonVoters() error {
+	if rac.notEnoughVoters() || rac.notEnoughNonVoters() {
+		return errors.AssertionFailedf(
+			"expected enough voters and non-voters but have %d/%d voters and %d/%d non-voters",
+			len(rac.replicas[voterIndex]), int(rac.numNeededReplicas[voterIndex]),
+			len(rac.replicas[nonVoterIndex]), int(rac.numNeededReplicas[nonVoterIndex]),
+		)
+	}
+	return nil
+}
+
+func (rac *rangeAnalyzedConstraints) voterConstraintCount() (under, match, over int) {
+	for i, c := range rac.voterConstraints.constraints {
+		neededReplicas := int(c.numReplicas)
+		actualReplicas := len(rac.voterConstraints.satisfiedByReplica[voterIndex][i])
+		if neededReplicas > actualReplicas {
+			under++
+		} else if neededReplicas == actualReplicas {
+			match++
+		} else {
+			over++
+		}
+	}
+	return under, match, over
+}
+
+func (rac *rangeAnalyzedConstraints) constraintCount() (under, match, over int) {
+	for i, c := range rac.constraints.constraints {
+		neededReplicas := int(c.numReplicas)
+		actualReplicas := len(rac.constraints.satisfiedByReplica[voterIndex][i]) +
+			len(rac.constraints.satisfiedByReplica[nonVoterIndex][i])
+		if neededReplicas > actualReplicas {
+			under++
+		} else if neededReplicas == actualReplicas {
+			match++
+		} else {
+			over++
+		}
+	}
+	return under, match, over
+}
+
+func (rac *rangeAnalyzedConstraints) expectMatchedConstraints() error {
+	if under, match, over := rac.constraintCount(); under > 0 || over > 0 {
+		return errors.AssertionFailedf(
+			"expected only matched constraints but found "+
+				"under=%d match=%d over=%d", under, match, over)
+	}
+	return nil
+}
+
+func (rac *rangeAnalyzedConstraints) expectMatchedVoterConstraints() error {
+	if under, match, over := rac.voterConstraintCount(); under > 0 || over > 0 {
+		return errors.AssertionFailedf(
+			"expected only matched voter constraints but found "+
+				"under=%d match=%d over=%d", under, match, over)
+	}
+	return nil
+}
+
+func (rac *rangeAnalyzedConstraints) expectNoUnsatisfied() error {
+	if err := rac.expectMatchedConstraints(); err != nil {
+		return err
+	}
+	return rac.expectMatchedVoterConstraints()
+}
+
 // REQUIRES: notEnoughVoters()
-func (rac *rangeAnalyzedConstraints) candidatesToConvertFromNonVoterToVoter() []roachpb.StoreID {
+func (rac *rangeAnalyzedConstraints) candidatesToConvertFromNonVoterToVoter() (
+	[]roachpb.StoreID,
+	error,
+) {
+	if err := rac.expectEnoughVoters(false); err != nil {
+		return nil, err
+	}
 	if len(rac.replicas[nonVoterIndex]) == 0 {
-		return nil
+		return nil, nil
 	}
 	var cands []roachpb.StoreID
 	if rac.voterConstraints.isEmpty() && !rac.constraints.isEmpty() {
@@ -972,7 +1073,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToConvertFromNonVoterToVoter() []
 		}
 		// NB: it is possible that cands is empty since none of the non-voters
 		// satisfy a constraint.
-		return cands
+		return cands, nil
 	}
 	if !rac.voterConstraints.isEmpty() {
 		// There are some voter constraints that need satisfaction.
@@ -985,17 +1086,21 @@ func (rac *rangeAnalyzedConstraints) candidatesToConvertFromNonVoterToVoter() []
 		}
 		// NB: it is possible that cands is empty since none of the non-voters
 		// satisfy a constraint.
-		return cands
+		return cands, nil
 	}
 	// No constraints, so all non-voters qualify.
 	for i := range rac.replicas[nonVoterIndex] {
 		cands = append(cands, rac.replicas[nonVoterIndex][i].StoreID)
 	}
-	return cands
+	return cands, nil
 }
 
 // REQUIRES: notEnoughVoters() and candidatesToConvertFromNonVoterToVoter() is empty.
 func (rac *rangeAnalyzedConstraints) constraintsForAddingVoter() (constraintsDisj, error) {
+	if err := rac.expectEnoughVoters(false); err != nil {
+		return nil, err
+	}
+
 	var constrDisj constraintsDisj
 	if rac.voterConstraints.isEmpty() && !rac.constraints.isEmpty() {
 		// There are some constraints that must not be satisfied since don't have
@@ -1027,10 +1132,6 @@ func (rac *rangeAnalyzedConstraints) constraintsForAddingVoter() (constraintsDis
 	return nil, nil
 }
 
-func (rac *rangeAnalyzedConstraints) notEnoughNonVoters() bool {
-	return len(rac.replicas[nonVoterIndex]) < int(rac.numNeededReplicas[nonVoterIndex])
-}
-
 // This is only useful when constraints or store attributes change and we can
 // more optimally fix things without moving replicas.
 //
@@ -1038,16 +1139,22 @@ func (rac *rangeAnalyzedConstraints) notEnoughNonVoters() bool {
 // bother with this complexity?
 //
 // REQUIRES: notEnoughNonVoters()
-func (rac *rangeAnalyzedConstraints) candidatesToConvertFromVoterToNonVoter() []roachpb.StoreID {
+func (rac *rangeAnalyzedConstraints) candidatesToConvertFromVoterToNonVoter() (
+	[]roachpb.StoreID,
+	error,
+) {
+	if err := rac.expectEnoughNonVoters(false); err != nil {
+		return nil, err
+	}
 	extraVoters := len(rac.replicas[voterIndex]) - int(rac.numNeededReplicas[voterIndex])
 	if extraVoters <= 0 {
-		return nil
+		return nil, nil
 	}
 	if !rac.constraints.isEmpty() &&
 		extraVoters <= len(rac.constraints.satisfiedNoConstraintReplica[voterIndex]) {
 		// We have voters that satisfy no constraint. Once we get rid of them
 		// there will not be extra voters.
-		return nil
+		return nil, nil
 	}
 	var constraintSet []roachpb.StoreID
 	constraintSetNeeded := false
@@ -1096,21 +1203,24 @@ func (rac *rangeAnalyzedConstraints) candidatesToConvertFromVoterToNonVoter() []
 		for i := range rac.replicas[voterIndex] {
 			voterStores = append(voterStores, rac.replicas[voterIndex][i].StoreID)
 		}
-		return voterStores
+		return voterStores, nil
 	}
 	if !constraintSetNeeded && voterConstraintSetNeeded {
-		return voterConstraintSet
+		return voterConstraintSet, nil
 	}
 	if constraintSetNeeded && !voterConstraintSetNeeded {
-		return constraintSet
+		return constraintSet, nil
 	}
 	cset := makeStoreIDPostingList(constraintSet)
 	cset.intersect(makeStoreIDPostingList(voterConstraintSet))
-	return cset
+	return cset, nil
 }
 
 // REQUIRES: notEnoughNonVoters() and candidatesToConvertVoterToNonVoter() is empty.
 func (rac *rangeAnalyzedConstraints) constraintsForAddingNonVoter() (constraintsDisj, error) {
+	if err := rac.expectEnoughNonVoters(false); err != nil {
+		return nil, err
+	}
 	var constrDisj constraintsDisj
 	if !rac.constraints.isEmpty() {
 		// There are some constraints that are not satisfied since don't have
@@ -1140,10 +1250,14 @@ func (rac *rangeAnalyzedConstraints) constraintsForAddingNonVoter() (constraints
 // remove a voter from C'. But removing a replica from C' will also unsatisfy
 // C. What this requires is switching a voter in C to non-voter and switching
 // a non-voter in A' to voter.
-func (rac *rangeAnalyzedConstraints) candidatesForRoleSwapForConstraints() [numReplicaKinds][]roachpb.StoreID {
-	if rac.notEnoughVoters() || rac.notEnoughNonVoters() {
-		// Add first.
-		return [numReplicaKinds][]roachpb.StoreID{}
+// REQUIRES: !notEnoughVoters() && !notEnoughNonVoters()
+func (rac *rangeAnalyzedConstraints) candidatesForRoleSwapForConstraints() (
+	[numReplicaKinds][]roachpb.StoreID,
+	error,
+) {
+	if err := rac.expectEnoughVotersAndNonVoters(); err != nil {
+		// Need to add necessary voters and non-voters first.
+		return [numReplicaKinds][]roachpb.StoreID{}, err
 	}
 	// We have enough voters and enough non-voters. We have either the right
 	// number of each kind, or may have extra of some kind.
@@ -1159,7 +1273,7 @@ func (rac *rangeAnalyzedConstraints) candidatesForRoleSwapForConstraints() [numR
 	// on constraints satisfaction. If any unsatisfied conjunction can be
 	// satisfied by a non-voter we can make into a voter.
 	if rac.voterConstraints.isEmpty() {
-		return [numReplicaKinds][]roachpb.StoreID{}
+		return [numReplicaKinds][]roachpb.StoreID{}, nil
 	}
 	var swapCands [numReplicaKinds][]roachpb.StoreID
 	for i, c := range rac.voterConstraints.constraints {
@@ -1182,13 +1296,16 @@ func (rac *rangeAnalyzedConstraints) candidatesForRoleSwapForConstraints() [numR
 	} else if len(swapCands[voterIndex]) == 0 {
 		swapCands[nonVoterIndex] = nil
 	}
-	return swapCands
+	return swapCands, nil
 }
 
-func (rac *rangeAnalyzedConstraints) candidatesToRemove() []roachpb.StoreID {
-	if rac.notEnoughVoters() || rac.notEnoughNonVoters() {
-		return nil
+// REQUIRES: !notEnoughVoters() && !notEnoughNonVoters()
+func (rac *rangeAnalyzedConstraints) candidatesToRemove() ([]roachpb.StoreID, error) {
+	if err := rac.expectEnoughVotersAndNonVoters(); err != nil {
+		// Need to add necessary voters and non-voters first.
+		return nil, err
 	}
+
 	var cands []roachpb.StoreID
 	if len(rac.replicas[nonVoterIndex]) > int(rac.numNeededReplicas[nonVoterIndex]) {
 		if !rac.constraints.isEmpty() {
@@ -1211,7 +1328,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToRemove() []roachpb.StoreID {
 			}
 		}
 		if len(cands) > 0 {
-			return cands
+			return cands, nil
 		}
 	}
 	if len(rac.replicas[voterIndex]) > int(rac.numNeededReplicas[voterIndex]) {
@@ -1225,7 +1342,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToRemove() []roachpb.StoreID {
 			}
 			cands = append(
 				cands, rac.voterConstraints.satisfiedNoConstraintReplica[voterIndex]...)
-			return cands
+			return cands, nil
 		}
 		if !rac.constraints.isEmpty() {
 			for i, c := range rac.constraints.constraints {
@@ -1236,31 +1353,28 @@ func (rac *rangeAnalyzedConstraints) candidatesToRemove() []roachpb.StoreID {
 				}
 			}
 			cands = append(cands, rac.constraints.satisfiedNoConstraintReplica[voterIndex]...)
-			return cands
+			return cands, nil
 		}
 		// No constraints. Can remove any voter.
 		for i := range rac.replicas[voterIndex] {
 			cands = append(cands, rac.replicas[nonVoterIndex][i].StoreID)
 		}
-		return cands
+		return cands, nil
 	}
-	return nil
+	return nil, nil
 }
 
 // REQUIRES: !notEnoughVoters() and !notEnoughNonVoters()
 func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 	toRemoveVoters []roachpb.StoreID,
 	toAdd constraintsDisj,
+	err error,
 ) {
-	if rac.notEnoughVoters() || rac.notEnoughNonVoters() {
-		// Add first.
-		return nil, nil
+	if err := rac.expectEnoughVotersAndNonVoters(); err != nil {
+		// Need to add necessary voters and non-voters first.
+		return nil, nil, err
 	}
-	if rac.voterConstraints.isEmpty() && rac.constraints.isEmpty() {
-		return nil, nil
-	}
-
-	if rac.voterConstraints.isEmpty() && !rac.constraints.isEmpty() {
+	if rac.voterConstraints.isEmpty() {
 		// There are some constraints, and no voter constraints.
 		//
 		// Only need to remove a voter if some conjunction is oversatisfied purely
@@ -1276,9 +1390,11 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 					toRemoveVoters, rac.constraints.satisfiedByReplica[voterIndex][i]...)
 			}
 		}
+		// Always include the voters which are satisfying no constraints as
+		// candidates to remove.
 		toRemoveVoters = append(
 			toRemoveVoters, rac.constraints.satisfiedNoConstraintReplica[voterIndex]...)
-	} else if !rac.voterConstraints.isEmpty() {
+	} else {
 		for i, c := range rac.voterConstraints.constraints {
 			neededReplicas := int(c.numReplicas)
 			actualVoterReplicas := len(rac.voterConstraints.satisfiedByReplica[voterIndex][i])
@@ -1289,6 +1405,8 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 					toRemoveVoters, rac.voterConstraints.satisfiedByReplica[voterIndex][i]...)
 			}
 		}
+		// Always include the voters which are satisfying no voter constraints as
+		// candidates to remove.
 		toRemoveVoters = append(
 			toRemoveVoters, rac.voterConstraints.satisfiedNoConstraintReplica[voterIndex]...)
 	}
@@ -1297,29 +1415,108 @@ func (rac *rangeAnalyzedConstraints) candidatesVoterConstraintsUnsatisfied() (
 	} else if len(toAdd) == 0 {
 		toRemoveVoters = nil
 	}
-	return toRemoveVoters, toAdd
+	return toRemoveVoters, toAdd, nil
 }
 
+// REQUIRES: !notEnoughVoters() and !notEnoughNonVoters()
 func (rac *rangeAnalyzedConstraints) candidatesNonVoterConstraintsUnsatisfied() (
-	toRemoveVoters []roachpb.StoreID,
+	toRemoveNonVoters []roachpb.StoreID,
 	toAdd constraintsDisj,
+	err error,
 ) {
-	// TODO(sumeer): implement
-	return nil, nil
+	if err = rac.expectEnoughVotersAndNonVoters(); err != nil {
+		// Need to add necessary voters and non-voters first.
+		return nil, nil, err
+	}
+	if !rac.constraints.isEmpty() {
+		// If some conjunction is oversatisfied, include all non-voters which satisfy
+		// the constraint as candidates to be removed. If there are not enough
+		// replicas to satisfy an all-replica constraint, include the constraint for
+		// toAdd.
+		for i, c := range rac.constraints.constraints {
+			neededReplicas := int(c.numReplicas)
+			actualReplicas := len(rac.constraints.satisfiedByReplica[voterIndex][i]) +
+				len(rac.constraints.satisfiedByReplica[nonVoterIndex][i])
+			if neededReplicas > actualReplicas {
+				toAdd = append(toAdd, c.constraints)
+			} else if neededReplicas < actualReplicas {
+				toRemoveNonVoters = append(toRemoveNonVoters,
+					rac.constraints.satisfiedByReplica[nonVoterIndex][i]...)
+			}
+		}
+	}
+	// Always include the non-voters which are satisfying no constraints as
+	// candidates to remove.
+	toRemoveNonVoters = append(
+		toRemoveNonVoters, rac.constraints.satisfiedNoConstraintReplica[nonVoterIndex]...)
+	if len(toRemoveNonVoters) == 0 {
+		toAdd = nil
+	} else if len(toAdd) == 0 {
+		toRemoveNonVoters = nil
+	}
+	return toRemoveNonVoters, toAdd, nil
 }
 
+// REQUIRES: !notEnoughVoters() and !notEnoughNonVoters() and no unsatisfied
+// constraint.
 func (rac *rangeAnalyzedConstraints) candidatesToReplaceVoterForRebalance(
 	storeID roachpb.StoreID,
-) []roachpb.ConstraintsConjunction {
-	// TODO(sumeer): implement
-	return nil
+) (toReplace constraintsConj, err error) {
+	if err = rac.expectEnoughVotersAndNonVoters(); err != nil {
+		// Need to add necessary voters and non-voters first.
+		return nil, err
+	}
+	if err = rac.expectNoUnsatisfied(); err != nil {
+		// Need to address constraint satisfaction first.
+		return nil, err
+	}
+
+	for i, c := range rac.voterConstraints.constraints {
+		// Find the voter constraint which the store being replaced satisfies.
+		for _, checkStoreID := range rac.voterConstraints.satisfiedByReplica[voterIndex][i] {
+			if checkStoreID == storeID {
+				return c.constraints, nil
+			}
+		}
+	}
+	for i, c := range rac.constraints.constraints {
+		// Find the all-replica constraint which the store being replaced
+		// satisfies.
+		for _, checkStoreID := range rac.constraints.satisfiedByReplica[voterIndex][i] {
+			if checkStoreID == storeID {
+				return c.constraints, nil
+			}
+		}
+	}
+	return nil,
+		errors.Errorf("expected replaced store %d to match a constraint", toReplace)
 }
 
+// REQUIRES: !notEnoughVoters() and !notEnoughNonVoters() and no unsatisfied
+// constraint.
 func (rac *rangeAnalyzedConstraints) candidatesToReplaceNonVoterForRebalance(
 	storeID roachpb.StoreID,
-) []roachpb.ConstraintsConjunction {
-	// TODO(sumeer): implement
-	return nil
+) (toReplace constraintsConj, err error) {
+	if err = rac.expectEnoughVotersAndNonVoters(); err != nil {
+		// Need to add necessary voters and non-voters first.
+		return nil, err
+	}
+	if err = rac.expectNoUnsatisfied(); err != nil {
+		// Need to address constraint satisfaction first.
+		return nil, err
+	}
+
+	for i, c := range rac.constraints.constraints {
+		// Find the all-replica constraint which the store being replaced
+		// satisfies.
+		for _, checkStoreID := range rac.constraints.satisfiedByReplica[nonVoterIndex][i] {
+			if checkStoreID == storeID {
+				return c.constraints, nil
+			}
+		}
+	}
+	return nil,
+		errors.Errorf("expected replaced store %d to match a constraint", toReplace)
 }
 
 // Helper for constructing rangeAnalyzedConstraints. Contains initial state

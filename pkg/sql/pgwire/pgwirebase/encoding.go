@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -324,31 +325,33 @@ func DecodeDatum(
 	ctx context.Context, evalCtx *eval.Context, typ *types.T, code FormatCode, b []byte,
 ) (tree.Datum, error) {
 	id := typ.Oid()
+	// Use a direct string pointing to b where we are sure we aren't retaining this string.
+	bs := encoding.UnsafeConvertBytesToString(b)
 	switch code {
 	case FormatText:
 		switch id {
 		case oid.T_record:
-			d, _, err := tree.ParseDTupleFromString(evalCtx, string(b), typ)
+			d, _, err := tree.ParseDTupleFromString(evalCtx, bs, typ)
 			if err != nil {
 				return nil, err
 			}
 			return d, nil
 		case oid.T_bool:
-			t, err := strconv.ParseBool(string(b))
+			t, err := strconv.ParseBool(bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return tree.MakeDBool(tree.DBool(t)), nil
 		case oid.T_bit, oid.T_varbit:
-			t, err := tree.ParseDBitArray(string(b))
+			t, err := tree.ParseDBitArray(bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return t, nil
 		case oid.T_int2, oid.T_int4, oid.T_int8:
-			i, err := strconv.ParseInt(string(b), 10, 64)
+			i, err := strconv.ParseInt(bs, 10, 64)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_oid,
@@ -362,106 +365,108 @@ func DecodeDatum(
 			oid.T_regnamespace,
 			oid.T_regprocedure,
 			oid.T_regdictionary:
-			return eval.ParseDOid(ctx, evalCtx, string(b), typ)
+			return eval.ParseDOid(ctx, evalCtx, bs, typ)
 		case oid.T_float4, oid.T_float8:
-			f, err := strconv.ParseFloat(string(b), 64)
+			f, err := strconv.ParseFloat(bs, 64)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return tree.NewDFloat(tree.DFloat(f)), nil
 		case oidext.T_box2d:
-			d, err := tree.ParseDBox2D(string(b))
+			d, err := tree.ParseDBox2D(bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oidext.T_geography:
-			d, err := tree.ParseDGeography(string(b))
+			d, err := tree.ParseDGeography(bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oidext.T_geometry:
-			d, err := tree.ParseDGeometry(string(b))
+			d, err := tree.ParseDGeometry(bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_void:
 			return tree.DVoidDatum, nil
 		case oid.T_numeric:
-			d, err := tree.ParseDDecimal(string(b))
+			d, err := tree.ParseDDecimal(bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_bytea:
 			res, err := lex.DecodeRawBytesToByteArrayAuto(b)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return tree.NewDBytes(tree.DBytes(res)), nil
+			// Note: we could use encoding.UnsafeConvertBytesToString here if
+			// we were guaranteed all callers never mutated b.
+			return tree.NewDBytes(tree.DBytes(string(res))), nil
 		case oid.T_timestamp:
-			d, _, err := tree.ParseDTimestamp(evalCtx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimestamp(evalCtx, bs, time.Microsecond)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, _, err := tree.ParseDTimestampTZ(evalCtx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimestampTZ(evalCtx, bs, time.Microsecond)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_date:
-			d, _, err := tree.ParseDDate(evalCtx, string(b))
+			d, _, err := tree.ParseDDate(evalCtx, bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_time:
-			d, _, err := tree.ParseDTime(nil, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTime(nil, bs, time.Microsecond)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_timetz:
-			d, _, err := tree.ParseDTimeTZ(evalCtx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimeTZ(evalCtx, bs, time.Microsecond)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_interval:
-			d, err := tree.ParseDInterval(evalCtx.GetIntervalStyle(), string(b))
+			d, err := tree.ParseDInterval(evalCtx.GetIntervalStyle(), bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_uuid:
-			d, err := tree.ParseDUuidFromString(string(b))
+			d, err := tree.ParseDUuidFromString(bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_inet:
-			d, err := tree.ParseDIPAddrFromINetString(string(b))
+			d, err := tree.ParseDIPAddrFromINetString(bs)
 			if err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return d, nil
 		case oid.T_jsonb, oid.T_json:
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
-			return tree.ParseDJSON(string(b))
+			return tree.ParseDJSON(bs)
 		case oid.T_tsquery:
-			ret, err := tsearch.ParseTSQuery(string(b))
+			ret, err := tsearch.ParseTSQuery(bs)
 			if err != nil {
 				return nil, err
 			}
 			return &tree.DTSQuery{TSQuery: ret}, nil
 		case oid.T_tsvector:
-			ret, err := tsearch.ParseTSVector(string(b))
+			ret, err := tsearch.ParseTSVector(bs)
 			if err != nil {
 				return nil, err
 			}
@@ -473,7 +478,7 @@ func DecodeDatum(
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
-			return tree.NewDString(string(b)), nil
+			return tree.NewDString(bs), nil
 		}
 	case FormatBinary:
 		switch id {
@@ -613,7 +618,7 @@ func DecodeDatum(
 					decDigits = decDigits[:len(decDigits)-int(overScale)]
 				}
 
-				decString := string(decDigits)
+				decString := encoding.UnsafeConvertBytesToString(decDigits)
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
 					return nil, pgerror.Newf(pgcode.Syntax, "could not parse %q as type decimal", decString)
 				}
@@ -640,6 +645,7 @@ func DecodeDatum(
 
 			return &alloc.dd, nil
 		case oid.T_bytea:
+			// Note: there's an implicit string cast here reallocating b.
 			return tree.NewDBytes(tree.DBytes(b)), nil
 		case oid.T_timestamp:
 			if len(b) < 8 {
@@ -698,7 +704,7 @@ func DecodeDatum(
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
-			return tree.ParseDJSON(string(b))
+			return tree.ParseDJSON(bs)
 		case oid.T_jsonb:
 			if len(b) < 1 {
 				return nil, NewProtocolViolationErrorf("no data to decode")
@@ -711,7 +717,7 @@ func DecodeDatum(
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
-			return tree.ParseDJSON(string(b))
+			return tree.ParseDJSON(encoding.UnsafeConvertBytesToString(b))
 		case oid.T_varbit, oid.T_bit:
 			if len(b) < 4 {
 				return nil, NewProtocolViolationErrorf("insufficient data: %d", len(b))
@@ -801,7 +807,7 @@ func DecodeDatum(
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		e, err := tree.MakeDEnumFromLogicalRepresentation(typ, string(b))
+		e, err := tree.MakeDEnumFromLogicalRepresentation(typ, bs)
 		if err != nil {
 			return nil, err
 		}
@@ -812,15 +818,21 @@ func DecodeDatum(
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
+		// Note: we could use bs here if we were guaranteed all callers never
+		// mutated b.
 		return tree.NewDString(string(b)), nil
 	case oid.T_bpchar:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
 		// Trim the trailing spaces
+		// Note: we could use bs here if we were guaranteed all callers never
+		// mutated b.
 		sv := strings.TrimRight(string(b), " ")
 		return tree.NewDString(sv), nil
 	case oid.T_char:
+		// Note: we could use bs here if we were guaranteed all callers never
+		// mutated b.
 		sv := string(b)
 		// Always truncate to 1 byte, and handle the null byte specially.
 		if len(b) >= 1 {
@@ -835,6 +847,8 @@ func DecodeDatum(
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
+		// Note: we could use bs here if we were guaranteed all callers never
+		// mutated b.
 		return tree.NewDName(string(b)), nil
 	}
 

@@ -139,16 +139,34 @@ func (ics *indexCandidateSet) categorizeIndexCandidates(expr opt.Expr) {
 		ics.addVariableExprIndex(expr.Right, ics.rangeCandidates)
 	case *memo.InnerJoinExpr:
 		ics.addJoinIndexes(expr.On)
+		ics.categorizeIndexCandidates(expr.Left)
+		ics.categorizeIndexCandidates(expr.Right)
+		return
 	case *memo.LeftJoinExpr:
 		ics.addJoinIndexes(expr.On)
+		ics.categorizeIndexCandidates(expr.Left)
+		ics.categorizeIndexCandidates(expr.Right)
+		return
 	case *memo.RightJoinExpr:
 		ics.addJoinIndexes(expr.On)
+		ics.categorizeIndexCandidates(expr.Left)
+		ics.categorizeIndexCandidates(expr.Right)
+		return
 	case *memo.FullJoinExpr:
 		ics.addJoinIndexes(expr.On)
+		ics.categorizeIndexCandidates(expr.Left)
+		ics.categorizeIndexCandidates(expr.Right)
+		return
 	case *memo.SemiJoinExpr:
 		ics.addJoinIndexes(expr.On)
+		ics.categorizeIndexCandidates(expr.Left)
+		ics.categorizeIndexCandidates(expr.Right)
+		return
 	case *memo.AntiJoinExpr:
 		ics.addJoinIndexes(expr.On)
+		ics.categorizeIndexCandidates(expr.Left)
+		ics.categorizeIndexCandidates(expr.Right)
+		return
 	case *memo.UnionExpr:
 		ics.addSetOperationIndexes(expr.LeftCols, expr.RightCols)
 	case *memo.IntersectExpr:

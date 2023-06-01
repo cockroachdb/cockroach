@@ -11,8 +11,6 @@
 package colenc
 
 import (
-	"unsafe"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -144,9 +142,9 @@ func encodeKeys[T []byte | roachpb.Key](
 			}
 			s := ss.Get(r + start)
 			if dir == encoding.Ascending {
-				kys[r] = encoding.EncodeStringAscending(b, unsafeConvertBytesToString(s))
+				kys[r] = encoding.EncodeStringAscending(b, encoding.UnsafeConvertBytesToString(s))
 			} else {
-				kys[r] = encoding.EncodeStringDescending(b, unsafeConvertBytesToString(s))
+				kys[r] = encoding.EncodeStringDescending(b, encoding.UnsafeConvertBytesToString(s))
 			}
 		}
 	case types.TimestampFamily, types.TimestampTZFamily:
@@ -248,8 +246,4 @@ func (b *BatchEncoder) encodeIndexKey(
 		}
 	}
 	return nil
-}
-
-func unsafeConvertBytesToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
 }

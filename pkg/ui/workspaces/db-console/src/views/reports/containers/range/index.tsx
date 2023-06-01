@@ -192,6 +192,11 @@ export class Range extends React.Component<RangeProps, {}> {
         <h1 className="base-heading">
           Range Report for r{responseRangeID.toString()}
         </h1>
+        <a
+          href={`/#/debug/enqueue_range?rangeID=${responseRangeID.toString()}`}
+        >
+          Enqueue Range
+        </a>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
         <ConnectionsTable range={range} />

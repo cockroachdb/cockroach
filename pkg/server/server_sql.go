@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig"
@@ -68,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -945,35 +947,42 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.nodeDialer)
 	*execCfg = sql.ExecutorConfig{
-		Settings:                  cfg.Settings,
-		NodeInfo:                  nodeInfo,
-		Codec:                     codec,
-		DefaultZoneConfig:         &cfg.DefaultZoneConfig,
-		Locality:                  cfg.Locality,
-		AmbientCtx:                cfg.AmbientCtx,
-		DB:                        cfg.db,
-		Gossip:                    cfg.gossip,
-		NodeLiveness:              cfg.nodeLiveness,
-		SystemConfig:              cfg.systemConfigWatcher,
-		MetricsRecorder:           cfg.recorder,
-		DistSender:                cfg.distSender,
-		RPCContext:                cfg.rpcContext,
-		LeaseManager:              leaseMgr,
-		TenantStatusServer:        cfg.tenantStatusServer,
-		Clock:                     cfg.clock,
-		DistSQLSrv:                distSQLServer,
-		NodesStatusServer:         cfg.nodesStatusServer,
-		SQLStatusServer:           cfg.sqlStatusServer,
-		SessionRegistry:           cfg.sessionRegistry,
-		ClosedSessionCache:        cfg.closedSessionCache,
-		ContentionRegistry:        contentionRegistry,
-		SQLLiveness:               cfg.sqlLivenessProvider,
-		JobRegistry:               jobRegistry,
-		VirtualSchemas:            virtualSchemas,
-		HistogramWindowInterval:   cfg.HistogramWindowInterval(),
-		RangeDescriptorCache:      cfg.distSender.RangeDescriptorCache(),
-		RoleMemberCache:           sql.NewMembershipCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
-		SessionInitCache:          sessioninit.NewCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
+		Settings:                cfg.Settings,
+		NodeInfo:                nodeInfo,
+		Codec:                   codec,
+		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
+		Locality:                cfg.Locality,
+		AmbientCtx:              cfg.AmbientCtx,
+		DB:                      cfg.db,
+		Gossip:                  cfg.gossip,
+		NodeLiveness:            cfg.nodeLiveness,
+		SystemConfig:            cfg.systemConfigWatcher,
+		MetricsRecorder:         cfg.recorder,
+		DistSender:              cfg.distSender,
+		RPCContext:              cfg.rpcContext,
+		LeaseManager:            leaseMgr,
+		TenantStatusServer:      cfg.tenantStatusServer,
+		Clock:                   cfg.clock,
+		DistSQLSrv:              distSQLServer,
+		NodesStatusServer:       cfg.nodesStatusServer,
+		SQLStatusServer:         cfg.sqlStatusServer,
+		SessionRegistry:         cfg.sessionRegistry,
+		ClosedSessionCache:      cfg.closedSessionCache,
+		ContentionRegistry:      contentionRegistry,
+		SQLLiveness:             cfg.sqlLivenessProvider,
+		JobRegistry:             jobRegistry,
+		VirtualSchemas:          virtualSchemas,
+		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
+		RoleMemberCache: sql.NewMembershipCache(
+			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper,
+		),
+		SessionInitCache: sessioninit.NewCache(
+			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper,
+		),
+		ClientCertExpirationCache: security.NewClientCertExpirationCache(
+			ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
+		),
 		RootMemoryMonitor:         rootSQLMemoryMonitor,
 		TestingKnobs:              sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:     storageEngineClient.CompactEngineSpan,
@@ -1364,6 +1373,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
 	fn(ctx)
+
+	auditlogging.UserAuditLogConfig.SetOnChange(
+		&execCfg.Settings.SV, func(ctx context.Context) {
+			auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings)
+		})
+	auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings)
 
 	return &SQLServer{
 		ambientCtx:                     cfg.BaseConfig.AmbientCtx,
