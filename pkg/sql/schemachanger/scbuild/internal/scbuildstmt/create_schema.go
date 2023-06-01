@@ -129,14 +129,10 @@ func getSchemaName(b BuildCtx, n *tree.CreateSchema) (schemaName string) {
 
 // schemaExists returns true if `schema` has already been used.
 func schemaExists(b BuildCtx, schema tree.ObjectNamePrefix) bool {
-	// Check statically known schemas.
-	if schema.Schema() == tree.PublicSchema {
+	// Check statically known schemas: "public" or virtual schemas ("pg_catalog",
+	// "pg_information", "crdb_internal").
+	if schema.Schema() == catconstants.PublicSchemaName || IsVirtualSchemaName(schema.Schema()) {
 		return true
-	}
-	for virtualSchema := range catconstants.VirtualSchemaNames {
-		if schema.Schema() == virtualSchema {
-			return true
-		}
 	}
 	// Check user defined schemas.
 	schemaElts := b.ResolveSchema(schema, ResolveParams{
@@ -145,4 +141,13 @@ func schemaExists(b BuildCtx, schema tree.ObjectNamePrefix) bool {
 		WithOffline:         true, // We search schema with name `schema`, including offline ones.
 	})
 	return schemaElts != nil
+}
+
+func IsVirtualSchemaName(schema string) bool {
+	for virtualSchema := range catconstants.VirtualSchemaNames {
+		if schema == virtualSchema {
+			return true
+		}
+	}
+	return false
 }

@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -306,7 +306,7 @@ func WithPublicSchemaID(publicSchemaID descpb.ID) NewInitialOption {
 		// not have a descriptor.
 		if publicSchemaID != keys.PublicSchemaID {
 			desc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
-				tree.PublicSchema: {ID: publicSchemaID},
+				catconstants.PublicSchemaName: {ID: publicSchemaID},
 			}
 		}
 	}

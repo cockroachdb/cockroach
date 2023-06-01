@@ -772,6 +772,9 @@ func (b *builderState) ResolvePrefix(
 ) (dbElts scbuildstmt.ElementResultSet, scElts scbuildstmt.ElementResultSet) {
 	db, sc := b.cr.MustResolvePrefix(b.ctx, prefix)
 	b.ensureDescriptor(db.GetID())
+	if sc.SchemaKind() == catalog.SchemaVirtual || sc.SchemaKind() == catalog.SchemaTemporary {
+		panic(sqlerrors.NewCannotModifyTempOrVirtualSchemaError(sc.GetName(), sc.SchemaKind().String()))
+	}
 	b.ensureDescriptor(sc.GetID())
 	b.checkOwnershipOrPrivilegesOnSchemaDesc(prefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
 	return b.descCache[db.GetID()].ers, b.descCache[sc.GetID()].ers
@@ -987,7 +990,7 @@ func (b *builderState) ResolveIndex(
 func (b *builderState) ResolveIndexByName(
 	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
-	// If a table name is specified, confirm its not a systme table first.
+	// If a table name is specified, confirm it is not a system table first.
 	if tableIndexName.Table.ObjectName != "" {
 		desc := b.resolveRelation(tableIndexName.Table.ToUnresolvedObjectName(), p)
 		if desc == nil {

@@ -320,7 +320,7 @@ func (q *byIDLookupContext) lookupTemporary(
 		return nil, catalog.NoValidation, nil
 	}
 	if q.flags.isMutable {
-		err := catalog.NewMutableAccessToVirtualSchemaError(schemadesc.GetPublicSchema())
+		err := catalog.NewMutableAccessToVirtualSchemaError(td)
 		return nil, catalog.NoValidation, err
 	}
 	return td, validate.Write, nil

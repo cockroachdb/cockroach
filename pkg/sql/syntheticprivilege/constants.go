@@ -10,7 +10,10 @@
 
 package syntheticprivilege
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 // SystemPrivilegesTableName represents system.database_role_settings.
-var SystemPrivilegesTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "privileges")
+var SystemPrivilegesTableName = tree.NewTableNameWithSchema("system", catconstants.PublicSchemaName, "privileges")

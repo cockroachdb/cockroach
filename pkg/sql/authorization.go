@@ -833,8 +833,7 @@ func (p *planner) canCreateOnSchema(
 		// Callers must check whether temporary schemas are valid to create in.
 		return nil
 	case catalog.SchemaVirtual:
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"cannot CREATE on schema %s", scDesc.GetName())
+		return sqlerrors.NewCannotModifyTempOrVirtualSchemaError(scDesc.GetName(), catalog.SchemaVirtual.String())
 	case catalog.SchemaUserDefined:
 		return p.CheckPrivilegeForUser(ctx, scDesc, privilege.CREATE, user)
 	default:

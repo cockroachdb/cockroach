@@ -199,7 +199,12 @@ func WrapFunctionDescRefErr(id descpb.ID, err error) error {
 }
 
 // NewMutableAccessToVirtualSchemaError is returned when trying to mutably
-// access a virtual schema object.
+// access a "virtual" schema object.
+//
+// Here, a virtual schema includes
+// - descriptorless public schemas (deprecated),
+// - temporary schemas,
+// - virtual schemas (pg_catalog, pg_extension, information_schema, and crdb_internal)
 func NewMutableAccessToVirtualSchemaError(schema SchemaDescriptor) error {
 	switch schema.SchemaKind() {
 	case SchemaPublic:
