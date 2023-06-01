@@ -941,6 +941,7 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:            "cdc/initial-scan-only",
 		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
