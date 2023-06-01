@@ -93,7 +93,18 @@ func getCombinedStatementStats(
 	activityHasAllData := false
 	reqStartTime := getTimeFromSeconds(req.Start)
 	if settings.Version.IsActive(ctx, clusterversion.V23_1AddSystemActivityTables) {
-		activityHasAllData, err = activityTablesHaveFullData(ctx, ie, testingKnobs, reqStartTime)
+		sort := serverpb.StatsSortOptions_SERVICE_LAT
+		if req.FetchMode != nil {
+			sort = req.FetchMode.Sort
+		}
+		activityHasAllData, err = activityTablesHaveFullData(
+			ctx,
+			ie,
+			testingKnobs,
+			reqStartTime,
+			req.Limit,
+			sort,
+		)
 		if err != nil {
 			log.Errorf(ctx, "Error on activityTablesHaveFullData: %s", err)
 		}
@@ -173,7 +184,12 @@ func activityTablesHaveFullData(
 	ie *sql.InternalExecutor,
 	testingKnobs *sqlstats.TestingKnobs,
 	reqStartTime *time.Time,
+	limit int64,
+	order serverpb.StatsSortOptions,
 ) (result bool, err error) {
+	if (limit > 0 && !isLimitOnActivityTable(limit)) || !isSortOptionOnActivityTable(order) {
+		return false, nil
+	}
 	var auxDate time.Time
 	dateFormat := "2006-01-02 15:04:05.00"
 	auxDate, err = time.Parse(dateFormat, timeutil.Now().String())
@@ -343,14 +359,42 @@ FROM %s
 	return stmtsRuntime, txnsRuntime, err
 }
 
-// Common stmt and txn columns to sort on.
+// Return true is the limit request is within the limit
+// on the Activity tables (500)
+func isLimitOnActivityTable(limit int64) bool {
+	return limit <= 500
+}
+
+func isSortOptionOnActivityTable(sort serverpb.StatsSortOptions) bool {
+	switch sort {
+	case serverpb.StatsSortOptions_SERVICE_LAT,
+		serverpb.StatsSortOptions_CPU_TIME,
+		serverpb.StatsSortOptions_EXECUTION_COUNT,
+		serverpb.StatsSortOptions_P99_STMTS_ONLY,
+		serverpb.StatsSortOptions_CONTENTION_TIME:
+		return true
+	}
+	return false
+}
+
 const (
 	sortSvcLatDesc         = `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
-	sortCPUTimeDesc        = `(statistics -> 'statistics' -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC`
+	sortCPUTimeDesc        = `(statistics -> 'execution_statistics' -> 'cpuSQLNanos' ->> 'mean')::FLOAT DESC`
 	sortExecCountDesc      = `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
 	sortContentionTimeDesc = `(statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC`
 	sortPCTRuntimeDesc     = `((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
                          (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC`
+	sortLatencyInfoP50Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p50')::FLOAT DESC`
+	sortLatencyInfoP90Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p90')::FLOAT DESC`
+	sortLatencyInfoP99Desc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC`
+	sortLatencyInfoMinDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'min')::FLOAT DESC`
+	sortLatencyInfoMaxDesc = `(statistics -> 'statistics' -> 'latencyInfo' ->> 'max')::FLOAT DESC`
+	sortRowsProcessedDesc  = `((statistics -> 'statistics' -> 'rowsRead' ->> 'mean')::FLOAT + 
+												 (statistics -> 'statistics' -> 'rowsWritten' ->> 'mean')::FLOAT) DESC`
+	sortMaxMemoryDesc = `(statistics -> 'execution_statistics' -> 'maxMemUsage' ->> 'mean')::FLOAT DESC`
+	sortNetworkDesc   = `(statistics -> 'execution_statistics' -> 'networkBytes' ->> 'mean')::FLOAT DESC`
+	sortRetriesDesc   = `(statistics -> 'statistics' ->> 'maxRetries')::INT DESC`
+	sortLastExecDesc  = `(statistics -> 'statistics' ->> 'lastExecAt') DESC`
 )
 
 func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
@@ -362,9 +406,27 @@ func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 	case serverpb.StatsSortOptions_EXECUTION_COUNT:
 		return sortExecCountDesc
 	case serverpb.StatsSortOptions_P99_STMTS_ONLY:
-		return `(statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC`
+		return sortLatencyInfoP99Desc
 	case serverpb.StatsSortOptions_CONTENTION_TIME:
 		return sortContentionTimeDesc
+	case serverpb.StatsSortOptions_LATENCY_INFO_P50:
+		return sortLatencyInfoP50Desc
+	case serverpb.StatsSortOptions_LATENCY_INFO_P90:
+		return sortLatencyInfoP90Desc
+	case serverpb.StatsSortOptions_LATENCY_INFO_MIN:
+		return sortLatencyInfoMinDesc
+	case serverpb.StatsSortOptions_LATENCY_INFO_MAX:
+		return sortLatencyInfoMaxDesc
+	case serverpb.StatsSortOptions_ROWS_PROCESSED:
+		return sortRowsProcessedDesc
+	case serverpb.StatsSortOptions_MAX_MEMORY:
+		return sortMaxMemoryDesc
+	case serverpb.StatsSortOptions_NETWORK:
+		return sortNetworkDesc
+	case serverpb.StatsSortOptions_RETRIES:
+		return sortRetriesDesc
+	case serverpb.StatsSortOptions_LAST_EXEC:
+		return sortLastExecDesc
 	default:
 		return sortSvcLatDesc
 	}
@@ -979,7 +1041,14 @@ func getStatementDetails(
 	activityHasData := false
 	reqStartTime := getTimeFromSeconds(req.Start)
 	if settings.Version.IsActive(ctx, clusterversion.V23_1AddSystemActivityTables) {
-		activityHasData, err = activityTablesHaveFullData(ctx, ie, testingKnobs, reqStartTime)
+		activityHasData, err = activityTablesHaveFullData(
+			ctx,
+			ie,
+			testingKnobs,
+			reqStartTime,
+			1,
+			serverpb.StatsSortOptions_SERVICE_LAT, //Order is not used on this endpoint, so any value can be passed here.
+		)
 		if err != nil {
 			log.Errorf(ctx, "Error on getStatementDetails: %s", err)
 		}

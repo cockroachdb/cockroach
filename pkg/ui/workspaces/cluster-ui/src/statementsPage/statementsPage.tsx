@@ -81,7 +81,6 @@ import {
 import { filteredStatementsData } from "../sqlActivity/util";
 import {
   STATS_LONG_LOADING_DURATION,
-  stmtRequestSortOptions,
   getSortLabel,
   getSortColumn,
   getSubsetWarning,
@@ -742,7 +741,7 @@ export class StatementsPage extends React.Component<
     return (
       <div className={cx("root")}>
         <SearchCriteria
-          sortOptions={stmtRequestSortOptions}
+          searchType="Statement"
           topValue={this.state.limit}
           byValue={this.state.reqSortSetting}
           currentScale={this.state.timeScale}
