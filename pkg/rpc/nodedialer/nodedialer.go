@@ -152,8 +152,9 @@ func (n *Dialer) DialInternalClient(
 	return TracingInternalClient{InternalClient: kvpb.NewInternalClient(conn)}, nil
 }
 
-// dial performs the dialing of the remote connection. If breaker is nil,
-// then perform this logic without using any breaker functionality.
+// dial performs the dialing of the remote connection. If checkBreaker
+// is set (which it usually is), circuit breakers for the peer will be
+// checked.
 func (n *Dialer) dial(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
