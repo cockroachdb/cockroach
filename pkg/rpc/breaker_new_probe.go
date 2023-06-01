@@ -32,6 +32,18 @@ func (p *peer) disabled() bool {
 	return !enableRPCCircuitBreakers.Get(&p.opts.Settings.SV)
 }
 
+// launch starts the probe in the background. The probe typically runs forever[1],
+// and has the following high-level structure (dashes reflect call depth).
+//
+// - run: loops "forever", one loop per failed connection.
+// -- runOnce: starts a new *ClientConn and maintains it until it errors out.
+// --- runSingleHeartbeat: performs the first heartbeat.
+// --- onInitialHeartbeatSucceeded: signals the conn future (*ClientConn now accessible).
+// --- runHeartbeatUntilFailure: performs subsequent heartbeats until error occurs.
+// ---- onSubsequentHeartbeatSucceeded: metric updates.
+// - onHeartbeatFailed: state transition into failed state (breaker, logging, etc).
+//
+// [1]: see comment on `peer` for exceptions.
 func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 	// Acquire mu just to show that we can, as the caller is supposed
 	// to not hold the lock.

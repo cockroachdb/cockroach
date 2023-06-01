@@ -38,6 +38,7 @@ import (
 // When the current time has surpassed `deleteAfter`, the peer will be taken out
 // of its surrounding rpc.Context and will no longer probe; see
 // (*peer).maybeDelete.
+// See (*peer).launch for details on the probe (heartbeat loop) itself.
 type peer struct {
 	peerMetrics
 	k                 peerKey
