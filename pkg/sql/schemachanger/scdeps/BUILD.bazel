@@ -34,6 +34,7 @@ go_library(
         "//pkg/sql/schemachanger/scexec/backfiller",
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scrun",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
