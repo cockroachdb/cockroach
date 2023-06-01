@@ -181,7 +181,7 @@ func TestIOLoadListener(t *testing.T) {
 					req.buf.Reset()
 				}
 				for i := 0; i < int(unloadedDuration.ticksInAdjustmentInterval()); i++ {
-					ioll.allocateTokensTick(unloadedDuration)
+					ioll.allocateTokensTick(false, unloadedDuration.ticksInAdjustmentInterval() - int64(i))
 					if i == 0 || !printOnlyFirstTick {
 						fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
 					}
@@ -211,7 +211,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		ioll.totalNumByteTokens = math.MaxInt64 - i
 		ioll.byteTokensAllocated = 0
 		for j := 0; j < int(unloadedDuration.ticksInAdjustmentInterval()); j++ {
-			ioll.allocateTokensTick(unloadedDuration)
+			ioll.allocateTokensTick(false, unloadedDuration.ticksInAdjustmentInterval() - int64(i))
 		}
 	}
 	// Bug2: overflow when bytes added delta is 0.
@@ -222,7 +222,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	}
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
-	ioll.allocateTokensTick(unloadedDuration)
+	ioll.allocateTokensTick(false, unloadedDuration.ticksInAdjustmentInterval())
 }
 
 // TODO(sumeer): we now do more work outside adjustTokensInner, so the parts
@@ -312,7 +312,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			DiskStats: d,
 		})
 		for j := 0; j < int(loadedDuration.ticksInAdjustmentInterval()); j++ {
-			ioll.allocateTokensTick(loadedDuration)
+			ioll.allocateTokensTick(true, loadedDuration.ticksInAdjustmentInterval() - int64(i))
 			require.LessOrEqual(t, int64(0), ioll.smoothedIntL0CompactedBytes)
 			require.LessOrEqual(t, float64(0), ioll.smoothedCompactionByteTokens)
 			require.LessOrEqual(t, float64(0), ioll.smoothedNumFlushTokens)
@@ -418,4 +418,39 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	require.LessOrEqual(g.t, int64(0), l0IngestLM.constant)
 	require.LessOrEqual(g.t, 0.5, ingestLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), ingestLM.constant)
+}
+
+func TestTokenAllocationTicker(t *testing.T) {
+	ticker := tokenAllocationTicker{}
+	currTime := time.Now()
+	ticker.adjustmentStart(true /* loaded */)
+	testStartTime := time.Now()
+	ticks := 0
+	for time.Since(testStartTime) < 600 * time.Second {
+		ticker.tick()
+		remainingTicks := ticker.remainingTicks()
+			ticks++
+		if remainingTicks == 0 {
+			abs := func(diff time.Duration) time.Duration {
+				if diff < 0 {
+					return -diff
+				}
+				return diff
+			}
+			timeElapsed := time.Since(currTime)
+			diff := abs(timeElapsed-(15*time.Second))
+			fmt.Println(timeElapsed, diff, ticks)
+			if diff > 1*time.Second {
+				// TODO(bananabrick): Get rid of this.
+				panic(diff)
+			}
+			systemLoaded := rand.Intn(2) == 0
+			ticker.adjustmentStart(systemLoaded)
+			currTime = time.Now()
+			ticks = 0
+			remainingTicks = ticker.remainingTicks()
+		}
+		time.Sleep(1 * time.Millisecond)
+	}
+	ticker.stop()
 }

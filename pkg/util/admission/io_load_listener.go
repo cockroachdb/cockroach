@@ -288,13 +288,62 @@ const unlimitedTokens = math.MaxInt64
 const adjustmentInterval = 15
 
 type tickDuration time.Duration
-
 func (t tickDuration) ticksInAdjustmentInterval() int64 {
 	return 15 * int64(time.Second/time.Duration(t))
 }
 
 const unloadedDuration = tickDuration(250 * time.Millisecond)
 const loadedDuration = tickDuration(1 * time.Millisecond)
+
+// tokenAllocationTicker wraps a time.Ticker, and also computes the remaining
+// ticks in the adjustment interval, given an expected tick rate. If every tick
+// from the ticker was always equal to the expected tick rate, then we could
+// easily determine the remaining ticks, but each tick of time.Ticker can have
+// drift, especially for tiny tick rates like 1ms.
+type tokenAllocationTicker struct {
+	expectedTickDuration time.Duration
+	adjustmentIntervalStartTime time.Time
+	ticker *time.Ticker
+}
+
+// Start a new adjustment interval. adjustmentStart must be called before tick
+// is called. After the initial call, adjustmentStart must also be called if
+// tick returns 0, to indicate that a new adjustment interval has started.
+func (t *tokenAllocationTicker) adjustmentStart(loaded bool) {
+	tickDuration := unloadedDuration
+	if loaded {
+		tickDuration = loadedDuration
+	}
+	t.expectedTickDuration = time.Duration(tickDuration)
+	if t.ticker == nil {
+		t.ticker = time.NewTicker(t.expectedTickDuration)
+	} else {
+		t.ticker.Reset(t.expectedTickDuration)
+	}
+	t.adjustmentIntervalStartTime = time.Now()
+}
+
+func (t *tokenAllocationTicker) tick() {
+	<-t.ticker.C
+}
+
+// remainingTicks will return the remaining ticks before the next adjustment
+// interval is reached while assuming that all future ticks will have a duration of
+// expectedTickDuration. A return value of 0 indicates that adjustmentStart must
+// be called, as the previous adjustmentInterval is over.
+func (t *tokenAllocationTicker) remainingTicks() uint64 {
+	timePassed := time.Since(t.adjustmentIntervalStartTime)
+	if timePassed > adjustmentInterval * time.Second {
+		return 0
+	}
+	remainingTime := adjustmentInterval * time.Second - timePassed
+	return uint64((remainingTime + t.expectedTickDuration - 1) / t.expectedTickDuration)
+}
+
+func (t *tokenAllocationTicker) stop() {
+	t.ticker.Stop()
+	*t = tokenAllocationTicker{}
+}
 
 func cumLSMWriteAndIngestedBytes(
 	m *pebble.Metrics,
@@ -352,12 +401,13 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 
 // allocateTokensTick gives out 1/tickDuration.ticksInAdjustmentInterval()
 // of the various tokens every tickDuration.
-func (io *ioLoadListener) allocateTokensTick(tickDuration tickDuration) {
-	allocateFunc := func(total int64, allocated int64, ticks int64) (toAllocate int64) {
+func (io *ioLoadListener) allocateTokensTick(loaded bool, remainingTicks int64) {
+	allocateFunc := func(total int64, allocated int64, remainingTicks int64) (toAllocate int64) {
+		remainingTokens := total - allocated
 		// unlimitedTokens==MaxInt64, so avoid overflow in the rounding up
 		// calculation.
-		if total >= unlimitedTokens-(ticks-1) {
-			toAllocate = total / ticks
+		if remainingTokens >= unlimitedTokens-(remainingTicks-1) {
+			toAllocate = remainingTokens / remainingTicks
 		} else {
 			// Round up so that we don't accumulate tokens to give in a burst on
 			// the last tick.
@@ -365,9 +415,9 @@ func (io *ioLoadListener) allocateTokensTick(tickDuration tickDuration) {
 			// TODO(bananabrick): Rounding up is a problem for 1ms tick rate as we tick
 			// 15000 times. Say totalNumByteTokens is 150001. We round up to give 11
 			// tokens per ms. So, we'll end up distributing the 150001 available tokens
-			// in 150000/11 == 13637 ticks. So, we'll have over a second where we grant
+			// in 150000/11 == 13637 remainingTicks. So, we'll have over a second where we grant
 			// no tokens. Larger values of totalNumBytesTokens will ease this problem.
-			toAllocate = (total + ticks - 1) / ticks
+			toAllocate = (remainingTokens + remainingTicks - 1) / remainingTicks
 			if toAllocate < 0 {
 				panic(errors.AssertionFailedf("toAllocate is negative %d", toAllocate))
 			}
@@ -381,7 +431,7 @@ func (io *ioLoadListener) allocateTokensTick(tickDuration tickDuration) {
 	toAllocateByteTokens := allocateFunc(
 		io.totalNumByteTokens,
 		io.byteTokensAllocated,
-		tickDuration.ticksInAdjustmentInterval(),
+		remainingTicks,
 	)
 	if toAllocateByteTokens < 0 {
 		panic(errors.AssertionFailedf("toAllocateByteTokens is negative %d", toAllocateByteTokens))
@@ -390,7 +440,7 @@ func (io *ioLoadListener) allocateTokensTick(tickDuration tickDuration) {
 		allocateFunc(
 			io.elasticDiskBWTokens,
 			io.elasticDiskBWTokensAllocated,
-			tickDuration.ticksInAdjustmentInterval(),
+			remainingTicks,
 		)
 	if toAllocateElasticDiskBWTokens < 0 {
 		panic(errors.AssertionFailedf("toAllocateElasticDiskBWTokens is negative %d",
@@ -404,7 +454,7 @@ func (io *ioLoadListener) allocateTokensTick(tickDuration tickDuration) {
 	io.elasticDiskBWTokensAllocated += toAllocateElasticDiskBWTokens
 
 	var burstMultiplier int64 = 1
-	if tickDuration == loadedDuration {
+	if loaded {
 		// toAllocateBytes can be small because setAvailableTokens can be called
 		// every ms. Consider a workload which requires tokens every 10ms. We don't
 		// want 9ms worth of tokens to be wasted.

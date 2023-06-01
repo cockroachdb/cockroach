@@ -78,8 +78,6 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	sgc.pebbleMetricsProvider = pmp
 	sgc.closeCh = make(chan struct{})
 	metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
-	// System starts off unloaded/with unlimited tokens, so use the unloaded values.
-	currTickDuration := unloadedDuration
 	for _, m := range metrics {
 		gc := sgc.initGrantCoordinator(m.StoreID)
 		// Defensive call to LoadAndStore even though Store ought to be sufficient
@@ -91,7 +89,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 		}
 		gc.pebbleMetricsTick(startupCtx, m)
 		gc.allocateIOTokensTick(
-			currTickDuration,
+			false /* loaded */, unloadedDuration.ticksInAdjustmentInterval(),
 		)
 	}
 	if sgc.disableTickerForTesting {
@@ -105,16 +103,17 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 		// load. If the system is unloaded, we tick at a 250ms rate, and if the system
 		// is loaded, we tick at a 1ms rate. See the comment above the
 		// adjustmentInterval definition to see why we tick at different rates.
-		var ticks int64
-		ticker := time.NewTicker(time.Duration(unloadedDuration))
+		ticker := tokenAllocationTicker{}
 		done := false
 		var systemLoaded bool // First adjustment interval is unloaded.
 		currTime := time.Now()
+		ticker.adjustmentStart(false /* loaded */)
 		for !done {
+			ticker.tick()
+			remainingTicks := ticker.remainingTicks()
 			select {
-			case <-ticker.C:
-				ticks++
-				if ticks%currTickDuration.ticksInAdjustmentInterval() == 0 {
+			default:
+				if remainingTicks == 0 {
 					abs := func(diff time.Duration) time.Duration {
 						if diff < 0 {
 							return -diff
@@ -123,7 +122,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					}
 					if timeElapsed := time.Since(currTime); abs(timeElapsed-(15*time.Second)) > 100*time.Millisecond {
 						// TODO(bananabrick): Get rid of this.
-						t := timeElapsed - (15 * time.Second)
+						t := abs(timeElapsed - (15 * time.Second))
 						panic(t.String())
 					}
 					metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
@@ -144,20 +143,15 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 								"seeing metrics for unknown storeID %d", m.StoreID)
 						}
 					}
-
-					if systemLoaded {
-						currTickDuration = loadedDuration
-					} else {
-						currTickDuration = unloadedDuration
-					}
-					ticker.Reset(time.Duration(currTickDuration))
-					ticks = 0
+					systemLoaded = true
+					ticker.adjustmentStart(systemLoaded)
+					remainingTicks = ticker.remainingTicks()
 					currTime = time.Now()
 				}
 
 				sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
 					gc := (*GrantCoordinator)(unsafeGc)
-					gc.allocateIOTokensTick(currTickDuration)
+					gc.allocateIOTokensTick(systemLoaded, int64(remainingTicks))
 					// true indicates that iteration should continue after the
 					// current entry has been processed.
 					return true
@@ -166,7 +160,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				done = true
 			}
 		}
-		ticker.Stop()
+		ticker.stop()
 	}()
 }
 
@@ -673,8 +667,8 @@ func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreMet
 }
 
 // allocateIOTokensTick tells the ioLoadListener to allocate tokens.
-func (coord *GrantCoordinator) allocateIOTokensTick(t tickDuration) {
-	coord.ioLoadListener.allocateTokensTick(t)
+func (coord *GrantCoordinator) allocateIOTokensTick(loaded bool, remainingTicks int64) {
+	coord.ioLoadListener.allocateTokensTick(loaded, remainingTicks)
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	if !coord.mu.grantChainActive {
