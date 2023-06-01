@@ -88,8 +88,6 @@ class TestDriver {
         expected.indexStats.lastReset,
       );
     }
-    delete this.properties().indexStats.lastReset;
-    delete expected.indexStats.lastReset;
     expect(this.properties()).toEqual(expected);
   }
 
@@ -116,18 +114,25 @@ class TestDriver {
   ) {
     // Assert moments are equal if not in pre-loading state.
     if (compareTimestamps) {
-      expect(expected.stats[0].lastUsed).toEqual(
-        this.properties().indexStats.stats[0].lastUsed,
-      );
+      expect(
+        expected.stats[0].lastUsed.isSame(
+          this.properties().indexStats.stats[0].lastUsed,
+        ),
+      ).toEqual(true);
     }
-    delete this.properties().indexStats.stats[0].lastUsed;
-    delete expected.stats[0].lastUsed;
-    expect(expected.lastReset).toEqual(this.properties().indexStats.lastReset);
-    delete this.properties().indexStats.lastReset;
+    const indexStats = this.properties().indexStats;
+    expect(expected.lastReset.isSame(indexStats.lastReset)).toEqual(true);
+    // Remove moment objects.
+    indexStats.stats.map(stat => {
+      delete stat.lastUsed;
+    });
+    expected.stats.map(stat => {
+      delete stat.lastUsed;
+    });
+    delete indexStats.lastReset;
     delete expected.lastReset;
-
     // Assert objects without moments are equal.
-    expect(this.properties().indexStats).toEqual(expected);
+    expect(indexStats).toEqual(expected);
   }
 
   async refreshSettings() {
@@ -161,43 +166,45 @@ describe("Database Table Page", function () {
     fakeApi.stubClusterSettings({
       key_values: {
         "sql.stats.automatic_collection.enabled": { value: "true" },
+        version: { value: "23.1.0" },
       },
     });
 
     await driver.refreshSettings();
 
-    driver.assertProperties(
-      {
-        databaseName: "DATABASE",
-        name: "TABLE",
-        showNodeRegionsSection: false,
-        details: {
-          loading: false,
-          loaded: false,
-          lastError: undefined,
-          createStatement: "",
-          replicaCount: 0,
-          indexNames: [],
-          grants: [],
-          statsLastUpdated: null,
-          livePercentage: 0,
-          liveBytes: 0,
-          totalBytes: 0,
-          sizeInBytes: 0,
-          rangeCount: 0,
-          nodesByRegionString: "",
-        },
-        automaticStatsCollectionEnabled: true,
-        indexStats: {
-          loading: false,
-          loaded: false,
-          lastError: undefined,
-          stats: [],
-          lastReset: null,
-        },
+    driver.assertProperties({
+      databaseName: "DATABASE",
+      name: "TABLE",
+      schemaName: "",
+      showNodeRegionsSection: false,
+      details: {
+        loading: false,
+        loaded: false,
+        lastError: undefined,
+        createStatement: "",
+        replicaCount: 0,
+        indexNames: [],
+        grants: [],
+        statsLastUpdated: null,
+        livePercentage: 0,
+        liveBytes: 0,
+        totalBytes: 0,
+        sizeInBytes: 0,
+        rangeCount: 0,
+        nodesByRegionString: "",
       },
-      false,
-    );
+      automaticStatsCollectionEnabled: true,
+      indexUsageStatsEnabled: true,
+      showIndexRecommendations: true,
+      hasAdminRole: false,
+      indexStats: {
+        loading: false,
+        loaded: false,
+        lastError: undefined,
+        stats: [],
+        lastReset: util.minDate,
+      },
+    });
   });
 
   it("loads table details", async function () {
@@ -347,16 +354,12 @@ describe("Database Table Page", function () {
         {
           indexName: "index_no_reads_no_resets",
           totalReads: 0,
-          lastUsed: util.TimestampToMoment(
-            util.stringToTimestamp("0001-01-01T00:00:00Z"),
-          ),
+          lastUsed: util.minDate,
           lastUsedType: "created",
           indexRecommendations: [],
         },
       ],
-      lastReset: util.TimestampToMoment(
-        util.stringToTimestamp("0001-01-01T00:00:00Z"),
-      ),
+      lastReset: util.minDate,
     });
   });
 });
