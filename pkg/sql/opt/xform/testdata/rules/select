@@ -8561,7 +8561,6 @@ project
       └── filters (true)
 
 # Query requiring a zigzag join with a remaining filter.
-# TODO(itsbilal): remove filter from index join if zigzag join covers it.
 opt expect=GenerateInvertedIndexZigzagJoins
 SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
