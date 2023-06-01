@@ -388,6 +388,8 @@ type AuthConn interface {
 	LogAuthFailed(ctx context.Context, reason eventpb.AuthFailReason, err error)
 	// LogAuthOK logs when the authentication handshake has completed.
 	LogAuthOK(ctx context.Context)
+	// GetTenantSpecificMetrics returns the tenant-specific metrics for the connection.
+	GetTenantSpecificMetrics() *ServerMetrics
 }
 
 // authPipe is the implementation for the authenticator and AuthConn interfaces.
@@ -541,4 +543,9 @@ func (p *authPipe) SendAuthRequest(authType int32, data []byte) error {
 	c.msgBuilder.putInt32(authType)
 	c.msgBuilder.write(data)
 	return c.msgBuilder.finishMsg(c.conn)
+}
+
+// GetTenantSpecificMetrics is part of the AuthConn interface.
+func (p *authPipe) GetTenantSpecificMetrics() *ServerMetrics {
+	return p.c.metrics
 }
