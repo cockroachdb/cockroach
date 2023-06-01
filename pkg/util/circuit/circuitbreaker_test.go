@@ -384,6 +384,28 @@ func TestBreakerRealistic(t *testing.T) {
 	})
 }
 
+func TestBreaker_Probe(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	_, eh := testLogBridge(t)
+	defer eh.RequireNumTrippedEqualsNumResets(t)
+	var ran bool
+	br := NewBreaker(Options{
+		Name: "mybreaker",
+		AsyncProbe: func(report func(error), done func()) {
+			ran = true
+			done()
+		},
+		EventHandler: eh,
+	})
+	br.Probe()
+	testutils.SucceedsSoon(t, func() error {
+		if !ran {
+			return errors.New("probe did not run")
+		}
+		return nil
+	})
+}
+
 func TestTestingSetTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	_, tl := testLogBridge(t)
