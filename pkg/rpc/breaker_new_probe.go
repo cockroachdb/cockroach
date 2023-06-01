@@ -39,16 +39,6 @@ func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 	_ = 0 // bypass empty crit section lint
 	p.mu.Unlock()
 
-	if errors.Is(p.b.Signal().Err(), ErrNotHeartbeated) {
-		// Special case: the probe is just launched for the very first time after
-		// creating the connection. Immediately report a nil (but launch the probe)
-		// to get the behavior that we want: the peer starts out healthy, but
-		// callers will block on initialHeartbeatDone until the result of the first
-		// heartbeat is known. In other words, we're optimistic that the first time
-		// a node is dialled it will actually turn out healthy.
-		report(nil)
-	}
-
 	taskName := fmt.Sprintf("conn to n%d@%s/%s", p.k.NodeID, p.k.TargetAddr, p.k.Class)
 
 	if err := p.opts.Stopper.RunAsyncTask(ctx, taskName, func(ctx context.Context) {

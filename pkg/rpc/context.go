@@ -2411,14 +2411,12 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	// [^2]: https://github.com/cockroachdb/cockroach/pull/89539
 
 	p := rpcCtx.newPeer(k)
-	// Start the probe (= heartbeat loop). As a special case, the probe will
-	// immediately (synchronously with the  call to Report) mark itself as healthy
-	// again (but keep running)[1]. This means we are immediately able to hand out
-	// the connection to callers, who will then block on the initialHeartbeatDone
-	// channel (as opposed to bouncing off the breaker).
+	// (Asynchronously) Start the probe (= heartbeat loop). The breaker is healthy
+	// right now (it was just created) but the call to `.Probe` will launch the
+	// probe[1] regardless.
 	//
-	// [1]: see (*breakerProbe).launch.
-	p.b.Report(ErrNotHeartbeated)
+	// [1]: see (*peer).launch.
+	p.b.Probe()
 	conns.mu.m[k] = p
 	return p.snap().c
 }
