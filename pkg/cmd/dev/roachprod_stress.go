@@ -21,7 +21,9 @@ import (
 )
 
 const (
-	clusterFlag = "cluster"
+	clusterFlag    = "cluster"
+	stressArgsFlag = "stress-args"
+	stressTarget   = "@com_github_cockroachdb_stress//:stress"
 )
 
 func makeRoachprodStressCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {

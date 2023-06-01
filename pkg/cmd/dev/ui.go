@@ -549,7 +549,6 @@ Replaces 'make ui-lint'.`,
 			}
 
 			bazelTestArgs := d.getTestOutputArgs(
-				false, /* stream */
 				isVerbose,
 				false, /* showLogs */
 				false, /* streamOutput */
@@ -806,7 +805,6 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 				}
 			} else {
 				testOutputArg := d.getTestOutputArgs(
-					false, // stress
 					isVerbose,
 					false,                     // showLogs
 					isWatch || isStreamOutput, // streamOutput
