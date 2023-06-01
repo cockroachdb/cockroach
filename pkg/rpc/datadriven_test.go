@@ -37,6 +37,15 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
+/*
+TestReconnection supports input data:
+  - dial class=(def|sys|rf)
+  - connect class=(def|sys|rf)
+  - set-hb-err
+  - reset-hb-err
+  - soon [healthy=<n>] [unhealthy=<n>]
+    verify metrics in context report number of healthy and unhealthy connections
+*/
 func TestReconnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	datadriven.Walk(t, datapathutils.TestDataPath(t, t.Name()), func(t *testing.T, path string) {
