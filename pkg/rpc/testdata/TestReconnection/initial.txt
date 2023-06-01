@@ -1,3 +1,8 @@
+# This basic test establishes a healthy DefaultClass connection,
+# the interrupts the heartbeat, lets the peer reconnect, then
+# adds a SystemClass and RangeFeedClass connection, and interrupts
+# heartbeats again.
+# At each step, metrics are verified via `soon`.
 dial class=def
 ----
 ok
