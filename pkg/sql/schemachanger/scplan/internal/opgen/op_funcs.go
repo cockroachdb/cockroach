@@ -14,6 +14,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -49,6 +50,7 @@ func statementForDropJob(e scpb.Element, md *opGenContext) scop.StatementForDrop
 // lookup.
 type opGenContext struct {
 	scpb.TargetState
+	Current         []scpb.Status
 	ActiveVersion   clusterversion.ClusterVersion
 	elementToTarget map[scpb.Element]int
 	InRollback      bool
@@ -61,6 +63,7 @@ func makeOpgenContext(
 		ActiveVersion:   activeVersion,
 		InRollback:      cs.InRollback,
 		TargetState:     cs.TargetState,
+		Current:         cs.Current,
 		elementToTarget: make(map[scpb.Element]int),
 	}
 	for i := range cs.Targets {
@@ -163,4 +166,29 @@ func checkOpFunc(el scpb.Element, fn interface{}) (opType scop.Type, _ error) {
 			out, opInterfaceType)
 	}
 	return opType, nil
+}
+
+// checkIfDescriptorIsAdded given the context this will determine if
+// a descriptor is an added state, which will imply that certain
+// steps can be completely skipped (i.e. backfill and validatin).
+func checkIfDescriptorIsAdded(id descpb.ID, md *opGenContext) bool {
+	for idx, t := range md.Targets {
+		// Only descriptors transitioning from ABSENT headed
+		// towards PUBLI can be considered added.
+		if (md.Current[idx] != scpb.Status_ABSENT &&
+			md.Current[idx] != scpb.Status_DESCRIPTOR_ADDED) ||
+			t.TargetStatus != scpb.Status_PUBLIC {
+			continue
+		}
+		// Validate this is the descriptor we are
+		// looking for.
+		if screl.GetDescID(t.Element()) != id {
+			continue
+		}
+		switch t.Element().(type) {
+		case *scpb.Sequence, *scpb.Table, *scpb.View:
+			return true
+		}
+	}
+	return false
 }
