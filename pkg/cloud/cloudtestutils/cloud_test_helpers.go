@@ -222,7 +222,10 @@ func CheckExportStore(
 					byteReader := bytes.NewReader(testingContent)
 					offset, length := rng.Int63n(size), rng.Intn(32*1024)
 					t.Logf("read %d of file at %d", length, offset)
-					reader, size, err := s.ReadFile(ctx, testingFilename, cloud.ReadOptions{Offset: offset})
+					reader, size, err := s.ReadFile(ctx, testingFilename, cloud.ReadOptions{
+						Offset:     offset,
+						LengthHint: int64(length),
+					})
 					require.NoError(t, err)
 					defer reader.Close(ctx)
 					require.Equal(t, int64(len(testingContent)), size)

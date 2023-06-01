@@ -95,6 +95,14 @@ type ExternalStorage interface {
 type ReadOptions struct {
 	Offset int64
 
+	// LengthHint is set when the caller will not read more than this many bytes
+	// from the returned ReadCloserCtx. This allows backend implementation to make
+	// more efficient limited requests.
+	//
+	// There is no guarantee that the reader won't produce more bytes; backends
+	// are free to ignore this value.
+	LengthHint int64
+
 	// NoFileSize is set if the ReadFile caller is not interested in the fileSize
 	// return value (potentially making the call more efficient).
 	NoFileSize bool

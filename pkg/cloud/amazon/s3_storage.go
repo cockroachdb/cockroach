@@ -716,15 +716,23 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 	}), nil
 }
 
+// openStreamAt opens a stream of object data, starting at offset <pos>.
+// If endPos is non-zero, returns data up to that offset (exclusive).
 func (s *s3Storage) openStreamAt(
-	ctx context.Context, basename string, pos int64,
+	ctx context.Context, basename string, pos int64, endPos int64,
 ) (*s3.GetObjectOutput, error) {
 	client, err := s.getClient(ctx)
 	if err != nil {
 		return nil, err
 	}
 	req := &s3.GetObjectInput{Bucket: s.bucket, Key: aws.String(path.Join(s.prefix, basename))}
-	if pos != 0 {
+	if endPos != 0 {
+		if pos >= endPos {
+			return nil, io.EOF
+		}
+		// Range header end position is inclusive.
+		req.Range = aws.String(fmt.Sprintf("bytes=%d-%d", pos, endPos-1))
+	} else if pos != 0 {
 		req.Range = aws.String(fmt.Sprintf("bytes=%d-", pos))
 	}
 
@@ -756,8 +764,12 @@ func (s *s3Storage) ReadFile(
 
 	path := path.Join(s.prefix, basename)
 	sp.SetTag("path", attribute.StringValue(path))
+	endOffset := int64(0)
+	if opts.LengthHint != 0 {
+		endOffset = opts.Offset + opts.LengthHint - 1
+	}
 
-	stream, err := s.openStreamAt(ctx, basename, opts.Offset)
+	stream, err := s.openStreamAt(ctx, basename, opts.Offset, endOffset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -787,7 +799,7 @@ func (s *s3Storage) ReadFile(
 		}
 	}
 	opener := func(ctx context.Context, pos int64) (io.ReadCloser, error) {
-		s, err := s.openStreamAt(ctx, basename, pos)
+		s, err := s.openStreamAt(ctx, basename, pos, endOffset)
 		if err != nil {
 			return nil, err
 		}
