@@ -1243,7 +1243,8 @@ SELECT crdb_internal.unsafe_clear_gossip_info('unknown key')
 ----
 false
 
-# Verify users with VIEWCLUSTERSETTING, MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING can view non sql.defaults cluster settings.
+# Verify users with VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING can view non sql.defaults cluster settings.
+# Verify users with MODIFYSQLCLUSTERSETTING can only view sql.defaults cluster settings.
 
 user root
 
@@ -1257,10 +1258,30 @@ SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics
 ----
 true
 
+# Verify a combination of system privileges where one is restrictive will still allow users to see non sql.defaults.
+
+user root
+
+skipif config local-mixed-22.2-23.1
+statement ok
+GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
+
+user testuser
+
+skipif config local-mixed-22.2-23.1
+query T
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
+true
+
 user root
 
 statement ok
 REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
+
+skipif config local-mixed-22.2-23.1
+statement ok
+REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
 
 statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
@@ -1320,9 +1341,15 @@ GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO testuser
 user testuser
 
 query T
-SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('sql.defaults.zigzag_join.enabled')
 ----
 true
+
+skipif config local-mixed-22.2-23.1
+query T
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
+
 
 user root
 
