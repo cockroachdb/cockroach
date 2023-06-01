@@ -2400,19 +2400,7 @@ func (c *clusterImpl) InternalAddr(
 func (c *clusterImpl) InternalIP(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
-	var ips []string
-	addrs, err := c.InternalAddr(ctx, l, node)
-	if err != nil {
-		return nil, err
-	}
-	for _, addr := range addrs {
-		host, err := addrToHost(addr)
-		if err != nil {
-			return nil, err
-		}
-		ips = append(ips, host)
-	}
-	return ips, nil
+	return roachprod.IP(l, c.MakeNodes(node), false)
 }
 
 // ExternalAddr returns the external address in the form host:port for the
