@@ -46,6 +46,19 @@ interrupt
 eexpect ":/# "
 end_test
 
+start_test "Check that using --advertise-addr does not cause a user warning."
+send "$argv start-single-node --insecure --advertise-addr=172.31.11.189\r"
+expect {
+  "WARNING: neither --listen-addr nor --advertise-addr was specified" {
+    report "unexpected WARNING: neither --listen-addr nor --advertise-addr was specified"
+	  exit 1
+  }
+}
+eexpect "node starting"
+interrupt
+eexpect ":/# "
+end_test
+
 start_test "Check that --listening-url-file gets created with the right data"
 send "$argv start-single-node --insecure --listening-url-file=foourl\r"
 eexpect "node starting"
