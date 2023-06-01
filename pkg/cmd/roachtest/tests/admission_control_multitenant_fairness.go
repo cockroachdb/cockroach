@@ -90,6 +90,7 @@ func registerMultiTenantFairness(r registry.Registry) {
 			Name:              fmt.Sprintf("admission-control/multitenant-fairness/%s", s.name),
 			Cluster:           r.MakeClusterSpec(5),
 			Owner:             registry.OwnerAdmissionControl,
+			Benchmark:         true,
 			Leases:            registry.MetamorphicLeases,
 			NonReleaseBlocker: false,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
