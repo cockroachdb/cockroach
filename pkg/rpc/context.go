@@ -2447,7 +2447,7 @@ func runSingleHeartbeat(
 	k peerKey,
 	roundTripLatency ewma.MovingAverage,
 	remoteClocks *RemoteClockMonitor, // nil if no RemoteClocks update should be made
-	opts ContextOptions,
+	opts *ContextOptions,
 	heartbeatTimeout time.Duration,
 	preferredDialback PingRequest_DialbackType,
 ) error {
@@ -2549,7 +2549,7 @@ func runSingleHeartbeat(
 // must be derived from rpcCtx.masterCtx, so that it respects the same
 // cancellation policy.
 // TODO(during review): move once the review dust has settled.
-func (p *breakerProbe) runHeartbeatUntilFailure(
+func (p *peer) runHeartbeatUntilFailure(
 	ctx context.Context, connFailedCh <-chan connectivity.State,
 ) error {
 	var heartbeatTimer timeutil.Timer
