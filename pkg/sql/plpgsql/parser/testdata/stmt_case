@@ -6,14 +6,18 @@ WHEN world THEN
 END CASE;
 END
 ----
+----
 DECLARE
 BEGIN
 CASE hello
-WHEN world THEN
+
+WHEN world  THEN
 END CASE
 <NOT DONE YET>
 END
 <NOT DONE YET>
+----
+----
 
 parse
 DECLARE
@@ -23,14 +27,18 @@ WHEN 1, 2, 3 THEN
 END CASE;
 END
 ----
+----
 DECLARE
 BEGIN
 CASE order_cnt
-WHEN 1 , 2 , 3 THEN
+
+WHEN 1, 2, 3  THEN
 END CASE
 <NOT DONE YET>
 END
 <NOT DONE YET>
+----
+----
 
 parse
 DECLARE
@@ -41,15 +49,19 @@ WHEN 5 THEN
 END CASE;
 END
 ----
+----
 DECLARE
 BEGIN
 CASE order_cnt
-WHEN 1 , 2 , 3 THEN
-WHEN 5 THEN
+
+WHEN 1, 2, 3  THEN
+WHEN 5  THEN
 END CASE
 <NOT DONE YET>
 END
 <NOT DONE YET>
+----
+----
 
 parse
 DECLARE
@@ -62,7 +74,7 @@ END
 DECLARE
 BEGIN
 CASE
-WHEN true THEN
+WHEN true  THEN
 END CASE
 <NOT DONE YET>
 END
@@ -82,8 +94,8 @@ DECLARE
 order_cnt INT8 := 10;
 BEGIN
 CASE
-WHEN order_cnt between 0 and 100 THEN
-WHEN order_cnt > 100 THEN
+WHEN order_cnt BETWEEN 0 AND 100  THEN
+WHEN order_cnt > 100  THEN
 END CASE
 <NOT DONE YET>
 END
@@ -107,10 +119,10 @@ DECLARE
 order_cnt INT8 := 10;
 BEGIN
 CASE
-WHEN order_cnt between 0 and 100 THEN
+WHEN order_cnt BETWEEN 0 AND 100  THEN
   CALL a function/procedure
 <NOT DONE YET>
-WHEN order_cnt > 100 THEN
+WHEN order_cnt > 100  THEN
   CALL a function/procedure
 <NOT DONE YET>
 ELSE
