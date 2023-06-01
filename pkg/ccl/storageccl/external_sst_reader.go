@@ -51,7 +51,7 @@ func getFileWithRetry(
 	const maxAttempts = 3
 	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
 		var err error
-		f, sz, err = e.ReadFileAt(ctx, basename, 0)
+		f, sz, err = e.ReadFile(ctx, basename, cloud.ReadOptions{})
 		return err
 	}); err != nil {
 		return nil, 0, err
@@ -140,7 +140,10 @@ func ExternalSSTReader(
 			sz:   sizeStat(sz),
 			body: f,
 			openAt: func(offset int64) (ioctx.ReadCloserCtx, error) {
-				reader, _, err := store.ReadFileAt(ctx, filePath, offset)
+				reader, _, err := store.ReadFile(ctx, filePath, cloud.ReadOptions{
+					Offset:     offset,
+					NoFileSize: true,
+				})
 				return reader, err
 			},
 		}
