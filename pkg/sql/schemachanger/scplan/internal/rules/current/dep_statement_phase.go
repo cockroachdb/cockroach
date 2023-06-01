@@ -57,6 +57,7 @@ func init() {
 			from.Target.AttrEq(screl.TargetStatus, targetStatus.Status()),
 			from.Node.AttrEq(screl.CurrentStatus, t.From()),
 			to.Node.AttrEq(screl.CurrentStatus, t.To()),
+			from.Target.AttrNeq(screl.CurrentStatus, scpb.Status_DESCRIPTOR_ADDED),
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,
@@ -65,6 +66,38 @@ func init() {
 		}
 		return clauses
 	}
+	clausesForDepTwoVersionEdge := func(
+		from, to NodeVars,
+		el scpb.Element,
+		targetStatus scpb.TargetStatus,
+		t opgen.Transition,
+		prePrevStatuses []scpb.Status,
+	) rel.Clauses {
+		targetDesc := MkNodeVars("target-desc")
+		var descIDVar rel.Var = "desc-id"
+		clauses := rel.Clauses{
+			targetDesc.TypeFilter(rulesVersionKey, isDescriptor),
+			from.Type(el),
+			to.Type(el),
+			targetDesc.JoinTargetNode(),
+			from.DescIDEq(descIDVar),
+			from.El.AttrEqVar(rel.Self, to.El),
+			from.Target.AttrEqVar(rel.Self, to.Target),
+			from.Target.AttrEq(screl.TargetStatus, targetStatus.Status()),
+			from.Node.AttrEq(screl.CurrentStatus, t.From()),
+			to.Node.AttrEq(screl.CurrentStatus, t.To()),
+			targetDesc.DescIDEq(descIDVar),
+			targetDesc.Target.AttrNeq(screl.CurrentStatus, scpb.Status_DESCRIPTOR_ADDED),
+		}
+		if len(prePrevStatuses) > 0 {
+			clauses = append(clauses,
+				GetNotJoinOnNodeWithStatusIn(prePrevStatuses)(from.Target),
+			)
+		}
+
+		return clauses
+	}
+
 	addRules := func(el scpb.Element, targetStatus scpb.TargetStatus) {
 		statusMap := findNoopSourceStatuses(el, targetStatus)
 		if err := opgen.IterateTransitions(el, targetStatus, func(
@@ -91,14 +124,73 @@ func init() {
 			panic(err)
 		}
 	}
+
+	addRulesForDep := func(el scpb.Element, targetStatus scpb.TargetStatus) {
+		statusMap := findNoopSourceStatuses(el, targetStatus)
+		if err := opgen.IterateTransitions(el, targetStatus, func(
+			t opgen.Transition,
+		) error {
+			elemName := reflect.TypeOf(el).Elem().Name()
+			ruleName := scgraph.RuleName(fmt.Sprintf(
+				"%s transitions to %s uphold only single transition in statement phase: %s->%s",
+				elemName, targetStatus.Status(), t.From(), t.To(),
+			))
+			registerDepRuleWithMaxPhase(
+				ruleName,
+				scgraph.PreviousStagePrecedence,
+				scop.StatementPhase,
+				"prev", "next",
+				func(from, to NodeVars) rel.Clauses {
+					return clausesForDepTwoVersionEdge(
+						from, to, el, targetStatus, t, statusMap[t.From()],
+					)
+				},
+			)
+			return nil
+		}); err != nil {
+			panic(err)
+		}
+	}
+
 	_ = scpb.ForEachElementType(func(el scpb.Element) error {
-		if opgen.HasPublic(el) {
-			addRules(el, scpb.ToPublic)
+		if IsDescriptor(el) {
+			if opgen.HasPublic(el) {
+				addRules(el, scpb.ToPublic)
+			}
+			if opgen.HasTransient(el) {
+				addRules(el, scpb.Transient)
+			}
+			addRules(el, scpb.ToAbsent) // every element has ToAbsent
+		} else {
+			if opgen.HasPublic(el) {
+				addRulesForDep(el, scpb.ToPublic)
+			}
+			if opgen.HasTransient(el) {
+				addRules(el, scpb.Transient)
+			}
+			addRules(el, scpb.ToAbsent) // every element has ToAbsent
 		}
-		if opgen.HasTransient(el) {
-			addRules(el, scpb.Transient)
-		}
-		addRules(el, scpb.ToAbsent) // every element has ToAbsent
 		return nil
 	})
 }
+
+/*
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+ALTER TABLE foo ADD COLUMN k INT
+
+statement ok
+COMMIT
+
+*/

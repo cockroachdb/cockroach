@@ -69,7 +69,7 @@ func init() {
 			from.Target.AttrEq(screl.TargetStatus, targetStatus.Status()),
 			from.Node.AttrEq(screl.CurrentStatus, t.From()),
 			to.Node.AttrEq(screl.CurrentStatus, t.To()),
-			descriptorIsNotBeingDropped(from.El),
+			descriptorIsNotBeingAddedOrDropped(from.El),
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,

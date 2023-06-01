@@ -615,26 +615,14 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: PreviousStagePrecedence
   rule: Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 104, ColumnID: 3}, DELETE_ONLY]
-  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
 - from: [Column:{DescID: 104, ColumnID: 3}, PUBLIC]
   to:   [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 104, ColumnID: 3}, PUBLIC]
-  to:   [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
 - from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
   to:   [Column:{DescID: 104, ColumnID: 3}, DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY
-- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
-  to:   [Column:{DescID: 104, ColumnID: 3}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -671,18 +659,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rule: column type dependents removed right before column type
-- from: [ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, PUBLIC]
-  to:   [ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnDefaultExpression transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, PUBLIC]
-  to:   [ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -695,42 +675,18 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, VALIDATED]
   kind: PreviousStagePrecedence
   rule: ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
-- from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, PUBLIC]
-  to:   [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, VALIDATED]
-  kind: PreviousStagePrecedence
-  rule: ColumnNotNull transitions to ABSENT uphold only single transition in statement phase: PUBLIC->VALIDATED
 - from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, VALIDATED]
   to:   [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT]
   kind: PreviousStagePrecedence
   rule: ColumnNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
-- from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, VALIDATED]
-  to:   [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnNotNull transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT
 - from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
   rules: [dependents removed before column; column type removed right before column when not dropping relation]
-- from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC]
-  to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -743,14 +699,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -759,10 +707,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
   kind: Precedence
@@ -771,14 +715,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
   kind: Precedence
@@ -791,18 +727,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -815,14 +739,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -831,10 +747,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
   kind: Precedence
@@ -843,14 +755,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
   kind: Precedence
@@ -867,18 +771,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -895,14 +787,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -916,10 +800,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexData:{DescID: 104, IndexID: 1}, DROPPED]
-  to:   [IndexData:{DescID: 104, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [IndexData:{DescID: 104, IndexID: 1}, DROPPED]
   to:   [IndexData:{DescID: 104, IndexID: 2}, TRANSIENT_DROPPED]
   kind: SameStagePrecedence
   rule: schedule all GC jobs for a descriptor in the same stage
@@ -931,18 +811,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_DROPPED]
   kind: SameStagePrecedence
   rule: schedule all GC jobs for a descriptor in the same stage
-- from: [IndexData:{DescID: 104, IndexID: 1}, PUBLIC]
-  to:   [IndexData:{DescID: 104, IndexID: 1}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
-- from: [IndexData:{DescID: 104, IndexID: 2}, ABSENT]
-  to:   [IndexData:{DescID: 104, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexData:{DescID: 104, IndexID: 2}, TRANSIENT_DROPPED]
-  to:   [IndexData:{DescID: 104, IndexID: 2}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT
 - from: [IndexData:{DescID: 104, IndexID: 2}, TRANSIENT_DROPPED]
   to:   [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
   kind: SameStagePrecedence
@@ -951,46 +819,14 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_DROPPED]
   kind: SameStagePrecedence
   rule: schedule all GC jobs for a descriptor in the same stage
-- from: [IndexData:{DescID: 104, IndexID: 3}, ABSENT]
-  to:   [IndexData:{DescID: 104, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
-  to:   [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT
 - from: [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
   to:   [IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_DROPPED]
   kind: SameStagePrecedence
   rule: schedule all GC jobs for a descriptor in the same stage
-- from: [IndexData:{DescID: 104, IndexID: 4}, ABSENT]
-  to:   [IndexData:{DescID: 104, IndexID: 4}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexData:{DescID: 104, IndexID: 5}, ABSENT]
-  to:   [IndexData:{DescID: 104, IndexID: 5}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_DROPPED]
-  to:   [IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT
 - from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, PUBLIC]
-  to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
-- from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, ABSENT]
-  to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexName transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, PUBLIC]
-  to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexName transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
@@ -999,10 +835,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, ABSENT]
-  to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
@@ -1035,18 +867,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT
-- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, DELETE_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
 - from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, VALIDATED]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
-- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, VALIDATED]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: PUBLIC->VALIDATED
 - from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
@@ -1056,10 +880,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, VALIDATED]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rule: primary index swap
@@ -1067,18 +887,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->BACKFILL_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->BACKFILL_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: BACKFILLED->DELETE_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   kind: Precedence
@@ -1103,42 +915,22 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: BACKFILL_ONLY->BACKFILLED
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: DELETE_ONLY->MERGE_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGED->WRITE_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: MERGED->WRITE_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGE_ONLY->MERGED
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: MERGE_ONLY->MERGED
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: PUBLIC->TRANSIENT_VALIDATED
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_VALIDATED
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
   kind: Precedence
@@ -1167,10 +959,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
   to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, TRANSIENT_ABSENT]
   kind: Precedence
@@ -1180,10 +968,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->TRANSIENT_WRITE_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_VALIDATED->TRANSIENT_WRITE_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
   rule: primary index swap
@@ -1191,34 +975,18 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: VALIDATED->PUBLIC
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: VALIDATED->PUBLIC
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->VALIDATED
 - from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, ABSENT]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: ABSENT->BACKFILL_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILLED->DELETE_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC]
   kind: Precedence
@@ -1239,58 +1007,30 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED
-- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILL_ONLY->BACKFILLED
 - from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, DELETE_ONLY]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, MERGE_ONLY]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, DELETE_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, MERGE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: DELETE_ONLY->MERGE_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, MERGED]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY
-- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, MERGED]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: MERGED->WRITE_ONLY
 - from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, MERGE_ONLY]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, MERGED]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED
-- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, MERGE_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, MERGED]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: MERGE_ONLY->MERGED
 - from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, VALIDATED]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC
-- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, VALIDATED]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: VALIDATED->PUBLIC
 - from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, WRITE_ONLY]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, VALIDATED]
   kind: PreviousStagePrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
-- from: [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, WRITE_ONLY]
-  to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, VALIDATED]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, ABSENT]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, ABSENT]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->DELETE_ONLY
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
@@ -1307,10 +1047,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, DELETE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: DELETE_ONLY->WRITE_ONLY
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
   kind: Precedence
@@ -1331,10 +1067,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [IndexData:{DescID: 104, IndexID: 3}, PUBLIC]
   kind: SameStagePrecedence
@@ -1347,18 +1079,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY
 - from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, ABSENT]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, ABSENT]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->DELETE_ONLY
 - from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, PUBLIC]
   kind: Precedence
@@ -1371,10 +1095,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: DELETE_ONLY->WRITE_ONLY
 - from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_DROPPED]
   kind: Precedence
@@ -1391,10 +1111,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
-- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_DELETE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
 - from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
   to:   [IndexData:{DescID: 104, IndexID: 5}, PUBLIC]
   kind: SameStagePrecedence
@@ -1407,7 +1123,3 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY

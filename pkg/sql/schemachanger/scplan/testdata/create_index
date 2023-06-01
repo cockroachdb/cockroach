@@ -288,10 +288,6 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -300,14 +296,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -316,10 +304,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -328,14 +312,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -344,10 +320,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -356,14 +328,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -372,22 +336,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexData:{DescID: 104, IndexID: 2}, ABSENT]
-  to:   [IndexData:{DescID: 104, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexData:{DescID: 104, IndexID: 3}, ABSENT]
-  to:   [IndexData:{DescID: 104, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
-  to:   [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT
-- from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, ABSENT]
-  to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
@@ -400,18 +348,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: ABSENT->BACKFILL_ONLY
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILLED->DELETE_ONLY
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   kind: Precedence
@@ -436,58 +376,30 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILL_ONLY->BACKFILLED
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: DELETE_ONLY->MERGE_ONLY
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: MERGED->WRITE_ONLY
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: MERGE_ONLY->MERGED
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: VALIDATED->PUBLIC
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, ABSENT]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, ABSENT]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->DELETE_ONLY
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
@@ -504,10 +416,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, DELETE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: DELETE_ONLY->WRITE_ONLY
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
   kind: Precedence
@@ -528,10 +436,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   to:   [IndexData:{DescID: 104, IndexID: 3}, PUBLIC]
   kind: SameStagePrecedence
@@ -544,10 +448,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY
 
 ops
 CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name gin_trgm_ops)
@@ -812,10 +712,6 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -824,14 +720,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -840,10 +728,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -852,14 +736,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -868,10 +744,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -880,14 +752,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, ABSENT]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -896,22 +760,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexData:{DescID: 104, IndexID: 2}, ABSENT]
-  to:   [IndexData:{DescID: 104, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexData:{DescID: 104, IndexID: 3}, ABSENT]
-  to:   [IndexData:{DescID: 104, IndexID: 3}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC
-- from: [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
-  to:   [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT
-- from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, ABSENT]
-  to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: IndexName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
@@ -924,18 +772,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: ABSENT->BACKFILL_ONLY
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILLED->DELETE_ONLY
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC]
   kind: Precedence
@@ -960,58 +800,30 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILL_ONLY->BACKFILLED
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, DELETE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: DELETE_ONLY->MERGE_ONLY
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: MERGED->WRITE_ONLY
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, MERGED]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: MERGE_ONLY->MERGED
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: VALIDATED->PUBLIC
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
-  kind: PreviousStagePrecedence
-  rule: SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, ABSENT]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, ABSENT]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->DELETE_ONLY
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   kind: Precedence
@@ -1028,10 +840,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, DELETE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: DELETE_ONLY->WRITE_ONLY
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
   kind: Precedence
@@ -1052,10 +860,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   to:   [IndexData:{DescID: 104, IndexID: 3}, PUBLIC]
   kind: SameStagePrecedence
@@ -1068,7 +872,3 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
-- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY

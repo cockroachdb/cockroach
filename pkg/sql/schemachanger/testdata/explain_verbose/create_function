@@ -33,16 +33,31 @@ $$;
 │       ├── • 8 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Function:{DescID: 110}
-│       │   │   │ ABSENT → DESCRIPTOR_ADDED
+│       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Function:{DescID: 110}
-│       │   │         rule: "Function transitions to PUBLIC uphold only single transition in statement phase: ABSENT->DESCRIPTOR_ADDED"
+│       │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 110, ReferencedDescID: 101}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 110}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC FunctionVolatility:{DescID: 110}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 110}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110, Name: admin}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110, Name: root}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 110}
+│       │   │         rule: "dependents exist before descriptor becomes public"
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 110, ReferencedDescID: 101}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT SchemaChild:{DescID: 110, ReferencedDescID: 101}
-│       │   │   │     rule: "SchemaChild transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
 │       │   │   │     rule: "descriptor existence precedes dependents"
@@ -53,17 +68,11 @@ $$;
 │       │   ├── • FunctionName:{DescID: 110}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT FunctionName:{DescID: 110}
-│       │   │   │     rule: "FunctionName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
 │       │   ├── • FunctionVolatility:{DescID: 110}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT FunctionVolatility:{DescID: 110}
-│       │   │   │     rule: "FunctionVolatility transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
 │       │   │         rule: "descriptor existence precedes dependents"
@@ -71,17 +80,11 @@ $$;
 │       │   ├── • Owner:{DescID: 110}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT Owner:{DescID: 110}
-│       │   │   │     rule: "Owner transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 110, Name: admin}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT UserPrivileges:{DescID: 110, Name: admin}
-│       │   │   │     rule: "UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
 │       │   │         rule: "descriptor existence precedes dependents"
@@ -89,22 +92,16 @@ $$;
 │       │   ├── • UserPrivileges:{DescID: 110, Name: root}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT UserPrivileges:{DescID: 110, Name: root}
-│       │   │   │     rule: "UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
 │       │   └── • FunctionBody:{DescID: 110}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       ├── • PreviousStagePrecedence dependency from ABSENT FunctionBody:{DescID: 110}
-│       │       │     rule: "FunctionBody transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │       │
 │       │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
 │       │             rule: "descriptor existence precedes dependents"
 │       │
-│       └── • 10 Mutation operations
+│       └── • 11 Mutation operations
 │           │
 │           ├── • CreateFunctionDescriptor
 │           │     Function:
@@ -223,10 +220,13 @@ $$;
 │           │       columnids:
 │           │       - 1
 │           │
-│           └── • SetObjectParentID
-│                 ObjParent:
-│                   ChildObjectID: 110
-│                   SchemaID: 101
+│           ├── • SetObjectParentID
+│           │     ObjParent:
+│           │       ChildObjectID: 110
+│           │       SchemaID: 101
+│           │
+│           └── • MarkDescriptorAsPublic
+│                 DescriptorID: 110
 │
 └── • PreCommitPhase
     │
@@ -235,7 +235,7 @@ $$;
     │   ├── • 8 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Function:{DescID: 110}
-    │   │   │     DESCRIPTOR_ADDED → ABSENT
+    │   │   │     PUBLIC → ABSENT
     │   │   │
     │   │   ├── • SchemaChild:{DescID: 110, ReferencedDescID: 101}
     │   │   │     PUBLIC → ABSENT
@@ -270,12 +270,6 @@ $$;
         │   ├── • Function:{DescID: 110}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from ABSENT Function:{DescID: 110}
-        │   │   │     rule: "Function transitions to PUBLIC uphold only single transition in statement phase: ABSENT->DESCRIPTOR_ADDED"
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
-        │   │   │     rule: "Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC"
-        │   │   │
         │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 110, ReferencedDescID: 101}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │
@@ -300,9 +294,6 @@ $$;
         │   ├── • SchemaChild:{DescID: 110, ReferencedDescID: 101}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from ABSENT SchemaChild:{DescID: 110, ReferencedDescID: 101}
-        │   │   │     rule: "SchemaChild transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-        │   │   │
         │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
         │   │   │     rule: "descriptor existence precedes dependents"
         │   │   │
@@ -312,17 +303,11 @@ $$;
         │   ├── • FunctionName:{DescID: 110}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from ABSENT FunctionName:{DescID: 110}
-        │   │   │     rule: "FunctionName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-        │   │   │
         │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
         │   │         rule: "descriptor existence precedes dependents"
         │   │
         │   ├── • FunctionVolatility:{DescID: 110}
         │   │   │ ABSENT → PUBLIC
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from ABSENT FunctionVolatility:{DescID: 110}
-        │   │   │     rule: "FunctionVolatility transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
         │   │   │
         │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
         │   │         rule: "descriptor existence precedes dependents"
@@ -330,17 +315,11 @@ $$;
         │   ├── • Owner:{DescID: 110}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from ABSENT Owner:{DescID: 110}
-        │   │   │     rule: "Owner transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-        │   │   │
         │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
         │   │         rule: "descriptor existence precedes dependents"
         │   │
         │   ├── • UserPrivileges:{DescID: 110, Name: admin}
         │   │   │ ABSENT → PUBLIC
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from ABSENT UserPrivileges:{DescID: 110, Name: admin}
-        │   │   │     rule: "UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
         │   │   │
         │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
         │   │         rule: "descriptor existence precedes dependents"
@@ -348,17 +327,11 @@ $$;
         │   ├── • UserPrivileges:{DescID: 110, Name: root}
         │   │   │ ABSENT → PUBLIC
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from ABSENT UserPrivileges:{DescID: 110, Name: root}
-        │   │   │     rule: "UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-        │   │   │
         │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
         │   │         rule: "descriptor existence precedes dependents"
         │   │
         │   └── • FunctionBody:{DescID: 110}
         │       │ ABSENT → PUBLIC
-        │       │
-        │       ├── • PreviousStagePrecedence dependency from ABSENT FunctionBody:{DescID: 110}
-        │       │     rule: "FunctionBody transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
         │       │
         │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
         │             rule: "descriptor existence precedes dependents"

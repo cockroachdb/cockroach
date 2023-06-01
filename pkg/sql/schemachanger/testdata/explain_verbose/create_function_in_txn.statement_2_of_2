@@ -14,37 +14,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 6 elements transitioning toward PUBLIC
-│       │   │
-│       │   ├── • Function:{DescID: 105}
-│       │   │   │ DESCRIPTOR_ADDED → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
-│       │   │   │     rule: "Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 105}
-│       │   │   │     rule: "dependents exist before descriptor becomes public"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105, Name: admin}
-│       │   │   │     rule: "dependents exist before descriptor becomes public"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105, Name: root}
-│       │   │   │     rule: "dependents exist before descriptor becomes public"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 105, ReferencedDescID: 101}
-│       │   │   │     rule: "dependents exist before descriptor becomes public"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 105}
-│       │   │   │     rule: "dependents exist before descriptor becomes public"
-│       │   │   │
-│       │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 105}
-│       │   │         rule: "dependents exist before descriptor becomes public"
+│       ├── • 5 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │   │   │     rule: "SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: ABSENT->BACKFILL_ONLY"
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
@@ -52,17 +25,11 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-│       │   │   │     rule: "IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index existence precedes index dependents"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-│       │   │   │     rule: "IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index existence precedes index dependents"
@@ -70,17 +37,11 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • IndexData:{DescID: 104, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT IndexData:{DescID: 104, IndexID: 2}
-│       │   │   │     rule: "IndexData transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index data exists as soon as index accepts backfills"
 │       │   │
 │       │   └── • IndexName:{DescID: 104, Name: idx, IndexID: 2}
 │       │       │ ABSENT → PUBLIC
-│       │       │
-│       │       ├── • PreviousStagePrecedence dependency from ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 2}
-│       │       │     rule: "IndexName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │       │
 │       │       └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │             rule: "index existence precedes index dependents"
@@ -90,17 +51,11 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-│       │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->DELETE_ONLY"
-│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
-│       │   │   │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │         rule: "temp index existence precedes index dependents"
@@ -108,16 +63,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
 │       │       │ ABSENT → PUBLIC
 │       │       │
-│       │       ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-│       │       │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │       │
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 8 Mutation operations
-│           │
-│           ├── • MarkDescriptorAsPublic
-│           │     DescriptorID: 105
+│       └── • 7 Mutation operations
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -230,17 +179,11 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • Owner:{DescID: 105}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT Owner:{DescID: 105}
-│       │   │   │     rule: "Owner transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 105, Name: admin}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: admin}
-│       │   │   │     rule: "UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
 │       │   │         rule: "descriptor existence precedes dependents"
@@ -248,23 +191,14 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • UserPrivileges:{DescID: 105, Name: root}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: root}
-│       │   │   │     rule: "UserPrivileges transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
 │       │   ├── • Function:{DescID: 105}
-│       │   │   │ ABSENT → DESCRIPTOR_ADDED
-│       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Function:{DescID: 105}
-│       │   │         rule: "Function transitions to PUBLIC uphold only single transition in statement phase: ABSENT->DESCRIPTOR_ADDED"
+│       │   │     ABSENT → DESCRIPTOR_ADDED
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 105, ReferencedDescID: 101}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT SchemaChild:{DescID: 105, ReferencedDescID: 101}
-│       │   │   │     rule: "SchemaChild transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
 │       │   │   │     rule: "descriptor existence precedes dependents"
@@ -275,17 +209,11 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • FunctionName:{DescID: 105}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT FunctionName:{DescID: 105}
-│       │   │   │     rule: "FunctionName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
 │       │   │         rule: "descriptor existence precedes dependents"
 │       │   │
 │       │   ├── • FunctionBody:{DescID: 105}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT FunctionBody:{DescID: 105}
-│       │   │   │     rule: "FunctionBody transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
 │       │   │         rule: "descriptor existence precedes dependents"
@@ -293,17 +221,11 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │   │   │     rule: "SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: ABSENT->BACKFILL_ONLY"
-│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-│       │   │   │     rule: "IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index existence precedes index dependents"
@@ -311,26 +233,17 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-│       │   │   │     rule: "IndexColumn transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index existence precedes index dependents"
 │       │   │
 │       │   ├── • IndexData:{DescID: 104, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT IndexData:{DescID: 104, IndexID: 2}
-│       │   │   │     rule: "IndexData transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index data exists as soon as index accepts backfills"
 │       │   │
 │       │   └── • IndexName:{DescID: 104, Name: idx, IndexID: 2}
 │       │       │ ABSENT → PUBLIC
-│       │       │
-│       │       ├── • PreviousStagePrecedence dependency from ABSENT IndexName:{DescID: 104, Name: idx, IndexID: 2}
-│       │       │     rule: "IndexName transitions to PUBLIC uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │       │
 │       │       └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │             rule: "index existence precedes index dependents"
@@ -340,26 +253,17 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-│       │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->DELETE_ONLY"
-│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
 │       │   │   │ ABSENT → PUBLIC
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
-│       │   │   │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │         rule: "temp index existence precedes index dependents"
 │       │   │
 │       │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
 │       │       │ ABSENT → PUBLIC
-│       │       │
-│       │       ├── • PreviousStagePrecedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-│       │       │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC"
 │       │       │
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
@@ -507,9 +411,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │   │   │ DELETE_ONLY → WRITE_ONLY
 │   │   │   │   │
 │   │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-│   │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: DELETE_ONLY->WRITE_ONLY"
-│   │   │   │   │
-│   │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │   │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │   │   │   │   │
 │   │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
@@ -520,9 +421,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │   │
 │   │   │   └── • IndexData:{DescID: 104, IndexID: 3}
 │   │   │       │ ABSENT → PUBLIC
-│   │   │       │
-│   │   │       ├── • PreviousStagePrecedence dependency from ABSENT IndexData:{DescID: 104, IndexID: 3}
-│   │   │       │     rule: "IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: ABSENT->PUBLIC"
 │   │   │       │
 │   │   │       └── • SameStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │   │   │             rule: "temp index data exists as soon as temp index accepts writes"
@@ -551,9 +449,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │       │ BACKFILL_ONLY → BACKFILLED
 │   │   │       │
 │   │   │       ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│   │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILL_ONLY->BACKFILLED"
-│   │   │       │
-│   │   │       ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED"
 │   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
@@ -578,9 +473,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │   │
 │   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ BACKFILLED → DELETE_ONLY
-│   │   │       │
-│   │   │       ├── • PreviousStagePrecedence dependency from BACKFILLED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│   │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILLED->DELETE_ONLY"
 │   │   │       │
 │   │   │       └── • PreviousStagePrecedence dependency from BACKFILLED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY"
@@ -608,9 +500,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ DELETE_ONLY → MERGE_ONLY
 │   │   │       │
-│   │   │       ├── • PreviousStagePrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│   │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: DELETE_ONLY->MERGE_ONLY"
-│   │   │       │
 │   │   │       └── • PreviousStagePrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY"
 │   │   │
@@ -637,9 +526,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ MERGE_ONLY → MERGED
 │   │   │       │
-│   │   │       ├── • PreviousStagePrecedence dependency from MERGE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│   │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: MERGE_ONLY->MERGED"
-│   │   │       │
 │   │   │       └── • PreviousStagePrecedence dependency from MERGE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED"
 │   │   │
@@ -656,9 +542,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │   │
 │   │   │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ MERGED → WRITE_ONLY
-│   │   │       │
-│   │   │       ├── • PreviousStagePrecedence dependency from MERGED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│   │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: MERGED->WRITE_ONLY"
 │   │   │       │
 │   │   │       └── • PreviousStagePrecedence dependency from MERGED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
@@ -687,9 +570,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │       │ WRITE_ONLY → VALIDATED
 │       │       │
 │       │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │       │     rule: "SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED"
-│       │       │
-│       │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │       │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │       │       │
 │       │       └── • Precedence dependency from PUBLIC IndexName:{DescID: 104, Name: idx, IndexID: 2}
@@ -709,9 +589,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
     │   │   │
     │   │   ├── • Function:{DescID: 105}
     │   │   │   │ DESCRIPTOR_ADDED → PUBLIC
-    │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
-    │   │   │   │     rule: "Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 105}
     │   │   │   │     rule: "dependents exist before descriptor becomes public"
@@ -735,9 +612,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
     │   │       │ VALIDATED → PUBLIC
     │   │       │
     │   │       ├── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-    │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: VALIDATED->PUBLIC"
-    │   │       │
-    │   │       ├── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │       │
     │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
@@ -754,26 +628,17 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-    │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
-    │   │   │   │
     │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
     │   │   │   │ PUBLIC → TRANSIENT_ABSENT
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
-    │   │   │   │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT"
-    │   │   │   │
     │   │   │   └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
     │   │       │ PUBLIC → TRANSIENT_ABSENT
-    │   │       │
-    │   │       ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-    │   │       │     rule: "IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT"
     │   │       │
     │   │       └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │             rule: "index drop mutation visible before cleaning up index columns"
@@ -824,9 +689,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
         │   │   │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-        │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
-        │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
         │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
@@ -838,11 +700,8 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
         │   └── • IndexData:{DescID: 104, IndexID: 3}
         │       │ PUBLIC → TRANSIENT_ABSENT
         │       │
-        │       ├── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-        │       │     rule: "index removed before garbage collection"
-        │       │
-        │       └── • PreviousStagePrecedence dependency from TRANSIENT_DROPPED IndexData:{DescID: 104, IndexID: 3}
-        │             rule: "IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT"
+        │       └── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+        │             rule: "index removed before garbage collection"
         │
         └── • 5 Mutation operations
             │

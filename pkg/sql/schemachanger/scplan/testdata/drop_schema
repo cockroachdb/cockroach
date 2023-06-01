@@ -18,10 +18,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, DROPPED]
   to:   [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT]
   kind: PreviousStagePrecedence
-  rule: AliasType transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, DROPPED]
-  to:   [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT]
-  kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
 - from: [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, DROPPED]
   to:   [Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, ABSENT]
@@ -47,26 +43,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 112, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, PUBLIC]
-  to:   [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: AliasType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [Column:{DescID: 106, ColumnID: 1}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 106, ColumnID: 1}, DELETE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 106, ColumnID: 1}, PUBLIC]
-  to:   [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 106, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -87,18 +67,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 106, ColumnID: 2}, DELETE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 106, ColumnID: 2}, PUBLIC]
-  to:   [Column:{DescID: 106, ColumnID: 2}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 106, ColumnID: 2}, WRITE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 2}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 106, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: name, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -115,18 +83,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 106, ColumnID: 3}, DELETE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 106, ColumnID: 3}, PUBLIC]
-  to:   [Column:{DescID: 106, ColumnID: 3}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 106, ColumnID: 3}, WRITE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 3}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 106, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105]}, ABSENT]
   kind: Precedence
@@ -147,18 +103,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 106, ColumnID: 4294967294}, DELETE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 106, ColumnID: 4294967294}, PUBLIC]
-  to:   [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 4294967294}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 106, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -171,18 +115,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 106, ColumnID: 4294967295}, DELETE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 106, ColumnID: 4294967295}, PUBLIC]
-  to:   [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [Column:{DescID: 106, ColumnID: 4294967295}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 106, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -195,18 +127,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 107, ColumnID: 1}, DELETE_ONLY]
-  to:   [Column:{DescID: 107, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 107, ColumnID: 1}, PUBLIC]
-  to:   [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
-  to:   [Column:{DescID: 107, ColumnID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -219,18 +139,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 107, ColumnID: 4294967294}, DELETE_ONLY]
-  to:   [Column:{DescID: 107, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 107, ColumnID: 4294967294}, PUBLIC]
-  to:   [Column:{DescID: 107, ColumnID: 4294967294}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 107, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [Column:{DescID: 107, ColumnID: 4294967294}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 107, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -243,18 +151,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 107, ColumnID: 4294967295}, DELETE_ONLY]
-  to:   [Column:{DescID: 107, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 107, ColumnID: 4294967295}, PUBLIC]
-  to:   [Column:{DescID: 107, ColumnID: 4294967295}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 107, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [Column:{DescID: 107, ColumnID: 4294967295}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 107, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -267,18 +163,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 108, ColumnID: 1}, DELETE_ONLY]
-  to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 108, ColumnID: 1}, PUBLIC]
-  to:   [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
-  to:   [Column:{DescID: 108, ColumnID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -291,18 +175,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 108, ColumnID: 2}, DELETE_ONLY]
-  to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 108, ColumnID: 2}, PUBLIC]
-  to:   [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
-  to:   [Column:{DescID: 108, ColumnID: 2}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 108, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -315,18 +187,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 108, ColumnID: 4294967294}, DELETE_ONLY]
-  to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 108, ColumnID: 4294967294}, PUBLIC]
-  to:   [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [Column:{DescID: 108, ColumnID: 4294967294}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 108, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -339,18 +199,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 108, ColumnID: 4294967295}, DELETE_ONLY]
-  to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 108, ColumnID: 4294967295}, PUBLIC]
-  to:   [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [Column:{DescID: 108, ColumnID: 4294967295}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 108, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -363,18 +211,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 109, ColumnID: 1}, DELETE_ONLY]
-  to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 109, ColumnID: 1}, PUBLIC]
-  to:   [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
-  to:   [Column:{DescID: 109, ColumnID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -387,18 +223,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 109, ColumnID: 2}, DELETE_ONLY]
-  to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 109, ColumnID: 2}, PUBLIC]
-  to:   [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
-  to:   [Column:{DescID: 109, ColumnID: 2}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 109, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -411,18 +235,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 109, ColumnID: 4294967294}, DELETE_ONLY]
-  to:   [Column:{DescID: 109, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 109, ColumnID: 4294967294}, PUBLIC]
-  to:   [Column:{DescID: 109, ColumnID: 4294967294}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 109, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [Column:{DescID: 109, ColumnID: 4294967294}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 109, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -435,18 +247,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 109, ColumnID: 4294967295}, DELETE_ONLY]
-  to:   [Column:{DescID: 109, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 109, ColumnID: 4294967295}, PUBLIC]
-  to:   [Column:{DescID: 109, ColumnID: 4294967295}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 109, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [Column:{DescID: 109, ColumnID: 4294967295}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 109, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -459,18 +259,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 110, ColumnID: 1}, DELETE_ONLY]
-  to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 110, ColumnID: 1}, PUBLIC]
-  to:   [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
-  to:   [Column:{DescID: 110, ColumnID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -483,18 +271,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 110, ColumnID: 2}, DELETE_ONLY]
-  to:   [Column:{DescID: 110, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 110, ColumnID: 2}, PUBLIC]
-  to:   [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
-  to:   [Column:{DescID: 110, ColumnID: 2}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 110, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -507,18 +283,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 110, ColumnID: 4294967294}, DELETE_ONLY]
-  to:   [Column:{DescID: 110, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 110, ColumnID: 4294967294}, PUBLIC]
-  to:   [Column:{DescID: 110, ColumnID: 4294967294}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 110, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [Column:{DescID: 110, ColumnID: 4294967294}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 110, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -531,18 +295,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 110, ColumnID: 4294967295}, DELETE_ONLY]
-  to:   [Column:{DescID: 110, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 110, ColumnID: 4294967295}, PUBLIC]
-  to:   [Column:{DescID: 110, ColumnID: 4294967295}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 110, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [Column:{DescID: 110, ColumnID: 4294967295}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 110, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -555,18 +307,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 113, ColumnID: 1}, DELETE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 113, ColumnID: 1}, PUBLIC]
-  to:   [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 1}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -579,18 +319,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 113, ColumnID: 2}, DELETE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 113, ColumnID: 2}, PUBLIC]
-  to:   [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 2}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 113, ColumnID: 2}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -603,18 +331,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 113, ColumnID: 3}, DELETE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 113, ColumnID: 3}, PUBLIC]
-  to:   [Column:{DescID: 113, ColumnID: 3}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 113, ColumnID: 3}, WRITE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 3}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 113, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -627,18 +343,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 113, ColumnID: 4294967294}, DELETE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 113, ColumnID: 4294967294}, PUBLIC]
-  to:   [Column:{DescID: 113, ColumnID: 4294967294}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 113, ColumnID: 4294967294}, WRITE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 4294967294}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 113, ColumnID: 4294967294}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -651,18 +355,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Column:{DescID: 113, ColumnID: 4294967295}, DELETE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [Column:{DescID: 113, ColumnID: 4294967295}, PUBLIC]
-  to:   [Column:{DescID: 113, ColumnID: 4294967295}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: PUBLIC->WRITE_ONLY
-- from: [Column:{DescID: 113, ColumnID: 4294967295}, WRITE_ONLY]
-  to:   [Column:{DescID: 113, ColumnID: 4294967295}, DELETE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY
 - from: [Column:{DescID: 113, ColumnID: 4294967295}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -683,18 +375,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105]}, PUBLIC]
-  to:   [ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105]}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnDefaultExpression transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, PUBLIC]
-  to:   [ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnFamily transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -703,10 +387,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -715,10 +395,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, PUBLIC]
-  to:   [ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 106, Name: name, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -727,10 +403,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 106, Name: name, ColumnID: 2}, PUBLIC]
-  to:   [ColumnName:{DescID: 106, Name: name, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -739,10 +411,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 106, Name: val, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -751,10 +419,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 106, Name: val, ColumnID: 3}, PUBLIC]
-  to:   [ColumnName:{DescID: 106, Name: val, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -763,10 +427,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -775,10 +435,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, PUBLIC]
-  to:   [ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -787,10 +443,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -799,10 +451,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -811,10 +459,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, PUBLIC]
-  to:   [ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -823,10 +467,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, PUBLIC]
-  to:   [ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -835,10 +475,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -847,10 +483,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -859,10 +491,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, PUBLIC]
-  to:   [ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -871,10 +499,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 109, Name: name, ColumnID: 1}, PUBLIC]
-  to:   [ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -883,10 +507,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -895,10 +515,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -907,10 +523,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, PUBLIC]
-  to:   [ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -919,10 +531,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, PUBLIC]
-  to:   [ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -931,10 +539,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -943,10 +547,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -955,10 +555,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 113, Name: k, ColumnID: 1}, PUBLIC]
-  to:   [ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -967,10 +563,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, PUBLIC]
-  to:   [ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -979,10 +571,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, PUBLIC]
-  to:   [ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -991,10 +579,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1007,14 +591,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, PUBLIC]
-  to:   [ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, VALIDATED]
-  kind: PreviousStagePrecedence
-  rule: ColumnNotNull transitions to ABSENT uphold only single transition in statement phase: PUBLIC->VALIDATED
-- from: [ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, VALIDATED]
-  to:   [ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnNotNull transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT
 - from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1027,10 +603,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -1043,10 +615,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1059,10 +627,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -1075,10 +639,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -1091,10 +651,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1103,10 +659,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -1115,10 +667,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 107, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -1127,10 +675,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1139,10 +683,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -1151,10 +691,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -1163,10 +699,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -1175,10 +707,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1187,10 +715,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
-  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -1199,10 +723,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC]
-  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -1211,10 +731,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -1223,10 +739,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1235,10 +747,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
-  to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -1247,10 +755,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC]
-  to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -1259,10 +763,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 110, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -1271,10 +771,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1283,10 +779,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
-  to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -1295,10 +787,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC]
-  to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1307,10 +795,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC]
-  to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
@@ -1319,10 +803,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, PUBLIC]
-  to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
   to:   [Column:{DescID: 113, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -1331,14 +811,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, PUBLIC]
-  to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
-- from: [EnumType:{DescID: 111}, DROPPED]
-  to:   [EnumType:{DescID: 111}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: EnumType transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
 - from: [EnumType:{DescID: 111}, DROPPED]
   to:   [EnumType:{DescID: 111}, ABSENT]
   kind: PreviousStagePrecedence
@@ -1371,18 +843,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 111, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [EnumType:{DescID: 111}, PUBLIC]
-  to:   [EnumType:{DescID: 111}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: EnumType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [EnumTypeValue:{DescID: 111, Name: a}, ABSENT]
   to:   [EnumType:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [EnumTypeValue:{DescID: 111, Name: a}, PUBLIC]
-  to:   [EnumTypeValue:{DescID: 111, Name: a}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: EnumTypeValue transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1395,10 +859,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, PUBLIC]
-  to:   [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 2}, ABSENT]
   kind: Precedence
@@ -1411,10 +871,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, PUBLIC]
-  to:   [IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, ABSENT]
   to:   [Column:{DescID: 106, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -1427,18 +883,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, PUBLIC]
-  to:   [IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
-- from: [IndexData:{DescID: 106, IndexID: 1}, DROPPED]
-  to:   [IndexData:{DescID: 106, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [IndexData:{DescID: 106, IndexID: 1}, PUBLIC]
-  to:   [IndexData:{DescID: 106, IndexID: 1}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: IndexData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
@@ -1447,170 +891,86 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, PUBLIC]
-  to:   [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: IndexName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, ABSENT]
   to:   [Sequence:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 106, Name: t1, ReferencedDescID: 100}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 106, Name: t1, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 106, Name: t1, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 107, Name: v1, ReferencedDescID: 100}, ABSENT]
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 107, Name: v1, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 107, Name: v1, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 108, Name: v2, ReferencedDescID: 100}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 108, Name: v2, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 108, Name: v2, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 109, Name: v3, ReferencedDescID: 100}, ABSENT]
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 109, Name: v3, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 109, Name: v3, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 110, Name: v4, ReferencedDescID: 100}, ABSENT]
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 110, Name: v4, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 110, Name: v4, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100}, ABSENT]
   to:   [EnumType:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, ABSENT]
   to:   [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Namespace:{DescID: 113, Name: v5, ReferencedDescID: 100}, ABSENT]
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 113, Name: v5, ReferencedDescID: 100}, PUBLIC]
-  to:   [Namespace:{DescID: 113, Name: v5, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 104}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 104}, PUBLIC]
-  to:   [Owner:{DescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 105}, ABSENT]
   to:   [Sequence:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 105}, PUBLIC]
-  to:   [Owner:{DescID: 105}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 106}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 106}, PUBLIC]
-  to:   [Owner:{DescID: 106}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 107}, ABSENT]
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 107}, PUBLIC]
-  to:   [Owner:{DescID: 107}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 108}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 108}, PUBLIC]
-  to:   [Owner:{DescID: 108}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 109}, ABSENT]
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 109}, PUBLIC]
-  to:   [Owner:{DescID: 109}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 110}, ABSENT]
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 110}, PUBLIC]
-  to:   [Owner:{DescID: 110}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 111}, ABSENT]
   to:   [EnumType:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 111}, PUBLIC]
-  to:   [Owner:{DescID: 111}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 112}, ABSENT]
   to:   [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 112}, PUBLIC]
-  to:   [Owner:{DescID: 112}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Owner:{DescID: 113}, ABSENT]
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Owner:{DescID: 113}, PUBLIC]
-  to:   [Owner:{DescID: 113}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
   to:   [IndexData:{DescID: 106, IndexID: 1}, DROPPED]
   kind: Precedence
@@ -1631,22 +991,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, DELETE_ONLY]
-  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT
-- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, PUBLIC]
-  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: PUBLIC->VALIDATED
 - from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents, excluding columns
-- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
-  to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, WRITE_ONLY]
-  kind: PreviousStagePrecedence
-  rule: PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY
 - from: [Schema:{DescID: 104}, DROPPED]
   to:   [Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, ABSENT]
   kind: Precedence
@@ -1655,10 +1003,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Owner:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [Schema:{DescID: 104}, DROPPED]
-  to:   [Schema:{DescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: Schema transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
 - from: [Schema:{DescID: 104}, DROPPED]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: PreviousStagePrecedence
@@ -1679,10 +1023,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [Schema:{DescID: 104}, PUBLIC]
-  to:   [Schema:{DescID: 104}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: Schema transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [SchemaChild:{DescID: 105, ReferencedDescID: 104}, ABSENT]
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
@@ -1691,10 +1031,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Sequence:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 105, ReferencedDescID: 104}, PUBLIC]
-  to:   [SchemaChild:{DescID: 105, ReferencedDescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT]
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
@@ -1703,10 +1039,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 106, ReferencedDescID: 104}, PUBLIC]
-  to:   [SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaChild:{DescID: 107, ReferencedDescID: 104}, ABSENT]
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
@@ -1715,10 +1047,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 107, ReferencedDescID: 104}, PUBLIC]
-  to:   [SchemaChild:{DescID: 107, ReferencedDescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaChild:{DescID: 108, ReferencedDescID: 104}, ABSENT]
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
@@ -1727,10 +1055,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 108, ReferencedDescID: 104}, PUBLIC]
-  to:   [SchemaChild:{DescID: 108, ReferencedDescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaChild:{DescID: 109, ReferencedDescID: 104}, ABSENT]
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
@@ -1739,10 +1063,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 109, ReferencedDescID: 104}, PUBLIC]
-  to:   [SchemaChild:{DescID: 109, ReferencedDescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaChild:{DescID: 110, ReferencedDescID: 104}, ABSENT]
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
@@ -1751,10 +1071,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 110, ReferencedDescID: 104}, PUBLIC]
-  to:   [SchemaChild:{DescID: 110, ReferencedDescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaChild:{DescID: 111, ReferencedDescID: 104}, ABSENT]
   to:   [EnumType:{DescID: 111}, ABSENT]
   kind: Precedence
@@ -1763,10 +1079,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
   rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [SchemaChild:{DescID: 111, ReferencedDescID: 104}, PUBLIC]
-  to:   [SchemaChild:{DescID: 111, ReferencedDescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaChild:{DescID: 112, ReferencedDescID: 104}, ABSENT]
   to:   [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT]
   kind: Precedence
@@ -1775,10 +1087,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
   rule: back-reference in parent descriptor is removed before parent descriptor is dropped
-- from: [SchemaChild:{DescID: 112, ReferencedDescID: 104}, PUBLIC]
-  to:   [SchemaChild:{DescID: 112, ReferencedDescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaChild:{DescID: 113, ReferencedDescID: 104}, ABSENT]
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: Precedence
@@ -1787,26 +1095,14 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaChild:{DescID: 113, ReferencedDescID: 104}, PUBLIC]
-  to:   [SchemaChild:{DescID: 113, ReferencedDescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaComment:{DescID: 104, Comment: sc1 is good schema}, PUBLIC]
-  to:   [SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaComment transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaParent:{DescID: 104, ReferencedDescID: 100}, PUBLIC]
-  to:   [SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: SchemaParent transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [Sequence:{DescID: 105}, ABSENT]
   to:   [TableData:{DescID: 105, ReferencedDescID: 100}, DROPPED]
   kind: SameStagePrecedence
@@ -1830,10 +1126,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [Sequence:{DescID: 105}, ABSENT]
   kind: PreviousStagePrecedence
-  rule: Sequence transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [Sequence:{DescID: 105}, DROPPED]
-  to:   [Sequence:{DescID: 105}, ABSENT]
-  kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
@@ -1843,10 +1135,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [Sequence:{DescID: 105}, PUBLIC]
-  to:   [Sequence:{DescID: 105}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: Sequence transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [Table:{DescID: 106}, ABSENT]
   to:   [TableData:{DescID: 106, ReferencedDescID: 100}, DROPPED]
   kind: SameStagePrecedence
@@ -1958,10 +1246,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: PreviousStagePrecedence
-  rule: Table transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [Table:{DescID: 106}, DROPPED]
-  to:   [Table:{DescID: 106}, ABSENT]
-  kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT]
@@ -1975,214 +1259,102 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [Table:{DescID: 106}, PUBLIC]
-  to:   [Table:{DescID: 106}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: Table transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TableComment:{DescID: 106, Comment: t1 is good table}, PUBLIC]
-  to:   [TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: TableComment transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
-- from: [TableData:{DescID: 105, ReferencedDescID: 100}, DROPPED]
-  to:   [TableData:{DescID: 105, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: TableData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC]
-  to:   [TableData:{DescID: 105, ReferencedDescID: 100}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: TableData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [TableData:{DescID: 106, ReferencedDescID: 100}, DROPPED]
   to:   [IndexData:{DescID: 106, IndexID: 1}, DROPPED]
   kind: SameStagePrecedence
   rule: schedule all GC jobs for a descriptor in the same stage
-- from: [TableData:{DescID: 106, ReferencedDescID: 100}, DROPPED]
-  to:   [TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: TableData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [TableData:{DescID: 106, ReferencedDescID: 100}, PUBLIC]
-  to:   [TableData:{DescID: 106, ReferencedDescID: 100}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: TableData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 104, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 104, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
   to:   [Sequence:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 105, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
   to:   [Sequence:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 106, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 106, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 107, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 107, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 108, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 108, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 109, Name: admin}, ABSENT]
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 109, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 109, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 109, Name: root}, ABSENT]
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 109, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 109, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 110, Name: admin}, ABSENT]
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 110, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 110, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 110, Name: root}, ABSENT]
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 110, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 110, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 111, Name: admin}, ABSENT]
   to:   [EnumType:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 111, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 111, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 111, Name: public}, ABSENT]
   to:   [EnumType:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 111, Name: public}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 111, Name: public}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 111, Name: root}, ABSENT]
   to:   [EnumType:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 111, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 111, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 112, Name: admin}, ABSENT]
   to:   [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 112, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 112, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 112, Name: public}, ABSENT]
   to:   [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 112, Name: public}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 112, Name: public}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 112, Name: root}, ABSENT]
   to:   [AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 112, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 112, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 113, Name: admin}, ABSENT]
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 113, Name: admin}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 113, Name: admin}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [UserPrivileges:{DescID: 113, Name: root}, ABSENT]
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [UserPrivileges:{DescID: 113, Name: root}, PUBLIC]
-  to:   [UserPrivileges:{DescID: 113, Name: root}, ABSENT]
-  kind: PreviousStagePrecedence
-  rule: UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT
 - from: [View:{DescID: 107}, DROPPED]
   to:   [Column:{DescID: 107, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -2242,15 +1414,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 107}, DROPPED]
   to:   [View:{DescID: 107}, ABSENT]
   kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [View:{DescID: 107}, DROPPED]
-  to:   [View:{DescID: 107}, ABSENT]
-  kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
-- from: [View:{DescID: 107}, PUBLIC]
-  to:   [View:{DescID: 107}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Column:{DescID: 108, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -2322,15 +1486,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 108}, DROPPED]
   to:   [View:{DescID: 108}, ABSENT]
   kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [View:{DescID: 108}, DROPPED]
-  to:   [View:{DescID: 108}, ABSENT]
-  kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
-- from: [View:{DescID: 108}, PUBLIC]
-  to:   [View:{DescID: 108}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [View:{DescID: 109}, DROPPED]
   to:   [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -2402,15 +1558,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 109}, DROPPED]
   to:   [View:{DescID: 109}, ABSENT]
   kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [View:{DescID: 109}, DROPPED]
-  to:   [View:{DescID: 109}, ABSENT]
-  kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
-- from: [View:{DescID: 109}, PUBLIC]
-  to:   [View:{DescID: 109}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [View:{DescID: 110}, DROPPED]
   to:   [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -2482,15 +1630,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 110}, DROPPED]
   to:   [View:{DescID: 110}, ABSENT]
   kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [View:{DescID: 110}, DROPPED]
-  to:   [View:{DescID: 110}, ABSENT]
-  kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
-- from: [View:{DescID: 110}, PUBLIC]
-  to:   [View:{DescID: 110}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 - from: [View:{DescID: 113}, DROPPED]
   to:   [Column:{DescID: 113, ColumnID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -2574,20 +1714,12 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 113}, DROPPED]
   to:   [View:{DescID: 113}, ABSENT]
   kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT
-- from: [View:{DescID: 113}, DROPPED]
-  to:   [View:{DescID: 113}, ABSENT]
-  kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
-- from: [View:{DescID: 113}, PUBLIC]
-  to:   [View:{DescID: 113}, DROPPED]
-  kind: PreviousStagePrecedence
-  rule: View transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
 
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 127 MutationType ops
+StatementPhase stage 1 of 1 with 183 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -2610,24 +1742,27 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     [[SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 106, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 106, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 106, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105]}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
+    [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 107, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
@@ -2635,13 +1770,13 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 108, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -2650,16 +1785,16 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 109, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -2668,16 +1803,16 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 109}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -2686,16 +1821,16 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -2719,19 +1854,19 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 113}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -3042,6 +2177,21 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 106
       User: root
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 106
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 106
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 106
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 106
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 106
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -3057,6 +2207,15 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 107
       User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 107
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 107
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 107
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -3072,6 +2231,18 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 108
       User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 108
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -3087,6 +2258,18 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 109
       User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 109
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -3102,6 +2285,18 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 110
       User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 110
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -3153,6 +2348,21 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 113
       User: root
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 2
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 4294967294
+      TableID: 113
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -3168,6 +2378,105 @@ StatementPhase stage 1 of 1 with 127 MutationType ops
       DescriptorID: 104
       User: root
     *scop.AssertColumnFamilyIsRemoved
+      TableID: 106
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 1
+      TableID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 106
+    *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 1
+      TableID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 107
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 107
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 107
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 108
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 3
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      TableID: 113
+    *scop.RemoveColumnFromIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 106
+    *scop.RemoveColumnFromIndex
+      ColumnID: 2
+      IndexID: 1
+      Kind: 2
+      TableID: 106
+    *scop.RemoveColumnFromIndex
+      ColumnID: 3
+      IndexID: 1
+      Kind: 2
+      Ordinal: 1
+      TableID: 106
+    *scop.MakeIndexAbsent
+      IndexID: 1
+      TableID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      TableID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 3
       TableID: 106
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
@@ -3192,24 +2501,27 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 106, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
-    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[ColumnNotNull:{DescID: 106, ColumnID: 1, IndexID: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[Column:{DescID: 106, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 106, Name: name, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 106, ColumnID: 3}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 106, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 106, Name: val, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105]}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 106, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 106, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
-    [[PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> PUBLIC
+    [[IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[IndexName:{DescID: 106, Name: t1_pkey, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 107, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 107}, ABSENT], ABSENT] -> PUBLIC
@@ -3217,13 +2529,13 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 107}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 107, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 107, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 107, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 108, Name: v2, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
@@ -3232,16 +2544,16 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 108}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 108, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 108, Name: n1, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 108, Name: n2, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 109, Name: v3, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
@@ -3250,16 +2562,16 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 109}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 109, Name: n1, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 110, Name: v4, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
@@ -3268,16 +2580,16 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 110}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 110, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 110, Name: n2, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
@@ -3301,19 +2613,19 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 113}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 113, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 113, Name: k, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 113, Name: n2, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 113, ColumnID: 3}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 113, Name: n1, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], ABSENT] -> PUBLIC
-    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> PUBLIC
+    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], ABSENT] -> PUBLIC
   ops:

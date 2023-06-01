@@ -17,17 +17,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT unique_j;
 │       │   ├── • UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │   │   │     rule: "UniqueWithoutIndexConstraint transitions to ABSENT uphold only single transition in statement phase: PUBLIC->VALIDATED"
-│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from PUBLIC UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │         rule: "UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
 │       │       │ PUBLIC → ABSENT
-│       │       │
-│       │       ├── • PreviousStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
-│       │       │     rule: "ConstraintWithoutIndexName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │       │
 │       │       └── • Precedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │             rule: "Constraint should be hidden before name"
@@ -67,17 +61,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT unique_j;
 │       │   ├── • UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │   │ PUBLIC → VALIDATED
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-│       │   │   │     rule: "UniqueWithoutIndexConstraint transitions to ABSENT uphold only single transition in statement phase: PUBLIC->VALIDATED"
-│       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from PUBLIC UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │   │         rule: "UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
 │       │       │ PUBLIC → ABSENT
-│       │       │
-│       │       ├── • PreviousStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}
-│       │       │     rule: "ConstraintWithoutIndexName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │       │
 │       │       └── • Precedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │             rule: "Constraint should be hidden before name"
@@ -118,9 +106,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT unique_j;
         │   │
         │   └── • UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
         │       │ VALIDATED → ABSENT
-        │       │
-        │       ├── • PreviousStagePrecedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
-        │       │     rule: "UniqueWithoutIndexConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT"
         │       │
         │       ├── • PreviousStagePrecedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
         │       │     rule: "UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"

@@ -32,17 +32,11 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • Owner:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 109}
-│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 109, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 109, Name: admin}
-│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -50,23 +44,14 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • UserPrivileges:{DescID: 109, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 109, Name: root}
-│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Function:{DescID: 109}
-│       │   │   │ PUBLIC → DROPPED
-│       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Function:{DescID: 109}
-│       │   │         rule: "Function transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+│       │   │     PUBLIC → DROPPED
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 109, ReferencedDescID: 101}
 │       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 109, ReferencedDescID: 101}
-│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -75,17 +60,11 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • FunctionName:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC FunctionName:{DescID: 109}
-│       │   │   │     rule: "FunctionName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionVolatility:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC FunctionVolatility:{DescID: 109}
-│       │   │   │     rule: "FunctionVolatility transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -93,26 +72,17 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • FunctionLeakProof:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC FunctionLeakProof:{DescID: 109}
-│       │   │   │     rule: "FunctionLeakProof transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionNullInputBehavior:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC FunctionNullInputBehavior:{DescID: 109}
-│       │   │   │     rule: "FunctionNullInputBehavior transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   └── • FunctionBody:{DescID: 109}
 │       │       │ PUBLIC → ABSENT
-│       │       │
-│       │       ├── • PreviousStagePrecedence dependency from PUBLIC FunctionBody:{DescID: 109}
-│       │       │     rule: "FunctionBody transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │       │
 │       │       └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │             rule: "descriptor dropped before dependent element removal"
@@ -217,17 +187,11 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • Owner:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 109}
-│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 109, Name: admin}
 │       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 109, Name: admin}
-│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -235,23 +199,14 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • UserPrivileges:{DescID: 109, Name: root}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 109, Name: root}
-│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Function:{DescID: 109}
-│       │   │   │ PUBLIC → DROPPED
-│       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Function:{DescID: 109}
-│       │   │         rule: "Function transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+│       │   │     PUBLIC → DROPPED
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 109, ReferencedDescID: 101}
 │       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 109, ReferencedDescID: 101}
-│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -260,17 +215,11 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • FunctionName:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC FunctionName:{DescID: 109}
-│       │   │   │     rule: "FunctionName transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionVolatility:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC FunctionVolatility:{DescID: 109}
-│       │   │   │     rule: "FunctionVolatility transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -278,26 +227,17 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • FunctionLeakProof:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC FunctionLeakProof:{DescID: 109}
-│       │   │   │     rule: "FunctionLeakProof transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • FunctionNullInputBehavior:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC FunctionNullInputBehavior:{DescID: 109}
-│       │   │   │     rule: "FunctionNullInputBehavior transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
-│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   └── • FunctionBody:{DescID: 109}
 │       │       │ PUBLIC → ABSENT
-│       │       │
-│       │       ├── • PreviousStagePrecedence dependency from PUBLIC FunctionBody:{DescID: 109}
-│       │       │     rule: "FunctionBody transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │       │
 │       │       └── • Precedence dependency from DROPPED Function:{DescID: 109}
 │       │             rule: "descriptor dropped before dependent element removal"
@@ -404,9 +344,6 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
         │   │
         │   └── • Function:{DescID: 109}
         │       │ DROPPED → ABSENT
-        │       │
-        │       ├── • PreviousStagePrecedence dependency from DROPPED Function:{DescID: 109}
-        │       │     rule: "Function transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │       │
         │       ├── • Precedence dependency from ABSENT Owner:{DescID: 109}
         │       │     rule: "non-data dependents removed before descriptor"
