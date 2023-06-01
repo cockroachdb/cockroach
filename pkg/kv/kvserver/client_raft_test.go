@@ -4265,6 +4265,7 @@ func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 	repl, err := s2.GetReplica(desc.RangeID)
 	require.NoError(t, err)
 	require.True(t, repl.IsInitialized())
+	require.False(t, repl.IsQuiescent())
 	if !kvserver.ExpirationLeasesOnly.Get(&tc.Servers[0].ClusterSettings().SV) {
 		testutils.SucceedsSoon(t, func() error {
 			if !repl.IsQuiescent() {
