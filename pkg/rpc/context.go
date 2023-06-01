@@ -310,32 +310,32 @@ func NewServerEx(
 	}, nil
 }
 
-type gatedClientConn struct {
+type connFuture struct {
 	ready chan struct{}
 	cc    *grpc.ClientConn
 	err   error
 }
 
-var _ circuitbreaker.Signal = (*gatedClientConn)(nil)
+var _ circuitbreaker.Signal = (*connFuture)(nil)
 
-func (s *gatedClientConn) C() <-chan struct{} {
+func (s *connFuture) C() <-chan struct{} {
 	return s.ready
 }
 
 // Err must only be called after C() has been closed.
-func (s *gatedClientConn) Err() error {
+func (s *connFuture) Err() error {
 	return s.err
 }
 
 // Conn must only be called after C() has been closed.
-func (s *gatedClientConn) Conn() *grpc.ClientConn {
+func (s *connFuture) Conn() *grpc.ClientConn {
 	if s.err != nil {
 		return nil
 	}
 	return s.cc
 }
 
-func (s *gatedClientConn) Resolved() bool {
+func (s *connFuture) Resolved() bool {
 	select {
 	case <-s.ready:
 		return true
@@ -346,7 +346,7 @@ func (s *gatedClientConn) Resolved() bool {
 
 // Resolve is idempotent. Only the first call has any effect.
 // Not thread safe.
-func (s *gatedClientConn) Resolve(cc *grpc.ClientConn, err error) {
+func (s *connFuture) Resolve(cc *grpc.ClientConn, err error) {
 	select {
 	case <-s.ready:
 		// Already resolved, noop.
@@ -367,16 +367,16 @@ type Connection struct {
 	// The following fields are populated on instantiation.
 	k               peerKey
 	breakerSignalFn func() circuitbreaker.Signal // breaker.Signal
-	// gatedCC is signaled with success (revealing the clientConn) once the initial
+	// connFuture is signaled with success (revealing the clientConn) once the initial
 	// heartbeat failed. If we fail to create a ClientConn or the ClientConn fails
 	// its first heartbeat, it's signaled with an error.
 	//
-	// gatedCC can be signaled (like any mutation, from the probe only) without
+	// connFuture can be signaled (like any mutation, from the probe only) without
 	// holding the surrounding mutex.
 	//
 	// Ultimately, it is always signaled with either, regardless of
 	// system shutdown, etc.
-	gatedCC gatedClientConn
+	connFuture connFuture
 }
 
 // newConnectionToNodeID makes a Connection for the given node, class, and nontrivial Signal
@@ -385,7 +385,7 @@ func newConnectionToNodeID(k peerKey, breakerSignal func() circuitbreaker.Signal
 	c := &Connection{
 		breakerSignalFn: breakerSignal,
 		k:               k,
-		gatedCC: gatedClientConn{
+		connFuture: connFuture{
 			ready: make(chan struct{}),
 		},
 	}
@@ -401,7 +401,7 @@ func (c *Connection) waitOrDefault(
 	ctx context.Context, defErr error, sig circuitbreaker.Signal,
 ) (*grpc.ClientConn, error) {
 	// Check the circuit breaker first. If it is already tripped now, we
-	// want it to take precedence over gatedCC below (which is closed in
+	// want it to take precedence over connFuture below (which is closed in
 	// the common case of a connection going bad after having been healthy
 	// for a while).
 	select {
@@ -415,7 +415,7 @@ func (c *Connection) waitOrDefault(
 	// there are two largely identical branches that should be kept in sync.
 	if defErr == nil {
 		select {
-		case <-c.gatedCC.C():
+		case <-c.connFuture.C():
 		case <-sig.C():
 			return nil, sig.Err()
 		case <-ctx.Done():
@@ -423,7 +423,7 @@ func (c *Connection) waitOrDefault(
 		}
 	} else {
 		select {
-		case <-c.gatedCC.C():
+		case <-c.connFuture.C():
 		case <-sig.C():
 			return nil, sig.Err()
 		case <-ctx.Done():
@@ -433,10 +433,10 @@ func (c *Connection) waitOrDefault(
 		}
 	}
 
-	// Done waiting, c.gatedCC has resolved, return the result. Note that this
+	// Done waiting, c.connFuture has resolved, return the result. Note that this
 	// conn could be unhealthy (or there may not even be a conn, i.e. Err() !=
 	// nil), if that's what the caller wanted (ConnectNoBreaker).
-	return c.gatedCC.Conn(), c.gatedCC.Err()
+	return c.connFuture.Conn(), c.connFuture.Err()
 }
 
 // Connect returns the underlying grpc.ClientConn after it has been validated,
@@ -2556,10 +2556,10 @@ func (p *peer) runHeartbeatUntilFailure(
 	// queue for an immedidate heartbeat but wait out the interval.
 	heartbeatTimer.Reset(p.heartbeatInterval)
 
-	// If we get here, we know `gatedCC` has been resolved (due to the
+	// If we get here, we know `connFuture` has been resolved (due to the
 	// initial heartbeat having succeeded), so we have a Conn() we can
 	// use.
-	heartbeatClient := NewHeartbeatClient(p.snap().c.gatedCC.Conn())
+	heartbeatClient := NewHeartbeatClient(p.snap().c.connFuture.Conn())
 
 	for {
 		select {

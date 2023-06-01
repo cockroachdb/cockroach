@@ -49,10 +49,10 @@ func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 		// (which has a gRPC status), not kvpb.NodeUnavailableError.
 		err = errQuiescing
 		report(err)
-		// We also need to resolve gatedCC because a caller may be waiting on
+		// We also need to resolve connFuture because a caller may be waiting on
 		// (*Connection).ConnectNoBreaker, and they need to be signaled as well
 		// but aren't listening to the stopper.
-		p.mu.c.gatedCC.Resolve(nil, errQuiescing)
+		p.mu.c.connFuture.Resolve(nil, errQuiescing)
 		done()
 	}
 }
@@ -148,13 +148,13 @@ func (p *peer) onHeartbeatFailed(
 	defer p.mu.Unlock()
 	ls := &p.mu.PeerSnap // "locked snap"
 
-	if !ls.c.gatedCC.Resolved() {
+	if !ls.c.connFuture.Resolved() {
 		// If the initial heartbeat failed (or we got an error creating the
-		// *grpc.ClientConn), wrap the error. More importantly, resolve gatedCC;
+		// *grpc.ClientConn), wrap the error. More importantly, resolve connFuture;
 		// someone might be waiting on it in ConnectNoBreaker who is not paying
 		// attention to the circuit breaker.
 		err = &netutil.InitialHeartbeatFailedError{WrappedErr: err}
-		ls.c.gatedCC.Resolve(nil /* cc */, err)
+		ls.c.connFuture.Resolve(nil /* cc */, err)
 	}
 	// By convention, we stick to updating breaker before updating peer
 	// to make it easier to write non-flaky tests.
@@ -253,7 +253,7 @@ func (p *peer) onInitialHeartbeatSucceeded(
 
 	// Close the channel last which is helpful for unit tests that
 	// first waitOrDefault for a healthy conn to then check metrics.
-	p.mu.c.gatedCC.Resolve(cc, nil /* err */)
+	p.mu.c.connFuture.Resolve(cc, nil /* err */)
 
 	logOnHealthy(ctx, p.mu.disconnected, now)
 }
