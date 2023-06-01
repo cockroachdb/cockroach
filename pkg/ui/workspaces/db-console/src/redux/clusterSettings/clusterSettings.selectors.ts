@@ -94,3 +94,14 @@ export const selectClusterSettingVersion = createSelector(
     return settings["version"].value;
   },
 );
+
+export const selectIndexUsageStatsEnabled = createSelector(
+  selectClusterSettings,
+  (settings): boolean => {
+    if (!settings) {
+      return false;
+    }
+    const value = settings["version"]?.value || "";
+    return util.greaterOrEqualThanVersion(value, [22, 1, 0]);
+  },
+);
