@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging/auditevents"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -884,8 +885,8 @@ func (p *planner) setAuditMode(
 	// An auditing config change is itself auditable!
 	// We record the event even if the permission check below fails:
 	// auditing wants to know who tried to change the settings.
-	p.curPlan.auditEvents = append(p.curPlan.auditEvents,
-		auditEvent{desc: desc, writing: true})
+	event := &auditevents.SensitiveTableAccessEvent{TableDesc: desc, Writing: true}
+	p.curPlan.auditEventBuilders = append(p.curPlan.auditEventBuilders, event)
 
 	// Requires admin or MODIFYCLUSTERSETTING as of 22.2
 	hasAdmin, err := p.HasAdminRole(ctx)

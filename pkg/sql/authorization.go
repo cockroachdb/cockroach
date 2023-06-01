@@ -166,7 +166,7 @@ func (p *planner) HasPrivilege(
 	// it will not be forgotten if features are added that access
 	// descriptors (since every use of descriptors presumably need a
 	// permission check).
-	p.maybeAudit(privilegeObject, privilegeKind)
+	p.maybeAuditSensitiveTableAccessEvent(privilegeObject, privilegeKind)
 
 	privs, err := p.getPrivilegeDescriptor(ctx, privilegeObject)
 	if err != nil {
