@@ -1173,12 +1173,34 @@ func (t *Transaction) BumpEpoch() {
 	t.Epoch++
 }
 
-// Refresh reconfigures a transaction to account for a read refresh up to the
-// specified timestamp. For details about transaction read refreshes, see the
-// comment on txnSpanRefresher.
-func (t *Transaction) Refresh(timestamp hlc.Timestamp) {
-	t.WriteTimestamp.Forward(timestamp)
-	t.ReadTimestamp.Forward(t.WriteTimestamp)
+// BumpReadTimestamp forwards the transaction's read timestamp to the provided
+// timestamp. It also forwards its write timestamp, if necessary, to ensure that
+// its write timestamp is always greater than or equal to its read timestamp.
+//
+// A transaction's write timestamp serves as a lower bound on its commit
+// timestamp. It is free to advance over the course of the transaction's
+// lifetime when experiencing read-write or write-write contention. The write
+// timestamp can advance without restraint or prior validation.
+//
+// A transaction's read timestamp establishes the consistent read snapshot that
+// the transaction observes when reading data. Unlike the write timestamp, the
+// read timestamp is not free to advance, except in specific circumstances.
+// Movement of the read timestamp outside these circumstances would break the
+// consistent view of data that the transaction is meaning to provide. The read
+// can be advanced in three situations:
+//   - When a transaction restarts and moves to a new epoch. At this time, the
+//     reads and writes performed in the prior epoch(s) are considered invalid
+//     and the read snapshot can be re-established using a new read timestamp.
+//   - When a transaction performs a read refresh, having validated that all
+//     prior reads are equivalent at the old and new read timestamp. For details
+//     about transaction read refreshes, see the comment on txnSpanRefresher.
+//   - When the transaction reaches a statement boundary, if the transaction's
+//     isolation level permits it to observe a different read snapshot on each
+//     statement. For more, see the comment on isolation.Level.
+func (t *Transaction) BumpReadTimestamp(timestamp hlc.Timestamp) {
+	t.ReadTimestamp.Forward(timestamp)
+	t.WriteTimestamp.Forward(t.ReadTimestamp)
+	// TODO(nvanbenschoten): remove this when the WriteTooOld flag is removed.
 	t.WriteTooOld = false
 }
 
