@@ -99,6 +99,60 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 }
 
+// TestTenantStreamingJobRetryReset tests that the job level retry counter
+// resets after the replicated time progresses. To do this, the test conducts a
+// few retries before the initial scan completes, lets the initial scan
+// complete, and then maxes out the retry counter, causing the job to pause.
+// Since the job made progress when it completed the initial scan, the test
+// asserts that the total number of retries counted is larger than the max
+// number of retries allowed.
+func TestTenantStreamingJobRetryReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mu := struct {
+		syncutil.Mutex
+		initialScanComplete bool
+		ingestionStarts     int
+	}{}
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		RunAfterReceivingEvent: func(ctx context.Context) error {
+			mu.Lock()
+			defer mu.Unlock()
+			if mu.ingestionStarts > replicationtestutils.
+				TestingMaxDistSQLRetries-1 && !mu.initialScanComplete {
+				return nil
+			}
+			return errors.New("throwing a retryable error")
+		},
+		BeforeIngestionStart: func(ctx context.Context) error {
+			mu.Lock()
+			defer mu.Unlock()
+			mu.ingestionStarts++
+			return nil
+		},
+	}
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+	mu.Lock()
+	mu.initialScanComplete = true
+	mu.Unlock()
+
+	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	require.Greater(t, mu.ingestionStarts, replicationtestutils.TestingMaxDistSQLRetries+1)
+}
 func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
