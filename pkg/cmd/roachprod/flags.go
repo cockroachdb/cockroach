@@ -78,6 +78,8 @@ var (
 
 	// hostCluster is used for multi-tenant functionality.
 	hostCluster string
+
+	revertUpdate bool
 )
 
 func initFlags() {
@@ -302,6 +304,9 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 		"the volume type that should be created. Provide a volume type that is connected to"+
 			" the provider chosen for the cluster. If no volume type is provided the provider default will be used. "+
 			"Note: This volume will be deleted once the VM is deleted.")
+
+	updateCmd.Flags().BoolVar(&revertUpdate, "revert", false, "restore roachprod to the previous version "+
+		"which would have been renamed to roachprod.bak during the update process")
 
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
