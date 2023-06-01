@@ -496,7 +496,12 @@ func (c *Connection) Signal() circuitbreaker.Signal {
 	return c.breakerSignalFn()
 }
 
-// Context contains the fields required by the rpc framework.
+// Context is a pool of *grpc.ClientConn that are periodically health-checked,
+// and for which circuit breaking and metrics are provided. Callers can obtain a
+// *Connection via the non-blocking GRPCDialNode method. A *Connection is akin
+// to a promise, with the `Connection.Connect` method blocking on the promise. A
+// single underlying *grpc.ClientConn is maintained for each triplet of (NodeID,
+// TargetAddress, ConnectionClass).
 //
 // TODO(tbg): rename at the very least the `ctx` receiver, but possibly the whole
 // thing.
