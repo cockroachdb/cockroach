@@ -1022,13 +1022,15 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    name,
-		Owner:   owner,
-		Cluster: nodes,
-		Tags:    b.Tags,
+		Name:      name,
+		Owner:     owner,
+		Benchmark: true,
+		Cluster:   nodes,
+		Tags:      b.Tags,
 		// NB: intentionally not enabling encryption-at-rest to produce
 		// consistent results.
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
+
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},

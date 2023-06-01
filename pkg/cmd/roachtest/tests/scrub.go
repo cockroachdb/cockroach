@@ -54,9 +54,11 @@ func makeScrubTPCCTest(
 	}
 
 	return registry.TestSpec{
-		Name:    fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Name:      fmt.Sprintf("scrub/%s/tpcc/w=%d", optionName, warehouses),
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(numNodes),
+
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses:   warehouses,

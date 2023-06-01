@@ -646,10 +646,12 @@ func registerRestore(r registry.Registry) {
 	withPauseTestName := fmt.Sprintf("restore%s/nodes=%d/with-pause", withPauseDataset.name(), 10)
 	withPauseTimeout := 3 * time.Hour
 	r.Add(registry.TestSpec{
-		Name:    withPauseTestName,
-		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: r.MakeClusterSpec(10),
-		Timeout: withPauseTimeout,
+		Name:      withPauseTestName,
+		Owner:     registry.OwnerDisasterRecovery,
+		Cluster:   r.MakeClusterSpec(10),
+		Benchmark: true,
+		Timeout:   withPauseTimeout,
+
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())

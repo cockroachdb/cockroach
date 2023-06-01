@@ -173,17 +173,13 @@ Examples:
    roachtest list tag:weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
+			r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, listBench)
 			if err != nil {
 				return err
 			}
-			if !listBench {
-				tests.RegisterTests(&r)
-			} else {
-				tests.RegisterBenchmarks(&r)
-			}
+			tests.RegisterTests(&r)
 
-			matchedTests := r.List(context.Background(), args)
+			matchedTests := r.List(args)
 			for _, test := range matchedTests {
 				var skip string
 				if test.Skip != "" {
@@ -228,7 +224,8 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
-			})
+				enableFIPS:             enableFIPS,
+			}, false /* benchOnly */)
 		},
 	}
 
@@ -255,7 +252,7 @@ runner itself.
 			if literalArtifacts == "" {
 				literalArtifacts = artifacts
 			}
-			return runTests(tests.RegisterBenchmarks, cliCfg{
+			return runTests(tests.RegisterTests, cliCfg{
 				args:                   args,
 				count:                  count,
 				cpuQuota:               cpuQuota,
@@ -266,7 +263,8 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
-			})
+				enableFIPS:             enableFIPS,
+			}, true /* benchOnly */)
 		},
 	}
 
@@ -360,14 +358,17 @@ type cliCfg struct {
 	versionsBinaryOverride map[string]string
 }
 
-func runTests(register func(registry.Registry), cfg cliCfg) error {
+func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) error {
 	if cfg.count <= 0 {
 		return fmt.Errorf("--count (%d) must by greater than 0", cfg.count)
 	}
-	r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg)
+	r, err := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, benchOnly)
 	if err != nil {
 		return err
 	}
+
+	// actual registering of tests
+	// TODO: don't register if we can't run on the specified registry cloud
 	register(&r)
 	cr := newClusterRegistry()
 	stopper := stop.NewStopper()
@@ -403,7 +404,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		return err
 	}
 
-	tests := testsToRun(context.Background(), r, filter)
+	tests := testsToRun(r, filter)
 	n := len(tests)
 	if n*cfg.count < cfg.parallelism {
 		// Don't spin up more workers than necessary. This has particular
@@ -535,10 +536,8 @@ func testRunnerLogger(
 	return l, teeOpt
 }
 
-func testsToRun(
-	ctx context.Context, r testRegistryImpl, filter *registry.TestFilter,
-) []registry.TestSpec {
-	tests := r.GetTests(ctx, filter)
+func testsToRun(r testRegistryImpl, filter *registry.TestFilter) []registry.TestSpec {
+	tests := r.GetTests(filter)
 
 	var notSkipped []registry.TestSpec
 	for _, s := range tests {

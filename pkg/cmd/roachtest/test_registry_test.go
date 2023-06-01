@@ -20,8 +20,9 @@ import (
 
 func TestMakeTestRegistry(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "preferSSD", func(t *testing.T, preferSSD bool) {
-		r, err := makeTestRegistry(spec.AWS, "foo", "zone123", preferSSD)
+		r, err := makeTestRegistry(spec.AWS, "foo", "zone123", preferSSD, false)
 		require.NoError(t, err)
+
 		require.Equal(t, preferSSD, r.preferSSD)
 		require.Equal(t, "zone123", r.zones)
 		require.Equal(t, "foo", r.instanceType)
@@ -41,5 +42,4 @@ func TestMakeTestRegistry(t *testing.T) {
 		require.EqualValues(t, 4, s.CPUs)
 		require.True(t, s.TerminateOnMigration)
 	})
-
 }

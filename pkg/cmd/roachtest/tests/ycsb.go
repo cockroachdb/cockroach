@@ -102,9 +102,10 @@ func registerYCSB(r registry.Registry) {
 			}
 			wl, cpus := wl, cpus
 			r.Add(registry.TestSpec{
-				Name:    name,
-				Owner:   registry.OwnerTestEng,
-				Cluster: r.MakeClusterSpec(4, spec.CPU(cpus)),
+				Name:      name,
+				Owner:     registry.OwnerTestEng,
+				Benchmark: true,
+				Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus)),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus, false /* rangeTombstone */)
 				},
@@ -112,9 +113,10 @@ func registerYCSB(r registry.Registry) {
 
 			if wl == "A" {
 				r.Add(registry.TestSpec{
-					Name:    fmt.Sprintf("zfs/ycsb/%s/nodes=3/cpu=%d", wl, cpus),
-					Owner:   registry.OwnerStorage,
-					Cluster: r.MakeClusterSpec(4, spec.CPU(cpus), spec.SetFileSystem(spec.Zfs)),
+					Name:      fmt.Sprintf("zfs/ycsb/%s/nodes=3/cpu=%d", wl, cpus),
+					Owner:     registry.OwnerStorage,
+					Benchmark: true,
+					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.SetFileSystem(spec.Zfs)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, false /* rangeTombstone */)
 					},
@@ -123,9 +125,10 @@ func registerYCSB(r registry.Registry) {
 
 			if cpus == cpusWithGlobalMVCCRangeTombstone {
 				r.Add(registry.TestSpec{
-					Name:    fmt.Sprintf("%s/mvcc-range-keys=global", name),
-					Owner:   registry.OwnerTestEng,
-					Cluster: r.MakeClusterSpec(4, spec.CPU(cpus)),
+					Name:      fmt.Sprintf("%s/mvcc-range-keys=global", name),
+					Owner:     registry.OwnerTestEng,
+					Benchmark: true,
+					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus)),
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, true /* rangeTombstone */)
 					},

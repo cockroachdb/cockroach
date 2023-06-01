@@ -162,6 +162,7 @@ func registerImportTPCC(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:              testName,
 			Owner:             registry.OwnerDisasterRecovery,
+			Benchmark:         true,
 			Cluster:           r.MakeClusterSpec(numNodes),
 			Timeout:           timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
@@ -207,6 +208,7 @@ func registerImportTPCH(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:              fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
 			Owner:             registry.OwnerDisasterRecovery,
+			Benchmark:         true,
 			Cluster:           r.MakeClusterSpec(item.nodes),
 			Timeout:           item.timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,

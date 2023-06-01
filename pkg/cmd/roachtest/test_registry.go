@@ -11,7 +11,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -43,11 +42,13 @@ type testRegistryImpl struct {
 	preferSSD    bool
 	// buildVersion is the version of the Cockroach binary that tests will run against.
 	buildVersion version.Version
+
+	benchOnly bool
 }
 
 // makeTestRegistry constructs a testRegistryImpl and configures it with opts.
 func makeTestRegistry(
-	cloud string, instanceType string, zones string, preferSSD bool,
+	cloud string, instanceType string, zones string, preferSSD bool, benchOnly bool,
 ) (testRegistryImpl, error) {
 	r := testRegistryImpl{
 		cloud:        cloud,
@@ -55,6 +56,7 @@ func makeTestRegistry(
 		zones:        zones,
 		preferSSD:    preferSSD,
 		m:            make(map[string]*registry.TestSpec),
+		benchOnly:    benchOnly,
 	}
 	v := buildTag
 	if v == "" {
@@ -76,6 +78,11 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
 	}
+	if r.benchOnly && !spec.Benchmark {
+		// Skip non-benchmarks.
+		return
+	}
+
 	if err := r.prepareSpec(&spec); err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
@@ -158,9 +165,8 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 // GetTests returns all the tests that match the given regexp.
 // Skipped tests are included, and tests that don't match their minVersion spec
 // are also included but marked as skipped.
-func (r testRegistryImpl) GetTests(
-	ctx context.Context, filter *registry.TestFilter,
-) []registry.TestSpec {
+func (r testRegistryImpl) GetTests(filter *registry.TestFilter) []registry.TestSpec {
+
 	var tests []registry.TestSpec
 	for _, t := range r.m {
 		if !t.MatchOrSkip(filter) {
@@ -175,9 +181,10 @@ func (r testRegistryImpl) GetTests(
 }
 
 // List lists tests that match one of the filters.
-func (r testRegistryImpl) List(ctx context.Context, filters []string) []registry.TestSpec {
+func (r testRegistryImpl) List(filters []string) []registry.TestSpec {
 	filter := registry.NewTestFilter(filters)
-	tests := r.GetTests(ctx, filter)
+	tests := r.GetTests(filter)
+
 	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
 	return tests
 }

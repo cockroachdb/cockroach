@@ -63,9 +63,11 @@ func registerLOQRecovery(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:              s.String(),
 			Owner:             registry.OwnerReplication,
+			Benchmark:         true,
 			Tags:              []string{`default`},
 			Cluster:           spec,
 			NonReleaseBlocker: true,
+
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRecoverLossOfQuorum(ctx, t, c, testSpec)
 			},
