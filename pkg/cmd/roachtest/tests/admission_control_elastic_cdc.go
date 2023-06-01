@@ -32,6 +32,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:            "admission-control/elastic-cdc",
 		Owner:           registry.OwnerAdmissionControl,
+		Benchmark:       true,
 		Tags:            registry.Tags(`weekly`),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(8)),
 		RequiresLicense: true,
