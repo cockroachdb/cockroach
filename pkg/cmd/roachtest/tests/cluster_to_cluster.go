@@ -296,6 +296,9 @@ type replicationSpec struct {
 	// name specifies the name of the roachtest
 	name string
 
+	// whether this is a performance test
+	benchmark bool
+
 	// srcodes is the number of nodes on the source cluster.
 	srcNodes int
 
@@ -724,6 +727,7 @@ func c2cRegisterWrapper(
 	r.Add(registry.TestSpec{
 		Name:            sp.name,
 		Owner:           registry.OwnerDisasterRecovery,
+		Benchmark:       sp.benchmark,
 		Cluster:         r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
 		Leases:          registry.MetamorphicLeases,
 		Timeout:         sp.timeout,
@@ -755,11 +759,12 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 func registerClusterToCluster(r registry.Registry) {
 	for _, sp := range []replicationSpec{
 		{
-			name:     "c2c/tpcc/warehouses=500/duration=10/cutover=5",
-			srcNodes: 4,
-			dstNodes: 4,
-			cpus:     8,
-			pdSize:   1000,
+			name:      "c2c/tpcc/warehouses=500/duration=10/cutover=5",
+			benchmark: true,
+			srcNodes:  4,
+			dstNodes:  4,
+			cpus:      8,
+			pdSize:    1000,
 			// 500 warehouses adds 30 GB to source
 			//
 			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
@@ -770,11 +775,12 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:            5 * time.Minute,
 		},
 		{
-			name:     "c2c/tpcc/warehouses=1000/duration=60/cutover=30",
-			srcNodes: 4,
-			dstNodes: 4,
-			cpus:     8,
-			pdSize:   1000,
+			name:      "c2c/tpcc/warehouses=1000/duration=60/cutover=30",
+			benchmark: true,
+			srcNodes:  4,
+			dstNodes:  4,
+			cpus:      8,
+			pdSize:    1000,
 			// 500 warehouses adds 30 GB to source
 			//
 			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
@@ -786,6 +792,7 @@ func registerClusterToCluster(r registry.Registry) {
 		},
 		{
 			name:               "c2c/kv0",
+			benchmark:          true,
 			srcNodes:           3,
 			dstNodes:           3,
 			cpus:               8,
