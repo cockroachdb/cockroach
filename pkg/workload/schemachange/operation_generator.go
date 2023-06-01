@@ -1417,6 +1417,24 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 				}
 			}
 		}
+		// Run a similar check against the partition by clauses.
+		if stmt.PartitionByTable == nil {
+			return false, nil
+		}
+		for _, f := range stmt.PartitionByTable.PartitionBy.Fields {
+			colInfo := colInfoMap[f]
+			typ, err := tree.ResolveType(ctx, colInfo.Type, &txTypeResolver{tx: tx})
+			if err != nil {
+				return false, err
+			}
+			if forwardIndexesOnArraysNotSupported && typ.Family() == types.ArrayFamily {
+				return true, nil
+			}
+			if forwardIndexesOnJSONNotSupported && typ.Family() == types.JsonFamily {
+				return true, nil
+			}
+		}
+
 		return false, nil
 	}()
 	if err != nil {
@@ -1442,6 +1460,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		{code: pgcode.Syntax, condition: hasUnsupportedTSQuery},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedIdxQueries},
+		{code: pgcode.InvalidTableDefinition, condition: hasUnsupportedIdxQueries},
 	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
