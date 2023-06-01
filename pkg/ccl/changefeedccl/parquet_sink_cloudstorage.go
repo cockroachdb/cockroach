@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -155,6 +156,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 			return err
 		}
 	}
+	fmt.Println("adding data")
 
 	if err := file.parquetCodec.addData(updatedRow, prevRow); err != nil {
 		return err

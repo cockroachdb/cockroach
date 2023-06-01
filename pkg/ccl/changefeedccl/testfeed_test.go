@@ -1223,6 +1223,7 @@ func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []b
 func (c *cloudFeed) appendParquetTestFeedMessages(
 	path string, topic string, envelopeType changefeedbase.EnvelopeType,
 ) (err error) {
+	fmt.Println("a")
 	meta, datums, err := parquet.ReadFile(path)
 	if err != nil {
 		return err
@@ -1345,6 +1346,7 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 			continue
 		}
 
+		fmt.Println(m)
 		c.rows = append(c.rows, m)
 	}
 

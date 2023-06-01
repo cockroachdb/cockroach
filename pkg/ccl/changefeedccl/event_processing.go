@@ -225,9 +225,19 @@ func newKVEventToRowConsumer(
 	metrics *sliMetrics,
 	pacer *admission.Pacer,
 ) (_ *kvEventToRowConsumer, err error) {
-	includeVirtual := details.Opts.IncludeVirtual()
-	keyOnly := details.Opts.KeyOnly()
-	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual, keyOnly)
+	encodingOpts, err := details.Opts.GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO (#103309): Leverage these columns for the json and avro formats.
+	withUpdatedTimestamps := details.Opts.UpdatedTimestamps()
+	withMVCCTimestamps := details.Opts.MVCCTimestamps()
+	if !(encodingOpts.Format == changefeedbase.OptFormatParquet) {
+		withUpdatedTimestamps = false
+		withMVCCTimestamps = false
+	}
+	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, details.Opts.IncludeVirtual(), details.Opts.KeyOnly(), withUpdatedTimestamps, withMVCCTimestamps)
 	if err != nil {
 		return nil, err
 	}
@@ -238,11 +248,6 @@ func newKVEventToRowConsumer(
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	encodingOpts, err := details.Opts.GetEncodingOptions()
-	if err != nil {
-		return nil, err
 	}
 
 	return &kvEventToRowConsumer{

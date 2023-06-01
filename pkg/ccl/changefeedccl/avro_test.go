@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -488,7 +487,7 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
 			require.NoError(t, err)
 			field, err := columnToAvroSchema(
-				cdcevent.ResultColumn{ResultColumn: colinfo.ResultColumn{Typ: tableDesc.PublicColumns()[1].GetType()}},
+				cdcevent.ResultColumn{Typ: tableDesc.PublicColumns()[1].GetType()},
 			)
 			require.NoError(t, err)
 			schema, err := json.Marshal(field.SchemaType)

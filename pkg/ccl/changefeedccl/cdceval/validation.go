@@ -220,7 +220,7 @@ func newEventDescriptorForTarget(
 	if err != nil {
 		return nil, err
 	}
-	return cdcevent.NewEventDescriptor(desc, family, includeVirtual, keyOnly, schemaTS)
+	return cdcevent.NewEventDescriptor(desc, family, includeVirtual, keyOnly, schemaTS, false, false)
 }
 
 func getTargetFamilyDescriptor(
