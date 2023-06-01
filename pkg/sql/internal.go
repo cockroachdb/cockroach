@@ -374,6 +374,10 @@ func (r *rowsIterator) Types() colinfo.ResultColumns {
 	return r.resultCols
 }
 
+func (r *rowsIterator) HasResults() bool {
+	return r.first != nil && r.first.row != nil
+}
+
 // QueryBuffered executes the supplied SQL statement and returns the resulting
 // rows (meaning all of them are buffered at once). If no user has been
 // previously set through SetSessionData, the statement is executed as the root
@@ -840,7 +844,9 @@ func (ie *InternalExecutor) execInternal(
 
 	// Note that if a context cancellation error has occurred, we still return
 	// the iterator and nil retErr so that the iterator is properly closed by
-	// the caller which will cleanup the connExecutor goroutine.
+	// the caller which will clean up the connExecutor goroutine.
+	// TODO(yuzefovich): reconsider this and return an error explicitly if
+	// r.lastErr is non-nil.
 	return r, nil
 }
 
