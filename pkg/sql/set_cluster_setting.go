@@ -79,7 +79,6 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
 		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
 			hasModify = true
-			hasView = true
 		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
 			return err
 		}
@@ -99,26 +98,6 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 			return err
 		}
 		hasModify = hasModify || ok
-		hasView = hasView || ok
-	}
-
-	// The "set" action requires MODIFYCLUSTERSETTING.
-	if action == "set" {
-		isSqlSetting := strings.HasPrefix(name, "sql.defaults")
-		modifyClusterSettingAll := modifyClusterSettingAppliesToAll.Get(&p.ExecCfg().Settings.SV)
-		isAdmin, err := p.HasAdminRole(ctx)
-		if err != nil {
-			return err
-		}
-		if !hasModify {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with the %s privilege are allowed to %s cluster setting '%s'",
-				privilege.MODIFYCLUSTERSETTING, action, name)
-		} else if !isAdmin && !modifyClusterSettingAll && !isSqlSetting {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"users with the %s privilege need the cluster setting %s to be set to true to %s cluster setting '%s'",
-				privilege.MODIFYCLUSTERSETTING, modifyClusterSettingAppliesToAll.Key(), action, name)
-		}
 	}
 
 	if !hasView {
@@ -129,11 +108,45 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 		hasView = hasView || ok
 	}
 
-	// The "show" action requires either either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges.
-	if action == "show" && !hasView {
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with either %s or %s privileges are allowed to %s cluster setting '%s'",
-			privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING, action, name)
+	modifyClusterSettingAll := modifyClusterSettingAppliesToAll.Get(&p.ExecCfg().Settings.SV)
+	isSqlSetting := strings.HasPrefix(name, "sql.defaults")
+	// If the user has admin or unrestricted modify we can early return.
+	isAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if isAdmin {
+		return nil
+	}
+	if hasModify && modifyClusterSettingAll {
+		return nil
+	}
+	// At this point for the set action, we will return an error if user doesn't have modify
+	// or has restricted modify and it's a non sql.default setting,
+	if action == "set" {
+		if !hasModify {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the %s privilege are allowed to %s cluster setting '%s'",
+				privilege.MODIFYCLUSTERSETTING, action, name)
+		} else if !modifyClusterSettingAll && !isSqlSetting {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"users with the %s privilege need the cluster setting %s to be set to true to %s cluster setting '%s'",
+				privilege.MODIFYCLUSTERSETTING, modifyClusterSettingAppliesToAll.Key(), action, name)
+		}
+	}
+
+	// At this point, for the show action we will return an error if the user doesn't have view or
+	// has view but also has restricted modify and it's a non sql.defaults setting.
+	if action == "show" {
+		if !hasView && !hasModify {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with either %s or %s privileges are allowed to %s cluster setting '%s'",
+				privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING, action, name)
+		} else if hasModify && !modifyClusterSettingAll && !isSqlSetting {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"users with the %s privilege need the cluster setting %s to be set to true to %s cluster setting '%s'",
+				privilege.MODIFYCLUSTERSETTING, modifyClusterSettingAppliesToAll.Key(), action, name)
+		}
 	}
 	return nil
 }
