@@ -1112,6 +1112,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	r.Add(registry.TestSpec{
 		Name:              name,
 		Owner:             owner,
+		Benchmark:         true,
 		Cluster:           nodes,
 		Timeout:           7 * time.Hour,
 		Tags:              b.Tags,
