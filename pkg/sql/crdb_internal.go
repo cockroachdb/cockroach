@@ -1659,31 +1659,33 @@ CREATE TABLE crdb_internal.cluster_settings (
 		if err != nil {
 			return err
 		}
-		if !hasAdmin {
-			hasModify := false
-			hasView := false
-			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-				hasModify = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
-				hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING) == nil
-			}
+		hasModify := false
+		hasView := false
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			hasModify = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
+			hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING) == nil
+		}
 
+		if !hasModify && !hasView {
+			hasModify, err = p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
+			if err != nil {
+				return err
+			}
+			hasView, err = p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
+			if err != nil {
+				return err
+			}
 			if !hasModify && !hasView {
-				hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
-				if err != nil {
-					return err
-				}
-				hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
-				if err != nil {
-					return err
-				}
-				if !hasModify && !hasView {
-					return pgerror.Newf(pgcode.InsufficientPrivilege,
-						"only users with either %s or %s system privileges are allowed to read "+
-							"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
-				}
+				return pgerror.Newf(pgcode.InsufficientPrivilege,
+					"only users with either %s or %s system privileges are allowed to read "+
+						"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 			}
 		}
+		modifyClusterSettingAll := modifyClusterSettingAppliesToAll.Get(&p.ExecCfg().Settings.SV)
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
+			if !hasAdmin && hasModify && !hasView && !modifyClusterSettingAll && !strings.HasPrefix(k, "sql.defaults") {
+				continue
+			}
 			setting, _ := settings.Lookup(
 				k, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
 			)
