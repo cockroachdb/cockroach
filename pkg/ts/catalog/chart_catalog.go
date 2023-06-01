@@ -2752,6 +2752,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Connections Waiting to Compute Password Hash",
+				Metrics: []string{
+					"sql.conns_waiting_to_hash",
+				},
+			},
+			{
 				Title: "Connection Latency",
 				Metrics: []string{
 					"sql.conn.latency",
