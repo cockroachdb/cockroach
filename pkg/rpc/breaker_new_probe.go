@@ -193,6 +193,7 @@ func (p *peer) onHeartbeatFailed(
 	maybeLogOnFailedHeartbeat(ctx, now, err, prevErr, *ls, &p.logDisconnectEvery)
 
 	nConnUnhealthy := int64(1)
+	nConnInactive := int64(0)
 	connUnhealthyFor := now.Sub(ls.disconnected).Nanoseconds() + 1 // 1ns for unit tests w/ manual clock
 	if ls.deleteAfter != 0 {
 		// The peer got marked as pending deletion, so the probe becomes lazy
@@ -200,11 +201,13 @@ func (p *peer) onHeartbeatFailed(
 		// consults the breaker). Reset the gauges, causing this peer to not be
 		// reflected in aggregate stats any longer.
 		nConnUnhealthy = 0
+		nConnInactive = 1
 		connUnhealthyFor = 0
 	}
 	// Gauge updates.
 	p.ConnectionHealthy.Update(0)
 	p.ConnectionUnhealthy.Update(nConnUnhealthy)
+	p.ConnectionInactive.Update(nConnInactive)
 	p.ConnectionHealthyFor.Update(0)
 	p.ConnectionUnhealthyFor.Update(connUnhealthyFor)
 	// NB: keep this last for TestGrpcDialInternal_ReconnectPeer.
@@ -268,6 +271,7 @@ func (p *peer) onInitialHeartbeatSucceeded(
 	// Gauge updates.
 	p.ConnectionHealthy.Update(1)
 	p.ConnectionUnhealthy.Update(0)
+	p.ConnectionInactive.Update(0)
 	// ConnectionHealthyFor is already zero.
 	p.ConnectionUnhealthyFor.Update(0)
 	// AvgRoundTripLatency is already zero. We don't use the initial
@@ -289,6 +293,7 @@ func (p *peer) onSubsequentHeartbeatSucceeded(_ context.Context, now time.Time) 
 	// ConnectionHealthy is already one.
 	// ConnectionUnhealthy is already zero.
 	p.ConnectionHealthyFor.Update(now.Sub(p.snap().connected).Nanoseconds() + 1) // add 1ns for unit tests w/ manual clock
+	// ConnectionInactive is already zero.
 	// ConnectionUnhealthyFor is already zero.
 	p.AvgRoundTripLatency.Update(int64(p.roundTripLatency.Value()) + 1) // add 1ns for unit tests w/ manual clock
 
