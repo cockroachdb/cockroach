@@ -42,6 +42,10 @@ import (
 // formatCrdbV2 is the canonical log format.
 type formatCrdbV2 struct{}
 
+func (formatCrdbV2) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
+
 func (formatCrdbV2) formatterName() string { return "crdb-v2" }
 
 func (formatCrdbV2) formatEntry(entry logEntry) *buffer {
@@ -185,6 +189,10 @@ indicator.
 // the stderr output is a TTY and -nocolor is not passed on the
 // command line.
 type formatCrdbV2TTY struct{}
+
+func (formatCrdbV2TTY) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
 
 func (formatCrdbV2TTY) formatterName() string { return "crdb-v2-tty" }
 
