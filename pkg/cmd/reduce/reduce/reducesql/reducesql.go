@@ -197,6 +197,21 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				if node.AsSource != nil {
 					walk(node.AsSource)
 				}
+			case *tree.CreateFunction:
+				for i := range node.Options {
+					if body, ok := node.Options[i].(tree.FunctionBodyStr); ok {
+						stmts, err := parser.Parse(string(body))
+						if err != nil {
+							// Ignore parsing errors.
+							continue
+						}
+						funcAsts := collectASTs(stmts)
+						for _, ast := range funcAsts {
+							walk(ast)
+						}
+						node.Options[i] = tree.FunctionBodyStr(joinASTs(asts))
+					}
+				}
 			case *tree.CTE:
 				walk(node.Stmt)
 			case *tree.DBool:
