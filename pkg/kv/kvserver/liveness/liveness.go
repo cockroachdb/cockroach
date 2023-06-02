@@ -619,23 +619,6 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 	return statusChanged, nil
 }
 
-// IsLive returns whether or not the specified node is considered live based on
-// whether or not its liveness has expired regardless of the liveness status. It
-// is an error if the specified node is not in the local liveness table.
-func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
-	liveness, ok := nl.GetLiveness(nodeID)
-	if !ok {
-		// TODO(irfansharif): We only expect callers to supply us with node IDs
-		// they learnt through existing liveness records, which implies we
-		// should never find ourselves here. We should clean up this conditional
-		// once we re-visit the caching structure used within NodeLiveness;
-		// we should be able to return ErrMissingRecord instead.
-		return false, ErrRecordCacheMiss
-	}
-	// NB: We use clock.Now() in order to consider clock signals from other nodes.
-	return liveness.IsLive(nl.clock.Now()), nil
-}
-
 // Start starts a periodic heartbeat to refresh this node's last
 // heartbeat in the node liveness table. The optionally provided
 // HeartbeatCallback will be invoked whenever this node updates its
@@ -1188,9 +1171,10 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	if update.oldRaw == nil {
 		l, ok := nl.cache.GetLiveness(update.newLiveness.NodeID)
 		if !ok {
-			// TODO(irfansharif): See TODO in `NodeLiveness.IsLive`, the same
-			// applies to this conditional. We probably want to be able to
-			// return ErrMissingRecord here instead.
+			// TODO(baptist): We only expect callers to supply us with node IDs
+			// they learnt through existing liveness records, which implies we
+			// should never find ourselves here. We should be able to return
+			// ErrMissingRecord instead.
 			return Record{}, ErrRecordCacheMiss
 		}
 		if l.Liveness != update.oldLiveness {
