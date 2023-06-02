@@ -166,7 +166,7 @@ const dropUnusedIndexQuery: SchemaInsightQuery<ClusterIndexUsageStatistic> = {
                             JOIN "".crdb_internal.tables as t
                                  ON t.table_id = ti.descriptor_id and t.name = ti.descriptor_name
                             CROSS JOIN cs
-                   WHERE t.database_name != 'system' AND ti.index_type != 'primary')
+                   WHERE t.database_name != 'system' AND ti.is_unique IS false)
           WHERE unused_interval > interval_threshold
           ORDER BY total_reads DESC;`,
   toSchemaInsight: clusterIndexUsageStatsToSchemaInsight,
