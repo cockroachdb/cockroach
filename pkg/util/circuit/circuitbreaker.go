@@ -82,6 +82,9 @@ type Signal interface {
 func (b *Breaker) Signal() Signal {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	if fn := b.mu.signalInterceptor; fn != nil {
+		return fn(b.mu.errAndCh)
+	}
 	// NB: we need to return errAndCh here, returning (errAndCh.C(), errAndCh.Err)
 	// allocates.
 	return b.mu.errAndCh
@@ -185,6 +188,40 @@ func (b *Breaker) Reconfigure(opts Options) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.mu.Options = &opts
+}
+
+var closedCh = func() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}()
+
+type alwaysTrippedSignaler struct {
+	err error
+}
+
+func (a *alwaysTrippedSignaler) Err() error {
+	return a.err
+}
+
+func (a *alwaysTrippedSignaler) C() <-chan struct{} {
+	return closedCh
+}
+
+func TestingSetTripped(b *Breaker, err error) (undo func()) {
+	err = errors.Mark(errors.Mark(err, ErrBreakerOpen), b.errMark())
+	a := &alwaysTrippedSignaler{
+		err: err,
+	}
+	opts := b.Opts()
+	orig := opts
+	opts.signalInterceptor = func(sig Signal) Signal {
+		return a
+	}
+	b.Reconfigure(opts)
+	return func() {
+		b.Reconfigure(orig)
+	}
 }
 
 func (b *Breaker) maybeTriggerProbe() {
