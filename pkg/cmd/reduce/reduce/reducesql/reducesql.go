@@ -32,6 +32,7 @@ var SQLPasses = []reduce.Pass{
 	removeWithCTEs,
 	removeWith,
 	removeCreateDefs,
+	removeCreateFuncParams,
 	removeComputedColumn,
 	removeValuesCols,
 	removeWithSelectExprs,
@@ -755,6 +756,17 @@ var (
 			n := len(node.Defs)
 			if xfi < n {
 				node.Defs = append(node.Defs[:xfi], node.Defs[xfi+1:]...)
+			}
+			return n
+		}
+		return 0
+	})
+	removeCreateFuncParams = walkSQL("remove CREATE FUNCTION parameters", func(xfi int, node interface{}) int {
+		switch node := node.(type) {
+		case *tree.CreateFunction:
+			n := len(node.Params)
+			if xfi < n {
+				node.Params = append(node.Params[:xfi], node.Params[xfi+1:]...)
 			}
 			return n
 		}
