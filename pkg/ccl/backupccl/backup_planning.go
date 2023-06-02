@@ -1232,17 +1232,23 @@ func getReintroducedSpans(
 	return tableSpans, nil
 }
 
-func getProtectedTimestampTargetForBackup(backupManifest *backuppb.BackupManifest) *ptpb.Target {
+func getProtectedTimestampTargetForBackup(
+	backupManifest *backuppb.BackupManifest,
+) (*ptpb.Target, error) {
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
-		return ptpb.MakeClusterTarget()
+		return ptpb.MakeClusterTarget(), nil
 	}
 
-	if len(backupManifest.Tenants) > 0 {
-		tenantID := make([]roachpb.TenantID, 0)
-		for _, tenant := range backupManifest.Tenants {
+	if backupManifest.HasTenants() {
+		tenants, err := backupManifest.GetTenants()
+		if err != nil {
+			return nil, err
+		}
+		tenantID := make([]roachpb.TenantID, 0, len(tenants))
+		for _, tenant := range tenants {
 			tenantID = append(tenantID, roachpb.MustMakeTenantID(tenant.ID))
 		}
-		return ptpb.MakeTenantsTarget(tenantID)
+		return ptpb.MakeTenantsTarget(tenantID), nil
 	}
 
 	// ResolvedCompleteDBs contains all the "complete" databases being backed up.
@@ -1251,7 +1257,7 @@ func getProtectedTimestampTargetForBackup(backupManifest *backuppb.BackupManifes
 	// result of `BACKUP TABLE db.*`. In both cases we want to write a protected
 	// timestamp record that covers the entire database.
 	if len(backupManifest.CompleteDbs) > 0 {
-		return ptpb.MakeSchemaObjectsTarget(backupManifest.CompleteDbs)
+		return ptpb.MakeSchemaObjectsTarget(backupManifest.CompleteDbs), nil
 	}
 
 	// At this point we are dealing with a `BACKUP TABLE`, so we write a protected
@@ -1263,7 +1269,7 @@ func getProtectedTimestampTargetForBackup(backupManifest *backuppb.BackupManifes
 			tableIDs = append(tableIDs, t.GetID())
 		}
 	}
-	return ptpb.MakeSchemaObjectsTarget(tableIDs)
+	return ptpb.MakeSchemaObjectsTarget(tableIDs), nil
 }
 
 func protectTimestampForBackup(
@@ -1280,7 +1286,10 @@ func protectTimestampForBackup(
 
 	// Resolve the target that the PTS record will protect as part of this
 	// backup.
-	target := getProtectedTimestampTargetForBackup(backupManifest)
+	target, err := getProtectedTimestampTargetForBackup(backupManifest)
+	if err != nil {
+		return err
+	}
 
 	// Records written by the backup job should be ignored when making GC
 	// decisions on any table that has been marked as
