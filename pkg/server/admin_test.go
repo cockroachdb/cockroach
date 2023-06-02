@@ -2499,7 +2499,6 @@ func checkNodeCheckResultReady(
 	require.Equal(t, serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 		NodeID:                nID,
 		DecommissionReadiness: serverpb.DecommissionPreCheckResponse_READY,
-		LivenessStatus:        livenesspb.NodeLivenessStatus_LIVE,
 		ReplicaCount:          replicaCount,
 		CheckedRanges:         nil,
 	}, checkResult)
@@ -2859,7 +2858,6 @@ func TestDecommissionPreCheckInvalidNode(t *testing.T) {
 	require.Equal(t, serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 		NodeID:                invalidDecommissioningNodeID,
 		DecommissionReadiness: serverpb.DecommissionPreCheckResponse_UNKNOWN,
-		LivenessStatus:        livenesspb.NodeLivenessStatus_UNKNOWN,
 		ReplicaCount:          0,
 		CheckedRanges:         nil,
 	}, resp.CheckedNodes[1])
