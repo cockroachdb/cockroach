@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -127,8 +126,7 @@ func (s *Server) upgradeStatus(
 	if err != nil {
 		return upgradeBlockedDueToError, err
 	}
-	clock := s.admin.server.clock
-	statusMap, err := getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now(), s.st)
+	vitalities, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
 		return upgradeBlockedDueToError, err
 	}
@@ -137,20 +135,19 @@ func (s *Server) upgradeStatus(
 	var notRunningErr error
 	for _, node := range nodes.Nodes {
 		nodeID := node.Desc.NodeID
-		st := statusMap[nodeID]
+		v := vitalities[nodeID]
 
 		// Skip over removed nodes.
-		if st == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+		if v.IsDecommissioned() {
 			continue
 		}
 
-		if st != livenesspb.NodeLivenessStatus_LIVE &&
-			st != livenesspb.NodeLivenessStatus_DECOMMISSIONING {
+		if !v.IsAvailableNotDraining() {
 			// We definitely won't be able to upgrade, but defer this error as
 			// we may find out that we are already at the latest version (the
 			// cluster may be up-to-date, but a node is down).
 			if notRunningErr == nil {
-				notRunningErr = errors.Errorf("node %d not running (%s), cannot determine version", nodeID, st)
+				notRunningErr = errors.Errorf("node %d not running (%d), cannot determine version", nodeID, st)
 			}
 			continue
 		}
