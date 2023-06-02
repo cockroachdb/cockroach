@@ -1899,13 +1899,15 @@ message TableIndexStatsResponse {
     // create_statement is the SQL statement that would re-create the
     // current index if executed.
     string create_statement = 4;
-    // CreatedAt is an approximate timestamp at which the index was created.
+    // created_at is an approximate timestamp at which the index was created.
     // Note that it may not always be populated.
     google.protobuf.Timestamp created_at = 5 [(gogoproto.stdtime) = true];
     // index_id is the ID of the index.
     string index_id = 6 [(gogoproto.customname) = "IndexID"];
     // table_id is the ID of the table which the index belongs to.
     string table_id = 7 [(gogoproto.customname) = "TableID"];
+    // is_unique indicates if the index is unique (include primary index).
+    bool is_unique = 8;
   }
 
   repeated ExtendedCollectedIndexUsageStatistics statistics = 1;
