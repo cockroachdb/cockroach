@@ -933,6 +933,13 @@ func TestLogic_grant_type(
 	runLogicTest(t, "grant_type")
 }
 
+func TestLogic_guardrails(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "guardrails")
+}
+
 func TestLogic_hash_join(
 	t *testing.T,
 ) {
