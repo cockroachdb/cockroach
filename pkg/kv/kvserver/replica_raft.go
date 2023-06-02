@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -78,12 +77,6 @@ var (
 	raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
 		"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
 )
-
-func makeIDKey() kvserverbase.CmdIDKey {
-	idKeyBuf := make([]byte, 0, raftlog.RaftCommandIDLen)
-	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
-	return kvserverbase.CmdIDKey(idKeyBuf)
-}
 
 // evalAndPropose prepares the necessary pending command struct and initializes
 // a client command ID if one hasn't been. A verified lease is supplied as a
@@ -128,7 +121,7 @@ func (r *Replica) evalAndPropose(
 	*kvpb.Error,
 ) {
 	defer tok.DoneIfNotMoved(ctx)
-	idKey := makeIDKey()
+	idKey := raftlog.MakeCmdIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, g, st, ui)
 	log.Event(proposal.ctx, "evaluated request")
 
