@@ -325,7 +325,7 @@ func (ob *OutputBuilder) AddKVReadStats(rows, bytes, kvPairs, batchRequests int6
 		// rows or if verbose output is requested.
 		kvs = fmt.Sprintf("%s KVs, ", humanizeutil.Count(uint64(kvPairs)))
 	}
-	ob.AddTopLevelField("rows read from KV", fmt.Sprintf(
+	ob.AddTopLevelField("rows decoded from KV", fmt.Sprintf(
 		"%s (%s, %s%s gRPC calls)", humanizeutil.Count(uint64(rows)),
 		humanizeutil.IBytes(bytes), kvs, humanizeutil.Count(uint64(batchRequests)),
 	))

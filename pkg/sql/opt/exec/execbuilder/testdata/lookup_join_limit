@@ -80,7 +80,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -99,7 +99,7 @@ regions: <hidden>
     │   │ actual row count: 1
     │   │ KV time: 0µs
     │   │ KV contention time: 0µs
-    │   │ KV rows read: 1
+    │   │ KV rows decoded: 1
     │   │ KV pairs read: 2
     │   │ KV bytes read: 8 B
     │   │ KV gRPC calls: 1
@@ -113,7 +113,7 @@ regions: <hidden>
     │         actual row count: 1
     │         KV time: 0µs
     │         KV contention time: 0µs
-    │         KV rows read: 1
+    │         KV rows decoded: 1
     │         KV pairs read: 2
     │         KV bytes read: 8 B
     │         KV gRPC calls: 1
@@ -128,7 +128,7 @@ regions: <hidden>
         │ actual row count: 0
         │ KV time: 0µs
         │ KV contention time: 0µs
-        │ KV rows read: 0
+        │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
         │ estimated max memory allocated: 0 B
@@ -141,7 +141,7 @@ regions: <hidden>
               actual row count: 0
               KV time: 0µs
               KV contention time: 0µs
-              KV rows read: 0
+              KV rows decoded: 0
               KV bytes read: 0 B
               KV gRPC calls: 0
               estimated max memory allocated: 0 B
@@ -161,7 +161,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -180,7 +180,7 @@ regions: <hidden>
     │   │ actual row count: 1
     │   │ KV time: 0µs
     │   │ KV contention time: 0µs
-    │   │ KV rows read: 1
+    │   │ KV rows decoded: 1
     │   │ KV pairs read: 2
     │   │ KV bytes read: 8 B
     │   │ KV gRPC calls: 1
@@ -193,7 +193,7 @@ regions: <hidden>
     │         actual row count: 1
     │         KV time: 0µs
     │         KV contention time: 0µs
-    │         KV rows read: 1
+    │         KV rows decoded: 1
     │         KV pairs read: 2
     │         KV bytes read: 8 B
     │         KV gRPC calls: 1
@@ -207,7 +207,7 @@ regions: <hidden>
         │ actual row count: 0
         │ KV time: 0µs
         │ KV contention time: 0µs
-        │ KV rows read: 0
+        │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
         │ estimated max memory allocated: 0 B
@@ -219,7 +219,7 @@ regions: <hidden>
               actual row count: 0
               KV time: 0µs
               KV contention time: 0µs
-              KV rows read: 0
+              KV rows decoded: 0
               KV bytes read: 0 B
               KV gRPC calls: 0
               missing stats
@@ -315,7 +315,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -329,7 +329,7 @@ regions: <hidden>
     │ actual row count: 1
     │ KV time: 0µs
     │ KV contention time: 0µs
-    │ KV rows read: 1
+    │ KV rows decoded: 1
     │ KV pairs read: 2
     │ KV bytes read: 8 B
     │ KV gRPC calls: 1
@@ -344,7 +344,7 @@ regions: <hidden>
           actual row count: 1
           KV time: 0µs
           KV contention time: 0µs
-          KV rows read: 1
+          KV rows decoded: 1
           KV pairs read: 2
           KV bytes read: 8 B
           KV gRPC calls: 1
@@ -407,7 +407,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
+rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -421,7 +421,7 @@ regions: <hidden>
     │ actual row count: 2
     │ KV time: 0µs
     │ KV contention time: 0µs
-    │ KV rows read: 2
+    │ KV rows decoded: 2
     │ KV pairs read: 4
     │ KV bytes read: 16 B
     │ KV gRPC calls: 2
@@ -436,7 +436,7 @@ regions: <hidden>
           actual row count: 2
           KV time: 0µs
           KV contention time: 0µs
-          KV rows read: 2
+          KV rows decoded: 2
           KV pairs read: 4
           KV bytes read: 16 B
           KV gRPC calls: 2

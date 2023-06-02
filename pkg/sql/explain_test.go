@@ -393,7 +393,7 @@ type kvInfo struct {
 var patterns [numKVCounters]*regexp.Regexp
 
 func init() {
-	patterns[rowsRead] = regexp.MustCompile(`KV rows read: (\d+)`)
+	patterns[rowsRead] = regexp.MustCompile(`KV rows decoded: (\d+)`)
 	patterns[pairsRead] = regexp.MustCompile(`KV pairs read: (\d+)`)
 	patterns[bytesRead] = regexp.MustCompile(`KV bytes read: (\d+) \w+`)
 	patterns[gRPCCalls] = regexp.MustCompile(`KV gRPC calls: (\d+)`)

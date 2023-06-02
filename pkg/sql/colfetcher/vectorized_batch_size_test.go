@@ -111,7 +111,7 @@ func TestScanBatchSize(t *testing.T) {
 			}
 
 			// Allow for commas in the numbers that exceed 1000.
-			kvRowsReadRegex := regexp.MustCompile(`KV rows read: ([\d,]+)`)
+			kvRowsReadRegex := regexp.MustCompile(`KV rows decoded: ([\d,]+)`)
 			batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
 			mvccStepCountRegex := regexp.MustCompile(`MVCC step count \(ext/int\): ([\d,]+)/\d+`)
 			testutils.SucceedsSoon(t, func() error {
