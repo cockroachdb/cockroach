@@ -13,13 +13,10 @@ import {
   executeInternalSql,
   formatApiResult,
   isMaxSizeError,
-  LARGE_RESULT_SIZE,
-  LONG_TIMEOUT,
   SqlApiQueryResponse,
   SqlApiResponse,
   SqlExecutionErrorMessage,
   SqlExecutionRequest,
-  SqlExecutionResponse,
   SqlStatement,
   SqlTxnResult,
   txnResultIsEmpty,
@@ -423,9 +420,9 @@ const getDatabaseIndexUsageStats: DatabaseDetailsQuery<IndexUsageStatistic> = {
                   cs.value::interval as interval_threshold,
                   now() - COALESCE(us.last_read AT TIME ZONE 'UTC', COALESCE(ti.created_at, '0001-01-01')) as unused_interval
                   FROM %1.crdb_internal.index_usage_statistics AS us
-                  JOIN %1.crdb_internal.table_indexes AS ti ON (us.index_id = ti.index_id AND us.table_id = ti.descriptor_id AND ti.index_type = 'secondary')
+                  JOIN %1.crdb_internal.table_indexes AS ti ON (us.index_id = ti.index_id AND us.table_id = ti.descriptor_id)
                   CROSS JOIN cs
-                 WHERE $1 != 'system')
+                 WHERE $1 != 'system' AND ti.is_unique IS false)
                WHERE unused_interval > interval_threshold
                ORDER BY total_reads DESC;`,
         [new Identifier(dbName)],

@@ -35,6 +35,7 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 			- drop unused rec
 			- drop never used rec
 			- recently used index
+			- secondary unique index
 	*/
 
 	testData := []struct {
@@ -50,6 +51,7 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 				IndexID:          2,
 				LastRead:         anHourBefore,
 				IndexType:        "secondary",
+				IsUnique:         false,
 				CreatedAt:        nil,
 				UnusedIndexKnobs: nil,
 			},
@@ -66,6 +68,7 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 				CreatedAt:        nil,
 				UnusedIndexKnobs: nil,
 				IndexType:        "primary",
+				IsUnique:         true,
 			},
 			dbName:              "testdb",
 			unusedIndexDuration: time.Hour,
@@ -78,6 +81,7 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 				IndexID:          2,
 				LastRead:         anHourBefore,
 				IndexType:        "secondary",
+				IsUnique:         false,
 				CreatedAt:        nil,
 				UnusedIndexKnobs: nil,
 			},
@@ -95,11 +99,11 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 		// Index has never been used and has no creation time, expect never used index recommendation.
 		{
 			idxStats: IndexStatsRow{
-				TableID:  1,
-				IndexID:  3,
-				LastRead: time.Time{},
-
+				TableID:          1,
+				IndexID:          3,
+				LastRead:         time.Time{},
 				IndexType:        "secondary",
+				IsUnique:         false,
 				CreatedAt:        nil,
 				UnusedIndexKnobs: nil,
 			},
@@ -121,11 +125,27 @@ func TestGetRecommendationsFromIndexStats(t *testing.T) {
 				IndexID:          4,
 				LastRead:         aMinuteBefore,
 				IndexType:        "secondary",
+				IsUnique:         false,
 				CreatedAt:        nil,
 				UnusedIndexKnobs: nil,
 			},
 			dbName:              "testdb",
 			unusedIndexDuration: defaultUnusedIndexDuration,
+			expectedReturn:      []*serverpb.IndexRecommendation{},
+		},
+		// Index exceeds the unused index duration, but is unique, so expect no index recommendation.
+		{
+			idxStats: IndexStatsRow{
+				TableID:          1,
+				IndexID:          5,
+				LastRead:         anHourBefore,
+				IndexType:        "secondary",
+				IsUnique:         true,
+				CreatedAt:        nil,
+				UnusedIndexKnobs: nil,
+			},
+			dbName:              "testdb",
+			unusedIndexDuration: time.Hour,
 			expectedReturn:      []*serverpb.IndexRecommendation{},
 		},
 	}
