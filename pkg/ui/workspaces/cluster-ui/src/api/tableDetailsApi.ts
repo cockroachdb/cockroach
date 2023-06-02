@@ -494,11 +494,10 @@ const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
                   JOIN tableId ON us.table_id = tableId.table_id
                   JOIN %1.crdb_internal.table_indexes AS ti ON (
                       us.index_id = ti.index_id AND 
-                      tableId.table_id = ti.descriptor_id AND 
-                      ti.index_type = 'secondary' 
+                      tableId.table_id = ti.descriptor_id
                   )
                   CROSS JOIN cs
-                 WHERE $2 != 'system')
+                 WHERE $2 != 'system' AND ti.is_unique IS false)
                WHERE unused_interval > interval_threshold
                ORDER BY total_reads DESC`,
         [new Identifier(dbName)],
