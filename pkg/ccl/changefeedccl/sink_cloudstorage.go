@@ -557,6 +557,7 @@ func (s *cloudStorageSink) EmitRow(
 func (s *cloudStorageSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
+	// TODO: There should be a better way to check if the sink is closed.
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}

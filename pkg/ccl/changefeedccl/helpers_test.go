@@ -325,6 +325,12 @@ func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) (hlc.Timestamp, s
 	return extractResolvedTimestamp(t, m), m.Partition
 }
 
+// resolvedRaw represents a JSON object containing the single key "resolved"
+// with a resolved timestamp value.
+type resolvedRaw struct {
+	Resolved string `json:"resolved"`
+}
+
 func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Timestamp {
 	t.Helper()
 	if m.Key != nil {
@@ -334,14 +340,12 @@ func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Time
 		t.Fatal(`expected a resolved timestamp notification`)
 	}
 
-	var resolvedRaw struct {
-		Resolved string `json:"resolved"`
-	}
-	if err := gojson.Unmarshal(m.Resolved, &resolvedRaw); err != nil {
+	var resolved resolvedRaw
+	if err := gojson.Unmarshal(m.Resolved, &resolved); err != nil {
 		t.Fatal(err)
 	}
 
-	return parseTimeToHLC(t, resolvedRaw.Resolved)
+	return parseTimeToHLC(t, resolved.Resolved)
 }
 
 func expectResolvedTimestampAvro(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
