@@ -375,6 +375,10 @@ func (r *Replica) propose(
 	p.command.MaxLeaseIndex = 0
 
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
+		if err := checkReplicationChangeAllowed(p.command, r.Desc(), r.StoreID()); err != nil {
+			log.Errorf(ctx, "%v", err)
+			return kvpb.NewError(err)
+		}
 		log.KvDistribution.Infof(p.ctx, "proposing %s", crt)
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
@@ -383,11 +387,8 @@ func (r *Replica) propose(
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
-	data, err := raftCmdToPayload(ctx, r.Desc(), r.StoreID(), p.command, p.idKey)
+	data, err := raftCmdToPayload(ctx, p.command, p.idKey)
 	if err != nil {
-		if errors.Is(err, errMarkInvalidReplicationChange) {
-			log.Errorf(ctx, "%v", err)
-		}
 		return kvpb.NewError(err)
 	}
 	p.encodedCommand = data
@@ -428,12 +429,75 @@ func (r *Replica) propose(
 	return nil
 }
 
+func checkReplicationChangeAllowed(
+	command *kvserverpb.RaftCommand, desc *roachpb.RangeDescriptor, storeID roachpb.StoreID,
+) error {
+	// The following deals with removing a leaseholder. A voter can be removed
+	// in two ways. 1) Simple (old style) where there is a reconfiguration
+	// turning a voter into a LEARNER / NON-VOTER. 2) Through an intermediate
+	// joint configuration, where the replica remains in the descriptor, but
+	// as VOTER_{OUTGOING, DEMOTING}. When leaving the JOINT config (a second
+	// Raft operation), the removed replica transitions a LEARNER / NON-VOTER.
+	//
+	// In case (1) the lease needs to be transferred out before a removal is
+	// proposed (cooperative transfer). The code below permits leaseholder
+	// removal only if entering a joint configuration (option 2 above) in which
+	// the leaseholder is (any kind of) voter, and in addition, this joint config
+	// should include a VOTER_INCOMING replica. In this case, the lease is
+	// transferred to this new replica in maybeLeaveAtomicChangeReplicas right
+	// before we exit the joint configuration.
+	//
+	// When the leaseholder is replaced by a new replica, transferring the
+	// lease in the joint config allows transferring directly from old to new,
+	// since both are active in the joint config, without going through a third
+	// node or adding the new node before transferring, which might reduce
+	// fault tolerance. For example, consider v1 in region1 (leaseholder), v2
+	// in region2 and v3 in region3. We want to relocate v1 to a new node v4 in
+	// region1. We add v4 as LEARNER. At this point we can't transfer the lease
+	// to v4, so we could transfer it to v2 first, but this is likely to hurt
+	// application performance. We could instead add v4 as VOTER first, and
+	// then transfer lease directly to v4, but this would change the number of
+	// replicas to 4, and if region1 goes down, we loose a quorum. Instead,
+	// we move to a joint config where v1 (VOTER_DEMOTING_LEARNER) transfer the
+	// lease to v4 (VOTER_INCOMING) directly.
+	//
+	// Our implementation assumes that the intention of the caller is for the
+	// VOTER_INCOMING node to be the replacement replica, and hence get the
+	// lease. We therefore don't dynamically select a lease target during the
+	// joint config, and hand it to the VOTER_INCOMING node. This means,
+	// however, that we only allow a VOTER_DEMOTING to have the lease in a
+	// joint configuration, when there's also a VOTER_INCOMING node (that
+	// will be used as a target for the lease transfer). Otherwise, the caller
+	// is expected to shed the lease before entering a joint configuration.
+	// See also https://github.com/cockroachdb/cockroach/issues/67740.
+	lhDesc, lhDescOK := desc.GetReplicaDescriptor(storeID)
+	if !lhDescOK {
+		return kvpb.NewRangeNotFoundError(desc.RangeID, storeID)
+	}
+	proposedDesc := command.ReplicatedEvalResult.State.Desc
+	// This is a reconfiguration command, we make sure the proposed
+	// config is legal w.r.t. the current leaseholder: we now allow the
+	// leaseholder to be a VOTER_DEMOTING as long as there is a VOTER_INCOMING.
+	// Otherwise, the leaseholder must be a full voter in the target config.
+	// This check won't allow exiting the joint config before the lease is
+	// transferred away. The previous leaseholder is a LEARNER in the target config,
+	// and therefore shouldn't continue holding the lease.
+	if err := roachpb.CheckCanReceiveLease(
+		lhDesc, proposedDesc.Replicas(), true, /* wasLastLeaseholder */
+	); err != nil {
+		err = errors.Handled(err)
+		err = errors.Mark(err, errMarkInvalidReplicationChange)
+		err = errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
+			"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
+			lhDesc, command.ReplicatedEvalResult.ChangeReplicas, true /* lhRemovalAllowed */, desc, proposedDesc)
+		return err
+	}
+
+	return nil
+}
+
 func raftCmdToPayload(
-	_ context.Context,
-	desc *roachpb.RangeDescriptor,
-	storeID roachpb.StoreID,
-	command *kvserverpb.RaftCommand,
-	idKey kvserverbase.CmdIDKey,
+	_ context.Context, command *kvserverpb.RaftCommand, idKey kvserverbase.CmdIDKey,
 ) ([]byte, error) {
 	// Determine the encoding style for the Raft command.
 	prefix := true
@@ -446,67 +510,6 @@ func raftCmdToPayload(
 		// prefix because the command ID is stored in a field in
 		// raft.ConfChange.
 		prefix = false
-
-		// The following deals with removing a leaseholder. A voter can be removed
-		// in two ways. 1) Simple (old style) where there is a reconfiguration
-		// turning a voter into a LEARNER / NON-VOTER. 2) Through an intermediate
-		// joint configuration, where the replica remains in the descriptor, but
-		// as VOTER_{OUTGOING, DEMOTING}. When leaving the JOINT config (a second
-		// Raft operation), the removed replica transitions a LEARNER / NON-VOTER.
-		//
-		// In case (1) the lease needs to be transferred out before a removal is
-		// proposed (cooperative transfer). The code below permits leaseholder
-		// removal only if entering a joint configuration (option 2 above) in which
-		// the leaseholder is (any kind of) voter, and in addition, this joint config
-		// should include a VOTER_INCOMING replica. In this case, the lease is
-		// transferred to this new replica in maybeLeaveAtomicChangeReplicas right
-		// before we exit the joint configuration.
-		//
-		// When the leaseholder is replaced by a new replica, transferring the
-		// lease in the joint config allows transferring directly from old to new,
-		// since both are active in the joint config, without going through a third
-		// node or adding the new node before transferring, which might reduce
-		// fault tolerance. For example, consider v1 in region1 (leaseholder), v2
-		// in region2 and v3 in region3. We want to relocate v1 to a new node v4 in
-		// region1. We add v4 as LEARNER. At this point we can't transfer the lease
-		// to v4, so we could transfer it to v2 first, but this is likely to hurt
-		// application performance. We could instead add v4 as VOTER first, and
-		// then transfer lease directly to v4, but this would change the number of
-		// replicas to 4, and if region1 goes down, we loose a quorum. Instead,
-		// we move to a joint config where v1 (VOTER_DEMOTING_LEARNER) transfer the
-		// lease to v4 (VOTER_INCOMING) directly.
-		//
-		// Our implementation assumes that the intention of the caller is for the
-		// VOTER_INCOMING node to be the replacement replica, and hence get the
-		// lease. We therefore don't dynamically select a lease target during the
-		// joint config, and hand it to the VOTER_INCOMING node. This means,
-		// however, that we only allow a VOTER_DEMOTING to have the lease in a
-		// joint configuration, when there's also a VOTER_INCOMING node (that
-		// will be used as a target for the lease transfer). Otherwise, the caller
-		// is expected to shed the lease before entering a joint configuration.
-		// See also https://github.com/cockroachdb/cockroach/issues/67740.
-		lhDesc, lhDescOK := desc.GetReplicaDescriptor(storeID)
-		if !lhDescOK {
-			return nil, kvpb.NewRangeNotFoundError(desc.RangeID, storeID)
-		}
-		proposedDesc := command.ReplicatedEvalResult.State.Desc
-		// This is a reconfiguration command, we make sure the proposed
-		// config is legal w.r.t. the current leaseholder: we now allow the
-		// leaseholder to be a VOTER_DEMOTING as long as there is a VOTER_INCOMING.
-		// Otherwise, the leaseholder must be a full voter in the target config.
-		// This check won't allow exiting the joint config before the lease is
-		// transferred away. The previous leaseholder is a LEARNER in the target config,
-		// and therefore shouldn't continue holding the lease.
-		if err := roachpb.CheckCanReceiveLease(
-			lhDesc, proposedDesc.Replicas(), true, /* wasLastLeaseholder */
-		); err != nil {
-			err = errors.Handled(err)
-			err = errors.Mark(err, errMarkInvalidReplicationChange)
-			err = errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
-				"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
-				lhDesc, crt, true /* lhRemovalAllowed */, desc, proposedDesc)
-			return nil, err
-		}
 	} else if command.ReplicatedEvalResult.AddSSTable != nil {
 		entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
 
