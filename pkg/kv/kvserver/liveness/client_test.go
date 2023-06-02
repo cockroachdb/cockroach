@@ -59,9 +59,7 @@ func TestNodeLivenessAppearsAtStart(t *testing.T) {
 		nodeID := tc.Server(i).NodeID()
 		nl := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness)
 
-		if live, err := nl.IsLive(nodeID); err != nil {
-			t.Fatal(err)
-		} else if !live {
+		if !nl.GetNodeVitalityFromCache(nodeID).IsAlive() {
 			t.Fatalf("node %d not live", nodeID)
 		}
 
@@ -98,9 +96,7 @@ func TestScanNodeVitalityFromKV(t *testing.T) {
 		nodeID := tc.Server(i).NodeID()
 		nl := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness)
 
-		if live, err := nl.IsLive(nodeID); err != nil {
-			t.Fatal(err)
-		} else if !live {
+		if !nl.GetNodeVitalityFromCache(nodeID).IsAlive() {
 			t.Fatalf("node %d not live", nodeID)
 		}
 
