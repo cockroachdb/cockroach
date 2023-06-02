@@ -115,17 +115,21 @@ func min(a, b int) int {
 var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 	"restore-worker-concurrency",
 	func() int {
-		// On low-CPU instances, a default value may still allow concurrent restore
-		// workers to tie up all cores so cap default value at cores-1 when the
-		// default value is higher.
-		restoreWorkerCores := runtime.GOMAXPROCS(0) - 1
+		cores := runtime.GOMAXPROCS(0)
+		restoreWorkerCores := cores / 2
+
+		// Preserve legacy behavior for small instances.
+		if cores <= 4 {
+			restoreWorkerCores = cores - 1
+		}
+
 		if restoreWorkerCores < 1 {
 			restoreWorkerCores = 1
 		}
-		return min(4, restoreWorkerCores)
+		return min(16, restoreWorkerCores)
 	}(), /* defaultValue */
-	1, /* metamorphic min */
-	8, /* metamorphic max */
+	1,  /* metamorphic min */
+	16, /* metamorphic max */
 )
 
 // TODO(pbardea): It may be worthwhile to combine this setting with the one that
