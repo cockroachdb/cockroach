@@ -277,18 +277,23 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	return completeIngestion(ctx, execCtx, ingestionJob)
 }
 
+func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
+	if knobs != nil && knobs.DistSQLRetryPolicy != nil {
+		return *knobs.DistSQLRetryPolicy
+	}
+	return retry.Options{
+		InitialBackoff: time.Microsecond,
+		Multiplier:     1,
+		MaxBackoff:     2 * time.Microsecond,
+		MaxRetries:     20}
+}
+
 func ingestWithRetries(
 	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
 ) error {
-	ro := retry.Options{
-		InitialBackoff: 3 * time.Second,
-		Multiplier:     2,
-		MaxBackoff:     1 * time.Minute,
-		MaxRetries:     60,
-	}
-
+	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
 	var err error
-	retryCount := 0
+	var lastReplicatedTime hlc.Timestamp
 	for r := retry.Start(ro); r.Next(); {
 		err = ingest(ctx, execCtx, ingestionJob)
 		if err == nil {
@@ -305,7 +310,11 @@ func ingestWithRetries(
 		log.Warningf(ctx, msgFmt, err)
 		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError,
 			fmt.Sprintf(msgFmt, err))
-		retryCount++
+		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
+		if lastReplicatedTime.Less(newReplicatedTime) {
+			r.Reset()
+			lastReplicatedTime = newReplicatedTime
+		}
 	}
 	if err != nil {
 		return err
@@ -313,6 +322,15 @@ func ingestWithRetries(
 	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver,
 		"stream ingestion finished successfully")
 	return nil
+}
+
+func loadReplicatedTime(ctx context.Context, db isql.DB, ingestionJob *jobs.Job) hlc.Timestamp {
+	latestProgress, err := replicationutils.LoadIngestionProgress(ctx, db, ingestionJob.ID())
+	if err != nil {
+		log.Warningf(ctx, "error loading job progress: %s", err)
+		return hlc.Timestamp{}
+	}
+	return latestProgress.ReplicatedTime
 }
 
 // The ingestion job should never fail, only pause, as progress should never be lost.

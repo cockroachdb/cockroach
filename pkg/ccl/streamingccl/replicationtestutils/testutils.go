@@ -37,9 +37,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+const TestingMaxDistSQLRetries = 4
 
 type srcInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner)
 type destInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner) // Tenant is created by the replication stream
@@ -217,6 +220,15 @@ func waitForTenantPodsActive(
 func CreateTenantStreamingClusters(
 	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
 ) (*TenantStreamingClusters, func()) {
+
+	if args.TestingKnobs != nil && args.TestingKnobs.DistSQLRetryPolicy == nil {
+		args.TestingKnobs.DistSQLRetryPolicy = &retry.Options{
+			InitialBackoff: time.Microsecond,
+			Multiplier:     2,
+			MaxBackoff:     2 * time.Microsecond,
+			MaxRetries:     TestingMaxDistSQLRetries,
+		}
+	}
 	serverArgs := base.TestServerArgs{
 		// Test fails because it tries to set a cluster setting only accessible
 		// to system tenants. Tracked with #76378.
