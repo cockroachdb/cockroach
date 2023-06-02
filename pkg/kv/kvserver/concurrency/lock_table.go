@@ -574,6 +574,20 @@ func (g *lockTableGuardImpl) updateWaitingStateLocked(newState waitingState) {
 	g.mu.state = newState
 }
 
+// canElideWaitingStateUpdate returns true if the updating the guard's waiting
+// state to the supplied waitingState will result in a noop update, and can thus
+// be elided.
+//
+// REQUIRES: g.mu to be locked.
+func (g *lockTableGuardImpl) canElideWaitingStateUpdate(newState waitingState) bool {
+	// Note that we don't need to check newState.guardStrength as it's
+	// automatically assigned when updating the state.
+	return g.mu.state.kind == newState.kind && g.mu.state.txn == newState.txn &&
+		g.mu.state.key.Equal(newState.key) && g.mu.state.held == newState.held &&
+		g.mu.state.queuedWriters == newState.queuedWriters &&
+		g.mu.state.queuedReaders == newState.queuedReaders
+}
+
 func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(
 	lockSpanSet *lockspanset.LockSpanSet,
 ) (ok bool) {
@@ -1256,22 +1270,25 @@ func (l *lockState) informActiveWaiters() {
 	}
 
 	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
+		state := waitForState
 		// Since there are waiting readers, we could not have transitioned out of
 		// or into a state where the lock is held. This is because readers only wait
 		// for held locks -- they race with other {,non-}transactional writers.
-		if !waitForState.held {
-			panic("waiting readers should be empty if lock isn't held")
-		}
+		assert(state.held, "waiting readers should be empty if the lock isn't held")
 		g := e.Value.(*lockTableGuardImpl)
 		if findDistinguished {
 			l.distinguishedWaiter = g
 			findDistinguished = false
 		}
-		g.mu.Lock()
-		g.updateWaitingStateLocked(waitForState)
 		if l.distinguishedWaiter == g {
-			g.mu.state.kind = waitForDistinguished
+			state.kind = waitForDistinguished
 		}
+		g.mu.Lock()
+		if g.canElideWaitingStateUpdate(state) {
+			g.mu.Unlock()
+			continue
+		}
+		g.updateWaitingStateLocked(state)
 		g.notify()
 		g.mu.Unlock()
 	}
@@ -1297,6 +1314,10 @@ func (l *lockState) informActiveWaiters() {
 			}
 		}
 		g.mu.Lock()
+		if g.canElideWaitingStateUpdate(state) {
+			g.mu.Unlock()
+			continue
+		}
 		g.updateWaitingStateLocked(state)
 		g.notify()
 		g.mu.Unlock()
