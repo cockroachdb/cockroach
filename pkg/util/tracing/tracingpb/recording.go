@@ -265,12 +265,12 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	sb.SafeString(redact.SafeString(sp.Operation))
 
 	for _, tg := range sp.TagGroups {
-		var prefix string
+		var prefix redact.RedactableString
 		if tg.Name != AnonymousTagGroupName {
-			prefix = fmt.Sprintf("%s-", tg.Name)
+			prefix = redact.Sprint("%s-", redact.SafeString(tg.Name))
 		}
 		for _, tag := range tg.Tags {
-			sb.Printf(" %s%s:%s", redact.SafeString(prefix), redact.SafeString(tag.Key), tag.Value)
+			sb.Printf(" %s%s:%s", prefix, redact.SafeString(tag.Key), tag.Value)
 		}
 	}
 
@@ -291,7 +291,7 @@ func (r Recording) visitSpan(sp RecordedSpan, depth int) []traceLogData {
 	})
 	for _, c := range childrenMetadata {
 		var sb redact.StringBuilder
-		sb.Printf("[%s: %s]", redact.SafeString(c.Operation), c.Metadata.String())
+		sb.Printf("[%s: %s]", redact.SafeString(c.Operation), c.Metadata)
 		ownLogs = append(ownLogs, conv(sb.RedactableString(), sp.StartTime, time.Time{}))
 	}
 

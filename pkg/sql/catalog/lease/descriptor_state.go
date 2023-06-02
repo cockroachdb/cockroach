@@ -175,7 +175,7 @@ func (t *descriptorState) upsertLeaseLocked(
 	return nil, toRelease, nil
 }
 
-var _ redact.SafeMessager = (*descriptorVersionState)(nil)
+var _ redact.SafeFormatter = (*descriptorVersionState)(nil)
 
 func newDescriptorVersionState(
 	t *descriptorState,
