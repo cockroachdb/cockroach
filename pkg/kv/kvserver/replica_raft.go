@@ -383,104 +383,120 @@ func (r *Replica) propose(
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
-	// Determine the encoding style for the Raft command.
-	prefix := true
-	entryEncoding := raftlog.EntryEncodingStandardWithoutAC
-	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
-		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
-		// needs to understand it; it cannot simply be an opaque command. To
-		// permit this, the command is proposed by the proposal buffer using
-		// ProposeConfChange. For that reason, we also don't need a Raft command
-		// prefix because the command ID is stored in a field in
-		// raft.ConfChange.
-		prefix = false
+	raftCmdToPayload := func(
+		ctx context.Context,
+		desc *roachpb.RangeDescriptor,
+		storeID roachpb.StoreID,
+		command *kvserverpb.RaftCommand,
+		idKey kvserverbase.CmdIDKey,
+	) ([]byte, error) {
+		// Determine the encoding style for the Raft command.
+		prefix := true
+		entryEncoding := raftlog.EntryEncodingStandardWithoutAC
+		if crt := command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
+			// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
+			// needs to understand it; it cannot simply be an opaque command. To
+			// permit this, the command is proposed by the proposal buffer using
+			// ProposeConfChange. For that reason, we also don't need a Raft command
+			// prefix because the command ID is stored in a field in
+			// raft.ConfChange.
+			prefix = false
 
-		// The following deals with removing a leaseholder. A voter can be removed
-		// in two ways. 1) Simple (old style) where there is a reconfiguration
-		// turning a voter into a LEARNER / NON-VOTER. 2) Through an intermediate
-		// joint configuration, where the replica remains in the descriptor, but
-		// as VOTER_{OUTGOING, DEMOTING}. When leaving the JOINT config (a second
-		// Raft operation), the removed replica transitions a LEARNER / NON-VOTER.
-		//
-		// In case (1) the lease needs to be transferred out before a removal is
-		// proposed (cooperative transfer). The code below permits leaseholder
-		// removal only if entering a joint configuration (option 2 above) in which
-		// the leaseholder is (any kind of) voter, and in addition, this joint config
-		// should include a VOTER_INCOMING replica. In this case, the lease is
-		// transferred to this new replica in maybeLeaveAtomicChangeReplicas right
-		// before we exit the joint configuration.
-		//
-		// When the leaseholder is replaced by a new replica, transferring the
-		// lease in the joint config allows transferring directly from old to new,
-		// since both are active in the joint config, without going through a third
-		// node or adding the new node before transferring, which might reduce
-		// fault tolerance. For example, consider v1 in region1 (leaseholder), v2
-		// in region2 and v3 in region3. We want to relocate v1 to a new node v4 in
-		// region1. We add v4 as LEARNER. At this point we can't transfer the lease
-		// to v4, so we could transfer it to v2 first, but this is likely to hurt
-		// application performance. We could instead add v4 as VOTER first, and
-		// then transfer lease directly to v4, but this would change the number of
-		// replicas to 4, and if region1 goes down, we loose a quorum. Instead,
-		// we move to a joint config where v1 (VOTER_DEMOTING_LEARNER) transfer the
-		// lease to v4 (VOTER_INCOMING) directly.
-		//
-		// Our implementation assumes that the intention of the caller is for the
-		// VOTER_INCOMING node to be the replacement replica, and hence get the
-		// lease. We therefore don't dynamically select a lease target during the
-		// joint config, and hand it to the VOTER_INCOMING node. This means,
-		// however, that we only allow a VOTER_DEMOTING to have the lease in a
-		// joint configuration, when there's also a VOTER_INCOMING node (that
-		// will be used as a target for the lease transfer). Otherwise, the caller
-		// is expected to shed the lease before entering a joint configuration.
-		// See also https://github.com/cockroachdb/cockroach/issues/67740.
-		lhDesc, err := r.GetReplicaDescriptor()
-		if err != nil {
-			return kvpb.NewError(err)
-		}
-		proposedDesc := p.command.ReplicatedEvalResult.State.Desc
-		// This is a reconfiguration command, we make sure the proposed
-		// config is legal w.r.t. the current leaseholder: we now allow the
-		// leaseholder to be a VOTER_DEMOTING as long as there is a VOTER_INCOMING.
-		// Otherwise, the leaseholder must be a full voter in the target config.
-		// This check won't allow exiting the joint config before the lease is
-		// transferred away. The previous leaseholder is a LEARNER in the target config,
-		// and therefore shouldn't continue holding the lease.
-		if err := roachpb.CheckCanReceiveLease(
-			lhDesc, proposedDesc.Replicas(), true, /* wasLastLeaseholder */
-		); err != nil {
-			err = errors.Handled(err)
-			err = errors.Mark(err, errMarkInvalidReplicationChange)
-			err = errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
-				"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
-				lhDesc, crt, true /* lhRemovalAllowed */, r.Desc(), proposedDesc)
-			log.Errorf(p.ctx, "%v", err)
-			return kvpb.NewError(err)
-		}
-	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
-		entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
+			// The following deals with removing a leaseholder. A voter can be removed
+			// in two ways. 1) Simple (old style) where there is a reconfiguration
+			// turning a voter into a LEARNER / NON-VOTER. 2) Through an intermediate
+			// joint configuration, where the replica remains in the descriptor, but
+			// as VOTER_{OUTGOING, DEMOTING}. When leaving the JOINT config (a second
+			// Raft operation), the removed replica transitions a LEARNER / NON-VOTER.
+			//
+			// In case (1) the lease needs to be transferred out before a removal is
+			// proposed (cooperative transfer). The code below permits leaseholder
+			// removal only if entering a joint configuration (option 2 above) in which
+			// the leaseholder is (any kind of) voter, and in addition, this joint config
+			// should include a VOTER_INCOMING replica. In this case, the lease is
+			// transferred to this new replica in maybeLeaveAtomicChangeReplicas right
+			// before we exit the joint configuration.
+			//
+			// When the leaseholder is replaced by a new replica, transferring the
+			// lease in the joint config allows transferring directly from old to new,
+			// since both are active in the joint config, without going through a third
+			// node or adding the new node before transferring, which might reduce
+			// fault tolerance. For example, consider v1 in region1 (leaseholder), v2
+			// in region2 and v3 in region3. We want to relocate v1 to a new node v4 in
+			// region1. We add v4 as LEARNER. At this point we can't transfer the lease
+			// to v4, so we could transfer it to v2 first, but this is likely to hurt
+			// application performance. We could instead add v4 as VOTER first, and
+			// then transfer lease directly to v4, but this would change the number of
+			// replicas to 4, and if region1 goes down, we loose a quorum. Instead,
+			// we move to a joint config where v1 (VOTER_DEMOTING_LEARNER) transfer the
+			// lease to v4 (VOTER_INCOMING) directly.
+			//
+			// Our implementation assumes that the intention of the caller is for the
+			// VOTER_INCOMING node to be the replacement replica, and hence get the
+			// lease. We therefore don't dynamically select a lease target during the
+			// joint config, and hand it to the VOTER_INCOMING node. This means,
+			// however, that we only allow a VOTER_DEMOTING to have the lease in a
+			// joint configuration, when there's also a VOTER_INCOMING node (that
+			// will be used as a target for the lease transfer). Otherwise, the caller
+			// is expected to shed the lease before entering a joint configuration.
+			// See also https://github.com/cockroachdb/cockroach/issues/67740.
+			lhDesc, lhDescOK := desc.GetReplicaDescriptor(storeID)
+			if !lhDescOK {
+				return nil, kvpb.NewRangeNotFoundError(desc.RangeID, storeID)
+			}
+			proposedDesc := command.ReplicatedEvalResult.State.Desc
+			// This is a reconfiguration command, we make sure the proposed
+			// config is legal w.r.t. the current leaseholder: we now allow the
+			// leaseholder to be a VOTER_DEMOTING as long as there is a VOTER_INCOMING.
+			// Otherwise, the leaseholder must be a full voter in the target config.
+			// This check won't allow exiting the joint config before the lease is
+			// transferred away. The previous leaseholder is a LEARNER in the target config,
+			// and therefore shouldn't continue holding the lease.
+			if err := roachpb.CheckCanReceiveLease(
+				lhDesc, proposedDesc.Replicas(), true, /* wasLastLeaseholder */
+			); err != nil {
+				err = errors.Handled(err)
+				err = errors.Mark(err, errMarkInvalidReplicationChange)
+				err = errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
+					"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
+					lhDesc, crt, true /* lhRemovalAllowed */, desc, proposedDesc)
+				return nil, err
+			}
+		} else if command.ReplicatedEvalResult.AddSSTable != nil {
+			entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
 
-		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
-			return kvpb.NewErrorf("cannot sideload empty SSTable")
+			if command.ReplicatedEvalResult.AddSSTable.Data == nil {
+				return nil, errors.Errorf("cannot sideload empty SSTable")
+			}
 		}
+
+		// Create encoding buffer.
+		preLen := 0
+		if prefix {
+			preLen = raftlog.RaftCommandPrefixLen
+		}
+		cmdLen := command.Size()
+		// Allocate the data slice with enough capacity to eventually hold the two
+		// "footers" that are filled later.
+		needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
+		data := make([]byte, preLen, needed)
+		// Encode prefix with command ID, if necessary.
+		if prefix {
+			raftlog.EncodeRaftCommandPrefix(data, entryEncoding, idKey)
+		}
+		// Encode body of command.
+		data = data[:preLen+cmdLen]
+		if _, err := protoutil.MarshalTo(command, data[preLen:]); err != nil {
+			return nil, err
+		}
+		return data, nil
 	}
 
-	// Create encoding buffer.
-	preLen := 0
-	if prefix {
-		preLen = raftlog.RaftCommandPrefixLen
-	}
-	cmdLen := p.command.Size()
-	// Allocate the data slice with enough capacity to eventually hold the two
-	// "footers" that are filled later.
-	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, preLen, needed)
-	// Encode prefix with command ID, if necessary.
-	if prefix {
-		raftlog.EncodeRaftCommandPrefix(data, entryEncoding, p.idKey)
-	}
-	// Encode body of command.
-	data = data[:preLen+cmdLen]
-	if _, err := protoutil.MarshalTo(p.command, data[preLen:]); err != nil {
+	data, err := raftCmdToPayload(ctx, r.Desc(), r.StoreID(), p.command, p.idKey)
+	if err != nil {
+		if errors.Is(err, errMarkInvalidReplicationChange) {
+			log.Errorf(ctx, "%v", err)
+		}
 		return kvpb.NewError(err)
 	}
 	p.encodedCommand = data
@@ -492,7 +508,7 @@ func (r *Replica) propose(
   RaftCommand.ReplicatedEvalResult:          %d
   RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
-`, p.Request.Summary(), cmdLen,
+`, p.Request.Summary(), p.command.Size(),
 			p.command.ReplicatedEvalResult.Size(),
 			p.command.ReplicatedEvalResult.Delta.Size(),
 			p.command.WriteBatch.Size(),
@@ -504,8 +520,8 @@ func (r *Replica) propose(
 	//
 	// TODO(tschottdorf): can we mark them so lightstep can group them?
 	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
-	if cmdLen > largeProposalEventThresholdBytes {
-		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(cmdLen)))
+	if len(p.encodedCommand) > largeProposalEventThresholdBytes {
+		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(len(p.encodedCommand))))
 	}
 
 	// Insert into the proposal buffer, which passes the command to Raft to be
@@ -515,8 +531,7 @@ func (r *Replica) propose(
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
 	log.VEvent(p.ctx, 2, "submitting proposal to proposal buffer")
-	err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx))
-	if err != nil {
+	if err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx)); err != nil {
 		return kvpb.NewError(err)
 	}
 	return nil
