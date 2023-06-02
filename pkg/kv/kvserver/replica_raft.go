@@ -453,7 +453,6 @@ func (r *Replica) propose(
 			err = errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
 				"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
 				lhDesc, crt, true /* lhRemovalAllowed */, r.Desc(), proposedDesc)
-			log.Errorf(p.ctx, "%v", err)
 			return kvpb.NewError(err)
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
