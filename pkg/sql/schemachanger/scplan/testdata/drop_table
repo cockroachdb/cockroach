@@ -35,7 +35,7 @@ ALTER TABLE shipments ALTER COLUMN udfcol SET DEFAULT f1();
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 117 MutationType ops
+StatementPhase stage 1 of 1 with 123 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -103,6 +103,12 @@ StatementPhase stage 1 of 1 with 117 MutationType ops
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
+    [[SequenceOption:{DescID: 110, Name: INCREMENT}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: MINVALUE}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: MAXVALUE}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: START}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: VIRTUAL}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: CACHE}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
@@ -153,6 +159,24 @@ StatementPhase stage 1 of 1 with 117 MutationType ops
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
     *scop.RemoveObjectParent
       ObjectID: 110
       ParentSchemaID: 101
@@ -598,6 +622,12 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 110}, ABSENT], DROPPED] -> PUBLIC
+    [[SequenceOption:{DescID: 110, Name: INCREMENT}, ABSENT], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 110, Name: MINVALUE}, ABSENT], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 110, Name: MAXVALUE}, ABSENT], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 110, Name: START}, ABSENT], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 110, Name: VIRTUAL}, ABSENT], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 110, Name: CACHE}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, ABSENT], ABSENT] -> PUBLIC
@@ -620,7 +650,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 127 MutationType ops
+PreCommitPhase stage 2 of 2 with 133 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -688,6 +718,12 @@ PreCommitPhase stage 2 of 2 with 127 MutationType ops
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
+    [[SequenceOption:{DescID: 110, Name: INCREMENT}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: MINVALUE}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: MAXVALUE}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: START}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: VIRTUAL}, ABSENT], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 110, Name: CACHE}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
@@ -738,6 +774,24 @@ PreCommitPhase stage 2 of 2 with 127 MutationType ops
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOption
     *scop.RemoveObjectParent
       ObjectID: 110
       ParentSchemaID: 101
@@ -2072,6 +2126,30 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [Sequence:{DescID: 110}, DROPPED]
+  to:   [SequenceOption:{DescID: 110, Name: CACHE}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 110}, DROPPED]
+  to:   [SequenceOption:{DescID: 110, Name: INCREMENT}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 110}, DROPPED]
+  to:   [SequenceOption:{DescID: 110, Name: MAXVALUE}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 110}, DROPPED]
+  to:   [SequenceOption:{DescID: 110, Name: MINVALUE}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 110}, DROPPED]
+  to:   [SequenceOption:{DescID: 110, Name: START}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 110}, DROPPED]
+  to:   [SequenceOption:{DescID: 110, Name: VIRTUAL}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 110}, DROPPED]
   to:   [SequenceOwner:{DescID: 109, ColumnID: 2, ReferencedDescID: 110}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before removing dependent with attr ref
@@ -2083,6 +2161,30 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [UserPrivileges:{DescID: 110, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [SequenceOption:{DescID: 110, Name: CACHE}, ABSENT]
+  to:   [Sequence:{DescID: 110}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SequenceOption:{DescID: 110, Name: INCREMENT}, ABSENT]
+  to:   [Sequence:{DescID: 110}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SequenceOption:{DescID: 110, Name: MAXVALUE}, ABSENT]
+  to:   [Sequence:{DescID: 110}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SequenceOption:{DescID: 110, Name: MINVALUE}, ABSENT]
+  to:   [Sequence:{DescID: 110}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SequenceOption:{DescID: 110, Name: START}, ABSENT]
+  to:   [Sequence:{DescID: 110}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
+- from: [SequenceOption:{DescID: 110, Name: VIRTUAL}, ABSENT]
+  to:   [Sequence:{DescID: 110}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [SequenceOwner:{DescID: 109, ColumnID: 2, ReferencedDescID: 110}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
   kind: Precedence

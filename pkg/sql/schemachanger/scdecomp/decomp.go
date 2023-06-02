@@ -12,6 +12,7 @@ package scdecomp
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -229,11 +231,36 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	switch {
 	case tbl.IsSequence():
 		w.ev(descriptorStatus(tbl), &scpb.Sequence{
-			SequenceID:  tbl.GetID(),
-			IsTemporary: tbl.IsTemporary(),
+			SequenceID:          tbl.GetID(),
+			IsTemporary:         tbl.IsTemporary(),
+			OptionalRestartWith: nil, /* Only used during creation. */
 		})
 		if opts := tbl.GetSequenceOpts(); opts != nil {
 			w.backRefs.Add(opts.SequenceOwner.OwnerTableID)
+			addSequenceOption := func(key string, value interface{}) {
+				// Nil or empty keys can be skipped.
+				if value == nil {
+					return
+				}
+				keyStr := fmt.Sprintf("%v", value)
+				if len(keyStr) == 0 {
+					return
+				}
+				w.ev(descriptorStatus(tbl),
+					&scpb.SequenceOption{
+						SequenceID: tbl.GetID(),
+						Key:        key,
+						Value:      keyStr,
+					},
+				)
+			}
+			addSequenceOption(tree.SeqOptIncrement, opts.Increment)
+			addSequenceOption(tree.SeqOptMinValue, opts.MinValue)
+			addSequenceOption(tree.SeqOptMaxValue, opts.MaxValue)
+			addSequenceOption(tree.SeqOptStart, opts.Start)
+			addSequenceOption(tree.SeqOptVirtual, opts.Virtual)
+			addSequenceOption(tree.SeqOptCache, opts.CacheSize)
+			addSequenceOption(tree.SeqOptAs, opts.AsIntegerType)
 		}
 	case tbl.IsView():
 		w.ev(descriptorStatus(tbl), &scpb.View{

@@ -164,6 +164,18 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
   {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 105}, ABSENT], PUBLIC]
   {sequenceId: 105}
+- [[SequenceOption:{DescID: 105, Name: INCREMENT}, ABSENT], PUBLIC]
+  {key: INCREMENT, sequenceId: 105, value: "1"}
+- [[SequenceOption:{DescID: 105, Name: MINVALUE}, ABSENT], PUBLIC]
+  {key: MINVALUE, sequenceId: 105, value: "1"}
+- [[SequenceOption:{DescID: 105, Name: MAXVALUE}, ABSENT], PUBLIC]
+  {key: MAXVALUE, sequenceId: 105, value: "9223372036854775807"}
+- [[SequenceOption:{DescID: 105, Name: START}, ABSENT], PUBLIC]
+  {key: START, sequenceId: 105, value: "1"}
+- [[SequenceOption:{DescID: 105, Name: VIRTUAL}, ABSENT], PUBLIC]
+  {key: VIRTUAL, sequenceId: 105, value: "false"}
+- [[SequenceOption:{DescID: 105, Name: CACHE}, ABSENT], PUBLIC]
+  {key: CACHE, sequenceId: 105, value: "1"}
 - [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 105, schemaId: 101}
 - [[TableData:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -212,6 +224,18 @@ ALTER TABLE defaultdb.t DROP COLUMN l
   {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 105}, ABSENT], PUBLIC]
   {sequenceId: 105}
+- [[SequenceOption:{DescID: 105, Name: INCREMENT}, ABSENT], PUBLIC]
+  {key: INCREMENT, sequenceId: 105, value: "1"}
+- [[SequenceOption:{DescID: 105, Name: MINVALUE}, ABSENT], PUBLIC]
+  {key: MINVALUE, sequenceId: 105, value: "1"}
+- [[SequenceOption:{DescID: 105, Name: MAXVALUE}, ABSENT], PUBLIC]
+  {key: MAXVALUE, sequenceId: 105, value: "9223372036854775807"}
+- [[SequenceOption:{DescID: 105, Name: START}, ABSENT], PUBLIC]
+  {key: START, sequenceId: 105, value: "1"}
+- [[SequenceOption:{DescID: 105, Name: VIRTUAL}, ABSENT], PUBLIC]
+  {key: VIRTUAL, sequenceId: 105, value: "false"}
+- [[SequenceOption:{DescID: 105, Name: CACHE}, ABSENT], PUBLIC]
+  {key: CACHE, sequenceId: 105, value: "1"}
 - [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 105, schemaId: 101}
 - [[TableData:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC]

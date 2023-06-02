@@ -1783,6 +1783,42 @@ func FindSequence(b ElementStatusIterator) (current Status, target TargetStatus,
 	return current, target, element
 }
 
+func (e SequenceOption) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_SequenceOption) Element() Element {
+	return e.SequenceOption
+}
+
+// ForEachSequenceOption iterates over elements of type SequenceOption.
+func ForEachSequenceOption(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SequenceOption),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*SequenceOption); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindSequenceOption finds the first element of type SequenceOption.
+func FindSequenceOption(b ElementStatusIterator) (current Status, target TargetStatus, element *SequenceOption) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*SequenceOption); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e SequenceOwner) element() {}
 
 // Element implements ElementGetter.
@@ -2462,6 +2498,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_SecondaryIndexPartial{ SecondaryIndexPartial: t}
 		case *Sequence:
 			e.ElementOneOf = &ElementProto_Sequence{ Sequence: t}
+		case *SequenceOption:
+			e.ElementOneOf = &ElementProto_SequenceOption{ SequenceOption: t}
 		case *SequenceOwner:
 			e.ElementOneOf = &ElementProto_SequenceOwner{ SequenceOwner: t}
 		case *Table:
@@ -2549,6 +2587,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_SecondaryIndex)(nil)),
 	((*ElementProto_SecondaryIndexPartial)(nil)),
 	((*ElementProto_Sequence)(nil)),
+	((*ElementProto_SequenceOption)(nil)),
 	((*ElementProto_SequenceOwner)(nil)),
 	((*ElementProto_Table)(nil)),
 	((*ElementProto_TableComment)(nil)),
@@ -2621,6 +2660,7 @@ func GetElementTypes() []interface{} {
 	((*SecondaryIndex)(nil)),
 	((*SecondaryIndexPartial)(nil)),
 	((*Sequence)(nil)),
+	((*SequenceOption)(nil)),
 	((*SequenceOwner)(nil)),
 	((*Table)(nil)),
 	((*TableComment)(nil)),

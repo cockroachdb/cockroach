@@ -805,3 +805,21 @@ type CreateSchemaDescriptor struct {
 	immediateMutationOp
 	SchemaID descpb.ID
 }
+
+type CreateSequenceDescriptor struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+}
+
+type SetSequenceOptions struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+	Key        string
+	Value      string
+}
+
+type InitSequence struct {
+	immediateMutationOp
+	SequenceID  descpb.ID
+	RestartWith *int64
+}

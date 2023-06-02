@@ -155,6 +155,11 @@ func TestValidateMixedVersionElements_create_schema_drop_schema_separate_stateme
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/create_schema_drop_schema_separate_statements", sctest.SingleNodeMixedCluster)
 }
+func TestValidateMixedVersionElements_create_sequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/create_sequence", sctest.SingleNodeMixedCluster)
+}
 func TestValidateMixedVersionElements_drop_column_basic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

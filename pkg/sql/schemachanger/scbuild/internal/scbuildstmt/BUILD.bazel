@@ -16,6 +16,7 @@ go_library(
         "create_function.go",
         "create_index.go",
         "create_schema.go",
+        "create_sequence.go",
         "dependencies.go",
         "drop_database.go",
         "drop_function.go",

@@ -15,6 +15,18 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   {descriptorId: 104, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 104}, ABSENT], PUBLIC]
   {sequenceId: 104}
+- [[SequenceOption:{DescID: 104, Name: INCREMENT}, ABSENT], PUBLIC]
+  {key: INCREMENT, sequenceId: 104, value: "1"}
+- [[SequenceOption:{DescID: 104, Name: MINVALUE}, ABSENT], PUBLIC]
+  {key: MINVALUE, sequenceId: 104, value: "1"}
+- [[SequenceOption:{DescID: 104, Name: MAXVALUE}, ABSENT], PUBLIC]
+  {key: MAXVALUE, sequenceId: 104, value: "9223372036854775807"}
+- [[SequenceOption:{DescID: 104, Name: START}, ABSENT], PUBLIC]
+  {key: START, sequenceId: 104, value: "1"}
+- [[SequenceOption:{DescID: 104, Name: VIRTUAL}, ABSENT], PUBLIC]
+  {key: VIRTUAL, sequenceId: 104, value: "false"}
+- [[SequenceOption:{DescID: 104, Name: CACHE}, ABSENT], PUBLIC]
+  {key: CACHE, sequenceId: 104, value: "1"}
 - [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 104, schemaId: 101}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -40,6 +52,18 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   {descriptorId: 104, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 104}, ABSENT], PUBLIC]
   {sequenceId: 104}
+- [[SequenceOption:{DescID: 104, Name: INCREMENT}, ABSENT], PUBLIC]
+  {key: INCREMENT, sequenceId: 104, value: "1"}
+- [[SequenceOption:{DescID: 104, Name: MINVALUE}, ABSENT], PUBLIC]
+  {key: MINVALUE, sequenceId: 104, value: "1"}
+- [[SequenceOption:{DescID: 104, Name: MAXVALUE}, ABSENT], PUBLIC]
+  {key: MAXVALUE, sequenceId: 104, value: "9223372036854775807"}
+- [[SequenceOption:{DescID: 104, Name: START}, ABSENT], PUBLIC]
+  {key: START, sequenceId: 104, value: "1"}
+- [[SequenceOption:{DescID: 104, Name: VIRTUAL}, ABSENT], PUBLIC]
+  {key: VIRTUAL, sequenceId: 104, value: "false"}
+- [[SequenceOption:{DescID: 104, Name: CACHE}, ABSENT], PUBLIC]
+  {key: CACHE, sequenceId: 104, value: "1"}
 - [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 104, schemaId: 101}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -81,6 +105,18 @@ DROP SEQUENCE defaultdb.ownedseq CASCADE
   {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 111}, ABSENT], PUBLIC]
   {sequenceId: 111}
+- [[SequenceOption:{DescID: 111, Name: INCREMENT}, ABSENT], PUBLIC]
+  {key: INCREMENT, sequenceId: 111, value: "1"}
+- [[SequenceOption:{DescID: 111, Name: MINVALUE}, ABSENT], PUBLIC]
+  {key: MINVALUE, sequenceId: 111, value: "1"}
+- [[SequenceOption:{DescID: 111, Name: MAXVALUE}, ABSENT], PUBLIC]
+  {key: MAXVALUE, sequenceId: 111, value: "9223372036854775807"}
+- [[SequenceOption:{DescID: 111, Name: START}, ABSENT], PUBLIC]
+  {key: START, sequenceId: 111, value: "1"}
+- [[SequenceOption:{DescID: 111, Name: VIRTUAL}, ABSENT], PUBLIC]
+  {key: VIRTUAL, sequenceId: 111, value: "false"}
+- [[SequenceOption:{DescID: 111, Name: CACHE}, ABSENT], PUBLIC]
+  {key: CACHE, sequenceId: 111, value: "1"}
 - [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 111, schemaId: 101}
 - [[TableData:{DescID: 111, ReferencedDescID: 100}, ABSENT], PUBLIC]

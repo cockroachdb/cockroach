@@ -43,6 +43,18 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   {descriptorId: 106, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 106}, ABSENT], PUBLIC]
   {sequenceId: 106}
+- [[SequenceOption:{DescID: 106, Name: INCREMENT}, ABSENT], PUBLIC]
+  {key: INCREMENT, sequenceId: 106, value: "1"}
+- [[SequenceOption:{DescID: 106, Name: MINVALUE}, ABSENT], PUBLIC]
+  {key: MINVALUE, sequenceId: 106, value: "1"}
+- [[SequenceOption:{DescID: 106, Name: MAXVALUE}, ABSENT], PUBLIC]
+  {key: MAXVALUE, sequenceId: 106, value: "9223372036854775807"}
+- [[SequenceOption:{DescID: 106, Name: START}, ABSENT], PUBLIC]
+  {key: START, sequenceId: 106, value: "1"}
+- [[SequenceOption:{DescID: 106, Name: VIRTUAL}, ABSENT], PUBLIC]
+  {key: VIRTUAL, sequenceId: 106, value: "false"}
+- [[SequenceOption:{DescID: 106, Name: CACHE}, ABSENT], PUBLIC]
+  {key: CACHE, sequenceId: 106, value: "1"}
 - [[SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {childObjectId: 106, schemaId: 104}
 - [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC]

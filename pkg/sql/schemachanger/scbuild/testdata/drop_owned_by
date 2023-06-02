@@ -44,6 +44,18 @@ DROP OWNED BY r
   {descriptorId: 106, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 106}, ABSENT], PUBLIC]
   {sequenceId: 106}
+- [[SequenceOption:{DescID: 106, Name: INCREMENT}, ABSENT], PUBLIC]
+  {key: INCREMENT, sequenceId: 106, value: "1"}
+- [[SequenceOption:{DescID: 106, Name: MINVALUE}, ABSENT], PUBLIC]
+  {key: MINVALUE, sequenceId: 106, value: "1"}
+- [[SequenceOption:{DescID: 106, Name: MAXVALUE}, ABSENT], PUBLIC]
+  {key: MAXVALUE, sequenceId: 106, value: "9223372036854775807"}
+- [[SequenceOption:{DescID: 106, Name: START}, ABSENT], PUBLIC]
+  {key: START, sequenceId: 106, value: "1"}
+- [[SequenceOption:{DescID: 106, Name: VIRTUAL}, ABSENT], PUBLIC]
+  {key: VIRTUAL, sequenceId: 106, value: "false"}
+- [[SequenceOption:{DescID: 106, Name: CACHE}, ABSENT], PUBLIC]
+  {key: CACHE, sequenceId: 106, value: "1"}
 - [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 106, schemaId: 101}
 - [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -120,6 +132,18 @@ DROP OWNED BY r
   {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 107}, ABSENT], PUBLIC]
   {sequenceId: 107}
+- [[SequenceOption:{DescID: 107, Name: INCREMENT}, ABSENT], PUBLIC]
+  {key: INCREMENT, sequenceId: 107, value: "1"}
+- [[SequenceOption:{DescID: 107, Name: MINVALUE}, ABSENT], PUBLIC]
+  {key: MINVALUE, sequenceId: 107, value: "1"}
+- [[SequenceOption:{DescID: 107, Name: MAXVALUE}, ABSENT], PUBLIC]
+  {key: MAXVALUE, sequenceId: 107, value: "9223372036854775807"}
+- [[SequenceOption:{DescID: 107, Name: START}, ABSENT], PUBLIC]
+  {key: START, sequenceId: 107, value: "1"}
+- [[SequenceOption:{DescID: 107, Name: VIRTUAL}, ABSENT], PUBLIC]
+  {key: VIRTUAL, sequenceId: 107, value: "false"}
+- [[SequenceOption:{DescID: 107, Name: CACHE}, ABSENT], PUBLIC]
+  {key: CACHE, sequenceId: 107, value: "1"}
 - [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {childObjectId: 107, schemaId: 105}
 - [[TableData:{DescID: 107, ReferencedDescID: 100}, ABSENT], PUBLIC]

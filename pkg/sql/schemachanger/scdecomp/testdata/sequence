@@ -33,6 +33,36 @@ ElementState:
     isTemporary: false
     sequenceId: 104
   Status: PUBLIC
+- SequenceOption:
+    key: CACHE
+    sequenceId: 104
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: INCREMENT
+    sequenceId: 104
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: MAXVALUE
+    sequenceId: 104
+    value: "9223372036854775807"
+  Status: PUBLIC
+- SequenceOption:
+    key: MINVALUE
+    sequenceId: 104
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: START
+    sequenceId: 104
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: VIRTUAL
+    sequenceId: 104
+    value: "false"
+  Status: PUBLIC
 - TableData:
     databaseId: 100
     tableId: 104
@@ -77,6 +107,36 @@ ElementState:
 - Sequence:
     isTemporary: false
     sequenceId: 106
+  Status: PUBLIC
+- SequenceOption:
+    key: CACHE
+    sequenceId: 106
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: INCREMENT
+    sequenceId: 106
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: MAXVALUE
+    sequenceId: 106
+    value: "9223372036854775807"
+  Status: PUBLIC
+- SequenceOption:
+    key: MINVALUE
+    sequenceId: 106
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: START
+    sequenceId: 106
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: VIRTUAL
+    sequenceId: 106
+    value: "false"
   Status: PUBLIC
 - TableData:
     databaseId: 100
@@ -701,6 +761,36 @@ ElementState:
 - Sequence:
     isTemporary: false
     sequenceId: 104
+  Status: PUBLIC
+- SequenceOption:
+    key: CACHE
+    sequenceId: 104
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: INCREMENT
+    sequenceId: 104
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: MAXVALUE
+    sequenceId: 104
+    value: "9223372036854775807"
+  Status: PUBLIC
+- SequenceOption:
+    key: MINVALUE
+    sequenceId: 104
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: START
+    sequenceId: 104
+    value: "1"
+  Status: PUBLIC
+- SequenceOption:
+    key: VIRTUAL
+    sequenceId: 104
+    value: "false"
   Status: PUBLIC
 - TableData:
     databaseId: 100
