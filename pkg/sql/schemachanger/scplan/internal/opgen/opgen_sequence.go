@@ -21,12 +21,23 @@ func init() {
 	opRegistry.register((*scpb.Sequence)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
-			to(scpb.Status_DROPPED,
-				emit(func(this *scpb.Sequence) *scop.NotImplemented {
-					return notImplemented(this)
+			equiv(scpb.Status_DROPPED),
+			to(scpb.Status_DESCRIPTOR_ADDED,
+				emit(func(this *scpb.Sequence) *scop.CreateSequenceDescriptor {
+					return &scop.CreateSequenceDescriptor{
+						SequenceID: this.SequenceID,
+					}
 				}),
 			),
 			to(scpb.Status_PUBLIC,
+				revertible(false),
+				emit(func(this *scpb.Sequence) *scop.InitSequence {
+					return &scop.InitSequence{
+						SequenceID:     this.SequenceID,
+						RestartWith:    this.RestartWith,
+						UseRestartWith: this.UseRestartWith,
+					}
+				}),
 				emit(func(this *scpb.Sequence) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
 						DescriptorID: this.SequenceID,
@@ -35,6 +46,7 @@ func init() {
 			),
 		),
 		toAbsent(scpb.Status_PUBLIC,
+			equiv(scpb.Status_DESCRIPTOR_ADDED),
 			to(scpb.Status_DROPPED,
 				revertible(false),
 				emit(func(this *scpb.Sequence) *scop.MarkDescriptorAsDropped {

@@ -94,6 +94,9 @@ type Catalog interface {
 	// transaction so far, assuming that they haven't been persisted yet
 	// by calling Run.
 	Reset(ctx context.Context) error
+
+	// InitializeSequence initializes the initial value for a sequence.
+	InitializeSequence(id descpb.ID, startVal int64)
 }
 
 // Telemetry encapsulates metrics gather for the declarative schema changer.

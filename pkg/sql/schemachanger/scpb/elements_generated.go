@@ -1828,6 +1828,43 @@ func (c *ElementCollection[E]) FilterSequence() *ElementCollection[*Sequence] {
 	return (*ElementCollection[*Sequence])(ret)
 }
 
+func (e SequenceOption) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_SequenceOption) Element() Element {
+	return e.SequenceOption
+}
+
+// ForEachSequenceOption iterates over elements of type SequenceOption.
+// Deprecated
+func ForEachSequenceOption(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SequenceOption),
+) {
+  c.FilterSequenceOption().ForEach(fn)
+}
+
+// FindSequenceOption finds the first element of type SequenceOption.
+// Deprecated
+func FindSequenceOption(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *SequenceOption) {
+	if tc := c.FilterSequenceOption(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*SequenceOption)
+	}
+	return current, target, element
+}
+
+// SequenceOptionElements filters elements of type SequenceOption.
+func (c *ElementCollection[E]) FilterSequenceOption() *ElementCollection[*SequenceOption] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*SequenceOption)
+		return ok
+	})
+	return (*ElementCollection[*SequenceOption])(ret)
+}
+
 func (e SequenceOwner) element() {}
 
 // Element implements ElementGetter.
@@ -2523,6 +2560,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_SecondaryIndexPartial{ SecondaryIndexPartial: t}
 		case *Sequence:
 			e.ElementOneOf = &ElementProto_Sequence{ Sequence: t}
+		case *SequenceOption:
+			e.ElementOneOf = &ElementProto_SequenceOption{ SequenceOption: t}
 		case *SequenceOwner:
 			e.ElementOneOf = &ElementProto_SequenceOwner{ SequenceOwner: t}
 		case *Table:
@@ -2610,6 +2649,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_SecondaryIndex)(nil)),
 	((*ElementProto_SecondaryIndexPartial)(nil)),
 	((*ElementProto_Sequence)(nil)),
+	((*ElementProto_SequenceOption)(nil)),
 	((*ElementProto_SequenceOwner)(nil)),
 	((*ElementProto_Table)(nil)),
 	((*ElementProto_TableComment)(nil)),
@@ -2682,6 +2722,7 @@ func GetElementTypes() []interface{} {
 	((*SecondaryIndex)(nil)),
 	((*SecondaryIndexPartial)(nil)),
 	((*Sequence)(nil)),
+	((*SequenceOption)(nil)),
 	((*SequenceOwner)(nil)),
 	((*Table)(nil)),
 	((*TableComment)(nil)),

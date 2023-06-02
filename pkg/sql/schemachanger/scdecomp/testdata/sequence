@@ -31,7 +31,9 @@ ElementState:
   Status: PUBLIC
 - Sequence:
     isTemporary: false
+    restartWith: "0"
     sequenceId: 104
+    useRestartWith: false
   Status: PUBLIC
 - TableData:
     databaseId: 100
@@ -76,7 +78,9 @@ ElementState:
   Status: PUBLIC
 - Sequence:
     isTemporary: false
+    restartWith: "0"
     sequenceId: 106
+    useRestartWith: false
   Status: PUBLIC
 - TableData:
     databaseId: 100
@@ -700,7 +704,9 @@ ElementState:
   Status: PUBLIC
 - Sequence:
     isTemporary: false
+    restartWith: "0"
     sequenceId: 104
+    useRestartWith: false
   Status: PUBLIC
 - TableData:
     databaseId: 100

@@ -17,6 +17,7 @@ go_library(
         "schema.go",
         "schema_change_job.go",
         "scmutationexec.go",
+        "sequence.go",
         "stats.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec",
