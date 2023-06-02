@@ -191,7 +191,7 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 			if err := checkPeerMetrics(m, true, false, true); err != nil {
 				return err
 			}
-			return checkMetrics(am, 1, 0, true)
+			return checkMetrics(am, 1, 0, 0, true)
 		})
 
 		// Also make an unvalidated conn because they're tricky because
@@ -212,7 +212,7 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 			if err := checkPeerMetrics(m, true, false, true); err != nil {
 				return err
 			}
-			return checkMetrics(am, 2, 0, true)
+			return checkMetrics(am, 2, 0, 0, true)
 		})
 
 	}
@@ -252,7 +252,7 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 				}
 			}
 
-			return checkMetrics(clientCtx.Metrics(), 0, 1, true)
+			return checkMetrics(clientCtx.Metrics(), 0, 1, 0, true)
 		})
 	}
 
@@ -309,9 +309,9 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 			return err
 		}
 
-		// The two connections to ln1 should both no longer be represented in the
-		// aggregate, too. Only the healthy connection to ln2 is.
-		return checkMetrics(clientCtx.Metrics(), 1, 0, true)
+		// The two connections to ln1 are "inactive". Only the connection to ln2 is
+		// healthy.
+		return checkMetrics(clientCtx.Metrics(), 1, 0, 2, true)
 	})
 
 	// Disable the circuit breaker setting and watch the map clear out. Because p1 and p1U
@@ -330,7 +330,7 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 		}
 		return nil
 	})
-	require.NoError(t, checkMetrics(clientCtx.Metrics(), 1, 0, true))
+	require.NoError(t, checkMetrics(clientCtx.Metrics(), 1, 0, 0, true))
 }
 
 // TestPingInterceptors checks that OnOutgoingPing and OnIncomingPing can inject errors.
@@ -2591,7 +2591,7 @@ func TestHeartbeatDialback(t *testing.T) {
 // TODO(baptist): Add a test using TestCluster to verify this works in a full
 // integration test.
 
-func checkMetrics(m *Metrics, healthy, unhealthy int64, checkDurations bool) error {
+func checkMetrics(m *Metrics, healthy, unhealthy, inactive int64, checkDurations bool) error {
 	// NB: peers can be neither healthy nor unhealthy. This happens when
 	// a peer is first created and when its deleteAfter field is set.
 	if exp, n := healthy, m.ConnectionHealthy.Value(); exp != n {
@@ -2599,6 +2599,9 @@ func checkMetrics(m *Metrics, healthy, unhealthy int64, checkDurations bool) err
 	}
 	if exp, n := unhealthy, m.ConnectionUnhealthy.Value(); exp != n {
 		return errors.Errorf("ConnectionUnhealthy = %d", n)
+	}
+	if exp, n := inactive, m.ConnectionInactive.Value(); exp != n {
+		return errors.Errorf("ConnectionInactive = %d", n)
 	}
 
 	if !checkDurations {
