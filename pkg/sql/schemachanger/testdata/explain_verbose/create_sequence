@@ -1,0 +1,778 @@
+/* setup */
+
+/* test */
+EXPLAIN (ddl, verbose) CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+----
+• Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 18 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Sequence:{DescID: 104 (sq1+)}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "INCREMENT"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "MINVALUE"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "MAXVALUE"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "VIRTUAL"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "CACHE"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 104 (sq1+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
+│       │   │         rule: "dependents exist before descriptor becomes public"
+│       │   │
+│       │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "INCREMENT"}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "MINVALUE"}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "MAXVALUE"}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "START"}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "VIRTUAL"}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "CACHE"}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │   │     rule: "descriptor existence precedes dependents"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+│       │   │   │     rule: "column dependents exist before column becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+│       │   │   │     rule: "column dependents exist before column becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
+│       │   │   │     rule: "column dependents exist before column becomes public"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+│       │   │         rule: "column dependents exist before column becomes public"
+│       │   │
+│       │   ├── • ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │   │     rule: "descriptor existence precedes dependents"
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+│       │   │   │     rule: "column writable right before column constraint is enforced."
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │   │     rule: "descriptor existence precedes dependents"
+│       │   │   │
+│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │
+│       │   ├── • ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │   │     rule: "descriptor existence precedes dependents"
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+│       │   │         rule: "column existence precedes column dependents"
+│       │   │         rule: "column name and type set right after column existence"
+│       │   │
+│       │   ├── • PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+│       │   │   │     rule: "column existence precedes index existence"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+│       │   │   │     rule: "index-column added to index before index is backfilled"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │   │     rule: "descriptor existence precedes dependents"
+│       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+│       │   │   │     rule: "index dependents exist before index becomes public"
+│       │   │   │     rule: "primary index named right before index becomes public"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+│       │   │         rule: "index dependents exist before index becomes public"
+│       │   │
+│       │   ├── • IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │   │     rule: "descriptor existence precedes dependents"
+│       │   │   │
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   ├── • IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │   │     rule: "descriptor existence precedes dependents"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+│       │   │   │     rule: "column existence precedes column dependents"
+│       │   │   │
+│       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
+│       │   │         rule: "index existence precedes index dependents"
+│       │   │
+│       │   ├── • Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • Owner:{DescID: 104 (sq1+)}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   └── • UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+│       │             rule: "descriptor existence precedes dependents"
+│       │
+│       └── • 28 Mutation operations
+│           │
+│           ├── • CreateSequenceDescriptor
+│           │     SequenceID: 104
+│           │
+│           ├── • SetSequenceOptions
+│           │     Key: INCREMENT
+│           │     SequenceID: 104
+│           │     Value: "1"
+│           │
+│           ├── • SetSequenceOptions
+│           │     Key: MINVALUE
+│           │     SequenceID: 104
+│           │     Value: "1"
+│           │
+│           ├── • SetSequenceOptions
+│           │     Key: MAXVALUE
+│           │     SequenceID: 104
+│           │     Value: "9223372036854775807"
+│           │
+│           ├── • SetSequenceOptions
+│           │     Key: START
+│           │     SequenceID: 104
+│           │     Value: "32"
+│           │
+│           ├── • SetSequenceOptions
+│           │     Key: VIRTUAL
+│           │     SequenceID: 104
+│           │     Value: "false"
+│           │
+│           ├── • SetSequenceOptions
+│           │     Key: CACHE
+│           │     SequenceID: 104
+│           │     Value: "1"
+│           │
+│           ├── • MakeAbsentColumnDeleteOnly
+│           │     Column:
+│           │       ColumnID: 1
+│           │       TableID: 104
+│           │
+│           ├── • SetAddedColumnType
+│           │     ColumnType:
+│           │       ColumnID: 1
+│           │       ElementCreationMetadata:
+│           │         in231OrLater: true
+│           │       TableID: 104
+│           │       TypeT:
+│           │         Type:
+│           │           family: IntFamily
+│           │           oid: 20
+│           │           width: 64
+│           │
+│           ├── • SetColumnName
+│           │     ColumnID: 1
+│           │     Name: value
+│           │     TableID: 104
+│           │
+│           ├── • MakeAbsentIndexBackfilling
+│           │     Index:
+│           │       IndexID: 1
+│           │       IsUnique: true
+│           │       TableID: 104
+│           │
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 1
+│           │     IndexID: 1
+│           │     TableID: 104
+│           │
+│           ├── • SetNameInDescriptor
+│           │     DescriptorID: 104
+│           │     Name: sq1
+│           │
+│           ├── • AddDescriptorName
+│           │     Namespace:
+│           │       DatabaseID: 100
+│           │       DescriptorID: 104
+│           │       Name: sq1
+│           │       SchemaID: 101
+│           │
+│           ├── • UpdateOwner
+│           │     Owner:
+│           │       DescriptorID: 104
+│           │       Owner: root
+│           │
+│           ├── • UpdateUserPrivileges
+│           │     Privileges:
+│           │       DescriptorID: 104
+│           │       Privileges: 2
+│           │       UserName: admin
+│           │       WithGrantOption: 2
+│           │
+│           ├── • UpdateUserPrivileges
+│           │     Privileges:
+│           │       DescriptorID: 104
+│           │       Privileges: 2
+│           │       UserName: root
+│           │       WithGrantOption: 2
+│           │
+│           ├── • MakeDeleteOnlyColumnWriteOnly
+│           │     ColumnID: 1
+│           │     TableID: 104
+│           │
+│           ├── • MakeAbsentColumnNotNullWriteOnly
+│           │     ColumnID: 1
+│           │     TableID: 104
+│           │
+│           ├── • MakeBackfillingIndexDeleteOnly
+│           │     IndexID: 1
+│           │     TableID: 104
+│           │
+│           ├── • MakeValidatedColumnNotNullPublic
+│           │     ColumnID: 1
+│           │     TableID: 104
+│           │
+│           ├── • MakeBackfilledIndexMerging
+│           │     IndexID: 1
+│           │     TableID: 104
+│           │
+│           ├── • MakeWriteOnlyColumnPublic
+│           │     ColumnID: 1
+│           │     TableID: 104
+│           │
+│           ├── • MakeMergedIndexWriteOnly
+│           │     IndexID: 1
+│           │     TableID: 104
+│           │
+│           ├── • SetIndexName
+│           │     IndexID: 1
+│           │     Name: primary
+│           │     TableID: 104
+│           │
+│           ├── • MakeValidatedPrimaryIndexPublic
+│           │     IndexID: 1
+│           │     TableID: 104
+│           │
+│           ├── • InitSequence
+│           │     SequenceID: 104
+│           │
+│           └── • MarkDescriptorAsPublic
+│                 DescriptorID: 104
+│
+└── • PreCommitPhase
+    │
+    ├── • Stage 1 of 2 in PreCommitPhase
+    │   │
+    │   ├── • 18 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • Sequence:{DescID: 104 (sq1+)}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "INCREMENT"}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "MINVALUE"}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "MAXVALUE"}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "START"}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "VIRTUAL"}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "CACHE"}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • Owner:{DescID: 104 (sq1+)}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   └── • UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
+    │   │         PUBLIC → ABSENT
+    │   │
+    │   └── • 1 Mutation operation
+    │       │
+    │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+    │             {}
+    │
+    └── • Stage 2 of 2 in PreCommitPhase
+        │
+        ├── • 18 elements transitioning toward PUBLIC
+        │   │
+        │   ├── • Sequence:{DescID: 104 (sq1+)}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "INCREMENT"}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "MINVALUE"}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "MAXVALUE"}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "VIRTUAL"}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "CACHE"}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 104 (sq1+)}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   └── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
+        │   │         rule: "dependents exist before descriptor becomes public"
+        │   │
+        │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "INCREMENT"}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "MINVALUE"}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "MAXVALUE"}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "START"}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "VIRTUAL"}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • SequenceOption:{DescID: 104 (sq1+), Name: "CACHE"}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │   │     rule: "descriptor existence precedes dependents"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+        │   │   │     rule: "column dependents exist before column becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+        │   │   │     rule: "column dependents exist before column becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
+        │   │   │     rule: "column dependents exist before column becomes public"
+        │   │   │
+        │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+        │   │         rule: "column dependents exist before column becomes public"
+        │   │
+        │   ├── • ColumnType:{DescID: 104 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │   │     rule: "descriptor existence precedes dependents"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+        │   │         rule: "column existence precedes column dependents"
+        │   │         rule: "column name and type set right after column existence"
+        │   │
+        │   ├── • ColumnNotNull:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+        │   │   │     rule: "column writable right before column constraint is enforced."
+        │   │   │
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │   │     rule: "descriptor existence precedes dependents"
+        │   │   │
+        │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+        │   │         rule: "column existence precedes column dependents"
+        │   │
+        │   ├── • ColumnName:{DescID: 104 (sq1+), Name: "value", ColumnID: 1 (value+)}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │   │     rule: "descriptor existence precedes dependents"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+        │   │         rule: "column existence precedes column dependents"
+        │   │         rule: "column name and type set right after column existence"
+        │   │
+        │   ├── • PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+        │   │   │     rule: "column existence precedes index existence"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+        │   │   │     rule: "index-column added to index before index is backfilled"
+        │   │   │
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │   │     rule: "descriptor existence precedes dependents"
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+        │   │   │     rule: "index dependents exist before index becomes public"
+        │   │   │     rule: "primary index named right before index becomes public"
+        │   │   │
+        │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+        │   │         rule: "index dependents exist before index becomes public"
+        │   │
+        │   ├── • IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │   │     rule: "descriptor existence precedes dependents"
+        │   │   │
+        │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
+        │   │         rule: "index existence precedes index dependents"
+        │   │
+        │   ├── • IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │   │     rule: "descriptor existence precedes dependents"
+        │   │   │
+        │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 104 (sq1+), ColumnID: 1 (value+)}
+        │   │   │     rule: "column existence precedes column dependents"
+        │   │   │
+        │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
+        │   │         rule: "index existence precedes index dependents"
+        │   │
+        │   ├── • Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • Owner:{DescID: 104 (sq1+)}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   └── • UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
+        │       │ ABSENT → PUBLIC
+        │       │
+        │       └── • Precedence dependency from DESCRIPTOR_ADDED Sequence:{DescID: 104 (sq1+)}
+        │             rule: "descriptor existence precedes dependents"
+        │
+        └── • 30 Mutation operations
+            │
+            ├── • CreateSequenceDescriptor
+            │     SequenceID: 104
+            │
+            ├── • SetSequenceOptions
+            │     Key: INCREMENT
+            │     SequenceID: 104
+            │     Value: "1"
+            │
+            ├── • SetSequenceOptions
+            │     Key: MINVALUE
+            │     SequenceID: 104
+            │     Value: "1"
+            │
+            ├── • SetSequenceOptions
+            │     Key: MAXVALUE
+            │     SequenceID: 104
+            │     Value: "9223372036854775807"
+            │
+            ├── • SetSequenceOptions
+            │     Key: START
+            │     SequenceID: 104
+            │     Value: "32"
+            │
+            ├── • SetSequenceOptions
+            │     Key: VIRTUAL
+            │     SequenceID: 104
+            │     Value: "false"
+            │
+            ├── • SetSequenceOptions
+            │     Key: CACHE
+            │     SequenceID: 104
+            │     Value: "1"
+            │
+            ├── • MakeAbsentColumnDeleteOnly
+            │     Column:
+            │       ColumnID: 1
+            │       TableID: 104
+            │
+            ├── • SetAddedColumnType
+            │     ColumnType:
+            │       ColumnID: 1
+            │       ElementCreationMetadata:
+            │         in231OrLater: true
+            │       TableID: 104
+            │       TypeT:
+            │         Type:
+            │           family: IntFamily
+            │           oid: 20
+            │           width: 64
+            │
+            ├── • SetColumnName
+            │     ColumnID: 1
+            │     Name: value
+            │     TableID: 104
+            │
+            ├── • MakeAbsentIndexBackfilling
+            │     Index:
+            │       IndexID: 1
+            │       IsUnique: true
+            │       TableID: 104
+            │
+            ├── • MaybeAddSplitForIndex
+            │     IndexID: 1
+            │     TableID: 104
+            │
+            ├── • AddColumnToIndex
+            │     ColumnID: 1
+            │     IndexID: 1
+            │     TableID: 104
+            │
+            ├── • SetNameInDescriptor
+            │     DescriptorID: 104
+            │     Name: sq1
+            │
+            ├── • AddDescriptorName
+            │     Namespace:
+            │       DatabaseID: 100
+            │       DescriptorID: 104
+            │       Name: sq1
+            │       SchemaID: 101
+            │
+            ├── • UpdateOwner
+            │     Owner:
+            │       DescriptorID: 104
+            │       Owner: root
+            │
+            ├── • UpdateUserPrivileges
+            │     Privileges:
+            │       DescriptorID: 104
+            │       Privileges: 2
+            │       UserName: admin
+            │       WithGrantOption: 2
+            │
+            ├── • UpdateUserPrivileges
+            │     Privileges:
+            │       DescriptorID: 104
+            │       Privileges: 2
+            │       UserName: root
+            │       WithGrantOption: 2
+            │
+            ├── • MakeDeleteOnlyColumnWriteOnly
+            │     ColumnID: 1
+            │     TableID: 104
+            │
+            ├── • MakeAbsentColumnNotNullWriteOnly
+            │     ColumnID: 1
+            │     TableID: 104
+            │
+            ├── • MakeBackfillingIndexDeleteOnly
+            │     IndexID: 1
+            │     TableID: 104
+            │
+            ├── • MakeValidatedColumnNotNullPublic
+            │     ColumnID: 1
+            │     TableID: 104
+            │
+            ├── • MakeBackfilledIndexMerging
+            │     IndexID: 1
+            │     TableID: 104
+            │
+            ├── • MakeWriteOnlyColumnPublic
+            │     ColumnID: 1
+            │     TableID: 104
+            │
+            ├── • RefreshStats
+            │     TableID: 104
+            │
+            ├── • MakeMergedIndexWriteOnly
+            │     IndexID: 1
+            │     TableID: 104
+            │
+            ├── • SetIndexName
+            │     IndexID: 1
+            │     Name: primary
+            │     TableID: 104
+            │
+            ├── • MakeValidatedPrimaryIndexPublic
+            │     IndexID: 1
+            │     TableID: 104
+            │
+            ├── • InitSequence
+            │     SequenceID: 104
+            │
+            └── • MarkDescriptorAsPublic
+                  DescriptorID: 104
