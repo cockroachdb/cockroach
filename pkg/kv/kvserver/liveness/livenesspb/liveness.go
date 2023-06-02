@@ -235,6 +235,8 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 		return nv.isAvailableNotDraining()
 	case AdminHealthCheck:
 		return nv.isAvailableNotDraining()
+	case DecommissionCheck:
+		return nv.isAlive()
 	}
 	// TODO(baptist): Should be an assertion that we don't know this uasge.
 	return false
