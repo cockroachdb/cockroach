@@ -129,6 +129,13 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 		p.mu.Lock()
 		p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
 		p.mu.Unlock()
+
+		if p.snap().deleteAfter != 0 {
+			// Peer is in inactive mode, and we just finished up a probe, so
+			// end the probe. Another one will be started if anyone accesses
+			// the breaker.
+			return
+		}
 	}
 }
 
