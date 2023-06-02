@@ -53,6 +53,7 @@ func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 
 	taskName := fmt.Sprintf("conn to n%d@%s/%s", p.k.NodeID, p.k.TargetAddr, p.k.Class)
 
+	log.VEventf(ctx, 1, "probe starting")
 	if err := p.opts.Stopper.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
 		p.run(ctx, report, done)
 	}); err != nil {
@@ -73,6 +74,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 	var t timeutil.Timer
 	defer t.Stop()
 	defer done()
+	defer log.VEventf(ctx, 1, "probe stopping")
 	// Immediately run probe after breaker circuit is tripped, optimizing for the
 	// case in which we can immediately reconnect.
 	t.Reset(0)
@@ -115,7 +117,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 
 		// Release peer and delete from map, if appropriate. We'll detect
 		// whether this happened after looping around.
-		p.maybeDelete(now)
+		p.maybeDelete(ctx, now)
 
 		if errors.Is(err, errQuiescing) {
 			// Heartbeat loop ended due to shutdown. Exit the probe, it won't be
@@ -205,7 +207,7 @@ func (p *peer) onHeartbeatFailed(
 	p.ConnectionFailures.Inc(1)
 }
 
-func (p *peer) maybeDelete(now time.Time) {
+func (p *peer) maybeDelete(ctx context.Context, now time.Time) {
 	// If the peer can be deleted, delete it now.
 	//
 	// Also delete unconditionally if circuit breakers are (now) disabled. We want
@@ -214,12 +216,15 @@ func (p *peer) maybeDelete(now time.Time) {
 	snap := p.snap()
 
 	if snap.deleted {
+		log.VEventf(ctx, 2, "peer already deleted")
 		return
 	}
 
 	if !p.disabled() && !snap.deletable(now) {
 		return
 	}
+
+	log.VEventf(ctx, 1, "deleting peer")
 
 	// Lock order: map, then peer. But here we can do better and
 	// not hold both mutexes at the same time.
@@ -249,6 +254,8 @@ func (p *peer) onInitialHeartbeatSucceeded(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mu.connected = now
+	// If the probe was inactive, the fact that we managed to heartbeat implies
+	// that it ought not have been.
 	p.mu.deleteAfter = 0
 
 	// Gauge updates.
