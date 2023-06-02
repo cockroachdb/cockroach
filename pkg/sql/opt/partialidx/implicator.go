@@ -514,12 +514,12 @@ func (im *Implicator) atomImpliesAtom(
 	// Build constraint sets for e and pred, unless they have been cached.
 	eSet, eTight, ok := im.fetchConstraint(e)
 	if !ok {
-		eSet, eTight = memo.BuildConstraints(e, im.md, im.evalCtx)
+		eSet, eTight = memo.BuildConstraints(e, im.md, im.evalCtx, false /* skipExtraConstraints */)
 		im.cacheConstraint(e, eSet, eTight)
 	}
 	predSet, predTight, ok := im.fetchConstraint(pred)
 	if !ok {
-		predSet, predTight = memo.BuildConstraints(pred, im.md, im.evalCtx)
+		predSet, predTight = memo.BuildConstraints(pred, im.md, im.evalCtx, false /* skipExtraConstraints */)
 		im.cacheConstraint(pred, predSet, predTight)
 	}
 

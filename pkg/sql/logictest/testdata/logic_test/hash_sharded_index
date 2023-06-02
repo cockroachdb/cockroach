@@ -1061,3 +1061,28 @@ COMMIT;
 
 statement ok
 DROP TABLE products;
+
+statement ok
+CREATE TABLE t103755 (c0 INT4, c1 INT);
+
+statement ok
+CREATE INDEX ON t103755(c0) USING HASH WITH BUCKET_COUNT=794;
+
+statement ok
+INSERT INTO t103755 (c0, c1) VALUES(-10, 1), (-20, 1);
+
+# No predicates should be derived on the hash-sharded bucket column and this
+# should return 2 rows.
+query I
+SELECT c0 FROM t103755 WHERE c0 < 0 OR c0 IN (VALUES (2)) ORDER BY c0;
+----
+-20
+-10
+
+# No predicates should be derived on the hash-sharded bucket column and this
+# should return 2 rows.
+query I
+SELECT c0 FROM t103755 WHERE c0 < 0 OR (c0 IN (VALUES (2)) AND c1 IN (6,8,9)) ORDER BY c0
+----
+-20
+-10
