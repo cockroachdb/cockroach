@@ -238,14 +238,16 @@ type cFetcher struct {
 	// stableKVs indicates whether the KVs returned by nextKVer are stable (i.e.
 	// are not invalidated) across NextKV() calls.
 	stableKVs bool
-	// bytesRead and batchRequestsIssued store the total number of bytes read
-	// and of BatchRequests issued, respectively, by this cFetcher throughout
-	// its lifetime in case when the underlying row.KVFetcher has already been
-	// closed and nil-ed out.
+	// bytesRead, kvPairsRead, and batchRequestsIssued store the total number of
+	// bytes read, key-values pairs read, and of BatchRequests issued,
+	// respectively, by this cFetcher throughout its lifetime in case when the
+	// underlying row.KVFetcher has already been closed and nil-ed out.
 	//
 	// The fields should not be accessed directly by the users of the cFetcher -
-	// getBytesRead() and getBatchRequestsIssued() should be used instead.
+	// getBytesRead(), getKVPairsRead(), and getBatchRequestsIssued() should be
+	// used instead.
 	bytesRead           int64
+	kvPairsRead         int64
 	batchRequestsIssued int64
 	// cpuStopWatch tracks the CPU time spent by this cFetcher while fulfilling KV
 	// requests *in the current goroutine*.
@@ -1361,6 +1363,15 @@ func (cf *cFetcher) getBytesRead() int64 {
 	return cf.bytesRead
 }
 
+// getKVPairsRead returns the number of key-value pairs read by the cFetcher
+// throughout its lifetime so far.
+func (cf *cFetcher) getKVPairsRead() int64 {
+	if cf.fetcher != nil {
+		return cf.fetcher.GetKVPairsRead()
+	}
+	return cf.kvPairsRead
+}
+
 // getBatchRequestsIssued returns the number of BatchRequests issued by the
 // cFetcher throughout its lifetime so far.
 func (cf *cFetcher) getBatchRequestsIssued() int64 {
@@ -1396,6 +1407,7 @@ func (cf *cFetcher) Close(ctx context.Context) {
 		cf.nextKVer = nil
 		if cf.fetcher != nil {
 			cf.bytesRead = cf.fetcher.GetBytesRead()
+			cf.kvPairsRead = cf.fetcher.GetKVPairsRead()
 			cf.batchRequestsIssued = cf.fetcher.GetBatchRequestsIssued()
 			cf.fetcher.Close(ctx)
 			cf.fetcher = nil

@@ -418,7 +418,17 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			e.ob.AddField("KV contention time", string(humanizeutil.Duration(s.KVContentionTime.Value())))
 		}
 		if s.KVRowsRead.HasValue() {
-			e.ob.AddField("KV rows read", string(humanizeutil.Count(s.KVRowsRead.Value())))
+			e.ob.AddField("KV rows decoded", string(humanizeutil.Count(s.KVRowsRead.Value())))
+		}
+		if s.KVPairsRead.HasValue() {
+			pairs := s.KVPairsRead.Value()
+			rows := s.KVRowsRead.Value()
+			if pairs != rows || e.ob.flags.Verbose {
+				// Only show the number of KV pairs read when it's different
+				// from the number of rows decoded or if verbose output is
+				// requested.
+				e.ob.AddField("KV pairs read", string(humanizeutil.Count(s.KVPairsRead.Value())))
+			}
 		}
 		if s.KVBytesRead.HasValue() {
 			e.ob.AddField("KV bytes read", humanize.IBytes(s.KVBytesRead.Value()))

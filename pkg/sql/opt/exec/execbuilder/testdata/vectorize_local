@@ -42,7 +42,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 2,001 (16 KiB, 2,001 gRPC calls)
+rows decoded from KV: 2,001 (16 KiB, 4,002 KVs, 2,001 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -53,7 +53,8 @@ regions: <hidden>
   actual row count: 2,001
   KV time: 0µs
   KV contention time: 0µs
-  KV rows read: 2,001
+  KV rows decoded: 2,001
+  KV pairs read: 4,002
   KV bytes read: 16 KiB
   KV gRPC calls: 2,001
   estimated max memory allocated: 0 B
@@ -61,7 +62,7 @@ regions: <hidden>
   table: a@a_pkey
   spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkcGKFDEQhu8-RVEnhcimPXjISWxWWNZ1l95hLtJITVKMzaSTNqnGGYZ-LF_AJ5NOHERkwFvXV3_X__PnjPmbR4PPtx9v2w0QfOgeH4BQYYiOP9HIGc1nbLBXOKVoOeeYVnQugjt3RKMVDmGaZcW9QhsTozmjDOIZDW5o57ljcpxuNCp0LDT4cpbe0ZfpwCdU2EY_jyGb4v080fr5GhXeb0GGkQ3onz9ynW0MwkGGGP5Zpfg9Q2JyBt4orZtKdyfhC27ewv3wvvJ999SCJe_zH_nDtm0hC09g4xwEXvJRboYgrwzoEr8KmA_XBCMdYeQxphOQ99GSsDOgYTXdkdivnCHOMs1iYNWXzBdQY_SLwkp-d5qF9oymWdT_995xnmLI_Ffl1y7rpVfIbs_1bXOck-WnFG2xqeNj-a8Ax1nqtqnDXairpV9e_AoAAP__tLm9Mw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkc9q3DAQxu99imFOLahEDqUHnUpNCiFNE5yQSzFlVhq2JrLkasZ0l8WP1RfokxVbzSGUQG-e7_t5_ug7ofyI6PDu4vNFew8En7qbayA0mHLgLzSyoPuKDfYGp5I9i-SySqcNuAwHdNbgkKZZV7k36HNhdCfUQSOjw3vaRe6YApcziwYDKw1xa0sf6Nv0yEc02OY4j0ncNvtuovXzLRq8egAdRnZgf_-SWvuclJMOOf1jlfxTILDPgYODc2NtU43dUVmgMAUHzXu4Gj5Wfd_dtuApRnmGTzSUJ_ydsfYcDV4_tC2I8gQ-z0nhNR_0bEj6xoHdDqsA8-NLwEgHGHnM5QgUY_ak65YW1l12pP47C-RZp1kdrPx2zZNQt-sXg1X5-9qitGd0zWL-P5GOZcpJ-FkYL3W2S2-Qw55r6pLn4vm2ZL-NqeXN9t8mBBatblOLy1StpV9e_QkAAP__SmDEtw==
 
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
@@ -70,7 +71,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 3 (24 B, 3 gRPC calls)
+rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -81,7 +82,8 @@ regions: <hidden>
 │ actual row count: 2
 │ KV time: 0µs
 │ KV contention time: 0µs
-│ KV rows read: 1
+│ KV rows decoded: 1
+│ KV pairs read: 2
 │ KV bytes read: 8 B
 │ KV gRPC calls: 1
 │ estimated max memory allocated: 0 B
@@ -94,7 +96,8 @@ regions: <hidden>
       actual row count: 2
       KV time: 0µs
       KV contention time: 0µs
-      KV rows read: 2
+      KV rows decoded: 2
+      KV pairs read: 4
       KV bytes read: 16 B
       KV gRPC calls: 2
       estimated max memory allocated: 0 B
@@ -102,7 +105,7 @@ regions: <hidden>
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0U9Fq1EAUffcrLvdJYdwmeRAZEBZDha3tpmxLXyTIZOayxp3MjZkJ7rLsZ_kDfplkpoXWtaJiH8-Zc-89nMPs0X-xKPHq9Py0vAY9U_BuVV2AhrNqsQQD1RLMrIE3oGcNCnRsaKk68ig_YI61wH5gTd7zMFH7KFiYLcpMYOv6MUx0LVDzQCj3GNpgCSVeq8bSipSh4SRDgYaCam1cq-eeNAos2Y6d8xKUgOn2Va8m9BIFvr-B0HYkIfv-zSes2QVyoWV39DTwVw8DKSOhSEyzC3RH5a_gbWLXq8sStLLWJ-HFTVmCD9SD5tEFeE7bcNK68EJCFk0nAdHmMUGnttBRx8MOlLWsVSAjIYsHGxX0J_LAY-jHIGHSR6d3RIH1QWBCtyn6oNaEMj-IP0_6jFt3G3T-MGgzNx_7De1Q4DnzZuzhM7cO2EmYF_cLmNKvJkvzaUM8FkNNMSXsg7L2KPp_ayk_bun1r0rK_0tJtCU9Hlt6ou6Kv-luRb5n5-lBb49tzg61QDJrSj_R8zhouhxYxzMJVnEuEoZ8SK95AguXniaD94fz3w4XPw3Xh2c_AgAA__-952K3
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0U-FqE00U_f89xeX--oQx3V1EZEAIhgqpbVLS0j8SZDJziWtm564zs5gQ8li-gE8mM9NKa6yo6M9z5tx7z57D7jF8tCjx6vT8dHINeqTg9WJ-ARrO5tMZGJjPwIxW8BL0aIUCHRuaqY4CyrdY41Jg71lTCOwTtc-CqdmirAS2rh9iopcCNXtCucfYRkso8VqtLC1IGfInFQo0FFVr81o9DqRR4ITt0LkgQQlIt696ldBTFPjmBmLbkYTqy-dQsGYXycWW3dGT508BDGk2ZCQ0hVztIgXwpIyE-jm8Kux6cTkBrawN34S9av2d8BkKvLiZTCBE6kHz4CL8T9t40rr4REKVP6UIiDaPCTq1hY469jtQ1rJWMfmqsoeVivo9BeAh9kOUkPTZ_x3R4PIgsKDbbENUa0JZH8Sv53_GrbuNv34Yvxmbd_2GdijwnHkz9PCBWwfsJIyb-7WkTubJ0jhtyMdy1CW5gkNU1h4V8sfd1cfdvfhRdfVxdc1fqY62pIdjo_-o0eZ3Gl1Q6NkFetDmY5urw1IgmTWVvzbw4DVdetb5TIHzPJcJQyGW17qAqStPyeD94fqnw813w8vDf18DAAD__xqpcEE=
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
@@ -149,7 +152,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
-rows read from KV: 4 (32 B, 4 gRPC calls)
+rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -168,7 +171,8 @@ regions: <hidden>
 │     actual row count: 2
 │     KV time: 0µs
 │     KV contention time: 0µs
-│     KV rows read: 2
+│     KV rows decoded: 2
+│     KV pairs read: 4
 │     KV bytes read: 16 B
 │     KV gRPC calls: 2
 │     estimated max memory allocated: 0 B
@@ -182,7 +186,8 @@ regions: <hidden>
       actual row count: 2
       KV time: 0µs
       KV contention time: 0µs
-      KV rows read: 2
+      KV rows decoded: 2
+      KV pairs read: 4
       KV bytes read: 16 B
       KV gRPC calls: 2
       estimated max memory allocated: 0 B
@@ -190,7 +195,7 @@ regions: <hidden>
       table: d@d_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk9Fq2zAUhu_3FIdz1TKtsV3YhaAQFrKRbkmKW3ozwlCkM9dEllxJZgkhj7UX2JMNSytrmrajY5e70_nP_0vyd6wt-luNHC_Hn8ajK5AnAt6X8ylImMxm4xKm4_LDGM7nkxkomM-i4QzUyRIZGqtoJhryyD9jjguGrbOSvLeul7bRMFFr5BnD2rRd6OUFQ2kdId9iqIMm5HgllppKEorcIEOGioKoddxWDuWXdkUbZDiyumuM5yCQ4WUr-uUbZPjxGkLdEIfsx3efamlNIBNqaw5azn7z4EgoDkVSlptAd1L-Ft4ltSovRiCF1j4Zp9ejEfhALUjbmQBHtA6D2oRjDlm8dDIQrZ4yNGINDTXWbUBobaUIpDhk8cClCPKGPNgutF3g0PvjTe-EAhc7hqn6RdEHURHyfMf-jnS-T1oN1QHp5X_S90gXT5L-Dbgz1ilypPbgLvrknyyPjGtKrqJzWxtyg2J_XJq-hqNh_vr4zNXVTVoiw3n_CcN-tLQm2R0O5jk2fc_fagjUtKBqv4LOi4r-AbrTl_ykJfnWGk8PET66c9ZzI1VRmoO3nZN04ayMx6RyHnNRUORD6hapmJjYiq_ofjh_Qbh4GC6eDZ_uhbPdYvfqZwAAAP__snHGqQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsk89uEzEQxu88xWhOrTDt7hZxsFQpIgoohSTVtuoFRcixh-0qXntre0WiKI_FC_BkaG0KpOkfFXHk5vnm-5zxb7Ib9DcaOV6MPo6GlyCPBLwrZxOQMJ5ORyVMRuX7EZzNxlNQMJtGwymoowUyNFbRVDTkkX_CHOcMW2cleW9dL22iYaxWyDOGtWm70MtzhtI6Qr7BUAdNyPFSLDSVJBS54wwZKgqi1vFaOZCf2yWtkeHQ6q4xnoNAhhet6I-vkOGHKwh1Qxyy7998qqU1gUyordlrOfvVgyJpFSkORRIX60AeHAnFIX8Db5NaledDkEJr_8vYitrdGl8jw8nVcAg-UAvSdibAAa3CcW3CIYcsPiUZiJYPGRqxgoYa69YgtLZShH6uLM6wEEFekwfbhbYLHHp_nP9WKHC-ZZiqn2x9EBUhz7fs7_jnu_zVQO3xX_zn_yT_4kH-v7F3xjpFjtQO8nmffMpyzxIn5Co6s7Uhd1zsLlHTl3AwyF8enrq6uk5HZDjrnzDoF04rkt3-uh5j0_f8jYZATQuq9kvovKjoH6A7ec5ftyTfWuPpLsJ7b856bqQqSnvwtnOSzp2V8WdSOYu5KCjyIXWLVIxNbMVv689w_oxwcTdcPBo-2Qln2_n2xY8AAAD__yYe1DU=
 
 statement ok
 RESET vectorize; RESET distsql
