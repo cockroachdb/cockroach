@@ -132,7 +132,7 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 
 	// Call the final value of logShutdownFn immediately if returning with error.
 	defer func() {
-		if err != nil {
+		if err != nil && logShutdownFn != nil {
 			logShutdownFn()
 		}
 	}()
