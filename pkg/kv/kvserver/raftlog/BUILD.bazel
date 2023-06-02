@@ -20,6 +20,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/util/encoding",
         "//pkg/util/iterutil",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",

@@ -97,7 +97,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 				Index: uint64(r.mu.state.RaftAppliedIndex + 1),
 				Type:  raftpb.EntryConfChange,
 			},
-			ID: makeIDKey(),
+			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
 				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
@@ -201,7 +201,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 				Index: uint64(raftAppliedIndex + 1),
 				Type:  raftpb.EntryNormal,
 			},
-			ID: makeIDKey(),
+			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
 				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
@@ -320,7 +320,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 					Index: uint64(raftAppliedIndex + 1),
 					Type:  raftpb.EntryNormal,
 				},
-				ID: makeIDKey(),
+				ID: raftlog.MakeCmdIDKey(),
 				Cmd: kvserverpb.RaftCommand{
 					ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 					MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
@@ -451,7 +451,7 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 				Index: uint64(raftAppliedIndex + 1),
 				Type:  raftpb.EntryNormal,
 			},
-			ID: makeIDKey(),
+			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
 				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
