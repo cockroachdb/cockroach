@@ -87,6 +87,7 @@ export class Axis extends React.Component<AxisProps, {}> {
 export interface MetricProps {
   name: string;
   sources?: string[];
+  tenantSource?: string;
   title?: string;
   rate?: boolean;
   nonNegativeRate?: boolean;
@@ -138,6 +139,7 @@ export interface MetricsDataComponentProps {
   // convenient syntax for a common use case where all metrics on a graph are
   // are from the same source set.
   sources?: string[];
+  tenantSource?: string;
   setMetricsFixedWindow?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
   history?: History;
