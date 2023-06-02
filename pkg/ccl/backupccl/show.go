@@ -963,11 +963,7 @@ func backupShowerDefault(
 					}
 					rows = append(rows, row)
 				}
-				tenants, err := manifest.GetTenants()
-				if err != nil {
-					return nil, err
-				}
-				for _, t := range tenants {
+				for _, t := range manifest.Tenants {
 					tenantID, err := roachpb.MakeTenantID(t.ID)
 					if err != nil {
 						return nil, err
