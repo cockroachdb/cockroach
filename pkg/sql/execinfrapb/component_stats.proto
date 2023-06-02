@@ -63,6 +63,8 @@ message ComponentID {
 // Depending on the component, not all statistics apply. For all fields, the zero
 // value indicates that the particular stat is not available.
 message ComponentStats {
+  option (gogoproto.goproto_stringer) = false;
+
   optional ComponentID component = 1 [(gogoproto.nullable) = false];
 
   optional NetworkRxStats net_rx = 2 [(gogoproto.nullable) = false];
