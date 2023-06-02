@@ -151,6 +151,7 @@ type Memo struct {
 	propagateInputOrdering                     bool
 	disallowFullTableScans                     bool
 	largeFullScanRows                          float64
+	txnRowsReadErr                             int64
 	nullOrderedLast                            bool
 	costScansWithDefaultColSize                bool
 	allowUnconstrainedNonCoveringIndexScan     bool
@@ -211,6 +212,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		propagateInputOrdering:                     evalCtx.SessionData().PropagateInputOrdering,
 		disallowFullTableScans:                     evalCtx.SessionData().DisallowFullTableScans,
 		largeFullScanRows:                          evalCtx.SessionData().LargeFullScanRows,
+		txnRowsReadErr:                             evalCtx.SessionData().TxnRowsReadErr,
 		nullOrderedLast:                            evalCtx.SessionData().NullOrderedLast,
 		costScansWithDefaultColSize:                evalCtx.SessionData().CostScansWithDefaultColSize,
 		allowUnconstrainedNonCoveringIndexScan:     evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled,
@@ -355,6 +357,7 @@ func (m *Memo) IsStale(
 		m.propagateInputOrdering != evalCtx.SessionData().PropagateInputOrdering ||
 		m.disallowFullTableScans != evalCtx.SessionData().DisallowFullTableScans ||
 		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows ||
+		m.txnRowsReadErr != evalCtx.SessionData().TxnRowsReadErr ||
 		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast ||
 		m.costScansWithDefaultColSize != evalCtx.SessionData().CostScansWithDefaultColSize ||
 		m.allowUnconstrainedNonCoveringIndexScan != evalCtx.SessionData().UnconstrainedNonCoveringIndexScanEnabled ||
