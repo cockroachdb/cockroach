@@ -99,14 +99,10 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	ctx := sgc.ambientCtx.AnnotateCtx(context.Background())
 
 	go func() {
-		// For each adjustmentInterval, we pick a tick rate depending on the system
-		// load. If the system is unloaded, we tick at a 250ms rate, and if the system
-		// is loaded, we tick at a 1ms rate. See the comment above the
-		// adjustmentInterval definition to see why we tick at different rates.
 		ticker := tokenAllocationTicker{}
 		done := false
 		var systemLoaded bool // First adjustment interval is unloaded.
-		currTime := time.Now()
+		currTime := timeutil.Now()
 		ticker.adjustmentStart(false /* loaded */)
 		for !done {
 			ticker.tick()
@@ -120,9 +116,10 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 						}
 						return diff
 					}
-					if timeElapsed := time.Since(currTime); abs(timeElapsed-(15*time.Second)) > 100*time.Millisecond {
+					timeElapsed := timeutil.Since(currTime)
+					t := abs(timeElapsed - (15 * time.Second))
+					if t > 1*time.Second {
 						// TODO(bananabrick): Get rid of this.
-						t := abs(timeElapsed - (15 * time.Second))
 						panic(t.String())
 					}
 					metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
@@ -143,10 +140,14 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 								"seeing metrics for unknown storeID %d", m.StoreID)
 						}
 					}
+					// TODO(bananabrick): Remove this.
 					systemLoaded = true
+					// Start a new adjustment interval since there are no ticks remaining
+					// in the current adjustment interval. Note that the next call to
+					// allocateIOTokensTick will belong to the new adjustment interval.
 					ticker.adjustmentStart(systemLoaded)
 					remainingTicks = ticker.remainingTicks()
-					currTime = time.Now()
+					currTime = timeutil.Now()
 				}
 
 				sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
