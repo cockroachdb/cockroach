@@ -249,7 +249,8 @@ func getTableIndexUsageStats(
 			total_reads,
 			last_read,
 			indexdef,
-			ti.created_at
+			ti.created_at,
+			ti.is_unique
 		FROM crdb_internal.index_usage_statistics AS us
   	JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id 
 		AND us.table_id = ti.descriptor_id
@@ -294,6 +295,7 @@ func getTableIndexUsageStats(
 			ts := tree.MustBeDTimestamp(row[6])
 			createdAt = &ts.Time
 		}
+		isUnique := tree.MustBeDBool(row[7])
 
 		if err != nil {
 			return nil, err
@@ -312,6 +314,7 @@ func getTableIndexUsageStats(
 			},
 			IndexName:       string(indexName),
 			IndexType:       string(indexType),
+			IsUnique:        bool(isUnique),
 			CreateStatement: string(createStmt),
 			CreatedAt:       createdAt,
 		}
@@ -322,6 +325,7 @@ func getTableIndexUsageStats(
 			CreatedAt:        idxStatsRow.CreatedAt,
 			LastRead:         idxStatsRow.Statistics.Stats.LastRead,
 			IndexType:        idxStatsRow.IndexType,
+			IsUnique:         idxStatsRow.IsUnique,
 			UnusedIndexKnobs: execConfig.UnusedIndexRecommendationsKnobs,
 		}
 		recommendations := statsRow.GetRecommendationsFromIndexStats(req.Database, st)
@@ -396,7 +400,8 @@ func getDatabaseIndexRecommendations(
 			ti.index_id,
 			ti.index_type,
 			last_read,
-			ti.created_at
+			ti.created_at,
+			ti.is_unique
 		FROM %[1]s.crdb_internal.index_usage_statistics AS us
 		 JOIN %[1]s.crdb_internal.table_indexes AS ti ON (us.index_id = ti.index_id AND us.table_id = ti.descriptor_id AND index_type = 'secondary')
 		 JOIN %[1]s.crdb_internal.tables AS t ON (ti.descriptor_id = t.table_id AND t.database_name != 'system');`, escDBName)
@@ -433,6 +438,7 @@ func getDatabaseIndexRecommendations(
 			ts := tree.MustBeDTimestamp(row[4])
 			createdAt = &ts.Time
 		}
+		isUnique := tree.MustBeDBool(row[5])
 
 		if err != nil {
 			return []*serverpb.IndexRecommendation{}, err
@@ -444,6 +450,7 @@ func getDatabaseIndexRecommendations(
 			CreatedAt:        createdAt,
 			LastRead:         lastRead,
 			IndexType:        string(indexType),
+			IsUnique:         bool(isUnique),
 			UnusedIndexKnobs: knobs,
 		}
 		recommendations := statsRow.GetRecommendationsFromIndexStats(dbName, st)

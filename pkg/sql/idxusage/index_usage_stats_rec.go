@@ -33,6 +33,7 @@ type IndexStatsRow struct {
 	CreatedAt        *time.Time
 	LastRead         time.Time
 	IndexType        string
+	IsUnique         bool
 	UnusedIndexKnobs *UnusedIndexRecommendationTestingKnobs
 }
 
@@ -85,7 +86,7 @@ func (i IndexStatsRow) GetRecommendationsFromIndexStats(
 func (i IndexStatsRow) maybeAddUnusedIndexRecommendation(
 	unusedIndexDuration time.Duration,
 ) *serverpb.IndexRecommendation {
-	if i.IndexType == "primary" {
+	if i.IsUnique {
 		return nil
 	}
 
