@@ -374,6 +374,15 @@ func (r *Replica) propose(
 	// buffer as a MaxLeaseFooter.
 	p.command.MaxLeaseIndex = 0
 
+	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
+		log.KvDistribution.Infof(p.ctx, "proposing %s", crt)
+	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
+		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
+		r.store.metrics.AddSSTableProposals.Inc(1)
+	} else if log.V(4) {
+		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
+	}
+
 	// Determine the encoding style for the Raft command.
 	prefix := true
 	entryEncoding := raftlog.EntryEncodingStandardWithoutAC
@@ -384,7 +393,6 @@ func (r *Replica) propose(
 		// ProposeConfChange. For that reason, we also don't need a Raft command
 		// prefix because the command ID is stored in a field in
 		// raft.ConfChange.
-		log.KvDistribution.Infof(p.ctx, "proposing %s", crt)
 		prefix = false
 
 		// The following deals with removing a leaseholder. A voter can be removed
@@ -449,15 +457,11 @@ func (r *Replica) propose(
 			return kvpb.NewError(err)
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
-		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
 		entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
-		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
 			return kvpb.NewErrorf("cannot sideload empty SSTable")
 		}
-	} else if log.V(4) {
-		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
 	// Create encoding buffer.
