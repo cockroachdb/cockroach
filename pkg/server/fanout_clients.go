@@ -239,10 +239,15 @@ func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse,
 		Nodes: statuses,
 	}
 
-	clock := k.clock
-	resp.LivenessByNodeID, err = getLivenessStatusMap(ctx, k.nodeLiveness, clock.Now(), k.st)
+	nodeStatusMap, err := k.nodeLiveness.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
 		return nil, err
+	}
+	// TODO(baptist): Consider returning something better than LivenessStatus. It
+	// is an unfortunate mix of values.
+	resp.LivenessByNodeID = make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeStatusMap))
+	for nodeID, status := range nodeStatusMap {
+		resp.LivenessByNodeID[nodeID] = status.LivenessStatus()
 	}
 	return &resp, nil
 }
