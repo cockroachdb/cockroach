@@ -94,9 +94,11 @@ message BackupManifest {
   repeated File files = 4 [(gogoproto.nullable) = false];
   repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
   // Tenants holds metadata about any tenants contained in the
-  // backup. Callers should only access this field via GetTenants()
-  // and HasTenants() which ensures that TenantsDeprecated is
-  // correctly handled and performs any metadata upgrade required.
+  // backup. Callers who constructed a BackupManifest using without
+  // using the backupinfo package should take care with the handling
+  // of deprecated fields in Tenants and the existence of
+  // TenantsDeprecated. See UpgradeTenantDescriptors for more
+  // information.
   repeated cockroach.multitenant.TenantInfoWithUsage tenants = 26 [(gogoproto.nullable) = false];
   // This field is deprecated; it is only retained to allow restoring older
   // backups.
