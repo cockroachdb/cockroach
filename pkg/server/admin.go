@@ -2731,13 +2731,11 @@ func (s *systemAdminServer) DecommissionPreCheck(
 			resultsByNodeID[nID] = serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 				NodeID:                nID,
 				DecommissionReadiness: serverpb.DecommissionPreCheckResponse_UNKNOWN,
-				LivenessStatus:        livenessStatus,
 			}
 		} else if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
 			resultsByNodeID[nID] = serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 				NodeID:                nID,
 				DecommissionReadiness: serverpb.DecommissionPreCheckResponse_ALREADY_DECOMMISSIONED,
-				LivenessStatus:        livenessStatus,
 			}
 		} else {
 			nodesToCheck = append(nodesToCheck, nID)
@@ -2782,7 +2780,6 @@ func (s *systemAdminServer) DecommissionPreCheck(
 		resultsByNodeID[nID] = serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 			NodeID:                nID,
 			DecommissionReadiness: readiness,
-			LivenessStatus:        livenessStatusByNodeID[nID],
 			ReplicaCount:          int64(numReplicas),
 			CheckedRanges:         rangeCheckErrsByNode[nID],
 		}
