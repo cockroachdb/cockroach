@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -142,7 +143,7 @@ func (s *Server) upgradeStatus(
 			continue
 		}
 
-		if !v.IsAvailableNotDraining() {
+		if !v.IsLive(livenesspb.Upgrade) {
 			// We definitely won't be able to upgrade, but defer this error as
 			// we may find out that we are already at the latest version (the
 			// cluster may be up-to-date, but a node is down).
