@@ -8,6 +8,7 @@ go_library(
         "encoding.go",
         "entry.go",
         "iterator.go",
+        "payload.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog",
     visibility = ["//visibility:public"],
