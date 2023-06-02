@@ -142,13 +142,13 @@ upsert descriptor #105
   +  dependedOnBy:
   +  - byId: true
   +    id: 110
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
-  -  version: "1"
-  +  version: "2"
+  -  version: "2"
+  +  version: "3"
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -284,13 +284,13 @@ upsert descriptor #105
   +  dependedOnBy:
   +  - byId: true
   +    id: 110
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
-  -  version: "1"
-  +  version: "2"
+  -  version: "2"
+  +  version: "3"
 upsert descriptor #106
   ...
      createAsOfTime:

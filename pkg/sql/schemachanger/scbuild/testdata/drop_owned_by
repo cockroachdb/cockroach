@@ -44,6 +44,8 @@ DROP OWNED BY r
   {descriptorId: 106, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 106}, ABSENT], PUBLIC]
   {sequenceId: 106}
+- [[SequenceOptions:{DescID: 106}, ABSENT], PUBLIC]
+  {cacheSize: "1", increment: "1", max: "9223372036854775807", min: "1", sequenceId: 106, start: "1"}
 - [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 106, schemaId: 101}
 - [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -120,6 +122,8 @@ DROP OWNED BY r
   {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 107}, ABSENT], PUBLIC]
   {sequenceId: 107}
+- [[SequenceOptions:{DescID: 107}, ABSENT], PUBLIC]
+  {cacheSize: "1", increment: "1", max: "9223372036854775807", min: "1", sequenceId: 107, start: "1"}
 - [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {childObjectId: 107, schemaId: 105}
 - [[TableData:{DescID: 107, ReferencedDescID: 100}, ABSENT], PUBLIC]

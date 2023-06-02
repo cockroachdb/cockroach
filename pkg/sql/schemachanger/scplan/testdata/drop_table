@@ -175,7 +175,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 127 MutationType ops
+PreCommitPhase stage 2 of 2 with 128 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -243,6 +243,7 @@ PreCommitPhase stage 2 of 2 with 127 MutationType ops
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
+    [[SequenceOptions:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
@@ -293,6 +294,9 @@ PreCommitPhase stage 2 of 2 with 127 MutationType ops
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
+    *scop.NotImplementedForPublicObjects
+      DescID: 110
+      ElementType: scpb.SequenceOptions
     *scop.RemoveObjectParent
       ObjectID: 110
       ParentSchemaID: 101
@@ -1899,6 +1903,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: PreviousStagePrecedence
   rule: descriptor dropped in transaction before removal
 - from: [Sequence:{DescID: 110}, DROPPED]
+  to:   [SequenceOptions:{DescID: 110}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [Sequence:{DescID: 110}, DROPPED]
   to:   [SequenceOwner:{DescID: 109, ColumnID: 2, ReferencedDescID: 110}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before removing dependent with attr ref
@@ -1914,6 +1922,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Sequence:{DescID: 110}, DROPPED]
   kind: PreviousStagePrecedence
   rule: Sequence transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED
+- from: [SequenceOptions:{DescID: 110}, ABSENT]
+  to:   [Sequence:{DescID: 110}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 - from: [SequenceOwner:{DescID: 109, ColumnID: 2, ReferencedDescID: 110}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
   kind: Precedence
