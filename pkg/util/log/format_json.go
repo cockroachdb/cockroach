@@ -28,6 +28,10 @@ import (
 
 type formatFluentJSONCompact struct{}
 
+func (formatFluentJSONCompact) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
+
 func (formatFluentJSONCompact) formatterName() string { return "json-fluent-compact" }
 
 func (formatFluentJSONCompact) doc() string { return formatJSONDoc(true /* fluent */, tagCompact) }
@@ -39,6 +43,10 @@ func (f formatFluentJSONCompact) formatEntry(entry logEntry) *buffer {
 func (formatFluentJSONCompact) contentType() string { return "application/json" }
 
 type formatFluentJSONFull struct{}
+
+func (formatFluentJSONFull) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
 
 func (formatFluentJSONFull) formatterName() string { return "json-fluent" }
 
@@ -52,6 +60,10 @@ func (formatFluentJSONFull) contentType() string { return "application/json" }
 
 type formatJSONCompact struct{}
 
+func (formatJSONCompact) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
+
 func (formatJSONCompact) formatterName() string { return "json-compact" }
 
 func (f formatJSONCompact) formatEntry(entry logEntry) *buffer {
@@ -63,6 +75,10 @@ func (formatJSONCompact) doc() string { return formatJSONDoc(false /* fluent */,
 func (formatJSONCompact) contentType() string { return "application/json" }
 
 type formatJSONFull struct{}
+
+func (formatJSONFull) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
 
 func (formatJSONFull) formatterName() string { return "json" }
 

@@ -135,6 +135,8 @@ yaml
 file-defaults:
      dir: /default/dir
      filter: ERROR
+     format: foo
+     format-options: {bar: baz}
      redact: true
      redactable: false
      max-file-size: 10MB
@@ -171,6 +173,9 @@ file-defaults:
   max-file-size: 9.5MiB
   max-group-size: 95MiB
   filter: ERROR
+  format: foo
+  format-options:
+    bar: baz
   redact: true
   redactable: false
 sinks:

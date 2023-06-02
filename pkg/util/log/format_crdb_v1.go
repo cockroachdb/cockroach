@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/ttycolor"
 )
@@ -30,6 +31,10 @@ import (
 // formatCrdbV1 is the pre-v21.1 canonical log format, without a
 // counter column.
 type formatCrdbV1 struct{}
+
+func (formatCrdbV1) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
 
 func (formatCrdbV1) formatterName() string { return "crdb-v1" }
 
@@ -163,6 +168,10 @@ by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` +
 // counter column.
 type formatCrdbV1WithCounter struct{}
 
+func (formatCrdbV1WithCounter) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
+
 func (formatCrdbV1WithCounter) formatterName() string { return "crdb-v1-count" }
 
 func (formatCrdbV1WithCounter) formatEntry(entry logEntry) *buffer {
@@ -177,6 +186,10 @@ func (formatCrdbV1WithCounter) contentType() string { return "text/plain" }
 // the stderr output is a TTY and -nocolor is not passed on the
 // command line.
 type formatCrdbV1TTY struct{}
+
+func (formatCrdbV1TTY) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
 
 func (formatCrdbV1TTY) formatterName() string { return "crdb-v1-tty" }
 
@@ -204,6 +217,10 @@ func (formatCrdbV1TTY) contentType() string { return "text/plain" }
 // includes VT color codes if the stderr output is a TTY and -nocolor
 // is not passed on the command line.
 type formatCrdbV1TTYWithCounter struct{}
+
+func (formatCrdbV1TTYWithCounter) setOption(k string, _ string) error {
+	return errors.Newf("unknown option: %q", redact.Safe(k))
+}
 
 func (formatCrdbV1TTYWithCounter) formatterName() string { return "crdb-v1-tty-count" }
 

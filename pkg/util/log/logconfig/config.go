@@ -209,6 +209,9 @@ type CommonSinkConfig struct {
 	// Format indicates the entry format to use.
 	Format *string `yaml:",omitempty"`
 
+	// FormatOptions indicates additional options for the format.
+	FormatOptions map[string]string `yaml:"format-options,omitempty"`
+
 	// Redact indicates whether to strip sensitive information before
 	// log events are emitted to this sink.
 	Redact *bool `yaml:",omitempty"`
