@@ -25,7 +25,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -583,9 +583,6 @@ type latencyTargets struct {
 }
 
 func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping cdc/bank under ARM64.")
-	}
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
 	c.Run(ctx, c.All(), `mkdir -p logs`)
@@ -941,6 +938,7 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:            "cdc/initial-scan-only",
 		Owner:           registry.OwnerCDC,
+		Benchmark:       true,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1317,9 +1315,10 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/bank",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(4),
+		Name:  "cdc/bank",
+		Owner: `cdc`,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Timeout:         30 * time.Minute,

@@ -50,6 +50,7 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                "failover/chaos" + suffix,
 				Owner:               registry.OwnerKV,
+				Benchmark:           true,
 				Timeout:             60 * time.Minute,
 				Cluster:             r.MakeClusterSpec(10, spec.CPU(4), spec.PreferLocalSSD(false)),
 				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
@@ -60,30 +61,33 @@ func registerFailover(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:    "failover/partial/lease-gateway" + suffix,
-			Owner:   registry.OwnerKV,
-			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(8, spec.CPU(4)),
+			Name:      "failover/partial/lease-gateway" + suffix,
+			Owner:     registry.OwnerKV,
+			Benchmark: true,
+			Timeout:   30 * time.Minute,
+			Cluster:   r.MakeClusterSpec(8, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverPartialLeaseGateway(ctx, t, c, expirationLeases)
 			},
 		})
 
 		r.Add(registry.TestSpec{
-			Name:    "failover/partial/lease-leader" + suffix,
-			Owner:   registry.OwnerKV,
-			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(7, spec.CPU(4)),
+			Name:      "failover/partial/lease-leader" + suffix,
+			Owner:     registry.OwnerKV,
+			Benchmark: true,
+			Timeout:   30 * time.Minute,
+			Cluster:   r.MakeClusterSpec(7, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverPartialLeaseLeader(ctx, t, c, expirationLeases)
 			},
 		})
 
 		r.Add(registry.TestSpec{
-			Name:    "failover/partial/lease-liveness" + suffix,
-			Owner:   registry.OwnerKV,
-			Timeout: 30 * time.Minute,
-			Cluster: r.MakeClusterSpec(8, spec.CPU(4)),
+			Name:      "failover/partial/lease-liveness" + suffix,
+			Owner:     registry.OwnerKV,
+			Benchmark: true,
+			Timeout:   30 * time.Minute,
+			Cluster:   r.MakeClusterSpec(8, spec.CPU(4)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runFailoverPartialLeaseLiveness(ctx, t, c, expirationLeases)
 			},
@@ -103,6 +107,7 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/non-system/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
+				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
 				Cluster:             r.MakeClusterSpec(7, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
@@ -113,6 +118,7 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
+				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
 				Cluster:             r.MakeClusterSpec(5, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
@@ -123,6 +129,7 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
+				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
 				Cluster:             r.MakeClusterSpec(7, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
