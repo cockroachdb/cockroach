@@ -101,7 +101,7 @@ authlog 6
 12 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 13 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all  all cert-password map=testing","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl"}
 14 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl"}
-15 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":2,"RemoteAddress":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl","User":"carl@cockroachlabs.com"}
+15 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"USER_NOT_FOUND","RemoteAddress":"XXX","SystemIdentity":"carl@cockroachlabs.com","Timestamp":"XXX","Transport":"hostssl","User":"carl@cockroachlabs.com"}
 16 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 17 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 

@@ -2127,7 +2127,7 @@ Events of this type are only emitted when the cluster setting
 | Field | Description | Sensitive |
 |--|--|--|
 | `Reason` | The reason for the authentication failure. See below for possible values for type `AuthFailReason`. | no |
-| `Detail` | The detailed error for the authentication failure. | yes |
+| `Detail` | The detailed error for the authentication failure. | partially |
 | `Method` | The authentication method used. | no |
 
 
