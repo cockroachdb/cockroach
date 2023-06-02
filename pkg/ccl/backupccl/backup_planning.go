@@ -804,7 +804,11 @@ func backupPlanHook(
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
 			}
-			initialDetails.SpecificTenantIds = []roachpb.TenantID{roachpb.MustMakeTenantID(backupStmt.Targets.TenantID.ID)}
+			tid, err := roachpb.MakeTenantID(backupStmt.Targets.TenantID.ID)
+			if err != nil {
+				return err
+			}
+			initialDetails.SpecificTenantIds = []roachpb.TenantID{tid}
 		}
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
@@ -1239,14 +1243,14 @@ func getProtectedTimestampTargetForBackup(
 		return ptpb.MakeClusterTarget(), nil
 	}
 
-	if backupManifest.HasTenants() {
-		tenants, err := backupManifest.GetTenants()
-		if err != nil {
-			return nil, err
-		}
-		tenantID := make([]roachpb.TenantID, 0, len(tenants))
-		for _, tenant := range tenants {
-			tenantID = append(tenantID, roachpb.MustMakeTenantID(tenant.ID))
+	if len(backupManifest.Tenants) > 0 {
+		tenantID := make([]roachpb.TenantID, 0, len(backupManifest.Tenants))
+		for _, tenant := range backupManifest.Tenants {
+			tid, err := roachpb.MakeTenantID(tenant.ID)
+			if err != nil {
+				return nil, err
+			}
+			tenantID = append(tenantID, tid)
 		}
 		return ptpb.MakeTenantsTarget(tenantID), nil
 	}
@@ -1418,6 +1422,9 @@ func getTenantInfo(
 		)
 	}
 	for i := range tenants {
+		// NB: We use MustMakeTenantID here since the data is
+		// coming from the database and we should only ever
+		// have valid tenant IDs returned to us.
 		prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenants[i].ID))
 		spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 	}

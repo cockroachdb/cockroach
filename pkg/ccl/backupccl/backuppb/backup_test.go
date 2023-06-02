@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetTenants(t *testing.T) {
+func TestUpgradeTenantDescriptors(t *testing.T) {
 	t.Run("prefers Tenants over DeprecatedTenants", func(t *testing.T) {
 		manifest := backuppb.BackupManifest{
 			Tenants: []mtinfopb.TenantInfoWithUsage{{
@@ -28,12 +28,11 @@ func TestGetTenants(t *testing.T) {
 				{DeprecatedID: 6},
 			},
 		}
-		tenants, err := manifest.GetTenants()
-		require.NoError(t, err)
+		require.NoError(t, manifest.UpgradeTenantDescriptors())
 		require.Equal(t,
 			[]mtinfopb.TenantInfoWithUsage{
 				{SQLInfo: mtinfopb.SQLInfo{ID: 5}},
-			}, tenants)
+			}, manifest.Tenants)
 
 	})
 	t.Run("returns DeprecatedTenants when Tenants is empty", func(t *testing.T) {
@@ -43,8 +42,7 @@ func TestGetTenants(t *testing.T) {
 				DeprecatedDataState: mtinfopb.ProtoInfo_READY,
 			}},
 		}
-		tenants, err := manifest.GetTenants()
-		require.NoError(t, err)
+		require.NoError(t, manifest.UpgradeTenantDescriptors())
 		require.Equal(t,
 			[]mtinfopb.TenantInfoWithUsage{{
 				SQLInfo: mtinfopb.SQLInfo{
@@ -55,7 +53,7 @@ func TestGetTenants(t *testing.T) {
 					DeprecatedID:        6,
 					DeprecatedDataState: mtinfopb.ProtoInfo_READY,
 				}},
-			}, tenants)
+			}, manifest.Tenants)
 
 	})
 	t.Run("copies ProtoInfo fields to SQLInfo with state ADD", func(t *testing.T) {
@@ -67,8 +65,7 @@ func TestGetTenants(t *testing.T) {
 				}},
 			},
 		}
-		tenants, err := manifest.GetTenants()
-		require.NoError(t, err)
+		require.NoError(t, manifest.UpgradeTenantDescriptors())
 		require.Equal(t,
 			[]mtinfopb.TenantInfoWithUsage{{
 				SQLInfo: mtinfopb.SQLInfo{
@@ -79,7 +76,7 @@ func TestGetTenants(t *testing.T) {
 					DeprecatedID:        5,
 					DeprecatedDataState: mtinfopb.ProtoInfo_ADD,
 				}},
-			}, tenants)
+			}, manifest.Tenants)
 	})
 	t.Run("copies ProtoInfo fields to SQLInfo with state READY", func(t *testing.T) {
 		manifest := backuppb.BackupManifest{
@@ -90,8 +87,7 @@ func TestGetTenants(t *testing.T) {
 				}},
 			},
 		}
-		tenants, err := manifest.GetTenants()
-		require.NoError(t, err)
+		require.NoError(t, manifest.UpgradeTenantDescriptors())
 		require.Equal(t,
 			[]mtinfopb.TenantInfoWithUsage{{
 				SQLInfo: mtinfopb.SQLInfo{
@@ -102,7 +98,7 @@ func TestGetTenants(t *testing.T) {
 					DeprecatedID:        5,
 					DeprecatedDataState: mtinfopb.ProtoInfo_READY,
 				}},
-			}, tenants)
+			}, manifest.Tenants)
 	})
 	t.Run("copies ProtoInfo fields to SQLInfo with state DROP", func(t *testing.T) {
 		manifest := backuppb.BackupManifest{
@@ -113,8 +109,7 @@ func TestGetTenants(t *testing.T) {
 				}},
 			},
 		}
-		tenants, err := manifest.GetTenants()
-		require.NoError(t, err)
+		require.NoError(t, manifest.UpgradeTenantDescriptors())
 		require.Equal(t,
 			[]mtinfopb.TenantInfoWithUsage{{
 				SQLInfo: mtinfopb.SQLInfo{
@@ -125,7 +120,7 @@ func TestGetTenants(t *testing.T) {
 					DeprecatedID:        5,
 					DeprecatedDataState: mtinfopb.ProtoInfo_DROP,
 				}},
-			}, tenants)
+			}, manifest.Tenants)
 	})
 	t.Run("copies ProtoInfo fields to SQLInfo from deprecated tenants", func(t *testing.T) {
 		manifest := backuppb.BackupManifest{
@@ -134,8 +129,7 @@ func TestGetTenants(t *testing.T) {
 				DeprecatedDataState: mtinfopb.ProtoInfo_ADD,
 			}},
 		}
-		tenants, err := manifest.GetTenants()
-		require.NoError(t, err)
+		require.NoError(t, manifest.UpgradeTenantDescriptors())
 		require.Equal(t,
 			[]mtinfopb.TenantInfoWithUsage{{
 				SQLInfo: mtinfopb.SQLInfo{
@@ -146,7 +140,7 @@ func TestGetTenants(t *testing.T) {
 					DeprecatedID:        5,
 					DeprecatedDataState: mtinfopb.ProtoInfo_ADD,
 				}},
-			}, tenants)
+			}, manifest.Tenants)
 	})
 
 	t.Run("returns error on partial SQLInfo", func(t *testing.T) {
@@ -157,8 +151,7 @@ func TestGetTenants(t *testing.T) {
 				}},
 			},
 		}
-		_, err := manifest.GetTenants()
-		require.Error(t, err)
+		require.Error(t, manifest.UpgradeTenantDescriptors())
 	})
 	t.Run("return error on invalid data state", func(t *testing.T) {
 		manifest := backuppb.BackupManifest{
@@ -169,7 +162,6 @@ func TestGetTenants(t *testing.T) {
 				}},
 			},
 		}
-		_, err := manifest.GetTenants()
-		require.Error(t, err)
+		require.Error(t, manifest.UpgradeTenantDescriptors())
 	})
 }
