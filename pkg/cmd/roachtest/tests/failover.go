@@ -1574,7 +1574,10 @@ func (f *deadlockFailer) Fail(ctx context.Context, nodeID int) {
 			f.t.Status(fmt.Sprintf("locked r%d on n%d", rangeID, nodeID))
 		}
 	}
-	require.Len(f.t, f.locks[nodeID], f.numReplicas, "couldn't lock requested number of replicas")
+	// Some nodes may have fewer ranges than the requested numReplicas locks, and
+	// replicas may also have moved in the meanwhile. Just assert that we were able
+	// to lock at least 1 replica.
+	require.NotEmpty(f.t, f.locks[nodeID], "didn't lock any replicas")
 }
 
 func (f *deadlockFailer) Recover(ctx context.Context, nodeID int) {
