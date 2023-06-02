@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/stringmap"
 	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -107,6 +108,10 @@ func (t testWrapper) WorkerProgress(f float64) {
 
 func (t testWrapper) IsDebug() bool {
 	return false
+}
+
+func (t testWrapper) CLIOverrides() *stringmap.StringMap {
+	panic("implement me")
 }
 
 var _ test2.Test = testWrapper{}

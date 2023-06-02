@@ -247,7 +247,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	m := c.NewMonitor(ctx, crdbNodes)
-	rampDur := rampDuration(c.IsLocal())
+	rampDur := t.CLIOverrides().Duration("tpcc.rampDuration", rampDuration(c.IsLocal()))
 	for i := range workloadInstances {
 		// Make a copy of i for the goroutine.
 		i := i
@@ -259,7 +259,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 				statsPrefix = fmt.Sprintf("workload_%d.", i)
 			}
 			t.WorkerStatus(fmt.Sprintf("running tpcc worker=%d warehouses=%d ramp=%s duration=%s on %s (<%s)",
-				i, opts.Warehouses, rampDur, opts.Duration, pgURLs[i], time.Minute))
+				i, opts.Warehouses, rampDur, t.CLIOverrides().Duration("tpcc.duration", opts.Duration), pgURLs[i], time.Minute))
 			cmd := fmt.Sprintf(
 				"./cockroach workload run tpcc --warehouses=%d --histograms="+t.PerfArtifactsDir()+"/%sstats.json "+
 					opts.ExtraRunArgs+" --ramp=%s --duration=%s --prometheus-port=%d --pprofport=%d %s %s",

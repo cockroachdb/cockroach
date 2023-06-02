@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/stringmap"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -111,10 +112,19 @@ type testImpl struct {
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
 	skipInit               bool
+
+	// The overrides passed from the CLI are universal, and each test author is responsible
+	// for using them appropriately. This map is a convenience for tests that want to
+	// have defaults that can be easily overridden by the CLI.
+	cliOverrides *stringmap.StringMap
 }
 
 func newFailure(squashedErr error, errs []error) failure {
 	return failure{squashedErr: squashedErr, errors: errs}
+}
+
+func (t *testImpl) CLIOverrides() *stringmap.StringMap {
+	return t.cliOverrides
 }
 
 // BuildVersion exposes the build version of the cluster
