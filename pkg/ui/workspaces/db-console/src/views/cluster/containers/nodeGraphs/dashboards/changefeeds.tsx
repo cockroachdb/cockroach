@@ -23,14 +23,20 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
-  const { storeSources, nodeIDs, nodeDisplayNameByID, storeIDsByNodeID } =
-    props;
+  const {
+    storeSources,
+    nodeIDs,
+    nodeDisplayNameByID,
+    storeIDsByNodeID,
+    tenantSource,
+  } = props;
 
   return [
     <LineGraph
       title="Max Changefeed Latency"
       isKvGraph={false}
       sources={storeSources}
+      tenantSource={tenantSource}
     >
       <Axis units={AxisUnits.Duration} label="time">
         <Metric
@@ -46,6 +52,7 @@ export default function (props: GraphDashboardProps) {
       title="Sink Byte Traffic"
       isKvGraph={false}
       sources={storeSources}
+      tenantSource={tenantSource}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
         <Metric
@@ -56,7 +63,12 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Sink Counts" isKvGraph={false} sources={storeSources}>
+    <LineGraph
+      title="Sink Counts"
+      isKvGraph={false}
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
           name="cr.node.changefeed.emitted_messages"
@@ -71,7 +83,12 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Sink Timings" isKvGraph={false} sources={storeSources}>
+    <LineGraph
+      title="Sink Timings"
+      isKvGraph={false}
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
       <Axis units={AxisUnits.Duration} label="time">
         <Metric
           name="cr.node.changefeed.emit_nanos"
@@ -90,6 +107,7 @@ export default function (props: GraphDashboardProps) {
       title="Changefeed Restarts"
       isKvGraph={false}
       sources={storeSources}
+      tenantSource={tenantSource}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
