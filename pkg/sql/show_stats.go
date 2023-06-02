@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	encjson "encoding/json"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -179,15 +180,24 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 
 				forecasts := stats.ForecastTableStatistics(ctx, observed)
-
+				forecastRows := make([]tree.Datums, 0, len(forecasts))
 				// Iterate in reverse order to match the ORDER BY "columnIDs".
 				for i := len(forecasts) - 1; i >= 0; i-- {
 					forecastRow, err := tableStatisticProtoToRow(&forecasts[i].TableStatisticProto)
 					if err != nil {
 						return nil, err
 					}
-					rows = append(rows, forecastRow)
+					forecastRows = append(forecastRows, forecastRow)
 				}
+				rows = append(forecastRows, rows...)
+				// Some forecasts could have a CreatedAt time before or after some
+				// collected stats, so make sure the list is sorted in ascending
+				// CreatedAt order.
+				sort.SliceStable(rows, func(i, j int) bool {
+					iTime := rows[i][createdAtIdx].(*tree.DTimestamp).Time
+					jTime := rows[j][createdAtIdx].(*tree.DTimestamp).Time
+					return iTime.Before(jTime)
+				})
 			}
 
 			v := p.newContainerValuesNode(columns, 0)
