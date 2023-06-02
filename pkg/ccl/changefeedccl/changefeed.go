@@ -87,7 +87,9 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
 }
 
 const (
-	jsonMetaSentinel = `__crdb__`
+	// metaSentinel is a key or prefix used to mark metadata fields or columns
+	// into rows returned by an encoder.
+	metaSentinel = `__crdb__`
 )
 
 // emitResolvedTimestamp emits a changefeed-level resolved timestamp to the

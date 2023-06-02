@@ -9,12 +9,19 @@
 package changefeedccl
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
 )
@@ -22,7 +29,7 @@ import (
 // This is an extra column that will be added to every parquet file which tells
 // us about the type of event that generated a particular row. The types are
 // defined below.
-const parquetCrdbEventTypeColName string = "__crdb_event_type__"
+const parquetCrdbEventTypeColName string = "__crdb__event_type__"
 
 type parquetEventType int
 
@@ -117,9 +124,47 @@ func (parquetSink *parquetCloudStorageSink) Dial() error {
 // EmitResolvedTimestamp does not do anything as of now. It is there to
 // implement Sink interface.
 func (parquetSink *parquetCloudStorageSink) EmitResolvedTimestamp(
-	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
-) error {
-	return errors.AssertionFailedf("Parquet format does not support emitting resolved timestamp")
+	ctx context.Context, _ Encoder, resolved hlc.Timestamp,
+) (err error) {
+	// TODO: There should be a better way to check if the sink is closed.
+	// This is copied from the wrapped sink's EmitResolvedTimestamp()
+	// method.
+	if parquetSink.wrapped.files == nil {
+		return errors.New(`cannot EmitRow on a closed sink`)
+	}
+
+	defer parquetSink.wrapped.metrics.recordResolvedCallback()()
+
+	if err := parquetSink.wrapped.waitAsyncFlush(ctx); err != nil {
+		return errors.Wrapf(err, "while emitting resolved timestamp")
+	}
+
+	var buf bytes.Buffer
+	sch, err := parquet.NewSchema([]string{metaSentinel + "resolved"}, []*types.T{types.Decimal})
+	if err != nil {
+		return err
+	}
+	var writer *parquet.Writer
+
+	writer, err = newParquetWriter(sch, &buf, parquetSink.wrapped.testingKnobs)
+	if err != nil {
+		return err
+	}
+
+	if err := writer.AddRow([]tree.Datum{eval.TimestampToDecimalDatum(resolved)}); err != nil {
+		return err
+	}
+
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	part := resolved.GoTime().Format(parquetSink.wrapped.partitionFormat)
+	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
+	if log.V(1) {
+		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
+	}
+	return cloud.WriteFile(ctx, parquetSink.wrapped.es, filepath.Join(part, filename), &buf)
 }
 
 // Flush implements the Sink interface.
