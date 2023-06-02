@@ -436,7 +436,12 @@ func (l *sinkInfo) applyConfig(c logconfig.CommonSinkConfig) error {
 	if !ok {
 		return errors.Newf("unknown format: %q", *c.Format)
 	}
-	l.formatter = f
+	l.formatter = f()
+	for k, v := range c.FormatOptions {
+		if err := l.formatter.setOption(k, v); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
