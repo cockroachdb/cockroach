@@ -81,7 +81,7 @@ message ElementProto {
     IndexZoneConfig index_zone_config = 122 [(gogoproto.moretags) = "parent:\"Index\""];
     TableData table_data = 131 [(gogoproto.customname) = "TableData", (gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
     TablePartitioning table_partitioning = 132 [(gogoproto.customname) = "TablePartitioning", (gogoproto.moretags) = "parent:\"Table\""];
-  TableSchemaLocked table_schema_locked = 133 [(gogoproto.customname) = "TableSchemaLocked", (gogoproto.moretags) = "parent:\"Table\""];
+    TableSchemaLocked table_schema_locked = 133 [(gogoproto.customname) = "TableSchemaLocked", (gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -97,6 +97,10 @@ message ElementProto {
     SequenceOwner sequence_owner = 34 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
+
+    // Sequence elements.
+    SequenceOptions sequence_options = 37 [(gogoproto.moretags) = "parent:\"Sequences\""];
+
 
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -121,10 +125,10 @@ message ElementProto {
     DatabaseComment database_comment = 82 [(gogoproto.moretags) = "parent:\"Database\""];
     DatabaseData database_data = 83 [(gogoproto.customname) = "DatabaseData", (gogoproto.moretags) = "parent:\"Database\""];
 
-  // Schema elements.
-  SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
-  SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
-  SchemaName schema_name = 92 [(gogoproto.moretags) = "parent:\"Schema\""];
+    // Schema elements.
+    SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
+    SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
+    SchemaName schema_name = 92 [(gogoproto.moretags) = "parent:\"Schema\""];
 
     // SchemaChild elements.
     SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
@@ -304,8 +308,21 @@ message SchemaChild {
 
 message Sequence {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-
+  oneof optional_restart_with{
+    int64 restart_with = 2;
+  }
   bool is_temporary = 10;
+}
+
+message SequenceOptions {
+  uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  int64 increment = 2;
+  int64 max = 3;
+  int64 min = 4;
+  int64 start = 5;
+  int64 cache_size = 6;
+  bool virtual = 7;
+  string as_integer_type = 8;
 }
 
 message SequenceOwner {

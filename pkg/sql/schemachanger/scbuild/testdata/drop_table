@@ -145,6 +145,8 @@ DROP TABLE defaultdb.shipments CASCADE;
   {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 110}, ABSENT], PUBLIC]
   {sequenceId: 110}
+- [[SequenceOptions:{DescID: 110}, ABSENT], PUBLIC]
+  {cacheSize: "1", increment: "1", max: "9223372036854775807", min: "1", sequenceId: 110, start: "1"}
 - [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 110, schemaId: 101}
 - [[TableData:{DescID: 110, ReferencedDescID: 100}, ABSENT], PUBLIC]

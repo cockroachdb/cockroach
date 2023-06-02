@@ -17,7 +17,7 @@ CREATE VIEW s.v2 AS (SELECT 'a'::s.typ::string AS k, name FROM s.v1);
 ops
 DROP OWNED BY r
 ----
-StatementPhase stage 1 of 1 with 108 MutationType ops
+StatementPhase stage 1 of 1 with 110 MutationType ops
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -32,6 +32,7 @@ StatementPhase stage 1 of 1 with 108 MutationType ops
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
+    [[SequenceOptions:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -64,6 +65,7 @@ StatementPhase stage 1 of 1 with 108 MutationType ops
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
+    [[SequenceOptions:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
@@ -148,6 +150,9 @@ StatementPhase stage 1 of 1 with 108 MutationType ops
       User: r
     *scop.MarkDescriptorAsDropped
       DescriptorID: 106
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
+      ElementType: scpb.SequenceOptions
     *scop.RemoveObjectParent
       ObjectID: 106
       ParentSchemaID: 101
@@ -211,6 +216,9 @@ StatementPhase stage 1 of 1 with 108 MutationType ops
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
+    *scop.NotImplementedForPublicObjects
+      DescID: 107
+      ElementType: scpb.SequenceOptions
     *scop.RemoveObjectParent
       ObjectID: 107
       ParentSchemaID: 105
@@ -522,6 +530,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 106}, ABSENT], DROPPED] -> PUBLIC
+    [[SequenceOptions:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
@@ -554,6 +563,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> PUBLIC
+    [[SequenceOptions:{DescID: 107}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
@@ -632,7 +642,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 166 MutationType ops
+PreCommitPhase stage 2 of 2 with 168 MutationType ops
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -647,6 +657,7 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
+    [[SequenceOptions:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -682,6 +693,7 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
+    [[SequenceOptions:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
@@ -769,6 +781,9 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
       User: r
     *scop.MarkDescriptorAsDropped
       DescriptorID: 106
+    *scop.NotImplementedForPublicObjects
+      DescID: 106
+      ElementType: scpb.SequenceOptions
     *scop.RemoveObjectParent
       ObjectID: 106
       ParentSchemaID: 101
@@ -832,6 +847,9 @@ PreCommitPhase stage 2 of 2 with 166 MutationType ops
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
+    *scop.NotImplementedForPublicObjects
+      DescID: 107
+      ElementType: scpb.SequenceOptions
     *scop.RemoveObjectParent
       ObjectID: 107
       ParentSchemaID: 105

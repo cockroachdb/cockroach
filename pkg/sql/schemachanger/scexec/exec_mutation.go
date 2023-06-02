@@ -34,7 +34,7 @@ func executeMutationOps(
 			}
 		}
 	}
-	if err := uvs.exec(ctx, deps.Catalog()); err != nil {
+	if err := uvs.exec(ctx, deps.Catalog(), deps.RelationHelpers()); err != nil {
 		return err
 	}
 	// Exit early when in statement phase to not persist any side effects.
