@@ -446,7 +446,7 @@ func (sr *StoreRebalancer) ShouldRebalanceStore(ctx context.Context, rctx *Rebal
 		// requested by log config or when looking at traces.
 		log.KvDistribution.VEventf(
 			ctx, 1,
-			"local load %s is below max threshold %s mean=%s; no rebalancing needed",
+			"local load %s is below max threshold %v mean=%v; no rebalancing needed",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds, rctx.allStoresList.LoadMeans())
 		return false
 	}
@@ -454,7 +454,7 @@ func (sr *StoreRebalancer) ShouldRebalanceStore(ctx context.Context, rctx *Rebal
 	// the simulator, in practice we currently always move into lease
 	// rebalancing first - however this may change in the future.
 	log.KvDistribution.Infof(ctx,
-		"considering load-based lease transfers for s%d with %s load, mean=%s, upperThreshold=%s",
+		"considering load-based lease transfers for s%d with %v load, mean=%v, upperThreshold=%v",
 		rctx.LocalDesc.StoreID, rctx.LocalDesc.Capacity.Load(), rctx.allStoresList.LoadMeans(), rctx.maxThresholds)
 	return true
 }
@@ -567,7 +567,7 @@ func (sr *StoreRebalancer) TransferToRebalanceRanges(
 ) bool {
 	if rctx.LessThanMaxThresholds() {
 		log.KvDistribution.Infof(ctx,
-			"load-based lease transfers successfully brought s%d down to %s load, mean=%s, upperThreshold=%s)",
+			"load-based lease transfers successfully brought s%d down to %v load, mean=%v, upperThreshold=%v",
 			rctx.LocalDesc.StoreID, rctx.LocalDesc.Capacity.Load(),
 			rctx.allStoresList.LoadMeans(), rctx.maxThresholds)
 		return false
@@ -575,15 +575,15 @@ func (sr *StoreRebalancer) TransferToRebalanceRanges(
 
 	if rctx.mode != LBRebalancingLeasesAndReplicas {
 		log.KvDistribution.Infof(ctx,
-			"ran out of leases worth transferring and load %s is still above desired threshold %s",
+			"ran out of leases worth transferring and load %v is still above desired threshold %v",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
 		sr.metrics.ImbalancedStateOverfullOptionsExhausted.Inc(1)
 		return false
 	}
 
 	log.KvDistribution.Infof(ctx,
-		"ran out of leases worth transferring and load %s is still above desired "+
-			"threshold %s; considering load-based replica rebalances",
+		"ran out of leases worth transferring and load %v is still above desired "+
+			"threshold %v; considering load-based replica rebalances",
 		rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
 	// Re-combine replicasToMaybeRebalance with what remains of hottestRanges so
 	// that we'll reconsider them for replica rebalancing.
@@ -597,7 +597,7 @@ func (sr *StoreRebalancer) LogRangeRebalanceOutcome(ctx context.Context, rctx *R
 	// max threshold. Log the failure.
 	if !rctx.LessThanMaxThresholds() {
 		log.KvDistribution.Infof(ctx,
-			"ran out of replicas worth transferring and load %s is still above desired threshold %s; will check again soon",
+			"ran out of replicas worth transferring and load %v is still above desired threshold %v; will check again soon",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
 		sr.metrics.ImbalancedStateOverfullOptionsExhausted.Inc(1)
 		return
@@ -606,7 +606,7 @@ func (sr *StoreRebalancer) LogRangeRebalanceOutcome(ctx context.Context, rctx *R
 	// We successfully rebalanced below or equal to the max threshold,
 	// fulfilling our goal, load <= max threshold. Log the success.
 	log.KvDistribution.Infof(ctx,
-		"load-based replica transfers successfully brought s%d down to %s load, mean=%s, upperThreshold=%s",
+		"load-based replica transfers successfully brought s%d down to %v load, mean=%v, upperThreshold=%v",
 		rctx.LocalDesc.StoreID, rctx.LocalDesc.Capacity.Load(), rctx.allStoresList.LoadMeans(), rctx.maxThresholds)
 }
 
@@ -647,7 +647,7 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 	log.KvDistribution.VEventf(
 		ctx,
 		1,
-		"rebalancing r%d (%s load) to better balance load: voters from %v to %v; non-voters from %v to %v",
+		"rebalancing r%d with %v load to better balance load: voters from %v to %v; non-voters from %v to %v",
 		candidateReplica.GetRangeID(),
 		candidateReplica.RangeUsageInfo().Load(),
 		descBeforeRebalance.Replicas().Voters(),
@@ -725,14 +725,14 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		const minLoadFraction = .001
 		if candidateReplica.RangeUsageInfo().TransferImpact().Dim(rctx.loadDimension) <
 			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLoadFraction {
-			log.KvDistribution.VEventf(ctx, 3, "r%d's %s load is too little to matter relative to s%d's %s total load",
+			log.KvDistribution.VEventf(ctx, 3, "r%d's %v load is too little to matter relative to s%d's %v total load",
 				candidateReplica.GetRangeID(), candidateReplica.RangeUsageInfo().TransferImpact(),
 				rctx.LocalDesc.StoreID, rctx.LocalDesc.Capacity.Load())
 			continue
 		}
 
 		desc, conf := candidateReplica.DescAndSpanConfig()
-		log.KvDistribution.VEventf(ctx, 3, "considering lease transfer for r%d with %s load",
+		log.KvDistribution.VEventf(ctx, 3, "considering lease transfer for r%d with %v load",
 			desc.RangeID, candidateReplica.RangeUsageInfo().TransferImpact())
 
 		// Check all the other voting replicas in order of increasing load.
@@ -793,7 +793,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			log.KvDistribution.VEventf(
 				ctx,
 				1,
-				"transferring lease for r%d load=%s to store s%d load=%s from local store s%d load=%s",
+				"transferring lease for r%d load=%v to store s%d load=%v from local store s%d load=%v",
 				desc.RangeID,
 				candidateReplica.RangeUsageInfo().TransferImpact(),
 				targetStore.StoreID,
@@ -849,16 +849,8 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLoadFraction {
 			log.KvDistribution.VEventf(
 				ctx,
-				5,
-				"r%d's %s load is too little to matter relative to s%d's %s total load",
-				candidateReplica.GetRangeID(),
-				candidateReplica.RangeUsageInfo().Load(),
-				rctx.LocalDesc.StoreID,
-				rctx.LocalDesc.Capacity.Load(),
-			)
-			log.KvDistribution.Infof(
-				ctx,
-				"r%d's %s load is too little to matter relative to s%d's %s total load",
+				3,
+				"r%d's %v load is too little to matter relative to s%d's %v total load",
 				candidateReplica.GetRangeID(),
 				candidateReplica.RangeUsageInfo().Load(),
 				rctx.LocalDesc.StoreID,
@@ -926,7 +918,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		log.KvDistribution.VEventf(
 			ctx,
 			3,
-			"considering replica rebalance for r%d with %s load",
+			"considering replica rebalance for r%d with %v load",
 			candidateReplica.GetRangeID(),
 			candidateReplica.RangeUsageInfo().Load(),
 		)
@@ -1072,7 +1064,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnLoad(
 		log.KvDistribution.VEventf(
 			ctx,
 			3,
-			"rebalancing voter load=%s for r%d on %v to %v in order to improve load balance",
+			"rebalancing voter load=%v for r%d on %v to %v in order to improve load balance",
 			rbCtx.candidateReplica.RangeUsageInfo().Load(),
 			rbCtx.rangeDesc.RangeID,
 			remove,
@@ -1137,7 +1129,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnLoad(
 		log.KvDistribution.VEventf(
 			ctx,
 			3,
-			"rebalancing non-voter load=%s for r%d on %v to %v in order to improve load balance",
+			"rebalancing non-voter load=%v for r%d on %v to %v in order to improve load balance",
 			rbCtx.candidateReplica.RangeUsageInfo().Load(),
 			rbCtx.rangeDesc.RangeID,
 			remove,

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/redact"
 )
 
 // Dimension is a singe dimension of load that a component may track.
@@ -32,23 +33,28 @@ const (
 
 // String returns a human readable string representation of the dimension.
 func (d Dimension) String() string {
+	return redact.StringWithoutMarkers(d)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (d Dimension) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch d {
 	case Queries:
-		return "queries-per-second"
+		w.Print("queries-per-second")
 	case CPU:
-		return "cpu-per-second"
+		w.Print("cpu-per-second")
 	default:
 		panic(fmt.Sprintf("cannot name: unknown dimension with ordinal %d", d))
 	}
 }
 
-// Format returns a formatted string for a value.
-func (d Dimension) Format(value float64) string {
+// FormatValue returns a formatted string for a value.
+func (d Dimension) FormatValue(value float64) redact.SafeString {
 	switch d {
 	case Queries:
-		return fmt.Sprintf("%.1f", value)
+		return redact.SafeString(fmt.Sprintf("%.1f", value))
 	case CPU:
-		return string(humanizeutil.Duration(time.Duration(int64(value))))
+		return humanizeutil.Duration(time.Duration(int64(value)))
 	default:
 		panic(fmt.Sprintf("cannot format value: unknown dimension with ordinal %d", d))
 	}
