@@ -24,6 +24,7 @@ go_library(
         "github.com/cockroachdb/cockroach/pkg/build.utcTime": "{BUILD_UTCTIME}",
     },
     deps = [
+        "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/version",
     ],

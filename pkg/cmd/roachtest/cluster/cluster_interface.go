@@ -108,7 +108,10 @@ type Cluster interface {
 	Spec() spec.ClusterSpec
 	Name() string
 	IsLocal() bool
+	// IsSecure returns true iff the cluster uses TLS.
 	IsSecure() bool
+	// Returns CPU architecture of the nodes.
+	Architecture() vm.CPUArch
 
 	// Deleting CockroachDB data and logs on nodes.
 

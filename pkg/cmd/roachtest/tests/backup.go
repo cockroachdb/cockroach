@@ -385,6 +385,7 @@ func registerBackup(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:              fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
 		Owner:             registry.OwnerDisasterRecovery,
+		Benchmark:         true,
 		Cluster:           backup2TBSpec,
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

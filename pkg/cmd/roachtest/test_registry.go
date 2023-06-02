@@ -11,7 +11,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"regexp"
@@ -43,11 +42,13 @@ type testRegistryImpl struct {
 	snapshotPrefixes map[string]struct{}
 
 	promRegistry *prometheus.Registry
+	// benchOnly is true iff the registry is being used to run benchmarks only.
+	benchOnly bool
 }
 
 // makeTestRegistry constructs a testRegistryImpl and configures it with opts.
 func makeTestRegistry(
-	cloud string, instanceType string, zones string, preferSSD bool,
+	cloud string, instanceType string, zones string, preferSSD bool, benchOnly bool,
 ) testRegistryImpl {
 	return testRegistryImpl{
 		cloud:            cloud,
@@ -57,6 +58,7 @@ func makeTestRegistry(
 		m:                make(map[string]*registry.TestSpec),
 		snapshotPrefixes: make(map[string]struct{}),
 		promRegistry:     prometheus.NewRegistry(),
+		benchOnly:        benchOnly,
 	}
 }
 
@@ -65,6 +67,10 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 	if _, ok := r.m[spec.Name]; ok {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
+	}
+	if r.benchOnly && !spec.Benchmark {
+		// Skip non-benchmarks.
+		return
 	}
 	if spec.SnapshotPrefix != "" {
 		for existingPrefix := range r.snapshotPrefixes {
@@ -160,7 +166,7 @@ func (r *testRegistryImpl) PromFactory() promauto.Factory {
 // Skipped tests are included, and tests that don't match their minVersion spec
 // are also included but marked as skipped.
 func (r testRegistryImpl) GetTests(
-	ctx context.Context, filter *registry.TestFilter,
+	filter *registry.TestFilter,
 ) ([]registry.TestSpec, []registry.TestSpec) {
 	var tests []registry.TestSpec
 	var tagMismatch []registry.TestSpec
@@ -183,9 +189,9 @@ func (r testRegistryImpl) GetTests(
 }
 
 // List lists tests that match one of the filters.
-func (r testRegistryImpl) List(ctx context.Context, filters []string) []registry.TestSpec {
+func (r testRegistryImpl) List(filters []string) []registry.TestSpec {
 	filter := registry.NewTestFilter(filters, true)
-	tests, _ := r.GetTests(ctx, filter)
+	tests, _ := r.GetTests(filter)
 	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
 	return tests
 }

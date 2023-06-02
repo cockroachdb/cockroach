@@ -287,7 +287,8 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 	r.Add(registry.TestSpec{
 		Name: fmt.Sprintf("decommissionBench/nodes=%d/warehouses=%d%s",
 			benchSpec.nodes, benchSpec.warehouses, extraName),
-		Owner: registry.OwnerKV,
+		Owner:     registry.OwnerKV,
+		Benchmark: true,
 		Cluster: r.MakeClusterSpec(
 			benchSpec.nodes+addlNodeCount+1,
 			specOptions...,

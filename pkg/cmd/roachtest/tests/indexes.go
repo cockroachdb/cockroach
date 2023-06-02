@@ -34,9 +34,10 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 	}
 	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(geoZonesStr)),
+		Name:      fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
+		Owner:     registry.OwnerKV,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.Zones(geoZonesStr)),
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			firstAZ := geoZones[0]
@@ -137,10 +138,4 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 
 func registerIndexes(r registry.Registry) {
 	registerNIndexes(r, 2)
-}
-
-func registerIndexesBench(r registry.Registry) {
-	for i := 0; i <= 100; i++ {
-		registerNIndexes(r, i)
-	}
 }

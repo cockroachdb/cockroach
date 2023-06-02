@@ -75,8 +75,6 @@ func postSlackReport(pass, fail, skip map[*testImpl]struct{}) {
 	switch {
 	case cloud != "":
 		prefix = strings.ToUpper(cloud)
-	case local:
-		prefix = "LOCAL"
 	default:
 		prefix = "GCE"
 	}
