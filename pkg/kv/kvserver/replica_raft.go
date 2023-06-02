@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -380,7 +379,7 @@ func (r *Replica) propose(
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
-	data, err := raftCmdToPayload(ctx, p.command, p.idKey)
+	data, err := raftlog.RaftCmdToPayload(ctx, p.command, p.idKey)
 	if err != nil {
 		return kvpb.NewError(err)
 	}
@@ -487,50 +486,6 @@ func checkReplicationChangeAllowed(
 	}
 
 	return nil
-}
-
-func raftCmdToPayload(
-	_ context.Context, command *kvserverpb.RaftCommand, idKey kvserverbase.CmdIDKey,
-) ([]byte, error) {
-	// Determine the encoding style for the Raft command.
-	prefix := true
-	entryEncoding := raftlog.EntryEncodingStandardWithoutAC
-	if crt := command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
-		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
-		// needs to understand it; it cannot simply be an opaque command. To
-		// permit this, the command is proposed by the proposal buffer using
-		// ProposeConfChange. For that reason, we also don't need a Raft command
-		// prefix because the command ID is stored in a field in
-		// raft.ConfChange.
-		prefix = false
-	} else if command.ReplicatedEvalResult.AddSSTable != nil {
-		entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
-
-		if command.ReplicatedEvalResult.AddSSTable.Data == nil {
-			return nil, errors.Errorf("cannot sideload empty SSTable")
-		}
-	}
-
-	// Create encoding buffer.
-	preLen := 0
-	if prefix {
-		preLen = raftlog.RaftCommandPrefixLen
-	}
-	cmdLen := command.Size()
-	// Allocate the data slice with enough capacity to eventually hold the two
-	// "footers" that are filled later.
-	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, preLen, needed)
-	// Encode prefix with command ID, if necessary.
-	if prefix {
-		raftlog.EncodeRaftCommandPrefix(data, entryEncoding, idKey)
-	}
-	// Encode body of command.
-	data = data[:preLen+cmdLen]
-	if _, err := protoutil.MarshalTo(command, data[preLen:]); err != nil {
-		return nil, err
-	}
-	return data, nil
 }
 
 func (r *Replica) numPendingProposalsRLocked() int {
