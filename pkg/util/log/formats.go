@@ -39,21 +39,21 @@ var formatParsers = map[string]string{
 	"json-fluent-compact": "json-compact",
 }
 
-var formatters = func() map[string]logFormatter {
-	m := make(map[string]logFormatter)
-	r := func(f logFormatter) {
-		m[f.formatterName()] = f
+var formatters = func() map[string]func() logFormatter {
+	m := make(map[string]func() logFormatter)
+	r := func(f func() logFormatter) {
+		m[f().formatterName()] = f
 	}
-	r(formatCrdbV1{})
-	r(formatCrdbV1WithCounter{})
-	r(formatCrdbV1TTY{})
-	r(formatCrdbV1TTYWithCounter{})
-	r(formatCrdbV2{})
-	r(formatCrdbV2TTY{})
-	r(formatFluentJSONCompact{})
-	r(formatFluentJSONFull{})
-	r(formatJSONCompact{})
-	r(formatJSONFull{})
+	r(func() logFormatter { return formatCrdbV1{} })
+	r(func() logFormatter { return formatCrdbV1WithCounter{} })
+	r(func() logFormatter { return formatCrdbV1TTY{} })
+	r(func() logFormatter { return formatCrdbV1TTYWithCounter{} })
+	r(func() logFormatter { return formatCrdbV2{} })
+	r(func() logFormatter { return formatCrdbV2TTY{} })
+	r(func() logFormatter { return formatFluentJSONCompact{} })
+	r(func() logFormatter { return formatFluentJSONFull{} })
+	r(func() logFormatter { return formatJSONCompact{} })
+	r(func() logFormatter { return formatJSONFull{} })
 	return m
 }()
 
@@ -62,7 +62,7 @@ var formatters = func() map[string]logFormatter {
 func GetFormatterDocs() map[string]string {
 	m := make(map[string]string)
 	for fmtName, f := range formatters {
-		m[fmtName] = f.doc()
+		m[fmtName] = f().doc()
 	}
 	return m
 }
