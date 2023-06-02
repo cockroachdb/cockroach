@@ -42,6 +42,7 @@ func makeUICmd(d *dev) *cobra.Command {
 	uiCmd.AddCommand(makeUIWatchCmd(d))
 	uiCmd.AddCommand(makeUIE2eCmd(d))
 	uiCmd.AddCommand(makeMirrorDepsCmd(d))
+	uiCmd.AddCommand(makeUIStorybookCmd(d))
 
 	return uiCmd
 }
@@ -223,6 +224,118 @@ Replaces 'make ui-watch'.`,
 	watchCmd.Flags().Bool(ossFlag, false, "build only the open-source parts of the UI")
 
 	return watchCmd
+}
+
+// makeUIStorybookCmd initializes the 'ui storybook' subcommand, which runs
+// storybook for either db-console or cluster-ui projects.
+func makeUIStorybookCmd(d *dev) *cobra.Command {
+	const (
+		// projectFlag indicates whether storybook should be run for db-console or
+		// cluster-ui projects
+		projectFlag = "project"
+		// portFlag defines the port to run Storybook
+		portFlag = "port"
+	)
+
+	storybookCmd := &cobra.Command{
+		Use:   "storybook",
+		Short: "Runs Storybook in watch mode",
+		Long:  ``,
+		Args:  cobra.MinimumNArgs(0),
+		RunE: func(cmd *cobra.Command, commandLine []string) error {
+			// Create a context that cancels when OS signals come in.
+			ctx, stop := signal.NotifyContext(d.cli.Context(), os.Interrupt, os.Kill)
+			defer stop()
+
+			// Fetch all node dependencies (through Bazel) to ensure things are up-to-date
+			err := d.exec.CommandContextInheritingStdStreams(
+				ctx,
+				"bazel",
+				"fetch",
+				"//pkg/ui/workspaces/cluster-ui:cluster-ui",
+				"//pkg/ui/workspaces/db-console:db-console-ccl",
+			)
+			if err != nil {
+				log.Fatalf("failed to fetch node dependencies: %v", err)
+			}
+
+			// Build prerequisites for Storybook. It runs Db Console with CCL license.
+			args := []string{
+				"build",
+				"//pkg/ui/workspaces/cluster-ui:cluster-ui",
+				"//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
+			}
+
+			logCommand("bazel", args...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+			if err != nil {
+				log.Fatalf("failed to build UI watch prerequisites: %v", err)
+				return err
+			}
+
+			if err := arrangeFilesForWatchers(d /* ossOnly */, false); err != nil {
+				log.Fatalf("failed to arrange files for watchers: %v", err)
+				return err
+			}
+
+			dirs, err := getUIDirs(d)
+			if err != nil {
+				log.Fatalf("unable to find cluster-ui and db-console directories: %v", err)
+				return err
+			}
+
+			portNumber, err := cmd.Flags().GetInt16(portFlag)
+			if err != nil {
+				log.Fatalf("unexpected error: %v", err)
+				return err
+			}
+			port := fmt.Sprint(portNumber)
+
+			project, err := cmd.Flags().GetString(projectFlag)
+			if err != nil {
+				log.Fatalf("unexpected error: %v", err)
+				return err
+			}
+
+			projectToPath := map[string]string{
+				"db-console": dirs.dbConsole,
+				"cluster-ui": dirs.clusterUI,
+			}
+
+			cwd, ok := projectToPath[project]
+			if !ok {
+				err = fmt.Errorf("unexpected project name (%s) provided with --project flag", project)
+				log.Fatalf("%v", err)
+				return err
+			}
+
+			nbExec := d.exec.AsNonBlocking()
+
+			args = []string{
+				"--silent",
+				"--cwd", cwd,
+				"start-storybook",
+				"-p", port,
+			}
+
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", args...)
+			if err != nil {
+				log.Fatalf("Unable to run Storybook for %s : %v", project, err)
+				return err
+			}
+
+			// Wait for OS signals to cancel if we're not in test-mode.
+			if !d.exec.IsDryrun() {
+				<-ctx.Done()
+			}
+			return nil
+		},
+	}
+
+	storybookCmd.Flags().Int16P(portFlag, "p", 6006, "port to run Storybook")
+	storybookCmd.Flags().String(projectFlag, "db-console", "db-console, cluster-ui")
+
+	return storybookCmd
 }
 
 func makeUILintCmd(d *dev) *cobra.Command {
