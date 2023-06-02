@@ -100,7 +100,7 @@ func (r *Replica) maybeUnquiesceAndWakeLeaderLocked() bool {
 	r.store.unquiescedReplicas.Unlock()
 	r.maybeCampaignOnWakeLocked(ctx)
 	// Propose an empty command which will wake the leader.
-	data := raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, makeIDKey(), nil)
+	data := raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, raftlog.MakeCmdIDKey(), nil)
 	_ = r.mu.internalRaftGroup.Propose(data)
 	r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
 	return true
