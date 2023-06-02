@@ -4978,6 +4978,12 @@ func setRandomizedElectionTimeout(r *raft, v int) {
 	r.randomizedElectionTimeout = v
 }
 
+// SetRandomizedElectionTimeout is like setRandomizedElectionTimeout, but
+// exported for use by tests that are not in the raft package, using RawNode.
+func SetRandomizedElectionTimeout(r *RawNode, v int) {
+	setRandomizedElectionTimeout(r.raft, v)
+}
+
 func newTestConfig(id uint64, election, heartbeat int, storage Storage) *Config {
 	return &Config{
 		ID:              id,
