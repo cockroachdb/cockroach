@@ -100,14 +100,17 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 
 		log.Printf("building %s", pretty.Sprint(o))
 		buildOneCockroach(providers, o, execFn)
+
+		// We build workload only for Linux.
+		if platform == release.PlatformLinux || platform == release.PlatformLinuxArm {
+			var o opts
+			o.Platform = platform
+			o.PkgDir = flags.pkgDir
+			o.Branch = flags.branch
+			o.VersionStr = flags.sha
+			buildAndPublishWorkload(providers, o, execFn)
+		}
 	}
-	// We build workload only for Linux.
-	var o opts
-	o.Platform = release.PlatformLinux
-	o.PkgDir = flags.pkgDir
-	o.Branch = flags.branch
-	o.VersionStr = flags.sha
-	buildAndPublishWorkload(providers, o, execFn)
 }
 
 func buildOneCockroach(providers []release.ObjectPutGetter, o opts, execFn release.ExecFn) {
@@ -139,7 +142,7 @@ func buildOneCockroach(providers []release.ObjectPutGetter, o opts, execFn relea
 
 func buildAndPublishWorkload(providers []release.ObjectPutGetter, o opts, execFn release.ExecFn) {
 	log.Printf("building workload %s", pretty.Sprint(o))
-	if err := release.MakeWorkload(release.BuildOptions{ExecFn: execFn}, o.PkgDir); err != nil {
+	if err := release.MakeWorkload(o.Platform, release.BuildOptions{ExecFn: execFn}, o.PkgDir); err != nil {
 		log.Fatal(err)
 	}
 	o.AbsolutePath = filepath.Join(o.PkgDir, "bin", "workload")
