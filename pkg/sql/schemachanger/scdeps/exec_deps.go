@@ -238,6 +238,13 @@ func (d *txnDeps) Run(ctx context.Context) error {
 	return nil
 }
 
+// InitializeSequence implements the scexec.RelationHelpers interface.
+func (d *txnDeps) InitializeSequence(id descpb.ID, startVal int64) {
+	batch := d.getOrCreateBatch()
+	sequenceKey := d.codec.SequenceKey(uint32(id))
+	batch.Inc(sequenceKey, startVal)
+}
+
 // Reset implements the scexec.Catalog interface.
 func (d *txnDeps) Reset(ctx context.Context) error {
 	d.descsCollection.ResetUncommitted(ctx)
@@ -420,6 +427,11 @@ func (d *execDeps) StatsRefresher() scexec.StatsRefreshQueue {
 
 // Telemetry implements the scexec.Dependencies interface.
 func (d *execDeps) Telemetry() scexec.Telemetry {
+	return d
+}
+
+// RelationHelpers implements the scexec.Dependencies interface.
+func (d *execDeps) RelationHelpers() scexec.RelationHelpers {
 	return d
 }
 

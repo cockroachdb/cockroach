@@ -395,6 +395,20 @@ func (mr *MockDependenciesMockRecorder) PeriodicProgressFlusher() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeriodicProgressFlusher", reflect.TypeOf((*MockDependencies)(nil).PeriodicProgressFlusher))
 }
 
+// RelationHelpers mocks base method.
+func (m *MockDependencies) RelationHelpers() scexec.RelationHelpers {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RelationHelpers")
+	ret0, _ := ret[0].(scexec.RelationHelpers)
+	return ret0
+}
+
+// RelationHelpers indicates an expected call of RelationHelpers.
+func (mr *MockDependenciesMockRecorder) RelationHelpers() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RelationHelpers", reflect.TypeOf((*MockDependencies)(nil).RelationHelpers))
+}
+
 // Statements mocks base method.
 func (m *MockDependencies) Statements() []string {
 	m.ctrl.T.Helper()

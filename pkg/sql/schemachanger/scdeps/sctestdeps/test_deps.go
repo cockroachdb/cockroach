@@ -1368,3 +1368,13 @@ func getNameEntryDescriptorType(parentID, parentSchemaID descpb.ID) string {
 	}
 	return ret
 }
+
+// RelationHelper is part of the scexec.Dependencies interface.
+func (s *TestState) RelationHelpers() scexec.RelationHelpers {
+	return s
+}
+
+// InitializeSequence is part of the scexec.RelationsHelper interface.
+func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
+	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
+}
