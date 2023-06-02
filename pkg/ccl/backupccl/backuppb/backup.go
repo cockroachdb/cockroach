@@ -35,23 +35,71 @@ func (m *BackupManifest) IsIncremental() bool {
 // GetTenants retrieves the tenant information from the manifest. It should be
 // used instead of Tenants to support older versions of the manifest which used
 // the deprecated field.
-func (m *BackupManifest) GetTenants() []mtinfopb.TenantInfoWithUsage {
+func (m *BackupManifest) GetTenants() ([]mtinfopb.TenantInfoWithUsage, error) {
 	if len(m.Tenants) > 0 {
-		return m.Tenants
+		if err := upgradeTenantDescriptors(m.Tenants); err != nil {
+			return nil, err
+		}
+		return m.Tenants, nil
 	}
+	// TODO(ssd): The Tenants field was introduced in 21.2, so
+	// only backups from 21.1 should produce backups with this
+	// field populated. Given the age of such backups, we can
+	// likely remove support for restoring them.
 	if len(m.TenantsDeprecated) > 0 {
 		res := make([]mtinfopb.TenantInfoWithUsage, len(m.TenantsDeprecated))
 		for i := range res {
 			res[i].ProtoInfo = m.TenantsDeprecated[i]
+			if err := populateTenantSQLInfoFromDeprecatedProtoInfo(&res[i]); err != nil {
+				return nil, err
+			}
 		}
-		return res
+		return res, nil
 	}
-	return nil
+	return nil, nil
 }
 
 // HasTenants returns true if the manifest contains (non-system) tenant data.
 func (m *BackupManifest) HasTenants() bool {
 	return len(m.Tenants) > 0 || len(m.TenantsDeprecated) > 0
+}
+
+func upgradeTenantDescriptors(tenants []mtinfopb.TenantInfoWithUsage) error {
+	for i := range tenants {
+		if err := populateTenantSQLInfoFromDeprecatedProtoInfo(&tenants[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// populateTenantSQLInfoFromDeprecatedProtoInfo copies deprecated
+// fields from the ProtoInfo field into the SQLInfo fields. The
+// ProtoInfo fields were deprecatd in 23.1, but manifests from 22.2 or
+// earlier only have the deprecated fields set.  We copy the relevant
+// values into the new fields so that the
+func populateTenantSQLInfoFromDeprecatedProtoInfo(t *mtinfopb.TenantInfoWithUsage) error {
+	if t.ID == 0 {
+		t.ID = t.DeprecatedID
+		// NB: The zero-value of both DataState and
+		// DeprecatedDataState is meaningful so it
+		// can't be used to determe if it is set or
+		// not. We assume that if the non-deprecated
+		// ID field isn't set, then the DataState
+		// field should also be overwritten. But, if
+		// we see a non-zero DataState, something is
+		// clearly wrong.
+		if t.DataState != mtinfopb.TenantDataState(0) {
+			return errors.Newf("unexpected non-zero DataState (%d), with zero-values ID field", t.DataState)
+		}
+
+		ds, err := t.DeprecatedDataState.ToDataState()
+		if err != nil {
+			return err
+		}
+		t.DataState = ds
+	}
+	return nil
 }
 
 // MarshalJSONPB implements jsonpb.JSONPBMarshaller to provide a custom Marshaller
