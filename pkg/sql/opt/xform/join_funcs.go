@@ -381,7 +381,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	// Generate implicit filters from CHECK constraints and computed columns as
 	// optional filters to help generate lookup join keys.
 	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
-	computedColFilters := c.computedColFilters(scanPrivate, on, optionalFilters)
+	computedColFilters := c.ComputedColFilters(scanPrivate, on, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
 
 	var pkCols opt.ColList
@@ -797,7 +797,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 				// using them here would result in a reduced set of optional
 				// filters.
 				optionalFilters = c.checkConstraintFilters(scanPrivate.Table)
-				computedColFilters := c.computedColFilters(scanPrivate, on, optionalFilters)
+				computedColFilters := c.ComputedColFilters(scanPrivate, on, optionalFilters)
 				optionalFilters = append(optionalFilters, computedColFilters...)
 
 				eqColsAndOptionalFiltersCalculated = true
