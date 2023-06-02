@@ -188,3 +188,24 @@ SELECT * FROM generated_as_id_t ORDER BY a;
 7  4  2
 8  5  2
 9  6  2
+
+
+subtest repro_103693
+
+statement ok
+CREATE TABLE t1_103693(k1 PRIMARY KEY) AS SELECT 1::INT;
+CREATE TABLE t2_103693(k2 PRIMARY KEY, v2) AS SELECT 1::INT, 0::INT;
+
+statement ok
+CREATE FUNCTION f_103693(k INT, v INT) RETURNS INT AS
+$$
+  UPDATE t2_103693 SET v2 = v + 1 WHERE k2 = k2 RETURNING v2;
+$$ LANGUAGE SQL;
+
+statement ok
+SET streamer_enabled = true
+
+query I
+SELECT f_103693(k2, v2) FROM t1_103693 INNER LOOKUP JOIN t2_103693 ON k1 = k2;
+----
+1
