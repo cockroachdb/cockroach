@@ -119,7 +119,7 @@ start-waiting: true
 
 guard-state r=req4
 ----
-new: state=waitSelf
+old: state=waitSelf
 
 # ---------------------------------------------------------------------------------
 # req4 is waiting on reserved "a", and req2 from the same txn acquires the
