@@ -39,7 +39,7 @@ func (formatFluentJSONCompact) formatterName() string { return "json-fluent-comp
 func (formatFluentJSONCompact) doc() string { return formatJSONDoc(true /* fluent */, tagCompact) }
 
 func (f formatFluentJSONCompact) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, true /* fluent */, tagCompact, "")
+	return formatJSON(entry, true /* fluent */, tagCompact, "", nil)
 }
 
 func (formatFluentJSONCompact) contentType() string { return "application/json" }
@@ -53,7 +53,7 @@ func (formatFluentJSONFull) setOption(k string, _ string) error {
 func (formatFluentJSONFull) formatterName() string { return "json-fluent" }
 
 func (f formatFluentJSONFull) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, true /* fluent */, tagVerbose, "")
+	return formatJSON(entry, true /* fluent */, tagVerbose, "", nil)
 }
 
 func (formatFluentJSONFull) doc() string { return formatJSONDoc(true /* fluent */, tagVerbose) }
@@ -69,7 +69,7 @@ func (formatJSONCompact) setOption(k string, _ string) error {
 func (formatJSONCompact) formatterName() string { return "json-compact" }
 
 func (f formatJSONCompact) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, false /* fluent */, tagCompact, "")
+	return formatJSON(entry, false /* fluent */, tagCompact, "", nil)
 }
 
 func (formatJSONCompact) doc() string { return formatJSONDoc(false /* fluent */, tagCompact) }
@@ -78,10 +78,19 @@ func (formatJSONCompact) contentType() string { return "application/json" }
 
 type formatJSONFull struct {
 	datetimeFormat string
+	loc            *time.Location
 }
 
 func (f *formatJSONFull) setOption(k string, v string) error {
 	switch k {
+	case "datetime-timezone":
+		l, err := timeutil.LoadLocation(v)
+		if err != nil {
+			return errors.Wrapf(err, "invalid timezone: %q", v)
+		}
+		f.loc = l
+		return nil
+
 	case "datetime-format":
 		switch v {
 		case "none":
@@ -106,7 +115,7 @@ func (f *formatJSONFull) setOption(k string, v string) error {
 func (formatJSONFull) formatterName() string { return "json" }
 
 func (f formatJSONFull) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, false /* fluent */, tagVerbose, f.datetimeFormat)
+	return formatJSON(entry, false /* fluent */, tagVerbose, f.datetimeFormat, f.loc)
 }
 
 func (formatJSONFull) doc() string { return formatJSONDoc(false /* fluent */, tagVerbose) }
@@ -195,6 +204,7 @@ Additional options recognized via ` + "`format-options`" + `:
 | Option | Description |
 |--------|-------------|
 | ` + "`datetime-format`" + ` | The format to use for the ` + "`datetime`" + ` field. The value can be one of ` + "`none`" + `, ` + "`iso8601`/`rfc3339` (synonyms)" + `, or ` + "`rfc1123`" + `. Default is ` + "`none`" + `. |
+| ` + "`datetime-timezone`" + ` | The timezone to use for the ` + "`datetime`" + ` field. The value can be any timezone name recognized by the Go standard library. Default is ` + "`UTC`" + ` |
 
 `)
 
@@ -259,7 +269,9 @@ var channelNamesLowercase = func() map[Channel]string {
 	return lnames
 }()
 
-func formatJSON(entry logEntry, forFluent bool, tags tagChoice, datetimeFormat string) *buffer {
+func formatJSON(
+	entry logEntry, forFluent bool, tags tagChoice, datetimeFormat string, loc *time.Location,
+) *buffer {
 	jtags := jsonTags
 	buf := getBuffer()
 	buf.WriteByte('{')
@@ -328,6 +340,9 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice, datetimeFormat s
 	// Extra "datetime" field if requested.
 	if len(datetimeFormat) > 0 {
 		t := timeutil.FromUnixNanos(entry.ts)
+		if loc != nil {
+			t = t.In(loc)
+		}
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['d'].tags[tags])
 		buf.WriteString(`":"`)
