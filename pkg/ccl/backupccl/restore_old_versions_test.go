@@ -63,6 +63,7 @@ func TestRestoreOldVersions(t *testing.T) {
 		systemPrivilegesDirs           = testdataBase + "/system-privileges-restore"
 		systemDatabaseRoleSettingsDirs = testdataBase + "/system-database-role-settings-restore"
 		systemExternalConnectionsDirs  = testdataBase + "/system-external-connections-restore"
+		clusterWithTenants             = testdataBase + "/cluster-with-tenants"
 	)
 
 	t.Run("cluster-restore", func(t *testing.T) {
@@ -121,6 +122,16 @@ func TestRestoreOldVersions(t *testing.T) {
 			exportDir, err := filepath.Abs(filepath.Join(systemExternalConnectionsDirs, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir))
+		}
+	})
+	t.Run("cluster-with-tenants", func(t *testing.T) {
+		dirs, err := os.ReadDir(clusterWithTenants)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(clusterWithTenants, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), fullClusterRestoreWithTenants(exportDir))
 		}
 	})
 }
@@ -190,9 +201,9 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		// Now validate that the namespace table doesn't have more than one entry
 		// for the same ID.
 		sqlDB.CheckQueryResults(t, `
-SELECT 
+SELECT
 CASE WHEN count(distinct id) = count(id)
-THEN 'unique' ELSE 'duplicates' 
+THEN 'unique' ELSE 'duplicates'
 END
 FROM system.namespace;`, [][]string{{"unique"}})
 
@@ -303,9 +314,8 @@ DROP SCHEMA bar;
 
 func fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
+		tmpDir, tempDirCleanupFn := testutils.TempDir(t)
+		defer tempDirCleanupFn()
 
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
 			InitManualReplication, base.TestClusterArgs{
@@ -339,9 +349,8 @@ func fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir string) func(t *tes
 
 func fullClusterRestoreSystemPrivilegesWithoutIDs(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
+		tmpDir, tempDirCleanupFn := testutils.TempDir(t)
+		defer tempDirCleanupFn()
 
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
 			InitManualReplication, base.TestClusterArgs{
@@ -375,9 +384,8 @@ func fullClusterRestoreSystemPrivilegesWithoutIDs(exportDir string) func(t *test
 
 func fullClusterRestoreSystemDatabaseRoleSettingsWithoutIDs(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
+		tmpDir, tempDirCleanupFn := testutils.TempDir(t)
+		defer tempDirCleanupFn()
 
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
 			InitManualReplication, base.TestClusterArgs{
@@ -411,9 +419,8 @@ func fullClusterRestoreSystemDatabaseRoleSettingsWithoutIDs(exportDir string) fu
 
 func fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
-		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
-		defer cleanupFn()
+		tmpDir, tempDirCleanupFn := testutils.TempDir(t)
+		defer tempDirCleanupFn()
 
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
 			InitManualReplication, base.TestClusterArgs{
@@ -442,6 +449,33 @@ func fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir string) fun
 				"\b\u0005\u0012\u0019\n\u0017userfile:///connection1", "testuser1", "100"},
 			{"connection2", "2023-03-20 01:26:51.223986 +0000 +0000", "2023-03-20 01:26:51.223986 +0000 +0000", "STORAGE",
 				"\b\u0005\u0012\u0019\n\u0017userfile:///connection2", "testuser2", "101"},
+		})
+	}
+}
+
+func fullClusterRestoreWithTenants(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		tmpDir, tempDirCleanupFn := testutils.TempDir(t)
+		defer tempDirCleanupFn()
+
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+					},
+				}})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+		sqlDB.CheckQueryResults(t, fmt.Sprintf("SELECT count(*) FROM [SHOW BACKUP LATEST IN '%s'] WHERE object_type = 'TENANT'", localFoo), [][]string{
+			{"2"},
+		})
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION, include_all_secondary_tenants", localFoo))
+		sqlDB.CheckQueryResults(t, "SHOW TENANTS", [][]string{
+			{"1", "system", "ready", "shared"},
+			{"5", "tenant-5", "ready", "none"},
+			{"6", "tenant-6", "ready", "none"},
 		})
 	}
 }

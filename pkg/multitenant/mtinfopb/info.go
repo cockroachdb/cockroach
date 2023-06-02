@@ -15,6 +15,7 @@ import (
 
 	// We manually import this to satisfy a dependency in info.proto.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/errors"
 )
 
 // TenantServiceMode describes how tenants can be served to clients.
@@ -107,5 +108,18 @@ func (m *TenantInfoWithUsage) ToInfo() *TenantInfo {
 	return &TenantInfo{
 		ProtoInfo: m.ProtoInfo,
 		SQLInfo:   m.SQLInfo,
+	}
+}
+
+func (d ProtoInfo_DeprecatedDataState) ToDataState() (TenantDataState, error) {
+	switch d {
+	case ProtoInfo_READY:
+		return DataStateReady, nil
+	case ProtoInfo_ADD:
+		return DataStateAdd, nil
+	case ProtoInfo_DROP:
+		return DataStateDrop, nil
+	default:
+		return 0, errors.AssertionFailedf("invalid DeprecatedDataState: %d", d)
 	}
 }

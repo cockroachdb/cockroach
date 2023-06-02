@@ -963,12 +963,20 @@ func backupShowerDefault(
 					}
 					rows = append(rows, row)
 				}
-				for _, t := range manifest.GetTenants() {
+				tenants, err := manifest.GetTenants()
+				if err != nil {
+					return nil, err
+				}
+				for _, t := range tenants {
+					tenantID, err := roachpb.MakeTenantID(t.ID)
+					if err != nil {
+						return nil, err
+					}
 					row := tree.Datums{
-						tree.DNull, // Database
-						tree.DNull, // Schema
-						tree.NewDString(roachpb.MustMakeTenantID(t.ID).String()), // Object Name
-						tree.NewDString("TENANT"),                                // Object Type
+						tree.DNull,                         // Database
+						tree.DNull,                         // Schema
+						tree.NewDString(tenantID.String()), // Object Name
+						tree.NewDString("TENANT"),          // Object Type
 						backupType,
 						start,
 						end,
