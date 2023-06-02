@@ -48,6 +48,7 @@ type rowFetcher interface {
 
 	Reset()
 	GetBytesRead() int64
+	GetKVPairsRead() int64
 	GetBatchRequestsIssued() int64
 	// Close releases any resources held by this fetcher.
 	Close(ctx context.Context)

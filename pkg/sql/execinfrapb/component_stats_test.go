@@ -66,7 +66,7 @@ network bytes sent: 80 B`,
 			},
 			expected: `
 KV time: 0µs
-KV rows read: 10
+KV rows decoded: 10
 KV bytes read: 80 B`,
 		},
 		{ // 4
@@ -181,7 +181,7 @@ network bytes sent: 12 KiB
 input rows: 100
 input stall time: 1s
 KV time: 1s
-KV rows read: 10
+KV rows decoded: 10
 KV bytes read: 12 KiB
 execution time: 1s
 max memory allocated: 1.0 KiB
@@ -233,7 +233,7 @@ network bytes sent: 12 KiB
 input rows: 100
 input stall time: 1s
 KV time: 1s
-KV rows read: 10
+KV rows decoded: 10
 KV bytes read: 12 KiB
 execution time: 1s
 max memory allocated: 1.0 KiB
@@ -301,7 +301,7 @@ network bytes sent: 12 KiB
 input rows: 100
 input stall time: 1s
 KV time: 1s
-KV rows read: 10
+KV rows decoded: 10
 KV bytes read: 12 KiB
 execution time: 1s
 max memory allocated: 1.0 KiB

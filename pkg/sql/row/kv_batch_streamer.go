@@ -54,6 +54,7 @@ func newTxnKVStreamer(
 	streamer *kvstreamer.Streamer,
 	lockStrength descpb.ScanLockingStrength,
 	acc *mon.BoundAccount,
+	kvPairsRead *int64,
 	batchRequestsIssued *int64,
 ) KVBatchFetcher {
 	f := &txnKVStreamer{
@@ -61,7 +62,7 @@ func newTxnKVStreamer(
 		keyLocking: GetKeyLockingStrength(lockStrength),
 		acc:        acc,
 	}
-	f.kvBatchFetcherHelper.init(f.nextBatch, batchRequestsIssued)
+	f.kvBatchFetcherHelper.init(f.nextBatch, kvPairsRead, batchRequestsIssued)
 	return f
 }
 

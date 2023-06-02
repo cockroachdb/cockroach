@@ -357,6 +357,7 @@ func TestExplainKVInfo(t *testing.T) {
 			info := getKVInfo(t, r, scanQuery)
 
 			assert.Equal(t, 1000, info.counters[rowsRead])
+			assert.Equal(t, 1000, info.counters[pairsRead])
 			assert.LessOrEqual(t, 31 /* KiB */, info.counters[bytesRead])
 			assert.Equal(t, 1, info.counters[gRPCCalls])
 			assert.Equal(t, 1000, info.counters[stepCount])
@@ -366,6 +367,7 @@ func TestExplainKVInfo(t *testing.T) {
 			info = getKVInfo(t, r, lookupJoinQuery)
 
 			assert.Equal(t, 1000, info.counters[rowsRead])
+			assert.Equal(t, 1000, info.counters[pairsRead])
 			assert.LessOrEqual(t, 13 /* KiB */, info.counters[bytesRead])
 			assert.Equal(t, 1, info.counters[gRPCCalls])
 			assert.Equal(t, 0, info.counters[stepCount])
@@ -376,6 +378,7 @@ func TestExplainKVInfo(t *testing.T) {
 
 const (
 	rowsRead = iota
+	pairsRead
 	bytesRead
 	gRPCCalls
 	stepCount
@@ -390,7 +393,8 @@ type kvInfo struct {
 var patterns [numKVCounters]*regexp.Regexp
 
 func init() {
-	patterns[rowsRead] = regexp.MustCompile(`KV rows read: (\d+)`)
+	patterns[rowsRead] = regexp.MustCompile(`KV rows decoded: (\d+)`)
+	patterns[pairsRead] = regexp.MustCompile(`KV pairs read: (\d+)`)
 	patterns[bytesRead] = regexp.MustCompile(`KV bytes read: (\d+) \w+`)
 	patterns[gRPCCalls] = regexp.MustCompile(`KV gRPC calls: (\d+)`)
 	patterns[stepCount] = regexp.MustCompile(`MVCC step count \(ext/int\): (\d+)/[\d+]`)
