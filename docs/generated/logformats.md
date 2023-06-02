@@ -375,6 +375,7 @@ Additional options recognized via `format-options`:
 | Option | Description |
 |--------|-------------|
 | `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
+| `datetime-timezone` | The timezone to use for the `datetime` field. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
 
 
 
@@ -439,6 +440,7 @@ Additional options recognized via `format-options`:
 | Option | Description |
 |--------|-------------|
 | `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
+| `datetime-timezone` | The timezone to use for the `datetime` field. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
 
 
 
@@ -504,6 +506,7 @@ Additional options recognized via `format-options`:
 | Option | Description |
 |--------|-------------|
 | `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
+| `datetime-timezone` | The timezone to use for the `datetime` field. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
 
 
 
@@ -569,6 +572,7 @@ Additional options recognized via `format-options`:
 | Option | Description |
 |--------|-------------|
 | `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
+| `datetime-timezone` | The timezone to use for the `datetime` field. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
 
 
 
