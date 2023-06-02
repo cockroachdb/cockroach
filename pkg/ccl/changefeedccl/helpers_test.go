@@ -852,6 +852,9 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 		for _, sinkType := range options.allowedSinkTypes {
 			sinkWeights[sinkType] = 1
 		}
+		if _, ok := sinkWeights["cloudstorage"]; ok {
+			sinkWeights = map[string]int{"cloudstorage": 1}
+		}
 	}
 	if options.disabledSinkTypes != nil {
 		for _, sinkType := range options.disabledSinkTypes {

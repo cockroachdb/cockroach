@@ -880,7 +880,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, resolved, format=parquet`)
 		defer closeFeed(t, foo)
 
 		// Grab the first non resolved-timestamp row.
@@ -927,7 +927,7 @@ func TestChangefeedTimestamps(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
 
 func TestChangefeedMVCCTimestamps(t *testing.T) {
@@ -950,12 +950,12 @@ func TestChangefeedMVCCTimestamps(t *testing.T) {
 				id, mvccTimestamp)
 		}
 
-		changeFeed := feed(t, f, `CREATE CHANGEFEED FOR mvcc_timestamp_test_table WITH mvcc_timestamp`)
+		changeFeed := feed(t, f, `CREATE CHANGEFEED FOR mvcc_timestamp_test_table WITH mvcc_timestamp, format=parquet`)
 		defer closeFeed(t, changeFeed)
 		assertPayloads(t, changeFeed, expectedPayloads)
 	}
 
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
 
 func TestChangefeedResolvedFrequency(t *testing.T) {
