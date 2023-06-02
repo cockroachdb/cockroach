@@ -75,9 +75,9 @@ func TestJSONFormats(t *testing.T) {
 		t.Fatal(err)
 	}
 	formats := []logFormatter{
-		formatFluentJSONCompact{},
-		formatFluentJSONFull{},
-		formatJSONCompact{},
+		&formatJSONFull{fluentTag: true, tags: tagCompact},
+		&formatJSONFull{fluentTag: true, tags: tagVerbose},
+		&formatJSONFull{tags: tagCompact},
 		&formatJSONFull{},
 		&formatJSONFull{datetimeFormat: "2006-01-02 xx 15:04:05+07", loc: l},
 	}

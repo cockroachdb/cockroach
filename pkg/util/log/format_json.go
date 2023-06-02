@@ -28,61 +28,41 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-type formatFluentJSONCompact struct{}
-
-func (formatFluentJSONCompact) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
-}
-
-func (formatFluentJSONCompact) formatterName() string { return "json-fluent-compact" }
-
-func (formatFluentJSONCompact) doc() string { return formatJSONDoc(true /* fluent */, tagCompact) }
-
-func (f formatFluentJSONCompact) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, true /* fluent */, tagCompact, "", nil)
-}
-
-func (formatFluentJSONCompact) contentType() string { return "application/json" }
-
-type formatFluentJSONFull struct{}
-
-func (formatFluentJSONFull) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
-}
-
-func (formatFluentJSONFull) formatterName() string { return "json-fluent" }
-
-func (f formatFluentJSONFull) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, true /* fluent */, tagVerbose, "", nil)
-}
-
-func (formatFluentJSONFull) doc() string { return formatJSONDoc(true /* fluent */, tagVerbose) }
-
-func (formatFluentJSONFull) contentType() string { return "application/json" }
-
-type formatJSONCompact struct{}
-
-func (formatJSONCompact) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
-}
-
-func (formatJSONCompact) formatterName() string { return "json-compact" }
-
-func (f formatJSONCompact) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, false /* fluent */, tagCompact, "", nil)
-}
-
-func (formatJSONCompact) doc() string { return formatJSONDoc(false /* fluent */, tagCompact) }
-
-func (formatJSONCompact) contentType() string { return "application/json" }
-
 type formatJSONFull struct {
+	// fluentTag, if set, will include a Fluent tag in the JSON output.
+	fluentTag bool
+	// tags controls the verbosity of the log tags.
+	tags tagChoice
+	// datetimeFormat controls the format of the extra timestamp field "datetime".
 	datetimeFormat string
-	loc            *time.Location
+	// loc controls the timezone of the extra timestamp field "datetime".
+	loc *time.Location
 }
 
 func (f *formatJSONFull) setOption(k string, v string) error {
 	switch k {
+	case "fluent-tag":
+		switch v {
+		case "true":
+			f.fluentTag = true
+		case "false":
+			f.fluentTag = false
+		default:
+			return errors.Newf("unknown fluent-tag value: %q", redact.Safe(v))
+		}
+		return nil
+
+	case "tag-style":
+		switch v {
+		case "compact":
+			f.tags = tagCompact
+		case "verbose":
+			f.tags = tagVerbose
+		default:
+			return errors.Newf("unknown tags value: %q", redact.Safe(v))
+		}
+		return nil
+
 	case "datetime-timezone":
 		l, err := timeutil.LoadLocation(v)
 		if err != nil {
@@ -112,17 +92,32 @@ func (f *formatJSONFull) setOption(k string, v string) error {
 	}
 }
 
-func (formatJSONFull) formatterName() string { return "json" }
-
-func (f formatJSONFull) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, false /* fluent */, tagVerbose, f.datetimeFormat, f.loc)
+func (f formatJSONFull) formatterName() string {
+	var buf strings.Builder
+	buf.WriteString("json")
+	if f.fluentTag {
+		buf.WriteString("-fluent")
+	}
+	if f.tags == tagCompact {
+		buf.WriteString("-compact")
+	}
+	return buf.String()
 }
-
-func (formatJSONFull) doc() string { return formatJSONDoc(false /* fluent */, tagVerbose) }
 
 func (formatJSONFull) contentType() string { return "application/json" }
 
-func formatJSONDoc(forFluent bool, tags tagChoice) string {
+func (f formatJSONFull) doc() string {
+	if f.formatterName() != "json" {
+		var buf strings.Builder
+		fmt.Fprintf(&buf, `This format name is an alias for 'json' with
+the following format option defaults:
+
+- `+"`fluent-tag: %v`"+`
+- `+"`tag-style: %v`"+`
+`, f.fluentTag, f.tags)
+		return buf.String()
+	}
+
 	var buf strings.Builder
 	buf.WriteString(`This format emits log entries as a JSON payload.
 
@@ -133,12 +128,10 @@ processing over a stream unambiguously.
 
 Each entry contains at least the following fields:
 
-| Field | Description |
-|-------|-------------|
+| Field name if ` + "`tag-style: compact`" + ` is specified | Field name if ` + "`tag-style: verbose`" + ` is specified | Description |
+|-------|-------|-------------|
+| ` + "`tag`" + ` | ` + "`tag`" + ` | (Only if the option ` + "`fluent-tag: true`" + ` is given.) A Fluent tag for the event, formed by the process name and the logging channel. |
 `)
-	if forFluent {
-		buf.WriteString("| `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |\n")
-	}
 
 	keys := make([]string, 0, len(jsonTags))
 	for c := range jsonTags {
@@ -153,7 +146,10 @@ Each entry contains at least the following fields:
 		if !jsonTags[c].includedInHeader {
 			continue
 		}
-		fmt.Fprintf(&buf, "| `%s` | %s |\n", jsonTags[c].tags[tags], jsonTags[c].description)
+		fmt.Fprintf(&buf, "| `%s` | `%s` | %s |\n",
+			jsonTags[c].tags[tagCompact],
+			jsonTags[c].tags[tagVerbose],
+			jsonTags[c].description)
 	}
 
 	buf.WriteString(`
@@ -161,33 +157,39 @@ Each entry contains at least the following fields:
 After a couple of *header* entries written at the beginning of each log sink,
 all subsequent log entries also contain the following fields:
 
-| Field               | Description |
-|---------------------|-------------|
+| Field name if ` + "`tag-style: compact`" + ` is specified | Field name if ` + "`tag-style: verbose`" + ` is specified | Description |
+|-------|-------|-------------|
 `)
 	for _, k := range keys {
 		c := k[0]
 		if jsonTags[c].includedInHeader {
 			continue
 		}
-		fmt.Fprintf(&buf, "| `%s` | %s |\n", jsonTags[c].tags[tags], jsonTags[c].description)
+		fmt.Fprintf(&buf, "| `%s` | `%s` | %s |\n",
+			jsonTags[c].tags[tagCompact],
+			jsonTags[c].tags[tagVerbose],
+			jsonTags[c].description)
 	}
 
 	buf.WriteString(`
 
 Additionally, the following fields are conditionally present:
 
-| Field               | Description |
-|---------------------|-------------|
+| Field name if ` + "`tag-style: compact`" + ` is specified | Field name if ` + "`tag-style: verbose`" + ` is specified | Description |
+|-------|-------|-------------|
 `)
 	for _, k := range serverIdentifierFields {
 		b := byte(k)
-		fmt.Fprintf(&buf, "| `%s` | %s |\n", jsonTags[b].tags[tags], jsonTags[b].description)
+		fmt.Fprintf(&buf, "| `%s` | `%s` | %s |\n",
+			jsonTags[b].tags[tagCompact],
+			jsonTags[b].tags[tagVerbose],
+			jsonTags[b].description)
 	}
 
-	buf.WriteString(`| ` + "`tags`" + `    | The logging context tags for the entry, if there were context tags. |
-| ` + "`message`" + ` | For unstructured events, the flat text payload. |
-| ` + "`event`" + `   | The logging event, if structured (see below for details). |
-| ` + "`stacks`" + `  | Goroutine stacks, for fatal events. |
+	buf.WriteString(`| ` + "`tags`" + ` | ` + "`tags`" + ` | The logging context tags for the entry, if there were context tags. |
+| ` + "`message`" + ` | ` + "`message`" + ` | For unstructured events, the flat text payload. |
+| ` + "`event`" + `   | ` + "`event`" + `   | The logging event, if structured (see below for details). |
+| ` + "`stacks`" + `  | ` + "`stacks`" + `  | Goroutine stacks, for fatal events. |
 
 When an entry is structured, the ` + "`event`" + ` field maps to a dictionary
 whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
@@ -205,6 +207,8 @@ Additional options recognized via ` + "`format-options`" + `:
 |--------|-------------|
 | ` + "`datetime-format`" + ` | The format to use for the ` + "`datetime`" + ` field. The value can be one of ` + "`none`" + `, ` + "`iso8601`/`rfc3339` (synonyms)" + `, or ` + "`rfc1123`" + `. Default is ` + "`none`" + `. |
 | ` + "`datetime-timezone`" + ` | The timezone to use for the ` + "`datetime`" + ` field. The value can be any timezone name recognized by the Go standard library. Default is ` + "`UTC`" + ` |
+| ` + "`tag-style`" + ` | The tags to include in the envelope. The value can be ` + "`compact`" + ` (one letter tags) or ` + "`verbose`" + ` (long-form tags). Default is ` + "`verbose`" + `. |
+| ` + "`fluent-tag`" + ` | Whether to produce an additional field called ` + "`tag`" + ` for Fluent compatibility. Default is ` + "`false`" + `. |
 
 `)
 
@@ -261,6 +265,13 @@ const (
 	TenantIDLogTagKeyJSON string    = "tenant_id"
 )
 
+func (t tagChoice) String() string {
+	if t == tagCompact {
+		return "compact"
+	}
+	return "verbose"
+}
+
 var channelNamesLowercase = func() map[Channel]string {
 	lnames := make(map[Channel]string, len(logpb.Channel_name))
 	for ch, s := range logpb.Channel_name {
@@ -269,13 +280,11 @@ var channelNamesLowercase = func() map[Channel]string {
 	return lnames
 }()
 
-func formatJSON(
-	entry logEntry, forFluent bool, tags tagChoice, datetimeFormat string, loc *time.Location,
-) *buffer {
+func (f formatJSONFull) formatEntry(entry logEntry) *buffer {
 	jtags := jsonTags
 	buf := getBuffer()
 	buf.WriteByte('{')
-	if forFluent {
+	if f.fluentTag {
 		// Tag: this is the main category for Fluentd events.
 		buf.WriteString(`"tag":"`)
 		// Note: fluent prefers if there is no period in the tag other
@@ -303,13 +312,13 @@ func formatJSON(
 	}
 	if !entry.header {
 		buf.WriteByte('"')
-		buf.WriteString(jtags['c'].tags[tags])
+		buf.WriteString(jtags['c'].tags[f.tags])
 		buf.WriteString(`":`)
 		n := buf.someDigits(0, int(entry.ch))
 		buf.Write(buf.tmp[:n])
-		if tags != tagCompact {
+		if f.tags != tagCompact {
 			buf.WriteString(`,"`)
-			buf.WriteString(jtags['C'].tags[tags])
+			buf.WriteString(jtags['C'].tags[f.tags])
 			buf.WriteString(`":"`)
 			escapeString(buf, entry.ch.String())
 			buf.WriteByte('"')
@@ -329,7 +338,7 @@ func formatJSON(
 	// precision of the resulting number exceeds json's native float
 	// precision. Fluentd doesn't care and still parses the value properly.
 	buf.WriteByte('"')
-	buf.WriteString(jtags['t'].tags[tags])
+	buf.WriteString(jtags['t'].tags[f.tags])
 	buf.WriteString(`":"`)
 	n := buf.someDigits(0, int(entry.ts/1000000000))
 	buf.tmp[n] = '.'
@@ -338,40 +347,40 @@ func formatJSON(
 	buf.Write(buf.tmp[:n])
 	buf.WriteByte('"')
 	// Extra "datetime" field if requested.
-	if len(datetimeFormat) > 0 {
+	if len(f.datetimeFormat) > 0 {
 		t := timeutil.FromUnixNanos(entry.ts)
-		if loc != nil {
-			t = t.In(loc)
+		if f.loc != nil {
+			t = t.In(f.loc)
 		}
 		buf.WriteString(`,"`)
-		buf.WriteString(jtags['d'].tags[tags])
+		buf.WriteString(jtags['d'].tags[f.tags])
 		buf.WriteString(`":"`)
-		buf.WriteString(t.Format(datetimeFormat))
+		buf.WriteString(t.Format(f.datetimeFormat))
 		buf.WriteByte('"')
 	}
 	// Server identifiers.
 	if entry.ClusterID != "" {
 		buf.WriteString(`,"`)
-		buf.WriteString(jtags['x'].tags[tags])
+		buf.WriteString(jtags['x'].tags[f.tags])
 		buf.WriteString(`":"`)
 		escapeString(buf, entry.ClusterID)
 		buf.WriteByte('"')
 	}
 	if entry.NodeID != "" {
 		buf.WriteString(`,"`)
-		buf.WriteString(jtags['N'].tags[tags])
+		buf.WriteString(jtags['N'].tags[f.tags])
 		buf.WriteString(`":`)
 		buf.WriteString(entry.NodeID)
 	}
 	if entry.TenantID() != "" {
 		buf.WriteString(`,"`)
-		buf.WriteString(jtags['T'].tags[tags])
+		buf.WriteString(jtags['T'].tags[f.tags])
 		buf.WriteString(`":`)
 		buf.WriteString(entry.TenantID())
 	}
 	if entry.SQLInstanceID != "" {
 		buf.WriteString(`,"`)
-		buf.WriteString(jtags['q'].tags[tags])
+		buf.WriteString(jtags['q'].tags[f.tags])
 		buf.WriteString(`":`)
 		buf.WriteString(entry.SQLInstanceID)
 	}
@@ -379,7 +388,7 @@ func formatJSON(
 	// The binary version.
 	if entry.version != "" {
 		buf.WriteString(`,"`)
-		buf.WriteString(jtags['v'].tags[tags])
+		buf.WriteString(jtags['v'].tags[f.tags])
 		buf.WriteString(`":"`)
 		escapeString(buf, entry.version)
 		buf.WriteByte('"')
@@ -389,22 +398,22 @@ func formatJSON(
 		// Severity, both in numeric form (for ease of processing) and
 		// string form (to facilitate human comprehension).
 		buf.WriteString(`,"`)
-		buf.WriteString(jtags['s'].tags[tags])
+		buf.WriteString(jtags['s'].tags[f.tags])
 		buf.WriteString(`":`)
 		n = buf.someDigits(0, int(entry.sev))
 		buf.Write(buf.tmp[:n])
 
-		if tags == tagCompact {
+		if f.tags == tagCompact {
 			if entry.sev > 0 && int(entry.sev) <= len(severityChar) {
 				buf.WriteString(`,"`)
-				buf.WriteString(jtags['S'].tags[tags])
+				buf.WriteString(jtags['S'].tags[f.tags])
 				buf.WriteString(`":"`)
 				buf.WriteByte(severityChar[int(entry.sev)-1])
 				buf.WriteByte('"')
 			}
 		} else {
 			buf.WriteString(`,"`)
-			buf.WriteString(jtags['S'].tags[tags])
+			buf.WriteString(jtags['S'].tags[f.tags])
 			buf.WriteString(`":"`)
 			escapeString(buf, entry.sev.String())
 			buf.WriteByte('"')
@@ -413,18 +422,18 @@ func formatJSON(
 
 	// Goroutine number.
 	buf.WriteString(`,"`)
-	buf.WriteString(jtags['g'].tags[tags])
+	buf.WriteString(jtags['g'].tags[f.tags])
 	buf.WriteString(`":`)
 	n = buf.someDigits(0, int(entry.gid))
 	buf.Write(buf.tmp[:n])
 
 	// Source location.
 	buf.WriteString(`,"`)
-	buf.WriteString(jtags['f'].tags[tags])
+	buf.WriteString(jtags['f'].tags[f.tags])
 	buf.WriteString(`":"`)
 	escapeString(buf, entry.file)
 	buf.WriteString(`","`)
-	buf.WriteString(jtags['l'].tags[tags])
+	buf.WriteString(jtags['l'].tags[f.tags])
 	buf.WriteString(`":`)
 	n = buf.someDigits(0, entry.line)
 	buf.Write(buf.tmp[:n])
@@ -432,7 +441,7 @@ func formatJSON(
 	if !entry.header {
 		// Entry counter.
 		buf.WriteString(`,"`)
-		buf.WriteString(jtags['n'].tags[tags])
+		buf.WriteString(jtags['n'].tags[f.tags])
 		buf.WriteString(`":`)
 		n = buf.someDigits(0, int(entry.counter))
 		buf.Write(buf.tmp[:n])
@@ -443,7 +452,7 @@ func formatJSON(
 	// it's likely there will be more redaction formats
 	// in the future.
 	buf.WriteString(`,"`)
-	buf.WriteString(jtags['r'].tags[tags])
+	buf.WriteString(jtags['r'].tags[f.tags])
 	buf.WriteString(`":`)
 	if entry.payload.redactable {
 		buf.WriteByte('1')
