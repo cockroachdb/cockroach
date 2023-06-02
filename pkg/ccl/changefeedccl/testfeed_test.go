@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -1060,7 +1061,11 @@ func (f *cloudFeedFactory) Feed(
 	// Determine if we can enable the parquet format if the changefeed is not
 	// being created with incompatible options. If it can be enabled, we will use
 	// parquet format with a probability of 0.4.
-	parquetPossible := true
+	//
+	// TODO: Consider making this knob a global flag so tests that don't
+	//  initialize testing knobs can use parquet metamorphically.
+	knobs := f.s.TestingKnobs().DistSQL.(*execinfra.TestingKnobs).Changefeed
+	parquetPossible := knobs != nil && knobs.(*TestingKnobs).EnableParquetMetadata
 	explicitEnvelope := false
 	for _, opt := range createStmt.Options {
 		if string(opt.Key) == changefeedbase.OptEnvelope {
@@ -1183,19 +1188,19 @@ func extractFieldFromJSONValue(
 
 	if isBare {
 		meta := make(map[string]gojson.RawMessage)
-		if metaVal, haveMeta := parsed[jsonMetaSentinel]; haveMeta {
+		if metaVal, haveMeta := parsed[metaSentinel]; haveMeta {
 			if err := gojson.Unmarshal(metaVal, &meta); err != nil {
 				return nil, nil, errors.Wrapf(err, "unmarshalling json %v", metaVal)
 			}
 			field = meta[fieldName]
 			delete(meta, fieldName)
 			if len(meta) == 0 {
-				delete(parsed, jsonMetaSentinel)
+				delete(parsed, metaSentinel)
 			} else {
 				if metaVal, err = reformatJSON(meta); err != nil {
 					return nil, nil, err
 				}
-				parsed[jsonMetaSentinel] = metaVal
+				parsed[metaSentinel] = metaVal
 			}
 		}
 	} else {
@@ -1348,6 +1353,29 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 	return nil
 }
 
+// readParquetResolvedPayload reads a resolved timestamp value from the
+// specified parquet file and returns it encoded as JSON.
+func (c *cloudFeed) readParquetResolvedPayload(path string) ([]byte, error) {
+	meta, datums, err := parquet.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if meta.NumRows != 1 || meta.NumCols != 1 {
+		return nil, errors.AssertionFailedf("expected one row with one col containing the resolved timestamp")
+	}
+
+	resolvedDatum := datums[0][0]
+
+	resolved := resolvedRaw{Resolved: resolvedDatum.String()}
+	resolvedBytes, err := gojson.Marshal(resolved)
+	if err != nil {
+		return nil, err
+	}
+
+	return resolvedBytes, nil
+}
+
 // Next implements the TestFeed interface.
 func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
@@ -1421,11 +1449,27 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 
+	details, err := c.Details()
+	if err != nil {
+		return err
+	}
+	format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
+
 	if strings.HasSuffix(path, `RESOLVED`) {
-		resolvedPayload, err := os.ReadFile(path)
-		if err != nil {
-			return err
+		var resolvedPayload []byte
+		var err error
+		if format == changefeedbase.OptFormatParquet {
+			resolvedPayload, err = c.readParquetResolvedPayload(path)
+			if err != nil {
+				return err
+			}
+		} else {
+			resolvedPayload, err = os.ReadFile(path)
+			if err != nil {
+				return err
+			}
 		}
+
 		resolvedEntry := &cdctest.TestFeedMessage{Resolved: resolvedPayload}
 		c.rows = append(c.rows, resolvedEntry)
 		c.resolved = path
@@ -1447,12 +1491,6 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return err
 	}
 	defer f.Close()
-	details, err := c.Details()
-	if err != nil {
-		return err
-	}
-
-	format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
 
 	if format == changefeedbase.OptFormatParquet {
 		envelopeType := changefeedbase.EnvelopeType(details.Opts[changefeedbase.OptEnvelope])

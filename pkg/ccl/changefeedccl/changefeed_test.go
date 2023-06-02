@@ -6154,8 +6154,10 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{
-					DrainFast:  true,
-					Changefeed: &TestingKnobs{},
+					DrainFast: true,
+					Changefeed: &TestingKnobs{
+						EnableParquetMetadata: true,
+					},
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

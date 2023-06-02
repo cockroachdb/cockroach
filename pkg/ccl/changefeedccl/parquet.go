@@ -66,19 +66,12 @@ func newParquetWriterFromRow(
 		return nil, err
 	}
 
-	writerConstructor := parquet.NewWriter
-
-	if knobs.EnableParquetMetadata {
+	if knobs != nil && knobs.EnableParquetMetadata {
 		if opts, err = addParquetTestMetadata(row, opts); err != nil {
 			return nil, err
 		}
-
-		// To use parquet test utils for reading datums, the writer needs to be
-		// configured with additional metadata.
-		writerConstructor = parquet.NewWriterWithReaderMeta
 	}
-
-	writer, err := writerConstructor(schemaDef, sink, opts...)
+	writer, err := newParquetWriter(schemaDef, sink, knobs, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -215,4 +208,21 @@ func deserializeMap(s string) (orderedKeys []string, m map[string]int, err error
 		m[key] = value
 	}
 	return orderedKeys, m, nil
+}
+
+// newParquetWriter allocates a new parquet writer using the provided
+// schema definition.
+func newParquetWriter(
+	sch *parquet.SchemaDefinition,
+	sink io.Writer,
+	knobs *TestingKnobs, /* may be nil */
+	opts ...parquet.Option,
+) (*parquet.Writer, error) {
+	if knobs != nil && knobs.EnableParquetMetadata {
+		// To use parquet test utils for reading datums, the writer needs to be
+		// configured with additional metadata.
+		return parquet.NewWriterWithReaderMeta(sch, sink, opts...)
+	}
+
+	return parquet.NewWriter(sch, sink, opts...)
 }
