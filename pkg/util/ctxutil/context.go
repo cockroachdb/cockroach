@@ -12,7 +12,9 @@ package ctxutil
 
 import (
 	"context"
+	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -49,4 +51,27 @@ func (c *whenDone) cancelWithCause(removeFromParent bool, err, cause error) {
 	if removeFromParent {
 		context_removeChild(c.Context, c)
 	}
+}
+
+// FastDoneCheckerContext is a context that can be used to quickly
+// check if the parent context is done.
+// Regular context implementations make Err() calls needlessly expensive
+// as they acquire locks.  This context avoids this problem.
+// Context must be initialized via Init method.
+type FastDoneCheckerContext struct {
+	_ util.NoCopy
+	context.Context
+	done uint32 // accessed atomically.
+}
+
+// Init initializes FastDontCheckerContext to be notified when parent
+// context becomes done.
+func (c *FastDoneCheckerContext) Init(parent context.Context) {
+	c.Context = parent
+	context_propagateCancel(parent, c)
+}
+
+// ContextDone returns true if this context is done.
+func (c *FastDoneCheckerContext) ContextDone() bool {
+	return atomic.LoadUint32(&c.done) != 0
 }

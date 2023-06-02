@@ -10,7 +10,10 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/ctxutil",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "//pkg/util",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 go_test(
@@ -23,6 +26,7 @@ go_test(
     embed = [":ctxutil"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_stretchr_testify//require",
     ],
 )

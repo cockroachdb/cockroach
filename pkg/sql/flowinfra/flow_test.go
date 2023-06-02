@@ -41,11 +41,11 @@ func BenchmarkFlowSetup(b *testing.B) {
 	defer s.Stopper().Stop(ctx)
 
 	r := sqlutils.MakeSQLRunner(conn)
-	r.Exec(b, "CREATE DATABASE b; CREATE TABLE b.test (k INT);")
+	r.Exec(b, "CREATE DATABASE b; CREATE TABLE b.test (k INT); INSERT INTO b.test SELECT generate_series(1, 8192)")
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	dsp := execCfg.DistSQLPlanner
-	stmt, err := parser.ParseOne("SELECT k FROM b.test WHERE k=1")
+	stmt, err := parser.ParseOne("SELECT k FROM b.test")
 	if err != nil {
 		b.Fatal(err)
 	}

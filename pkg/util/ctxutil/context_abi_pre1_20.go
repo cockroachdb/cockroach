@@ -14,6 +14,7 @@ package ctxutil
 
 import (
 	"context"
+	"sync/atomic"
 	_ "unsafe" // Must import unsafe to enable gross hack below.
 )
 
@@ -35,4 +36,11 @@ func context_removeChild(parent context.Context, child canceler)
 
 func (c *whenDone) cancel(removeFromParent bool, err error) {
 	c.cancelWithCause(removeFromParent, err, nil)
+}
+
+func (c *FastDoneCheckerContext) cancel(removeFromParent bool, err error) {
+	atomic.StoreUint32(&c.done, 1)
+	if removeFromParent {
+		context_removeChild(c.Context, c)
+	}
 }
