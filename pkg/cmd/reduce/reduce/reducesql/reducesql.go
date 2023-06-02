@@ -45,6 +45,7 @@ var SQLPasses = []reduce.Pass{
 	removeLimit,
 	removeOrderBy,
 	removeOrderByExprs,
+	removeNullsInOrderByExprs,
 	removeGroupBy,
 	removeGroupByExprs,
 	removeCreateNullDefs,
@@ -548,6 +549,37 @@ var (
 			return n
 		}
 		return 0
+	})
+	removeNullsInOrderByExprs = walkSQL("remove NULLS FIRST/LAST in ORDER BY exprs", func(xfi int, node interface{}) int {
+		hasOrderBy := true
+		var ob tree.OrderBy
+		switch node := node.(type) {
+		case *tree.Delete:
+			ob = node.OrderBy
+		case *tree.FuncExpr:
+			ob = node.OrderBy
+		case *tree.Select:
+			ob = node.OrderBy
+		case *tree.Update:
+			ob = node.OrderBy
+		case *tree.WindowDef:
+			ob = node.OrderBy
+		default:
+			hasOrderBy = false
+		}
+		if !hasOrderBy {
+			return 0
+		}
+		n := 0
+		for i := range ob {
+			if ob[i].NullsOrder != tree.DefaultNullsOrder {
+				n++
+				if xfi < n {
+					ob[i].NullsOrder = tree.DefaultNullsOrder
+				}
+			}
+		}
+		return n
 	})
 	removeGroupBy = walkSQL("remove GROUP BY", func(xfi int, node interface{}) int {
 		xf := xfi == 0
