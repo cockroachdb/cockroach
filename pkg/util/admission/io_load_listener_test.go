@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -160,6 +162,10 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("print-only-first-tick") {
 					d.ScanArgs(t, "print-only-first-tick", &printOnlyFirstTick)
 				}
+				currDuration := unloadedDuration
+				if d.HasArg("loaded") {
+					currDuration = loadedDuration
+				}
 
 				ioll.pebbleMetricsTick(ctx, StoreMetrics{
 					Metrics:         &metrics,
@@ -180,8 +186,8 @@ func TestIOLoadListener(t *testing.T) {
 					fmt.Fprintf(&buf, "%s\n", req.buf.String())
 					req.buf.Reset()
 				}
-				for i := 0; i < int(unloadedDuration.ticksInAdjustmentInterval()); i++ {
-					ioll.allocateTokensTick(false, unloadedDuration.ticksInAdjustmentInterval() - int64(i))
+				for i := 0; i < int(currDuration.ticksInAdjustmentInterval()); i++ {
+					ioll.allocateTokensTick(d.HasArg("loaded"), currDuration.ticksInAdjustmentInterval()-int64(i))
 					if i == 0 || !printOnlyFirstTick {
 						fmt.Fprintf(&buf, "tick: %d, %s\n", i, kvGranter.buf.String())
 					}
@@ -211,7 +217,7 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		ioll.totalNumByteTokens = math.MaxInt64 - i
 		ioll.byteTokensAllocated = 0
 		for j := 0; j < int(unloadedDuration.ticksInAdjustmentInterval()); j++ {
-			ioll.allocateTokensTick(false, unloadedDuration.ticksInAdjustmentInterval() - int64(i))
+			ioll.allocateTokensTick(false, unloadedDuration.ticksInAdjustmentInterval()-i)
 		}
 	}
 	// Bug2: overflow when bytes added delta is 0.
@@ -312,7 +318,7 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			DiskStats: d,
 		})
 		for j := 0; j < int(loadedDuration.ticksInAdjustmentInterval()); j++ {
-			ioll.allocateTokensTick(true, loadedDuration.ticksInAdjustmentInterval() - int64(i))
+			ioll.allocateTokensTick(true, loadedDuration.ticksInAdjustmentInterval()-int64(i))
 			require.LessOrEqual(t, int64(0), ioll.smoothedIntL0CompactedBytes)
 			require.LessOrEqual(t, float64(0), ioll.smoothedCompactionByteTokens)
 			require.LessOrEqual(t, float64(0), ioll.smoothedNumFlushTokens)
@@ -355,11 +361,14 @@ type testGranterWithIOTokens struct {
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
 
 func (g *testGranterWithIOTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64, _ int64, _ int64,
+	ioTokens int64, elasticDiskBandwidthTokens int64, maxIOTokens int64, maxElasticTokens int64,
 ) (tokensUsed int64) {
-	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s elastic-disk-bw-tokens=%s",
+	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s elastic-disk-bw-tokens=%s max-byte-tokens=%s max-disk-bw-tokens=%s",
 		tokensForTokenTickDurationToString(ioTokens),
-		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens))
+		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
+		tokensForTokenTickDurationToString(maxIOTokens),
+		tokensForTokenTickDurationToString(maxElasticTokens),
+	)
 	if g.allTokensUsed {
 		return ioTokens * 2
 	}
@@ -383,7 +392,7 @@ func (g *testGranterWithIOTokens) setLinearModels(
 }
 
 func tokensForTokenTickDurationToString(tokens int64) string {
-	if tokens >= unlimitedTokens/unloadedDuration.ticksInAdjustmentInterval() {
+	if tokens >= unlimitedTokens/loadedDuration.ticksInAdjustmentInterval() {
 		return "unlimited"
 	}
 	return fmt.Sprintf("%d", tokens)
@@ -420,37 +429,66 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	require.LessOrEqual(g.t, int64(0), ingestLM.constant)
 }
 
-func TestTokenAllocationTicker(t *testing.T) {
+// Tests if the tokenAllocationTicker produces correct adjustment interval
+// durations for both loaded and unloaded systems.
+func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
 	ticker := tokenAllocationTicker{}
-	currTime := time.Now()
+	defer ticker.stop()
+	currTime := timeutil.Now()
 	ticker.adjustmentStart(true /* loaded */)
-	testStartTime := time.Now()
-	ticks := 0
-	for time.Since(testStartTime) < 600 * time.Second {
+	adjustmentChanged := false
+	for {
 		ticker.tick()
 		remainingTicks := ticker.remainingTicks()
-			ticks++
 		if remainingTicks == 0 {
+			if adjustmentChanged {
+				break
+			}
 			abs := func(diff time.Duration) time.Duration {
 				if diff < 0 {
 					return -diff
 				}
 				return diff
 			}
-			timeElapsed := time.Since(currTime)
-			diff := abs(timeElapsed-(15*time.Second))
-			fmt.Println(timeElapsed, diff, ticks)
+			timeElapsed := timeutil.Since(currTime)
+			diff := abs(timeElapsed - (15 * time.Second))
 			if diff > 1*time.Second {
-				// TODO(bananabrick): Get rid of this.
-				panic(diff)
+				t.FailNow()
 			}
-			systemLoaded := rand.Intn(2) == 0
-			ticker.adjustmentStart(systemLoaded)
-			currTime = time.Now()
-			ticks = 0
-			remainingTicks = ticker.remainingTicks()
+			ticker.adjustmentStart(false /* loaded */)
+			currTime = timeutil.Now()
+			adjustmentChanged = true
 		}
 		time.Sleep(1 * time.Millisecond)
 	}
-	ticker.stop()
+}
+
+func TestTokenAllocationTicker(t *testing.T) {
+	ticker := tokenAllocationTicker{}
+	defer ticker.stop()
+
+	// Test remainingTicks calculations.
+	ticker.adjustmentStart(false /* loaded */)
+	require.Equal(t, 60, int(ticker.remainingTicks()))
+	time.Sleep(1 * time.Second)
+	// At least one second has passed, we assume that 2 seconds could've passed.
+	// So, we have 13-14 seconds remaining.
+	remaining := ticker.remainingTicks()
+	if remaining < 52 || remaining > 56 {
+		t.FailNow()
+	}
+
+	ticker.adjustmentStart(true /* unloaded */)
+	require.Equal(t, 15000, int(ticker.remainingTicks()))
+	time.Sleep(1 * time.Second)
+	// At least one second has passed. Assume an error of at most one seconds, so
+	// at most 2 seconds have passed. So, we have 13-14 seconds remaining.
+	remaining = ticker.remainingTicks()
+	if remaining > 14000 || remaining < 13000 {
+		t.FailNow()
+	}
+
+	// Skip to the future in which case remainingTicks must be exhausted.
+	ticker.adjustmentIntervalStartTime = time.Now().Add(-time.Duration(17 * time.Second))
+	require.Equal(t, 0, int(ticker.remainingTicks()))
 }
