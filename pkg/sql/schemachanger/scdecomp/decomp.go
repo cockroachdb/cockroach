@@ -12,6 +12,8 @@ package scdecomp
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
@@ -19,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -233,7 +237,45 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			IsTemporary: tbl.IsTemporary(),
 		})
 		if opts := tbl.GetSequenceOpts(); opts != nil {
+			// Compute the default sequence options.
+			defaultOpts := descpb.TableDescriptor_SequenceOpts{
+				Increment: 1,
+			}
+			err := schemaexpr.AssignSequenceOptions(&defaultOpts,
+				nil,
+				64,
+				true,
+				nil,
+			)
+			if err != nil {
+				panic(err)
+			}
 			w.backRefs.Add(opts.SequenceOwner.OwnerTableID)
+			addSequenceOption := func(key string, defaultValue, value interface{}) {
+				// Nil or empty values can be skipped. Or values which
+				// are the defaults.
+				if value == nil || reflect.DeepEqual(defaultValue, value) {
+					return
+				}
+				keyStr := fmt.Sprintf("%v", value)
+				if len(keyStr) == 0 {
+					return
+				}
+				w.ev(descriptorStatus(tbl),
+					&scpb.SequenceOption{
+						SequenceID: tbl.GetID(),
+						Key:        key,
+						Value:      keyStr,
+					},
+				)
+			}
+			addSequenceOption(tree.SeqOptIncrement, defaultOpts.Increment, opts.Increment)
+			addSequenceOption(tree.SeqOptMinValue, defaultOpts.MinValue, opts.MinValue)
+			addSequenceOption(tree.SeqOptMaxValue, defaultOpts.MaxValue, opts.MaxValue)
+			addSequenceOption(tree.SeqOptStart, defaultOpts.Start, opts.Start)
+			addSequenceOption(tree.SeqOptVirtual, defaultOpts.Virtual, opts.Virtual)
+			addSequenceOption(tree.SeqOptCache, defaultOpts.CacheSize, opts.CacheSize)
+			addSequenceOption(tree.SeqOptAs, defaultOpts.AsIntegerType, opts.AsIntegerType)
 		}
 	case tbl.IsView():
 		w.ev(descriptorStatus(tbl), &scpb.View{
