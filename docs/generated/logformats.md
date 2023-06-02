@@ -325,41 +325,42 @@ processing over a stream unambiguously.
 
 Each entry contains at least the following fields:
 
-| Field | Description |
-|-------|-------------|
-| `datetime` | The pretty-printed date/time of the event timestamp, if enabled via options. |
-| `file` | The name of the source file where the event was emitted. |
-| `goroutine` | The identifier of the goroutine where the event was emitted. |
-| `line` | The line number where the event was emitted in the source. |
-| `redactable` | Whether the payload is redactable (see below for details). |
-| `timestamp` | The timestamp at which the event was emitted on the logging channel. |
-| `version` | The binary version with which the event was generated. |
+| Field name if `tag-style: compact` is specified | Field name if `tag-style: verbose` is specified | Description |
+|-------|-------|-------------|
+| `tag` | `tag` | (Only if the option `fluent-tag: true` is given.) A Fluent tag for the event, formed by the process name and the logging channel. |
+| `d` | `datetime` | The pretty-printed date/time of the event timestamp, if enabled via options. |
+| `f` | `file` | The name of the source file where the event was emitted. |
+| `g` | `goroutine` | The identifier of the goroutine where the event was emitted. |
+| `l` | `line` | The line number where the event was emitted in the source. |
+| `r` | `redactable` | Whether the payload is redactable (see below for details). |
+| `t` | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+| `v` | `version` | The binary version with which the event was generated. |
 
 
 After a couple of *header* entries written at the beginning of each log sink,
 all subsequent log entries also contain the following fields:
 
-| Field               | Description |
-|---------------------|-------------|
-| `channel` | The name of the logging channel where the event was sent. |
-| `severity` | The severity of the event. |
-| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
-| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
-| `severity_numeric` | The numeric value of the severity of the event. |
+| Field name if `tag-style: compact` is specified | Field name if `tag-style: verbose` is specified | Description |
+|-------|-------|-------------|
+| `C` | `channel` | The name of the logging channel where the event was sent. |
+| `sev` | `severity` | The severity of the event. |
+| `c` | `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
+| `n` | `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
+| `s` | `severity_numeric` | The numeric value of the severity of the event. |
 
 
 Additionally, the following fields are conditionally present:
 
-| Field               | Description |
-|---------------------|-------------|
-| `node_id` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
-| `cluster_id` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
-| `instance_id` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tenant_id` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tags`    | The logging context tags for the entry, if there were context tags. |
-| `message` | For unstructured events, the flat text payload. |
-| `event`   | The logging event, if structured (see below for details). |
-| `stacks`  | Goroutine stacks, for fatal events. |
+| Field name if `tag-style: compact` is specified | Field name if `tag-style: verbose` is specified | Description |
+|-------|-------|-------------|
+| `N` | `node_id` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
+| `x` | `cluster_id` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
+| `q` | `instance_id` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
+| `T` | `tenant_id` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
+| `tags` | `tags` | The logging context tags for the entry, if there were context tags. |
+| `message` | `message` | For unstructured events, the flat text payload. |
+| `event`   | `event`   | The logging event, if structured (see below for details). |
+| `stacks`  | `stacks`  | Goroutine stacks, for fatal events. |
 
 When an entry is structured, the `event` field maps to a dictionary
 whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
@@ -376,203 +377,35 @@ Additional options recognized via `format-options`:
 |--------|-------------|
 | `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
 | `datetime-timezone` | The timezone to use for the `datetime` field. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
+| `tag-style` | The tags to include in the envelope. The value can be `compact` (one letter tags) or `verbose` (long-form tags). Default is `verbose`. |
+| `fluent-tag` | Whether to produce an additional field called `tag` for Fluent compatibility. Default is `false`. |
 
 
 
 ## Format `json-compact`
 
-This format emits log entries as a JSON payload.
+This format name is an alias for 'json' with
+the following format option defaults:
 
-The JSON object is guaranteed to not contain unescaped newlines
-or other special characters, and the entry as a whole is followed
-by a newline character. This makes the format suitable for
-processing over a stream unambiguously.
-
-Each entry contains at least the following fields:
-
-| Field | Description |
-|-------|-------------|
-| `d` | The pretty-printed date/time of the event timestamp, if enabled via options. |
-| `f` | The name of the source file where the event was emitted. |
-| `g` | The identifier of the goroutine where the event was emitted. |
-| `l` | The line number where the event was emitted in the source. |
-| `r` | Whether the payload is redactable (see below for details). |
-| `t` | The timestamp at which the event was emitted on the logging channel. |
-| `v` | The binary version with which the event was generated. |
-
-
-After a couple of *header* entries written at the beginning of each log sink,
-all subsequent log entries also contain the following fields:
-
-| Field               | Description |
-|---------------------|-------------|
-| `C` | The name of the logging channel where the event was sent. |
-| `sev` | The severity of the event. |
-| `c` | The numeric identifier for the logging channel where the event was sent. |
-| `n` | The entry number on this logging sink, relative to the last process restart. |
-| `s` | The numeric value of the severity of the event. |
-
-
-Additionally, the following fields are conditionally present:
-
-| Field               | Description |
-|---------------------|-------------|
-| `N` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
-| `x` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
-| `q` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `T` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tags`    | The logging context tags for the entry, if there were context tags. |
-| `message` | For unstructured events, the flat text payload. |
-| `event`   | The logging event, if structured (see below for details). |
-| `stacks`  | Goroutine stacks, for fatal events. |
-
-When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
-for structured events for a list of possible payloads.
-
-When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
-contain delimiters (‹...›) around
-fields that are considered sensitive. These markers are automatically recognized
-by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
-
-Additional options recognized via `format-options`:
-
-| Option | Description |
-|--------|-------------|
-| `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
-| `datetime-timezone` | The timezone to use for the `datetime` field. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
-
+- `fluent-tag: false`
+- `tag-style: compact`
 
 
 ## Format `json-fluent`
 
-This format emits log entries as a JSON payload.
+This format name is an alias for 'json' with
+the following format option defaults:
 
-The JSON object is guaranteed to not contain unescaped newlines
-or other special characters, and the entry as a whole is followed
-by a newline character. This makes the format suitable for
-processing over a stream unambiguously.
-
-Each entry contains at least the following fields:
-
-| Field | Description |
-|-------|-------------|
-| `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
-| `datetime` | The pretty-printed date/time of the event timestamp, if enabled via options. |
-| `file` | The name of the source file where the event was emitted. |
-| `goroutine` | The identifier of the goroutine where the event was emitted. |
-| `line` | The line number where the event was emitted in the source. |
-| `redactable` | Whether the payload is redactable (see below for details). |
-| `timestamp` | The timestamp at which the event was emitted on the logging channel. |
-| `version` | The binary version with which the event was generated. |
-
-
-After a couple of *header* entries written at the beginning of each log sink,
-all subsequent log entries also contain the following fields:
-
-| Field               | Description |
-|---------------------|-------------|
-| `channel` | The name of the logging channel where the event was sent. |
-| `severity` | The severity of the event. |
-| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
-| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
-| `severity_numeric` | The numeric value of the severity of the event. |
-
-
-Additionally, the following fields are conditionally present:
-
-| Field               | Description |
-|---------------------|-------------|
-| `node_id` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
-| `cluster_id` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
-| `instance_id` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tenant_id` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tags`    | The logging context tags for the entry, if there were context tags. |
-| `message` | For unstructured events, the flat text payload. |
-| `event`   | The logging event, if structured (see below for details). |
-| `stacks`  | Goroutine stacks, for fatal events. |
-
-When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
-for structured events for a list of possible payloads.
-
-When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
-contain delimiters (‹...›) around
-fields that are considered sensitive. These markers are automatically recognized
-by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
-
-Additional options recognized via `format-options`:
-
-| Option | Description |
-|--------|-------------|
-| `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
-| `datetime-timezone` | The timezone to use for the `datetime` field. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
-
+- `fluent-tag: true`
+- `tag-style: verbose`
 
 
 ## Format `json-fluent-compact`
 
-This format emits log entries as a JSON payload.
+This format name is an alias for 'json' with
+the following format option defaults:
 
-The JSON object is guaranteed to not contain unescaped newlines
-or other special characters, and the entry as a whole is followed
-by a newline character. This makes the format suitable for
-processing over a stream unambiguously.
-
-Each entry contains at least the following fields:
-
-| Field | Description |
-|-------|-------------|
-| `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
-| `d` | The pretty-printed date/time of the event timestamp, if enabled via options. |
-| `f` | The name of the source file where the event was emitted. |
-| `g` | The identifier of the goroutine where the event was emitted. |
-| `l` | The line number where the event was emitted in the source. |
-| `r` | Whether the payload is redactable (see below for details). |
-| `t` | The timestamp at which the event was emitted on the logging channel. |
-| `v` | The binary version with which the event was generated. |
-
-
-After a couple of *header* entries written at the beginning of each log sink,
-all subsequent log entries also contain the following fields:
-
-| Field               | Description |
-|---------------------|-------------|
-| `C` | The name of the logging channel where the event was sent. |
-| `sev` | The severity of the event. |
-| `c` | The numeric identifier for the logging channel where the event was sent. |
-| `n` | The entry number on this logging sink, relative to the last process restart. |
-| `s` | The numeric value of the severity of the event. |
-
-
-Additionally, the following fields are conditionally present:
-
-| Field               | Description |
-|---------------------|-------------|
-| `N` | The node ID where the event was generated, once known. Only reported for single-tenant or KV servers. |
-| `x` | The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers. |
-| `q` | The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `T` | The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers. |
-| `tags`    | The logging context tags for the entry, if there were context tags. |
-| `message` | For unstructured events, the flat text payload. |
-| `event`   | The logging event, if structured (see below for details). |
-| `stacks`  | Goroutine stacks, for fatal events. |
-
-When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
-for structured events for a list of possible payloads.
-
-When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
-contain delimiters (‹...›) around
-fields that are considered sensitive. These markers are automatically recognized
-by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
-
-Additional options recognized via `format-options`:
-
-| Option | Description |
-|--------|-------------|
-| `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
-| `datetime-timezone` | The timezone to use for the `datetime` field. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
-
+- `fluent-tag: true`
+- `tag-style: compact`
 
 

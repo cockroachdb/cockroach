@@ -50,10 +50,10 @@ var formatters = func() map[string]func() logFormatter {
 	r(func() logFormatter { return formatCrdbV1TTYWithCounter{} })
 	r(func() logFormatter { return formatCrdbV2{} })
 	r(func() logFormatter { return formatCrdbV2TTY{} })
-	r(func() logFormatter { return formatFluentJSONCompact{} })
-	r(func() logFormatter { return formatFluentJSONFull{} })
-	r(func() logFormatter { return formatJSONCompact{} })
-	r(func() logFormatter { return &formatJSONFull{} })
+	r(func() logFormatter { return &formatJSONFull{fluentTag: true, tags: tagCompact} })
+	r(func() logFormatter { return &formatJSONFull{fluentTag: true, tags: tagVerbose} })
+	r(func() logFormatter { return &formatJSONFull{tags: tagCompact} })
+	r(func() logFormatter { return &formatJSONFull{tags: tagVerbose} })
 	return m
 }()
 
