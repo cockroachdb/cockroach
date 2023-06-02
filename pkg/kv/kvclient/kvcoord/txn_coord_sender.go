@@ -482,7 +482,7 @@ func (tc *TxnCoordSender) Send(
 	defer tc.mu.Unlock()
 	tc.mu.active = true
 
-	if pErr := tc.maybeRejectIncompatibleRequest(ctx, ba); pErr != nil {
+	if pErr := tc.maybeRejectInvalidRequest(ctx, ba); pErr != nil {
 		return nil, pErr
 	}
 
@@ -507,18 +507,6 @@ func (tc *TxnCoordSender) Send(
 		if log.V(2) {
 			ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.WriteTimestamp)
 		}
-	}
-
-	// It doesn't make sense to use inconsistent reads in a transaction. However,
-	// we still need to accept it as a parameter for this to compile.
-	if ba.ReadConsistency != kvpb.CONSISTENT {
-		return nil, kvpb.NewErrorf("cannot use %s ReadConsistency in txn",
-			ba.ReadConsistency)
-	}
-
-	lastIndex := len(ba.Requests) - 1
-	if lastIndex < 0 {
-		return nil, nil
 	}
 
 	// Clone the Txn's Proto so that future modifications can be made without
@@ -671,12 +659,21 @@ func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) er
 	return nil
 }
 
-// maybeRejectIncompatibleRequest checks if the TxnCoordSender is compatible with
-// a given BatchRequest.
-// Specifically, a Leaf TxnCoordSender is not compatible with locking requests.
-func (tc *TxnCoordSender) maybeRejectIncompatibleRequest(
+// maybeRejectInvalidRequest checks if the given BatchRequest is valid and
+// compatible with the current TxnCoordSender instance.
+func (tc *TxnCoordSender) maybeRejectInvalidRequest(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) *kvpb.Error {
+	// Check for invalid requests.
+	if ba.ReadConsistency != kvpb.CONSISTENT {
+		return kvpb.NewError(errors.AssertionFailedf("cannot use %s ReadConsistency in txn",
+			ba.ReadConsistency))
+	}
+	if len(ba.Requests) == 0 {
+		return kvpb.NewError(errors.AssertionFailedf("cannot send empty batch"))
+	}
+
+	// Check for incompatible requests.
 	switch tc.typ {
 	case kv.RootTxn:
 		return nil
