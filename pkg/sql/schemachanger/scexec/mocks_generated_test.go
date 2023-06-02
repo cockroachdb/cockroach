@@ -141,6 +141,18 @@ func (mr *MockCatalogMockRecorder) GetFullyQualifiedName(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFullyQualifiedName", reflect.TypeOf((*MockCatalog)(nil).GetFullyQualifiedName), arg0, arg1)
 }
 
+// InitializeSequence mocks base method.
+func (m *MockCatalog) InitializeSequence(arg0 catid.DescID, arg1 int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "InitializeSequence", arg0, arg1)
+}
+
+// InitializeSequence indicates an expected call of InitializeSequence.
+func (mr *MockCatalogMockRecorder) InitializeSequence(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitializeSequence", reflect.TypeOf((*MockCatalog)(nil).InitializeSequence), arg0, arg1)
+}
+
 // MustReadImmutableDescriptors mocks base method.
 func (m *MockCatalog) MustReadImmutableDescriptors(arg0 context.Context, arg1 ...catid.DescID) ([]catalog.Descriptor, error) {
 	m.ctrl.T.Helper()
