@@ -105,14 +105,6 @@ type rangeKeyBatcher struct {
 	db       *kv.DB
 	settings *cluster.Settings
 
-	// Functor that creates a new range key SST writer in case
-	// we need to operate on a new batch. The created SST writer
-	// operates on the rangeKeySSTFile below.
-	// TODO(casper): replace this if SSTBatcher someday has support for
-	// adding MVCCRangeKeyValue
-	rangeKeySSTWriterMaker func() *storage.SSTWriter
-	// In-memory SST file for flushing MVCC range keys
-	rangeKeySSTFile *storage.MemObject
 	// curRangeKVBatch is the current batch of range KVs which will
 	// be ingested through 'flush' later.
 	curRangeKVBatch     mvccRangeKeyValues
@@ -133,16 +125,11 @@ func newRangeKeyBatcher(
 	ctx context.Context, cs *cluster.Settings, db *kv.DB, onFlush func(summary kvpb.BulkOpSummary),
 ) *rangeKeyBatcher {
 	batcher := &rangeKeyBatcher{
-		db:              db,
-		settings:        cs,
-		minTimestamp:    hlc.MaxTimestamp,
-		batchSummary:    kvpb.BulkOpSummary{},
-		rangeKeySSTFile: &storage.MemObject{},
-		onFlush:         onFlush,
-	}
-	batcher.rangeKeySSTWriterMaker = func() *storage.SSTWriter {
-		w := storage.MakeIngestionSSTWriter(ctx, batcher.settings, batcher.rangeKeySSTFile)
-		return &w
+		db:           db,
+		settings:     cs,
+		minTimestamp: hlc.MaxTimestamp,
+		batchSummary: kvpb.BulkOpSummary{},
+		onFlush:      onFlush,
 	}
 	return batcher
 }
@@ -833,7 +820,8 @@ func (r *rangeKeyBatcher) flush(ctx context.Context) error {
 
 	log.VInfof(ctx, 2, "flushing %d range keys", len(r.curRangeKVBatch))
 
-	sstWriter := r.rangeKeySSTWriterMaker()
+	sstFile := &storage.MemObject{}
+	sstWriter := storage.MakeIngestionSSTWriter(ctx, r.settings, sstFile)
 	defer sstWriter.Close()
 	// Sort current batch as the SST writer requires a sorted order.
 	sort.Slice(r.curRangeKVBatch, func(i, j int) bool {
@@ -864,7 +852,7 @@ func (r *rangeKeyBatcher) flush(ctx context.Context) error {
 	}
 
 	sstToFlush := &rangeKeySST{
-		data:  r.rangeKeySSTFile.Bytes(),
+		data:  sstFile.Bytes(),
 		start: start,
 		end:   end.Next(),
 	}
@@ -1078,7 +1066,6 @@ func (r *rangeKeyBatcher) reset() {
 	if len(r.curRangeKVBatch) == 0 {
 		return
 	}
-	r.rangeKeySSTFile.Reset()
 	r.minTimestamp = hlc.MaxTimestamp
 	r.batchSummary.Reset()
 	r.curRangeKVBatchSize = 0
