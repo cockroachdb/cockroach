@@ -27,6 +27,10 @@ import (
 // InteractionOpts groups the options for an InteractionEnv.
 type InteractionOpts struct {
 	OnConfig func(*raft.Config)
+
+	// SetRandomizedElectionTimeout is used to plumb this function down from the
+	// raft test package.
+	SetRandomizedElectionTimeout func(node *raft.RawNode, timeout int)
 }
 
 // Node is a member of a raft group tested via an InteractionEnv.

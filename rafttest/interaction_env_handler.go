@@ -97,6 +97,14 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		// following, etc.). The information for node n is based on
 		// n's view.
 		err = env.handleRaftState()
+	case "set-randomized-election-timeout":
+		// Set the randomized election timeout for the given node. Will be reset
+		// again when the node changes state.
+		//
+		// Example:
+		//
+		// set-randomized-election-timeout 1 timeout=5
+		err = env.handleSetRandomizedElectionTimeout(t, d)
 	case "stabilize":
 		// Deliver messages to and run process-ready on the set of IDs until
 		// no more work is to be done. If no ids are given, all nodes are used.
@@ -112,6 +120,14 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		//
 		// status 5
 		err = env.handleStatus(t, d)
+	case "tick-election":
+		// Tick an election timeout interval for the given node (but beware the
+		// randomized timeout).
+		//
+		// Example:
+		//
+		// tick-election 3
+		err = env.handleTickElection(t, d)
 	case "tick-heartbeat":
 		// Tick a heartbeat interval.
 		//
