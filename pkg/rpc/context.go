@@ -2819,7 +2819,17 @@ func hasSiblingConn(peers map[peerKey]*peer, self peerKey) (healthy, ok bool) {
 			// so while causing a hiccup it wouldn't wedge anything.
 		}
 		ok = true
-		healthy = healthy || otherSnap.c.Health() == nil
+		select {
+		// We don't just check `c.Health` because that will trigger
+		// the probe. If otherSnap belongs to an inactive peer, we
+		// don't want to randomly do that all of the time; only
+		// a direct access to the peer by a client should start
+		// the probe. Checking that the breaker channel is open
+		// accomplishes that.
+		case <-otherSnap.c.Signal().C():
+		default:
+			healthy = true
+		}
 	}
 	return healthy, ok
 }
