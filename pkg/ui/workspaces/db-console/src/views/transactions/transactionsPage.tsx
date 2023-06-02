@@ -30,8 +30,8 @@ import {
   defaultFilters,
   util,
   TransactionsPageStateProps,
-  RecentTransactionsViewDispatchProps,
-  RecentTransactionsViewStateProps,
+  ActiveTransactionsViewDispatchProps,
+  ActiveTransactionsViewStateProps,
   TransactionsPageDispatchProps,
   TransactionsPageRoot,
   TransactionsPageRootProps,
@@ -42,9 +42,9 @@ import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
 import { bindActionCreators } from "redux";
 import {
-  recentTransactionsPageActionCreators,
-  mapStateToRecentTransactionsPageProps,
-} from "./recentTransactionsSelectors";
+  activeTransactionsPageActionCreators,
+  mapStateToActiveTransactionsPageProps,
+} from "./activeTransactionsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
 import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
 
@@ -132,12 +132,12 @@ const fingerprintsPageActions = {
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
-  activePageProps: RecentTransactionsViewStateProps;
+  activePageProps: ActiveTransactionsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: TransactionsPageDispatchProps;
-  activePageProps: RecentTransactionsViewDispatchProps;
+  activePageProps: ActiveTransactionsViewDispatchProps;
 };
 
 const TransactionsPageConnected = withRouter(
@@ -162,7 +162,7 @@ const TransactionsPageConnected = withRouter(
         limit: limitSetting.selector(state),
         reqSortSetting: reqSortSetting.selector(state),
       },
-      activePageProps: mapStateToRecentTransactionsPageProps(state),
+      activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
     dispatch => ({
       fingerprintsPageProps: bindActionCreators(
@@ -170,7 +170,7 @@ const TransactionsPageConnected = withRouter(
         dispatch,
       ),
       activePageProps: bindActionCreators(
-        recentTransactionsPageActionCreators,
+        activeTransactionsPageActionCreators,
         dispatch,
       ),
     }),

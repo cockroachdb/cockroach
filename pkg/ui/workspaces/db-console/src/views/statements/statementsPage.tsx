@@ -37,9 +37,9 @@ import {
   defaultFilters,
   util,
   StatementsPageRoot,
-  RecentStatementsViewStateProps,
+  ActiveStatementsViewStateProps,
   StatementsPageStateProps,
-  RecentStatementsViewDispatchProps,
+  ActiveStatementsViewDispatchProps,
   StatementsPageDispatchProps,
   StatementsPageRootProps,
   api,
@@ -60,9 +60,9 @@ import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
-  recentStatementsViewActions,
-  mapStateToRecentStatementViewProps,
-} from "./recentStatementsSelectors";
+  activeStatementsViewActions,
+  mapStateToActiveStatementViewProps,
+} from "./activeStatementsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
 import { createSelectorForCachedDataField } from "src/redux/apiReducers";
 
@@ -198,12 +198,12 @@ const fingerprintsPageActions = {
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps;
-  activePageProps: RecentStatementsViewStateProps;
+  activePageProps: ActiveStatementsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: StatementsPageDispatchProps;
-  activePageProps: RecentStatementsViewDispatchProps;
+  activePageProps: ActiveStatementsViewDispatchProps;
 };
 
 const selectStatements =
@@ -234,7 +234,7 @@ export default withRouter(
           state.cachedData?.statements?.data?.stmts_total_runtime_secs ?? 0,
         statementsResponse: selectStatements(state),
       },
-      activePageProps: mapStateToRecentStatementViewProps(state),
+      activePageProps: mapStateToActiveStatementViewProps(state),
     }),
     (dispatch: AppDispatch): DispatchProps => ({
       fingerprintsPageProps: bindActionCreators(
@@ -242,7 +242,7 @@ export default withRouter(
         dispatch,
       ),
       activePageProps: bindActionCreators(
-        recentStatementsViewActions,
+        activeStatementsViewActions,
         dispatch,
       ),
     }),

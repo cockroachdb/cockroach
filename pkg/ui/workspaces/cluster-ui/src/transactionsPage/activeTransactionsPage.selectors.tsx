@@ -11,32 +11,32 @@
 import { Dispatch } from "redux";
 import { createSelector } from "reselect";
 import {
-  RecentStatementFilters,
-  RecentStatementsViewDispatchProps,
-  RecentStatementsViewStateProps,
+  ActiveTransactionFilters,
+  ActiveTransactionsViewDispatchProps,
+  ActiveTransactionsViewStateProps,
   AppState,
   SortSetting,
 } from "src";
 import {
-  selectRecentStatements,
   selectAppName,
+  selectActiveTransactions,
   selectExecutionStatus,
   selectClusterLocksMaxApiSizeReached,
-} from "src/selectors/recentExecutions.selectors";
+} from "src/selectors/activeExecutions.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
-import { selectIsTenant } from "src/store/uiConfig";
 import { localStorageSelector } from "../store/utils/selectors";
+import { selectIsTenant } from "src/store/uiConfig";
 
 export const selectSortSetting = (state: AppState): SortSetting =>
-  localStorageSelector(state)["sortSetting/ActiveStatementsPage"];
+  localStorageSelector(state)["sortSetting/ActiveTransactionsPage"];
 
-export const selectFilters = (state: AppState): RecentStatementFilters =>
-  localStorageSelector(state)["filters/ActiveStatementsPage"];
+export const selectFilters = (state: AppState): ActiveTransactionFilters =>
+  localStorageSelector(state)["filters/ActiveTransactionsPage"];
 
 const selectLocalStorageColumns = (state: AppState) => {
   const localStorage = localStorageSelector(state);
-  return localStorage["showColumns/ActiveStatementsPage"];
+  return localStorage["showColumns/ActiveTransactionsPage"];
 };
 
 export const selectColumns = createSelector(
@@ -48,10 +48,10 @@ export const selectColumns = createSelector(
   },
 );
 
-export const mapStateToRecentStatementsPageProps = (
+export const mapStateToActiveTransactionsPageProps = (
   state: AppState,
-): RecentStatementsViewStateProps => ({
-  statements: selectRecentStatements(state),
+): ActiveTransactionsViewStateProps => ({
+  transactions: selectActiveTransactions(state),
   sessionsError: state.adminUI?.sessions.lastError,
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
@@ -62,29 +62,28 @@ export const mapStateToRecentStatementsPageProps = (
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
 });
 
-export const mapDispatchToRecentStatementsPageProps = (
+export const mapDispatchToActiveTransactionsPageProps = (
   dispatch: Dispatch,
-): RecentStatementsViewDispatchProps => ({
+): ActiveTransactionsViewDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
-  onColumnsSelect: columns => {
+  onColumnsSelect: columns =>
     dispatch(
       localStorageActions.update({
-        key: "showColumns/ActiveStatementsPage",
-        value: columns.join(","),
+        key: "showColumns/ActiveTransactionsPage",
+        value: columns ? columns.join(", ") : " ",
       }),
-    );
-  },
-  onFiltersChange: (filters: RecentStatementFilters) =>
+    ),
+  onFiltersChange: (filters: ActiveTransactionFilters) =>
     dispatch(
       localStorageActions.update({
-        key: "filters/ActiveStatementsPage",
+        key: "filters/ActiveTransactionsPage",
         value: filters,
       }),
     ),
   onSortChange: (ss: SortSetting) =>
     dispatch(
       localStorageActions.update({
-        key: "sortSetting/ActiveStatementsPage",
+        key: "sortSetting/ActiveTransactionsPage",
         value: ss,
       }),
     ),

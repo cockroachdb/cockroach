@@ -10,27 +10,27 @@
 
 import {
   ExecutionStatus,
-  RecentExecutions,
+  ActiveExecutions,
   SessionsResponse,
-} from "src/recentExecutions/types";
+} from "src/activeExecutions/types";
 import { ClusterLocksResponse } from "src/api";
 import {
-  getRecentExecutionsFromSessions,
+  getActiveExecutionsFromSessions,
   getWaitTimeByTxnIDFromLocks,
-} from "../recentExecutions";
+} from "../activeExecutions";
 
 // The functions in this file are agnostic to the different shape of each
 // state in db-console and cluster-ui. This file contains selector functions
 // and combiners that can be reused across both packages.
 
-export const selectRecentExecutionsCombiner = (
+export const selectActiveExecutionsCombiner = (
   sessions: SessionsResponse | null,
   clusterLocks: ClusterLocksResponse | null,
-): RecentExecutions => {
+): ActiveExecutions => {
   if (!sessions) return { statements: [], transactions: [] };
 
   const waitTimeByTxnID = getWaitTimeByTxnIDFromLocks(clusterLocks);
-  const execs = getRecentExecutionsFromSessions(sessions);
+  const execs = getActiveExecutionsFromSessions(sessions);
 
   return {
     statements: execs.statements.map(s => ({
