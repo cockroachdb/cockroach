@@ -15,10 +15,13 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -267,4 +271,72 @@ func TestParseBootstrapResolvers(t *testing.T) {
 			t.Errorf("expected name %q, got %q", expectedName, host)
 		}
 	})
+}
+
+func TestIdProviderServerIdentityString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type fields struct {
+		clusterID  *base.ClusterIDContainer
+		clusterStr atomic.Value
+		tenantID   roachpb.TenantID
+		tenantStr  atomic.Value
+		serverID   *base.NodeIDContainer
+		serverStr  atomic.Value
+	}
+	type args struct {
+		key serverident.ServerIdentificationKey
+	}
+
+	nodeID := &base.NodeIDContainer{}
+	nodeID.Set(context.Background(), roachpb.NodeID(123))
+
+	tenID, err := roachpb.MakeTenantID(2)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   string
+	}{
+		{
+			"system tenant shows nodeID",
+			fields{tenantID: roachpb.SystemTenantID, serverID: nodeID},
+			args{key: serverident.IdentifyKVNodeID},
+			"123",
+		},
+		{
+			"system tenant shows tenID",
+			fields{tenantID: roachpb.SystemTenantID, serverID: nodeID},
+			args{key: serverident.IdentifyTenantID},
+			"1",
+		},
+		{
+			"application tenant hides nodeID",
+			fields{tenantID: tenID, serverID: nodeID},
+			args{key: serverident.IdentifyKVNodeID},
+			"",
+		},
+		{
+			"application tenant shows tenID",
+			fields{tenantID: tenID, serverID: nodeID},
+			args{key: serverident.IdentifyTenantID},
+			"2",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &idProvider{
+				clusterID:  tt.fields.clusterID,
+				clusterStr: tt.fields.clusterStr,
+				tenantID:   tt.fields.tenantID,
+				tenantStr:  tt.fields.tenantStr,
+				serverID:   tt.fields.serverID,
+				serverStr:  tt.fields.serverStr,
+			}
+			assert.Equalf(t, tt.want, s.ServerIdentityString(tt.args.key), "ServerIdentityString(%v)", tt.args.key)
+		})
+	}
 }
