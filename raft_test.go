@@ -461,13 +461,9 @@ func TestLearnerCanVote(t *testing.T) {
 	n2.Step(pb.Message{From: 1, To: 2, Term: 2, Type: pb.MsgVote, LogTerm: 11, Index: 11})
 
 	msgs := n2.readMessages()
-	if len(msgs) != 1 {
-		t.Fatalf("expected exactly one message, not %+v", msgs)
-	}
-	msg := msgs[0]
-	if msg.Type != pb.MsgVoteResp && !msg.Reject {
-		t.Fatal("expected learner to not reject vote")
-	}
+	require.Len(t, msgs, 1)
+	require.Equal(t, msgs[0].Type, pb.MsgVoteResp)
+	require.False(t, msgs[0].Reject, "expected learner to not reject vote")
 }
 
 func TestLeaderCycle(t *testing.T) {
@@ -835,7 +831,7 @@ func TestCommitWithoutNewTermEntry(t *testing.T) {
 	tt := newNetwork(nil, nil, nil, nil, nil)
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
-	// 0 cannot reach 2,3,4
+	// 0 cannot reach 3,4,5
 	tt.cut(1, 3)
 	tt.cut(1, 4)
 	tt.cut(1, 5)
@@ -1725,7 +1721,7 @@ func TestAllServerStepdown(t *testing.T) {
 				wlead = None
 			}
 			if sm.lead != wlead {
-				t.Errorf("#%d, sm.lead = %d, want %d", i, sm.lead, None)
+				t.Errorf("#%d, sm.lead = %d, want %d", i, sm.lead, wlead)
 			}
 		}
 	}
