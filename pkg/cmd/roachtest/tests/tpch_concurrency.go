@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -54,7 +55,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 	restartCluster := func(ctx context.Context, c cluster.Cluster, t test.Test) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, numNodes-1))
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 	}
 
 	// checkConcurrency returns an error if at least one node of the cluster
@@ -101,6 +102,17 @@ func registerTPCHConcurrency(r registry.Registry) {
 					// time.
 					t.Status("skipping Q", queryNum)
 					continue
+				}
+				if queryNum == 21 {
+					if rand.Float64() < 0.5 {
+						// Skip Q21 in 50% cases since it usually takes about 1
+						// hr significantly increasing the duration of all
+						// iterations. Note that we choose to not skip it all
+						// the time so that we still exercise it while keeping
+						// the total test runtime under the timeout.
+						t.Status("skipping Q", queryNum)
+						continue
+					}
 				}
 				t.Status("running Q", queryNum)
 				// The way --max-ops flag works is as follows: the global ops
