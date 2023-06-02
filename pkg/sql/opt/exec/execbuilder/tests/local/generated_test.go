@@ -228,6 +228,13 @@ func TestExecBuild_geospatial(
 	runExecBuildLogicTest(t, "geospatial")
 }
 
+func TestExecBuild_guardrails(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "guardrails")
+}
+
 func TestExecBuild_hash_sharded_index(
 	t *testing.T,
 ) {
