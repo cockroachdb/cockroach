@@ -32,18 +32,6 @@ type report struct {
 	path            string
 }
 
-// TODO: move this
-func initLogger(path string) *logger.Logger {
-	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
-	var loggerError error
-	l, loggerError := loggerCfg.NewLogger(path)
-	if loggerError != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "unable to configure logger: %s\n", loggerError)
-		os.Exit(1)
-	}
-	return l
-}
-
 func getReportLogName(name string, pkg string) string {
 	pkgFormatted := strings.ReplaceAll(pkg, "/", "_")
 	return fmt.Sprintf("%s-%s.log", pkgFormatted, name)
