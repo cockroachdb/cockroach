@@ -1,0 +1,36 @@
+# Export reports to open metrics format
+export set-a
+----
+pkg_server_AdminAPIDataDistribution-8_sec_op{some="test",abc_def="good/label?"} 0.814504 test
+pkg_util_hlc_TimestampIsEmpty_walltime-8_sec_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_TimestampIsEmpty_all-8_sec_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_TimestampIsEmpty_empty-8_sec_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_DecimalToHLC-8_sec_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_Update-8_sec_op{some="test",abc_def="good/label?"} 0.068845 test
+pkg_server_SetupSpanForIncomingRPC_traceInfo-8_sec_op{some="test",abc_def="good/label?"} 0.000001 test
+pkg_server_SetupSpanForIncomingRPC_grpcMeta-8_sec_op{some="test",abc_def="good/label?"} 0.000001 test
+pkg_server_SetupSpanForIncomingRPC_no_parent-8_sec_op{some="test",abc_def="good/label?"} 0.000001 test
+pkg_util_hlc_TimestampStringSynthetic-8_sec_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_TimestampString-8_sec_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_server_SetupSpanForIncomingRPC_traceInfo-8_alloc_op{some="test",abc_def="good/label?"} 320.000000 test
+pkg_server_SetupSpanForIncomingRPC_no_parent-8_alloc_op{some="test",abc_def="good/label?"} 320.000000 test
+pkg_util_hlc_TimestampStringSynthetic-8_alloc_op{some="test",abc_def="good/label?"} 24.000000 test
+pkg_util_hlc_TimestampIsEmpty_all-8_alloc_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_DecimalToHLC-8_alloc_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_server_AdminAPIDataDistribution-8_alloc_op{some="test",abc_def="good/label?"} 102515994.000000 test
+pkg_server_SetupSpanForIncomingRPC_grpcMeta-8_alloc_op{some="test",abc_def="good/label?"} 320.000000 test
+pkg_util_hlc_TimestampString-8_alloc_op{some="test",abc_def="good/label?"} 24.000000 test
+pkg_util_hlc_TimestampIsEmpty_walltime-8_alloc_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_TimestampIsEmpty_empty-8_alloc_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_Update-8_alloc_op{some="test",abc_def="good/label?"} 6066.000000 test
+pkg_server_SetupSpanForIncomingRPC_traceInfo-8_allocs_op{some="test",abc_def="good/label?"} 3.000000 test
+pkg_server_SetupSpanForIncomingRPC_grpcMeta-8_allocs_op{some="test",abc_def="good/label?"} 3.000000 test
+pkg_server_SetupSpanForIncomingRPC_no_parent-8_allocs_op{some="test",abc_def="good/label?"} 3.000000 test
+pkg_util_hlc_TimestampStringSynthetic-8_allocs_op{some="test",abc_def="good/label?"} 1.000000 test
+pkg_util_hlc_TimestampIsEmpty_walltime-8_allocs_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_TimestampIsEmpty_all-8_allocs_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_TimestampIsEmpty_empty-8_allocs_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_server_AdminAPIDataDistribution-8_allocs_op{some="test",abc_def="good/label?"} 786333.000000 test
+pkg_util_hlc_TimestampString-8_allocs_op{some="test",abc_def="good/label?"} 1.000000 test
+pkg_util_hlc_DecimalToHLC-8_allocs_op{some="test",abc_def="good/label?"} 0.000000 test
+pkg_util_hlc_Update-8_allocs_op{some="test",abc_def="good/label?"} 47.000000 test

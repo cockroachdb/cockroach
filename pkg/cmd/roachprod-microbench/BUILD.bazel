@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "compare.go",
         "executor.go",
+        "export.go",
         "main.go",
         "metadata.go",
         "report.go",
@@ -42,6 +43,7 @@ go_test(
     srcs = [
         "compare_test.go",
         "executor_test.go",
+        "export_test.go",
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
