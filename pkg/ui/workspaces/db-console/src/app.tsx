@@ -78,8 +78,8 @@ import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import HotRangesPage from "src/views/hotRanges/index";
-import RecentStatementDetails from "./views/statements/recentStatementDetailsConnected";
-import RecentTransactionDetails from "./views/transactions/recentTransactionDetailsConnected";
+import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
+import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 import "styl/app.styl";
 import InsightsOverviewPage from "./views/insights/insightsOverview";
 import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
@@ -238,13 +238,13 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     <Route
                       exact
                       path={`/execution/statement/:${executionIdAttr}`}
-                      component={RecentStatementDetails}
+                      component={ActiveStatementDetails}
                     />
 
                     <Route
                       exact
                       path={`/execution/transaction/:${executionIdAttr}`}
-                      component={RecentTransactionDetails}
+                      component={ActiveTransactionDetails}
                     />
 
                     {/* statement statistics */}
