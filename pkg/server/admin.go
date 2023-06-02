@@ -2203,29 +2203,6 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 	return nil
 }
 
-// getLivenessStatusMap generates a map from NodeID to LivenessStatus for all
-// nodes known to gossip. Nodes that haven't pinged their liveness record for
-// more than server.time_until_store_dead are considered dead.
-//
-// To include all nodes (including ones not in the gossip network), callers
-// should consider calling (statusServer).NodesWithLiveness() instead where
-// possible.
-//
-// getLivenessStatusMap() includes removed nodes (dead + decommissioned).
-func getLivenessStatusMap(
-	ctx context.Context, nl *liveness.NodeLiveness, now hlc.Timestamp, st *cluster.Settings,
-) (map[roachpb.NodeID]livenesspb.NodeLivenessStatus, error) {
-	nodeVitalityMap, err := nl.ScanNodeVitalityFromKV(ctx)
-	if err != nil {
-		return nil, err
-	}
-	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeVitalityMap))
-	for nodeID, vitality := range nodeVitalityMap {
-		statusMap[nodeID] = vitality.LivenessStatus()
-	}
-	return statusMap, nil
-}
-
 // getLivenessResponse returns LivenessResponse: a map from NodeID to LivenessStatus and
 // a slice containing the liveness record of all nodes that have ever been a part of the
 // cluster.
@@ -2718,7 +2695,7 @@ func (s *systemAdminServer) DecommissionPreCheck(
 
 	// Initially evaluate node liveness status, so we filter the nodes to check.
 	var nodesToCheck []roachpb.NodeID
-	livenessStatusByNodeID, err := getLivenessStatusMap(ctx, s.nodeLiveness, s.clock.Now(), s.st)
+	vitality, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -2729,16 +2706,16 @@ func (s *systemAdminServer) DecommissionPreCheck(
 	// Any nodes that are already decommissioned or have unknown liveness should
 	// not be checked, and are added to response without replica counts or errors.
 	for _, nID := range req.NodeIDs {
-		livenessStatus := livenessStatusByNodeID[nID]
-		if livenessStatus == livenesspb.NodeLivenessStatus_UNKNOWN {
-			resultsByNodeID[nID] = serverpb.DecommissionPreCheckResponse_NodeCheckResult{
-				NodeID:                nID,
-				DecommissionReadiness: serverpb.DecommissionPreCheckResponse_UNKNOWN,
-			}
-		} else if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+		vitality := vitality[nID]
+		if vitality.IsDecommissioned() {
 			resultsByNodeID[nID] = serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 				NodeID:                nID,
 				DecommissionReadiness: serverpb.DecommissionPreCheckResponse_ALREADY_DECOMMISSIONED,
+			}
+		} else if !vitality.IsLive(livenesspb.DecommissionCheck) {
+			resultsByNodeID[nID] = serverpb.DecommissionPreCheckResponse_NodeCheckResult{
+				NodeID:                nID,
+				DecommissionReadiness: serverpb.DecommissionPreCheckResponse_UNKNOWN,
 			}
 		} else {
 			nodesToCheck = append(nodesToCheck, nID)
