@@ -39,6 +39,16 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaConnectionInactive = metric.Metadata{
+		Name: "rpc.connection.inactive",
+		Help: "Gauge of current connections in an inactive state and pending deletion; " +
+			"these are not healthy but are not tracked as unhealthy either because " +
+			"there is reason to believe that the connection is no longer relevant," +
+			"for example if the node has since been seen under a new address",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	metaConnectionHealthyNanos = metric.Metadata{
 		Name: "rpc.connection.healthy_nanos",
 		Help: `Gauge of nanoseconds of healthy connection time
@@ -105,6 +115,7 @@ func makeMetrics() Metrics {
 	return Metrics{
 		ConnectionHealthy:             aggmetric.NewGauge(metaConnectionHealthy, childLabels...),
 		ConnectionUnhealthy:           aggmetric.NewGauge(metaConnectionUnhealthy, childLabels...),
+		ConnectionInactive:            aggmetric.NewGauge(metaConnectionInactive, childLabels...),
 		ConnectionHealthyFor:          aggmetric.NewGauge(metaConnectionHealthyNanos, childLabels...),
 		ConnectionUnhealthyFor:        aggmetric.NewGauge(metaConnectionUnhealthyNanos, childLabels...),
 		ConnectionHeartbeats:          aggmetric.NewCounter(metaConnectionHeartbeats, childLabels...),
@@ -118,6 +129,7 @@ func makeMetrics() Metrics {
 type Metrics struct {
 	ConnectionHealthy             *aggmetric.AggGauge
 	ConnectionUnhealthy           *aggmetric.AggGauge
+	ConnectionInactive            *aggmetric.AggGauge
 	ConnectionHealthyFor          *aggmetric.AggGauge
 	ConnectionUnhealthyFor        *aggmetric.AggGauge
 	ConnectionHeartbeats          *aggmetric.AggCounter
@@ -142,6 +154,11 @@ type peerMetrics struct {
 	// Reset on first successful heartbeat (via reportHealthy), 1 after
 	// runHeartbeatUntilFailure returns.
 	ConnectionUnhealthy *aggmetric.Gauge
+	// Set when the peer is inactive, i.e. `deleteAfter` is set but it is still in
+	// the peer map (i.e. likely a superseded connection, but we're not sure yet).
+	// For such peers the probe only runs on demand and the connection is not
+	// healthy but also not tracked as unhealthy.
+	ConnectionInactive *aggmetric.Gauge
 	// Updated on each successful heartbeat from a local var, reset after
 	// runHeartbeatUntilFailure returns.
 	ConnectionHealthyFor *aggmetric.Gauge
@@ -169,6 +186,7 @@ func (m *Metrics) acquire(k peerKey) peerMetrics {
 	return peerMetrics{
 		ConnectionHealthy:      m.ConnectionHealthy.AddChild(labelVals...),
 		ConnectionUnhealthy:    m.ConnectionUnhealthy.AddChild(labelVals...),
+		ConnectionInactive:     m.ConnectionInactive.AddChild(labelVals...),
 		ConnectionHealthyFor:   m.ConnectionHealthyFor.AddChild(labelVals...),
 		ConnectionUnhealthyFor: m.ConnectionUnhealthyFor.AddChild(labelVals...),
 		ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
@@ -190,6 +208,7 @@ func (pm *peerMetrics) release() {
 	// released. (Releasing a peer doesn't "undo" past heartbeats).
 	pm.ConnectionHealthy.Update(0)
 	pm.ConnectionUnhealthy.Update(0)
+	pm.ConnectionInactive.Update(0)
 	pm.ConnectionHealthyFor.Update(0)
 	pm.ConnectionUnhealthyFor.Update(0)
 	pm.AvgRoundTripLatency.Update(0)
