@@ -53,7 +53,7 @@ var formatters = func() map[string]func() logFormatter {
 	r(func() logFormatter { return formatFluentJSONCompact{} })
 	r(func() logFormatter { return formatFluentJSONFull{} })
 	r(func() logFormatter { return formatJSONCompact{} })
-	r(func() logFormatter { return formatJSONFull{} })
+	r(func() logFormatter { return &formatJSONFull{} })
 	return m
 }()
 

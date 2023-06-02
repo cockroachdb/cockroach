@@ -17,10 +17,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -37,7 +39,7 @@ func (formatFluentJSONCompact) formatterName() string { return "json-fluent-comp
 func (formatFluentJSONCompact) doc() string { return formatJSONDoc(true /* fluent */, tagCompact) }
 
 func (f formatFluentJSONCompact) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, true /* fluent */, tagCompact)
+	return formatJSON(entry, true /* fluent */, tagCompact, "")
 }
 
 func (formatFluentJSONCompact) contentType() string { return "application/json" }
@@ -51,7 +53,7 @@ func (formatFluentJSONFull) setOption(k string, _ string) error {
 func (formatFluentJSONFull) formatterName() string { return "json-fluent" }
 
 func (f formatFluentJSONFull) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, true /* fluent */, tagVerbose)
+	return formatJSON(entry, true /* fluent */, tagVerbose, "")
 }
 
 func (formatFluentJSONFull) doc() string { return formatJSONDoc(true /* fluent */, tagVerbose) }
@@ -67,23 +69,44 @@ func (formatJSONCompact) setOption(k string, _ string) error {
 func (formatJSONCompact) formatterName() string { return "json-compact" }
 
 func (f formatJSONCompact) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, false /* fluent */, tagCompact)
+	return formatJSON(entry, false /* fluent */, tagCompact, "")
 }
 
 func (formatJSONCompact) doc() string { return formatJSONDoc(false /* fluent */, tagCompact) }
 
 func (formatJSONCompact) contentType() string { return "application/json" }
 
-type formatJSONFull struct{}
+type formatJSONFull struct {
+	datetimeFormat string
+}
 
-func (formatJSONFull) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
+func (f *formatJSONFull) setOption(k string, v string) error {
+	switch k {
+	case "datetime-format":
+		switch v {
+		case "none":
+			f.datetimeFormat = ""
+		case "iso8601", "rfc3339":
+			f.datetimeFormat = time.RFC3339Nano
+		case "rfc1123":
+			f.datetimeFormat = time.RFC1123Z
+		default:
+			if strings.HasPrefix(v, "fmt:") {
+				f.datetimeFormat = v[4:]
+			} else {
+				return errors.Newf("unknown datetime-format value format: %q", v)
+			}
+		}
+		return nil
+	default:
+		return errors.Newf("unknown option: %q", redact.Safe(k))
+	}
 }
 
 func (formatJSONFull) formatterName() string { return "json" }
 
 func (f formatJSONFull) formatEntry(entry logEntry) *buffer {
-	return formatJSON(entry, false /* fluent */, tagVerbose)
+	return formatJSON(entry, false /* fluent */, tagVerbose, f.datetimeFormat)
 }
 
 func (formatJSONFull) doc() string { return formatJSONDoc(false /* fluent */, tagVerbose) }
@@ -167,6 +190,11 @@ fields that are considered sensitive. These markers are automatically recognized
 by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` +
 		"[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` when log redaction is requested.
 
+Additional options recognized via ` + "`format-options`" + `:
+
+| Option | Description |
+|--------|-------------|
+| ` + "`datetime-format`" + ` | The format to use for the ` + "`datetime`" + ` field. The value can be one of ` + "`none`" + `, ` + "`iso8601`/`rfc3339` (synonyms)" + `, or ` + "`rfc1123`" + `. Default is ` + "`none`" + `. |
 
 `)
 
@@ -184,6 +212,8 @@ var jsonTags = map[byte]struct {
 		"The name of the logging channel where the event was sent.", false},
 	't': {[2]string{"t", "timestamp"},
 		"The timestamp at which the event was emitted on the logging channel.", true},
+	'd': {[2]string{"d", "datetime"},
+		"The pretty-printed date/time of the event timestamp, if enabled via options.", true},
 	's': {[2]string{"s", "severity_numeric"},
 		"The numeric value of the severity of the event.", false},
 	'S': {[2]string{"sev", "severity"},
@@ -229,7 +259,7 @@ var channelNamesLowercase = func() map[Channel]string {
 	return lnames
 }()
 
-func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
+func formatJSON(entry logEntry, forFluent bool, tags tagChoice, datetimeFormat string) *buffer {
 	jtags := jsonTags
 	buf := getBuffer()
 	buf.WriteByte('{')
@@ -295,7 +325,15 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	n += buf.nDigits(9, n, int(entry.ts%1000000000), '0')
 	buf.Write(buf.tmp[:n])
 	buf.WriteByte('"')
-
+	// Extra "datetime" field if requested.
+	if len(datetimeFormat) > 0 {
+		t := timeutil.FromUnixNanos(entry.ts)
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['d'].tags[tags])
+		buf.WriteString(`":"`)
+		buf.WriteString(t.Format(datetimeFormat))
+		buf.WriteByte('"')
+	}
 	// Server identifiers.
 	if entry.ClusterID != "" {
 		buf.WriteString(`,"`)

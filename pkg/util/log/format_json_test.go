@@ -73,7 +73,8 @@ func TestJSONFormats(t *testing.T) {
 		formatFluentJSONCompact{},
 		formatFluentJSONFull{},
 		formatJSONCompact{},
-		formatJSONFull{},
+		&formatJSONFull{},
+		&formatJSONFull{datetimeFormat: "2006-01-02 xx 15:04:05"},
 	}
 
 	// We only use the datadriven framework for the ability to rewrite the output.

@@ -327,6 +327,7 @@ Each entry contains at least the following fields:
 
 | Field | Description |
 |-------|-------------|
+| `datetime` | The pretty-printed date/time of the event timestamp, if enabled via options. |
 | `file` | The name of the source file where the event was emitted. |
 | `goroutine` | The identifier of the goroutine where the event was emitted. |
 | `line` | The line number where the event was emitted in the source. |
@@ -369,6 +370,11 @@ contain delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
 by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
+Additional options recognized via `format-options`:
+
+| Option | Description |
+|--------|-------------|
+| `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
 
 
 
@@ -385,6 +391,7 @@ Each entry contains at least the following fields:
 
 | Field | Description |
 |-------|-------------|
+| `d` | The pretty-printed date/time of the event timestamp, if enabled via options. |
 | `f` | The name of the source file where the event was emitted. |
 | `g` | The identifier of the goroutine where the event was emitted. |
 | `l` | The line number where the event was emitted in the source. |
@@ -427,6 +434,11 @@ contain delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
 by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
+Additional options recognized via `format-options`:
+
+| Option | Description |
+|--------|-------------|
+| `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
 
 
 
@@ -444,6 +456,7 @@ Each entry contains at least the following fields:
 | Field | Description |
 |-------|-------------|
 | `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
+| `datetime` | The pretty-printed date/time of the event timestamp, if enabled via options. |
 | `file` | The name of the source file where the event was emitted. |
 | `goroutine` | The identifier of the goroutine where the event was emitted. |
 | `line` | The line number where the event was emitted in the source. |
@@ -486,6 +499,11 @@ contain delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
 by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
+Additional options recognized via `format-options`:
+
+| Option | Description |
+|--------|-------------|
+| `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
 
 
 
@@ -503,6 +521,7 @@ Each entry contains at least the following fields:
 | Field | Description |
 |-------|-------------|
 | `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
+| `d` | The pretty-printed date/time of the event timestamp, if enabled via options. |
 | `f` | The name of the source file where the event was emitted. |
 | `g` | The identifier of the goroutine where the event was emitted. |
 | `l` | The line number where the event was emitted in the source. |
@@ -545,6 +564,11 @@ contain delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
 by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
+Additional options recognized via `format-options`:
+
+| Option | Description |
+|--------|-------------|
+| `datetime-format` | The format to use for the `datetime` field. The value can be one of `none`, `iso8601`/`rfc3339` (synonyms), or `rfc1123`. Default is `none`. |
 
 
 
