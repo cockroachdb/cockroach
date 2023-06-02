@@ -14,15 +14,18 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -33,17 +36,20 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
 /*
 TestReconnection supports input data:
-  - dial class=(def|sys|rf)
-  - connect class=(def|sys|rf)
-  - set-hb-err
-  - reset-hb-err
-  - soon [healthy=<n>] [unhealthy=<n>]
+  - tick <duration>
+  - dial id=X class=(def|sys|rf)
+  - connect id=X class=(def|sys|rf)
+  - set-hb-err id=X <decommissioned=(false|true)>
+  - reset-hb-err id=X
+  - soon [healthy=<n>] [unhealthy=<n>] [inactive=<n>]
     verify metrics in context report number of healthy and unhealthy connections
 */
 func TestReconnection(t *testing.T) {
@@ -57,24 +63,49 @@ func TestReconnection(t *testing.T) {
 			defer collect()
 			env.clock.Advance(time.Second)
 			switch d.Cmd {
+			case "tick":
+				require.Len(t, d.CmdArgs, 1)
+				d, err := time.ParseDuration(d.CmdArgs[0].Key)
+				require.NoError(t, err)
+				env.clock.Advance(d)
+				log.Eventf(ctx, "%s", env.clock.Now())
 			case "dial":
-				env.handleDial(scanClass(t, d))
+				env.handleDial(env.lookupTarget(t, d.CmdArgs...), scanClass(t, d))
 			case "connect":
-				env.handleConnect(ctx, scanClass(t, d))
+				env.handleConnect(ctx, env.lookupTarget(t, d.CmdArgs...), scanClass(t, d))
+			case "show":
+				env.handleShow(ctx, env.lookupTarget(t, d.CmdArgs...), scanClass(t, d))
 			case "set-hb-err":
-				env.handleSetHeartbeatError(true)
+				var dc bool
+				if d.HasArg("decommissioned") {
+					d.ScanArgs(t, "decommissioned", &dc)
+				}
+				var err error
+				if dc {
+					err = kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "injected decommissioned error")
+				} else {
+					err = errors.New("boom")
+				}
+
+				env.handleSetHeartbeatError(err, env.lookupTargets(t, d.CmdArgs...)...)
 			case "reset-hb-err":
-				env.handleSetHeartbeatError(false)
+				env.handleSetHeartbeatError(nil /* err */, env.lookupTargets(t, d.CmdArgs...)...)
 			case "soon":
 				var healthy int64
 				var unhealthy int64
+				var inactive int64
 				if d.HasArg("healthy") {
 					d.ScanArgs(t, "healthy", &healthy)
 				}
 				if d.HasArg("unhealthy") {
 					d.ScanArgs(t, "unhealthy", &unhealthy)
 				}
-				env.handleSoon(t, healthy, unhealthy)
+				if d.HasArg("inactive") {
+					d.ScanArgs(t, "inactive", &inactive)
+				}
+				if err := env.handleSoon(healthy, unhealthy, inactive); err != nil {
+					t.Fatalf("%s: %v", d.Pos, err)
+				}
 			default:
 				log.Eventf(ctx, "unknown command: %s\n", d.Cmd)
 			}
@@ -87,7 +118,7 @@ func TestReconnection(t *testing.T) {
 					// This is a crude hack, but it gets the job done: the trace has the
 					// file:line printed at the beginning of the message in an unstructured
 					// format, we need to get rid of that to have stable output.
-					msg = `‹` + redact.RedactableString(regexp.MustCompile(`^‹[^ ]+ `).ReplaceAllString(string(msg), ``))
+					msg = redact.RedactableString(regexp.MustCompile(`^([^ ]+) (.*)`).ReplaceAllString(string(msg), `$2`))
 					_, _ = fmt.Fprintln(&buf, msg)
 				}
 			}
@@ -100,126 +131,194 @@ func TestReconnection(t *testing.T) {
 }
 
 type ddEnv struct {
-	clock        *timeutil.ManualTime
-	stopper      *stop.Stopper
-	tracer       *tracing.Tracer
-	server       *Context
-	serverGRPC   *grpc.Server
-	serverAddr   string
-	serverNodeID roachpb.NodeID
-	hbs          *ManualHeartbeatService
-	hbErr        *atomic.Int32 // 0 = no error
-
-	client *Context
-	k      peerKey
+	clusterID uuid.UUID
+	clock     *timeutil.ManualTime
+	maxOffset time.Duration
+	stopper   *stop.Stopper
+	tracer    *tracing.Tracer
+	servers   []*ddServer
+	client    *Context
 }
 
 func setupEnv(t *testing.T) *ddEnv {
 	stopper := stop.NewStopper()
 	tracer := tracing.NewTracer()
-
+	tracer.SetRedactable(true)
 	// Shared cluster ID by all RPC peers (this ensures that the peers
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
-
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 0))
 	maxOffset := time.Duration(250)
-	serverCtx := newTestContext(clusterID, clock, maxOffset, stopper)
-
-	const serverNodeID = 1
-	serverCtx.NodeID.Set(context.Background(), serverNodeID)
-	s := newTestServer(t, serverCtx)
-
-	hbErr := new(atomic.Int32)
-
-	heartbeat := &ManualHeartbeatService{
-		readyFn: func() error {
-			if hbErr.Load() > 0 {
-				return errors.New("injected error")
-			}
-			return nil
-		},
-		stopper:            stopper,
-		clock:              clock,
-		maxOffset:          maxOffset,
-		remoteClockMonitor: serverCtx.RemoteClocks,
-		version:            serverCtx.Settings.Version,
-		nodeID:             serverCtx.NodeID,
-	}
-	RegisterHeartbeatServer(s, heartbeat)
-
-	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	remoteAddr := ln.Addr().String()
 
 	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
 	clientCtx.heartbeatInterval = 10 * time.Millisecond
 
-	conn := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass)
-	_, err = conn.Connect(context.Background())
+	env := &ddEnv{
+		clusterID: clusterID,
+		clock:     clock,
+		maxOffset: maxOffset,
+		stopper:   stopper,
+		tracer:    tracer,
+		client:    clientCtx,
+	}
+
+	// Add two servers with NodeID 1 so that tests can simulate the case of a node
+	// restarting under a new address.
+	env.addServer(t, roachpb.NodeID(1))
+	env.addServer(t, roachpb.NodeID(1))
+
+	return env
+}
+
+type ddServer struct {
+	nodeID     roachpb.NodeID
+	addr       string
+	context    *Context
+	grpcServer *grpc.Server
+	hbService  *ManualHeartbeatService
+	hbErr      *atomic.Pointer[error]
+}
+
+func (env *ddEnv) addServer(t *testing.T, nodeID roachpb.NodeID) {
+	serverCtx := newTestContext(env.clusterID, env.clock, env.maxOffset, env.stopper)
+	serverCtx.NodeID.Set(context.Background(), nodeID)
+	grpcServer := newTestServer(t, serverCtx)
+	hbErr := new(atomic.Pointer[error])
+	hbService := &ManualHeartbeatService{
+		readyFn: func() error {
+			if errp := hbErr.Load(); errp != nil && *errp != nil {
+				return *errp
+			}
+			return nil
+		},
+		stopper:            env.stopper,
+		clock:              env.clock,
+		maxOffset:          env.maxOffset,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		version:            serverCtx.Settings.Version,
+		nodeID:             serverCtx.NodeID,
+	}
+	RegisterHeartbeatServer(grpcServer, hbService)
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, grpcServer, util.TestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return &ddEnv{
-		clock:        clock,
-		stopper:      stopper,
-		tracer:       tracer,
-		server:       serverCtx,
-		serverGRPC:   s,
-		serverAddr:   remoteAddr,
-		serverNodeID: serverNodeID,
-		hbs:          heartbeat,
-		hbErr:        hbErr,
-		client:       clientCtx,
-		k: peerKey{
-			TargetAddr: remoteAddr,
-			NodeID:     serverNodeID,
-			Class:      DefaultClass,
-		},
+	env.servers = append(env.servers, &ddServer{
+		nodeID:     nodeID,
+		addr:       ln.Addr().String(),
+		context:    serverCtx,
+		grpcServer: grpcServer,
+		hbService:  hbService,
+		hbErr:      hbErr,
+	})
+}
+
+func (env *ddEnv) lookupServerWithSkip(nodeID roachpb.NodeID, skip int) *ddServer {
+	// NB: this code is intentionally dumb so that it can in principle handle
+	// out-of-order servers, in case we want to go dynamic at some point.
+	for i := range env.servers {
+		if env.servers[i].nodeID == nodeID {
+			if skip > 0 {
+				skip--
+				continue
+			}
+			return env.servers[i]
+		}
 	}
+	return nil
 }
 
-func (env *ddEnv) dial(class ConnectionClass) *Connection {
-	return env.client.GRPCDialNode(env.k.TargetAddr, env.k.NodeID, class)
+func (env *ddEnv) dial(srv *ddServer, class ConnectionClass) *Connection {
+	return env.client.GRPCDialNode(srv.addr, srv.nodeID, class)
 }
 
-func (env *ddEnv) handleDial(class ConnectionClass) {
-	env.dial(class)
+func (env *ddEnv) handleDial(to *ddServer, class ConnectionClass) {
+	env.dial(to, class)
 }
 
-func (env *ddEnv) handleConnect(ctx context.Context, class ConnectionClass) {
-	if _, err := env.dial(class).Connect(ctx); err != nil {
+func (env *ddEnv) handleConnect(ctx context.Context, srv *ddServer, class ConnectionClass) {
+	if _, err := env.dial(srv, class).Connect(ctx); err != nil {
 		// Don't log errors because it introduces too much flakiness. For example,
 		// network errors look different on different systems, and in many tests
 		// the heartbeat that catches an error may either be the first one or not
 		// (and so sometimes there's an InitialHeartbeatFailedError, or not). That's
 		// on top of error messages containing nondetermistic text.
-		log.Eventf(ctx, "error code: %v", grpcstatus.Code(errors.UnwrapAll(err)))
+		tripped := errors.Is(err, circuit.ErrBreakerOpen)
+		log.Eventf(ctx, "error code: %v [tripped=%t]", grpcstatus.Code(errors.UnwrapAll(err)), tripped)
 	}
 }
 
-func (env *ddEnv) handleSetHeartbeatError(fail bool) {
-	// NB: we can't put nil, so the consumer of the interceptor is
-	// set up to interpret interface{}((error)(nil)) like as interface{}(nil).
-	if fail {
-		env.hbErr.Store(1)
-	} else {
-		env.hbErr.Store(0)
+func (env *ddEnv) handleShow(ctx context.Context, srv *ddServer, class ConnectionClass) {
+	sn, _, b, ok := env.client.peers.getWithBreaker(peerKey{NodeID: srv.nodeID, TargetAddr: srv.addr, Class: class})
+	if !ok {
+		log.Eventf(ctx, "%s", redact.SafeString("<nil>"))
+		return
+	}
+	// Read tripped status without signaling probe.
+	var tripped bool
+	select {
+	case <-b.Signal().C():
+		tripped = true
+	default:
+	}
+	// Avoid printing timestamps since they're usually not
+	// deterministic; they're set by the probe but time advances
+	// by 1s on each datadriven command; they are not tightly
+	// synchronized.
+	now := env.clock.Now()
+	log.Eventf(ctx, `tripped:   %t
+inactive:  %t
+deletable: %t`,
+		redact.Safe(tripped),
+		redact.Safe(sn.deleteAfter != 0),
+		redact.Safe(sn.deletable(now)))
+}
+
+func (env *ddEnv) handleSetHeartbeatError(err error, srvs ...*ddServer) {
+	for _, srv := range srvs {
+		srv.hbErr.Store(&err)
 	}
 }
 
-func (env *ddEnv) handleSoon(t *testing.T, healthy, unhealthy int64) {
+func (env *ddEnv) handleSoon(healthy, unhealthy, inactive int64) error {
 	m := env.client.Metrics()
-	testutils.SucceedsSoon(t, func() error {
-		return checkMetrics(m, healthy, unhealthy, true)
+	// NB: returning to caller leads to printing in output, which means failure will
+	// be associated with a position in the test file. Much better than failing the
+	// test using `t.Fatal`.
+	return testutils.SucceedsSoonError(func() error {
+		return checkMetrics(m, healthy, unhealthy, inactive, true)
 	})
-	ps := &env.server.peers
-	ps.mu.RLock()
-	defer ps.mu.RUnlock()
+}
 
+// lookupTargets looks up the servers from the slice, where they are specified
+// as keys notation `n<node_id>'`. Each `'` skips one match, i.e. it n5' would
+// be the second server with NodeID 5.
+// Keys that don't match are ignored.
+func (env *ddEnv) lookupTargets(t *testing.T, in ...datadriven.CmdArg) []*ddServer {
+	var out []*ddServer
+	re := regexp.MustCompile(`^n([0-9]+)('*)$`)
+	for _, to := range in {
+		matches := re.FindStringSubmatch(to.Key)
+		if len(matches) != 3 {
+			continue
+		}
+		nodeID, err := strconv.ParseInt(matches[1], 10, 64)
+		require.NoError(t, err)
+		srv := env.lookupServerWithSkip(roachpb.NodeID(nodeID), len(matches[2]))
+		require.NotNil(t, srv)
+		out = append(out, srv)
+	}
+	return out
+}
+
+// lookupTarget is like lookupTargets, but asserts that there is exactly one
+// target, which is then returned.
+func (env *ddEnv) lookupTarget(t *testing.T, in ...datadriven.CmdArg) *ddServer {
+	srvs := env.lookupTargets(t, in...)
+	require.Len(t, srvs, 1)
+	return srvs[0]
 }
 
 func scanClass(t *testing.T, d *datadriven.TestData) ConnectionClass {
