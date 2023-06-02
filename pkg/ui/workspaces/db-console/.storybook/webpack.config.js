@@ -8,7 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-const custom = require("../webpack.app.js");
+const custom = require("../webpack.config");
+const path = require("path");
 
 const appConfig = custom({dist: "ccl"}, {mode: "development"});
 
@@ -17,8 +18,13 @@ module.exports = async ({ config, mode }) => {
     ...config,
     resolve: {
       ...config.resolve,
-      modules: appConfig.resolve.modules,
+      modules: [
+        path.resolve(__dirname, "..", "ccl"),
+        path.resolve(__dirname, ".."),
+        "node_modules",
+      ],
       extensions: appConfig.resolve.extensions,
+      alias: appConfig.resolve.alias,
     },
     module: {
       rules: [
