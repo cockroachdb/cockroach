@@ -3475,3 +3475,33 @@ SELECT f100915(20-(SELECT y FROM (VALUES (10), (20)) y(y) WHERE x=y)) FROM (VALU
 ----
 true
 true
+
+# Tests that document surprising but correct UDF behavior.
+subtest surprising_behavior
+
+statement ok
+CREATE TABLE t_param_names (a INT PRIMARY KEY, b INT);
+
+statement ok
+INSERT INTO t_param_names VALUES (1,2),(3,4);
+
+statement ok
+CREATE FUNCTION f_param_names(a INT, b INT) RETURNS INT AS
+$$
+  SELECT t_param_names.a FROM t_param_names WHERE t_param_names.a=a AND t_param_names.b=b;
+$$ LANGUAGE SQL;
+
+query I
+SELECT f_param_names(1,2);
+----
+1
+
+# When function arguments have the same name as the table columns the UDF
+# references, the table column names takes precedence over the function
+# argument names. In this example, the UDF returns a value from the first row in
+# the primary key, even though the arguments passed to it do not match. This
+# matches postgres behavior.
+query I
+SELECT f_param_names(3,4);
+----
+1
