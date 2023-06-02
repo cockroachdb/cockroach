@@ -328,10 +328,7 @@ func fullClusterTargetsRestore(
 
 	tenantsToRestore := []mtinfopb.TenantInfoWithUsage{}
 	if restoreAllTenants {
-		tenantsToRestore, err = lastBackupManifest.GetTenants()
-		if err != nil {
-			return nil, nil, nil, nil, err
-		}
+		tenantsToRestore = lastBackupManifest.Tenants
 	}
 
 	return filteredDescs, filteredDBs, nil, tenantsToRestore, nil
@@ -581,11 +578,7 @@ func selectTargets(
 	}
 
 	if targets.TenantID.IsSet() {
-		tenants, err := lastBackupManifest.GetTenants()
-		if err != nil {
-			return nil, nil, nil, nil, err
-		}
-		for _, tenant := range tenants {
+		for _, tenant := range lastBackupManifest.Tenants {
 			// TODO(dt): for now it is zero-or-one but when that changes, we should
 			// either keep it sorted or build a set here.
 			if tenant.ID == targets.TenantID.ID {
