@@ -301,11 +301,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, s := range tc.Servers {
 			id := s.NodeID()
-			live, err := nl.IsLive(id)
-			if err != nil {
-				return err
-			}
-			if !live {
+			if !nl.GetNodeVitalityFromCache(id).IsAlive() {
 				return errors.Newf("n%s not live yet", id)
 			}
 		}

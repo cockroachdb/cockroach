@@ -56,10 +56,7 @@ func verifyLiveness(t *testing.T, tc *testcluster.TestCluster) {
 }
 func verifyLivenessServer(s *server.TestServer, numServers int64) error {
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
-	live, err := nl.IsLive(s.Gossip().NodeID.Get())
-	if err != nil {
-		return err
-	} else if !live {
+	if !nl.GetNodeVitalityFromCache(s.Gossip().NodeID.Get()).IsAlive() {
 		return errors.Errorf("node %d not live", s.Gossip().NodeID.Get())
 	}
 	if a, e := nl.Metrics().LiveNodes.Value(), numServers; a != e {
@@ -109,10 +106,7 @@ func TestNodeLiveness(t *testing.T) {
 	for _, s := range tc.Servers {
 		nl := s.NodeLiveness().(*liveness.NodeLiveness)
 		nodeID := s.Gossip().NodeID.Get()
-		live, err := nl.IsLive(nodeID)
-		if err != nil {
-			t.Error(err)
-		} else if live {
+		if nl.GetNodeVitalityFromCache(nodeID).IsAlive() {
 			t.Errorf("expected node %d to be considered not-live after advancing node clock", nodeID)
 		}
 		testutils.SucceedsSoon(t, func() error {
@@ -471,10 +465,8 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 		if newLiveness.Expiration != oldLiveness.Expiration {
 			return errors.Errorf("expected expiration to remain unchanged")
 		}
-		if live, err := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).IsLive(deadNodeID); live || err != nil {
-			// NB: errors.Wrapf(nil, ...) returns nil.
-			// nolint:errwrap
-			return errors.Errorf("expected dead node to remain dead after epoch increment %t: %v", live, err)
+		if tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetNodeVitalityFromCache(deadNodeID).IsAlive() {
+			return errors.Errorf("expected dead node to remain dead after epoch increment")
 		}
 		return nil
 	})

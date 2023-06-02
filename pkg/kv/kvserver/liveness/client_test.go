@@ -58,9 +58,7 @@ func TestNodeLivenessAppearsAtStart(t *testing.T) {
 		nodeID := tc.Server(i).NodeID()
 		nl := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness)
 
-		if live, err := nl.IsLive(nodeID); err != nil {
-			t.Fatal(err)
-		} else if !live {
+		if !nl.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.IsAliveNotification) {
 			t.Fatalf("node %d not live", nodeID)
 		}
 
@@ -97,9 +95,7 @@ func TestScanNodeVitalityFromKV(t *testing.T) {
 		nodeID := tc.Server(i).NodeID()
 		nl := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness)
 
-		if live, err := nl.IsLive(nodeID); err != nil {
-			t.Fatal(err)
-		} else if !live {
+		if !nl.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.IsAliveNotification) {
 			t.Fatalf("node %d not live", nodeID)
 		}
 
@@ -113,11 +109,11 @@ func TestScanNodeVitalityFromKV(t *testing.T) {
 
 			// We expect epoch=1 as nodes first create a liveness record at epoch=0,
 			// and then increment it during their first heartbeat.
-			if liveness.Liveness.Epoch != 1 {
-				t.Fatalf("expected epoch=1, got epoch=%d", liveness.Liveness.Epoch)
+			if liveness.GetInternalLiveness().Epoch != 1 {
+				t.Fatalf("expected epoch=1, got epoch=%d", liveness.GetInternalLiveness().Epoch)
 			}
-			if !liveness.Liveness.Membership.Active() {
-				t.Fatalf("expected membership=active, got membership=%s", liveness.Liveness.Membership)
+			if !liveness.MembershipStatus().Active() {
+				t.Fatalf("expected membership=active, got membership=%s", liveness.MembershipStatus())
 			}
 		}
 
