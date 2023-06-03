@@ -13,7 +13,6 @@ package bulk
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -35,46 +34,37 @@ type TracingAggregatorEvent interface {
 // A TracingAggregator can be used to aggregate and render AggregatorEvents that
 // are emitted as part of its tracing spans' recording.
 type TracingAggregator struct {
-	mu struct {
-		syncutil.Mutex
-		// aggregatedEvents is a mapping from the tag identifying the
-		// TracingAggregatorEvent to the running aggregate of the TracingAggregatorEvent.
-		aggregatedEvents map[string]TracingAggregatorEvent
-		// sp is the tracing span managed by the TracingAggregator.
-		sp *tracing.Span
-		// closed is set to true if the TracingAggregator has already been closed.
-		closed bool
-	}
+	// sp is the tracing span managed by the TracingAggregator.
+	sp *tracing.Span
+	// aggregatedEvents is a mapping from the tag identifying the
+	// TracingAggregatorEvent to the running aggregate of the
+	// TracingAggregatorEvent.
+	aggregatedEvents map[string]TracingAggregatorEvent
 }
 
 // Notify implements the tracing.EventListener interface.
-func (b *TracingAggregator) Notify(event tracing.Structured) {
+func (b *TracingAggregator) Notify(event tracing.Structured) tracing.EventConsumptionStatus {
 	bulkEvent, ok := event.(TracingAggregatorEvent)
 	if !ok {
-		return
+		return tracing.EventNotConsumed
 	}
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	// If this is the first AggregatorEvent with this tag, set it as a LazyTag on
-	// the associated tracing span.
+	// If this is the first TracingAggregatorEvent with this tag, set it as a
+	// LazyTag on the associated tracing span.
 	eventTag := bulkEvent.Tag()
-	if _, ok := b.mu.aggregatedEvents[bulkEvent.Tag()]; !ok {
-		b.mu.aggregatedEvents[eventTag] = bulkEvent.Identity()
-		b.mu.sp.SetLazyTag(eventTag, b.mu.aggregatedEvents[eventTag])
+	if _, ok := b.aggregatedEvents[bulkEvent.Tag()]; !ok {
+		b.aggregatedEvents[eventTag] = bulkEvent.Identity()
+		b.sp.SetLazyTagLocked(eventTag, b.aggregatedEvents[eventTag])
 	}
-	b.mu.aggregatedEvents[eventTag].Combine(bulkEvent)
+	b.aggregatedEvents[eventTag].Combine(bulkEvent)
+	return tracing.EventNotConsumed
 }
 
-// Close is responsible for finishing the Aggregators' tracing span.
+// Close is responsible for finishing the TracingAggregator's tracing span.
+//
+// NOTE: it must be called exactly once.
 func (b *TracingAggregator) Close() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if !b.mu.closed {
-		b.mu.sp.Finish()
-		b.mu.closed = true
-	}
+	b.sp.Finish()
 }
 
 var _ tracing.EventListener = &TracingAggregator{}
@@ -92,10 +82,8 @@ func MakeTracingAggregatorWithSpan(
 	aggCtx, aggSpan := tracing.EnsureChildSpan(ctx, tracer, aggregatorName,
 		tracing.WithEventListeners(agg))
 
-	agg.mu.Lock()
-	defer agg.mu.Unlock()
-	agg.mu.aggregatedEvents = make(map[string]TracingAggregatorEvent)
-	agg.mu.sp = aggSpan
+	agg.aggregatedEvents = make(map[string]TracingAggregatorEvent)
+	agg.sp = aggSpan
 
 	return aggCtx, agg
 }

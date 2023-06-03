@@ -267,12 +267,10 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
 		s.KV.BytesRead.Set(uint64(vsc.kvReader.GetBytesRead()))
 		s.KV.BatchRequestsIssued.Set(uint64(vsc.kvReader.GetBatchRequestsIssued()))
-		totalContentionTime, events := vsc.kvReader.GetContentionInfo()
-		s.KV.ContentionTime.Set(totalContentionTime)
-		s.KV.ContentionEvents = events
+		s.KV.ContentionTime.Set(vsc.kvReader.GetContentionTime())
 		scanStats := vsc.kvReader.GetScanStats()
 		execstats.PopulateKVMVCCStats(&s.KV, &scanStats)
-		s.Exec.ConsumedRU.Set(scanStats.ConsumedRU)
+		s.Exec.ConsumedRU.Set(vsc.kvReader.GetConsumedRU())
 
 		// In order to account for SQL CPU time, we have to subtract the CPU time
 		// spent while serving KV requests on a SQL goroutine.

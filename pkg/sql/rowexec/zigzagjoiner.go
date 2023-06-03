@@ -251,7 +251,9 @@ type zigzagJoiner struct {
 	rowAlloc           rowenc.EncDatumRowAlloc
 	fetchedInititalRow bool
 
-	scanStats execstats.ScanStats
+	contentionEventsListener  execstats.ContentionEventsListener
+	scanStatsListener         execstats.ScanStatsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
 }
 
 // zigzagJoinerBatchSize is a parameter which determines how many rows should
@@ -381,7 +383,10 @@ func valuesSpecToEncDatum(
 
 // Start is part of the RowSource interface.
 func (z *zigzagJoiner) Start(ctx context.Context) {
-	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
+	ctx = z.StartInternal(
+		ctx, zigzagJoinerProcName, &z.contentionEventsListener,
+		&z.scanStatsListener, &z.tenantConsumptionListener,
+	)
 	z.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
 }
@@ -843,16 +848,12 @@ func (z *zigzagJoiner) ConsumerClosed() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
-	z.scanStats = execstats.GetScanStats(z.Ctx(), z.ExecStatsTrace)
-
-	contentionTime, contentionEvents := execstats.GetCumulativeContentionTime(z.Ctx(), z.ExecStatsTrace)
 	kvStats := execinfrapb.KVStats{
 		BytesRead:           optional.MakeUint(uint64(z.getBytesRead())),
-		ContentionTime:      optional.MakeTimeValue(contentionTime),
-		ContentionEvents:    contentionEvents,
+		ContentionTime:      optional.MakeTimeValue(z.contentionEventsListener.CumulativeContentionTime),
 		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
 	}
-	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStats)
+	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStatsListener.ScanStats)
 	for i := range z.infos {
 		fis, ok := getFetcherInputStats(z.infos[i].fetcher)
 		if !ok {
@@ -866,7 +867,7 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		KV:     kvStats,
 		Output: z.OutputHelper.Stats(),
 	}
-	ret.Exec.ConsumedRU = optional.MakeUint(z.scanStats.ConsumedRU)
+	ret.Exec.ConsumedRU = optional.MakeUint(z.tenantConsumptionListener.ConsumedRU)
 	return ret
 }
 

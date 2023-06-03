@@ -216,12 +216,12 @@ func (f *rowBasedFlow) makeProcessorAndOutput(
 			return nil, nil, errors.Errorf("expected one stream for passthrough router")
 		}
 		var err error
-		output, err = f.setupOutboundStream(spec.Streams[0])
+		output, err = f.setupOutboundStream(spec.Streams[0], ps.ProcessorID)
 		if err != nil {
 			return nil, nil, err
 		}
 	} else {
-		r, err := f.setupRouter(spec)
+		r, err := f.setupRouter(spec, ps.ProcessorID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -256,7 +256,7 @@ func (f *rowBasedFlow) makeProcessorAndOutput(
 	rowRecv := output.(*copyingRowReceiver).RowReceiver
 	switch o := rowRecv.(type) {
 	case router:
-		o.init(ctx, &f.FlowCtx, types)
+		o.init(ctx, &f.FlowCtx, ps.ProcessorID, types)
 	case *flowinfra.Outbox:
 		o.Init(types)
 	}
@@ -399,7 +399,7 @@ func (f *rowBasedFlow) setupInboundStream(
 // RowChannel is looked up in the localStreams map; otherwise an outgoing
 // mailbox is created.
 func (f *rowBasedFlow) setupOutboundStream(
-	spec execinfrapb.StreamEndpointSpec,
+	spec execinfrapb.StreamEndpointSpec, processorID int32,
 ) (execinfra.RowReceiver, error) {
 	sid := spec.StreamID
 	switch spec.Type {
@@ -408,7 +408,7 @@ func (f *rowBasedFlow) setupOutboundStream(
 
 	case execinfrapb.StreamEndpointSpec_REMOTE:
 		atomic.AddInt32(&f.numOutboxes, 1)
-		outbox := flowinfra.NewOutbox(&f.FlowCtx, spec.TargetNodeID, sid, &f.numOutboxes, f.FlowCtx.Gateway)
+		outbox := flowinfra.NewOutbox(&f.FlowCtx, processorID, spec.TargetNodeID, sid, &f.numOutboxes, f.FlowCtx.Gateway)
 		f.AddStartable(outbox)
 		return outbox, nil
 
@@ -431,11 +431,13 @@ func (f *rowBasedFlow) setupOutboundStream(
 // setupRouter initializes a router and the outbound streams.
 //
 // Pass-through routers are not supported; they should be handled separately.
-func (f *rowBasedFlow) setupRouter(spec *execinfrapb.OutputRouterSpec) (router, error) {
+func (f *rowBasedFlow) setupRouter(
+	spec *execinfrapb.OutputRouterSpec, processorID int32,
+) (router, error) {
 	streams := make([]execinfra.RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
-		streams[i], err = f.setupOutboundStream(spec.Streams[i])
+		streams[i], err = f.setupOutboundStream(spec.Streams[i], processorID)
 		if err != nil {
 			return nil, err
 		}

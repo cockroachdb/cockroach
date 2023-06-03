@@ -77,7 +77,7 @@ exp,benchmark
 12,ORMQueries/hasura_column_descriptions_8_tables
 5,ORMQueries/hasura_column_descriptions_modified
 4,ORMQueries/information_schema._pg_index_position
-132,ORMQueries/introspection_description_join
+134,ORMQueries/introspection_description_join
 4,ORMQueries/pg_attribute
 4,ORMQueries/pg_class
 6,ORMQueries/pg_is_other_temp_schema
