@@ -128,10 +128,10 @@ func TestInOrderResultsBuffer(t *testing.T) {
 			// With 50% probability, try spilling some of the buffered results
 			// to disk.
 			if rng.Float64() < 0.5 {
-				spillingPriority := rng.Intn(numExpectedResponses)
+				sp := spillingPriority{position: rng.Intn(numExpectedResponses)}
 				var spillableSize int64
 				for _, buffered := range b.(*inOrderResultsBuffer).buffered {
-					if !buffered.onDisk && buffered.Position > spillingPriority {
+					if !buffered.onDisk && buffered.Position > sp.position {
 						spillableSize += buffered.memoryTok.toRelease
 					}
 				}
@@ -141,11 +141,11 @@ func TestInOrderResultsBuffer(t *testing.T) {
 					// With 50% probability, ask the buffer to spill more than
 					// possible.
 					if rng.Float64() < 0.5 {
-						ok, err := b.spill(ctx, 2*spillableSize, spillingPriority)
+						ok, err := b.spill(ctx, 2*spillableSize, sp)
 						require.False(t, ok)
 						require.NoError(t, err)
 					} else {
-						ok, err := b.spill(ctx, spillableSize/2, spillingPriority)
+						ok, err := b.spill(ctx, spillableSize/2, sp)
 						require.True(t, ok)
 						require.NoError(t, err)
 					}

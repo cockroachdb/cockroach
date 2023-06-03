@@ -879,18 +879,21 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 		}
 
 		var atLeastBytes int64
+		var sp spillingPriority
 		// The higher the value of priority is, the lower the actual priority of
 		// spilling. Use the maximum value by default.
-		spillingPriority := math.MaxInt64
+		sp.position = math.MaxInt64
 		w.s.requestsToServe.Lock()
 		if !w.s.requestsToServe.emptyLocked() {
+			next := w.s.requestsToServe.nextLocked()
 			// If we already have minTargetBytes set on the first request to be
 			// issued, then use that.
-			atLeastBytes = w.s.requestsToServe.nextLocked().minTargetBytes
+			atLeastBytes = next.minTargetBytes
 			// The first request has the highest urgency among all current
 			// requests to serve, so we use its priority to spill everything
 			// with less urgency when necessary to free up the budget.
-			spillingPriority = w.s.requestsToServe.nextLocked().priority()
+			sp.position = next.priority()
+			sp.subRequestIdx = math.MaxInt32
 		}
 		w.s.requestsToServe.Unlock()
 
@@ -903,7 +906,7 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			atLeastBytes = avgResponseSize
 		}
 
-		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes, spillingPriority)
+		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes, sp)
 		if shouldExit {
 			return
 		}
@@ -987,7 +990,7 @@ func (w *workerCoordinator) getAvgResponseSize() (avgResponseSize int64, shouldE
 //
 // A boolean that indicates whether the coordinator should exit is returned.
 func (w *workerCoordinator) waitUntilEnoughBudget(
-	ctx context.Context, atLeastBytes int64, spillingPriority int,
+	ctx context.Context, atLeastBytes int64, sp spillingPriority,
 ) (shouldExit bool) {
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
@@ -997,7 +1000,7 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 		// First, ask the results buffer to spill some results to disk in order
 		// to free up budget.
 		if ok, err := w.s.results.spill(
-			ctx, atLeastBytes-(w.s.budget.limitBytes-w.s.budget.mu.acc.Used()), spillingPriority,
+			ctx, atLeastBytes-(w.s.budget.limitBytes-w.s.budget.mu.acc.Used()), sp,
 		); err != nil {
 			w.s.results.setError(err)
 			return true
@@ -1149,6 +1152,15 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 				return nil
 			}
 			budgetIsExhausted = true
+			sp := spillingPriority{
+				position:      singleRangeReqs.priority(),
+				subRequestIdx: singleRangeReqs.subPriority(),
+			}
+			if ok, err := w.s.results.spill(ctx, minAcceptableBudget-availableBudget, sp); err != nil {
+				return err
+			} else if ok {
+				availableBudget = w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
+			}
 			if availableBudget < 1 {
 				// The budget is already in debt, and we have no requests in
 				// flight. This occurs when we have very large roachpb.Span in
