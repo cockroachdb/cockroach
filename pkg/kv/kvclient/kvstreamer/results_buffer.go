@@ -126,7 +126,7 @@ type resultsBuffer interface {
 	// client.
 	//
 	// It is assumed that the budget's mutex is already being held.
-	spill(_ context.Context, atLeastBytes int64, spillingPriority int) (bool, error)
+	spill(_ context.Context, atLeastBytes int64, sp spillingPriority) (bool, error)
 
 	// numSpilledResults returns the number of Results that have been spilled to
 	// disk by the resultsBuffer so far.
@@ -146,6 +146,15 @@ type resultsBuffer interface {
 	// setError sets the error on the buffer (if it hasn't been previously set)
 	// and wakes up a goroutine if there is one blocked in wait().
 	setError(error)
+}
+
+type spillingPriority struct {
+	position      int
+	subRequestIdx int32
+}
+
+func (sp spillingPriority) spill(r Result) bool {
+	return r.Position > sp.position || (r.Position == sp.position && r.subRequestIdx > sp.subRequestIdx)
 }
 
 type resultsBufferBase struct {
@@ -344,7 +353,7 @@ func (b *outOfOrderResultsBuffer) get(context.Context) ([]Result, bool, error) {
 	return results, allComplete, b.err
 }
 
-func (b *outOfOrderResultsBuffer) spill(context.Context, int64, int) (bool, error) {
+func (b *outOfOrderResultsBuffer) spill(context.Context, int64, spillingPriority) (bool, error) {
 	// There is nothing to spill in the OutOfOrder mode, but we'll assert that
 	// the budget's mutex is held.
 	b.budget.mu.AssertHeld()
@@ -617,7 +626,7 @@ func (b *inOrderResultsBuffer) stringLocked() string {
 }
 
 func (b *inOrderResultsBuffer) spill(
-	ctx context.Context, atLeastBytes int64, spillingPriority int,
+	ctx context.Context, atLeastBytes int64, sp spillingPriority,
 ) (spilled bool, _ error) {
 	b.budget.mu.AssertHeld()
 	b.Lock()
@@ -629,10 +638,10 @@ func (b *inOrderResultsBuffer) spill(
 		defer func() {
 			if !spilled {
 				for i := range b.buffered {
-					if b.buffered[i].Position > spillingPriority && !b.buffered[i].onDisk {
+					if b.buffered[i].Position > sp.position && !b.buffered[i].onDisk {
 						panic(errors.AssertionFailedf(
 							"unexpectedly result for position %d wasn't spilled, spilling priority %d\n%s\n",
-							b.buffered[i].Position, spillingPriority, b.stringLocked()),
+							b.buffered[i].Position, sp.position, b.stringLocked()),
 						)
 					}
 				}
@@ -655,7 +664,7 @@ func (b *inOrderResultsBuffer) spill(
 		}
 	}(atLeastBytes, b.numSpilled)
 	for idx := len(b.buffered) - 1; idx >= 0; idx-- {
-		if r := &b.buffered[idx]; !r.onDisk && r.Position > spillingPriority {
+		if r := &b.buffered[idx]; !r.onDisk && sp.spill(r.Result) {
 			diskResultID, err := b.diskBuffer.Serialize(ctx, &b.buffered[idx].Result)
 			if err != nil {
 				b.setErrorLocked(err)
