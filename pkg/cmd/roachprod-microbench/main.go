@@ -109,11 +109,11 @@ func makeCompareCommand() *cobra.Command {
 			return err
 		}
 
-		tableResults, err := c.compareBenchmarks()
+		metricMaps, err := c.readMetrics()
 		if err != nil {
 			return err
 		}
-		return c.publishToGoogleSheets(tableResults)
+		return c.publishToGoogleSheets(metricMaps)
 	}
 
 	cmd := &cobra.Command{

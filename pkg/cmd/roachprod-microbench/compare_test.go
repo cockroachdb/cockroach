@@ -17,31 +17,44 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
-	//lint:ignore SA1019 benchstat is deprecated
-	"golang.org/x/perf/benchstat"
 )
 
-func tablesToText(tablesMap map[string][]*benchstat.Table) string {
+func metricsToText(metricMaps map[string]*model.MetricMap) string {
 	buf := new(bytes.Buffer)
-	keys := maps.Keys(tablesMap)
-	sort.Strings(keys)
-	for _, key := range keys {
-		tables := tablesMap[key]
-		// Sort the tables by benchmark name so that the output is deterministic.
-		for _, table := range tables {
-			sort.Slice(table.Rows, func(i, j int) bool {
-				return table.Rows[i].Benchmark < table.Rows[j].Benchmark
-			})
+	packages := maps.Keys(metricMaps)
+	sort.Strings(packages)
+
+	for _, pkg := range packages {
+		fmt.Fprintf(buf, "Package %s\n", pkg)
+		metricMap := metricMaps[pkg]
+		metricKeys := maps.Keys(*metricMap)
+		sort.Strings(metricKeys)
+
+		for _, metricKey := range metricKeys {
+			fmt.Fprintf(buf, "Metric %s\n", metricKey)
+			metric := (*metricMap)[metricKey]
+			entryKeys := maps.Keys(metric.BenchmarkEntries)
+			sort.Strings(entryKeys)
+
+			for _, entryKey := range entryKeys {
+				entry := metric.BenchmarkEntries[entryKey]
+				centers := make([]float64, len(entry.Summaries))
+				summaryKeys := maps.Keys(entry.Summaries)
+				sort.Strings(summaryKeys)
+				for i, key := range summaryKeys {
+					centers[i] = entry.Summaries[key].Center
+				}
+				comparison := metric.ComputeComparison(entryKey, "old", "new")
+				fmt.Fprintf(buf, "BenchmarkEntry %s %s %v %s\n",
+					entryKey, comparison.FormattedDelta, centers, comparison.Distribution.String(),
+				)
+			}
 		}
-		if buf.Len() != 0 {
-			fmt.Fprintf(buf, "\n")
-		}
-		fmt.Fprintf(buf, "Sheet: %s\n", key)
-		benchstat.FormatText(buf, tables)
 	}
 	return buf.String()
 }
@@ -52,8 +65,8 @@ func TestCompareBenchmarks(t *testing.T) {
 		if d.Cmd != "compare" {
 			d.Fatalf(t, "unknown command %s", d.Cmd)
 		}
-		newDir := datapathutils.TestDataPath(t, "reports", d.CmdArgs[0].String())
-		oldDir := datapathutils.TestDataPath(t, "reports", d.CmdArgs[1].String())
+		oldDir := datapathutils.TestDataPath(t, "reports", d.CmdArgs[0].String())
+		newDir := datapathutils.TestDataPath(t, "reports", d.CmdArgs[1].String())
 		packages, err := getPackagesFromLogs(oldDir)
 		require.NoError(t, err)
 		c := &compare{
@@ -63,9 +76,8 @@ func TestCompareBenchmarks(t *testing.T) {
 			},
 			packages: packages,
 		}
-		tables, err := c.compareBenchmarks()
+		metricMaps, err := c.readMetrics()
 		require.NoError(t, err)
-		return tablesToText(tables)
-
+		return metricsToText(metricMaps)
 	})
 }
