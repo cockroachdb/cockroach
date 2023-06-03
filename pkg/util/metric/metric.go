@@ -260,7 +260,8 @@ func newHistogram(meta Metadata, windowDuration time.Duration, buckets []float64
 	// TODO(obs-inf): prometheus supports labeled histograms but they require more
 	// plumbing and don't fit into the PrometheusObservable interface any more.
 	opts := prometheus.HistogramOpts{
-		Buckets: buckets,
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: uint32(len(buckets)),
 	}
 	cum := prometheus.NewHistogram(opts)
 	h := &Histogram{
@@ -887,6 +888,9 @@ func ValueAtQuantileWindowed(histogram *prometheusgo.Histogram, q float64) float
 	buckets := histogram.Bucket
 	n := float64(*histogram.SampleCount)
 	if n == 0 {
+		return 0
+	}
+	if len(buckets) == 0 {
 		return 0
 	}
 
