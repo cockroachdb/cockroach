@@ -36,16 +36,14 @@ func TestReplicaUnavailableError(t *testing.T) {
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 10, ReplicaID: 100})
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 20, ReplicaID: 200})
 	desc := roachpb.NewRangeDescriptor(10, roachpb.RKey("a"), roachpb.RKey("z"), repls)
-	lm := livenesspb.IsLiveMap{
-		1: livenesspb.IsLiveMapEntry{IsLive: true},
-	}
+	nv := livenesspb.TestCreateNodeVitality(1)
 	ts, err := time.Parse("2006-01-02 15:04:05", "2006-01-02 15:04:05")
 	require.NoError(t, err)
 	wrappedErr := errors.New("probe failed")
 	rs := raft.Status{}
 	ctx := context.Background()
 	err = errors.DecodeError(ctx, errors.EncodeError(ctx, replicaUnavailableError(
-		wrappedErr, desc, desc.Replicas().AsProto()[0], lm, &rs, hlc.Timestamp{WallTime: ts.UnixNano()}),
+		wrappedErr, desc, desc.Replicas().AsProto()[0], nv, &rs, hlc.Timestamp{WallTime: ts.UnixNano()}),
 	))
 	require.True(t, errors.Is(err, wrappedErr), "%+v", err)
 	echotest.Require(t, string(redact.Sprint(err)), datapathutils.TestDataPath(t, "replica_unavailable_error.txt"))

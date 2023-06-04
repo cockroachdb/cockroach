@@ -8095,7 +8095,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ticks := r.mu.ticks
 		r.mu.Unlock()
 		for ; (ticks % reproposalTicks) != 0; ticks++ {
-			if _, err := r.tick(ctx, nil, nil); err != nil {
+			if _, err := r.tick(ctx, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -8146,7 +8146,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 
 		// Tick raft.
 		iot := ioThresholdMap{m: map[roachpb.StoreID]*admissionpb.IOThreshold{}}
-		if _, err := r.tick(ctx, nil, &iot); err != nil {
+		if _, err := r.tick(ctx, &iot); err != nil {
 			t.Fatal(err)
 		}
 
@@ -9796,7 +9796,7 @@ type testQuiescer struct {
 	isDestroyed            bool
 
 	// Not used to implement quiescer, but used by tests.
-	livenessMap livenesspb.IsLiveMap
+	livenessMap livenesspb.TestNodeVitality
 	paused      map[roachpb.ReplicaID]struct{}
 }
 
@@ -9909,11 +9909,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						},
 					},
 				},
-				livenessMap: livenesspb.IsLiveMap{
-					1: {IsLive: true},
-					2: {IsLive: true},
-					3: {IsLive: true},
-				},
+				livenessMap: livenesspb.TestCreateNodeVitality(1, 2, 3),
 			}
 			q = transform(q)
 			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, q.leaseStatus, q.livenessMap, q.paused)
@@ -9922,8 +9918,8 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				// Any non-live replicas should be in the laggingReplicaSet.
 				var expLagging laggingReplicaSet
 				for _, rep := range q.descRLocked().Replicas().Descriptors() {
-					if l, ok := q.livenessMap[rep.NodeID]; ok && !l.IsLive {
-						expLagging = append(expLagging, l.Liveness)
+					if l := q.livenessMap.GetNodeVitalityFromCache(rep.NodeID); !l.IsLive(livenesspb.RangeQuiesience) {
+						expLagging = append(expLagging, l.GetInternalLiveness())
 					}
 				}
 				sort.Sort(expLagging)
@@ -10049,7 +10045,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	}
 	// Pass a nil liveness map.
 	test(true, func(q *testQuiescer) *testQuiescer {
-		q.livenessMap = nil
+		q.livenessMap = livenesspb.TestCreateNodeVitality()
 		return q
 	})
 	// Verify quiesce even when replica progress doesn't match, if
@@ -10057,19 +10053,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	for _, i := range []uint64{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
 			nodeID := roachpb.NodeID(i)
-			q.livenessMap[nodeID] = livenesspb.IsLiveMapEntry{
-				Liveness: livenesspb.Liveness{NodeID: nodeID},
-				IsLive:   false,
-			}
-			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
-			return q
-		})
-	}
-	// Verify no quiescence when replica progress doesn't match, if
-	// given a nil liveness map.
-	for _, i := range []uint64{1, 2, 3} {
-		test(false, func(q *testQuiescer) *testQuiescer {
-			q.livenessMap = nil
+			q.livenessMap.DownNode(nodeID)
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
 			return q
 		})
@@ -10078,7 +10062,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	// liveness map does not contain the lagging replica.
 	for _, i := range []uint64{1, 2, 3} {
 		test(false, func(q *testQuiescer) *testQuiescer {
-			delete(q.livenessMap, roachpb.NodeID(i))
+			q.livenessMap.DeleteNode(roachpb.NodeID(i))
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
 			return q
 		})
@@ -10132,11 +10116,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 						},
 					},
 				},
-				livenessMap: livenesspb.IsLiveMap{
-					1: {IsLive: true},
-					2: {IsLive: true},
-					3: {IsLive: true},
-				},
+				livenessMap: livenesspb.TestCreateNodeVitality(1, 2, 3),
 			}
 			req := kvserverpb.RaftMessageRequest{
 				Message: raftpb.Message{
@@ -10183,10 +10163,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
-			Liveness: l,
-			IsLive:   false,
-		}
+		q.livenessMap.DownNode(l.NodeID)
 		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{l}
 		return q, req
 	})
@@ -10197,10 +10174,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
-			Liveness: l,
-			IsLive:   false,
-		}
+		q.livenessMap.DownNode(l.NodeID)
 		lOld := l
 		lOld.Epoch--
 		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lOld}
@@ -10212,10 +10186,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
-			Liveness: l,
-			IsLive:   false,
-		}
+		q.livenessMap.AddDead(l.NodeID)
 		lOld := l
 		lOld.Expiration.WallTime--
 		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lOld}
@@ -10228,10 +10199,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
-			Liveness: l,
-			IsLive:   false,
-		}
+		q.livenessMap.AddDead(l.NodeID)
 		lNew := l
 		lNew.Epoch++
 		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lNew}
@@ -10243,10 +10211,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
-			Liveness: l,
-			IsLive:   false,
-		}
+		q.livenessMap.AddDead(l.NodeID)
 		lNew := l
 		lNew.Expiration.WallTime++
 		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lNew}
@@ -11450,7 +11415,7 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 		leaseStatus             kvserverpb.LeaseStatus
 		storeID                 roachpb.StoreID
 		raftStatus              raft.BasicStatus
-		livenessMap             livenesspb.IsLiveMap
+		livenessMap             livenesspb.TestNodeVitality
 		desc                    *roachpb.RangeDescriptor
 		requiresExpirationLease bool
 		now                     hlc.Timestamp
@@ -11482,12 +11447,10 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 				Lead:      2,
 			},
 		},
-		livenessMap: livenesspb.IsLiveMap{
-			1: livenesspb.IsLiveMapEntry{IsLive: true},
-			2: livenesspb.IsLiveMapEntry{IsLive: false},
-			3: livenesspb.IsLiveMapEntry{IsLive: false},
-		},
+		livenessMap: livenesspb.TestCreateNodeVitality(1),
 	}
+	base.livenessMap.AddDead(2)
+	base.livenessMap.AddDead(3)
 
 	testcases := map[string]struct {
 		expect bool
@@ -11523,43 +11486,26 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 			p.raftStatus.Lead = 4
 		}},
 		"leader not in liveness": {false, func(p *params) {
-			delete(p.livenessMap, 2)
+			p.livenessMap.DeleteNode(2)
 		}},
 		"leader is live": {false, func(p *params) {
-			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
-				IsLive: true,
-				Liveness: livenesspb.Liveness{
-					NodeID:     2,
-					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
-				},
-			}
+			p.livenessMap.RestartNode(2)
 		}},
 		"leader is live according to expiration": {false, func(p *params) {
-			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
-				IsLive: false,
-				Liveness: livenesspb.Liveness{
-					NodeID:     2,
-					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
-				},
-			}
+			// FIXME: This is a slightly different definition of alive.
+			p.livenessMap.RestartNode(2)
 		}},
 		"leader is dead according to expiration": {true, func(p *params) {
-			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
-				IsLive: true,
-				Liveness: livenesspb.Liveness{
-					NodeID:     2,
-					Expiration: p.now.Add(0, -1).ToLegacyTimestamp(),
-				},
-			}
+			p.livenessMap.DownNode(2)
 		}},
 	}
 
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			p := base
-			p.livenessMap = livenesspb.IsLiveMap{}
-			for k, v := range base.livenessMap {
-				p.livenessMap[k] = v
+			p.livenessMap = livenesspb.TestCreateNodeVitality()
+			for k, v := range base.livenessMap.Entry {
+				p.livenessMap.Entry[k] = v
 			}
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldCampaignOnWake(p.leaseStatus, p.storeID, p.raftStatus,
@@ -11574,7 +11520,7 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 
 	type params struct {
 		raftStatus               raft.BasicStatus
-		livenessMap              livenesspb.IsLiveMap
+		livenessMap              livenesspb.TestNodeVitality
 		desc                     *roachpb.RangeDescriptor
 		shouldUseExpirationLease bool
 		now                      hlc.Timestamp
@@ -11600,13 +11546,11 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 				Lead:      2,
 			},
 		},
-		livenessMap: livenesspb.IsLiveMap{
-			1: livenesspb.IsLiveMapEntry{IsLive: true},
-			2: livenesspb.IsLiveMapEntry{IsLive: false},
-			3: livenesspb.IsLiveMapEntry{IsLive: false},
-		},
-		now: hlc.Timestamp{Logical: 10},
+		livenessMap: livenesspb.TestCreateNodeVitality(1),
+		now:         hlc.Timestamp{Logical: 10},
 	}
+	base.livenessMap.AddDead(2)
+	base.livenessMap.AddDead(3)
 
 	testcases := map[string]struct {
 		expect bool
@@ -11635,47 +11579,30 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 			p.raftStatus.Lead = 4
 		}},
 		"leader not in liveness": {false, func(p *params) {
-			delete(p.livenessMap, 2)
+			p.livenessMap.DeleteNode(2)
 		}},
 		"leader is live": {false, func(p *params) {
-			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
-				IsLive: true,
-				Liveness: livenesspb.Liveness{
-					NodeID:     2,
-					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
-				},
-			}
+			p.livenessMap.RestartNode(2)
 		}},
 		"leader is live according to expiration": {false, func(p *params) {
-			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
-				IsLive: false,
-				Liveness: livenesspb.Liveness{
-					NodeID:     2,
-					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
-				},
-			}
+			// FIXME: This is a slightly different definition of alive.
+			p.livenessMap.RestartNode(2)
 		}},
 		"leader is dead according to expiration": {true, func(p *params) {
-			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
-				IsLive: true,
-				Liveness: livenesspb.Liveness{
-					NodeID:     2,
-					Expiration: p.now.Add(0, -1).ToLegacyTimestamp(),
-				},
-			}
+			p.livenessMap.DownNode(2)
 		}},
 	}
 
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			p := base
-			p.livenessMap = livenesspb.IsLiveMap{}
-			for k, v := range base.livenessMap {
-				p.livenessMap[k] = v
+			p.livenessMap = livenesspb.TestCreateNodeVitality()
+			for k, v := range base.livenessMap.Entry {
+				p.livenessMap.Entry[k] = v
 			}
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldCampaignOnLeaseRequestRedirect(
-				p.raftStatus, p.livenessMap, p.desc, p.shouldUseExpirationLease, p.now))
+				p.raftStatus, p.livenessMap, p.desc, p.shouldUseExpirationLease))
 		})
 	}
 }
@@ -11686,7 +11613,7 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 
 	type params struct {
 		raftStatus  raft.BasicStatus
-		livenessMap livenesspb.IsLiveMap
+		livenessMap livenesspb.TestNodeVitality
 		desc        *roachpb.RangeDescriptor
 		now         hlc.Timestamp
 	}
@@ -11711,13 +11638,11 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 				Lead:      2,
 			},
 		},
-		livenessMap: livenesspb.IsLiveMap{
-			1: livenesspb.IsLiveMapEntry{IsLive: true},
-			2: livenesspb.IsLiveMapEntry{IsLive: false},
-			3: livenesspb.IsLiveMapEntry{IsLive: false},
-		},
-		now: hlc.Timestamp{Logical: 10},
+		livenessMap: livenesspb.TestCreateNodeVitality(1),
+		now:         hlc.Timestamp{Logical: 10},
 	}
+	base.livenessMap.AddDead(2)
+	base.livenessMap.AddDead(3)
 
 	testcases := map[string]struct {
 		expect bool
@@ -11743,47 +11668,30 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 			p.raftStatus.Lead = 4
 		}},
 		"leader not in liveness": {true, func(p *params) {
-			delete(p.livenessMap, 2)
+			p.livenessMap.DeleteNode(2)
 		}},
 		"leader is live": {false, func(p *params) {
-			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
-				IsLive: true,
-				Liveness: livenesspb.Liveness{
-					NodeID:     2,
-					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
-				},
-			}
+			p.livenessMap.RestartNode(2)
 		}},
 		"leader is live according to expiration": {false, func(p *params) {
-			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
-				IsLive: false,
-				Liveness: livenesspb.Liveness{
-					NodeID:     2,
-					Expiration: p.now.Add(0, 1).ToLegacyTimestamp(),
-				},
-			}
+			// FIXME: This is a slightly different definition of alive.
+			p.livenessMap.RestartNode(2)
 		}},
 		"leader is dead according to expiration": {true, func(p *params) {
-			p.livenessMap[2] = livenesspb.IsLiveMapEntry{
-				IsLive: true,
-				Liveness: livenesspb.Liveness{
-					NodeID:     2,
-					Expiration: p.now.Add(0, -1).ToLegacyTimestamp(),
-				},
-			}
+			p.livenessMap.DownNode(2)
 		}},
 	}
 
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			p := base
-			p.livenessMap = livenesspb.IsLiveMap{}
-			for k, v := range base.livenessMap {
-				p.livenessMap[k] = v
+			p.livenessMap = livenesspb.TestCreateNodeVitality()
+			for k, v := range base.livenessMap.Entry {
+				p.livenessMap.Entry[k] = v
 			}
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldForgetLeaderOnVoteRequest(
-				p.raftStatus, p.livenessMap, p.desc, p.now))
+				p.raftStatus, p.livenessMap, p.desc))
 		})
 	}
 }
