@@ -140,6 +140,33 @@ message IgnoredSeqNumRange {
   int32 end = 2 [(gogoproto.casttype) = "TxnSeq"];
 }
 
+// LogicalReplicationState is a message describing information needed
+// to reconstruct logical replication stream.
+message LogicalReplicationState {
+  option (gogoproto.equal) = true;
+
+  // Write sequence number for this mutation.
+  int64 write_seq = 1;
+
+  message History {
+    option (gogoproto.equal) = true;
+
+    int64 write_seq = 1;
+    // raw_bytes contains the encoded value and checksum.
+    // This is the same as raw_bytes in roachpb.Value proto, but without the timestamp.
+    bytes raw_bytes = 2;
+  }
+
+  // History contains the history of mutation for the key.
+  repeated History history = 2 [(gogoproto.nullable) = false];
+
+  // SourceClusterID contains the cluster ID of the applying cluster.
+  // This will be used in the future to filter out non-local mutations.
+  bytes source_cluster_id = 3 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "SourceClusterID",
+    (gogoproto.customtype) =   "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+}
+
 // MVCCValueHeader holds MVCC-level metadata for a versioned value.
 // Used by storage.MVCCValue.
 //
@@ -195,6 +222,9 @@ message MVCCValueHeader {
   // to stale reads.
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // ReplicationState contains optional state needed for logical replication.
+  LogicalReplicationState replication_state = 3;
 }
 
 // MVCCValueHeaderPure is not to be used directly. It's generated only for use of
@@ -202,6 +232,9 @@ message MVCCValueHeader {
 message MVCCValueHeaderPure {
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // ReplicationState contains optional state needed for logical replication.
+  LogicalReplicationState replication_state = 3;
 }
 // MVCCValueHeaderCrdbTest is not to be used directly. It's generated only for use of
 // its marshaling methods by MVCCValueHeader. See the comment there.
@@ -213,6 +246,8 @@ message MVCCValueHeaderCrdbTest {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Container"];
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  // ReplicationState contains optional state needed for logical replication.
+  LogicalReplicationState replication_state = 3;
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
