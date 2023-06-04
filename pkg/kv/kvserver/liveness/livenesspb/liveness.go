@@ -269,7 +269,9 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 	case LossOfQuorum:
 		return nv.isAlive()
 	case ReplicaGCQueue:
-		return nv.isAlive()
+		// We want to err on the side of trying to GC this replica rather than
+		// waiting until it is definitely dead.
+		return nv.isAliveEpoch()
 	}
 
 	// TODO(baptist): Should be an assertion that we don't know this uasge.
