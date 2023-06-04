@@ -4196,7 +4196,10 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
 		errChan := make(chan error, 1)
 		knobs.HandleDistChangefeedError = func(err error) error {
-			errChan <- err
+			select {
+			case errChan <- err:
+			default:
+			}
 			return err
 		}
 
