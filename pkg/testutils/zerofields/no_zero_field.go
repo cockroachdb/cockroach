@@ -56,3 +56,48 @@ func NoZeroField(v interface{}) error {
 	}
 	return nil
 }
+
+// NoZeroFieldExcept returns nil if none of the fields of the struct underlying
+// the interface are equal to the zero value, excluding the fields specified in
+// the allowZero set, and an error otherwise.
+// It will panic if the struct has unexported fields and for any non-struct.
+func NoZeroFieldExcept(v interface{}, allowZero ...string) error {
+	exceptSet := make(map[string]struct{}, len(allowZero))
+	for _, allowed := range allowZero {
+		exceptSet[allowed] = struct{}{}
+	}
+	return noZeroFieldExcept(v, exceptSet)
+}
+
+func noZeroFieldExcept(v interface{}, exceptSet map[string]struct{}) error {
+	ele := reflect.Indirect(reflect.ValueOf(v))
+	eleT := ele.Type()
+
+	for i := 0; i < ele.NumField(); i++ {
+		f := ele.Field(i)
+		n := eleT.Field(i).Name
+		if _, exclude := exceptSet[n]; exclude {
+			continue
+		}
+		switch f.Kind() {
+		case reflect.Struct:
+			if err := noZeroFieldExcept(f.Interface(), exceptSet); err != nil {
+				var zfe zeroFieldErr
+				_ = errors.As(err, &zfe)
+				zfe.field = fmt.Sprintf("%s.%s", n, zfe.field)
+				return zfe
+			}
+		default:
+			zero := reflect.Zero(f.Type())
+			if reflect.DeepEqual(f.Interface(), zero.Interface()) {
+				switch field := eleT.Field(i).Name; field {
+				case "XXX_NoUnkeyedLiteral", "XXX_DiscardUnknown", "XXX_sizecache":
+					// Ignore these special protobuf fields.
+				default:
+					return zeroFieldErr{field: n}
+				}
+			}
+		}
+	}
+	return nil
+}
