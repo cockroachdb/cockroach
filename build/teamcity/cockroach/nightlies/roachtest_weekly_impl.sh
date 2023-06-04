@@ -31,7 +31,6 @@ timeout -s INT $((7800*60)) build/teamcity-roachtest-invoke.sh \
   tag:weekly \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
-  --cockroach "$PWD/bin/cockroach" \
   --artifacts=/artifacts \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --parallelism 5 \
