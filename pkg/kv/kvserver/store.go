@@ -1100,10 +1100,6 @@ type Store struct {
 
 	scheduler *raftScheduler
 
-	// livenessMap is a map from nodeID to a bool indicating
-	// liveness. It is updated periodically in raftTickLoop()
-	// and reactively in nodeIsLiveCallback() on liveness updates.
-	livenessMap atomic.Value
 	// ioThresholds is analogous to livenessMap, but stores the *IOThresholds for
 	// the stores in the cluster . It is gossip-backed but is not updated
 	// reactively, i.e. will refresh on each tick loop iteration only.

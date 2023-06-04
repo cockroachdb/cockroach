@@ -6920,7 +6920,6 @@ func TestRaftPreVoteUnquiesceDeadLeader(t *testing.T) {
 	for i := 0; i < tc.NumServers(); i++ {
 		isLive := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness).GetNodeVitalityFromCache(1).IsLive(livenesspb.LeaseCampaign)
 		require.False(t, isLive)
-		tc.GetFirstStoreFromServer(t, i).UpdateLivenessMap()
 	}
 	t.Logf("n1 not live")
 

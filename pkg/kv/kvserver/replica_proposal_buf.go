@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1233,13 +1232,11 @@ func (rp *replicaProposer) shouldCampaignOnRedirect(
 	raftGroup proposerRaft, leaseType roachpb.LeaseType,
 ) bool {
 	r := (*Replica)(rp)
-	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
 	return shouldCampaignOnLeaseRequestRedirect(
 		raftGroup.BasicStatus(),
-		livenessMap,
+		r.store.cfg.NodeLiveness,
 		r.descRLocked(),
 		leaseType,
-		r.store.Clock().Now(),
 	)
 }
 
