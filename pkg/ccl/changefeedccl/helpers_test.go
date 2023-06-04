@@ -712,7 +712,6 @@ func expectErrCreatingFeed(
 }
 
 func closeFeed(t testing.TB, f cdctest.TestFeed) {
-	t.Helper()
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
