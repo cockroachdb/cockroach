@@ -6,7 +6,6 @@ set +e
 # passed by the caller, the passed one takes precedence.
 bin/roachtest run \
   --teamcity \
-  --workload="${PWD}/bin/workload" \
   --os-volume-size=32 \
   "$@"
 code=$?
