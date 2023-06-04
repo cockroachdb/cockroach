@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "compare.go",
         "executor.go",
+        "export.go",
         "main.go",
         "metadata.go",
         "report.go",
@@ -26,6 +27,7 @@ go_library(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_klauspost_compress//gzip",
         "@com_github_spf13_cobra//:cobra",
+        "@org_golang_x_exp//maps",
         "@org_golang_x_perf//benchfmt",
     ],
 )
@@ -41,6 +43,7 @@ go_test(
     srcs = [
         "compare_test.go",
         "executor_test.go",
+        "export_test.go",
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
@@ -48,6 +51,7 @@ go_test(
     deps = [
         "//pkg/cmd/roachprod-microbench/model",
         "//pkg/testutils/datapathutils",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_exp//maps",
