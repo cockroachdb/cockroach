@@ -47,10 +47,8 @@ timeout -s INT $((7800*60)) bin/roachtest run \
   --build-tag "${build_tag}" \
   --cluster-id "${TC_BUILD_ID}" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
-  --cockroach "$PWD/bin/cockroach" \
-  --workload "$PWD/bin/workload" \
-  --artifacts "/artifacts/${artifacts_subdir}" \
-  --artifacts-literal="${artifacts}" \
+  --artifacts=/artifacts \
+  --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --parallelism 5 \
   --metamorphic-encryption-probability=0.5 \
   --teamcity || exit_status=$?
