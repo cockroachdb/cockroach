@@ -314,8 +314,9 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseDuration), 0)
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
-		l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
-		if !ok || l.Epoch == 0 {
+		vitality := p.repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(nextLeaseHolder.NodeID)
+		epoch := vitality.GetInternalLiveness().Epoch
+		if epoch == 0 {
 			llHandle.resolve(kvpb.NewError(&kvpb.LeaseRejectedError{
 				Existing:  status.Lease,
 				Requested: reqLease,
@@ -323,7 +324,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			}))
 			return llHandle
 		}
-		reqLease.Epoch = l.Epoch
+		reqLease.Epoch = epoch
 	}
 
 	var leaseReq kvpb.Request
@@ -723,19 +724,19 @@ func (r *Replica) leaseStatus(
 	if lease.Type() == roachpb.LeaseExpiration {
 		expiration = lease.GetExpiration()
 	} else {
-		l, ok := r.store.cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
-		status.Liveness = l.Liveness
-		if !ok || status.Liveness.Epoch < lease.Epoch {
+		vitality := r.store.cfg.NodeLiveness.GetNodeVitalityFromCache(lease.Replica.NodeID)
+		status.Liveness = vitality.GetInternalLiveness()
+		if status.Liveness.Epoch < lease.Epoch {
 			// If lease validity can't be determined (e.g. gossip is down
 			// and liveness info isn't available for owner), we can neither
 			// use the lease nor do we want to attempt to acquire it.
 			var msg redact.StringBuilder
-			if !ok {
+			if status.Liveness.Epoch == 0 {
 				msg.Printf("can't determine lease status of %s due to node liveness error: %v",
 					lease.Replica, liveness.ErrRecordCacheMiss)
 			} else {
 				msg.Printf("can't determine lease status of %s because node liveness info for n%d is stale. lease: %s, liveness: %s",
-					lease.Replica, lease.Replica.NodeID, lease, l.Liveness)
+					lease.Replica, lease.Replica.NodeID, lease, status.Liveness)
 			}
 			if leaseStatusLogLimiter.ShouldLog() {
 				log.Infof(ctx, "%s", msg)
@@ -841,7 +842,8 @@ func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimest
 // shouldUseExpirationLeaseRLocked. We can merge these once there are no more
 // callers: when expiration leases don't quiesce and are always eagerly renewed.
 func (r *Replica) requiresExpirationLeaseRLocked() bool {
-	return r.store.cfg.NodeLiveness == nil ||
+	selfLiveness, ok := r.store.cfg.NodeLiveness.Self()
+	return !ok || selfLiveness.Epoch == 0 ||
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 

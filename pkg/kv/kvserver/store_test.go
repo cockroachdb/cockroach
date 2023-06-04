@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -274,6 +275,26 @@ func createTestStoreWithoutStart(
 	}, ds)
 	require.Nil(t, cfg.DB)
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, txnCoordSenderFactory, cfg.Clock, stopper)
+	nlActive, nlRenewal := cfg.NodeLivenessDurations()
+	cache := liveness.NewCache(
+		gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry()),
+		cfg.Clock,
+		cfg.Settings,
+		cfg.NodeDialer,
+	)
+	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
+		AmbientCtx:              log.AmbientContext{},
+		Stopper:                 stopper,
+		Cache:                   cache,
+		Clock:                   cfg.Clock,
+		LivenessThreshold:       nlActive,
+		RenewalDuration:         nlRenewal,
+		HistogramWindowInterval: 0,
+		OnNodeDecommissioned:    nil,
+		OnNodeDecommissioning:   nil,
+		Engines:                 []storage.Engine{eng},
+		OnSelfHeartbeat:         nil,
+	})
 	store := NewStore(ctx, *cfg, eng, nodeDesc)
 	storeSender.Sender = store
 
