@@ -63,10 +63,10 @@ var (
 	cockroachPath string
 	// maps cpuArch to the corresponding crdb binary's absolute path
 	cockroach = make(map[vm.CPUArch]string)
-	// user-specified path to short crdb binary
-	cockroachShortPath string
-	// maps cpuArch to the corresponding short crdb (i.e., without UI) binary's absolute path
-	cockroachShort = make(map[vm.CPUArch]string)
+	// user-specified path to crdb binary with runtime assertions enabled (EA)
+	cockroachEAPath string
+	// maps cpuArch to the corresponding crdb binary with runtime assertions enabled (EA)
+	cockroachEA = make(map[vm.CPUArch]string)
 	// user-specified path to workload binary
 	workloadPath string
 	// maps cpuArch to the corresponding workload binary's absolute path
@@ -357,7 +357,7 @@ func initBinariesAndLibraries() {
 
 	cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
 	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, true, false)
-	cockroachShort[defaultArch], err = resolveBinary("cockroach-short", cockroachShortPath, defaultArch, false, true)
+	cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-short", defaultArch, err)
 	}
@@ -367,9 +367,9 @@ func initBinariesAndLibraries() {
 		// We need to verify we have all the required binaries for arm64.
 		cockroach[vm.ArchARM64], _ = resolveBinary("cockroach", cockroachPath, vm.ArchARM64, true, false)
 		workload[vm.ArchARM64], _ = resolveBinary("workload", workloadPath, vm.ArchARM64, true, false)
-		cockroachShort[vm.ArchARM64], err = resolveBinary("cockroach-short", cockroachShortPath, vm.ArchARM64, false, true)
+		cockroachEA[vm.ArchARM64], err = resolveBinary("cockroach-ea", cockroachEAPath, vm.ArchARM64, false, true)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-short", vm.ArchARM64, err)
+			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", vm.ArchARM64, err)
 		}
 	}
 	if fipsProbability > 0 && defaultArch != vm.ArchFIPS {
@@ -377,9 +377,9 @@ func initBinariesAndLibraries() {
 		// We need to verify we have all the required binaries for fips.
 		cockroach[vm.ArchFIPS], _ = resolveBinary("cockroach", cockroachPath, vm.ArchFIPS, true, false)
 		workload[vm.ArchFIPS], _ = resolveBinary("workload", workloadPath, vm.ArchFIPS, true, false)
-		cockroachShort[vm.ArchFIPS], err = resolveBinary("cockroach-short", cockroachShortPath, vm.ArchFIPS, false, true)
+		cockroachEA[vm.ArchFIPS], err = resolveBinary("cockroach-ea", cockroachEAPath, vm.ArchFIPS, false, true)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-short", vm.ArchFIPS, err)
+			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", vm.ArchFIPS, err)
 		}
 	}
 
@@ -417,9 +417,9 @@ func initBinariesAndLibraries() {
 			fmt.Printf("\tworkload %q at: %s\n", arch, path)
 		}
 	}
-	for arch, path := range cockroachShort {
+	for arch, path := range cockroachEA {
 		if path != "" {
-			fmt.Printf("\tcockroach-short %q at: %s\n", arch, path)
+			fmt.Printf("\tcockroach-ea %q at: %s\n", arch, path)
 		}
 	}
 	for arch, paths := range libraryFilePaths {
@@ -1950,7 +1950,11 @@ func (c *clusterImpl) PutLibraries(
 		if !contains(libraries, nil, libName) {
 			continue
 		}
-		putPath := filepath.Join(libraryDir, libName)
+		// Get the last extension (e.g., .so) to create a destination file.
+		// N.B. The optional arch-specific extension is elided since the destination doesn't need it, nor does it know
+		// how to resolve it. (E.g., see findLibraryDirectories in geos.go)
+		ext := filepath.Ext(filepath.Base(libraryFilePath))
+		putPath := filepath.Join(libraryDir, libName+ext)
 		if err := c.PutE(
 			ctx,
 			c.l,

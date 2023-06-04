@@ -15,6 +15,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"math/rand"
 	"net/http"
 	"reflect"
@@ -64,6 +65,9 @@ func registerFollowerReads(r registry.Registry) {
 			),
 			Leases: registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.Spec().Cloud == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
+					t.Skip("arm64 in GCE is available only in us-central1")
+				}
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{

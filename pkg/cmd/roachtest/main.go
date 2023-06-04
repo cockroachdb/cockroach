@@ -185,7 +185,7 @@ func main() {
 	rootCmd.PersistentFlags().StringVar(
 		&cockroachPath, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
-		&cockroachShortPath, "cockroach-short", "", "path to cockroach-short binary (compiled with crdb_test build tag) to use")
+		&cockroachEAPath, "cockroach-ea", "", "path to cockroach binary with enabled (runtime) assertions (i.e, compiled with crdb_test)")
 	rootCmd.PersistentFlags().StringVar(
 		&workloadPath, "workload", "", "path to workload binary to use")
 	rootCmd.PersistentFlags().Float64Var(
