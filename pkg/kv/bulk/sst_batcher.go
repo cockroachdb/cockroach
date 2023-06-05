@@ -241,12 +241,15 @@ func MakeSSTBatcher(
 func MakeStreamSSTBatcher(
 	ctx context.Context,
 	db *kv.DB,
+	rc *rangecache.RangeCache,
 	settings *cluster.Settings,
 	mem mon.BoundAccount,
 	sendLimiter limit.ConcurrentRequestLimiter,
 	onFlush func(summary kvpb.BulkOpSummary),
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, ingestAll: true, mem: mem, limiter: sendLimiter}
+	// A mutex is needed because flushes on range boundaries can Grow and Shrink memory asynchronously.
+	mem.Mu = &syncutil.Mutex{}
+	b := &SSTBatcher{db: db, rc: rc, settings: settings, ingestAll: true, mem: mem, limiter: sendLimiter}
 	b.SetOnFlush(onFlush)
 	err := b.Reset(ctx)
 	return b, err
