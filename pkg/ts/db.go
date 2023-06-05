@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -149,7 +148,7 @@ func (db *DB) PollSource(
 	frequency time.Duration,
 	r Resolution,
 	stopper *stop.Stopper,
-) {
+) (firstDone <-chan struct{}) {
 	ambient.AddLogTag("ts-poll", nil)
 	p := &poller{
 		AmbientContext: ambient,
@@ -159,29 +158,38 @@ func (db *DB) PollSource(
 		r:              r,
 		stopper:        stopper,
 	}
-	p.start()
+	return p.start()
 }
 
 // start begins the goroutine for this poller, which will periodically request
 // time series data from the DataSource and store it.
-func (p *poller) start() {
+func (p *poller) start() (firstDone <-chan struct{}) {
+	ch := make(chan struct{})
 	// Poll once immediately and synchronously.
-	// Wrap context as a startup context to enable access to kv on startup path
-	// without retries.
-	p.poll(p.AnnotateCtx(startup.WithoutChecks(context.Background())))
 	bgCtx := p.AnnotateCtx(context.Background())
-	_ = p.stopper.RunAsyncTask(bgCtx, "ts-poller", func(ctx context.Context) {
-		ticker := time.NewTicker(p.frequency)
+	if p.stopper.RunAsyncTask(bgCtx, "ts-poller", func(ctx context.Context) {
+		ch := ch // goroutine-local copy
+		ticker := timeutil.NewTimer()
+		ticker.Reset(0)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
+				ticker.Read = true
+				ticker.Reset(p.frequency)
 				p.poll(ctx)
+				if ch != nil {
+					close(ch)
+					ch = nil
+				}
 			case <-p.stopper.ShouldQuiesce():
 				return
 			}
 		}
-	})
+	}) != nil {
+		close(ch)
+	}
+	return ch
 }
 
 // poll retrieves data from the underlying DataSource a single time, storing any
