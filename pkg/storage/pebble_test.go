@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1305,7 +1306,12 @@ func TestIncompatibleVersion(t *testing.T) {
 	require.NoError(t, fs.SafeWriteToFile(loc.fs, loc.dir, MinVersionFilename, b))
 
 	_, err = Open(ctx, loc, cluster.MakeTestingClusterSettings())
-	require.ErrorContains(t, err, "is too old for running version")
+	require.Error(t, err)
+	msg := err.Error()
+	if !strings.Contains(msg, "is too old for running version") &&
+		!strings.Contains(msg, "cannot be opened by development version") {
+		t.Fatalf("unexpected error %v", err)
+	}
 }
 
 func TestNoMinVerFile(t *testing.T) {
