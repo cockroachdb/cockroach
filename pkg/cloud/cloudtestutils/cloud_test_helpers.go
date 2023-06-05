@@ -219,18 +219,22 @@ func CheckExportStore(
 		t.Run("rand-readats", func(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				t.Run("", func(t *testing.T) {
-					byteReader := bytes.NewReader(testingContent)
-					offset, length := rng.Int63n(size), rng.Intn(32*1024)
+					offset := rng.Int63n(size)
+					length := 1 + rng.Int63n(32*1024)
 					t.Logf("read %d of file at %d", length, offset)
-					reader, size, err := s.ReadFile(ctx, testingFilename, cloud.ReadOptions{Offset: offset})
+					reader, size, err := s.ReadFile(ctx, testingFilename, cloud.ReadOptions{
+						Offset:     offset,
+						LengthHint: length,
+					})
 					require.NoError(t, err)
 					defer reader.Close(ctx)
 					require.Equal(t, int64(len(testingContent)), size)
-					expected, got := make([]byte, length), make([]byte, length)
-					_, err = byteReader.Seek(offset, io.SeekStart)
-					require.NoError(t, err)
 
-					expectedN, expectedErr := io.ReadFull(byteReader, expected)
+					expectedByteReader := io.LimitReader(bytes.NewReader(testingContent[offset:]), length)
+
+					expected := make([]byte, length)
+					expectedN, expectedErr := io.ReadFull(expectedByteReader, expected)
+					got := make([]byte, length)
 					gotN, gotErr := io.ReadFull(ioctx.ReaderCtxAdapter(ctx, reader), got)
 					require.Equal(t, expectedErr != nil, gotErr != nil, "%+v vs %+v", expectedErr, gotErr)
 					require.Equal(t, expectedN, gotN)
