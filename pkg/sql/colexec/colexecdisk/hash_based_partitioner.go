@@ -417,7 +417,7 @@ func (op *hashBasedPartitioner) Next() coldata.Batch {
 	var batches [2]coldata.Batch
 StateChanged:
 	for {
-		op.cancelChecker.Check()
+		op.cancelChecker.CheckEveryCall()
 		switch op.state {
 		case hbpInitialPartitioning:
 			allZero := true

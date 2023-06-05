@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -200,7 +201,7 @@ func newWindower(
 func (w *windower) Start(ctx context.Context) {
 	ctx = w.StartInternal(ctx, windowerProcName)
 	w.input.Start(ctx)
-	w.cancelChecker.Reset(ctx)
+	w.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
 	w.runningState = windowerAccumulating
 }
 

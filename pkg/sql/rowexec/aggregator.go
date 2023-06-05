@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -348,7 +349,7 @@ func (ag *orderedAggregator) Start(ctx context.Context) {
 func (ag *aggregatorBase) start(ctx context.Context, procName string) {
 	ctx = ag.StartInternal(ctx, procName)
 	ag.input.Start(ctx)
-	ag.cancelChecker.Reset(ctx)
+	ag.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
 	ag.runningState = aggAccumulating
 }
 
