@@ -521,6 +521,10 @@ func (tc *TxnCoordSender) Send(
 		return nil, nil
 	}
 
+	if tc.mu.txn.IsoLevel.PerStatementReadSnapshot() {
+		tc.maybeAutoStepReadTimestampLocked()
+	}
+
 	// Clone the Txn's Proto so that future modifications can be made without
 	// worrying about synchronization.
 	ba.Txn = tc.mu.txn.Clone()
@@ -1353,8 +1357,14 @@ func (tc *TxnCoordSender) PrepareRetryableError(
 
 // Step is part of the TxnSender interface.
 func (tc *TxnCoordSender) Step(ctx context.Context) error {
+	if tc.typ != kv.RootTxn {
+		return errors.AssertionFailedf("cannot step in non-root txn")
+	}
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	if tc.mu.txn.IsoLevel.PerStatementReadSnapshot() {
+		tc.manualStepReadTimestampLocked()
+	}
 	return tc.interceptorAlloc.txnSeqNumAllocator.manualStepReadSeqLocked(ctx)
 }
 
@@ -1389,6 +1399,83 @@ func (tc *TxnCoordSender) ConfigureStepping(
 // GetSteppingMode is part of the TxnSender interface.
 func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode kv.SteppingMode) {
 	return tc.interceptorAlloc.txnSeqNumAllocator.steppingMode
+}
+
+// manualStepReadTimestampLocked advances the transaction's read timestamp to a
+// timestamp taken from the local clock and resets refresh span tracking.
+//
+//gcassert:inline
+func (tc *TxnCoordSender) manualStepReadTimestampLocked() {
+	tc.stepReadTimestampLocked()
+}
+
+// maybeAutoStepReadTimestampLocked advances the transaction's read timestamp to
+// a timestamp taken from the local clock and resets refresh span tracking, if
+// manual stepping is disabled and the transaction is expected to automatically
+// capture a new read snapshot on each batch.
+//
+//gcassert:inline
+func (tc *TxnCoordSender) maybeAutoStepReadTimestampLocked() {
+	if tc.typ != kv.RootTxn {
+		return // only root transactions auto-step
+	}
+	if tc.interceptorAlloc.txnSeqNumAllocator.steppingMode == kv.SteppingEnabled {
+		return // only manual stepping allowed
+	}
+	tc.stepReadTimestampLocked()
+}
+
+// stepReadTimestampLocked advances the transaction's read timestamp to a
+// timestamp taken from the local clock and resets refresh span tracking.
+//
+// Doing so establishes a new external "read snapshot" from which all future
+// reads in the transaction will operate. This read snapshot will be at least as
+// recent as the previous read snapshot, and will typically be more recent (i.e.
+// it will never regress). Consistency with prior reads in the transaction is
+// not maintained, so reads of previously read keys may not be "repeatable" and
+// may observe "phantoms". On the other hand, by not maintaining consistency
+// between read snapshots, isolation-related retries (write-write conflicts) and
+// consistency-related retries (uncertainty errors) have a higher chance of
+// being refreshed away (client-side or server-side) without need for client
+// intervention (i.e. without requiring a statement-level retry).
+//
+// Note that the transaction's uncertainty interval is not reset by this method
+// to now()+max_offset, even though doing so would be necessary to strictly
+// guarantee real-time ordering between the commit of a writer transaction and
+// the subsequent establishment of a new read snapshot in a reader transaction.
+// By not resetting the uncertainty interval, we allow for the possibility that
+// a reader transaction may establish a new read snapshot after the writer has
+// committed (on a node with a fast clock) and yet not observe that writer's
+// writes.
+//
+// This decision not to reset the transaction's uncertainty interval is
+// discussed in the Read Committed RFC (section "Read Uncertainty Intervals"):
+//
+// > Read Committed transactions have the option to provide the same "no stale
+// > reads" guarantee at the level of each individual statement. Doing so would
+// > require transactions to reset their `GlobalUncertaintyLimit` and
+// > `ObservedTimestamps` on each statement boundary, setting their
+// > `GlobalUncertaintyLimit` to `hlc.Now() + hlc.MaxOffset()` and clearing all
+// > `ObservedTimestamps`.
+// >
+// > We propose that Read Committed transactions do not do this. The cost of
+// > resetting a transaction's uncertainty interval on each statement boundary is
+// > likely greater than the benefit. Doing so increases the chance that
+// > individual statements retry due to `ReadWithinUncertaintyInterval` errors. In
+// > the worst case, each statement will need to traverse (through retries) an
+// > entire uncertainty interval before converging to a "certain" read snapshot.
+// > While these retries will be scoped to a single statement and should not
+// > escape to the client, they do still have a latency cost.
+// >
+// > We make this decision because we do not expect that applications rely on
+// > strong consistency guarantees between the commit of one transaction and the
+// > start of an individual statement within another in-progress transaction. To
+// > rely on such guarantees would require complex and surprising application-side
+// > synchronization.
+func (tc *TxnCoordSender) stepReadTimestampLocked() {
+	now := tc.clock.Now()
+	tc.mu.txn.BumpReadTimestamp(now)
+	tc.interceptorAlloc.txnSpanRefresher.resetRefreshSpansLocked()
 }
 
 // DeferCommitWait is part of the TxnSender interface.
