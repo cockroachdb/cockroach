@@ -1423,8 +1423,8 @@ func getTenantInfo(
 	}
 	for i := range tenants {
 		// NB: We use MustMakeTenantID here since the data is
-		// coming from the database and we should only ever
-		// have valid tenant IDs returned to us.
+		// coming from the tenants table and we should only
+		// ever have valid tenant IDs returned to us.
 		prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenants[i].ID))
 		spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 	}
