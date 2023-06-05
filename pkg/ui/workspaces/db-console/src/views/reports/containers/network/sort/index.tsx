@@ -24,14 +24,18 @@ import "./sort.styl";
 interface ISortProps {
   onChangeFilter: (key: string, value: string) => void;
   onChangeCollapse: (checked: boolean) => void;
+  onShowAllNodesChange: (checked: boolean) => void;
   deselectFilterByKey: (key: string) => void;
   collapsed: boolean;
   sort: NetworkSort[];
   filter: NetworkFilter;
+  showDeadNodes: boolean;
 }
 
 class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
   onChange = ({ target }: any) => this.props.onChangeCollapse(target.checked);
+  onShowAllNodesChange = ({ target }: any) =>
+    this.props.onShowAllNodesChange(target.checked);
 
   pageView = () => {
     const { match } = this.props;
@@ -74,6 +78,7 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
       deselectFilterByKey,
       filter,
       match,
+      showDeadNodes,
     } = this.props;
     const nodeId = getMatchParamByName(match, "node_id");
     return (
@@ -99,6 +104,14 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
           onChange={this.onChange}
         >
           Collapse Nodes
+        </Checkbox>
+        <Divider type="vertical" style={{ height: "100%" }} />
+        <Checkbox
+          disabled={!nodeId || nodeId === "cluster"}
+          checked={showDeadNodes}
+          onChange={this.onShowAllNodesChange}
+        >
+          Show dead nodes
         </Checkbox>
       </div>
     );

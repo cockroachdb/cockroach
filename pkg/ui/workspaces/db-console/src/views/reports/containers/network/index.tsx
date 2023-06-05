@@ -17,6 +17,7 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import NodeLivenessStatus = protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 
 import {
   CachedDataReducerState,
@@ -85,6 +86,7 @@ export interface NetworkSort {
 interface INetworkState {
   collapsed: boolean;
   filter: NetworkFilter | null;
+  showDeadNodes: boolean;
 }
 
 function contentAvailable(nodesSummary: NodesSummary) {
@@ -95,6 +97,30 @@ function contentAvailable(nodesSummary: NodesSummary) {
     !_.isEmpty(nodesSummary.nodeIDs)
   );
 }
+
+export const isHealthyLivenessStatus = (
+  status: NodeLivenessStatus,
+): boolean => {
+  switch (status) {
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_LIVE:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_DECOMMISSIONING:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_DRAINING:
+      return true;
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_UNKNOWN:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_DEAD:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_DECOMMISSIONED:
+    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+      .NODE_STATUS_UNAVAILABLE:
+    default:
+      return false;
+  }
+};
 
 export function getValueFromString(
   key: string,
@@ -118,6 +144,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   state: INetworkState = {
     collapsed: false,
     filter: null,
+    showDeadNodes: false,
   };
 
   refresh(props = this.props) {
@@ -140,6 +167,10 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   onChangeCollapse = (collapsed: boolean) => {
     trackCollapseNodes(collapsed);
     this.setState({ collapsed });
+  };
+
+  onShowDeadNodesChange = (showDeadNodes: boolean) => {
+    this.setState({ showDeadNodes });
   };
 
   onChangeFilter = (key: string, value: string) => {
@@ -174,7 +205,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   };
 
   filteredDisplayIdentities = (displayIdentities: Identity[]) => {
-    const { filter } = this.state;
+    const { filter, showDeadNodes } = this.state;
     let data: Identity[] = [];
     let selectedIndex = 0;
     if (
@@ -184,6 +215,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     ) {
       return displayIdentities;
     }
+
     displayIdentities.forEach(identities => {
       Object.keys(filter).forEach((key, index) => {
         const value = getValueFromString(
@@ -214,13 +246,18 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         }
       });
     });
+    if (!showDeadNodes) {
+      data = data.filter(identity =>
+        isHealthyLivenessStatus(identity.livenessStatus),
+      );
+    }
     return data;
   };
 
   renderLatencyTable(latencies: number[], displayIdentities: Identity[]) {
     const { match } = this.props;
     const nodeId = getMatchParamByName(match, "node_id");
-    const { collapsed, filter } = this.state;
+    const { collapsed, filter, showDeadNodes } = this.state;
     const mean = d3Mean(latencies);
     const sortParams = this.getSortParams(displayIdentities);
     let stddev = d3Deviation(latencies);
@@ -263,6 +300,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
           filter={filter}
           onChangeFilter={this.onChangeFilter}
           deselectFilterByKey={this.deselectFilterByKey}
+          showDeadNodes={showDeadNodes}
+          onShowAllNodesChange={this.onShowDeadNodesChange}
         />
         <div className="section">
           <Legend
@@ -281,54 +320,60 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   getSortParams = (data: Identity[]) => {
     const sort: NetworkSort[] = [];
     const searchQuery = (params: string) => `cluster,${params}`;
-    data.forEach(values => {
-      const localities = searchQuery(values.locality).split(",");
-      localities.forEach((locality: string) => {
-        if (locality !== "") {
-          const value = locality.match(/^\w+/gi)
-            ? locality.match(/^\w+/gi)[0]
-            : null;
-          if (!sort.some(x => x.id === value)) {
-            const sortValue: NetworkSort = { id: value, filters: [] };
-            data.forEach(item => {
-              const valueLocality = searchQuery(values.locality).split(",");
-              const itemLocality = searchQuery(item.locality);
-              valueLocality.forEach(val => {
-                const itemLocalitySplited = val.match(/^\w+/gi)
-                  ? val.match(/^\w+/gi)[0]
-                  : null;
-                if (val === "cluster" && value === "cluster") {
-                  sortValue.filters = [
-                    ...sortValue.filters,
-                    {
-                      name: item.nodeID.toString(),
-                      address: item.address,
-                    },
-                  ];
-                } else if (
-                  itemLocalitySplited === value &&
-                  !sortValue.filters.reduce(
-                    (accumulator, vendor) =>
-                      accumulator ||
-                      vendor.name === getValueFromString(value, itemLocality),
-                    false,
-                  )
-                ) {
-                  sortValue.filters = [
-                    ...sortValue.filters,
-                    {
-                      name: getValueFromString(value, itemLocality),
-                      address: item.address,
-                    },
-                  ];
-                }
-              });
-            });
-            sort.push(sortValue);
+    data
+      .filter(d => !!d.locality) // filter out dead nodes that don't have locality props
+      .forEach(values => {
+        const localities = searchQuery(values.locality).split(",");
+        localities.forEach((locality: string) => {
+          if (locality !== "") {
+            const value = locality.match(/^\w+/gi)
+              ? locality.match(/^\w+/gi)[0]
+              : null;
+            if (!sort.some(x => x.id === value)) {
+              const sortValue: NetworkSort = { id: value, filters: [] };
+              data
+                .filter(d => !!d.locality) // filter out dead nodes that don't have locality props
+                .forEach(item => {
+                  const valueLocality = searchQuery(values.locality).split(",");
+                  const itemLocality = searchQuery(item.locality);
+                  valueLocality.forEach(val => {
+                    const address = item.address ?? "";
+                    const itemLocalitySplited = val.match(/^\w+/gi)
+                      ? val.match(/^\w+/gi)[0]
+                      : null;
+                    if (val === "cluster" && value === "cluster") {
+                      sortValue.filters = [
+                        ...sortValue.filters,
+                        {
+                          name: item.nodeID.toString(),
+                          address: address,
+                        },
+                      ];
+                    } else if (
+                      itemLocalitySplited === value &&
+                      !sortValue.filters.reduce(
+                        (accumulator, vendor) =>
+                          accumulator ||
+                          vendor.name ===
+                            getValueFromString(value, itemLocality),
+                        false,
+                      )
+                    ) {
+                      sortValue.filters = [
+                        ...sortValue.filters,
+                        {
+                          name: getValueFromString(value, itemLocality),
+                          address: address,
+                        },
+                      ];
+                    }
+                  });
+                });
+              sort.push(sortValue);
+            }
           }
-        }
+        });
       });
-    });
     return sort;
   };
 
@@ -355,7 +400,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
     if (!contentAvailable(nodesSummary)) {
       return null;
     }
-
+    const { showDeadNodes } = this.state;
     // Following states can be observed:
     // 1. live connection
     // 2. partitioned connection
@@ -394,7 +439,8 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
       if (
         (filters.nodeIDs?.size > 0 && !filters.nodeIDs?.has(nodeId)) ||
         (!!filters.localityRegex &&
-          filters.localityRegex?.test(identity.locality))
+          filters.localityRegex?.test(identity.locality)) ||
+        (!showDeadNodes && !isHealthyLivenessStatus(identity.livenessStatus))
       ) {
         identityByID.delete(nodeId);
       }

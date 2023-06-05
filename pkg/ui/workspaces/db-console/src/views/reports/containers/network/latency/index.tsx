@@ -19,7 +19,7 @@ import { util } from "@cockroachlabs/cluster-ui";
 import { Chip } from "src/views/app/components/chip";
 import React from "react";
 import { Link } from "react-router-dom";
-import { getValueFromString, Identity } from "..";
+import { getValueFromString, Identity, isHealthyLivenessStatus } from "..";
 import "./latency.styl";
 import { Empty } from "src/components/empty";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -64,8 +64,6 @@ function createHeaderCell(
     "latency-table__cell--header",
     { "latency-table__cell--start": isMultiple },
   );
-  const isDecommissioned =
-    identity.livenessStatus === NodeLivenessStatus.NODE_STATUS_DECOMMISSIONED;
 
   let nodeBadgeStatus: BadgeProps["status"];
 
@@ -85,10 +83,24 @@ function createHeaderCell(
     default:
       nodeBadgeStatus = "default";
   }
+  // Render cell header without link to node details as it is not available
+  // for dead and decommissioned nodes.
+  if (!isHealthyLivenessStatus(identity.livenessStatus)) {
+    return (
+      <td className={className}>
+        <div title={livenessNomenclature(identity.livenessStatus)}>
+          {collapsed ? "" : node}
+          {!collapsed && (
+            <Badge status={nodeBadgeStatus} style={{ marginLeft: "4px" }} />
+          )}
+        </div>
+      </td>
+    );
+  }
   return (
     <td className={className}>
       <Link
-        to={!isDecommissioned ? `/node/${identity.nodeID}` : "#"}
+        to={`/node/${identity.nodeID}`}
         title={livenessNomenclature(identity.livenessStatus)}
       >
         {collapsed ? "" : node}
@@ -142,28 +154,6 @@ const generateCollapsedData = (
       return { ...itemValue, row: newRow };
     }),
   );
-};
-
-const isHealthyLivenessStatus = (status: NodeLivenessStatus): boolean => {
-  switch (status) {
-    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-      .NODE_STATUS_LIVE:
-    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-      .NODE_STATUS_DECOMMISSIONING:
-    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-      .NODE_STATUS_DRAINING:
-      return true;
-    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-      .NODE_STATUS_UNKNOWN:
-    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-      .NODE_STATUS_DEAD:
-    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-      .NODE_STATUS_DECOMMISSIONED:
-    case cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-      .NODE_STATUS_UNAVAILABLE:
-    default:
-      return false;
-  }
 };
 
 const renderMultipleHeaders = (
