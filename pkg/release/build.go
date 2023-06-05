@@ -132,13 +132,13 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 
 // MakeWorkload makes the bin/workload binary. It is only ever built in the
 // crosslinux configuration.
-func MakeWorkload(opts BuildOptions, pkgDir string) error {
+func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
 	if opts.Release {
 		return errors.Newf("cannot build workload in Release mode")
 	}
-	// NB: workload doesn't need anything stamped so we can use `crosslinux`
-	// rather than `crosslinuxbase`.
-	cmd := exec.Command("bazel", "build", "//pkg/cmd/workload", "-c", "opt", "--config=crosslinux", "--config=ci")
+	crossConfig := CrossConfigFromPlatform(platform)
+	configArg := fmt.Sprintf("--config=%s", crossConfig)
+	cmd := exec.Command("bazel", "build", "//pkg/cmd/workload", "-c", "opt", configArg, "--config=ci")
 	cmd.Dir = pkgDir
 	cmd.Stderr = os.Stderr
 	log.Printf("%s", cmd.Args)
@@ -147,11 +147,11 @@ func MakeWorkload(opts BuildOptions, pkgDir string) error {
 		return errors.Wrapf(err, "failed to run %s: %s", cmd.Args, string(stdoutBytes))
 	}
 
-	bazelBin, err := getPathToBazelBin(opts.ExecFn, pkgDir, []string{"-c", "opt", "--config=crosslinux", "--config=ci"})
+	bazelBin, err := getPathToBazelBin(opts.ExecFn, pkgDir, []string{"-c", "opt", configArg, "--config=ci"})
 	if err != nil {
 		return err
 	}
-	return stageBinary("//pkg/cmd/workload", PlatformLinux, bazelBin, filepath.Join(pkgDir, "bin"), false)
+	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), false)
 }
 
 // MakeRelease makes the release binary and associated files.
