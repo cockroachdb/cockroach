@@ -40,10 +40,11 @@ func registerDatabaseDrop(r registry.Registry) {
 	clusterSpec.GCEVolumeType = "pd-ssd"
 
 	r.Add(registry.TestSpec{
-		Name:    "admission-control/database-drop",
-		Timeout: 10 * time.Hour,
-		Owner:   registry.OwnerAdmissionControl,
-		Skip:    "TC builder agents need new GCE permissions",
+		Name:      "admission-control/database-drop",
+		Timeout:   10 * time.Hour,
+		Owner:     registry.OwnerAdmissionControl,
+		Benchmark: true,
+		Skip:      "TC builder agents need new GCE permissions",
 		// TODO(irfansharif): Reduce to weekly cadence once stabilized.
 		// Tags:            registry.Tags(`weekly`),
 		Cluster:         clusterSpec,

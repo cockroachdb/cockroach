@@ -598,9 +598,10 @@ const tpchVecNodeCount = 3
 
 func registerTPCHVec(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "tpchvec/perf",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
+		Name:      "tpchvec/perf",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.defaults.vectorize", /* settingName */
@@ -629,9 +630,10 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:    "tpchvec/streamer",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
+		Name:      "tpchvec/streamer",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.use_streamer.enabled", /* settingName */
