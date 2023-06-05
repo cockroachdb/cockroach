@@ -289,7 +289,7 @@ func ReadBackupManifest(
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupManifest")
 	defer sp.Finish()
 
-	manifestFile, err := exportStore.ReadFile(ctx, filename)
+	manifestFile, _, err := exportStore.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		return backuppb.BackupManifest{}, 0, err
 	}
@@ -297,7 +297,7 @@ func ReadBackupManifest(
 
 	// Look for a checksum, if one is not found it could be an older backup,
 	// but we want to continue anyway.
-	checksumFile, err := exportStore.ReadFile(ctx, filename+BackupManifestChecksumSuffix)
+	checksumFile, _, err := exportStore.ReadFile(ctx, filename+BackupManifestChecksumSuffix, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return backuppb.BackupManifest{}, 0, err
@@ -428,7 +428,7 @@ func readBackupPartitionDescriptor(
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readBackupPartitionDescriptor")
 	defer sp.Finish()
 
-	r, err := exportStore.ReadFile(ctx, filename)
+	r, _, err := exportStore.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		return backuppb.BackupPartitionDescriptor{}, 0, err
 	}
@@ -491,7 +491,7 @@ func readTableStatistics(
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.readTableStatistics")
 	defer sp.Finish()
 
-	r, err := exportStore.ReadFile(ctx, filename)
+	r, _, err := exportStore.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		return nil, err
 	}
@@ -1124,7 +1124,7 @@ func CheckForBackupLock(
 	// corresponding to `jobID`. If present, we have already laid claim on the
 	// location and do not need to check further.
 	lockFileName := fmt.Sprintf("%s%s", BackupLockFilePrefix, strconv.FormatInt(int64(jobID), 10))
-	r, err := defaultStore.ReadFile(ctx, lockFileName)
+	r, _, err := defaultStore.ReadFile(ctx, lockFileName, cloud.ReadOptions{NoFileSize: true})
 	if err == nil {
 		r.Close(ctx)
 		return true, nil
@@ -1171,7 +1171,7 @@ func CheckForPreviousBackup(
 	defer defaultStore.Close()
 
 	redactedURI := backuputils.RedactURIForErrorMessage(defaultURI)
-	r, err := defaultStore.ReadFile(ctx, backupbase.BackupManifestName)
+	r, _, err := defaultStore.ReadFile(ctx, backupbase.BackupManifestName, cloud.ReadOptions{NoFileSize: true})
 	if err == nil {
 		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
@@ -1369,7 +1369,11 @@ func WriteBackupManifestCheckpoint(
 		// TODO (darryl): We should do this only for file not found or directory
 		// does not exist errors. As of right now we only specifically wrap
 		// ReadFile errors for file not found so this is not possible yet.
-		if r, err := defaultStore.ReadFile(ctx, BackupProgressDirectory+"/"+BackupManifestCheckpointName); err != nil {
+		if r, _, err := defaultStore.ReadFile(
+			ctx,
+			BackupProgressDirectory+"/"+BackupManifestCheckpointName,
+			cloud.ReadOptions{NoFileSize: true},
+		); err != nil {
 			// Since we did not find the checkpoint file this is the first time
 			// we are going to write a checkpoint, so write it with the well
 			// known filename.
@@ -1433,7 +1437,7 @@ func readLatestCheckpointFile(
 	// directly. This can still fail if it is a mixed cluster and the
 	// checkpoint was written in the base directory.
 	if errors.Is(err, cloud.ErrListingUnsupported) {
-		r, err = exportStore.ReadFile(ctx, BackupProgressDirectory+"/"+filename)
+		r, _, err = exportStore.ReadFile(ctx, BackupProgressDirectory+"/"+filename, cloud.ReadOptions{NoFileSize: true})
 		// If we found the checkpoint in progress, then don't bother reading
 		// from base, just return the reader.
 		if err == nil {
@@ -1444,15 +1448,19 @@ func readLatestCheckpointFile(
 	}
 
 	if checkpointFound {
+		var name string
 		if strings.HasSuffix(filename, BackupManifestChecksumSuffix) {
-			return exportStore.ReadFile(ctx, BackupProgressDirectory+"/"+checkpoint+BackupManifestChecksumSuffix)
+			name = BackupProgressDirectory + "/" + checkpoint + BackupManifestChecksumSuffix
+		} else {
+			name = BackupProgressDirectory + "/" + checkpoint
 		}
-		return exportStore.ReadFile(ctx, BackupProgressDirectory+"/"+checkpoint)
+		r, _, err = exportStore.ReadFile(ctx, name, cloud.ReadOptions{NoFileSize: true})
+		return r, err
 	}
 
 	// If the checkpoint wasn't found in the progress directory, then try
 	// reading from the base directory instead.
-	r, err = exportStore.ReadFile(ctx, filename)
+	r, _, err = exportStore.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
 
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s could not be read in the base or progress directory", filename)

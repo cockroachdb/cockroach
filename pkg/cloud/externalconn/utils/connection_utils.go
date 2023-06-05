@@ -67,7 +67,7 @@ func CheckExternalStorageConnection(
 	}
 
 	// Read the sentinel file.
-	reader, err := es.ReadFile(ctx, markerFile)
+	reader, _, err := es.ReadFile(ctx, markerFile, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		return errors.Wrap(err, "failed to read sentinel ExternalStorage file")
 	}

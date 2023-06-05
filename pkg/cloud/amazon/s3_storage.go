@@ -747,48 +747,43 @@ func (s *s3Storage) openStreamAt(
 	return out, nil
 }
 
-// ReadFile is shorthand for ReadFileAt with offset 0.
-func (s *s3Storage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
-	reader, _, err := s.ReadFileAt(ctx, basename, 0)
-	return reader, err
-}
-
-// ReadFileAt opens a reader at the requested offset.
-func (s *s3Storage) ReadFileAt(
-	ctx context.Context, basename string, offset int64,
-) (ioctx.ReadCloserCtx, int64, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "s3.ReadFileAt")
+// ReadFile is part of the cloud.ExternalStorage interface.
+func (s *s3Storage) ReadFile(
+	ctx context.Context, basename string, opts cloud.ReadOptions,
+) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
+	ctx, sp := tracing.ChildSpan(ctx, "s3.ReadFile")
 	defer sp.Finish()
 
 	path := path.Join(s.prefix, basename)
 	sp.SetTag("path", attribute.StringValue(path))
 
-	stream, err := s.openStreamAt(ctx, basename, offset)
+	stream, err := s.openStreamAt(ctx, basename, opts.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
-	var size int64
-	if offset != 0 {
-		if stream.ContentRange == nil {
-			return nil, 0, errors.New("expected content range for read at offset")
-		}
-		size, err = cloud.CheckHTTPContentRangeHeader(*stream.ContentRange, offset)
-		if err != nil {
-			return nil, 0, err
-		}
-	} else {
-		if stream.ContentLength == nil {
-			log.Warningf(ctx, "Content length missing from S3 GetObject (is this actually s3?); attempting to lookup size with separate call...")
-			// Some not-actually-s3 services may not set it, or set it in a way the
-			// official SDK finds it (e.g. if they don't use the expected checksummer)
-			// so try a Size() request.
-			x, err := s.Size(ctx, basename)
-			if err != nil {
-				return nil, 0, errors.Wrap(err, "content-length missing from GetObject and Size() failed")
+	if !opts.NoFileSize {
+		if opts.Offset != 0 {
+			if stream.ContentRange == nil {
+				return nil, 0, errors.New("expected content range for read at offset")
 			}
-			size = x
+			fileSize, err = cloud.CheckHTTPContentRangeHeader(*stream.ContentRange, opts.Offset)
+			if err != nil {
+				return nil, 0, err
+			}
 		} else {
-			size = *stream.ContentLength
+			if stream.ContentLength == nil {
+				log.Warningf(ctx, "Content length missing from S3 GetObject (is this actually s3?); attempting to lookup size with separate call...")
+				// Some not-actually-s3 services may not set it, or set it in a way the
+				// official SDK finds it (e.g. if they don't use the expected checksummer)
+				// so try a Size() request.
+				x, err := s.Size(ctx, basename)
+				if err != nil {
+					return nil, 0, errors.Wrap(err, "content-length missing from GetObject and Size() failed")
+				}
+				fileSize = x
+			} else {
+				fileSize = *stream.ContentLength
+			}
 		}
 	}
 	opener := func(ctx context.Context, pos int64) (io.ReadCloser, error) {
@@ -798,8 +793,8 @@ func (s *s3Storage) ReadFileAt(
 		}
 		return s.Body, nil
 	}
-	return cloud.NewResumingReader(ctx, opener, stream.Body, offset, path,
-		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.settings), s3ErrDelay), size, nil
+	return cloud.NewResumingReader(ctx, opener, stream.Body, opts.Offset, path,
+		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.settings), s3ErrDelay), fileSize, nil
 }
 
 func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {

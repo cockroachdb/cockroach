@@ -68,7 +68,7 @@ var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
 
 // TODO(adityamaru): Move this to the soon to be `backupinfo` package.
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
-	r, err := exportStore.ReadFile(ctx, backupbase.BackupManifestName)
+	r, _, err := exportStore.ReadFile(ctx, backupbase.BackupManifestName, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return false, nil
@@ -325,7 +325,9 @@ func FindLatestFile(
 	// file directly. This can still fail if it is a mixed cluster and the
 	// latest file was written in the base directory.
 	if errors.Is(err, cloud.ErrListingUnsupported) {
-		r, err := exportStore.ReadFile(ctx, backupbase.LatestHistoryDirectory+"/"+backupbase.LatestFileName)
+		r, _, err := exportStore.ReadFile(
+			ctx, backupbase.LatestHistoryDirectory+"/"+backupbase.LatestFileName, cloud.ReadOptions{NoFileSize: true},
+		)
 		if err == nil {
 			return r, nil
 		}
@@ -334,12 +336,13 @@ func FindLatestFile(
 	}
 
 	if latestFileFound {
-		return exportStore.ReadFile(ctx, backupbase.LatestHistoryDirectory+"/"+latestFile)
+		r, _, err := exportStore.ReadFile(ctx, backupbase.LatestHistoryDirectory+"/"+latestFile, cloud.ReadOptions{NoFileSize: true})
+		return r, err
 	}
 
 	// The latest file couldn't be found in the latest directory,
 	// try the base directory instead.
-	r, err := exportStore.ReadFile(ctx, backupbase.LatestFileName)
+	r, _, err := exportStore.ReadFile(ctx, backupbase.LatestFileName, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		return nil, errors.Wrap(err, "LATEST file could not be read in base or metadata directory")
 	}
@@ -391,7 +394,7 @@ func CheckForLatestFileInCollection(
 			return false, pgerror.WithCandidateCode(err, pgcode.Io)
 		}
 
-		r, err = store.ReadFile(ctx, backupbase.LatestFileName)
+		r, _, err = store.ReadFile(ctx, backupbase.LatestFileName, cloud.ReadOptions{NoFileSize: true})
 	}
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {

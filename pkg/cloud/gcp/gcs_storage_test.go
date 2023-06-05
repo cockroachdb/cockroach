@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"strings"
@@ -345,7 +346,7 @@ func TestFileDoesNotExist(t *testing.T) {
 			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
-		_, err = s.ReadFile(context.Background(), "")
+		_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
 		require.Error(t, err, "")
 		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
 	}
@@ -363,7 +364,7 @@ func TestFileDoesNotExist(t *testing.T) {
 			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
-		_, err = s.ReadFile(context.Background(), "")
+		_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
 		require.Error(t, err, "")
 		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
 	}
@@ -407,15 +408,34 @@ func TestCompressedGCS(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	reader1, err := s1.ReadFile(context.Background(), "")
+	reader1, _, err := s1.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
 	require.NoError(t, err)
-	reader2, err := s2.ReadFile(context.Background(), "")
+	reader2, _, err := s2.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
 	require.NoError(t, err)
 
 	content1, err := ioctx.ReadAll(ctx, reader1)
 	require.NoError(t, err)
+	require.NoError(t, reader1.Close(context.Background()))
 	content2, err := ioctx.ReadAll(ctx, reader2)
 	require.NoError(t, err)
+	require.NoError(t, reader2.Close(context.Background()))
 
 	require.Equal(t, string(content1), string(content2))
+
+	// Test reading parts of the uncompressed object.
+	for i := 0; i < 10; i++ {
+		ofs := rand.Intn(len(content1) - 1)
+		l := rand.Intn(len(content1) - ofs)
+		reader, _, err := s1.ReadFile(context.Background(), "", cloud.ReadOptions{
+			Offset:     int64(ofs),
+			LengthHint: int64(l),
+			NoFileSize: true,
+		})
+		require.NoError(t, err)
+		content, err := ioctx.ReadAll(ctx, reader)
+		require.NoError(t, err)
+		require.NoError(t, reader.Close(context.Background()))
+		require.Equal(t, len(content), l)
+		require.Equal(t, string(content), string(content1[ofs:ofs+l]))
+	}
 }

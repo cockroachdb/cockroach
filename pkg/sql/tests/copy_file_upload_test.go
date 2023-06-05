@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -148,7 +149,7 @@ func checkUserFileContent(
 	store, err := s.ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx, uri,
 		user)
 	require.NoError(t, err)
-	reader, err := store.ReadFile(ctx, "")
+	reader, _, err := store.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
 	require.NoError(t, err)
 	got, err := ioctx.ReadAll(ctx, reader)
 	require.NoError(t, err)

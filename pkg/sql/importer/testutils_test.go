@@ -272,15 +272,13 @@ func (es *generatorExternalStorage) Conf() cloudpb.ExternalStorage {
 func (es *generatorExternalStorage) RequiresExternalIOAccounting() bool { return false }
 
 func (es *generatorExternalStorage) ReadFile(
-	ctx context.Context, basename string,
-) (ioctx.ReadCloserCtx, error) {
-	return es.gen.Open()
-}
-
-func (es *generatorExternalStorage) ReadFileAt(
-	ctx context.Context, basename string, offset int64,
-) (ioctx.ReadCloserCtx, int64, error) {
-	panic("unimplemented")
+	ctx context.Context, basename string, opts cloud.ReadOptions,
+) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
+	if opts.Offset != 0 || !opts.NoFileSize {
+		panic("unimplemented")
+	}
+	r, err := es.gen.Open()
+	return r, 0, err
 }
 
 func (es *generatorExternalStorage) Close() error {

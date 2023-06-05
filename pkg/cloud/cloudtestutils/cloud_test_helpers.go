@@ -171,7 +171,7 @@ func CheckExportStore(
 				t.Errorf("size mismatch, got %d, expected %d", sz, len(payload))
 			}
 
-			r, err := s.ReadFile(ctx, name)
+			r, _, err := s.ReadFile(ctx, name, cloud.ReadOptions{NoFileSize: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -202,7 +202,7 @@ func CheckExportStore(
 		}
 
 		// Attempt to read (or fetch) it back.
-		res, err := s.ReadFile(ctx, testingFilename)
+		res, _, err := s.ReadFile(ctx, testingFilename, cloud.ReadOptions{NoFileSize: true})
 		if err != nil {
 			t.Fatalf("Could not get reader for %s: %+v", testingFilename, err)
 		}
@@ -222,7 +222,7 @@ func CheckExportStore(
 					byteReader := bytes.NewReader(testingContent)
 					offset, length := rng.Int63n(size), rng.Intn(32*1024)
 					t.Logf("read %d of file at %d", length, offset)
-					reader, size, err := s.ReadFileAt(ctx, testingFilename, offset)
+					reader, size, err := s.ReadFile(ctx, testingFilename, cloud.ReadOptions{Offset: offset})
 					require.NoError(t, err)
 					defer reader.Close(ctx)
 					require.Equal(t, int64(len(testingContent)), size)
@@ -253,7 +253,7 @@ func CheckExportStore(
 			user, db, testSettings)
 		defer singleFile.Close()
 
-		res, err := singleFile.ReadFile(ctx, "")
+		res, _, err := singleFile.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -278,7 +278,7 @@ func CheckExportStore(
 			t.Fatal(err)
 		}
 
-		res, err := s.ReadFile(ctx, testingFilename)
+		res, _, err := s.ReadFile(ctx, testingFilename, cloud.ReadOptions{NoFileSize: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -306,7 +306,7 @@ func CheckExportStore(
 		defer singleFile.Close()
 
 		// Read a valid file.
-		res, err := singleFile.ReadFile(ctx, testingFilename)
+		res, _, err := s.ReadFile(ctx, testingFilename, cloud.ReadOptions{NoFileSize: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -321,15 +321,11 @@ func CheckExportStore(
 		}
 
 		// Attempt to read a file which does not exist.
-		_, err = singleFile.ReadFile(ctx, "file_does_not_exist")
+		_, _, err = s.ReadFile(ctx, "file does not exist", cloud.ReadOptions{NoFileSize: true})
 		require.Error(t, err)
 		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
 
-		_, _, err = singleFile.ReadFileAt(ctx, "file_does_not_exist", 0)
-		require.Error(t, err)
-		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
-
-		_, _, err = singleFile.ReadFileAt(ctx, "file_does_not_exist", 24)
+		_, _, err = singleFile.ReadFile(ctx, "file_does_not_exist", cloud.ReadOptions{Offset: 24})
 		require.Error(t, err)
 		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
 
@@ -542,7 +538,7 @@ func CheckAntagonisticRead(
 	require.NoError(t, err)
 	defer s.Close()
 
-	stream, err := s.ReadFile(ctx, basename)
+	stream, _, err := s.ReadFile(ctx, basename, cloud.ReadOptions{NoFileSize: true})
 	require.NoError(t, err)
 	defer stream.Close(ctx)
 	read, err := ioctx.ReadAll(ctx, stream)

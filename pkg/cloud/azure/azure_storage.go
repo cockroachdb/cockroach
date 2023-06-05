@@ -313,20 +313,14 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 	}), nil
 }
 
-// ReadFile is shorthand for ReadFileAt with offset 0.
-func (s *azureStorage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
-	reader, _, err := s.ReadFileAt(ctx, basename, 0)
-	return reader, err
-}
-
-func (s *azureStorage) ReadFileAt(
-	ctx context.Context, basename string, offset int64,
-) (ioctx.ReadCloserCtx, int64, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFileAt")
+func (s *azureStorage) ReadFile(
+	ctx context.Context, basename string, opts cloud.ReadOptions,
+) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
+	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFile")
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(path.Join(s.prefix, basename)))
 	resp, err := s.getBlob(basename).DownloadStream(ctx, &azblob.DownloadStreamOptions{Range: azblob.
-		HTTPRange{Offset: offset}})
+		HTTPRange{Offset: opts.Offset}})
 	if err != nil {
 		if azerr := (*azcore.ResponseError)(nil); errors.As(err, &azerr) {
 			if azerr.ErrorCode == "BlobNotFound" {
@@ -341,17 +335,18 @@ func (s *azureStorage) ReadFileAt(
 		return nil, 0, errors.Wrapf(err, "failed to create azure reader")
 	}
 
-	var size int64
-	if offset == 0 {
-		size = *resp.ContentLength
-	} else {
-		size, err = cloud.CheckHTTPContentRangeHeader(*resp.ContentRange, offset)
-		if err != nil {
-			return nil, 0, err
+	if !opts.NoFileSize {
+		if opts.Offset == 0 {
+			fileSize = *resp.ContentLength
+		} else {
+			fileSize, err = cloud.CheckHTTPContentRangeHeader(*resp.ContentRange, opts.Offset)
+			if err != nil {
+				return nil, 0, err
+			}
 		}
 	}
 	reader := resp.NewRetryReader(ctx, &azblob.RetryReaderOptions{MaxRetries: 3})
-	return ioctx.ReadCloserAdapter(reader), size, nil
+	return ioctx.ReadCloserAdapter(reader), fileSize, nil
 }
 
 func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
