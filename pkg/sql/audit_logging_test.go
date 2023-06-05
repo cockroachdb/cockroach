@@ -285,11 +285,11 @@ func TestReducedAuditConfig(t *testing.T) {
 	setupQueries(t, rootRunner)
 
 	// Enable reduced config.
-	rootRunner.Exec(t, `SET CLUSTER SETTING sql.log.user_audit.reduced_config = true`)
+	rootRunner.Exec(t, `SET CLUSTER SETTING sql.log.user_audit.reduced_config.enabled = true`)
 	testutils.SucceedsSoon(t, func() error {
 		var currentVal string
 		rootRunner.QueryRow(t,
-			"SHOW CLUSTER SETTING sql.log.user_audit.reduced_config",
+			"SHOW CLUSTER SETTING sql.log.user_audit.reduced_config.enabled",
 		).Scan(&currentVal)
 
 		if currentVal == "false" {
