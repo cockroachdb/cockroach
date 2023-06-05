@@ -178,6 +178,8 @@ func TestRandStep(t *testing.T) {
 					counts.ClosureTxn.CommitSerializableInBatch++
 				case isolation.Snapshot:
 					counts.ClosureTxn.CommitSnapshotInBatch++
+				case isolation.ReadCommitted:
+					counts.ClosureTxn.CommitReadCommittedInBatch++
 				default:
 					t.Fatalf("unexpected isolation level %s", o.IsoLevel)
 				}
@@ -188,6 +190,8 @@ func TestRandStep(t *testing.T) {
 					counts.ClosureTxn.CommitSerializable++
 				case isolation.Snapshot:
 					counts.ClosureTxn.CommitSnapshot++
+				case isolation.ReadCommitted:
+					counts.ClosureTxn.CommitReadCommitted++
 				default:
 					t.Fatalf("unexpected isolation level %s", o.IsoLevel)
 				}
@@ -197,6 +201,8 @@ func TestRandStep(t *testing.T) {
 					counts.ClosureTxn.RollbackSerializable++
 				case isolation.Snapshot:
 					counts.ClosureTxn.RollbackSnapshot++
+				case isolation.ReadCommitted:
+					counts.ClosureTxn.RollbackReadCommitted++
 				default:
 					t.Fatalf("unexpected isolation level %s", o.IsoLevel)
 				}
