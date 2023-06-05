@@ -72,6 +72,10 @@ type SchemaDefinition struct {
 	schema *schema.Schema
 }
 
+func (sd *SchemaDefinition) NumColumns() int {
+	return len(sd.cols)
+}
+
 // NewSchema generates a SchemaDefinition.
 //
 // Columns in the returned SchemaDefinition will match the order they appear in
