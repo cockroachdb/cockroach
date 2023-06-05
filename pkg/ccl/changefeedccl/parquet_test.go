@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
@@ -120,8 +121,10 @@ func TestParquetRows(t *testing.T) {
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, cdcevent.PrevRow, v.Timestamp(), false)
 				require.NoError(t, err)
 
+				encodingOpts := changefeedbase.EncodingOptions{}
+
 				if writer == nil {
-					writer, err = newParquetWriterFromRow(updatedRow, f, parquet.WithMaxRowGroupLength(maxRowGroupSize),
+					writer, err = newParquetWriterFromRow(updatedRow, f, encodingOpts, parquet.WithMaxRowGroupLength(maxRowGroupSize),
 						parquet.WithCompressionCodec(parquet.CompressionGZIP))
 					if err != nil {
 						t.Fatalf(err.Error())
@@ -129,12 +132,12 @@ func TestParquetRows(t *testing.T) {
 					numCols = len(updatedRow.ResultColumns()) + 1
 				}
 
-				err = writer.addData(updatedRow, prevRow)
+				err = writer.addData(updatedRow, prevRow, hlc.Timestamp{}, hlc.Timestamp{})
 				require.NoError(t, err)
 
 				// Save a copy of the datums we wrote.
-				datumRow := make([]tree.Datum, len(updatedRow.ResultColumns())+1)
-				err = populateDatums(updatedRow, prevRow, datumRow)
+				datumRow := make([]tree.Datum, writer.schemaDef.NumColumns())
+				err = populateDatums(updatedRow, prevRow, encodingOpts, hlc.Timestamp{}, hlc.Timestamp{}, datumRow)
 				require.NoError(t, err)
 				datums[i] = datumRow
 			}
