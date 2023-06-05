@@ -70,14 +70,7 @@ func (n *nullSinkStorage) Settings() *cluster.Settings {
 }
 
 func (n *nullSinkStorage) ReadFile(
-	ctx context.Context, basename string,
-) (ioctx.ReadCloserCtx, error) {
-	reader, _, err := n.ReadFileAt(ctx, basename, 0)
-	return reader, err
-}
-
-func (n *nullSinkStorage) ReadFileAt(
-	_ context.Context, _ string, _ int64,
+	_ context.Context, _ string, _ cloud.ReadOptions,
 ) (ioctx.ReadCloserCtx, int64, error) {
 	return nil, 0, io.EOF
 }

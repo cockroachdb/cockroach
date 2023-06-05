@@ -149,9 +149,5 @@ func (s *SpanStatsConsumer) decideBoundaries(ctx context.Context) ([]roachpb.Spa
 // DeleteExpiredSamples deletes historical samples older than 2 weeks.
 func (s *SpanStatsConsumer) DeleteExpiredSamples(ctx context.Context) error {
 	oneWeekAgo := timeutil.Now().AddDate(0, 0, -7)
-	if err := keyvisstorage.DeleteSamplesBeforeTime(ctx, s.ie, oneWeekAgo); err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(
-			err, "delete expired samples failed"))
-	}
-	return nil
+	return keyvisstorage.DeleteSamplesBeforeTime(ctx, s.ie, oneWeekAgo)
 }

@@ -286,7 +286,7 @@ func TestHttpGet(t *testing.T) {
 			}()
 
 			// Read the file and verify results.
-			file, err = store.ReadFile(ctx, "/something")
+			file, _, err = store.ReadFile(ctx, "/something", cloud.ReadOptions{NoFileSize: true})
 			require.NoError(t, err)
 
 			b, err := ioctx.ReadAll(ctx, file)
@@ -314,7 +314,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err = store.ReadFile(ctx, "/something")
+	_, _, err = store.ReadFile(ctx, "/something", cloud.ReadOptions{NoFileSize: true})
 	require.Error(t, context.Canceled, err)
 }
 
@@ -386,7 +386,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
-	stream, err := s.ReadFile(context.Background(), "file")
+	stream, _, err := s.ReadFile(context.Background(), "file", cloud.ReadOptions{NoFileSize: true})
 	require.NoError(t, err)
 	defer stream.Close(ctx)
 	data, err := ioctx.ReadAll(ctx, stream)
@@ -441,6 +441,6 @@ func TestExhaustRetries(t *testing.T) {
 		require.NoError(t, store.Close())
 	}()
 
-	_, err = store.ReadFile(context.Background(), "/something")
+	_, _, err = store.ReadFile(context.Background(), "/something", cloud.ReadOptions{NoFileSize: true})
 	require.Error(t, err)
 }

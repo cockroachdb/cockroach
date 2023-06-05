@@ -271,27 +271,33 @@ func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteClose
 	return w, nil
 }
 
-// ReadFile is shorthand for ReadFileAt with offset 0.
-func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
-	reader, _, err := g.ReadFileAt(ctx, basename, 0)
-	return reader, err
-}
-
-func (g *gcsStorage) ReadFileAt(
-	ctx context.Context, basename string, offset int64,
+func (g *gcsStorage) ReadFile(
+	ctx context.Context, basename string, opts cloud.ReadOptions,
 ) (ioctx.ReadCloserCtx, int64, error) {
 	object := path.Join(g.prefix, basename)
 
-	ctx, sp := tracing.ChildSpan(ctx, "gcs.ReadFileAt")
+	ctx, sp := tracing.ChildSpan(ctx, "gcs.ReadFile")
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(path.Join(g.prefix, basename)))
 
+	endPos := int64(0)
+	if opts.LengthHint != 0 {
+		endPos = opts.Offset + opts.LengthHint
+	}
+
 	r := cloud.NewResumingReader(ctx,
 		func(ctx context.Context, pos int64) (io.ReadCloser, error) {
-			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
+			length := int64(-1)
+			if endPos != 0 {
+				length = endPos - pos
+				if length <= 0 {
+					return nil, io.EOF
+				}
+			}
+			return g.bucket.Object(object).NewRangeReader(ctx, pos, length)
 		}, // opener
 		nil, //  reader
-		offset,
+		opts.Offset,
 		object,
 		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, g.settings),
 		nil, // errFn

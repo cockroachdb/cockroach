@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -65,7 +66,7 @@ func checkIfFileExists(ctx context.Context, c *copyMachine, dest, copyTargetTabl
 	}
 	defer store.Close()
 
-	_, err = store.ReadFile(ctx, "")
+	_, _, err = store.ReadFile(ctx, "", cloud.ReadOptions{})
 	if err == nil {
 		// Can ignore this parse error as it would have been caught when creating a
 		// new ExternalStorage above and so we never expect it to non-nil.

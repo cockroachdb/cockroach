@@ -6125,7 +6125,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			}))
 			for i, file := range files {
 				require.Equal(t, file, path.Join(dirName, logSubdir, fmt.Sprintf("%d.log", i)))
-				content, err := store.ReadFile(ctx, file)
+				content, _, err := store.ReadFile(ctx, file, cloud.ReadOptions{NoFileSize: true})
 				require.NoError(t, err)
 				descBytes, err := ioctx.ReadAll(ctx, content)
 				require.NoError(t, err)

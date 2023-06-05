@@ -22,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -161,4 +163,30 @@ func makeRangefeedReaderAndDecoder(
 	decoder, err := cdcevent.NewEventDecoder(ctx, &sqlExecCfg, targets, false, false)
 	require.NoError(t, err)
 	return popRow, cleanup, decoder
+}
+
+func TestParquetResolvedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format=parquet, resolved='10ms'`)
+		defer closeFeed(t, foo)
+
+		firstResolved, _ := expectResolvedTimestamp(t, foo)
+		testutils.SucceedsSoon(t, func() error {
+			nextResolved, _ := expectResolvedTimestamp(t, foo)
+			if !firstResolved.Less(nextResolved) {
+				return errors.AssertionFailedf(
+					"expected resolved timestamp %s to eventually exceed timestamp %s",
+					nextResolved, firstResolved)
+			}
+			return nil
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }

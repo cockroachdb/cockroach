@@ -60,15 +60,12 @@ type ExternalStorage interface {
 	// ExternalStorage implementation.
 	Settings() *cluster.Settings
 
-	// ReadFile is shorthand for ReadFileAt with offset 0.
+	// ReadFile returns a Reader for requested name reading at opts.Offset, along
+	// with the total size of the file (unless opts.NoFileSize is true).
+	//
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error)
-
-	// ReadFileAt returns a Reader for requested name reading at offset.
-	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
-	// This can be leveraged for an existence check.
-	ReadFileAt(ctx context.Context, basename string, offset int64) (ioctx.ReadCloserCtx, int64, error)
+	ReadFile(ctx context.Context, basename string, opts ReadOptions) (_ ioctx.ReadCloserCtx, fileSize int64, _ error)
 
 	// Writer returns a writer for the requested name.
 	//
@@ -93,6 +90,22 @@ type ExternalStorage interface {
 
 	// Size returns the length of the named file in bytes.
 	Size(ctx context.Context, basename string) (int64, error)
+}
+
+type ReadOptions struct {
+	Offset int64
+
+	// LengthHint is set when the caller will not read more than this many bytes
+	// from the returned ReadCloserCtx. This allows backend implementation to make
+	// more efficient limited requests.
+	//
+	// There is no guarantee that the reader won't produce more bytes; backends
+	// are free to ignore this value.
+	LengthHint int64
+
+	// NoFileSize is set if the ReadFile caller is not interested in the fileSize
+	// return value (potentially making the call more efficient).
+	NoFileSize bool
 }
 
 // ListingFn describes functions passed to ExternalStorage.ListFiles.

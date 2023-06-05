@@ -67,6 +67,7 @@ go_test(
         "//pkg/base",
         "//pkg/bench",
         "//pkg/ccl",
+        "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",

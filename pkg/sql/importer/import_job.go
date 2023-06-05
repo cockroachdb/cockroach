@@ -17,6 +17,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
@@ -870,7 +871,7 @@ func parseAndCreateBundleTableDescs(
 	}
 	defer store.Close()
 
-	raw, err := store.ReadFile(ctx, "")
+	raw, _, err := store.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		return tableDescs, schemaDescs, err
 	}

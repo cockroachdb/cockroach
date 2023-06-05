@@ -460,7 +460,7 @@ func listUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]s
 func downloadUserfile(
 	ctx context.Context, store cloud.ExternalStorage, src, dst string,
 ) (int64, error) {
-	remoteFile, err := store.ReadFile(ctx, src)
+	remoteFile, _, err := store.ReadFile(ctx, src, cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
 		return 0, err
 	}

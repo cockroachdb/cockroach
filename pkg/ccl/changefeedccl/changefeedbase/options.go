@@ -443,7 +443,7 @@ var InitialScanOnlyUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, Opt
 // columns, so there is no reason to emit duplicate key datums.
 //
 // TODO(#103129): add support for some of these
-var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptResolvedTimestamps, OptDiff,
+var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptDiff,
 	OptMVCCTimestamps, OptUpdatedTimestamps, OptKeyInValue)
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
