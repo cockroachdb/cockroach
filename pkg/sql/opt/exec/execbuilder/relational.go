@@ -653,6 +653,17 @@ func (b *Builder) scanParams(
 
 	softLimit := reqProps.LimitHintInt64()
 	hardLimit := scan.HardLimit.RowCount()
+	maxResults, maxResultsOk := b.indexConstraintMaxResults(scan, relProps)
+
+	// If the txn_rows_read_err guardrail is set, make sure that we never read
+	// more than txn_rows_read_err+1 rows on any single scan. Adding a hard limit
+	// of txn_rows_read_err+1 ensures that the results will still be correct since
+	// the conn_executor will return an error if the limit is actually reached.
+	if txnRowsReadErr := b.evalCtx.SessionData().TxnRowsReadErr; txnRowsReadErr > 0 &&
+		(hardLimit == 0 || hardLimit > txnRowsReadErr+1) &&
+		(!maxResultsOk || maxResults > uint64(txnRowsReadErr+1)) {
+		hardLimit = txnRowsReadErr + 1
+	}
 
 	// If this is a bounded staleness query, check that it touches at most one
 	// range.
@@ -667,8 +678,7 @@ func (b *Builder) scanParams(
 			// multiple ranges if the first range is empty.
 			valid = false
 		} else {
-			maxResults, ok := b.indexConstraintMaxResults(scan, relProps)
-			valid = ok && maxResults == 1
+			valid = maxResultsOk && maxResults == 1
 		}
 		if !valid {
 			return exec.ScanParams{}, opt.ColMap{}, unimplemented.NewWithIssuef(67562,
@@ -680,8 +690,8 @@ func (b *Builder) scanParams(
 
 	parallelize := false
 	if hardLimit == 0 && softLimit == 0 {
-		maxResults, ok := b.indexConstraintMaxResults(scan, relProps)
-		if ok && maxResults < getParallelScanResultThreshold(b.evalCtx.TestingKnobs.ForceProductionValues) {
+		if maxResultsOk &&
+			maxResults < getParallelScanResultThreshold(b.evalCtx.TestingKnobs.ForceProductionValues) {
 			// Don't set the flag when we have a single span which returns a single
 			// row: it does nothing in this case except litter EXPLAINs.
 			// There are still cases where the flag doesn't do anything when the spans
