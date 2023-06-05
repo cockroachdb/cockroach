@@ -35,7 +35,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 	) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, numNodes-1))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 
 		conn := c.Conn(ctx, t.L(), 1)
 		if disableStreamer {
@@ -161,69 +161,50 @@ func registerTPCHConcurrency(r registry.Registry) {
 		disableStreamer bool,
 	) {
 		setupCluster(ctx, t, c, disableStreamer)
-		// We use [970, 1030) range to perform the binary search over because
-		// - the interval length is smaller than 64, so we will need 6
-		// iterations. Each iteration can take 2-3 hours, and we have 18 hour
-		// timeout, so 6 iterations is the maximum without marking the test as
-		// "weekly".
-		// - the interval is centered around 1000. We often can push this a bit
-		// higher, but then the iterations also get longer. 1000 concurrently
-		// running analytical queries on the 3 node cluster that doesn't crash
-		// is much more than we expect our users to run.
-		const minConcurrency, maxConcurrency = 970, 1030
-		min, max := minConcurrency, maxConcurrency
-		// Run the binary search to find the largest concurrency that doesn't
-		// crash a node in the cluster. The current range is represented by
-		// [min, max).
-		for min < max-1 {
-			concurrency := (min + max) / 2
+		// Run at concurrency 1000. We often can push this a bit higher, but
+		// then the iterations also get longer. 1000 concurrently running
+		// analytical queries on the 3 node cluster that doesn't crash is much
+		// more than we expect our users to run.
+		const concurrency = 1000
+		// Each iteration can take on the order of 3 hours, so we choose the
+		// iteration count such that it'd be definitely completed with 18 hour
+		// timeout.
+		const numIterations = 3
+		var numFails int
+		for i := 0; i < numIterations; i++ {
 			if err := checkConcurrency(ctx, t, c, concurrency); err != nil {
-				max = concurrency
-			} else {
-				min = concurrency
+				numFails++
 			}
 		}
 		// Restart the cluster so that if any nodes crashed in the last
 		// iteration, it doesn't fail the test.
 		restartCluster(ctx, c, t)
-		t.Status(fmt.Sprintf("max supported concurrency is %d", min))
-		// Write the concurrency number into the stats.json file to be used by
-		// the roachperf.
-		c.Run(ctx, c.Node(numNodes), "mkdir", t.PerfArtifactsDir())
-		cmd := fmt.Sprintf(
-			`echo '{ "max_concurrency": %d }' > %s/stats.json`,
-			min, t.PerfArtifactsDir(),
-		)
-		c.Run(ctx, c.Node(numNodes), cmd)
-		if min == minConcurrency {
-			// In this case, we had a node crash in each iteration of the binary
-			// search. This is unexpected, so fail the test.
-			t.Fatal("couldn't sustain minimum concurrency")
+		if numFails > numIterations/2 {
+			// If we had a node crash in more than half of all iterations, then
+			// we fail the test.
+			t.Fatalf("crashed %d times out of %d iterations", numFails, numIterations)
 		}
 	}
 
-	// Each iteration of the binary search can take on the order of 2-3 hours
-	// (with concurrency around 1000), so use the longest timeout allowed by the
-	// roachtest infra (without marking the test as "weekly").
+	// Use the longest timeout allowed by the roachtest infra (without marking
+	// the test as "weekly").
 	const timeout = 18 * time.Hour
 
 	r.Add(registry.TestSpec{
-		Name:      "tpch_concurrency",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Timeout:   timeout,
-		Cluster:   r.MakeClusterSpec(numNodes),
+		Name:    "tpch_concurrency",
+		Owner:   registry.OwnerSQLQueries,
+		Timeout: timeout,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
 		},
 	})
 
 	r.Add(registry.TestSpec{
-		Name:      "tpch_concurrency/no_streamer",
-		Owner:     registry.OwnerSQLQueries,
-		Benchmark: true,
-		Timeout:   timeout,
-		Cluster:   r.MakeClusterSpec(numNodes),
+		Name:    "tpch_concurrency/no_streamer",
+		Owner:   registry.OwnerSQLQueries,
+		Timeout: timeout,
+		Cluster: r.MakeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},
