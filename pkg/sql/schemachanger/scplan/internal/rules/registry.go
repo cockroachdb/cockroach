@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -40,7 +41,7 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 			to := r.Var(dr.to).(*screl.Node)
 			added++
 			return g.AddDepEdge(
-				dr.name, dr.kind, from.Target, from.CurrentStatus, to.Target, to.CurrentStatus,
+				dr.name, dr.kind, dr.maxPhase, from.Target, from.CurrentStatus, to.Target, to.CurrentStatus,
 			)
 		}); err != nil {
 			return errors.Wrapf(err, "applying dep rule %s", dr.name)
@@ -134,6 +135,7 @@ type registeredDepRule struct {
 	from, to rel.Var
 	q        *rel.Query
 	kind     scgraph.DepEdgeKind
+	maxPhase scop.Phase
 }
 
 // Deprecated.
@@ -151,10 +153,12 @@ func NewRegistry() *Registry {
 
 // RegisterDepRule registers a rule from which a set of dependency edges will
 // be derived in a graph. The edge will be formed from the Node containing
-// the fromEl entity to the Node containing the toEl entity.
+// the fromEl entity to the Node containing the toEl entity. MaxPhase indicates
+// the maximum phase for which this rule is active.
 func (r *Registry) RegisterDepRule(
 	ruleName scgraph.RuleName,
 	kind scgraph.DepEdgeKind,
+	maxPhase scop.Phase,
 	fromEl, toEl string,
 	def func(from, to NodeVars) rel.Clauses,
 ) {
@@ -162,11 +166,12 @@ func (r *Registry) RegisterDepRule(
 	c := def(from, to)
 	c = append(c, from.JoinTargetNode(), to.JoinTargetNode())
 	r.depRules = append(r.depRules, registeredDepRule{
-		name: ruleName,
-		kind: kind,
-		from: from.Node,
-		to:   to.Node,
-		q:    screl.MustQuery(c...),
+		name:     ruleName,
+		kind:     kind,
+		from:     from.Node,
+		to:       to.Node,
+		q:        screl.MustQuery(c...),
+		maxPhase: maxPhase,
 	})
 }
 

@@ -259,12 +259,16 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 			if err := g.ForEachDepEdgeTo(oe.To(), func(de *scgraph.DepEdge) error {
 				switch fulfilled[de.From()] {
 				case before:
-					if de.Kind() == scgraph.SameStagePrecedence {
+					// Rules are only enforced till a maximum phase, so if we are past it
+					// no violation exists.
+					if de.Kind() == scgraph.SameStagePrecedence && stage.Phase <= de.MaxPhase() {
 						return errors.Errorf("%s not reached in same stage as %s, violates rule in %s",
 							de.From(), oe.To(), de.RuleNames())
 					}
 				case during:
-					if de.Kind() == scgraph.PreviousStagePrecedence {
+					// Rules are only enforced till a maximum phase, so if we are past it
+					// no violation exists.
+					if de.Kind() == scgraph.PreviousStagePrecedence && stage.Phase <= de.MaxPhase() {
 						return errors.Errorf("%s reached in same stage as %s, violates rule in %s",
 							de.From(), oe.To(), de.RuleNames())
 					}

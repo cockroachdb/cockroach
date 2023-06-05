@@ -12,6 +12,7 @@ package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -27,6 +28,21 @@ func registerDepRule(
 ) {
 	registry.RegisterDepRule(ruleName,
 		kind,
+		scop.LatestPhase,
+		fromEl, toEl,
+		def)
+}
+
+func registerDepRuleWithMaxPhase(
+	ruleName scgraph.RuleName,
+	kind scgraph.DepEdgeKind,
+	maxPhase scop.Phase,
+	fromEl, toEl string,
+	def func(from, to NodeVars) rel.Clauses,
+) {
+	registry.RegisterDepRule(ruleName,
+		kind,
+		maxPhase,
 		fromEl, toEl,
 		def)
 }
