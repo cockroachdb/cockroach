@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -1828,6 +1829,11 @@ func (ts *TestServer) BinaryVersionOverride() roachpb.Version {
 		return roachpb.Version{}
 	}
 	return knobs.(*TestingKnobs).BinaryVersionOverride
+}
+
+// KvProber is part of the TestServerInterface.
+func (ts *TestServer) KvProber() *kvprober.Prober {
+	return ts.Server.kvProber
 }
 
 type testServerFactoryImpl struct{}
