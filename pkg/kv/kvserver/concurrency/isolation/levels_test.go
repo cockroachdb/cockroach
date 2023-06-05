@@ -64,3 +64,29 @@ func TestLevel_PerStatementReadSnapshot(t *testing.T) {
 		})
 	}
 }
+
+func TestLevel_String(t *testing.T) {
+	exp := map[Level]string{
+		Serializable:  "Serializable",
+		Snapshot:      "Snapshot",
+		ReadCommitted: "ReadCommitted",
+	}
+	for l, exp := range exp {
+		t.Run(l.String(), func(t *testing.T) {
+			require.Equal(t, exp, l.String())
+		})
+	}
+}
+
+func TestLevel_StringLower(t *testing.T) {
+	exp := map[Level]string{
+		Serializable:  "serializable",
+		Snapshot:      "snapshot",
+		ReadCommitted: "read committed",
+	}
+	for l, exp := range exp {
+		t.Run(l.String(), func(t *testing.T) {
+			require.Equal(t, exp, l.StringLower())
+		})
+	}
+}
