@@ -18,10 +18,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
 )
 
 func TestReadProbe(t *testing.T) {
@@ -78,6 +80,31 @@ func TestReadProbe(t *testing.T) {
 		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 	})
 
+	// Once a node is fully decommissioned, neither kvclient nor kvprober work from
+	// the node. This does not indicate a service health issue; it is expected behavior.
+	//
+	// This is not tested with an integration test, since the kvclient of a decommissioned
+	// node will occasionally return other errors. We choose not to filter those out for
+	// reasons given at errorIsExpectedDuringNormalOperation. As a result, an integration test
+	// would be flaky. We believe a unit test is sufficient, largely because the main risk
+	// in only having a unit test is false positive pages on SRE, due to changes in what errors
+	// are returned from the kvclient of a decommissioned node. Though false positive pages add
+	// ops load, they do not directly affect the customer experience.
+	t.Run("planning fails due to decommissioning but not counted as error", func(t *testing.T) {
+		m := &mock{
+			t:       t,
+			read:    true,
+			planErr: kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "foobar"),
+		}
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
+	})
+
 	t.Run("txn fails", func(t *testing.T) {
 		m := &mock{
 			t:      t,
@@ -106,6 +133,22 @@ func TestReadProbe(t *testing.T) {
 		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
 		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
 		require.Equal(t, int64(1), p.Metrics().ReadProbeFailures.Count())
+	})
+
+	// See comment above matching case in TestReadProbe regarding planning.
+	t.Run("read fails due to decommissioning but not counted as error", func(t *testing.T) {
+		m := &mock{
+			t:       t,
+			read:    true,
+			readErr: kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "foobar"),
+		}
+		p := initTestProber(ctx, m)
+		p.readProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 	})
 }
 
@@ -163,6 +206,22 @@ func TestWriteProbe(t *testing.T) {
 		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
 	})
 
+	// See comment above matching case in TestReadProbe regarding planning.
+	t.Run("planning fails due to decommissioning but not counted as error", func(t *testing.T) {
+		m := &mock{
+			t:       t,
+			write:   true,
+			planErr: kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "foobar"),
+		}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Zero(t, p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
+	})
+
 	t.Run("open txn fails", func(t *testing.T) {
 		m := &mock{
 			t:      t,
@@ -191,6 +250,22 @@ func TestWriteProbe(t *testing.T) {
 		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
 		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
 		require.Equal(t, int64(1), p.Metrics().WriteProbeFailures.Count())
+	})
+
+	// See comment above matching case in TestReadProbe regarding planning.
+	t.Run("write fails due to decommissioning but not counted as error", func(t *testing.T) {
+		m := &mock{
+			t:        t,
+			write:    true,
+			writeErr: kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "foobar"),
+		}
+		p := initTestProber(ctx, m)
+		p.writeProbeImpl(ctx, m, m, m)
+
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().WriteProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
 	})
 }
 
