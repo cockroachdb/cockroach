@@ -307,8 +307,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		// Only compare the latest advancement, since not all intermediary resolved
 		// timestamps might be flushed (due to the minimum flush interval setting in
 		// the ingestion processor).
-		require.Contains(t, emittedRows, "key_1{-\\x00} 0.000000004,0",
-			"partition 1 should advance to timestamp 4")
+		require.Contains(t, emittedRows, "key_1{-\\x00} 0.000000006,0",
+			"partition 1 should advance to timestamp 6")
 		require.Contains(t, emittedRows, "key_2{-\\x00} 0.000000005,0",
 			"partition 2 should advance to timestamp 5")
 		require.Equal(t, lastClientStart[string(p1)], hlc.Timestamp{WallTime: 4})
