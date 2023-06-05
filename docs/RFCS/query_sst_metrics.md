@@ -6,7 +6,9 @@
 
 # Summary
 
-Adding the ability for operators to query sstable metrics which is useful for debugging storage issues pertaining to a specific key range. This will be implemented using a set-generating function (SRF) and will be used as follows.
+Storage Team engineers are often involved in support escalations from customers that require inspection of SSTable-level statistics. Currently, these statistics are difficult to obtain and require work from the customer and support teams
+to find appropriate files to pull from the filesystem to send to us. As a result, this RFC outlines how we will add the ability for operators to query sstable metrics which is useful for debugging storage issues pertaining to a specific key range.
+This will be implemented using a set-generating function (SRF) and used as follows.
 
 ```
 SELECT * FROM crdb_internal.engine_stats('start-key', 'end-key')
@@ -29,6 +31,13 @@ The SRF will be structured similar to [json_populate_record](https://github.com/
 ## Pebble Side
 
 Inside the store's server code is where Pebble will be used, specifically [DB.SSTables](https://github.com/cockroachdb/pebble/blob/25a8e9bb8d9586e5090979f24dec11712e9f4b3c/db.go#L1912). When calling `DB.SSTables` we will need to specify a `SSTableOption` which will be a function allowing us to filter SSTables for the key range specified by the user. Note that filtering can be performed based on the `FileMetadata` alone, which allows us to skip unnecessary `getTableProperties` calls (which can read metadata from storage and affect caches).
+
+## General Steps 
+
+1. Define the required functions with dummy implementations
+2. Create the new SSTableOption that filters by key ranges
+3. Implement the generator function for single node queries
+4. Add logic to support multiple node queries
 
 # Unresolved questions
 
