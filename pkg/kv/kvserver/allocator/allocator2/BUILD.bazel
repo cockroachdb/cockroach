@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "allocator2",
     srcs = [
+        "allocator.go",
         "allocator_state.go",
         "cluster_state.go",
         "constraint.go",

@@ -226,7 +226,7 @@ type storeIDAndReplicaState struct {
 	replicaState
 }
 
-// rangeState is periodically updated based in reporting by the leaseholder.
+// rangeState is periodically updated based on reporting by the leaseholder.
 type rangeState struct {
 	// replicas is the adjusted replicas. It is always consistent with
 	// the storeState.adjusted.replicas in the corresponding stores.
