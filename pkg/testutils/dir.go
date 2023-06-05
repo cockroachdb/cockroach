@@ -38,7 +38,10 @@ func TempDir(t testing.TB) (string, func()) {
 	}
 	cleanup := func() {
 		if err := os.RemoveAll(dir); err != nil {
-			t.Error(err)
+			// Temp dir cleanup may race with process shutdown, where
+			// some process is writing to dir, just as we try to shut down.
+			// This should not fail the test.
+			t.Logf("encountered error %s while removing temp dir %s", err, dir)
 		}
 	}
 	return dir, cleanup
