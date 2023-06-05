@@ -962,7 +962,7 @@ var ipCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		ips, err := roachprod.IP(context.Background(), config.Logger, args[0], external)
+		ips, err := roachprod.IP(config.Logger, args[0], external)
 		if err != nil {
 			return err
 		}
