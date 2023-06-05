@@ -77,8 +77,13 @@ message PingRequest {
     BLOCKING = 1;
     // If there is already an established reverse connection, respond
     // immediately, otherwise if there is no reverse connection, attempt to
-    // create one asynchronously.  If that fails to connect, then respond with
-    // failure to the next PingRequest on this connection.
+    // create one asynchronously. If that fails to connect, then respond with
+    // failure to the next PingRequest on this connection. This failure is
+    // then permanent (even if a redial would succeed) until the caller
+    // uses a BLOCKING heartbeat to kick off another attempt.
+    //
+    // Due to the above, NON_BLOCKING must only be used following a successful
+    // BLOCKING heartbeat.
     NON_BLOCKING = 2;
   }
   // What type of dialback is requested for the recipient of this PingRequest
