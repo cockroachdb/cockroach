@@ -297,12 +297,21 @@ func TestSchemaChanger(t *testing.T) {
 					},
 					metadata,
 				),
+				scpb.MakeTarget(
+					scpb.ToPublic,
+					&scpb.TableData{
+						TableID:    fooTable.GetID(),
+						DatabaseID: fooTable.GetParentID(),
+					},
+					metadata,
+				),
 			}
 			initial := []scpb.Status{
 				scpb.Status_ABSENT,
 				scpb.Status_ABSENT,
 				scpb.Status_ABSENT,
 				scpb.Status_ABSENT,
+				scpb.Status_PUBLIC,
 			}
 			cs = scpb.CurrentState{
 				TargetState: scpb.TargetState{Statements: stmts, Targets: targets},
@@ -329,6 +338,7 @@ func TestSchemaChanger(t *testing.T) {
 			return nil
 		}))
 		require.Equal(t, []scpb.Status{
+			scpb.Status_PUBLIC,
 			scpb.Status_PUBLIC,
 			scpb.Status_PUBLIC,
 			scpb.Status_PUBLIC,
