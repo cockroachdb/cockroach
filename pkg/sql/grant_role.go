@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -48,21 +49,40 @@ func (p *planner) GrantRole(ctx context.Context, n *tree.GrantRole) (planNode, e
 	return p.GrantRoleNode(ctx, n)
 }
 
+// createRoleAllowsGrantRoleMembership is a cluster setting that allows users
+// with CREATEROLE privilege to grant/revoke membership in roles.
+var createRoleAllowsGrantRoleMembership = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.auth.createrole_allows_grant_role_membership.enabled",
+	"if set, users with CREATEROLE privilege can grant/revoke membership in roles",
+	false,
+).WithPublic()
+
 func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantRoleNode, error) {
 	sqltelemetry.IncIAMGrantCounter(n.AdminOption)
 
 	ctx, span := tracing.ChildSpan(ctx, n.StatementTag())
 	defer span.Finish()
 
-	hasAdminRole, err := p.HasAdminRole(ctx)
-	if err != nil {
-		return nil, err
+	var allowedToGrantWithoutAdminOption bool
+	var err error
+	if createRoleAllowsGrantRoleMembership.Get(&p.ExecCfg().Settings.SV) {
+		allowedToGrantWithoutAdminOption, err = p.HasRoleOption(ctx, roleoption.CREATEROLE)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		allowedToGrantWithoutAdminOption, err = p.HasAdminRole(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 	// Check permissions on each role.
 	allRoles, err := p.MemberOfWithAdminOption(ctx, p.User())
 	if err != nil {
 		return nil, err
 	}
+	grantingRoleHasAdminOptionOnAdmin := allRoles[username.AdminRoleName()]
 
 	inputRoles, err := decodeusername.FromNameList(n.Roles)
 	if err != nil {
@@ -76,19 +96,29 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	}
 
 	for _, r := range inputRoles {
-		// If the user is an admin, don't check if the user is allowed to add/drop
-		// roles in the role. However, if the role being modified is the admin role, then
-		// make sure the user is an admin with the admin option.
-		if hasAdminRole && !r.IsAdminRole() {
+		// If the current user has CREATEROLE, and the role being granted is not an
+		// admin there is no need to check if the user is allowed to grant/revoke
+		// membership in the role. However, if the role being granted is an admin,
+		// then make sure the current user also has the admin option for that role.
+		grantedRoleIsAdmin, err := p.UserHasAdminRole(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		if allowedToGrantWithoutAdminOption && !grantedRoleIsAdmin {
 			continue
 		}
-		if isAdmin, ok := allRoles[r]; !ok || !isAdmin {
-			if r.IsAdminRole() {
+		if hasAdminOption := allRoles[r]; !hasAdminOption && !grantingRoleHasAdminOptionOnAdmin {
+			if grantedRoleIsAdmin {
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"%s is not a role admin for role %s", p.User(), r)
+					"%s must have admin option on role %q", p.User(), r)
 			}
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"%s is not a superuser or role admin for role %s", p.User(), r)
+			if createRoleAllowsGrantRoleMembership.Get(&p.ExecCfg().Settings.SV) {
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+					"%s must have CREATEROLE or have admin option on role %q", p.User(), r)
+			} else {
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+					"%s must belong to admin role or have admin option on role %q", p.User(), r)
+			}
 		}
 	}
 
