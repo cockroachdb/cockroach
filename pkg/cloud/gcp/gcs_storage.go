@@ -280,9 +280,21 @@ func (g *gcsStorage) ReadFile(
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(path.Join(g.prefix, basename)))
 
+	endPos := int64(0)
+	if opts.LengthHint != 0 {
+		endPos = opts.Offset + opts.LengthHint
+	}
+
 	r := cloud.NewResumingReader(ctx,
 		func(ctx context.Context, pos int64) (io.ReadCloser, error) {
-			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
+			length := int64(-1)
+			if endPos != 0 {
+				length = endPos - pos
+				if length <= 0 {
+					return nil, io.EOF
+				}
+			}
+			return g.bucket.Object(object).NewRangeReader(ctx, pos, length)
 		}, // opener
 		nil, //  reader
 		opts.Offset,
