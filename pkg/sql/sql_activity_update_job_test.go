@@ -186,6 +186,34 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 	err = row.Scan(&count)
 	require.NoError(t, err)
 	require.Equal(t, count, 1, "statement_activity after transfer: expect:1, actual:%d", count)
+
+	// Reset the stats and verify it's empty
+	_, err = db.ExecContext(ctx, "SELECT crdb_internal.reset_sql_stats()")
+	require.NoError(t, err)
+
+	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
+		"FROM system.public.transaction_activity")
+	err = row.Scan(&count)
+	require.NoError(t, err)
+	require.Zero(t, count, "transaction_activity after transfer: expect:0, actual:%d", count)
+
+	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
+		"FROM system.public.statement_activity")
+	err = row.Scan(&count)
+	require.NoError(t, err)
+	require.Zero(t, count, "statement_activity after transfer: expect:0, actual:%d", count)
+
+	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
+		"FROM crdb_internal.transaction_activity")
+	err = row.Scan(&count)
+	require.NoError(t, err)
+	require.Zero(t, count, "transaction_activity after transfer: expect:0, actual:%d", count)
+
+	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
+		"FROM crdb_internal.statement_activity")
+	err = row.Scan(&count)
+	require.NoError(t, err)
+	require.Zero(t, count, "statement_activity after transfer: expect:0, actual:%d", count)
 }
 
 // TestSqlActivityUpdateJob verifies that the

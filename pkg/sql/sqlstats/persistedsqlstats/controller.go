@@ -13,6 +13,7 @@ package persistedsqlstats
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -68,9 +69,22 @@ func (s *Controller) ResetClusterSQLStats(ctx context.Context) error {
 			"TRUNCATE "+tableName)
 		return err
 	}
+
 	if err := resetSysTableStats("system.statement_statistics"); err != nil {
 		return err
 	}
 
-	return resetSysTableStats("system.transaction_statistics")
+	if err := resetSysTableStats("system.transaction_statistics"); err != nil {
+		return err
+	}
+
+	if !s.st.Version.IsActive(ctx, clusterversion.V23_1CreateSystemActivityUpdateJob) {
+		return nil
+	}
+
+	if err := resetSysTableStats("system.statement_activity"); err != nil {
+		return err
+	}
+
+	return resetSysTableStats("system.transaction_activity")
 }

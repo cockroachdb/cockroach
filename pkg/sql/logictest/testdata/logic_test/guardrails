@@ -1,0 +1,74 @@
+statement ok
+CREATE TABLE guardrails (i INT PRIMARY KEY);
+INSERT INTO guardrails SELECT generate_series(1, 100)
+
+# When the transaction_rows_read_err guardrail is set to 1, we apply a limit
+# of 2 in all cases except for when we know at most 2 rows are returned.
+statement ok
+SET transaction_rows_read_err = 1
+
+query error txn has read 2 rows, which is above the limit
+SELECT * FROM guardrails
+
+query error txn has read 2 rows, which is above the limit
+SELECT * FROM guardrails LIMIT 50
+
+statement ok
+SELECT * FROM guardrails WHERE i = 1
+
+statement error txn has read 2 rows, which is above the limit
+SELECT * FROM guardrails WHERE i IN (1, 2)
+
+query error txn has read 2 rows, which is above the limit
+SELECT * FROM guardrails WHERE i > 0 AND i <= 10
+
+# When the transaction_rows_read_err guardrail is set to 50, we only apply a
+# limit if it's possible that more than 51 rows may be returned.
+statement ok
+SET transaction_rows_read_err = 50
+
+query error txn has read 51 rows, which is above the limit
+SELECT * FROM guardrails
+
+statement ok
+SELECT * FROM guardrails LIMIT 50
+
+statement ok
+SELECT * FROM guardrails WHERE i = 1
+
+statement ok
+SELECT * FROM guardrails WHERE i > 0 AND i <= 10
+
+statement ok
+SET transaction_rows_read_err = 150
+
+statement ok
+CREATE TABLE guardrails2 (i INT PRIMARY KEY);
+INSERT INTO guardrails2 SELECT generate_series(1, 150)
+
+statement ok
+BEGIN
+
+# A full scan shouldn't error if it only scans transaction_rows_read_err rows.
+statement ok
+SELECT * FROM guardrails2
+
+statement ok
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+SELECT * FROM guardrails
+
+# The whole transaction has now read more than transaction_rows_read_err rows,
+# so error.
+query error txn has read 250 rows, which is above the limit
+SELECT * FROM guardrails2
+
+statement ok
+ROLLBACK
+
+statement ok
+RESET transaction_rows_read_err
