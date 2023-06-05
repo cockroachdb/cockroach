@@ -59,6 +59,8 @@ type Prober struct {
 	// quarantineWritePool pool keeps track of ranges that timed out/errored when
 	// probing and repeatedly probes those ranges until a probe succeeds.
 	quarantineWritePool *quarantinePool
+	// Used to implement manualStop.
+	cancelFunc context.CancelFunc
 }
 
 // Opts provides knobs to control kvprober.Prober.
@@ -285,10 +287,20 @@ func (p *Prober) Metrics() Metrics {
 	return p.metrics
 }
 
+// ManualStops stops the prober from sending more probes. It does not
+// block on the completion of all work the prober is doing.
+func (p *Prober) ManualStop() {
+	log.Health.Infof(context.Background(), "manual stop of kvprober")
+	p.cancelFunc()
+}
+
 // Start causes kvprober to start probing KV. Start returns immediately. Start
 // returns an error only if stopper.RunAsyncTask returns an error.
 func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = logtags.AddTag(ctx, "kvprober", nil /* value */)
+	log.Error(ctx, "starting prober")
+	ctx, p.cancelFunc = context.WithCancel(ctx)
+
 	startLoop := func(ctx context.Context, opName string, probe func(context.Context, planner), pl planner, interval *settings.DurationSetting) error {
 		return stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: opName, SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 			defer logcrash.RecoverAndReportNonfatalPanic(ctx, &p.settings.SV)
@@ -310,6 +322,8 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 					t.Read = true
 					// Jitter added to de-synchronize different nodes' probe loops.
 					t.Reset(d())
+				case <-ctx.Done():
+					return
 				case <-stopper.ShouldQuiesce():
 					return
 				}
