@@ -17,6 +17,10 @@ import {
   defaultFilters,
   Filters,
   ViewMode,
+  combineLoadingErrors,
+  getNodesByRegionString,
+  normalizePrivileges,
+  normalizeRoles,
 } from "@cockroachlabs/cluster-ui";
 
 import {
@@ -31,26 +35,6 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import {
-  combineLoadingErrors,
-  getNodesByRegionString,
-  normalizePrivileges,
-} from "../utils";
-
-function normalizeRoles(raw: string[]): string[] {
-  const rolePrecedence: Record<string, number> = {
-    root: 1,
-    admin: 2,
-    public: 3,
-  };
-
-  // Once we have an alphabetized list of roles, we sort it again, promoting
-  // root, admin, and public to the head of the list. (We rely on _.sortBy to
-  // be stable.)
-  const alphabetizedRoles = _.sortBy(_.uniq(_.filter(raw)));
-
-  return _.sortBy(alphabetizedRoles, role => rolePrecedence[role] || 100);
-}
 
 const sortSettingTablesLocalSetting = new LocalSetting(
   "sortSetting/DatabasesDetailsTablesPage",

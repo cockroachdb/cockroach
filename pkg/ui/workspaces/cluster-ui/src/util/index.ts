@@ -26,3 +26,4 @@ export * from "./find";
 export * from "./proto";
 export * from "./formatNumber";
 export * from "./totalWorkload";
+export * from "./versions";

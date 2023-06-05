@@ -48,6 +48,7 @@ import RecommendationType = cockroach.sql.IndexRecommendation.RecommendationType
 
 // Note: if the managed-service routes to the index detail or the previous
 // database pages change, the breadcrumbs displayed here need to be updated.
+// TODO(thomas): ensure callers are splitting schema/table name correctly
 function createManagedServiceBreadcrumbs(
   database: string,
   schema: string,
