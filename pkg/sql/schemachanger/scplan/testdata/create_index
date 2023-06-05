@@ -297,6 +297,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index dependents exist before index becomes public
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
@@ -312,6 +316,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -329,6 +337,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index dependents exist before index becomes public
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
@@ -336,6 +348,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
+  to:   [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
@@ -436,6 +452,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   to:   [IndexData:{DescID: 104, IndexID: 3}, PUBLIC]
   kind: SameStagePrecedence
@@ -448,6 +468,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  kind: PreviousStagePrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY
 
 ops
 CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name gin_trgm_ops)
@@ -721,6 +745,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index dependents exist before index becomes public
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
@@ -736,6 +764,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -753,6 +785,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   kind: Precedence
   rule: index dependents exist before index becomes public
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
+  to:   [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: IndexColumn transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: PUBLIC->TRANSIENT_ABSENT
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
   rule: index-column added to index before temp index receives writes
@@ -760,6 +796,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_DROPPED]
+  to:   [IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: IndexData transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DROPPED->TRANSIENT_ABSENT
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
@@ -860,6 +900,10 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: PreviousStagePrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
 - from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
   to:   [IndexData:{DescID: 104, IndexID: 3}, PUBLIC]
   kind: SameStagePrecedence
@@ -872,3 +916,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousStagePrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
+- from: [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
+  kind: PreviousStagePrecedence
+  rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold only single transition in statement phase: WRITE_ONLY->TRANSIENT_DELETE_ONLY

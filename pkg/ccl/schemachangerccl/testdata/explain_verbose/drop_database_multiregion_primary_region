@@ -18,11 +18,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db"}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Owner:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -30,11 +36,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "public"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "public"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -42,17 +54,26 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → DROPPED
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Database:{DescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Database transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+│       │   │   │
 │       │   │   └── • Precedence dependency from ABSENT SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
 │       │   │
 │       │   ├── • DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
+│       │   │   │     rule: "DatabaseRoleSetting transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -69,6 +90,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
 │       │   │   │
@@ -78,11 +102,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Owner:{DescID: 105 (public-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 105 (public-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 105 (public-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (public-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -90,17 +120,26 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 105 (public-), Name: "public"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (public-), Name: "public"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 105 (public-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (public-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Schema:{DescID: 105 (public-)}
 │       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Schema:{DescID: 105 (public-)}
+│       │   │   │     rule: "Schema transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 106 (crdb_internal_region-), ReferencedDescID: 105 (public-)}
 │       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
@@ -114,12 +153,18 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "SchemaParent transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
@@ -130,11 +175,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Owner:{DescID: 106 (crdb_internal_region-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 106 (crdb_internal_region-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -142,17 +193,26 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "public"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "public"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • EnumType:{DescID: 106 (crdb_internal_region-)}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC EnumType:{DescID: 106 (crdb_internal_region-)}
+│       │   │         rule: "EnumType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   ├── • EnumTypeValue:{DescID: 106 (crdb_internal_region-), Name: "us-east1"}
 │       │   │   │ PUBLIC → ABSENT
@@ -175,12 +235,18 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • SchemaChild:{DescID: 106 (crdb_internal_region-), ReferencedDescID: 105 (public-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 106 (crdb_internal_region-), ReferencedDescID: 105 (public-)}
+│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
@@ -191,11 +257,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Owner:{DescID: 107 (_crdb_internal_region-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 107 (_crdb_internal_region-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -203,20 +275,32 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "public"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "public"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
+│       │   │         rule: "AliasType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 107 (_crdb_internal_region-), ReferencedDescID: 105 (public-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 107 (_crdb_internal_region-), ReferencedDescID: 105 (public-)}
+│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -224,6 +308,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │
 │       │   ├── • Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
@@ -234,11 +321,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Owner:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 108 (table_regional_by_table-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -246,14 +339,23 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Table:{DescID: 108 (table_regional_by_table-)}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Table:{DescID: 108 (table_regional_by_table-)}
+│       │   │         rule: "Table transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 105 (public-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 105 (public-)}
+│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -261,6 +363,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │
 │       │   ├── • TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-)}
+│       │   │   │     rule: "TableLocalitySecondaryRegion transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
@@ -270,6 +375,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │
 │       │   ├── • ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+│       │   │   │     rule: "ColumnFamily transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -301,6 +409,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -331,6 +442,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -354,6 +468,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │
 │       │   ├── • ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -752,11 +869,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db"}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Owner:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -764,11 +887,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "public"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "public"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -776,17 +905,26 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 104 (multi_region_test_db-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → DROPPED
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Database:{DescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Database transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+│       │   │   │
 │       │   │   └── • Precedence dependency from ABSENT SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
 │       │   │
 │       │   ├── • DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
+│       │   │   │     rule: "DatabaseRoleSetting transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -803,6 +941,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
 │       │   │   │
@@ -812,11 +953,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Owner:{DescID: 105 (public-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 105 (public-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 105 (public-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (public-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -824,17 +971,26 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 105 (public-), Name: "public"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (public-), Name: "public"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 105 (public-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (public-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Schema:{DescID: 105 (public-)}
 │       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Schema:{DescID: 105 (public-)}
+│       │   │   │     rule: "Schema transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 106 (crdb_internal_region-), ReferencedDescID: 105 (public-)}
 │       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
@@ -848,12 +1004,18 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "SchemaParent transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 105 (public-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
@@ -864,11 +1026,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Owner:{DescID: 106 (crdb_internal_region-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 106 (crdb_internal_region-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -876,17 +1044,26 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "public"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "public"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • EnumType:{DescID: 106 (crdb_internal_region-)}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC EnumType:{DescID: 106 (crdb_internal_region-)}
+│       │   │         rule: "EnumType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   ├── • EnumTypeValue:{DescID: 106 (crdb_internal_region-), Name: "us-east1"}
 │       │   │   │ PUBLIC → ABSENT
@@ -909,12 +1086,18 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • SchemaChild:{DescID: 106 (crdb_internal_region-), ReferencedDescID: 105 (public-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 106 (crdb_internal_region-), ReferencedDescID: 105 (public-)}
+│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
@@ -925,11 +1108,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Owner:{DescID: 107 (_crdb_internal_region-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 107 (_crdb_internal_region-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -937,20 +1126,32 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "public"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "public"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
+│       │   │         rule: "AliasType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 107 (_crdb_internal_region-), ReferencedDescID: 105 (public-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 107 (_crdb_internal_region-), ReferencedDescID: 105 (public-)}
+│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -958,6 +1159,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │
 │       │   ├── • Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 104 (multi_region_test_db-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 104 (multi_region_test_db-)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
@@ -968,11 +1172,17 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • Owner:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 108 (table_regional_by_table-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -980,14 +1190,23 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Table:{DescID: 108 (table_regional_by_table-)}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Table:{DescID: 108 (table_regional_by_table-)}
+│       │   │         rule: "Table transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 105 (public-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 105 (public-)}
+│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -995,6 +1214,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │
 │       │   ├── • TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-)}
+│       │   │   │     rule: "TableLocalitySecondaryRegion transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
 │       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
@@ -1004,6 +1226,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │
 │       │   ├── • ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+│       │   │   │     rule: "ColumnFamily transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -1023,8 +1248,14 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY"
+│       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 0}
 │       │   │   │     rule: "column constraint removed right before column reaches delete only"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108 (table_regional_by_table-), Name: "a", ColumnID: 1 (a-)}
 │       │   │   │     rule: "dependents removed before column"
@@ -1050,6 +1281,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -1062,6 +1296,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "relation dropped before dependent constraint"
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 0}
+│       │   │   │     rule: "ColumnNotNull transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
@@ -1070,6 +1307,12 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "relation dropped before dependent column"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108 (table_regional_by_table-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │     rule: "dependents removed before column"
@@ -1089,6 +1332,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -1100,6 +1346,12 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "relation dropped before dependent column"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967294 (tableoid-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967294 (tableoid-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108 (table_regional_by_table-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
 │       │   │   │     rule: "dependents removed before column"
@@ -1119,6 +1371,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   ├── • ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -1127,6 +1382,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
+│       │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -1142,6 +1400,12 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
 │       │   │   │     rule: "relation dropped before dependent index"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
+│       │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
+│       │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
 │       │   │   │     rule: "dependents removed before index"
@@ -1450,6 +1714,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   ├── • Database:{DescID: 104 (multi_region_test_db-)}
         │   │   │ DROPPED → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Database:{DescID: 104 (multi_region_test_db-)}
+        │   │   │     rule: "Database transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
+        │   │   │
         │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 104 (multi_region_test_db-), Name: "multi_region_test_db"}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
@@ -1477,11 +1744,20 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   ├── • DatabaseData:{DescID: 104 (multi_region_test_db-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
-        │   │   └── • SameStagePrecedence dependency from ABSENT Database:{DescID: 104 (multi_region_test_db-)}
-        │   │         rule: "descriptor removed right before garbage collection"
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC DatabaseData:{DescID: 104 (multi_region_test_db-)}
+        │   │   │     rule: "DatabaseData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from ABSENT Database:{DescID: 104 (multi_region_test_db-)}
+        │   │   │     rule: "descriptor removed right before garbage collection"
+        │   │   │
+        │   │   └── • PreviousStagePrecedence dependency from DROPPED DatabaseData:{DescID: 104 (multi_region_test_db-)}
+        │   │         rule: "DatabaseData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │   │
         │   ├── • Schema:{DescID: 105 (public-)}
         │   │   │ DROPPED → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Schema:{DescID: 105 (public-)}
+        │   │   │     rule: "Schema transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (multi_region_test_db-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
@@ -1506,6 +1782,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   │
         │   ├── • EnumType:{DescID: 106 (crdb_internal_region-)}
         │   │   │ DROPPED → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED EnumType:{DescID: 106 (crdb_internal_region-)}
+        │   │   │     rule: "EnumType transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
@@ -1540,6 +1819,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   ├── • AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
         │   │   │ DROPPED → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
+        │   │   │     rule: "AliasType transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
+        │   │   │
         │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
@@ -1563,6 +1845,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   │
         │   ├── • Table:{DescID: 108 (table_regional_by_table-)}
         │   │   │ DROPPED → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 108 (table_regional_by_table-)}
+        │   │   │     rule: "Table transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 104 (multi_region_test_db-)}
         │   │   │     rule: "non-data dependents removed before descriptor"
@@ -1630,17 +1915,29 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   ├── • IndexData:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexData:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-)}
+        │   │   │     rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+        │   │   │
         │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
         │   │   │     rule: "index removed before garbage collection"
         │   │   │
-        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 104 (multi_region_test_db-)}
-        │   │         rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │   ├── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 104 (multi_region_test_db-)}
+        │   │   │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │   │
+        │   │   └── • PreviousStagePrecedence dependency from DROPPED IndexData:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-)}
+        │   │         rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │   │
         │   └── • TableData:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 104 (multi_region_test_db-)}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108 (table_regional_by_table-)}
-        │             rule: "table removed right before garbage collection"
+        │       ├── • PreviousStagePrecedence dependency from PUBLIC TableData:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 104 (multi_region_test_db-)}
+        │       │     rule: "TableData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+        │       │
+        │       ├── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108 (table_regional_by_table-)}
+        │       │     rule: "table removed right before garbage collection"
+        │       │
+        │       └── • PreviousStagePrecedence dependency from DROPPED TableData:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 104 (multi_region_test_db-)}
+        │             rule: "TableData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │
         └── • 13 Mutation operations
             │

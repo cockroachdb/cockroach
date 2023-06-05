@@ -18,6 +18,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 1;
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (j-)}
+        │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (j-)}
         │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j-)}
@@ -34,10 +37,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 1;
         │   │     PUBLIC → ABSENT
         │   │
         │   ├── • ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-)}
-        │   │     PUBLIC → ABSENT
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-)}
+        │   │         rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
         │   │
         │   └── • IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 1 (tbl_pkey)}
-        │         PUBLIC → ABSENT
+        │       │ PUBLIC → ABSENT
+        │       │
+        │       └── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j-), IndexID: 1 (tbl_pkey)}
+        │             rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
         │
         └── • 5 Mutation operations
             │

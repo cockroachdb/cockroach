@@ -210,6 +210,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
     │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
+    │   │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY"
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
     │   │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 0}
@@ -217,6 +220,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   │
     │   │   ├── • ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 0}
     │   │   │   │ VALIDATED → ABSENT
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 0}
+    │   │   │   │     rule: "ColumnNotNull transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
     │   │   │   │     rule: "column no longer public before dependents"
@@ -227,6 +233,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 2 (idx-)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 2 (idx-)}
+    │   │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+    │   │   │   │
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
     │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
@@ -236,17 +245,26 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 2 (idx-)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 2 (idx-)}
+    │   │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+    │   │   │   │
     │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx-)}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx-)}
+    │   │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+    │   │   │   │
     │   │   │   └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-)}
     │   │   │         rule: "index drop mutation visible before cleaning up index columns"
     │   │   │
     │   │   ├── • SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-)}
     │   │   │   │ VALIDATED → DELETE_ONLY
+    │   │   │   │
+    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-)}
+    │   │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY"
     │   │   │   │
     │   │   │   └── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-)}
     │   │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
@@ -262,6 +280,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │   │
     │   │   └── • CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
     │   │       │ VALIDATED → ABSENT
+    │   │       │
+    │   │       ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
+    │   │       │     rule: "CheckConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT"
     │   │       │
     │   │       ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_j_shard_16-)}
     │   │       │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
@@ -325,6 +346,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
+        │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
         │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_16", ColumnID: 3 (crdb_internal_j_shard_16-)}
@@ -346,11 +370,17 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   ├── • ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_16-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_16-)}
+        │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+        │   │   │
         │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
         │   │         rule: "column no longer public before dependents"
         │   │
         │   ├── • SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-)}
         │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-)}
+        │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-), IndexID: 2 (idx-)}
         │   │   │     rule: "dependents removed before index"
@@ -370,8 +400,14 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   └── • IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-)}
-        │             rule: "index removed before garbage collection"
+        │       ├── • PreviousStagePrecedence dependency from PUBLIC IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
+        │       │     rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+        │       │
+        │       ├── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-)}
+        │       │     rule: "index removed before garbage collection"
+        │       │
+        │       └── • PreviousStagePrecedence dependency from DROPPED IndexData:{DescID: 104 (t), IndexID: 2 (idx-)}
+        │             rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │
         └── • 5 Mutation operations
             │

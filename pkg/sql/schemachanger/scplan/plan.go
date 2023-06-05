@@ -133,6 +133,7 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 			p.Params.ExecutionPhase,
 			p.Graph,
 			p.Params.SchemaChangerJobIDSupplier,
+			p.Params.ActiveVersion,
 			!p.Params.SkipPlannerSanityChecks,
 		)
 		if log.ExpensiveLogEnabled(ctx, 2) {

@@ -16,11 +16,17 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Owner:{DescID: 105 (t-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 105 (t-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -28,20 +34,32 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (t-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (t-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Table:{DescID: 105 (t-)}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Table:{DescID: 105 (t-)}
+│       │   │         rule: "Table transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (public)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (public)}
+│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -49,6 +67,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │
 │       │   ├── • ColumnFamily:{DescID: 105 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnFamily:{DescID: 105 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+│       │   │   │     rule: "ColumnFamily transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -83,6 +104,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -112,6 +136,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │
 │       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -149,6 +176,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -172,6 +202,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │
 │       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -371,11 +404,17 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
+│       │   │   │     rule: "Namespace transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Owner:{DescID: 105 (t-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC Owner:{DescID: 105 (t-)}
+│       │   │   │     rule: "Owner transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -383,20 +422,32 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "admin"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (t-), Name: "admin"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • UserPrivileges:{DescID: 105 (t-), Name: "root"}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC UserPrivileges:{DescID: 105 (t-), Name: "root"}
+│       │   │   │     rule: "UserPrivileges transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Table:{DescID: 105 (t-)}
-│       │   │     PUBLIC → DROPPED
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Table:{DescID: 105 (t-)}
+│       │   │         rule: "Table transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (public)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (public)}
+│       │   │   │     rule: "SchemaChild transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │         rule: "descriptor dropped before dependent element removal"
@@ -404,6 +455,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │
 │       │   ├── • ColumnFamily:{DescID: 105 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnFamily:{DescID: 105 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+│       │   │   │     rule: "ColumnFamily transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -426,8 +480,14 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY"
+│       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 0}
 │       │   │   │     rule: "column constraint removed right before column reaches delete only"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "i", ColumnID: 1 (i-)}
 │       │   │   │     rule: "dependents removed before column"
@@ -453,6 +513,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (i-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -465,6 +528,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent constraint"
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 0}
+│       │   │   │     rule: "ColumnNotNull transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT"
+│       │   │   │
 │       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 1 (i-)}
 │       │   │         rule: "column no longer public before dependents"
 │       │   │
@@ -473,6 +539,12 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent column"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "b", ColumnID: 2 (b-)}
 │       │   │   │     rule: "dependents removed before column"
@@ -498,6 +570,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -522,6 +597,12 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
@@ -540,6 +621,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -551,6 +635,12 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent column"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 105 (t-), ColumnID: 4294967294 (tableoid-)}
+│       │   │   │     rule: "Column transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 105 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
 │       │   │   │     rule: "dependents removed before column"
@@ -570,6 +660,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   ├── • ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+│       │   │   │     rule: "ColumnType transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
@@ -578,6 +671,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 1 (t_pkey-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 1 (t_pkey-)}
+│       │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -590,6 +686,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 105 (t-), ColumnID: 2 (b-), IndexID: 1 (t_pkey-)}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexColumn:{DescID: 105 (t-), ColumnID: 2 (b-), IndexID: 1 (t_pkey-)}
+│       │   │   │     rule: "IndexColumn transitions to ABSENT uphold only single transition in statement phase: PUBLIC->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "descriptor dropped before dependent element removal"
@@ -605,6 +704,12 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 105 (t-)}
 │       │   │   │     rule: "relation dropped before dependent index"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
+│       │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY"
+│       │   │   │
+│       │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
+│       │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: DELETE_ONLY->ABSENT"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 105 (t-), ColumnID: 1 (i-), IndexID: 1 (t_pkey-)}
 │       │   │   │     rule: "dependents removed before index"
@@ -800,6 +905,9 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
         │   ├── • Table:{DescID: 105 (t-)}
         │   │   │ DROPPED → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from DROPPED Table:{DescID: 105 (t-)}
+        │   │   │     rule: "Table transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
+        │   │   │
         │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
@@ -878,17 +986,29 @@ EXPLAIN (ddl, verbose) DROP TABLE t;
         │   ├── • IndexData:{DescID: 105 (t-), IndexID: 1 (t_pkey-)}
         │   │   │ PUBLIC → ABSENT
         │   │   │
+        │   │   ├── • PreviousStagePrecedence dependency from PUBLIC IndexData:{DescID: 105 (t-), IndexID: 1 (t_pkey-)}
+        │   │   │     rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+        │   │   │
         │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 105 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
         │   │   │     rule: "index removed before garbage collection"
         │   │   │
-        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 105 (t-), ReferencedDescID: 100 (defaultdb)}
-        │   │         rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │   ├── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 105 (t-), ReferencedDescID: 100 (defaultdb)}
+        │   │   │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │   │
+        │   │   └── • PreviousStagePrecedence dependency from DROPPED IndexData:{DescID: 105 (t-), IndexID: 1 (t_pkey-)}
+        │   │         rule: "IndexData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │   │
         │   └── • TableData:{DescID: 105 (t-), ReferencedDescID: 100 (defaultdb)}
         │       │ PUBLIC → ABSENT
         │       │
-        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 105 (t-)}
-        │             rule: "table removed right before garbage collection"
+        │       ├── • PreviousStagePrecedence dependency from PUBLIC TableData:{DescID: 105 (t-), ReferencedDescID: 100 (defaultdb)}
+        │       │     rule: "TableData transitions to ABSENT uphold only single transition in statement phase: PUBLIC->DROPPED"
+        │       │
+        │       ├── • SameStagePrecedence dependency from ABSENT Table:{DescID: 105 (t-)}
+        │       │     rule: "table removed right before garbage collection"
+        │       │
+        │       └── • PreviousStagePrecedence dependency from DROPPED TableData:{DescID: 105 (t-), ReferencedDescID: 100 (defaultdb)}
+        │             rule: "TableData transitions to ABSENT uphold only single transition in statement phase: DROPPED->ABSENT"
         │
         └── • 5 Mutation operations
             │
