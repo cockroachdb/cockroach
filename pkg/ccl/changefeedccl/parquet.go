@@ -17,9 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
 )
+
+// includeParquestTestMetadata configures the parquet writer to write
+// metadata required for reading parquet files in tests.
+var includeParquestTestMetadata = buildutil.CrdbTestBuild
 
 type parquetWriter struct {
 	inner      *parquet.Writer
@@ -56,22 +61,19 @@ func newParquetSchemaDefintion(row cdcevent.Row) (*parquet.SchemaDefinition, int
 // newParquetWriterFromRow constructs a new parquet writer which outputs to
 // the given sink. This function interprets the schema from the supplied row.
 func newParquetWriterFromRow(
-	row cdcevent.Row,
-	sink io.Writer,
-	knobs *TestingKnobs, /* may be nil */
-	opts ...parquet.Option,
+	row cdcevent.Row, sink io.Writer, opts ...parquet.Option,
 ) (*parquetWriter, error) {
 	schemaDef, numCols, err := newParquetSchemaDefintion(row)
 	if err != nil {
 		return nil, err
 	}
 
-	if knobs != nil && knobs.EnableParquetMetadata {
+	if includeParquestTestMetadata {
 		if opts, err = addParquetTestMetadata(row, opts); err != nil {
 			return nil, err
 		}
 	}
-	writer, err := newParquetWriter(schemaDef, sink, knobs, opts...)
+	writer, err := newParquetWriter(schemaDef, sink, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -213,12 +215,9 @@ func deserializeMap(s string) (orderedKeys []string, m map[string]int, err error
 // newParquetWriter allocates a new parquet writer using the provided
 // schema definition.
 func newParquetWriter(
-	sch *parquet.SchemaDefinition,
-	sink io.Writer,
-	knobs *TestingKnobs, /* may be nil */
-	opts ...parquet.Option,
+	sch *parquet.SchemaDefinition, sink io.Writer, opts ...parquet.Option,
 ) (*parquet.Writer, error) {
-	if knobs != nil && knobs.EnableParquetMetadata {
+	if includeParquestTestMetadata {
 		// To use parquet test utils for reading datums, the writer needs to be
 		// configured with additional metadata.
 		return parquet.NewWriterWithReaderMeta(sch, sink, opts...)

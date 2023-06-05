@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -1061,11 +1060,7 @@ func (f *cloudFeedFactory) Feed(
 	// Determine if we can enable the parquet format if the changefeed is not
 	// being created with incompatible options. If it can be enabled, we will use
 	// parquet format with a probability of 0.4.
-	//
-	// TODO: Consider making this knob a global flag so tests that don't
-	//  initialize testing knobs can use parquet metamorphically.
-	knobs := f.s.TestingKnobs().DistSQL.(*execinfra.TestingKnobs).Changefeed
-	parquetPossible := knobs != nil && knobs.(*TestingKnobs).EnableParquetMetadata
+	parquetPossible := includeParquestTestMetadata
 	explicitEnvelope := false
 	for _, opt := range createStmt.Options {
 		if string(opt.Key) == changefeedbase.OptEnvelope {
