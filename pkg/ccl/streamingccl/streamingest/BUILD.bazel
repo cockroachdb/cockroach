@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "alter_replication_job.go",
         "external_connection.go",
+        "merged_subscription.go",
         "metrics.go",
         "stream_ingest_manager.go",
         "stream_ingestion_dist.go",
@@ -68,7 +69,6 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/span",
-        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
