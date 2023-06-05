@@ -712,12 +712,12 @@ func (v *validator) processOp(op Operation) {
 			v.processOp(op)
 		}
 		prevFailures := v.failures
-		// TODO(nvanbenschoten): add isolation level to the atomicType string:
-		//   atomicTxnType := fmt.Sprintf(`%s txn`, strings.ToLower(t.IsoLevel.String()))
-		v.checkAtomic(`txn`, t.Result)
-		if t.IsoLevel == isolation.Snapshot {
-			// TODO(nvanbenschoten): for now, we run snapshot transactions in the mix
-			// but don't validate their results. Doing so is non-trivial. See #100169.
+		atomicTxnType := fmt.Sprintf(`%s txn`, t.IsoLevel.StringLower())
+		v.checkAtomic(atomicTxnType, t.Result)
+		if t.IsoLevel != isolation.Serializable {
+			// TODO(nvanbenschoten): for now, we run snapshot and read committed
+			// transactions in the mix but don't validate their results. Doing so
+			// is non-trivial. See #100169 and #100170
 			v.failures = prevFailures
 		}
 	case *SplitOperation:
