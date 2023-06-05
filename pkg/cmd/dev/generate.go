@@ -362,6 +362,7 @@ func (d *dev) generateJs(cmd *cobra.Command) error {
 		"build",
 		"//pkg/ui/workspaces/eslint-plugin-crdb:eslint-plugin-crdb",
 		"//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client",
+		"//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl",
 		"//pkg/ui/workspaces/cluster-ui:ts_project",
 	}
 	logCommand("bazel", args...)
@@ -378,17 +379,33 @@ func (d *dev) generateJs(cmd *cobra.Command) error {
 		return err
 	}
 
-	eslintPluginDist := "./pkg/ui/workspaces/eslint-plugin-crdb/dist"
-	// Delete eslint-plugin output tree that was previously copied out of the
-	// sandbox.
-	if err := d.os.RemoveAll(filepath.Join(workspace, eslintPluginDist)); err != nil {
-		return err
+	paths := []string{
+		// Copy generated resources back out of the sandbox to working path that can
+		// be resolved by editor to properly resolve dependencies.
+		"./pkg/ui/workspaces/eslint-plugin-crdb/dist",
+		// Copy generated protos.js back to workplace tree since it is referenced
+		// in code as a relative path and cannot be resolved in bazel bin directory.
+		"./pkg/ui/workspaces/db-console/src/js/protos.js",
+		"./pkg/ui/workspaces/db-console/src/js/protos.d.ts",
+		"./pkg/ui/workspaces/db-console/ccl/src/js/protos.js",
+		"./pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts",
 	}
 
-	// Copy the eslint-plugin output tree back out of the sandbox, since eslint
-	// plugins in editors default to only searching in ./node_modules for plugins.
-	return d.os.CopyAll(
-		filepath.Join(bazelBin, eslintPluginDist),
-		filepath.Join(workspace, eslintPluginDist),
-	)
+	for _, path := range paths {
+		// Delete output tree that was previously copied out of the sandbox.
+		if err := d.os.RemoveAll(filepath.Join(workspace, path)); err != nil {
+			return err
+		}
+
+		// Copy generated resources back out of the sandbox to working path that can
+		// be resolved by editor to properly resolve dependencies.
+		if err := d.os.CopyAll(
+			filepath.Join(bazelBin, path),
+			filepath.Join(workspace, path),
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
