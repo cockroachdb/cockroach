@@ -39,6 +39,7 @@ interface DropdownOwnProps {
   // If onArrowClick exists, don't display the arrow next to the dropdown,
   // display left and right arrows to either side instead.
   onArrowClick?: (direction: ArrowDirection) => void;
+  onDropdownClick?: () => void;
   // Disable any arrows in the arrow direction array.
   disabledArrows?: ArrowDirection[];
   content?: any;
@@ -68,6 +69,11 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
   selectRef: React.RefObject<ReactSelectClass> = React.createRef();
 
   triggerSelectClick = (e: any) => {
+    this.props.onDropdownClick && this.props.onDropdownClick();
+    // Don't handle click if custom dropdown menu content is rendered.
+    if (this.props.content) {
+      return;
+    }
     const dropdownNode = this.dropdownRef.current as Node;
     const titleNode = this.titleRef.current as Node;
     const selectNode = this.selectRef.current;
