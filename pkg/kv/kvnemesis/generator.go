@@ -68,18 +68,27 @@ type ClosureTxnConfig struct {
 	CommitSerializable int
 	// CommitSnapshot is a snapshot transaction that commits normally.
 	CommitSnapshot int
+	// CommitReadCommitted is a read committed transaction that commits normally.
+	CommitReadCommitted int
 	// RollbackSerializable is a serializable transaction that encounters an error
 	// at the end and has to roll back.
 	RollbackSerializable int
 	// RollbackSnapshot is a snapshot transaction that encounters an error at the
 	// end and has to roll back.
 	RollbackSnapshot int
+	// RollbackReadCommitted is a read committed transaction that encounters an
+	// error at the end and has to roll back.
+	RollbackReadCommitted int
 	// CommitSerializableInBatch is a serializable transaction that commits via
 	// the CommitInBatchMethod. This is an important part of the 1pc txn fastpath.
 	CommitSerializableInBatch int
 	// CommitSnapshotInBatch is a snapshot transaction that commits via the
 	// CommitInBatchMethod. This is an important part of the 1pc txn fastpath.
 	CommitSnapshotInBatch int
+	// CommitReadCommittedInBatch is a read committed transaction that commits
+	// via the CommitInBatchMethod. This is an important part of the 1pc txn
+	// fastpath.
+	CommitReadCommittedInBatch int
 
 	TxnClientOps ClientOperationConfig
 	TxnBatchOps  BatchOperationConfig
@@ -217,15 +226,18 @@ func newAllOperationsConfig() GeneratorConfig {
 		DB:    clientOpConfig,
 		Batch: batchOpConfig,
 		ClosureTxn: ClosureTxnConfig{
-			CommitSerializable:        3,
-			CommitSnapshot:            3,
-			RollbackSerializable:      3,
-			RollbackSnapshot:          3,
-			CommitSerializableInBatch: 3,
-			CommitSnapshotInBatch:     3,
-			TxnClientOps:              clientOpConfig,
-			TxnBatchOps:               batchOpConfig,
-			CommitBatchOps:            clientOpConfig,
+			CommitSerializable:         2,
+			CommitSnapshot:             2,
+			CommitReadCommitted:        2,
+			RollbackSerializable:       2,
+			RollbackSnapshot:           2,
+			RollbackReadCommitted:      2,
+			CommitSerializableInBatch:  2,
+			CommitSnapshotInBatch:      2,
+			CommitReadCommittedInBatch: 2,
+			TxnClientOps:               clientOpConfig,
+			TxnBatchOps:                batchOpConfig,
+			CommitBatchOps:             clientOpConfig,
 		},
 		Split: SplitConfig{
 			SplitNew:   1,
@@ -862,19 +874,25 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 
 func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig) {
 	const Commit, Rollback = ClosureTxnType_Commit, ClosureTxnType_Rollback
-	const SSI, SI = isolation.Serializable, isolation.Snapshot
+	const SSI, SI, RC = isolation.Serializable, isolation.Snapshot, isolation.ReadCommitted
 	addOpGen(allowed,
 		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.CommitSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.CommitSnapshotInBatch)
+		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.CommitSnapshot)
+	addOpGen(allowed,
+		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.CommitReadCommitted)
 	addOpGen(allowed,
 		makeClosureTxn(Rollback, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.RollbackSerializable)
 	addOpGen(allowed,
 		makeClosureTxn(Rollback, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.RollbackSnapshot)
 	addOpGen(allowed,
+		makeClosureTxn(Rollback, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/), c.RollbackReadCommitted)
+	addOpGen(allowed,
 		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitSerializableInBatch)
 	addOpGen(allowed,
 		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitSnapshotInBatch)
+	addOpGen(allowed,
+		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps), c.CommitReadCommittedInBatch)
 }
 
 func makeClosureTxn(
