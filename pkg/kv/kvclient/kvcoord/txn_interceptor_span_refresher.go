@@ -629,6 +629,16 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 	})
 }
 
+// resetRefreshSpansLocked clears the txnSpanRefresher's refresh span set and
+// marks the empty set as valid. This is used when a transaction is establishing
+// a new read snapshot and no longer needs to maintain consistency with previous
+// reads.
+func (sr *txnSpanRefresher) resetRefreshSpansLocked() {
+	sr.refreshFootprint.clear()
+	sr.refreshInvalid = false
+	sr.refreshedTimestamp.Reset()
+}
+
 // canForwardReadTimestampWithoutRefresh returns whether the transaction can
 // forward its read timestamp after refreshing all the reads that has performed
 // to this point. This requires that the transaction's timestamp has not leaked.
@@ -758,13 +768,14 @@ func (sr *txnSpanRefresher) importLeafFinalState(
 
 // epochBumpedLocked implements the txnInterceptor interface.
 func (sr *txnSpanRefresher) epochBumpedLocked() {
-	sr.refreshFootprint.clear()
-	sr.refreshInvalid = false
-	sr.refreshedTimestamp.Reset()
+	sr.resetRefreshSpansLocked()
 }
 
 // createSavepointLocked is part of the txnInterceptor interface.
 func (sr *txnSpanRefresher) createSavepointLocked(ctx context.Context, s *savepoint) {
+	// TODO(nvanbenschoten): make sure this works correctly with ReadCommitted.
+	// The refresh spans should either be empty when captured into a savepoint or
+	// should be cleared when the savepoint is rolled back to.
 	s.refreshSpans = make([]roachpb.Span, len(sr.refreshFootprint.asSlice()))
 	copy(s.refreshSpans, sr.refreshFootprint.asSlice())
 	s.refreshInvalid = sr.refreshInvalid
