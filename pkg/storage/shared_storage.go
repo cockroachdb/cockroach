@@ -36,7 +36,11 @@ type externalStorageReader struct {
 var _ shared.ObjectReader = (*externalStorageReader)(nil)
 
 func (r *externalStorageReader) ReadAt(ctx context.Context, p []byte, offset int64) error {
-	reader, _, err := r.es.ReadFileAt(ctx, r.objName, offset)
+	reader, _, err := r.es.ReadFile(ctx, r.objName, cloud.ReadOptions{
+		Offset:     offset,
+		LengthHint: int64(len(p)),
+		NoFileSize: true,
+	})
 	if err != nil {
 		return err
 	}

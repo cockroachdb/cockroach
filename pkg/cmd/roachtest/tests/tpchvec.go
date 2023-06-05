@@ -140,6 +140,28 @@ func (h *tpchVecPerfHelper) parseQueryOutput(t test.Test, output []byte, setupId
 	}
 }
 
+func (h *tpchVecPerfHelper) getQueryTimes(
+	t test.Test, numRunsPerQuery, queryNum int,
+) (onTime, offTime float64) {
+	findMedian := func(times []float64) float64 {
+		sort.Float64s(times)
+		return times[len(times)/2]
+	}
+	onTimes := h.timeByQueryNum[tpchPerfTestOnConfigIdx][queryNum]
+	onName := h.setupNames[tpchPerfTestOnConfigIdx]
+	offTimes := h.timeByQueryNum[tpchPerfTestOffConfigIdx][queryNum]
+	offName := h.setupNames[tpchPerfTestOffConfigIdx]
+	if len(onTimes) != numRunsPerQuery {
+		t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+			"recorded with %s config: %v", queryNum, onName, onTimes))
+	}
+	if len(offTimes) != numRunsPerQuery {
+		t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
+			"recorded with %s config: %v", queryNum, offName, offTimes))
+	}
+	return findMedian(onTimes), findMedian(offTimes)
+}
+
 // compareSetups compares the runtimes of TPCH queries in different setups and
 // logs that comparison. The expectation is that the second "ON" setup should be
 // faster, and if that is not the case, then a warning message is included in
@@ -151,24 +173,11 @@ func (h *tpchVecPerfHelper) compareSetups(
 ) {
 	t.Status("comparing the runtimes (only median values for each query are compared)")
 	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
-		findMedian := func(times []float64) float64 {
-			sort.Float64s(times)
-			return times[len(times)/2]
-		}
 		onTimes := h.timeByQueryNum[tpchPerfTestOnConfigIdx][queryNum]
 		onName := h.setupNames[tpchPerfTestOnConfigIdx]
 		offTimes := h.timeByQueryNum[tpchPerfTestOffConfigIdx][queryNum]
 		offName := h.setupNames[tpchPerfTestOffConfigIdx]
-		if len(onTimes) != numRunsPerQuery {
-			t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-				"recorded with %s config: %v", queryNum, onName, onTimes))
-		}
-		if len(offTimes) != numRunsPerQuery {
-			t.Fatal(fmt.Sprintf("[q%d] unexpectedly wrong number of run times "+
-				"recorded with %s config: %v", queryNum, offName, offTimes))
-		}
-		onTime := findMedian(onTimes)
-		offTime := findMedian(offTimes)
+		onTime, offTime := h.getQueryTimes(t, numRunsPerQuery, queryNum)
 		if offTime < onTime {
 			t.L().Printf(
 				fmt.Sprintf("[q%d] %s was faster by %.2f%%: "+
@@ -246,9 +255,41 @@ func (p *tpchVecPerfTest) postTestRunHook(
 	p.tpchVecPerfHelper.compareSetups(t, runConfig.numRunsPerQuery, func(queryNum int, onTime, offTime float64, onTimes, offTimes []float64) {
 		if onTime >= p.slownessThreshold*offTime {
 			// For some reason, the ON setup executed the query a lot slower
-			// than the OFF setup which is unexpected. In order to understand
-			// where the slowness comes from, we will run EXPLAIN ANALYZE
-			// (DEBUG) of the query with all setup options
+			// than the OFF setup which is unexpected.
+
+			// Check whether we can reproduce this slowness to prevent false
+			// positives.
+			var helper tpchVecPerfHelper
+			for setupIdx, setup := range runConfig.clusterSetups {
+				performClusterSetup(t, conn, setup)
+				result, err := c.RunWithDetailsSingleNode(
+					ctx, t.L(), c.Node(1),
+					getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum),
+				)
+				workloadOutput := result.Stdout + result.Stderr
+				t.L().Printf(workloadOutput)
+				if err != nil {
+					// Note: if you see an error like "exit status 1", it is
+					// likely caused by the erroneous output of the query.
+					t.Fatal(err)
+				}
+				helper.parseQueryOutput(t, []byte(workloadOutput), setupIdx)
+			}
+			newOnTime, newOffTime := helper.getQueryTimes(t, runConfig.numRunsPerQuery, queryNum)
+			if newOnTime < p.slownessThreshold*newOffTime {
+				// This time the slowness threshold was satisfied, so we don't
+				// fail the test.
+				t.L().Printf(fmt.Sprintf(
+					"[q%d] after re-running: %.2fs ON vs %.2fs OFF (proceeding)", queryNum, onTime, offTime,
+				))
+				return
+			}
+			t.L().Printf(fmt.Sprintf(
+				"[q%d] after re-running: %.2fs ON vs %.2fs OFF (failing)", queryNum, onTime, offTime,
+			))
+
+			// In order to understand where the slowness comes from, we will run
+			// EXPLAIN ANALYZE (DEBUG) of the query with all setup options
 			// tpchPerfTestNumRunsPerQuery times (hoping at least one will
 			// "catch" the slowness).
 			for setupIdx, setup := range runConfig.clusterSetups {
@@ -438,22 +479,26 @@ func (d tpchVecDiskTest) getRunConfig() tpchVecTestRunConfig {
 	return runConfig
 }
 
+func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int) string {
+	// Note that we use --default-vectorize flag which tells tpch workload to
+	// use the current cluster setting sql.defaults.vectorize which must have
+	// been set correctly in preQueryRunHook.
+	return fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
+		"--default-vectorize --max-ops=%d --queries=%d {pgurl:1} --enable-checks=true",
+		numRunsPerQuery, queryNum)
+}
+
 func baseTestRun(
 	ctx context.Context, t test.Test, c cluster.Cluster, conn *gosql.DB, tc tpchVecTestCase,
 ) {
-	firstNode := c.Node(1)
 	runConfig := tc.getRunConfig()
 	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
 		for setupIdx, setup := range runConfig.clusterSetups {
 			tc.preQueryRunHook(t, conn, setup)
-			// Note that we use --default-vectorize flag which tells tpch
-			// workload to use the current cluster setting
-			// sql.defaults.vectorize which must have been set correctly in
-			// preQueryRunHook.
-			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
-				"--default-vectorize --max-ops=%d --queries=%d {pgurl:1} --enable-checks=true",
-				runConfig.numRunsPerQuery, queryNum)
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), firstNode, cmd)
+			result, err := c.RunWithDetailsSingleNode(
+				ctx, t.L(), c.Node(1),
+				getTPCHVecWorkloadCmd(runConfig.numRunsPerQuery, queryNum),
+			)
 			workloadOutput := result.Stdout + result.Stderr
 			t.L().Printf(workloadOutput)
 			if err != nil {

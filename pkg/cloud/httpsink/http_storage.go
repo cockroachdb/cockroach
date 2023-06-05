@@ -108,12 +108,6 @@ func (h *httpStorage) Settings() *cluster.Settings {
 	return h.settings
 }
 
-func (h *httpStorage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
-	// https://github.com/cockroachdb/cockroach/issues/23859
-	stream, _, err := h.ReadFileAt(ctx, basename, 0)
-	return stream, err
-}
-
 func (h *httpStorage) openStreamAt(
 	ctx context.Context, url string, pos int64,
 ) (*http.Response, error) {
@@ -141,19 +135,19 @@ func (h *httpStorage) openStreamAt(
 	return nil, ctx.Err()
 }
 
-func (h *httpStorage) ReadFileAt(
-	ctx context.Context, basename string, offset int64,
-) (ioctx.ReadCloserCtx, int64, error) {
-	stream, err := h.openStreamAt(ctx, basename, offset)
+func (h *httpStorage) ReadFile(
+	ctx context.Context, basename string, opts cloud.ReadOptions,
+) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
+	stream, err := h.openStreamAt(ctx, basename, opts.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	var size int64
-	if offset == 0 {
+	if opts.Offset == 0 {
 		size = stream.ContentLength
 	} else {
-		size, err = cloud.CheckHTTPContentRangeHeader(stream.Header.Get("Content-Range"), offset)
+		size, err = cloud.CheckHTTPContentRangeHeader(stream.Header.Get("Content-Range"), opts.Offset)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -168,7 +162,7 @@ func (h *httpStorage) ReadFileAt(
 			}
 			return s.Body, err
 		}
-		return cloud.NewResumingReader(ctx, opener, stream.Body, offset, basename,
+		return cloud.NewResumingReader(ctx, opener, stream.Body, opts.Offset, basename,
 			cloud.ResumingReaderRetryOnErrFnForSettings(ctx, h.settings), nil), size, nil
 	}
 	return ioctx.ReadCloserAdapter(stream.Body), size, nil
