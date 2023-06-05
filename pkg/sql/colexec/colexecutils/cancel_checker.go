@@ -28,7 +28,10 @@ type CancelChecker struct {
 	colexecop.OneInputNode
 	colexecop.InitHelper
 	colexecop.NonExplainable
-	cancelchecker.CancelChecker
+
+	// Number of times check() has been called since last context cancellation
+	// check.
+	callsSinceLastCheck uint32
 }
 
 var _ colexecop.Operator = &CancelChecker{}
@@ -43,8 +46,6 @@ func (c *CancelChecker) Init(ctx context.Context) {
 	if !c.InitHelper.Init(ctx) {
 		return
 	}
-	c.CancelChecker.Reset(c.Ctx)
-
 	if c.Input != nil {
 		// In some cases, the cancel checker is used as a utility to provide
 		// Check*() methods, and the input remains nil then.
@@ -54,15 +55,35 @@ func (c *CancelChecker) Init(ctx context.Context) {
 
 // Next is part of colexecop.Operator interface.
 func (c *CancelChecker) Next() coldata.Batch {
-	c.Check()
+	c.CheckEveryCall()
 	return c.Input.Next()
 }
 
-// Check panics with query canceled error (which will be caught at the
-// materializer level and will be propagated forward as metadata) if the
-// associated query has been canceled.
+// Interval of Check() calls to wait between checks for context cancellation.
+// The value is a power of 2 to allow the compiler to use bitwise AND instead
+// of division.
+const cancelCheckInterval = 1024
+
+// Check panics with a query canceled error if the associated query has been
+// canceled. The check is performed on every cancelCheckInterval'th call. This
+// should be used only during long-running operations.
 func (c *CancelChecker) Check() {
-	if err := c.CancelChecker.Check(); err != nil {
-		colexecerror.ExpectedError(err)
+	if c.callsSinceLastCheck%cancelCheckInterval == 0 {
+		c.CheckEveryCall()
+	}
+
+	// Increment. This may rollover when the 32-bit capacity is reached, but
+	// that's all right.
+	c.callsSinceLastCheck++
+}
+
+// CheckEveryCall panics with query canceled error (which will be caught at the
+// materializer level and will be propagated forward as metadata) if the
+// associated query has been canceled. The check is performed on every call.
+func (c *CancelChecker) CheckEveryCall() {
+	select {
+	case <-c.Ctx.Done():
+		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
+	default:
 	}
 }

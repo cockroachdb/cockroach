@@ -810,7 +810,7 @@ func (ht *HashTable) buildNextChains(first, next []keyID, offset, batchSize uint
 			next[firstKeyID] = id
 		}
 	}
-	ht.cancelChecker.Check()
+	ht.cancelChecker.CheckEveryCall()
 }
 
 // SetupLimitedSlices ensures that HeadID, differs, foundNull, ToCheckID, and
