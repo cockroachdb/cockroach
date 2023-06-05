@@ -2031,14 +2031,25 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 				}
 				return nil
 			}
-			return c.beginCopyFrom(ctx, c.concatLines)
+			if err := c.beginCopyFrom(ctx, c.concatLines); err != nil {
+				return err
+			}
+			if c.cliCtx.IsInteractive {
+				return nil
+			}
 		}
 		q := clisqlclient.MakeQuery(c.concatLines)
 		if c.inCopy() {
+			var r io.Reader
+			if c.cliCtx.IsInteractive {
+				r = bytes.NewReader([]byte(c.concatLines))
+			} else {
+				r = os.Stdin
+			}
 			q = c.copyFromState.Commit(
 				ctx,
 				c.resetCopy,
-				c.concatLines,
+				r,
 			)
 		}
 		defer c.maybeFlushOutput()
@@ -2110,7 +2121,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 }
 
 func (c *cliState) beginCopyFrom(ctx context.Context, sql string) error {
-	copyFromState, err := clisqlclient.BeginCopyFrom(ctx, c.conn, sql)
+	copyFromState, err := clisqlclient.BeginCopyFrom(ctx, c.conn, sql, c.cliCtx.IsInteractive)
 	if err != nil {
 		return err
 	}

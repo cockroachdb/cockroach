@@ -32,12 +32,16 @@ type CopyFromState struct {
 }
 
 // BeginCopyFrom starts a COPY FROM query.
-func BeginCopyFrom(ctx context.Context, conn Conn, query string) (*CopyFromState, error) {
+func BeginCopyFrom(
+	ctx context.Context, conn Conn, query string, interactive bool,
+) (*CopyFromState, error) {
 	copyConn := conn.(*sqlConn).conn.PgConn()
-	// Run the initial query, but don't use the result so that we can get any
-	// errors early.
-	if _, err := copyConn.CopyFrom(ctx, bytes.NewReader([]byte{}), query); err != nil {
-		return nil, err
+	if interactive {
+		// Run the initial query, but don't use the result so that we can get any
+		// errors early.
+		if _, err := copyConn.CopyFrom(ctx, bytes.NewReader([]byte{}), query); err != nil {
+			return nil, err
+		}
 	}
 	return &CopyFromState{
 		conn:  copyConn,
@@ -80,11 +84,10 @@ func (c *CopyFromState) Cancel() error {
 }
 
 // Commit completes a COPY FROM query by committing lines to the database.
-func (c *CopyFromState) Commit(ctx context.Context, cleanupFunc func(), lines string) QueryFn {
+func (c *CopyFromState) Commit(ctx context.Context, cleanupFunc func(), r io.Reader) QueryFn {
 	return func(ctx context.Context, conn Conn) (Rows, bool, error) {
 		defer cleanupFunc()
 		rows, isMulti, err := func() (Rows, bool, error) {
-			r := bytes.NewReader([]byte(lines))
 			tag, err := c.conn.CopyFrom(ctx, r, c.query)
 			if err != nil {
 				return nil, false, err
