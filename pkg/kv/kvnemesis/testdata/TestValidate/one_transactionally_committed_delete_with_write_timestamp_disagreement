@@ -8,4 +8,4 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 }) // @0.000000001,0 <nil>
 /Table/100/"0000000000000001"/0.000000001,0 @ s1 <nil>
 /Table/100/"0000000000000002"/0.000000002,0 @ s2 <nil>
-committed txn non-atomic timestamps: [d]/Table/100/"0000000000000001":0.000000001,0-><nil>@s1 [d]/Table/100/"0000000000000002":0.000000002,0-><nil>@s2
+committed serializable txn non-atomic timestamps: [d]/Table/100/"0000000000000001":0.000000001,0-><nil>@s1 [d]/Table/100/"0000000000000002":0.000000002,0-><nil>@s2
