@@ -1319,7 +1319,7 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 			cloud.WithIOAccountingInterceptor(interceptor))
 		require.NoError(b, err)
 		return func(ctx context.Context) error {
-				r, err := es.ReadFile(ctx, "")
+				r, _, err := es.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
 				if err != nil {
 					return err
 				}
