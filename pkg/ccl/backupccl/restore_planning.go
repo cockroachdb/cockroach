@@ -1813,7 +1813,10 @@ func doRestorePlan(
 			if res != nil {
 				return errors.Errorf("tenant %s already exists", newTenantID)
 			}
-			old := roachpb.MustMakeTenantID(tenants[0].ID)
+			old, err := roachpb.MakeTenantID(tenants[0].ID)
+			if err != nil {
+				return err
+			}
 			tenants[0].ID = newTenantID.ToUint64()
 			if newTenantName != nil {
 				tenants[0].Name = *newTenantName

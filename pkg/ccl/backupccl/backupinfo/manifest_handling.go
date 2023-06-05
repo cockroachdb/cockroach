@@ -410,6 +410,10 @@ func readManifest(
 			t.ModificationTime = hlc.Timestamp{WallTime: 1}
 		}
 	}
+	if err := backupManifest.UpgradeTenantDescriptors(); err != nil {
+		return backuppb.BackupManifest{}, 0, err
+	}
+
 	return backupManifest, approxMemSize, nil
 }
 

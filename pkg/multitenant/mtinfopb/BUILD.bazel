@@ -9,7 +9,10 @@ go_library(
     embed = [":mtinfopb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/sql/catalog/catpb"],
+    deps = [
+        "//pkg/sql/catalog/catpb",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 proto_library(
