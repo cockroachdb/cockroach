@@ -10,9 +10,11 @@ package changefeedccl
 
 import (
 	"context"
+	gosql "database/sql"
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -26,10 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -120,8 +124,10 @@ func TestParquetRows(t *testing.T) {
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, cdcevent.PrevRow, v.Timestamp(), false)
 				require.NoError(t, err)
 
+				encodingOpts := changefeedbase.EncodingOptions{}
+
 				if writer == nil {
-					writer, err = newParquetWriterFromRow(updatedRow, f, &TestingKnobs{EnableParquetMetadata: true}, parquet.WithMaxRowGroupLength(maxRowGroupSize),
+					writer, err = newParquetWriterFromRow(updatedRow, f, encodingOpts, &TestingKnobs{EnableParquetMetadata: true}, parquet.WithMaxRowGroupLength(maxRowGroupSize),
 						parquet.WithCompressionCodec(parquet.CompressionGZIP))
 					if err != nil {
 						t.Fatalf(err.Error())
@@ -129,12 +135,12 @@ func TestParquetRows(t *testing.T) {
 					numCols = len(updatedRow.ResultColumns()) + 1
 				}
 
-				err = writer.addData(updatedRow, prevRow)
+				err = writer.addData(updatedRow, prevRow, hlc.Timestamp{}, hlc.Timestamp{})
 				require.NoError(t, err)
 
 				// Save a copy of the datums we wrote.
-				datumRow := make([]tree.Datum, len(updatedRow.ResultColumns())+1)
-				err = populateDatums(updatedRow, prevRow, datumRow)
+				datumRow := make([]tree.Datum, writer.schemaDef.NumColumns())
+				err = populateDatums(updatedRow, prevRow, encodingOpts, hlc.Timestamp{}, hlc.Timestamp{}, datumRow)
 				require.NoError(t, err)
 				datums[i] = datumRow
 			}
@@ -186,6 +192,66 @@ func TestParquetResolvedTimestamps(t *testing.T) {
 			}
 			return nil
 		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
+
+func TestChangefeedUpdatedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, resolved, format=parquet`)
+		defer closeFeed(t, foo)
+
+		// Grab the first non resolved-timestamp row.
+		var row0 *cdctest.TestFeedMessage
+		for {
+			var err error
+			row0, err = foo.Next()
+			assert.NoError(t, err)
+			if len(row0.Value) > 0 {
+				break
+			}
+		}
+
+		// If this changefeed uses jobs (and thus stores a ChangefeedDetails), get
+		// the statement timestamp from row0 and verify that they match. Otherwise,
+		// just skip the row.
+		if jf, ok := foo.(cdctest.EnterpriseTestFeed); ok {
+			d, err := jf.Details()
+			assert.NoError(t, err)
+			expected := `{"after": {"a": 0}, "updated": "` + d.StatementTime.AsOfSystemTime() + `"}`
+			assert.Equal(t, expected, string(row0.Value))
+		}
+
+		// Assert the remaining key using assertPayloads, since we know the exact
+		// timestamp expected.
+		var ts1 string
+		if err := crdb.ExecuteTx(ctx, s.DB, nil /* txopts */, func(tx *gosql.Tx) error {
+			return tx.QueryRow(
+				`INSERT INTO foo VALUES (1) RETURNING cluster_logical_timestamp()`,
+			).Scan(&ts1)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1}, "updated": "` + ts1 + `"}`,
+		})
+
+		// Check that we eventually get a resolved timestamp greater than ts1.
+		parsed := parseTimeToHLC(t, ts1)
+		for {
+			if resolved, _ := expectResolvedTimestamp(t, foo); parsed.Less(resolved) {
+				break
+			}
+		}
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
