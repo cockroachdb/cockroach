@@ -1085,11 +1085,6 @@ func cdcTestNamedWithSystem(
 		// Even if the parquet format is not being used, enable metadata
 		// in all tests for simplicity.
 		testServer, cleanupServer := makeServerWithOptions(t, options)
-		knobs := testServer.TestingKnobs.
-			DistSQL.(*execinfra.TestingKnobs).
-			Changefeed.(*TestingKnobs)
-		knobs.EnableParquetMetadata = true
-
 		feedFactory, cleanupSink := makeFeedFactoryWithOptions(t, sinkType, testServer.Server, testServer.DB, options)
 		feedFactory = maybeUseExternalConnection(feedFactory, testServer.DB, sinkType, options, t)
 		defer cleanupServer()
