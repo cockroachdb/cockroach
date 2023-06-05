@@ -78,7 +78,7 @@ write *eventpb.CreateIndex to event log:
     tag: CREATE INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 8 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -148,6 +148,13 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
+upsert descriptor #105
+  ...
+         oid: 20
+         width: 64
+  -  state: ADD
+     version: "1"
+     volatility: VOLATILE
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op

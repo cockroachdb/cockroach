@@ -8,6 +8,26 @@ EXPLAIN (ddl) CREATE UNIQUE INDEX idx ON t(k);
 Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹k›); following ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward TRANSIENT_ABSENT
+ │         │    ├── ABSENT      → PUBLIC      IndexData:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
+ │         │    └── DELETE_ONLY → WRITE_ONLY  TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+ │         ├── 7 elements transitioning toward ABSENT
+ │         │    ├── WRITE_ONLY  → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 2 (j-)}
+ │         │    ├── WRITE_ONLY  → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr-)}
+ │         │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr-), IndexID: 2 (t_expr_k_idx-)}
+ │         │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 2 (t_expr_k_idx-)}
+ │         │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_expr_k_idx-)}
+ │         │    ├── VALIDATED   → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx-)}
+ │         │    └── PUBLIC      → ABSENT      IndexName:{DescID: 104 (t), Name: "t_expr_k_idx", IndexID: 2 (t_expr_k_idx-)}
+ │         └── 8 Mutation operations
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4,"TableID":104}
+ │              ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":4,"TableID":104}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
+ │              ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
+ │              ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":2,"TableID":104}
+ │              ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Ordinal":1,"TableID":104}
+ │              └── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 4 elements transitioning toward PUBLIC
@@ -15,14 +35,19 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 3 (t_pkey+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (t_pkey+)}
  │    │    │    └── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey-)}
- │    │    ├── 3 elements transitioning toward TRANSIENT_ABSENT
+ │    │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
- │    │    │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
- │    │    ├── 5 elements transitioning toward ABSENT
- │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 2 (j-)}
- │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr-)}
- │    │    │    ├── VALIDATED     → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx-)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
+ │    │    │    └── WRITE_ONLY    → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+ │    │    ├── 9 elements transitioning toward ABSENT
+ │    │    │    ├── DELETE_ONLY   → PUBLIC Column:{DescID: 104 (t), ColumnID: 2 (j-)}
+ │    │    │    ├── DELETE_ONLY   → PUBLIC Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr-)}
+ │    │    │    ├── ABSENT        → PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr-), IndexID: 2 (t_expr_k_idx-)}
+ │    │    │    ├── ABSENT        → PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 2 (t_expr_k_idx-)}
+ │    │    │    ├── ABSENT        → PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_expr_k_idx-)}
+ │    │    │    ├── DELETE_ONLY   → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx-)}
+ │    │    │    ├── ABSENT        → PUBLIC IndexName:{DescID: 104 (t), Name: "t_expr_k_idx", IndexID: 2 (t_expr_k_idx-)}
  │    │    │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
  │    │    │    └── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 4 (crdb_internal_idx_expr-)}
  │    │    └── 1 Mutation operation

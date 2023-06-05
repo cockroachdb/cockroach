@@ -14,7 +14,31 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 5 elements transitioning toward PUBLIC
+│       ├── • 6 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Function:{DescID: 105 (t+)}
+│       │   │   │ DESCRIPTOR_ADDED → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 105 (t+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "admin"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "root"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • StatementPhasePrecedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105 (t+)}
+│       │   │   │     rule: "Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 105 (t+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 105 (t+)}
+│       │   │         rule: "dependents exist before descriptor becomes public"
 │       │   │
 │       │   ├── • SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
 │       │   │   │ ABSENT → BACKFILL_ONLY
@@ -66,7 +90,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 7 Mutation operations
+│       └── • 8 Mutation operations
+│           │
+│           ├── • MarkDescriptorAsPublic
+│           │     DescriptorID: 105
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -130,7 +157,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
 │   │   │   │     PUBLIC → ABSENT
 │   │   │   │
 │   │   │   ├── • Function:{DescID: 105 (t+)}
-│   │   │   │     DESCRIPTOR_ADDED → ABSENT
+│   │   │   │     PUBLIC → ABSENT
 │   │   │   │
 │   │   │   ├── • SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
 │   │   │   │     PUBLIC → ABSENT
@@ -598,6 +625,9 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(b);
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "root"}
     │   │   │   │     rule: "dependents exist before descriptor becomes public"
+    │   │   │   │
+    │   │   │   ├── • StatementPhasePrecedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105 (t+)}
+    │   │   │   │     rule: "Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
     │   │   │   │     rule: "dependents exist before descriptor becomes public"

@@ -12,6 +12,7 @@ func _() {
 	_ = x[SameStagePrecedence-2]
 	_ = x[PreviousStagePrecedence-3]
 	_ = x[PreviousTransactionPrecedence-4]
+	_ = x[StatementPhasePrecedence-5]
 }
 
 func (i DepEdgeKind) String() string {
@@ -24,6 +25,8 @@ func (i DepEdgeKind) String() string {
 		return "PreviousStagePrecedence"
 	case PreviousTransactionPrecedence:
 		return "PreviousTransactionPrecedence"
+	case StatementPhasePrecedence:
+		return "StatementPhasePrecedence"
 	default:
 		return "DepEdgeKind(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

@@ -149,6 +149,9 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
         │   ├── • Function:{DescID: 105 (t+)}
         │   │   │ ABSENT → PUBLIC
         │   │   │
+        │   │   ├── • StatementPhasePrecedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105 (t+)}
+        │   │   │     rule: "Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC"
+        │   │   │
         │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │

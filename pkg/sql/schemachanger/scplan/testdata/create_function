@@ -292,6 +292,10 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
 $$;
 ----
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
+  to:   [Function:{DescID: 110}, PUBLIC]
+  kind: StatementPhasePrecedence
+  rule: Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC
+- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
   to:   [FunctionBody:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents

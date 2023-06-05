@@ -105,6 +105,11 @@ const (
 	// release via the release_22_2 ruleset and should not be used elsewhere.
 	// Deprecated.
 	PreviousTransactionPrecedence
+
+	// StatementPhasePrecedence indicates that the source (from) of the edge must
+	// be reached before the destination (to), and _must_ do so after the statement
+	// phase.
+	StatementPhasePrecedence
 )
 
 // DepEdge represents a dependency between two nodes. A dependency

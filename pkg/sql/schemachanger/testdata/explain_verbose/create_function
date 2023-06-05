@@ -246,6 +246,9 @@ $$;
         │   ├── • Function:{DescID: 110 (f+)}
         │   │   │ ABSENT → PUBLIC
         │   │   │
+        │   │   ├── • StatementPhasePrecedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
+        │   │   │     rule: "Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC"
+        │   │   │
         │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │

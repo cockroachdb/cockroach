@@ -128,6 +128,9 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
         │   ├── • Schema:{DescID: 104 (sc+)}
         │   │   │ ABSENT → PUBLIC
         │   │   │
+        │   │   ├── • StatementPhasePrecedence dependency from DESCRIPTOR_ADDED Schema:{DescID: 104 (sc+)}
+        │   │   │     rule: "Schema transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC"
+        │   │   │
         │   │   ├── • Precedence dependency from PUBLIC SchemaName:{DescID: 104 (sc+)}
         │   │   │     rule: "dependents exist before descriptor becomes public"
         │   │   │

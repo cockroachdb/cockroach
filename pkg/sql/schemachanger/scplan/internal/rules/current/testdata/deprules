@@ -1,5 +1,21 @@
 deprules
 ----
+- name: 'AliasType transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.AliasType'
+    - $next[Type] = '*scpb.AliasType'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -47,6 +63,26 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
@@ -97,6 +133,25 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -145,6 +200,25 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Column'
+    - $next[Type] = '*scpb.Column'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = DELETE_ONLY
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -191,6 +265,25 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = PUBLIC
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Column transitions to PUBLIC uphold only single transition in statement phase: DELETE_ONLY->WRITE_ONLY'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Column'
+    - $next[Type] = '*scpb.Column'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DELETE_ONLY
+    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
@@ -242,6 +335,26 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -288,6 +401,41 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CompositeType transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CompositeType'
+    - $next[Type] = '*scpb.CompositeType'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: Constraint should be hidden before name
@@ -411,6 +559,37 @@ deprules
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($expr, $expr-Target, $expr-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: 'Database transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Database'
+    - $next[Type] = '*scpb.Database'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'EnumType transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.EnumType'
+    - $next[Type] = '*scpb.EnumType'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -460,6 +639,26 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ForeignKeyConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ForeignKeyConstraint'
+    - $next[Type] = '*scpb.ForeignKeyConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -506,6 +705,40 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ForeignKeyConstraint transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ForeignKeyConstraint'
+    - $next[Type] = '*scpb.ForeignKeyConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Function'
+    - $next[Type] = '*scpb.Function'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DESCRIPTOR_ADDED
+    - $next-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
@@ -767,6 +1000,26 @@ deprules
     - nodeNotExistsWithStatusIn_VALIDATED_TRANSIENT_WRITE_ONLY_MERGE_ONLY_TRANSIENT_MERGE_ONLY_MERGED_TRANSIENT_MERGED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.PrimaryIndex'
+    - $next[Type] = '*scpb.PrimaryIndex'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_TRANSIENT_VALIDATED($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -893,6 +1146,25 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILL_ONLY->BACKFILLED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.PrimaryIndex'
+    - $next[Type] = '*scpb.PrimaryIndex'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = BACKFILL_ONLY
+    - $next-Node[CurrentStatus] = BACKFILLED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
@@ -1153,6 +1425,21 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Schema transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Schema'
+    - $next[Type] = '*scpb.Schema'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DESCRIPTOR_ADDED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -1283,6 +1570,25 @@ deprules
     - nodeNotExistsWithStatusIn_VALIDATED_MERGE_ONLY_MERGED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'SecondaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.SecondaryIndex'
+    - $next[Type] = '*scpb.SecondaryIndex'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -1409,6 +1715,57 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILL_ONLY->BACKFILLED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.SecondaryIndex'
+    - $next[Type] = '*scpb.SecondaryIndex'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = BACKFILL_ONLY
+    - $next-Node[CurrentStatus] = BACKFILLED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Sequence transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Sequence'
+    - $next[Type] = '*scpb.Sequence'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Table transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Table'
+    - $next[Type] = '*scpb.Table'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
@@ -1589,6 +1946,26 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $next[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -1635,6 +2012,41 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $next[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'View transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.View'
+    - $next[Type] = '*scpb.View'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: back-reference in parent descriptor is removed before parent descriptor is dropped
@@ -3482,6 +3894,22 @@ deprules
 
 deprules
 ----
+- name: 'AliasType transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.AliasType'
+    - $next[Type] = '*scpb.AliasType'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -3529,6 +3957,26 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
@@ -3579,6 +4027,25 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CheckConstraint transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CheckConstraint'
+    - $next[Type] = '*scpb.CheckConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -3627,6 +4094,25 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Column transitions to ABSENT uphold only single transition in statement phase: WRITE_ONLY->DELETE_ONLY'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Column'
+    - $next[Type] = '*scpb.Column'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = DELETE_ONLY
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -3673,6 +4159,25 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = PUBLIC
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Column transitions to PUBLIC uphold only single transition in statement phase: DELETE_ONLY->WRITE_ONLY'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Column'
+    - $next[Type] = '*scpb.Column'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DELETE_ONLY
+    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
@@ -3724,6 +4229,26 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -3770,6 +4295,41 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'CompositeType transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.CompositeType'
+    - $next[Type] = '*scpb.CompositeType'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: Constraint should be hidden before name
@@ -3893,6 +4453,37 @@ deprules
     - $column-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($expr, $expr-Target, $expr-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: 'Database transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Database'
+    - $next[Type] = '*scpb.Database'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'EnumType transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.EnumType'
+    - $next[Type] = '*scpb.EnumType'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -3942,6 +4533,26 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ForeignKeyConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ForeignKeyConstraint'
+    - $next[Type] = '*scpb.ForeignKeyConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -3988,6 +4599,40 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ForeignKeyConstraint transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ForeignKeyConstraint'
+    - $next[Type] = '*scpb.ForeignKeyConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Function transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Function'
+    - $next[Type] = '*scpb.Function'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DESCRIPTOR_ADDED
+    - $next-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
@@ -4249,6 +4894,26 @@ deprules
     - nodeNotExistsWithStatusIn_VALIDATED_TRANSIENT_WRITE_ONLY_MERGE_ONLY_TRANSIENT_MERGE_ONLY_MERGED_TRANSIENT_MERGED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'PrimaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.PrimaryIndex'
+    - $next[Type] = '*scpb.PrimaryIndex'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_TRANSIENT_VALIDATED($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -4375,6 +5040,25 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'PrimaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILL_ONLY->BACKFILLED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.PrimaryIndex'
+    - $next[Type] = '*scpb.PrimaryIndex'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = BACKFILL_ONLY
+    - $next-Node[CurrentStatus] = BACKFILLED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
@@ -4635,6 +5319,21 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Schema transitions to PUBLIC uphold only single transition in statement phase: DESCRIPTOR_ADDED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Schema'
+    - $next[Type] = '*scpb.Schema'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DESCRIPTOR_ADDED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -4765,6 +5464,25 @@ deprules
     - nodeNotExistsWithStatusIn_VALIDATED_MERGE_ONLY_MERGED($prev-Target)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'SecondaryIndex transitions to ABSENT uphold only single transition in statement phase: VALIDATED->WRITE_ONLY'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.SecondaryIndex'
+    - $next[Type] = '*scpb.SecondaryIndex'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -4891,6 +5609,57 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'SecondaryIndex transitions to PUBLIC uphold only single transition in statement phase: BACKFILL_ONLY->BACKFILLED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.SecondaryIndex'
+    - $next[Type] = '*scpb.SecondaryIndex'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = BACKFILL_ONLY
+    - $next-Node[CurrentStatus] = BACKFILLED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Sequence transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Sequence'
+    - $next[Type] = '*scpb.Sequence'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'Table transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.Table'
+    - $next[Type] = '*scpb.Table'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
@@ -5071,6 +5840,26 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold only single transition in statement phase: VALIDATED->ABSENT'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $next[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
   kind: PreviousStagePrecedence
@@ -5117,6 +5906,41 @@ deprules
     - $prev-Node[CurrentStatus] = WRITE_ONLY
     - $next-Node[CurrentStatus] = VALIDATED
     - descriptorIsNotBeingDropped-23.2($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold only single transition in statement phase: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $next[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - $target-desc[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
+    - joinTargetNode($target-desc, $target-desc-Target, $target-desc-Node)
+    - $target-desc[DescID] = $desc-id
+    - $target-desc-Target[CurrentStatus] != DESCRIPTOR_ADDED
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'View transitions to PUBLIC uphold only single transition in statement phase: DROPPED->PUBLIC'
+  from: prev-Node
+  kind: StatementPhasePrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.View'
+    - $next[Type] = '*scpb.View'
+    - $prev[DescID] = $desc-id
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = DROPPED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - $prev-Target[CurrentStatus] != DESCRIPTOR_ADDED
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: back-reference in parent descriptor is removed before parent descriptor is dropped

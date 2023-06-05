@@ -49,6 +49,10 @@ func (t transition) To() scpb.Status {
 	return t.to
 }
 
+func (t transition) Revertible() bool {
+	return t.revertible
+}
+
 func makeTarget(e scpb.Element, spec targetSpec) (t target, err error) {
 	defer func() {
 		err = errors.Wrapf(err, "target %s", spec.to)
