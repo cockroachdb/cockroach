@@ -1080,9 +1080,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			//
 			// NB: this must be called after Advance() above since campaigning is
 			// a no-op in the presence of unapplied conf changes.
-			if shouldCampaignAfterConfChange(ctx, r.store.StoreID(), r.descRLocked(), raftGroup) {
-				r.campaignLocked(ctx)
-			}
+			r.maybeCampaignAfterConfChangeRLocked(ctx)
 		}
 
 		// If the Raft group still has more to process then we immediately
@@ -2478,12 +2476,7 @@ func ComputeRaftLogSize(
 	return ms.SysBytes + totalSideloaded, nil
 }
 
-func shouldCampaignAfterConfChange(
-	ctx context.Context,
-	storeID roachpb.StoreID,
-	desc *roachpb.RangeDescriptor,
-	raftGroup *raft.RawNode,
-) bool {
+func (r *Replica) maybeCampaignAfterConfChangeRLocked(ctx context.Context) {
 	// If a config change was carried out, it's possible that the Raft
 	// leader was removed. Verify that, and if so, campaign if we are
 	// the first remaining voter replica. Without this, the range will
@@ -2492,26 +2485,30 @@ func shouldCampaignAfterConfChange(
 	// We can't (or rather shouldn't) campaign on all remaining voters
 	// because that can lead to a stalemate. For example, three voters
 	// may all make it through PreVote and then reject each other.
-	st := raftGroup.BasicStatus()
+	st := r.raftBasicStatusRLocked()
 	if st.Lead == 0 {
 		// Leader unknown. This isn't what we expect in steady state, so we
 		// don't do anything.
-		return false
+		return
 	}
+	desc := r.descRLocked()
 	if !desc.IsInitialized() {
 		// We don't have an initialized, so we can't figure out who is supposed
 		// to campaign. It's possible that it's us and we're waiting for the
 		// initial snapshot, but it's hard to tell. Don't do anything.
-		return false
+		return
+	}
+	if _, hasLeader := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead)); hasLeader {
+		// Leader still in the descriptor.
+		return
 	}
 	// If the leader is no longer in the descriptor but we are the first voter,
 	// campaign.
-	_, leaderStillThere := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead))
-	if !leaderStillThere && storeID == desc.Replicas().VoterDescriptors()[0].StoreID {
-		log.VEventf(ctx, 3, "leader got removed by conf change")
-		return true
+	log.VEventf(ctx, 3, "leader got removed by conf change")
+	r.store.metrics.RangeRaftLeaderRemovals.Inc(1)
+	if r.StoreID() == desc.Replicas().VoterDescriptors()[0].StoreID {
+		r.campaignLocked(ctx)
 	}
-	return false
 }
 
 // printRaftTail pretty-prints the tail of the log and returns it as a string,
