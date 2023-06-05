@@ -100,7 +100,7 @@ SAVEPOINT before_invalid_grant
 # This grant should fail as testuser no longer has right to this grant
 # via role_foo.
 
-statement error testuser is not a superuser or role admin for role role_bar
+statement error testuser must have CREATEROLE or have admin option on role \"role_bar\"
 GRANT role_bar TO testuser;
 
 statement ok

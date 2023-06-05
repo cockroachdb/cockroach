@@ -54,7 +54,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	ctx, span := tracing.ChildSpan(ctx, n.StatementTag())
 	defer span.Finish()
 
-	hasAdminRole, err := p.HasAdminRole(ctx)
+	hasCreateRolePriv, err := p.HasRoleOption(ctx, roleoption.CREATEROLE)
 	if err != nil {
 		return nil, err
 	}
@@ -76,19 +76,20 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	}
 
 	for _, r := range inputRoles {
-		// If the user is an admin, don't check if the user is allowed to add/drop
-		// roles in the role. However, if the role being modified is the admin role, then
-		// make sure the user is an admin with the admin option.
-		if hasAdminRole && !r.IsAdminRole() {
+		// If the current user has CREATEROLE, and the role being modified is not
+		// "admin" there is no need to check if the user is allowed to grant/revoke
+		// membership in the role. However, if the role being modified is "admin",
+		// then make sure the current user also has the admin option for "admin".
+		if hasCreateRolePriv && !r.IsAdminRole() {
 			continue
 		}
-		if isAdmin, ok := allRoles[r]; !ok || !isAdmin {
+		if hasAdminOption, ok := allRoles[r]; !ok || !hasAdminOption {
 			if r.IsAdminRole() {
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"%s is not a role admin for role %s", p.User(), r)
+					"%s must have admin option on role %q", p.User(), r)
 			}
 			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"%s is not a superuser or role admin for role %s", p.User(), r)
+				"%s must have CREATEROLE or have admin option on role %q", p.User(), r)
 		}
 	}
 

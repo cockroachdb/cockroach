@@ -164,7 +164,10 @@ var retiredSettings = map[string]struct{}{
 	// renamed.
 	"spanconfig.host_coalesce_adjacent.enabled":            {},
 	"sql.defaults.experimental_stream_replication.enabled": {},
-	"sql.log.unstructured_entries.enabled":                 {},
+
+	// removed as of 23.2.
+	"sql.log.unstructured_entries.enabled":                     {},
+	"sql.auth.createrole_allows_grant_role_membership.enabled": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
