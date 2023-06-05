@@ -617,6 +617,22 @@ func (l Locality) Matches(filter Locality) (bool, Tier) {
 	return true, Tier{}
 }
 
+// IsCrossRegion checks if both this and passed locality has a tier with "region"
+// as the key. If either locality does not have a region tier, it returns
+// (false, error). Otherwise, it compares their region values and returns (true,
+// nil) if they are different, and (false, nil) otherwise.
+func (l Locality) IsCrossRegion(other Locality) (bool, error) {
+	// It is unfortunate that the "region" tier key is hardcoded here. Ideally, we
+	// would prefer a more robust way to determine node locality regions.
+	region, hasRegion := l.Find("region")
+	otherRegion, hasRegionInOther := other.Find("region")
+
+	if hasRegion && hasRegionInOther {
+		return region != otherRegion, nil
+	}
+	return false, errors.Errorf("locality must have a region tier key for cross-region comparison")
+}
+
 // SharedPrefix returns the number of this locality's tiers which match those of
 // the passed locality.
 func (l Locality) SharedPrefix(other Locality) int {
