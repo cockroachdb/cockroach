@@ -91,7 +91,7 @@ exp,benchmark
 17,Revoke/revoke_all_on_2_tables
 21,Revoke/revoke_all_on_3_tables
 14,RevokeRole/revoke_1_role
-16,RevokeRole/revoke_2_roles
+18,RevokeRole/revoke_2_roles
 10,ShowGrants/grant_2_roles
 11,ShowGrants/grant_3_roles
 12,ShowGrants/grant_4_roles
