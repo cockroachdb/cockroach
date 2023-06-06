@@ -56,7 +56,7 @@ export const mapStateToActiveTransactionsPageProps = (
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
-  executionStatus: selectExecutionStatus(),
+  executionStatus: selectExecutionStatus("transaction"),
   internalAppNamePrefix: selectAppName(state),
   isTenant: selectIsTenant(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),

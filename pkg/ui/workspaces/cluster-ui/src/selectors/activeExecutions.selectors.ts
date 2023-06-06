@@ -13,6 +13,7 @@ import {
   ActiveExecutions,
   ActiveTransaction,
   ExecutionStatus,
+  ExecutionType,
 } from "src/activeExecutions/types";
 import { AppState } from "src/store";
 import { selectActiveExecutionsCombiner } from "src/selectors/activeExecutionsCommon.selectors";
@@ -46,9 +47,12 @@ export const selectActiveStatements = createSelector(
   (executions: ActiveExecutions) => executions.statements,
 );
 
-export const selectExecutionStatus = () => {
+export const selectExecutionStatus = (execType: ExecutionType) => {
   const execStatuses: string[] = [];
   for (const execStatus in ExecutionStatus) {
+    if (execType == "statement" && execStatus == ExecutionStatus.Idle) {
+      continue;
+    }
     execStatuses.push(execStatus);
   }
   return execStatuses;

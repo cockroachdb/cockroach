@@ -57,7 +57,7 @@ export const mapStateToActiveStatementViewProps = (state: AdminUIState) => ({
   selectedColumns: selectedColumnsLocalSetting.selectorToArray(state),
   sortSetting: sortSettingLocalSetting.selector(state),
   statements: selectActiveStatements(state),
-  executionStatus: selectExecutionStatus(),
+  executionStatus: selectExecutionStatus("statement"),
   sessionsError: state.cachedData?.sessions.lastError,
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),

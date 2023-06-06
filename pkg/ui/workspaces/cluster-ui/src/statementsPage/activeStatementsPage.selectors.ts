@@ -56,7 +56,7 @@ export const mapStateToActiveStatementsPageProps = (
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
-  executionStatus: selectExecutionStatus(),
+  executionStatus: selectExecutionStatus("statement"),
   internalAppNamePrefix: selectAppName(state),
   isTenant: selectIsTenant(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),

@@ -16,6 +16,7 @@ import {
   getContentionDetailsFromLocksAndTxns,
   selectExecutionID,
   ExecutionStatus,
+  ExecutionType,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 import { CachedDataReducerState } from "src/redux/apiReducers";
@@ -44,9 +45,12 @@ export const selectActiveStatements = createSelector(
   (executions: ActiveExecutions) => executions.statements,
 );
 
-export const selectExecutionStatus = () => {
+export const selectExecutionStatus = (execType: ExecutionType) => {
   const execStatuses: string[] = [];
   for (const execStatus in ExecutionStatus) {
+    if (execType == "statement" && execStatus == ExecutionStatus.Idle) {
+      continue;
+    }
     execStatuses.push(execStatus);
   }
   return execStatuses;

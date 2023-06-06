@@ -58,7 +58,7 @@ export const mapStateToActiveTransactionsPageProps = (state: AdminUIState) => ({
   transactions: selectActiveTransactions(state),
   sessionsError: state.cachedData?.sessions.lastError,
   filters: filtersLocalSetting.selector(state),
-  executionStatus: selectExecutionStatus(),
+  executionStatus: selectExecutionStatus("transaction"),
   sortSetting: sortSettingLocalSetting.selector(state),
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
