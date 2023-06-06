@@ -88,7 +88,7 @@ func TestHotRangesStats(t *testing.T) {
 	})
 
 	testutils.SucceedsWithin(t, func() error {
-		log.Flush()
+		log.FlushFileSinks()
 		entries, err := log.FetchEntriesFromFiles(
 			0,
 			math.MaxInt64,

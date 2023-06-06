@@ -543,7 +543,7 @@ SELECT unnest(execution_errors)
 		t *testing.T, id jobspb.JobID, status jobs.Status,
 		from, to time.Time, cause string,
 	) {
-		log.Flush()
+		log.FlushFileSinks()
 		entries, err := log.FetchEntriesFromFiles(
 			from.UnixNano(), to.UnixNano(), 2,
 			regexp.MustCompile(fmt.Sprintf(

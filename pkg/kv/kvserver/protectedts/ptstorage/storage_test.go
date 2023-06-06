@@ -645,7 +645,7 @@ func TestCorruptData(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		log.Flush()
+		log.FlushFileSinks()
 		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
 			log.WithFlattenedSensitiveData)
 		require.NoError(t, err)
@@ -732,7 +732,7 @@ func TestCorruptData(t *testing.T) {
 		require.Nil(t, got)
 		_, err = pts.GetState(ctx)
 		require.NoError(t, err)
-		log.Flush()
+		log.FlushFileSinks()
 
 		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
 			log.WithFlattenedSensitiveData)

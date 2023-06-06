@@ -76,7 +76,7 @@ func runConnectInit(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	// Ensure that log files are populated when the process terminates.
-	defer log.Flush()
+	defer log.FlushFileSinks()
 
 	peers := []string(serverCfg.JoinList)
 	ctx, cancel := context.WithCancel(context.Background())
