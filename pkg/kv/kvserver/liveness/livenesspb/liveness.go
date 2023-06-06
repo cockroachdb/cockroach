@@ -150,19 +150,6 @@ func ValidateTransition(old Liveness, newStatus MembershipStatus) (bool, error) 
 	return true, nil
 }
 
-// IsLiveMapEntry encapsulates data about current liveness for a
-// node based on the liveness range.
-// TODO(abaptist): This should only be used for epoch leases as it uses an
-// overly strict version of liveness. Once epoch leases are removed, this will
-// be also.
-type IsLiveMapEntry struct {
-	Liveness
-	IsLive bool
-}
-
-// IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
-type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
-
 // VitalityStatus tracks the current health of a node.
 type VitalityStatus int
 

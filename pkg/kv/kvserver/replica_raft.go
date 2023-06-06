@@ -1287,9 +1287,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, err error) (removed bool) {
 
 // tick the Raft group, returning true if the raft group exists and should
 // be queued for Ready processing; false otherwise.
-func (r *Replica) tick(
-	ctx context.Context, livenessMap livenesspb.IsLiveMap, ioThresholdMap *ioThresholdMap,
-) (bool, error) {
+func (r *Replica) tick(ctx context.Context, ioThresholdMap *ioThresholdMap) (bool, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -1315,7 +1313,7 @@ func (r *Replica) tick(
 	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
 
 	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
-	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, leaseStatus, livenessMap) {
+	if r.maybeQuiesceRaftMuLockedReplicaMuLocked(ctx, leaseStatus) {
 		return false, nil
 	}
 
@@ -2138,7 +2136,7 @@ func shouldCampaignOnWake(
 	leaseStatus kvserverpb.LeaseStatus,
 	storeID roachpb.StoreID,
 	raftStatus raft.BasicStatus,
-	livenessMap livenesspb.IsLiveMap,
+	nl livenesspb.NodeVitalityInterface,
 	desc *roachpb.RangeDescriptor,
 	requiresExpirationLease bool,
 ) bool {
@@ -2174,13 +2172,14 @@ func shouldCampaignOnWake(
 	if !ok {
 		return false
 	}
-	// If we don't know about the leader in our liveness map, then we err on the side
-	// of caution and dont campaign.
-	livenessEntry, ok := livenessMap[replDesc.NodeID]
-	if !ok {
+	nv := nl.GetNodeVitalityFromCache(replDesc.NodeID)
+	if !nv.IsValid() {
+		// If we don't know about the leader in our liveness map, then we err on the side
+		// of caution and don't campaign.
 		return false
 	}
-	return !livenessEntry.IsLive
+	// If we don't think the leader is alive, campaign.
+	return !nv.IsAlive()
 }
 
 // maybeCampaignOnWakeLocked is called when the range wakes from a
@@ -2200,8 +2199,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 
 	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
-	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
-	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpirationLeaseRLocked()) {
+	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, r.store.cfg.NodeLiveness, r.descRLocked(), r.requiresExpirationLeaseRLocked()) {
 		r.campaignLocked(ctx)
 	}
 }
@@ -2224,10 +2222,9 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 // become leader and can proceed with a future attempt to acquire the lease.
 func shouldCampaignOnLeaseRequestRedirect(
 	raftStatus raft.BasicStatus,
-	livenessMap livenesspb.IsLiveMap,
+	nl livenesspb.NodeVitalityInterface,
 	desc *roachpb.RangeDescriptor,
 	shouldUseExpirationLease bool,
-	now hlc.Timestamp,
 ) bool {
 	// If we're already campaigning don't start a new term.
 	if raftStatus.RaftState != raft.StateFollower {
@@ -2258,20 +2255,15 @@ func shouldCampaignOnLeaseRequestRedirect(
 	if !ok {
 		return false
 	}
-	// If we don't know about the leader in our liveness map, then we err on the
-	// side of caution and don't campaign.
-	livenessEntry, ok := livenessMap[replDesc.NodeID]
-	if !ok {
+	nv := nl.GetNodeVitalityFromCache(replDesc.NodeID)
+	if !nv.IsValid() {
+		// If we don't know about the leader in our liveness map, then we err on the
+		// side of caution and don't campaign.
 		return false
 	}
 	// Otherwise, we check if the leader is live according to node liveness and
 	// campaign if it is not.
-	// NOTE: we intentionally do not look at the IsLiveMapEntry.IsLive field,
-	// which accounts for whether the leader is reachable from this node (see
-	// Store.updateLivenessMap). We only care whether the leader is currently live
-	// according to node liveness because this determines whether it will be able
-	// to acquire an epoch-based lease.
-	return !livenessEntry.Liveness.IsLive(now)
+	return !nv.IsAlive()
 }
 
 func (r *Replica) campaignLocked(ctx context.Context) {
