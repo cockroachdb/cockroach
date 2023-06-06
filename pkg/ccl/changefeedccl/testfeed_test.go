@@ -1050,40 +1050,45 @@ func (f *cloudFeedFactory) Feed(
 			tree.KVOption{Key: changefeedbase.OptKeyInValue},
 		)
 	}
-	// Determine if we can enable the parquet format if the changefeed is not
-	// being created with incompatible options. If it can be enabled, we will use
-	// parquet format with a probability of 0.4.
-	parquetPossible := includeParquestTestMetadata
+
+	formatSpecified := false
 	explicitEnvelope := false
 	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptFormat {
+			formatSpecified = true
+		}
 		if string(opt.Key) == changefeedbase.OptEnvelope {
 			explicitEnvelope = true
 		}
-		if string(opt.Key) == changefeedbase.OptFormat &&
-			opt.Value.String() != string(changefeedbase.OptFormatParquet) {
-			parquetPossible = false
-			break
-		}
-		for o := range changefeedbase.ParquetFormatUnsupportedOptions {
-			if o == string(opt.Key) {
-				parquetPossible = false
-				break
+	}
+
+	if !formatSpecified {
+		// Determine if we can enable the parquet format if the changefeed is not
+		// being created with incompatible options. If it can be enabled, we will use
+		// parquet format with a probability of 0.4.
+		parquetPossible := includeParquestTestMetadata
+		for _, opt := range createStmt.Options {
+			for o := range changefeedbase.ParquetFormatUnsupportedOptions {
+				if o == string(opt.Key) {
+					parquetPossible = false
+					break
+				}
 			}
 		}
-	}
-	randNum := rand.Intn(5)
-	if randNum < 2 {
-		parquetPossible = false
-	}
-	if parquetPossible {
-		log.Infof(context.Background(), "using parquet format")
-		createStmt.Options = append(
-			createStmt.Options,
-			tree.KVOption{
-				Key:   changefeedbase.OptFormat,
-				Value: tree.NewStrVal(string(changefeedbase.OptFormatParquet)),
-			},
-		)
+		randNum := rand.Intn(5)
+		if randNum < 3 {
+			parquetPossible = false
+		}
+		if parquetPossible {
+			log.Infof(context.Background(), "using parquet format")
+			createStmt.Options = append(
+				createStmt.Options,
+				tree.KVOption{
+					Key:   changefeedbase.OptFormat,
+					Value: tree.NewStrVal(string(changefeedbase.OptFormatParquet)),
+				},
+			)
+		}
 	}
 
 	feedDir := feedSubDir()
