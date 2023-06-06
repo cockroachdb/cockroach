@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/types"
 )
 
@@ -482,7 +483,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	if err := maybeRelocateJobExecution(ctx, b.job.ID(), p, details.ExecutionLocality); err != nil {
+	if err := maybeRelocateJobExecution(ctx, b.job.ID(), p, details.ExecutionLocality, "BACKUP"); err != nil {
 		return err
 	}
 
@@ -881,7 +882,11 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 }
 
 func maybeRelocateJobExecution(
-	ctx context.Context, jobID jobspb.JobID, p sql.JobExecContext, locality roachpb.Locality,
+	ctx context.Context,
+	jobID jobspb.JobID,
+	p sql.JobExecContext,
+	locality roachpb.Locality,
+	jobDesc redact.SafeString,
 ) error {
 	if locality.NonEmpty() {
 		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(p.ExecCfg().JobRegistry.ID())
@@ -890,8 +895,8 @@ func maybeRelocateJobExecution(
 		}
 		if ok, missedTier := current.Locality.Matches(locality); !ok {
 			log.Infof(ctx,
-				"BACKUP job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
-				jobID, current.NodeID, missedTier.String(),
+				"%s job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
+				jobDesc, jobID, current.NodeID, missedTier.String(),
 			)
 
 			instancesInRegion, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, locality)

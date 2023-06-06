@@ -412,6 +412,7 @@ func restore(
 			filter,
 			numImportSpans,
 			simpleImportSpans,
+			details.ExecutionLocality,
 			progCh,
 		)
 	}
@@ -1517,7 +1518,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
 
-	if err := maybeRelocateJobExecution(ctx, r.job.ID(), p, details.ExecutionLocality); err != nil {
+	if err := maybeRelocateJobExecution(ctx, r.job.ID(), p, details.ExecutionLocality, "RESTORE"); err != nil {
 		return err
 	}
 
