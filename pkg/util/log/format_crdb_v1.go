@@ -13,6 +13,7 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"regexp"
 	"strconv"
@@ -30,66 +31,102 @@ import (
 
 // formatCrdbV1 is the pre-v21.1 canonical log format, without a
 // counter column.
-type formatCrdbV1 struct{}
-
-func (formatCrdbV1) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
+type formatCrdbV1 struct {
+	// showCounter determines whether the counter column is printed.
+	showCounter bool
+	// colorProfile is used to colorize the output.
+	colorProfile ttycolor.Profile
+	// colorProfileName is the name of the color profile, used for
+	// documentation purposes.
+	colorProfileName string
 }
 
-func (formatCrdbV1) formatterName() string { return "crdb-v1" }
+func (f *formatCrdbV1) setOption(k string, v string) error {
+	switch k {
+	case "show-counter":
+		switch v {
+		case "true":
+			f.showCounter = true
+		case "false":
+			f.showCounter = false
+		default:
+			return errors.WithHint(
+				errors.Newf("unknown show-counter value: %q", redact.Safe(v)),
+				"Possible values: true, false.")
+		}
+		return nil
 
-func (formatCrdbV1) formatEntry(entry logEntry) *buffer {
-	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, false /*showCounter*/, nil)
+	case "colors":
+		switch v {
+		case "none":
+			f.colorProfile = nil
+		case "auto":
+			f.colorProfile = ttycolor.StderrProfile
+		case "ansi":
+			f.colorProfile = ttycolor.Profile8
+		case "256color":
+			f.colorProfile = ttycolor.Profile256
+		default:
+			return errors.WithHint(
+				errors.Newf("unknown colors value: %q", redact.Safe(v)),
+				"Possible values: none, auto, ansi, 256color.")
+		}
+		f.colorProfileName = v
+		return nil
+
+	default:
+		return errors.Newf("unknown format option: %q", redact.Safe(k))
+	}
 }
 
-func (formatCrdbV1) doc() string { return formatCrdbV1CommonDoc(false /* withCounter */) }
+func (f formatCrdbV1) formatterName() string {
+	var buf strings.Builder
+	buf.WriteString("crdb-v1")
+	if f.colorProfileName != "none" {
+		buf.WriteString("-tty")
+	}
+	if f.showCounter {
+		buf.WriteString("-count")
+	}
+	return buf.String()
+}
 
 func (formatCrdbV1) contentType() string { return "text/plain" }
 
-func formatCrdbV1CommonDoc(withCounter bool) string {
-	var buf strings.Builder
+func (f formatCrdbV1) doc() string {
+	if f.formatterName() != "crdb-v1" {
+		var buf strings.Builder
+		fmt.Fprintf(&buf, `This format name is an alias for 'crdb-v1' with
+the following format option defaults:
 
-	if !withCounter {
-		buf.WriteString(`This is the legacy file format used from CockroachDB v1.0.`)
-	} else {
-		buf.WriteString(`This is an alternative, backward-compatible legacy file format used from CockroachDB v2.0.`)
+- `+"`show-counter: %v`"+`
+- `+"`colors: %v`"+`
+`, f.showCounter, f.colorProfileName)
+		return buf.String()
 	}
 
+	var buf strings.Builder
+
 	buf.WriteString(`
+This is a legacy file format used from CockroachDB v1.0.
 
-Each log entry is emitted using a common prefix, described below,`)
-
-	if withCounter {
-		buf.WriteString(`
-followed by the text of the log entry.`)
-	} else {
-		buf.WriteString(`
-followed by:
+Each log entry is emitted using a common prefix, described below, followed by:
 
 - The logging context tags enclosed between ` + "`[`" + ` and ` + "`]`" + `, if any. It is possible
   for this to be omitted if there were no context tags.
-- the text of the log entry.`)
-	}
+- Optionally, a counter column, if the option 'show-counter' is enabled. See below for details.
+- the text of the log entry.
 
-	buf.WriteString(`
+Beware that the text of the log entry can span multiple lines.
+The following caveats apply:
 
-Beware that the text of the log entry can span multiple lines. The following caveats apply:
-
-`)
-
-	if !withCounter {
-		// If there is no counter, the format is ambiguous. Explain that.
-		buf.WriteString(`
 - The text of the log entry can start with text enclosed between ` + "`[`" + ` and ` + "`]`" + `.
   If there were no logging tags to start with, it is not possible to distinguish between
   logging context tag information and a ` + "`[...]`" + ` string in the main text of the
-  log entry. This means that this format is ambiguous. For an unambiguous alternative,
-  consider ` + "`" + formatCrdbV1WithCounter{}.formatterName() + "`" + `.
-`)
-	}
+  log entry. This means that this format is ambiguous.
 
-	// General disclaimer about the lack of boundaries.
-	buf.WriteString(`
+  To remove this ambiguity, you can use the option 'show-counter'.
+
 - The text of the log entry can embed arbitrary application-level strings,
   including strings that represent log entries. In particular, an accident
   of implementation can cause the common entry prefix (described below)
@@ -121,13 +158,10 @@ if known, and other metadata about the running process.
 
 Each line of output starts with the following prefix:
 
-     Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker`)
+     Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker tags counter
 
-	if withCounter {
-		buf.WriteString(` tags counter`)
-	}
-
-	buf.WriteString(`
+Reminder, the tags may be omitted; and the counter is only printed if the option
+'show-counter' is specified.
 
 | Field           | Description                                                                                                                          |
 |-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
@@ -140,15 +174,9 @@ Each line of output starts with the following prefix:
 | chan            | The channel number (omitted if zero for backward compatibility).                                                                     |
 | file            | The file name where the entry originated.                                                                                            |
 | line            | The line number where the entry originated.                                                                                          |
-| marker          | Redactability marker ` + "` + redactableIndicator + `" + ` (see below for details).                                                  |`)
-
-	if withCounter {
-		buf.WriteString(`
-| tags    | The logging tags, enclosed between ` + "`[`" + ` and ` + "`]`" + `. May be absent. |
-| counter | The entry counter. Always present.                                                 |`)
-	}
-
-	buf.WriteString(`
+| marker          | Redactability marker ` + "` + redactableIndicator + `" + ` (see below for details).                                                  |
+| tags            | The logging tags, enclosed between ` + "`[`" + ` and ` + "`]`" + `. May be absent.                                                   |
+| counter         | The entry counter. Only included if 'show-counter' is enabled.                                                                       |
 
 The redactability marker can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
@@ -159,84 +187,24 @@ fields that are considered sensitive. These markers are automatically recognized
 by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` +
 		"[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" +
 		` when log redaction is requested.
+
+
+Additional options recognized via ` + "`format-options`" + `:
+
+| Option | Description |
+|--------|-------------|
+| ` + "`show-counter`" + ` | Whether to include the counter column in the line header. Without it, the format may be ambiguous due to the optionality of tags. |
+| ` + "`colors`" + ` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+
 `)
 
 	return buf.String()
 }
 
-// formatCrdbV1WithCounter is the canonical log format including a
-// counter column.
-type formatCrdbV1WithCounter struct{}
-
-func (formatCrdbV1WithCounter) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
+func (f formatCrdbV1) formatEntry(entry logEntry) *buffer {
+	return formatLogEntryInternalV1(entry.convertToLegacy(),
+		entry.header, f.showCounter, f.colorProfile)
 }
-
-func (formatCrdbV1WithCounter) formatterName() string { return "crdb-v1-count" }
-
-func (formatCrdbV1WithCounter) formatEntry(entry logEntry) *buffer {
-	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, true /*showCounter*/, nil)
-}
-
-func (formatCrdbV1WithCounter) doc() string { return formatCrdbV1CommonDoc(true /* withCounter */) }
-
-func (formatCrdbV1WithCounter) contentType() string { return "text/plain" }
-
-// formatCrdbV1TTY is like formatCrdbV1 and includes VT color codes if
-// the stderr output is a TTY and -nocolor is not passed on the
-// command line.
-type formatCrdbV1TTY struct{}
-
-func (formatCrdbV1TTY) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
-}
-
-func (formatCrdbV1TTY) formatterName() string { return "crdb-v1-tty" }
-
-func (formatCrdbV1TTY) formatEntry(entry logEntry) *buffer {
-	cp := ttycolor.StderrProfile
-	if logging.stderrSink.noColor.Get() {
-		cp = nil
-	}
-	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, false /*showCounter*/, cp)
-}
-
-const ttyFormatDoc = `
-
-In addition, if the output stream happens to be a VT-compatible terminal,
-and the flag ` + "`no-color`" + ` was *not* set in the configuration, the entries
-are decorated using ANSI color codes.`
-
-func (formatCrdbV1TTY) doc() string {
-	return "Same textual format as `" + formatCrdbV1{}.formatterName() + "`." + ttyFormatDoc
-}
-
-func (formatCrdbV1TTY) contentType() string { return "text/plain" }
-
-// formatCrdbV1ColorWithCounter is like formatCrdbV1WithCounter and
-// includes VT color codes if the stderr output is a TTY and -nocolor
-// is not passed on the command line.
-type formatCrdbV1TTYWithCounter struct{}
-
-func (formatCrdbV1TTYWithCounter) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
-}
-
-func (formatCrdbV1TTYWithCounter) formatterName() string { return "crdb-v1-tty-count" }
-
-func (formatCrdbV1TTYWithCounter) formatEntry(entry logEntry) *buffer {
-	cp := ttycolor.StderrProfile
-	if logging.stderrSink.noColor.Get() {
-		cp = nil
-	}
-	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, true /*showCounter*/, cp)
-}
-
-func (formatCrdbV1TTYWithCounter) doc() string {
-	return "Same textual format as `" + formatCrdbV1WithCounter{}.formatterName() + "`." + ttyFormatDoc
-}
-
-func (formatCrdbV1TTYWithCounter) contentType() string { return "text/plain" }
 
 // formatEntryInternalV1 renders a log entry.
 // Log lines are colorized depending on severity.

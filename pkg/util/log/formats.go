@@ -10,6 +10,12 @@
 
 package log
 
+import (
+	"sort"
+
+	"github.com/cockroachdb/ttycolor"
+)
+
 type logFormatter interface {
 	formatterName() string
 	// doc is used to generate the formatter documentation.
@@ -44,12 +50,24 @@ var formatters = func() map[string]func() logFormatter {
 	r := func(f func() logFormatter) {
 		m[f().formatterName()] = f
 	}
-	r(func() logFormatter { return formatCrdbV1{} })
-	r(func() logFormatter { return formatCrdbV1WithCounter{} })
-	r(func() logFormatter { return formatCrdbV1TTY{} })
-	r(func() logFormatter { return formatCrdbV1TTYWithCounter{} })
-	r(func() logFormatter { return formatCrdbV2{} })
-	r(func() logFormatter { return formatCrdbV2TTY{} })
+	r(func() logFormatter {
+		return &formatCrdbV1{showCounter: false, colorProfile: ttycolor.StderrProfile, colorProfileName: "auto"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV1{showCounter: false, colorProfileName: "none"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV1{showCounter: true, colorProfile: ttycolor.StderrProfile, colorProfileName: "auto"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV1{showCounter: true, colorProfileName: "none"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV2{colorProfileName: "none"}
+	})
+	r(func() logFormatter {
+		return &formatCrdbV2{colorProfile: ttycolor.StderrProfile, colorProfileName: "auto"}
+	})
 	r(func() logFormatter { return &formatJSONFull{fluentTag: true, tags: tagCompact} })
 	r(func() logFormatter { return &formatJSONFull{fluentTag: true, tags: tagVerbose} })
 	r(func() logFormatter { return &formatJSONFull{tags: tagCompact} })

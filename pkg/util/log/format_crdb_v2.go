@@ -22,6 +22,7 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"regexp"
 	"strconv"
@@ -40,23 +41,61 @@ import (
 )
 
 // formatCrdbV2 is the canonical log format.
-type formatCrdbV2 struct{}
-
-func (formatCrdbV2) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
+type formatCrdbV2 struct {
+	// colorProfile is used to colorize the output.
+	colorProfile ttycolor.Profile
+	// colorProfileName is the name of the color profile, used for
+	// documentation purposes.
+	colorProfileName string
 }
 
-func (formatCrdbV2) formatterName() string { return "crdb-v2" }
+func (f *formatCrdbV2) setOption(k string, v string) error {
+	switch k {
+	case "colors":
+		switch v {
+		case "none":
+			f.colorProfile = nil
+		case "auto":
+			f.colorProfile = ttycolor.StderrProfile
+		case "ansi":
+			f.colorProfile = ttycolor.Profile8
+		case "256color":
+			f.colorProfile = ttycolor.Profile256
+		default:
+			return errors.WithHint(
+				errors.Newf("unknown colors value: %q", redact.Safe(v)),
+				"Possible values: none, auto, ansi, 256color.")
+		}
+		f.colorProfileName = v
+		return nil
 
-func (formatCrdbV2) formatEntry(entry logEntry) *buffer {
-	return formatLogEntryInternalV2(entry, nil)
+	default:
+		return errors.Newf("unknown format option: %q", redact.Safe(k))
+	}
 }
 
-func (formatCrdbV2) doc() string { return formatCrdbV2CommonDoc() }
+func (f formatCrdbV2) formatterName() string {
+	var buf strings.Builder
+	buf.WriteString("crdb-v2")
+	if f.colorProfileName != "none" {
+		buf.WriteString("-tty")
+	}
+	return buf.String()
+}
 
 func (formatCrdbV2) contentType() string { return "text/plain" }
 
-func formatCrdbV2CommonDoc() string {
+func (f formatCrdbV2) doc() string {
+	if f.formatterName() != "crdb-v2" {
+		var buf strings.Builder
+		fmt.Fprintf(&buf, `This format name is an alias for 'crdb-v2' with
+the following format option defaults:
+
+- `+"`colors: %v`"+`
+`, f.colorProfileName)
+		return buf.String()
+	}
+
 	var buf strings.Builder
 
 	buf.WriteString(`This is the main file format used from CockroachDB v21.1.
@@ -180,46 +219,24 @@ Finally, in the previous format, structured entries
 were prefixed with the string ` + "`" + structuredEntryPrefix + "`" + `. In
 the new format, they are prefixed by the ` + "`=`" + ` continuation
 indicator.
+
+
+Additional options recognized via ` + "`format-options`" + `:
+
+| Option | Description |
+|--------|-------------|
+| ` + "`colors`" + ` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+
 `)
 
 	return buf.String()
 }
 
-// formatCrdbV2TTY is like formatCrdbV2 and includes VT color codes if
-// the stderr output is a TTY and -nocolor is not passed on the
-// command line.
-type formatCrdbV2TTY struct{}
-
-func (formatCrdbV2TTY) setOption(k string, _ string) error {
-	return errors.Newf("unknown option: %q", redact.Safe(k))
-}
-
-func (formatCrdbV2TTY) formatterName() string { return "crdb-v2-tty" }
-
-func (formatCrdbV2TTY) formatEntry(entry logEntry) *buffer {
-	cp := ttycolor.StderrProfile
-	if logging.stderrSink.noColor.Get() {
-		cp = nil
-	}
-	return formatLogEntryInternalV2(entry, cp)
-}
-
-func (formatCrdbV2TTY) doc() string {
-	return "Same textual format as `" + formatCrdbV2{}.formatterName() + "`." + ttyFormatDoc
-}
-
-func (formatCrdbV2TTY) contentType() string { return "text/plain" }
-
-// formatEntryInternalV2 renders a log entry.
-// Log lines are colorized depending on severity.
-// It uses a newly allocated *buffer. The caller is responsible
-// for calling putBuffer() afterwards.
-//
-// Note: the prefix up to and including the logging tags
-// needs to remain the same as in crdb-v1, so as to
-// preserve cross-version compatibility with at least
-// one version backwards.
-func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
+func (f formatCrdbV2) formatEntry(entry logEntry) *buffer {
+	// Note: the prefix up to and including the logging tags
+	// needs to remain the same as in crdb-v1, so as to
+	// preserve cross-version compatibility with at least
+	// one version backwards.
 	buf := getBuffer()
 	if entry.line < 0 {
 		entry.line = 0 // not a real line number, but acceptable to someDigits
@@ -231,6 +248,7 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 	tmp := buf.tmp[:len(buf.tmp)]
 	var n int
 	var prefix []byte
+	cp := f.colorProfile
 	switch entry.sev {
 	case severity.INFO:
 		prefix = cp[ttycolor.Cyan]

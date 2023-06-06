@@ -248,6 +248,17 @@ func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
 	if err := logging.stderrSinkInfoTemplate.applyConfig(config.Sinks.Stderr.CommonSinkConfig); err != nil {
 		return nil, err
 	}
+	if config.Sinks.Stderr.NoColor {
+		// This branch exists for backward compatibility with CockroachDB
+		// v23.1 and previous versions. The same effect can be obtained
+		// using 'format-options: {colors: none}'.
+		switch t := logging.stderrSinkInfoTemplate.formatter.(type) {
+		case *formatCrdbV1:
+			t.colorProfile = nil
+		case *formatCrdbV2:
+			t.colorProfile = nil
+		}
+	}
 	logging.stderrSinkInfoTemplate.applyFilters(config.Sinks.Stderr.Channels)
 
 	// Create the per-channel loggers.
