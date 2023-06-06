@@ -380,9 +380,13 @@ func TestFlowControlBlockedAdmission(t *testing.T) {
 	var disableWorkQueueGranting atomic.Bool
 	disableWorkQueueGranting.Store(true)
 
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -495,9 +499,13 @@ func TestFlowControlAdmissionPostSplitMerge(t *testing.T) {
 	var disableWorkQueueGranting atomic.Bool
 	disableWorkQueueGranting.Store(true)
 
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -644,6 +652,7 @@ func TestFlowControlCrashedNode(t *testing.T) {
 	// we only check the last-updated state when ticked. So we disable range
 	// quiescence.
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
@@ -765,8 +774,13 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	var disableWorkQueueGranting atomic.Bool
 	disableWorkQueueGranting.Store(true)
 
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
+			Settings: st,
 			StoreSpecs: []base.StoreSpec{
 				{
 					InMemory:               true,
@@ -820,7 +834,6 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 		}
 	}
 
-	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
 			ReplicationMode:   base.ReplicationManual,
@@ -1064,9 +1077,13 @@ func TestFlowControlRaftTransportBreak(t *testing.T) {
 	const numNodes = 3
 	var maintainStreamsForInactiveFollowers atomic.Bool
 
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			RaftConfig: base.RaftConfig{
 				// Suppress timeout-based elections. This test doesn't want to
 				// deal with leadership changing hands.
@@ -1179,7 +1196,11 @@ func TestFlowControlRaftTransportCulled(t *testing.T) {
 	markSendQueueAsIdleCh := make(chan roachpb.NodeID)
 	var disableWorkerTeardown atomic.Bool
 
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 	baseServerArgs := base.TestServerArgs{
+		Settings: st,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -1313,12 +1334,16 @@ func TestFlowControlRaftMembership(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 	const numNodes = 5
 	var disableWorkQueueGranting atomic.Bool
 	disableWorkQueueGranting.Store(true)
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -1442,12 +1467,16 @@ func TestFlowControlRaftMembershipRemoveSelf(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "transfer-lease-first", func(t *testing.T, transferLeaseFirst bool) {
 		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 		const numNodes = 4
 		var disableWorkQueueGranting atomic.Bool
 		disableWorkQueueGranting.Store(true)
 		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings:   st,
 				RaftConfig: base.RaftConfig{
 					// TODO(irfansharif): The AdminRelocateRange used below can
 					// occasionally flake if we suppress timeout-based
@@ -1576,9 +1605,13 @@ func TestFlowControlClassPrioritization(t *testing.T) {
 	var disableWorkQueueGranting atomic.Bool
 	disableWorkQueueGranting.Store(true)
 
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -1671,6 +1704,7 @@ func TestFlowControlQuiescedRange(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
@@ -1807,6 +1841,7 @@ func TestFlowControlUnquiescedRange(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
@@ -1966,9 +2001,14 @@ func TestFlowControlTransferLease(t *testing.T) {
 	const numNodes = 5
 	var disableWorkQueueGranting atomic.Bool
 	disableWorkQueueGranting.Store(true)
+
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -2046,9 +2086,14 @@ func TestFlowControlLeaderNotLeaseholder(t *testing.T) {
 	const numNodes = 5
 	var disableWorkQueueGranting atomic.Bool
 	disableWorkQueueGranting.Store(true)
+
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable leader transfers during leaseholder changes so

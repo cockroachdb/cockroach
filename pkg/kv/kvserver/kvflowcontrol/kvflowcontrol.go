@@ -30,7 +30,7 @@ var Enabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.enabled",
 	"determines whether we use flow control for replication traffic in KV",
-	true,
+	false,
 )
 
 // Mode determines the 'mode' of flow control we use for replication traffic in
