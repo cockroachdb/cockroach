@@ -187,7 +187,7 @@ func (p *planner) createTenantInternal(
 		OverrideKey:             bootstrapVersionOverride,
 		Codec:                   codec,
 	}
-	kvs, splits, err = initialValuesOpts.GetInitialValuesCheckForOverrides()
+	kvs, splits, err = initialValuesOpts.GenerateInitialValues()
 	if err != nil {
 		return tid, err
 	}
