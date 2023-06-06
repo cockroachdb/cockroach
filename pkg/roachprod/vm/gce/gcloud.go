@@ -243,7 +243,7 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// projects needs space for one project, which is set by the flags for
 		// commands that accept a single project.
-		MachineType:          "n1-standard-4",
+		MachineType:          "n2-standard-4",
 		MinCPUPlatform:       "",
 		Zones:                nil,
 		Image:                DefaultImage,
@@ -767,7 +767,7 @@ func (p *Provider) GetProjects() []string {
 
 // ConfigureCreateFlags implements vm.ProviderOptions.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
-	flags.StringVar(&o.MachineType, "machine-type", "n1-standard-4", "DEPRECATED")
+	flags.StringVar(&o.MachineType, "machine-type", "n2-standard-4", "DEPRECATED")
 	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
 	flags.StringSliceVar(&o.Zones, "zones", nil, "DEPRECATED")
 	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
@@ -775,7 +775,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&providerInstance.ServiceAccount, ProviderName+"-service-account",
 		providerInstance.ServiceAccount, "Service account to use")
 
-	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n1-standard-4",
+	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
@@ -1494,9 +1494,9 @@ func (p *Provider) ProjectActive(project string) bool {
 // lastComponent splits a url path and returns only the last part. This is
 // used because some fields in GCE APIs are defined using URLs like:
 //
-//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n1-standard-16"
+//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n2-standard-16"
 //
-// We want to strip this down to "n1-standard-16", so we only want the last
+// We want to strip this down to "n2-standard-16", so we only want the last
 // component.
 func lastComponent(url string) string {
 	s := strings.Split(url, "/")

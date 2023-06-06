@@ -249,8 +249,8 @@ type Provider struct {
 }
 
 const (
-	defaultSSDMachineType = "m5d.xlarge"
-	defaultMachineType    = "m5.xlarge"
+	defaultSSDMachineType = "m6id.xlarge"
+	defaultMachineType    = "m6i.xlarge"
 )
 
 var defaultConfig = func() (cfg *awsConfig) {

@@ -738,16 +738,16 @@ func MachineTypeToCPUs(s string) int {
 	{
 		// GCE machine types.
 		var v int
-		if _, err := fmt.Sscanf(s, "n1-standard-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
 			return v
 		}
 		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
 			return v
 		}
-		if _, err := fmt.Sscanf(s, "n1-highcpu-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "n2-highcpu-%d", &v); err == nil {
 			return v
 		}
-		if _, err := fmt.Sscanf(s, "n1-highmem-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "n2-highmem-%d", &v); err == nil {
 			return v
 		}
 	}
@@ -766,12 +766,12 @@ func MachineTypeToCPUs(s string) int {
 			return 8
 		case "4xlarge":
 			return 16
-		case "9xlarge":
-			return 36
+		case "8xlarge":
+			return 32
 		case "12xlarge":
 			return 48
-		case "18xlarge":
-			return 72
+		case "16xlarge":
+			return 64
 		case "24xlarge":
 			return 96
 		}
