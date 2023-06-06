@@ -564,6 +564,19 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 		requireHasSSTs(t, path.Join(dir, "east1", "c"))
 		// Check that no other node has data in it.
 		requireHasNoSSTs(t, path.Join(dir, "east0", "c"), path.Join(dir, "west0", "c"), path.Join(dir, "west1", "c"))
+
+		// TODO(dt): ideally we'd send the RESTORE stmt to a node that cannot reach
+		// the backup files at all to show that the locality filter means a node
+		// which _can_ reach the files then runs it and it succeeds, however RESTORE
+		// _statement_ evaluation, to even create the job, requires reading the from
+		// the backup to verify it can be restored at all. Thus while specifying an
+		// execution locality filter is useful for restricting the execution to only
+		// those nodes with access to the data files, it is still on the operator to
+		// send the initial statement to a node with access.
+		var id int64
+		n4.QueryRow(t, "RESTORE DATABASE data FROM $1 WITH EXECUTION LOCALITY = $2, NEW_DB_NAME = 'restored', DETACHED",
+			"nodelocal://0/c", "tier=1,region=east").Scan(&id)
+		n4.CheckQueryResults(t, fmt.Sprintf("SELECT status FROM [SHOW JOB WHEN COMPLETE %d]", id), [][]string{{"succeeded"}})
 	})
 }
 

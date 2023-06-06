@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -78,6 +79,7 @@ func distRestore(
 	spanFilter spanCoveringFilter,
 	numImportSpans int,
 	useSimpleImportSpans bool,
+	execLocality roachpb.Locality,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
 	defer close(progCh)
@@ -111,7 +113,10 @@ func distRestore(
 	memMonSSTs := memoryMonitorSSTs.Get(execCtx.ExecCfg().SV())
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 
-		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
+		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
+			ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
+			physicalplan.DefaultReplicaChooser, execLocality,
+		)
 		if err != nil {
 			return nil, nil, err
 		}

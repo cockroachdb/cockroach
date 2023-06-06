@@ -19,3 +19,4 @@ restore_options ::=
 	| 'SCHEMA_ONLY'
 	| 'VERIFY_BACKUP_TABLE_DATA'
 	| 'UNSAFE_RESTORE_INCOMPATIBLE_VERSION'
+	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
