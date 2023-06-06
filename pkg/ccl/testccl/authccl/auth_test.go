@@ -533,7 +533,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-log-uses-override", func(t *testing.T) {
 				// Wait for the disconnection event in logs.
 				testutils.SucceedsSoon(t, func() error {
-					log.FlushFileSinks()
+					log.Flush()
 					entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, sessionTerminatedRe,
 						log.WithMarkedSensitiveData)
 					if err != nil {
@@ -546,7 +546,7 @@ func TestClientAddrOverride(t *testing.T) {
 				})
 
 				// Now we want to check that the logging tags are also updated.
-				log.FlushFileSinks()
+				log.Flush()
 				entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, authLogFileRe,
 					log.WithMarkedSensitiveData)
 				if err != nil {

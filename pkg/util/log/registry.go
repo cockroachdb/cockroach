@@ -76,25 +76,12 @@ func (r *sinkInfoRegistry) iter(fn func(l *sinkInfo) error) error {
 	return nil
 }
 
-// iterFileSinks iterates over all the file sinks and stops at the first
+// iterate iterates over all the file sinks and stops at the first
 // error encountered.
 func (r *sinkInfoRegistry) iterFileSinks(fn func(l *fileSink) error) error {
 	return r.iter(func(si *sinkInfo) error {
 		if fs, ok := si.sink.(*fileSink); ok {
 			if err := fn(fs); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-// iterBufferedSinks iterates over all the buffered sinks and stops at the first
-// error encountered.
-func (r *sinkInfoRegistry) iterBufferedSinks(fn func(bs *bufferedSink) error) error {
-	return r.iter(func(si *sinkInfo) error {
-		if bs, ok := si.sink.(*bufferedSink); ok {
-			if err := fn(bs); err != nil {
 				return err
 			}
 		}
