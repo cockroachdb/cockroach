@@ -305,7 +305,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	rc := sip.FlowCtx.Cfg.RangeCache
 	var err error
 	sip.batcher, err = bulk.MakeStreamSSTBatcher(
-		ctx, db.KV(), rc, evalCtx.Settings, sip.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
+		ctx, db.KV(), rc, evalCtx.Settings, sip.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
 		sip.flowCtx.Cfg.BulkSenderLimiter, func(batchSummary kvpb.BulkOpSummary) {
 			// OnFlush update the ingested logical and SST byte metrics.
 			sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)

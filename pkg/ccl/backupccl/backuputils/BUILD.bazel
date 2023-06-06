@@ -30,7 +30,6 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/mon",
         "//pkg/util/quotapool",
-        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
