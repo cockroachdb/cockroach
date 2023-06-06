@@ -231,6 +231,21 @@ func (msstw *multiSSTWriter) finalizeSST(ctx context.Context) error {
 }
 
 func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, value []byte) error {
+	if msstw.currSST.DataSize > (128 << 20) {
+		if err := msstw.finalizeSST(ctx); err != nil {
+			return err
+		}
+
+		// use the previous key range if it contains the current key
+		if msstw.keySpans[msstw.currSpan-1].EndKey.Compare(key.Key) > 0 {
+			msstw.currSpan--
+		}
+
+		if err := msstw.initSST(ctx); err != nil {
+			return err
+		}
+	}
+
 	for msstw.keySpans[msstw.currSpan].EndKey.Compare(key.Key) <= 0 {
 		// Finish the current SST, write to the file, and move to the next key
 		// range.
@@ -241,12 +256,14 @@ func (msstw *multiSSTWriter) Put(ctx context.Context, key storage.EngineKey, val
 			return err
 		}
 	}
+
 	if msstw.keySpans[msstw.currSpan].Key.Compare(key.Key) > 0 {
 		return errors.AssertionFailedf("client error: expected %s to fall in one of %s", key.Key, msstw.keySpans)
 	}
 	if err := msstw.currSST.PutEngineKey(key, value); err != nil {
 		return errors.Wrap(err, "failed to put in sst")
 	}
+
 	return nil
 }
 
