@@ -1,0 +1,26 @@
+# test verifies that initial scan returns previous data and respects with diff contract
+put-keys
+  key=a, val=1
+  key=a, val=2
+  key=b, val=3, ts=start
+  key=c, val=4
+----
+ok
+
+create-feed startKey=a endKey=z startTs=start withDiff=true withInitialScan=true
+----
+ok
+
+wait-initial-scan
+----
+ok
+
+wait-feed
+----
+ok
+
+dump-feed
+----
+key=a, val=2, ts=start, prev=2
+key=b, val=3, ts=start, prev=3
+key=c, val=4

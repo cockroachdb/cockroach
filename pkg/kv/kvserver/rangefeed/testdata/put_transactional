@@ -1,0 +1,35 @@
+# Test verifies that if transaction is active, checkpoints would be suppressed
+# by active intents.
+put-keys
+ key=a, val=1
+ key=b, val=2
+ key=c, val=4, txn=first
+ key=a, val=3, ts=lastTs
+----
+ok
+
+create-feed startKey=a endKey=z withDiff=true
+----
+ok
+
+wait-feed timeout=5s
+----
+timeout
+
+put-keys
+ key=b, val=4
+ commit txn=first, ts=txnTs
+----
+ok
+
+wait-feed
+----
+ok
+
+dump-feed
+----
+key=a, val=1
+key=a, val=3, ts=lastTs, prev=1
+key=b, val=2
+key=b, val=4, prev=2
+key=c, val=4, ts=txnTs
