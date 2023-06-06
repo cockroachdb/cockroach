@@ -242,7 +242,7 @@ type streamIngestionProcessor struct {
 
 	mergedSubscription *mergedSubscription
 
-	flushCh chan *streamIngestionBuffer
+	flushCh chan flushableBuffer
 
 	errCh chan error
 
@@ -311,7 +311,7 @@ func newStreamIngestionDataProcessor(
 		buffer:           &streamIngestionBuffer{},
 		cutoverCh:        make(chan struct{}),
 		stopCh:           make(chan struct{}),
-		flushCh:          make(chan *streamIngestionBuffer),
+		flushCh:          make(chan flushableBuffer),
 		checkpointCh:     make(chan *jobspb.ResolvedSpans),
 		errCh:            make(chan error, 1),
 		rekeyer:          rekeyer,
@@ -1096,8 +1096,19 @@ func splitRangeKeySSTAtKey(
 func (sip *streamIngestionProcessor) flush() error {
 	bufferToFlush := sip.buffer
 	sip.buffer = getBuffer()
+
+	checkpoint := &jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
+	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+		checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		return span.ContinueMatch
+	})
+
 	select {
-	case sip.flushCh <- bufferToFlush:
+	case sip.flushCh <- flushableBuffer{
+		buffer:     bufferToFlush,
+		checkpoint: checkpoint,
+	}:
+		sip.lastFlushTime = timeutil.Now()
 		return nil
 	case <-sip.stopCh:
 		// We return on stopCh here because our flush process
@@ -1106,36 +1117,37 @@ func (sip *streamIngestionProcessor) flush() error {
 	}
 }
 
+type flushableBuffer struct {
+	buffer     *streamIngestionBuffer
+	checkpoint *jobspb.ResolvedSpans
+}
+
 // flushBuffer flushes the given streamIngestionBuffer via the SST
-// batchers and returns the given buffer to the pool.
-func (sip *streamIngestionProcessor) flushBuffer(
-	buffer *streamIngestionBuffer,
-) (*jobspb.ResolvedSpans, error) {
+// batchers and returns the underlying streamIngestionBuffer to the pool.
+func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.ResolvedSpans, error) {
 	ctx, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-flush")
 	defer sp.Finish()
-
-	flushedCheckpoints := jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
 
 	// First process the point KVs.
 	//
 	// Ensure that the current batch is sorted.
-	sort.Sort(buffer.curKVBatch)
-	for _, keyVal := range buffer.curKVBatch {
+	sort.Sort(b.buffer.curKVBatch)
+	for _, keyVal := range b.buffer.curKVBatch {
 		if err := sip.batcher.AddMVCCKey(ctx, keyVal.Key, keyVal.Value); err != nil {
 			return nil, errors.Wrapf(err, "adding key %+v", keyVal)
 		}
 	}
 
 	preFlushTime := timeutil.Now()
-	if len(buffer.curKVBatch) > 0 {
+	if len(b.buffer.curKVBatch) > 0 {
 		if err := sip.batcher.Flush(ctx); err != nil {
 			return nil, errors.Wrap(err, "flushing sst batcher")
 		}
 	}
 
 	// Now process the range KVs.
-	if len(buffer.curRangeKVBatch) > 0 {
-		if err := sip.rangeBatcher.flush(ctx, buffer.curRangeKVBatch); err != nil {
+	if len(b.buffer.curRangeKVBatch) > 0 {
+		if err := sip.rangeBatcher.flush(ctx, b.buffer.curRangeKVBatch); err != nil {
 			log.Warningf(ctx, "flush error: %v", err)
 			return nil, errors.Wrap(err, "flushing range key sst")
 		}
@@ -1143,21 +1155,18 @@ func (sip *streamIngestionProcessor) flushBuffer(
 
 	// Update the flush metrics.
 	sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
-	sip.metrics.CommitLatency.RecordValue(timeutil.Since(buffer.minTimestamp.GoTime()).Nanoseconds())
+	sip.metrics.CommitLatency.RecordValue(timeutil.Since(b.buffer.minTimestamp.GoTime()).Nanoseconds())
 	sip.metrics.Flushes.Inc(1)
-	sip.metrics.IngestedEvents.Inc(int64(len(buffer.curKVBatch)))
-	sip.metrics.IngestedEvents.Inc(int64(len(buffer.curRangeKVBatch)))
+	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curKVBatch)))
+	sip.metrics.IngestedEvents.Inc(int64(len(b.buffer.curRangeKVBatch)))
 
-	// Go through buffered checkpoint events, and put them on the channel to be
-	// emitted to the downstream frontier processor.
-	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
-		flushedCheckpoints.ResolvedSpans = append(flushedCheckpoints.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
-		return span.ContinueMatch
-	})
+	if err := sip.batcher.Reset(ctx); err != nil {
+		return b.checkpoint, err
+	}
 
-	sip.lastFlushTime = timeutil.Now()
-	releaseBuffer(buffer)
-	return &flushedCheckpoints, sip.batcher.Reset(ctx)
+	releaseBuffer(b.buffer)
+
+	return b.checkpoint, nil
 }
 
 // cutoverProvider allows us to override how we decide when the job has reached

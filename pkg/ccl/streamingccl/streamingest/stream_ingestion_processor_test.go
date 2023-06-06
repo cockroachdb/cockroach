@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -177,10 +178,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled},
+	})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).InternalDB().(descs.DB)
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+
 	const tenantID = 20
 	tenantRekey := execinfrapb.TenantRekey{
 		OldID: roachpb.MustMakeTenantID(tenantID),
@@ -189,8 +193,6 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 	p1 := streamclient.SubscriptionToken("p1")
 	p2 := streamclient.SubscriptionToken("p2")
-	v := roachpb.MakeValueFromString("value_1")
-	v.Timestamp = hlc.Timestamp{WallTime: 1}
 	p1Key := roachpb.Key("key_1")
 	p1Span := roachpb.Span{Key: p1Key, EndKey: p1Key.Next()}
 	p2Key := roachpb.Key("key_2")
@@ -200,27 +202,42 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		key, err := keys.RewriteKeyToTenantPrefix(p1Key,
 			keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID)))
 		require.NoError(t, err)
+		v := roachpb.MakeValueFromString("value_1")
+		v.Timestamp = hlc.Timestamp{WallTime: 1}
 		return roachpb.KeyValue{Key: key, Value: v}
 	}
 	sampleCheckpoint := func(span roachpb.Span, ts int64) []jobspb.ResolvedSpan {
 		return []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts}}}
 	}
 
+	readRow := func(streamOut execinfra.RowSource) []string {
+		row, meta := streamOut.Next()
+		require.Nil(t, meta, "unexpected non-nil meta on stream ingestion processor output: %v", meta)
+		if row == nil {
+			return nil
+		}
+		datum := row[0].Datum
+		protoBytes, ok := datum.(*tree.DBytes)
+		require.True(t, ok)
+
+		var resolvedSpans jobspb.ResolvedSpans
+		require.NoError(t, protoutil.Unmarshal([]byte(*protoBytes), &resolvedSpans))
+		ret := make([]string, 0, len(resolvedSpans.ResolvedSpans))
+		for _, resolvedSpan := range resolvedSpans.ResolvedSpans {
+			ret = append(ret, fmt.Sprintf("%s %s", resolvedSpan.Span, resolvedSpan.Timestamp))
+		}
+		return ret
+	}
+
 	readRows := func(streamOut *distsqlutils.RowBuffer) map[string]struct{} {
 		actualRows := make(map[string]struct{})
 		for {
-			row := streamOut.NextNoMeta(t)
-			if row == nil {
+			resolved := readRow(streamOut)
+			if resolved == nil {
 				break
 			}
-			datum := row[0].Datum
-			protoBytes, ok := datum.(*tree.DBytes)
-			require.True(t, ok)
-
-			var resolvedSpans jobspb.ResolvedSpans
-			require.NoError(t, protoutil.Unmarshal([]byte(*protoBytes), &resolvedSpans))
-			for _, resolvedSpan := range resolvedSpans.ResolvedSpans {
-				actualRows[fmt.Sprintf("%s %s", resolvedSpan.Span, resolvedSpan.Timestamp)] = struct{}{}
+			for _, resolvedSpan := range resolved {
+				actualRows[resolvedSpan] = struct{}{}
 			}
 		}
 		return actualRows
@@ -264,6 +281,141 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			"partition 1 should advance to timestamp 4")
 		require.Contains(t, emittedRows, "key_2{-\\x00} 0.000000005,0",
 			"partition 2 should advance to timestamp 5")
+	})
+	t.Run("time-based-flush", func(t *testing.T) {
+		events := func() []streamingccl.Event {
+			return []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 2)),
+				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 4)),
+			}
+		}
+		mockClient := &mockStreamClient{
+			doneCh:          make(chan struct{}),
+			partitionEvents: map[string][]streamingccl.Event{string(p1): events()},
+		}
+
+		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
+		partitions := []streamclient.PartitionInfo{
+			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}},
+		}
+		topology := streamclient.Topology{
+			Partitions: partitions,
+		}
+
+		g := ctxgroup.WithContext(ctx)
+		sip, st, err := getStreamIngestionProcessor(ctx, t, registry, db,
+			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, mockClient,
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+
+		require.NoError(t, err)
+		minimumFlushInterval.Override(ctx, &st.SV, 5*time.Millisecond)
+		out := &execinfra.RowChannel{}
+		out.InitWithNumSenders(sip.OutputTypes(), 1)
+		out.Start(ctx)
+		g.Go(func() error {
+			sip.Run(ctx, out)
+			return sip.forceClientForTests.Close(ctx)
+		})
+
+		emittedRows := readRow(out)
+		require.Equal(t, []string{"key_1{-\\x00} 0.000000002,0"}, emittedRows, "partition 1 should advance to timestamp 2")
+		emittedRows = readRow(out)
+		require.Equal(t, []string{"key_1{-\\x00} 0.000000004,0"}, emittedRows, "partition 1 should advance to timestamp 4")
+		close(mockClient.doneCh)
+		require.NoError(t, g.Wait())
+	})
+	t.Run("kv-size-based-flush", func(t *testing.T) {
+		events := func() []streamingccl.Event {
+			return []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 2)),
+				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 4)),
+				streamingccl.MakeKVEvent(sampleKV()),
+			}
+		}
+		mockClient := &mockStreamClient{
+			doneCh:          make(chan struct{}),
+			partitionEvents: map[string][]streamingccl.Event{string(p1): events()},
+		}
+
+		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
+		partitions := []streamclient.PartitionInfo{
+			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}},
+		}
+		topology := streamclient.Topology{
+			Partitions: partitions,
+		}
+
+		g := ctxgroup.WithContext(ctx)
+		sip, st, err := getStreamIngestionProcessor(ctx, t, registry, db,
+			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, mockClient,
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+		require.NoError(t, err)
+
+		minimumFlushInterval.Override(ctx, &st.SV, 50*time.Minute)
+		maxKVBufferSize.Override(ctx, &st.SV, 1)
+		out := &execinfra.RowChannel{}
+		out.InitWithNumSenders(sip.OutputTypes(), 1)
+		out.Start(ctx)
+		g.Go(func() error {
+			sip.Run(ctx, out)
+			return sip.forceClientForTests.Close(ctx)
+		})
+
+		emittedRows := readRow(out)
+		require.Equal(t, []string{"key_1{-\\x00} 0.000000002,0"}, emittedRows, "partition 1 should advance to timestamp 2")
+		emittedRows = readRow(out)
+		require.Equal(t, []string{"key_1{-\\x00} 0.000000004,0"}, emittedRows, "partition 1 should advance to timestamp 4")
+		close(mockClient.doneCh)
+		require.NoError(t, g.Wait())
+	})
+	t.Run("range-kv-size-based-flush", func(t *testing.T) {
+		key, err := keys.RewriteKeyToTenantPrefix(p1Key, keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID)))
+		require.NoError(t, err)
+		events := func() []streamingccl.Event {
+			return []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 2)),
+				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 4)),
+				streamingccl.MakeDeleteRangeEvent(kvpb.RangeFeedDeleteRange{
+					Span:      roachpb.Span{Key: key, EndKey: key.Next()},
+					Timestamp: hlc.Timestamp{WallTime: 5},
+				}),
+			}
+		}
+		mockClient := &mockStreamClient{
+			doneCh:          make(chan struct{}),
+			partitionEvents: map[string][]streamingccl.Event{string(p1): events()},
+		}
+
+		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
+		partitions := []streamclient.PartitionInfo{
+			{ID: "1", SubscriptionToken: p1, Spans: []roachpb.Span{p1Span}},
+		}
+		topology := streamclient.Topology{
+			Partitions: partitions,
+		}
+
+		g := ctxgroup.WithContext(ctx)
+		sip, st, err := getStreamIngestionProcessor(ctx, t, registry, db,
+			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, mockClient,
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+		require.NoError(t, err)
+
+		minimumFlushInterval.Override(ctx, &st.SV, 50*time.Minute)
+		maxRangeKeyBufferSize.Override(ctx, &st.SV, 1)
+		out := &execinfra.RowChannel{}
+		out.InitWithNumSenders(sip.OutputTypes(), 1)
+		out.Start(ctx)
+		g.Go(func() error {
+			sip.Run(ctx, out)
+			return sip.forceClientForTests.Close(ctx)
+		})
+
+		emittedRows := readRow(out)
+		require.Equal(t, []string{"key_1{-\\x00} 0.000000002,0"}, emittedRows, "partition 1 should advance to timestamp 2")
+		emittedRows = readRow(out)
+		require.Equal(t, []string{"key_1{-\\x00} 0.000000004,0"}, emittedRows, "partition 1 should advance to timestamp 4")
+		close(mockClient.doneCh)
+		require.NoError(t, g.Wait())
 	})
 
 	// Two partitions, checkpoint for each, client start time for each should match
@@ -590,7 +742,7 @@ func runStreamIngestionProcessor(
 	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 ) (*distsqlutils.RowBuffer, error) {
-	sip, err := getStreamIngestionProcessor(ctx, t, registry, db,
+	sip, _, err := getStreamIngestionProcessor(ctx, t, registry, db,
 		partitions, initialScanTimestamp, checkpoint, tenantRekey, mockClient, cutoverProvider, streamingTestingKnobs)
 	require.NoError(t, err)
 
@@ -619,11 +771,11 @@ func getStreamIngestionProcessor(
 	mockClient streamclient.Client,
 	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
-) (*streamIngestionProcessor, error) {
+) (*streamIngestionProcessor, *cluster.Settings, error) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	if mockClient == nil {
-		return nil, errors.AssertionFailedf("non-nil streamclient required")
+		return nil, nil, errors.AssertionFailedf("non-nil streamclient required")
 	}
 
 	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
@@ -671,7 +823,7 @@ func getStreamIngestionProcessor(
 		sip.cutoverProvider = cutoverProvider
 	}
 
-	return sip, err
+	return sip, st, err
 }
 
 func resolvedSpansMinTS(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
