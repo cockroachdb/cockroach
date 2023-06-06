@@ -593,7 +593,6 @@ go_test(
         "alter_column_type_test.go",
         "ambiguous_commit_test.go",
         "as_of_test.go",
-        "audit_logging_test.go",
         "authorization_test.go",
         "backfill_num_ranges_in_span_test.go",
         "backfill_protected_timestamp_test.go",
