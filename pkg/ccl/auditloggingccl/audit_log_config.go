@@ -1,21 +1,22 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package auditlogging
+package auditloggingccl
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,11 +52,11 @@ func validateAuditLogConfig(_ *settings.Values, input string) error {
 		return nil
 	}
 	// Ensure it can be parsed.
-	conf, err := parse(input)
+	conf, err := auditlogging.Parse(input)
 	if err != nil {
 		return err
 	}
-	if len(conf.settings) == 0 {
+	if len(conf.Settings) == 0 {
 		// The string was not empty, but we were unable to parse any settings.
 		return errors.WithHint(errors.New("no entries"),
 			"To use the default configuration, assign the empty string ('').")
@@ -66,17 +67,46 @@ func validateAuditLogConfig(_ *settings.Values, input string) error {
 // UpdateAuditConfigOnChange initializes the local
 // node's audit configuration each time the cluster setting
 // is updated.
-func UpdateAuditConfigOnChange(ctx context.Context, acl *AuditConfigLock, st *cluster.Settings) {
+func UpdateAuditConfigOnChange(
+	ctx context.Context, acl *auditlogging.AuditConfigLock, st *cluster.Settings, cluster uuid.UUID,
+) {
+	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(st, cluster, "role-based audit logging")
+	if enterpriseCheckErr != nil {
+		log.Ops.Error(ctx, "error updating role-based audit log configuration: requires enterprise license")
+		return
+	}
 	val := UserAuditLogConfig.Get(&st.SV)
-	config, err := parse(val)
+	config, err := auditlogging.Parse(val)
 	if err != nil {
 		// We encounter an error parsing (i.e. invalid config), fallback
 		// to an empty config.
 		log.Ops.Warningf(ctx, "invalid audit log config (sql.log.user_audit): %v\n"+
 			"falling back to empty audit config", err)
-		config = EmptyAuditConfig()
+		config = auditlogging.EmptyAuditConfig()
 	}
 	acl.Lock()
 	acl.Config = config
 	acl.Unlock()
+}
+
+var ConfigureRoleBasedAuditClusterSettings = func(ctx context.Context, acl *auditlogging.AuditConfigLock, st *cluster.Settings, sv *settings.Values, cluster uuid.UUID) {
+	UserAuditLogConfig.SetOnChange(
+		sv, func(ctx context.Context) {
+			UpdateAuditConfigOnChange(ctx, acl, st, cluster)
+		})
+	UpdateAuditConfigOnChange(ctx, acl, st, cluster)
+}
+
+var UserAuditLogConfigEmpty = func(sv *settings.Values) bool {
+	return UserAuditLogConfig.Get(sv) == ""
+}
+
+var UserAuditReducedConfigEnabled = func(sv *settings.Values) bool {
+	return UserAuditEnableReducedConfig.Get(sv)
+}
+
+func init() {
+	auditlogging.ConfigureRoleBasedAuditClusterSettings = ConfigureRoleBasedAuditClusterSettings
+	auditlogging.UserAuditLogConfigEmpty = UserAuditLogConfigEmpty
+	auditlogging.UserAuditReducedConfigEnabled = UserAuditReducedConfigEnabled
 }
