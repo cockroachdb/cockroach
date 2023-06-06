@@ -190,9 +190,10 @@ func passwordAuthenticator(
 		// in auth.go (and report CREDENTIALS_INVALID).
 	}
 
+	metrics := c.GetTenantSpecificMetrics()
 	// Now check the cleartext password against the retrieved credentials.
 	if err := security.UserAuthPasswordHook(
-		false /*insecure*/, passwordStr, hashedPassword,
+		false, passwordStr, hashedPassword, metrics.ConnsWaitingToHash,
 	)(ctx, systemIdentity, clientConnection); err != nil {
 		if errors.HasType(err, &security.PasswordUserAuthError{}) {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
