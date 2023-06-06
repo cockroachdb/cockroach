@@ -7,10 +7,10 @@ INSERT INTO guardrails SELECT generate_series(1, 100)
 statement ok
 SET transaction_rows_read_err = 1
 
-query error txn has read 2 rows, which is above the limit
+statement error txn has read 2 rows, which is above the limit
 SELECT * FROM guardrails
 
-query error txn has read 2 rows, which is above the limit
+statement error txn has read 2 rows, which is above the limit
 SELECT * FROM guardrails LIMIT 50
 
 statement ok
@@ -19,7 +19,7 @@ SELECT * FROM guardrails WHERE i = 1
 statement error txn has read 2 rows, which is above the limit
 SELECT * FROM guardrails WHERE i IN (1, 2)
 
-query error txn has read 2 rows, which is above the limit
+statement error txn has read 2 rows, which is above the limit
 SELECT * FROM guardrails WHERE i > 0 AND i <= 10
 
 # When the transaction_rows_read_err guardrail is set to 50, we only apply a
@@ -27,9 +27,15 @@ SELECT * FROM guardrails WHERE i > 0 AND i <= 10
 statement ok
 SET transaction_rows_read_err = 50
 
-query error txn has read 51 rows, which is above the limit
+# Use a retry for the next statement since we might occasionally read more than
+# 51 rows.
+retry
+statement error txn has read 51 rows, which is above the limit
 SELECT * FROM guardrails
 
+# Use a retry for the next statement since we might occasionally read more than
+# 50 rows.
+retry
 statement ok
 SELECT * FROM guardrails LIMIT 50
 
@@ -64,7 +70,7 @@ SELECT * FROM guardrails
 
 # The whole transaction has now read more than transaction_rows_read_err rows,
 # so error.
-query error txn has read 250 rows, which is above the limit
+statement error txn has read 250 rows, which is above the limit
 SELECT * FROM guardrails2
 
 statement ok
