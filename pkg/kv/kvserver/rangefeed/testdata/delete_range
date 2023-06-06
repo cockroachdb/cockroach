@@ -1,0 +1,29 @@
+# Test verifies that delete range is correctly delivered to the feed.
+create-feed startKey=b endKey=x
+----
+ok
+
+wait-feed
+----
+ok
+
+put-keys
+ key=b, val=1
+ key=p, val=2
+ key=a, endKey=z
+ key=b, val=3, ts=lastTs
+----
+ok
+
+wait-feed
+----
+ok
+
+# Dump key ordered by timestamp to better see where range del is.
+# We should see range being truncated to the boundary of the feed.
+dump-feed byTs=true
+----
+key=b, val=1
+key=p, val=2
+key=b, endKey=x
+key=b, val=3, ts=lastTs

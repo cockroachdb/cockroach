@@ -1,0 +1,29 @@
+# Basic multiple range test verifies that rangefeed could be created over span of ranges
+# and that data written to replicas is delivered to the feed.
+split-range key=h
+----
+[/Table/Max, h), [h, /Max)
+
+create-feed startKey=a endKey=z
+----
+ok
+
+put-keys
+  key=a, val=1
+  key=b, val=2
+  key=x, val=3
+  key=a, val=4
+----
+ok
+
+wait-feed
+----
+ok
+
+# Note that dump is sorted by key and then by timestamp for readability
+dump-feed
+----
+key=a, val=1
+key=a, val=4
+key=b, val=2
+key=x, val=3
