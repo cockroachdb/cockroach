@@ -972,17 +972,62 @@ func (s *Store) checkSnapshotOverlapLocked(
 	return nil
 }
 
-// shouldIncrementCrossRegionSnapshotMetrics returns true if the two replicas
-// given are cross-region, and false otherwise.
-func (s *Store) shouldIncrementCrossRegionSnapshotMetrics(
+// shouldIncrementCrossLocalitySnapshotMetrics returns (bool, bool) - indicating
+// if the two given replicas are cross-region and cross-zone respectively.
+func (s *Store) shouldIncrementCrossLocalitySnapshotMetrics(
 	ctx context.Context, firstReplica roachpb.ReplicaDescriptor, secReplica roachpb.ReplicaDescriptor,
-) bool {
-	isCrossRegion, err := s.cfg.StorePool.IsCrossRegion(firstReplica, secReplica)
-	if err != nil {
-		log.VEventf(ctx, 2, "unable to determine if snapshot is cross region %v", err)
-		return false
+) (bool, bool) {
+	isCrossRegion, regionErr, isCrossZone, zoneErr := s.cfg.StorePool.IsCrossRegionCrossZone(
+		firstReplica, secReplica)
+	if regionErr != nil {
+		log.VEventf(ctx, 2, "unable to determine if snapshot is cross region %v", regionErr)
 	}
-	return isCrossRegion
+	if zoneErr != nil {
+		log.VEventf(ctx, 2, "unable to determine if snapshot is cross zone %v", zoneErr)
+	}
+	return isCrossRegion, isCrossZone
+}
+
+// updateCrossLocalitySnapshotMetrics updates the snapshot metrics in a more
+// meaningful way. Cross-region metrics monitor activities across different
+// regions. Cross-zone metrics monitor any cross-zone activities within the same
+// region or if the region tier key is not configured on any node.
+func (s *Store) updateCrossLocalitySnapshotMetrics(
+	ctx context.Context,
+	firstReplica roachpb.ReplicaDescriptor,
+	secReplica roachpb.ReplicaDescriptor,
+	inc int64,
+	sentOrReceived string,
+) {
+	isCrossRegion, isCrossZone := s.shouldIncrementCrossLocalitySnapshotMetrics(ctx, firstReplica, secReplica)
+	switch sentOrReceived {
+	case "sent":
+		if isCrossRegion {
+			if !isCrossZone {
+				log.VEventf(ctx, 2, "unexpected: cross region but same zone")
+			} else {
+				s.metrics.RangeSnapShotCrossRegionSentBytes.Inc(inc)
+			}
+		} else {
+			if isCrossZone {
+				s.metrics.RangeSnapShotCrossZoneSentBytes.Inc(inc)
+			}
+		}
+	case "rcvd":
+		if isCrossRegion {
+			if !isCrossZone {
+				log.VEventf(ctx, 2, "unexpected: cross region but same zone")
+			} else {
+				s.metrics.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
+			}
+		} else {
+			if isCrossZone {
+				s.metrics.RangeSnapShotCrossZoneRcvdBytes.Inc(inc)
+			}
+		}
+	default:
+		log.VEventf(ctx, 2, "unexpected input %s", sentOrReceived)
+	}
 }
 
 // receiveSnapshot receives an incoming snapshot via a pre-opened GRPC stream.
@@ -1101,11 +1146,8 @@ func (s *Store) receiveSnapshot(
 
 	recordBytesReceived := func(inc int64) {
 		s.metrics.RangeSnapshotRcvdBytes.Inc(inc)
-
-		if s.shouldIncrementCrossRegionSnapshotMetrics(
-			ctx, header.RaftMessageRequest.FromReplica, header.RaftMessageRequest.ToReplica) {
-			s.metrics.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
-		}
+		s.updateCrossLocalitySnapshotMetrics(
+			ctx, header.RaftMessageRequest.FromReplica, header.RaftMessageRequest.ToReplica, inc, "rcvd")
 
 		switch header.Priority {
 		case kvserverpb.SnapshotRequest_RECOVERY:

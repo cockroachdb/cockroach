@@ -3151,9 +3151,8 @@ func (r *Replica) followerSendSnapshot(
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
-		if r.store.shouldIncrementCrossRegionSnapshotMetrics(ctx, req.CoordinatorReplica, req.RecipientReplica) {
-			r.store.metrics.RangeSnapShotCrossRegionSentBytes.Inc(inc)
-		}
+		r.store.updateCrossLocalitySnapshotMetrics(
+			ctx, req.CoordinatorReplica, req.RecipientReplica, inc, "sent")
 
 		switch header.Priority {
 		case kvserverpb.SnapshotRequest_RECOVERY:
