@@ -273,19 +273,22 @@ func entsSize(ents []pb.Entry) entryEncodingSize {
 	return size
 }
 
+// limitSize returns the longest prefix of the given entries slice, such that
+// its total byte size does not exceed maxSize. Always returns a non-empty slice
+// if the input is non-empty, so, as an exception, if the size of the first
+// entry exceeds maxSize, a non-empty slice with just this entry is returned.
 func limitSize(ents []pb.Entry, maxSize entryEncodingSize) []pb.Entry {
 	if len(ents) == 0 {
 		return ents
 	}
 	size := ents[0].Size()
-	var limit int
-	for limit = 1; limit < len(ents); limit++ {
+	for limit := 1; limit < len(ents); limit++ {
 		size += ents[limit].Size()
 		if entryEncodingSize(size) > maxSize {
-			break
+			return ents[:limit]
 		}
 	}
-	return ents[:limit]
+	return ents
 }
 
 // entryPayloadSize represents the size of one or more entries' payloads.
@@ -314,4 +317,21 @@ func assertConfStatesEquivalent(l Logger, cs1, cs2 pb.ConfState) {
 		return
 	}
 	l.Panic(err)
+}
+
+// extend appends vals to the given dst slice. It differs from the standard
+// slice append only in the way it allocates memory. If cap(dst) is not enough
+// for appending the values, precisely size len(dst)+len(vals) is allocated.
+//
+// Use this instead of standard append in situations when this is the last
+// append to dst, so there is no sense in allocating more than needed.
+func extend(dst, vals []pb.Entry) []pb.Entry {
+	need := len(dst) + len(vals)
+	if need <= cap(dst) {
+		return append(dst, vals...) // does not allocate
+	}
+	buf := make([]pb.Entry, need, need) // allocates precisely what's needed
+	copy(buf, dst)
+	copy(buf[len(dst):], vals)
+	return buf
 }
