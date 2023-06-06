@@ -188,7 +188,7 @@ func (a *orderedAggregator) Init(ctx context.Context) {
 func (a *orderedAggregator) Next() coldata.Batch {
 	stateAfterOutputting := orderedAggregatorUnknown
 	for {
-		a.cancelChecker.Check()
+		a.cancelChecker.CheckEveryCall()
 		switch a.state {
 		case orderedAggregatorAggregating:
 			if a.scratch.shouldResetInternalBatch {

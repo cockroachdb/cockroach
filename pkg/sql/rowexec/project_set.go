@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -141,7 +142,7 @@ func (ps *projectSetProcessor) MustBeStreaming() bool {
 func (ps *projectSetProcessor) Start(ctx context.Context) {
 	ctx = ps.StartInternal(ctx, projectSetProcName)
 	ps.input.Start(ctx)
-	ps.cancelChecker.Reset(ctx)
+	ps.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
 }
 
 // nextInputRow returns the next row or metadata from ps.input. It also
