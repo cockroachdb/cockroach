@@ -2387,20 +2387,12 @@ func (ds *DistSender) sendToReplicas(
 					var reqInfo tenantcostmodel.RequestInfo
 					var respInfo tenantcostmodel.ResponseInfo
 					if ba.IsWrite() {
-						// It is important to pass nil for replicas here so we
-						// will fetch a new list of *all* replicas, instead of
-						// just a subset (which routing uses).
-						writeMultiplier := ds.computeSendRUMultiplier(
-							ctx, desc, nil /* replicas */, &curReplica, false /* isRead */)
-						numReplicas := len(desc.Replicas().Descriptors())
-						reqInfo = tenantcostmodel.MakeRequestInfo(ba, numReplicas, writeMultiplier)
+						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, true /* isWrite */)
+						reqInfo = tenantcostmodel.MakeRequestInfo(ba, len(desc.Replicas().Descriptors()), networkCost)
 					}
 					if !reqInfo.IsWrite() {
-						// Use replicas here since it is guaranteed to include
-						// curReplica, and we only need that for computation.
-						readMultiplier := ds.computeSendRUMultiplier(
-							ctx, desc, replicas, &curReplica, true /* isRead */)
-						respInfo = tenantcostmodel.MakeResponseInfo(br, true, readMultiplier)
+						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, false /* isWrite */)
+						respInfo = tenantcostmodel.MakeResponseInfo(br, true, networkCost)
 					}
 					if err := ds.kvInterceptor.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
 						return nil, err
@@ -2583,107 +2575,73 @@ func (ds *DistSender) getCostControllerConfig(ctx context.Context) *tenantcostmo
 	return cfg
 }
 
-// computeSendRUMultiplier returns the RU multiplier for a batch that is sent
-// from the current DistSender node to the node with curReplica. If isRead=true,
-// the read RU multiplier will be returned instead of a write RU multiplier.
-//
-//  1. Write requests account traffic for all replicas since the data is
-//     eventually replicated to the remaining replicas. For simplicity of
-//     computation, we will assume that the writes were replicated from the
-//     DistSender node instead of the node that received the writes.
-//  2. Read requests only account traffic from the DistSender node to the node
-//     that received the read.
-//
-// NOTE: desc cannot be nil, and numReplicas >= len(replicas). If replicas is
-// nil, desc will be used to construct a new ReplicaSlice by fetching the node
-// descriptors for all replicas.
-func (ds *DistSender) computeSendRUMultiplier(
+// computeNetworkCost calculates the network cost multiplier for a read or
+// write operation. The network cost accounts for the logical byte traffic
+// between the client region and the replica regions.
+func (ds *DistSender) computeNetworkCost(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	replicas ReplicaSlice,
-	curReplica *roachpb.ReplicaDescriptor,
-	isRead bool,
-) tenantcostmodel.RUMultiplier {
-	numReplicas := len(desc.Replicas().Descriptors())
-
-	// Set default multipliers.
-	var res tenantcostmodel.RUMultiplier
-	if isRead {
-		res = 1
-	} else {
-		res = tenantcostmodel.RUMultiplier(numReplicas)
+	targetReplica *roachpb.ReplicaDescriptor,
+	isWrite bool,
+) tenantcostmodel.NetworkCost {
+	// It is unfortunate that we hardcode a particular locality tier name here.
+	// Ideally, we would have a cluster setting that specifies the name or some
+	// other way to configure it.
+	clientRegion, _ := ds.locality.Find("region")
+	if clientRegion == "" {
+		// If we do not have the source, there is no way to find the multiplier.
+		log.VErrEventf(ctx, 2, "missing region tier in current node: locality=%s",
+			ds.locality.String())
+		return tenantcostmodel.NetworkCost(0)
 	}
 
 	costCfg := ds.getCostControllerConfig(ctx)
 	if costCfg == nil {
 		// This case is unlikely to happen since this method will only be
 		// called through tenant processes, which has a KV interceptor.
-		return res
+		return tenantcostmodel.NetworkCost(0)
 	}
 
-	// It is unfortunate that we hardcode a particular locality tier name here.
-	// Ideally, we would have a cluster setting that specifies the name or some
-	// other way to configure it.
-	fromRegion, _ := ds.locality.Find("region")
-	if fromRegion == "" {
-		// If we do not have the source, there is no way to find the multiplier.
-		log.VErrEventf(ctx, 2, "missing region tier in current node: locality=%s",
-			ds.locality.String())
-		return res
-	}
-
-	// Input replicas wasn't provided, so we'd try to fetch all of them.
-	if len(replicas) == 0 {
-		// A leaseholder is not needed here since we are interested in returning
-		// all replicas, which will already include the leaseholder by definition.
-		var err error
-		replicas, err = NewReplicaSlice(ctx, ds.nodeDescs, desc, nil /* leaseholder */, AllReplicas)
-		if err != nil {
-			log.VErrEventf(ctx, 2, "empty replica slice: %s", err)
-			return res
-		}
-	}
-
-	// This should not happen, and if it does, is a bug.
-	if numReplicas < len(replicas) {
-		log.VErrEventf(ctx, 2, "fewer descriptors than replicas: numReplicas=%d, len(replicas)=%d",
-			numReplicas, len(replicas))
-		return res
-	}
-
-	if isRead {
-		var toRegion string
-		if idx := replicas.Find(curReplica.ReplicaID); idx != -1 {
-			toRegion = replicas[idx].LocalityValue("region")
-		}
-		if toRegion == "" {
-			log.VErrEventf(ctx, 2, "missing region locality for n%d", curReplica.NodeID)
-		}
-		res = costCfg.KVInterRegionCostMultiplier(fromRegion, toRegion)
-	} else {
-		for _, r := range replicas {
-			toRegion := r.LocalityValue("region")
-			if toRegion == "" {
-				log.VErrEventf(ctx, 2, "missing region locality for n%d", r.NodeID)
+	cost := tenantcostmodel.NetworkCost(0)
+	if isWrite {
+		for i := range desc.Replicas().Descriptors() {
+			if replicaRegion, ok := ds.getReplicaRegion(ctx, &desc.Replicas().Descriptors()[i]); ok {
+				cost += costCfg.NetworkCost(tenantcostmodel.NetworkPath{
+					ToRegion:   replicaRegion,
+					FromRegion: clientRegion,
+				})
 			}
-
-			// There is a possibility where len(replicas) != numReplicas, which
-			// occurs when the DistSender node has not received gossip
-			// subscription data for node descriptors. When that happens, we
-			// don't have locality information, so we will assume 1 for each
-			// replica.
-			//
-			// Since we started with numReplicas initially, this basically
-			// converts the multiplier accounted for that replica with its
-			// actual cost multiplier.
-			//
-			// Earlier we ensured that numReplicas >= len(replicas). Since
-			// cost multipliers are always non-negative (>= 0), res will never
-			// be negative (< 0).
-			res += (costCfg.KVInterRegionCostMultiplier(fromRegion, toRegion) - 1)
+		}
+	} else {
+		if replicaRegion, ok := ds.getReplicaRegion(ctx, targetReplica); ok {
+			cost = costCfg.NetworkCost(tenantcostmodel.NetworkPath{
+				ToRegion:   clientRegion,
+				FromRegion: replicaRegion,
+			})
 		}
 	}
-	return res
+
+	return cost
+}
+
+func (ds *DistSender) getReplicaRegion(
+	ctx context.Context, replica *roachpb.ReplicaDescriptor,
+) (region string, ok bool) {
+	nodeDesc, err := ds.nodeDescs.GetNodeDescriptor(replica.NodeID)
+	if err != nil {
+		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
+		// If we don't know where a node is, we can't determine the network cost
+		// for the operation.
+		return "", false
+	}
+
+	region, ok = nodeDesc.Locality.Find("region")
+	if !ok {
+		log.VErrEventf(ctx, 2, "missing region locality for n %d", nodeDesc.NodeID)
+		return "", false
+	}
+
+	return region, true
 }
 
 func (ds *DistSender) maybeIncrementErrCounters(br *kvpb.BatchResponse, err error) {
