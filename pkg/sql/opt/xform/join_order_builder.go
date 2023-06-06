@@ -368,6 +368,11 @@ func (jb *JoinOrderBuilder) Reorder(join memo.RelExpr) {
 		// the best plan.
 		jb.ensureClosure(join)
 
+		// Make cross join edges to support optimal plans for star schema or other
+		// cases where introducing cross joins could enable more performant lookup
+		// joins on a large fact table.
+		jb.buildCrossJoins()
+
 		// Ensure that the JoinOrderBuilder will not add reordered joins to the
 		// original memo groups (apart from the root) in the case when doing so
 		// would add filters that weren't present in the original joins. See the
@@ -453,6 +458,68 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 	// Use set difference operations to return all vertexes and edges added to the
 	// graph during traversal of this subtree.
 	return jb.allVertexes().difference(startVertexes), jb.allEdges().Difference(startEdges)
+}
+
+// buildCrossJoins finds all relations in the cross join set which are
+// unconnected to eachother, and have an exact known cardinality, and makes a
+// CROSS JOIN edge between them as long as there is no pre-exising plan for
+// a given pair of relations. Cross join edges are not built for every possible
+// pair, just every pair, as processed in a loop through each relation, as
+// each relation need only be connected with one other relation to build
+// the cross product.
+func (jb *JoinOrderBuilder) buildCrossJoins() {
+	var newSets []vertexSet
+	factTableVertexes := jb.allVertexes()
+	var dimensionTableVertexes vertexSet
+	// Find vertexes which are referenced in all INNER JOIN edges, in other
+	// words, relations which are connected to all other inner join relations,
+	// such as the fact table in a star schema.
+	for _, edge := range jb.edges {
+		if edge.ses.len() == 0 || edge.op.joinType != opt.InnerJoinOp {
+			// skip over cross terms or non-inner join connections.
+			continue
+		}
+		factTableVertexes = factTableVertexes.intersection(edge.ses)
+	}
+	if factTableVertexes.len() > 0 {
+		// The vertexes in the inner join relation set which are unconnected to
+		// each other, such as the dimension tables in a star schema.
+		dimensionTableVertexes = jb.allVertexes().difference(factTableVertexes)
+	}
+	// If there are at least 2 relations which could be cross joined together,
+	// examine them.
+	if dimensionTableVertexes.len() > 1 {
+		for idx, ok := dimensionTableVertexes.next(0); ok; idx, ok = dimensionTableVertexes.next(idx + 1) {
+			// If the cardinality of the relation is exact, perhaps because it's a
+			// VALUES expression or unnest of an ARRAY, the size of the cross join
+			// will be exact and relatively safe to plan in this first pass of star
+			// schema join planning.
+			if jb.vertexes[idx].Relational().Cardinality.Max ==
+				jb.vertexes[idx].Relational().Cardinality.Min {
+				var rels vertexSet
+				newSets = append(newSets, rels.add(idx))
+			}
+		}
+	}
+	// Loop through all relations in the cross join set and connect each one
+	// to the previous one in the slice, if there is no pre-existing plan for
+	// that set of relations.
+	if len(newSets) > 1 {
+		for i := 1; i < len(newSets); i++ {
+			_, ok := jb.plans[newSets[i-1].union(newSets[i])]
+			if !ok {
+				op := &operator{
+					joinType:      opt.InnerJoinOp,
+					leftVertexes:  newSets[i-1],
+					rightVertexes: newSets[i],
+				}
+				jb.makeInnerEdge(op, nil)
+				jb.plans[newSets[i-1].union(newSets[i])] = jb.memoize(
+					opt.InnerJoinOp, jb.plans[newSets[i-1]], jb.plans[newSets[i]], nil, nil,
+				)
+			}
+		}
+	}
 }
 
 // ensureClosure ensures that the edges considered during join reordering
@@ -1561,7 +1628,7 @@ func assoc(edgeA, edgeB *edge) bool {
 //	(
 //	  SELECT * FROM xy
 //	  INNER JOIN uv ON x = u
-//	)
+//	)calcTES
 //	INNER JOIN ab ON x = a
 func leftAsscom(edgeA, edgeB *edge) bool {
 	return checkProperty(leftAsscomTable, edgeA, edgeB)

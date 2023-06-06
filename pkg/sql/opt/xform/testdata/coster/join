@@ -1115,3 +1115,299 @@ inner-join (lookup big@big_a_idx)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters (true)
+
+exec-ddl
+CREATE TABLE t1 (a INT, b INT, c INT, d INT, e INT, f INT, INDEX idx (a, b, c, d, e, f));
+----
+
+exec-ddl
+ALTER TABLE t1 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 10,
+    "avg_size": 4
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 10,
+    "avg_size": 4
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 10,
+    "avg_size": 4
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 10,
+    "avg_size": 4
+  },
+  {
+    "columns": ["a", "b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 100,
+    "avg_size": 4
+  },
+  {
+    "columns": ["a", "b", "c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 1000,
+    "avg_size": 4
+  },
+  {
+    "columns": ["a", "b", "c", "d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000000,
+    "distinct_count": 10000,
+    "avg_size": 4
+  }
+]'
+----
+
+# Cross join of all WITH relations plus a single lookup join should be
+# the best plan.
+opt format=(show-stats,show-cost)
+WITH
+  a_ids (a_id) AS (SELECT * FROM unnest(ARRAY[1,2,3])),
+  b_ids (b_id) AS (SELECT * FROM unnest(ARRAY[4,5,6])),
+  c_ids (c_id) AS (SELECT * FROM unnest(ARRAY[7,8,9])),
+  d_ids (d_id) AS (SELECT * FROM unnest(ARRAY[10,11,12]))
+SELECT *
+FROM
+  t1 INNER JOIN a_ids ON a = a_id INNER JOIN b_ids ON b = b_id INNER JOIN d_ids on d_id = d inner join c_ids on c = c_id
+----
+inner-join (lookup t1@idx)
+ ├── columns: a:5!null b:6!null c:7!null d:8!null e:9 f:10 a_id:14!null b_id:15!null d_id:16!null c_id:17!null
+ ├── key columns: [14 15 17 16] = [5 6 7 8]
+ ├── stats: [rows=810000, distinct(7)=3, null(7)=0, distinct(17)=3, null(17)=0]
+ ├── cost: 1735025.65
+ ├── fd: (5)==(14), (14)==(5), (6)==(15), (15)==(6), (8)==(16), (16)==(8), (7)==(17), (17)==(7)
+ ├── inner-join (cross)
+ │    ├── columns: a_id:14!null b_id:15!null d_id:16!null c_id:17!null
+ │    ├── cardinality: [81 - 81]
+ │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ │    ├── stats: [rows=81]
+ │    ├── cost: 1.63
+ │    ├── inner-join (cross)
+ │    │    ├── columns: a_id:14!null b_id:15!null
+ │    │    ├── cardinality: [9 - 9]
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ │    │    ├── stats: [rows=9]
+ │    │    ├── cost: 0.27
+ │    │    ├── values
+ │    │    │    ├── columns: a_id:14!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── stats: [rows=3, distinct(14)=3, null(14)=0]
+ │    │    │    ├── cost: 0.04
+ │    │    │    ├── (1,)
+ │    │    │    ├── (2,)
+ │    │    │    └── (3,)
+ │    │    ├── values
+ │    │    │    ├── columns: b_id:15!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── stats: [rows=3, distinct(15)=3, null(15)=0]
+ │    │    │    ├── cost: 0.04
+ │    │    │    ├── (4,)
+ │    │    │    ├── (5,)
+ │    │    │    └── (6,)
+ │    │    └── filters (true)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: d_id:16!null c_id:17!null
+ │    │    ├── cardinality: [9 - 9]
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ │    │    ├── stats: [rows=9, distinct(16)=3, null(16)=0, distinct(17)=3, null(17)=0]
+ │    │    ├── cost: 0.27
+ │    │    ├── values
+ │    │    │    ├── columns: d_id:16!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── stats: [rows=3, distinct(16)=3, null(16)=0]
+ │    │    │    ├── cost: 0.04
+ │    │    │    ├── (10,)
+ │    │    │    ├── (11,)
+ │    │    │    └── (12,)
+ │    │    ├── values
+ │    │    │    ├── columns: c_id:17!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── stats: [rows=3, distinct(17)=3, null(17)=0]
+ │    │    │    ├── cost: 0.04
+ │    │    │    ├── (7,)
+ │    │    │    ├── (8,)
+ │    │    │    └── (9,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── filters (true)
+
+# An outer join causes `c_ids` and `d_ids` to not be considered for cross
+# join with `a_ids` and `b_ids`. `a_ids` and `b_ids` can be cross joined
+# with each other.
+opt format=(show-stats,show-cost)
+WITH
+  a_ids (a_id) AS (SELECT * FROM unnest(ARRAY[1,2,3])),
+  b_ids (b_id) AS (SELECT * FROM unnest(ARRAY[4,5,6])),
+  c_ids (c_id) AS (SELECT * FROM unnest(ARRAY[7,8,9])),
+  d_ids (d_id) AS (SELECT * FROM unnest(ARRAY[10,11,12]))
+SELECT *
+FROM
+  t1 INNER JOIN a_ids ON a = a_id INNER JOIN b_ids ON b = b_id left outer join d_ids on d_id = d inner join c_ids on c = c_id
+----
+left-join (hash)
+ ├── columns: a:5!null b:6!null c:7!null d:8 e:9 f:10 a_id:14!null b_id:15!null d_id:16 c_id:17!null
+ ├── stats: [rows=2700000, distinct(7)=3, null(7)=0, distinct(17)=3, null(17)=0]
+ ├── cost: 19460434.5
+ ├── fd: (5)==(14), (14)==(5), (6)==(15), (15)==(6), (7)==(17), (17)==(7)
+ ├── inner-join (hash)
+ │    ├── columns: a:5!null b:6!null c:7!null d:8 e:9 f:10 a_id:14!null b_id:15!null c_id:17!null
+ │    ├── stats: [rows=2700000, distinct(5)=3, null(5)=0, distinct(14)=3, null(14)=0]
+ │    ├── cost: 19399684.4
+ │    ├── fd: (7)==(17), (17)==(7), (6)==(15), (15)==(6), (5)==(14), (14)==(5)
+ │    ├── inner-join (lookup t1@idx)
+ │    │    ├── columns: a:5!null b:6!null c:7 d:8 e:9 f:10 a_id:14!null b_id:15!null
+ │    │    ├── key columns: [14 15] = [5 6]
+ │    │    ├── stats: [rows=9000000, distinct(5)=3, null(5)=0, distinct(6)=3, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=10, null(8)=0, distinct(14)=3, null(14)=0, distinct(15)=3, null(15)=0]
+ │    │    ├── cost: 19260184.3
+ │    │    ├── fd: (5)==(14), (14)==(5), (6)==(15), (15)==(6)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: a_id:14!null b_id:15!null
+ │    │    │    ├── cardinality: [9 - 9]
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ │    │    │    ├── stats: [rows=9]
+ │    │    │    ├── cost: 0.27
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: a_id:14!null
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── stats: [rows=3, distinct(14)=3, null(14)=0]
+ │    │    │    │    ├── cost: 0.04
+ │    │    │    │    ├── (1,)
+ │    │    │    │    ├── (2,)
+ │    │    │    │    └── (3,)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: b_id:15!null
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── stats: [rows=3, distinct(15)=3, null(15)=0]
+ │    │    │    │    ├── cost: 0.04
+ │    │    │    │    ├── (4,)
+ │    │    │    │    ├── (5,)
+ │    │    │    │    └── (6,)
+ │    │    │    └── filters (true)
+ │    │    └── filters (true)
+ │    ├── values
+ │    │    ├── columns: c_id:17!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── stats: [rows=3, distinct(17)=3, null(17)=0]
+ │    │    ├── cost: 0.04
+ │    │    ├── (7,)
+ │    │    ├── (8,)
+ │    │    └── (9,)
+ │    └── filters
+ │         └── c:7 = c_id:17 [outer=(7,17), constraints=(/7: (/NULL - ]; /17: (/NULL - ]), fd=(7)==(17), (17)==(7)]
+ ├── values
+ │    ├── columns: d_id:16!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── stats: [rows=3, distinct(16)=3, null(16)=0]
+ │    ├── cost: 0.04
+ │    ├── (10,)
+ │    ├── (11,)
+ │    └── (12,)
+ └── filters
+      └── d_id:16 = d:8 [outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
+
+
+# The `d = d_id` term is missing here.  Look into it.
+opt format=(show-stats,show-cost)
+WITH
+  a_ids (a_id) AS (SELECT * FROM unnest(ARRAY[1,2,3])),
+  b_ids (b_id) AS (SELECT * FROM unnest(ARRAY[4,5,6])),
+  c_ids (c_id) AS (SELECT * FROM unnest(ARRAY[7,8,9])),
+  d_ids (d_id) AS (SELECT * FROM unnest(ARRAY[10,11,12])),
+  e_ids (e_id) AS (SELECT * FROM unnest(ARRAY[13,14,15]))
+SELECT *
+FROM
+  t1 INNER JOIN a_ids ON a = a_id INNER JOIN b_ids ON b = b_id left outer join e_ids on e_id = e inner join c_ids on c = c_id inner join d_ids on d = d_id AND d_id = c_id
+----
+left-join (hash)
+ ├── columns: a:6!null b:7!null c:8!null d:9!null e:10 f:11 a_id:15!null b_id:16!null e_id:17 c_id:18!null d_id:19!null
+ ├── stats: [rows=81000, distinct(9)=3, null(9)=0, distinct(19)=3, null(19)=0]
+ ├── cost: 19278319.7
+ ├── fd: (8)==(9,18,19), (9)==(8,18,19), (6)==(15), (15)==(6), (7)==(16), (16)==(7), (18)==(8,9,19), (19)==(8,9,18)
+ ├── inner-join (hash)
+ │    ├── columns: a:6!null b:7!null c:8!null d:9!null e:10 f:11 a_id:15!null b_id:16!null c_id:18!null d_id:19!null
+ │    ├── stats: [rows=270000, distinct(6)=3, null(6)=0, distinct(15)=3, null(15)=0]
+ │    ├── cost: 19274134.6
+ │    ├── fd: (8)==(9,18,19), (9)==(8,18,19), (18)==(8,9,19), (19)==(8,9,18), (7)==(16), (16)==(7), (6)==(15), (15)==(6)
+ │    ├── inner-join (lookup t1@idx)
+ │    │    ├── columns: a:6!null b:7!null c:8!null d:9!null e:10 f:11 a_id:15!null b_id:16!null
+ │    │    ├── key columns: [15 16] = [6 7]
+ │    │    ├── stats: [rows=900000, distinct(6)=3, null(6)=0, distinct(7)=3, null(7)=0, distinct(8)=10, null(8)=0, distinct(9)=10, null(9)=0, distinct(10)=789382, null(10)=9000, distinct(15)=3, null(15)=0, distinct(16)=3, null(16)=0]
+ │    │    ├── cost: 19260184.3
+ │    │    ├── fd: (8)==(9), (9)==(8), (6)==(15), (15)==(6), (7)==(16), (16)==(7)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: a_id:15!null b_id:16!null
+ │    │    │    ├── cardinality: [9 - 9]
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ │    │    │    ├── stats: [rows=9, distinct(15)=3, null(15)=0, distinct(16)=3, null(16)=0]
+ │    │    │    ├── cost: 0.27
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: a_id:15!null
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── stats: [rows=3, distinct(15)=3, null(15)=0]
+ │    │    │    │    ├── cost: 0.04
+ │    │    │    │    ├── (1,)
+ │    │    │    │    ├── (2,)
+ │    │    │    │    └── (3,)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: b_id:16!null
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── stats: [rows=3, distinct(16)=3, null(16)=0]
+ │    │    │    │    ├── cost: 0.04
+ │    │    │    │    ├── (4,)
+ │    │    │    │    ├── (5,)
+ │    │    │    │    └── (6,)
+ │    │    │    └── filters (true)
+ │    │    └── filters
+ │    │         └── c:8 = d:9 [outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
+ │    ├── inner-join (hash)
+ │    │    ├── columns: c_id:18!null d_id:19!null
+ │    │    ├── cardinality: [0 - 9]
+ │    │    ├── stats: [rows=3, distinct(18)=3, null(18)=0, distinct(19)=3, null(19)=0]
+ │    │    ├── cost: 0.21
+ │    │    ├── fd: (18)==(19), (19)==(18)
+ │    │    ├── values
+ │    │    │    ├── columns: c_id:18!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── stats: [rows=3, distinct(18)=3, null(18)=0]
+ │    │    │    ├── cost: 0.04
+ │    │    │    ├── (7,)
+ │    │    │    ├── (8,)
+ │    │    │    └── (9,)
+ │    │    ├── values
+ │    │    │    ├── columns: d_id:19!null
+ │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    ├── stats: [rows=3, distinct(19)=3, null(19)=0]
+ │    │    │    ├── cost: 0.04
+ │    │    │    ├── (10,)
+ │    │    │    ├── (11,)
+ │    │    │    └── (12,)
+ │    │    └── filters
+ │    │         └── c_id:18 = d_id:19 [outer=(18,19), constraints=(/18: (/NULL - ]; /19: (/NULL - ]), fd=(18)==(19), (19)==(18)]
+ │    └── filters
+ │         └── c:8 = c_id:18 [outer=(8,18), constraints=(/8: (/NULL - ]; /18: (/NULL - ]), fd=(8)==(18), (18)==(8)]
+ ├── values
+ │    ├── columns: e_id:17!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── stats: [rows=3, distinct(17)=3, null(17)=0]
+ │    ├── cost: 0.04
+ │    ├── (13,)
+ │    ├── (14,)
+ │    └── (15,)
+ └── filters
+      └── e_id:17 = e:10 [outer=(10,17), constraints=(/10: (/NULL - ]; /17: (/NULL - ]), fd=(10)==(17), (17)==(10)]
