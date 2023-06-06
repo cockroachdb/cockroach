@@ -1024,6 +1024,7 @@ func restoreTypeCheck(
 			restoreStmt.Options.ForceTenantID,
 			restoreStmt.Options.AsTenant,
 			restoreStmt.Options.DebugPauseOn,
+			restoreStmt.Options.ExecutionLocality,
 		},
 	); err != nil {
 		return false, nil, err
