@@ -1441,8 +1441,8 @@ github.com/joho/godotenv v1.3.0/go.mod h1:7hK45KPybAkOC6peb+G5yklZfMxEjkZhHbwpqx
 github.com/jonboulle/clockwork v0.1.0/go.mod h1:Ii8DK3G1RaLaWxj9trq07+26W01tbo22gdxWY5EU2bo=
 github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible h1:jdpOPRN1zP63Td1hDQbZW73xKmzDvZHzVdNYxhnTMDA=
 github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible/go.mod h1:1c7szIrayyPPB/987hsnvNzLushdWf4o/79s3P08L8A=
-github.com/jordanlewis/gcassert v0.0.0-20221027203946-81f097ad35a0 h1:y9VRjxb2hZlTElaaUH50QkZnPKrvQR5NhPza66vh+9w=
-github.com/jordanlewis/gcassert v0.0.0-20221027203946-81f097ad35a0/go.mod h1:FsDIOYX6N9TFyHD602Yu/Zp04+KySTH00okDq+9IPqo=
+github.com/jordanlewis/gcassert v0.0.0-20230505190637-fed79d91cd5f h1:GoV80Ggs5ZeF6uDv/lYDGJAv2Wz3Mp/brqRbjvEm6mI=
+github.com/jordanlewis/gcassert v0.0.0-20230505190637-fed79d91cd5f/go.mod h1:FsDIOYX6N9TFyHD602Yu/Zp04+KySTH00okDq+9IPqo=
 github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8HmY=
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
 github.com/jpillora/backoff v1.0.0 h1:uvFg412JmmHBHw7iwprIxkPMI+sGQ4kzOWsMeHnm2EA=
