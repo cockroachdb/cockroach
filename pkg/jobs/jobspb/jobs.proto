@@ -475,7 +475,9 @@ message RestoreDetails {
   // Disables loacality checking for zone configs.
   bool SkipLocalitiesCheck = 29;
 
-  // NEXT ID: 30.
+  roachpb.Locality execution_locality = 30 [(gogoproto.nullable) = false];
+  
+  // NEXT ID: 31.
 }
 
 
