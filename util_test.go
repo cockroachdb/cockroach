@@ -42,25 +42,28 @@ func TestDescribeEntry(t *testing.T) {
 
 func TestLimitSize(t *testing.T) {
 	ents := []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}
-	tests := []struct {
-		maxsize  uint64
-		wentries []pb.Entry
-	}{
-		{math.MaxUint64, []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}},
-		// Even if maxsize is zero, the first entry should be returned.
-		{0, []pb.Entry{{Index: 4, Term: 4}}},
-		// Limit to 2.
-		{uint64(ents[0].Size() + ents[1].Size()), []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
-		// Limit to 2.
-		{uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()/2), []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
-		{uint64(ents[0].Size() + ents[1].Size() + ents[2].Size() - 1), []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}}},
-		// All.
-		{uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()), []pb.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 5}, {Index: 6, Term: 6}}},
+	prefix := func(size int) []pb.Entry {
+		return append([]pb.Entry{}, ents[:size]...) // protect the original slice
 	}
-
-	for _, tt := range tests {
+	for _, tt := range []struct {
+		maxSize uint64
+		want    []pb.Entry
+	}{
+		{math.MaxUint64, prefix(len(ents))}, // all entries are returned
+		// Even if maxSize is zero, the first entry should be returned.
+		{0, prefix(1)},
+		// Limit to 2.
+		{uint64(ents[0].Size() + ents[1].Size()), prefix(2)},
+		{uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()/2), prefix(2)},
+		{uint64(ents[0].Size() + ents[1].Size() + ents[2].Size() - 1), prefix(2)},
+		// All.
+		{uint64(ents[0].Size() + ents[1].Size() + ents[2].Size()), prefix(3)},
+	} {
 		t.Run("", func(t *testing.T) {
-			require.Equal(t, tt.wentries, limitSize(ents, entryEncodingSize(tt.maxsize)))
+			got := limitSize(ents, entryEncodingSize(tt.maxSize))
+			require.Equal(t, tt.want, got)
+			size := entsSize(got)
+			require.True(t, len(got) == 1 || size <= entryEncodingSize(tt.maxSize))
 		})
 	}
 }

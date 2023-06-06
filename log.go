@@ -463,43 +463,54 @@ func (l *raftLog) restore(s pb.Snapshot) {
 
 // slice returns a slice of log entries from lo through hi-1, inclusive.
 func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
-	err := l.mustCheckOutOfBounds(lo, hi)
-	if err != nil {
+	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
 		return nil, err
 	}
 	if lo == hi {
 		return nil, nil
 	}
-	var ents []pb.Entry
-	if lo < l.unstable.offset {
-		storedEnts, err := l.storage.Entries(lo, min(hi, l.unstable.offset), uint64(maxSize))
-		if err == ErrCompacted {
-			return nil, err
-		} else if err == ErrUnavailable {
-			l.logger.Panicf("entries[%d:%d) is unavailable from storage", lo, min(hi, l.unstable.offset))
-		} else if err != nil {
-			panic(err) // TODO(bdarnell)
-		}
-
-		// check if ents has reached the size limitation
-		if uint64(len(storedEnts)) < min(hi, l.unstable.offset)-lo {
-			return storedEnts, nil
-		}
-
-		ents = storedEnts
+	if lo >= l.unstable.offset {
+		ents := limitSize(l.unstable.slice(lo, hi), maxSize)
+		// NB: use the full slice expression to protect the unstable slice from
+		// appends to the returned ents slice.
+		return ents[:len(ents):len(ents)], nil
 	}
-	if hi > l.unstable.offset {
-		unstable := l.unstable.slice(max(lo, l.unstable.offset), hi)
-		if len(ents) > 0 {
-			combined := make([]pb.Entry, len(ents)+len(unstable))
-			n := copy(combined, ents)
-			copy(combined[n:], unstable)
-			ents = combined
-		} else {
-			ents = unstable
-		}
+
+	cut := min(hi, l.unstable.offset)
+	ents, err := l.storage.Entries(lo, cut, uint64(maxSize))
+	if err == ErrCompacted {
+		return nil, err
+	} else if err == ErrUnavailable {
+		l.logger.Panicf("entries[%d:%d) is unavailable from storage", lo, cut)
+	} else if err != nil {
+		panic(err) // TODO(pavelkalinnikov): handle errors uniformly
 	}
-	return limitSize(ents, maxSize), nil
+	if hi <= l.unstable.offset {
+		return ents, nil
+	}
+
+	// Fast path to check if ents has reached the size limitation. Either the
+	// returned slice is shorter than requested (which means the next entry would
+	// bring it over the limit), or a single entry reaches the limit.
+	if uint64(len(ents)) < cut-lo {
+		return ents, nil
+	}
+	// Slow path computes the actual total size, so that unstable entries are cut
+	// optimally before being copied to ents slice.
+	size := entsSize(ents)
+	if size >= maxSize {
+		return ents, nil
+	}
+
+	unstable := limitSize(l.unstable.slice(l.unstable.offset, hi), maxSize-size)
+	// Total size of unstable may exceed maxSize-size only if len(unstable) == 1.
+	// If this happens, ignore this extra entry.
+	if len(unstable) == 1 && size+entsSize(unstable) > maxSize {
+		return ents, nil
+	}
+	// Otherwise, total size of unstable does not exceed maxSize-size, so total
+	// size of ents+unstable does not exceed maxSize. Simply concatenate them.
+	return extend(ents, unstable), nil
 }
 
 // l.firstIndex <= lo <= hi <= l.firstIndex + len(l.entries)
