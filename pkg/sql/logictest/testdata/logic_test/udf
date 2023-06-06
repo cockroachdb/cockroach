@@ -2787,3 +2787,32 @@ statement ok
 USE test;
 DROP DATABASE d CASCADE;
 DROP FUNCTION fn;
+
+subtest regression_103869
+
+statement ok
+CREATE SEQUENCE sq_103869;
+
+statement ok
+CREATE FUNCTION f_103869(sq REGCLASS) RETURNS INT
+LANGUAGE SQL
+AS $$
+    SELECT setval(sq, 1);
+$$;
+
+query I
+SELECT f_103869('sq_103869'::REGCLASS);
+----
+1
+
+statement ok
+CREATE FUNCTION f_103869(sq STRING) RETURNS INT
+LANGUAGE SQL
+AS $$
+    SELECT setval(sq, 2);
+$$
+
+query I
+SELECT f_103869('sq_103869')
+----
+2
