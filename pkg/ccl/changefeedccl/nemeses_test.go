@@ -47,7 +47,7 @@ func TestChangefeedNemeses(t *testing.T) {
 	// nemeses_test.go:39: pq: unimplemented: operation is
 	// unsupported in multi-tenancy mode
 	cdcTest(t, testFn, feedTestNoTenants)
-	log.FlushFileSinks()
+	log.Flush()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
 	if err != nil {

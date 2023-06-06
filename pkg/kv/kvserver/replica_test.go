@@ -13619,7 +13619,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	if _, pErr := tc.repl.Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	}
-	log.FlushFileSinks()
+	log.Flush()
 
 	stopper.Quiesce(ctx)
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,

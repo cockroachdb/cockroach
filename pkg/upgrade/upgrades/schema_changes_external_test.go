@@ -510,7 +510,7 @@ func testMigrationWithFailures(
 			})
 			if test.waitForMigrationRestart {
 				// Ensure that we have observed the expected number of ignored schema change jobs.
-				log.FlushFileSinks()
+				log.Flush()
 				entries, err := log.FetchEntriesFromFiles(
 					0, math.MaxInt64, 10000,
 					regexp.MustCompile("skipping.*operation as the schema change already exists."),
