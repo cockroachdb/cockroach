@@ -913,7 +913,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		serverIterator,
 		spanConfig.reporter,
 		clock,
-		distSender,
 		rangestats.NewFetcher(db),
 		node,
 	)
