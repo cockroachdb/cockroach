@@ -413,16 +413,22 @@ func fromZipDir(
 				return errors.Wrapf(err, "failed to parse id %s", fields[3])
 			}
 		}
-
+		// Attempt to unquote any strings, if they aren't quoted,
+		// we will use the original raw string.
+		unquotedName := fields[2]
+		if updatedName := strings.TrimSuffix(strings.TrimPrefix(unquotedName, "\""), "\""); updatedName != unquotedName {
+			unquotedName = strings.Replace(updatedName, "\"\"", "\"", -1)
+		}
 		namespaceTable = append(namespaceTable, doctor.NamespaceTableRow{
 			NameInfo: descpb.NameInfo{
-				ParentID: descpb.ID(parID), ParentSchemaID: descpb.ID(parSchemaID), Name: fields[2],
+				ParentID: descpb.ID(parID), ParentSchemaID: descpb.ID(parSchemaID), Name: unquotedName,
 			},
 			ID: int64(id),
 		})
 		return nil
 	}); err != nil {
 		return nil, nil, nil, err
+
 	}
 
 	jobsTable = make(doctor.JobsTable, 0)
