@@ -3781,6 +3781,11 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{UnsafeRestoreIncompatibleVersion: true}
   }
+| EXECUTION LOCALITY '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{ExecutionLocality: $4.expr()}
+  }
+
 
 virtual_cluster_opt:
   TENANT  { /* SKIP DOC */ }
