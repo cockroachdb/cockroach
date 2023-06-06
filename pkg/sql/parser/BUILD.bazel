@@ -109,7 +109,7 @@ $(location :sql-gen) $(location sql.y) sql $(location replace_help_rules.awk) \
         "@go_sdk//:bin/go",
         "@org_golang_x_tools//cmd/goyacc",
     ],
-    tags = ["no-remote"],  # keep
+    tags = ["no-remote-exec"],  # keep
     visibility = ["//visibility:public"],
 )
 

@@ -77,7 +77,7 @@ $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@go_sdk//:bin/go",
     ],
-    tags = ["no-remote"],  # keep
+    tags = ["no-remote-exec"],  # keep
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
