@@ -966,9 +966,10 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	scratchStartKey := tc.ScratchRange(t)
 	g, ctx := errgroup.WithContext(ctx)
 
+	metrics := []string{".rebalancing", ".recovery", ".unknown", ""}
 	// Record the snapshot metrics before anything has been sent / received.
-	senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */)
-	receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */)
+	senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */, metrics)
+	receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
 
 	// Add a new voting replica, but don't initialize it. Note that
 	// `tc.AddNonVoters` will not return until the newly added non-voter is
@@ -1044,35 +1045,33 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	require.NoError(t, g.Wait())
 
 	// Record the snapshot metrics for the sender after the raft snapshot was sent.
-	senderMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 0)
+	senderMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 0, metrics)
 
 	// Asserts that the raft snapshot (aka recovery snapshot) bytes sent have been
 	// recorded and that it was not double counted in a different metric.
 	senderMapDelta := getSnapshotMetricsDiff(senderMetricsMapBefore, senderMetricsMapAfter)
 
 	senderMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing":  {sentBytes: 0, rcvdBytes: 0},
-		".recovery":     {sentBytes: snapshotLength, rcvdBytes: 0},
-		".unknown":      {sentBytes: 0, rcvdBytes: 0},
-		"":              {sentBytes: snapshotLength, rcvdBytes: 0},
-		".cross-region": {sentBytes: 0, rcvdBytes: 0},
+		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
+		".recovery":    {sentBytes: snapshotLength, rcvdBytes: 0},
+		".unknown":     {sentBytes: 0, rcvdBytes: 0},
+		"":             {sentBytes: snapshotLength, rcvdBytes: 0},
 	}
 	require.Equal(t, senderMapExpected, senderMapDelta)
 
 	// Record the snapshot metrics for the receiver after the raft snapshot was
 	// received.
-	receiverMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 1)
+	receiverMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 1, metrics)
 
 	// Asserts that the raft snapshot (aka recovery snapshot) bytes received have
 	// been recorded and that it was not double counted in a different metric.
 	receiverMapDelta := getSnapshotMetricsDiff(receiverMetricsMapBefore, receiverMetricsMapAfter)
 
 	receiverMapExpected := map[string]snapshotBytesMetrics{
-		".rebalancing":  {sentBytes: 0, rcvdBytes: 0},
-		".recovery":     {sentBytes: 0, rcvdBytes: snapshotLength},
-		".unknown":      {sentBytes: 0, rcvdBytes: 0},
-		"":              {sentBytes: 0, rcvdBytes: snapshotLength},
-		".cross-region": {sentBytes: 0, rcvdBytes: 0},
+		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
+		".recovery":    {sentBytes: 0, rcvdBytes: snapshotLength},
+		".unknown":     {sentBytes: 0, rcvdBytes: 0},
+		"":             {sentBytes: 0, rcvdBytes: snapshotLength},
 	}
 	require.Equal(t, receiverMapExpected, receiverMapDelta)
 }
@@ -2198,7 +2197,7 @@ type snapshotBytesMetrics struct {
 // is a `snapshotBytesMetrics` struct containing the total bytes sent/received,
 // and granularMetrics is the map mentioned above.
 func getSnapshotBytesMetrics(
-	t *testing.T, tc *testcluster.TestCluster, serverIdx int,
+	t *testing.T, tc *testcluster.TestCluster, serverIdx int, metricsName []string,
 ) map[string]snapshotBytesMetrics {
 	metrics := make(map[string]snapshotBytesMetrics)
 
@@ -2211,7 +2210,7 @@ func getSnapshotBytesMetrics(
 		}
 	}
 
-	for _, v := range [5]string{".unknown", ".recovery", ".rebalancing", ".cross-region", ""} {
+	for _, v := range metricsName {
 		metrics[v] = findSnapshotBytesMetrics(v)
 	}
 	return metrics
@@ -2394,10 +2393,11 @@ func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 		return snapshotLength
 	}
 
+	metrics := []string{".rebalancing", ".recovery", ".unknown", ".cross-region", ""}
 	// Record the snapshot metrics before anything has been sent / received.
-	senderBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */)
-	firstReceiverBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */)
-	secReceiverBefore := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */)
+	senderBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */, metrics)
+	firstReceiverBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
+	secReceiverBefore := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */, metrics)
 
 	// The first replica is added as a non-voter to help avoid issues in stress
 	// testing. A possible explanation is - if the first replica was added as a
@@ -2412,7 +2412,7 @@ func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 	t.Run("sender", func(t *testing.T) {
 		// Compare the snapshot metrics for the sender after sending two snapshots to
 		// server[1] and server[2].
-		senderAfter := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */)
+		senderAfter := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */, metrics)
 		senderDelta := getSnapshotMetricsDiff(senderBefore, senderAfter)
 		senderExpected := map[string]snapshotBytesMetrics{
 			".rebalancing": {sentBytes: totalSnapshotLength, rcvdBytes: 0},
@@ -2429,7 +2429,7 @@ func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 	t.Run("first receiver", func(t *testing.T) {
 		// Compare the snapshot metrics for server[1] after receiving the first
 		// snapshot.
-		firstReceiverMetricsAfter := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */)
+		firstReceiverMetricsAfter := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
 		firstReceiverDelta := getSnapshotMetricsDiff(firstReceiverBefore, firstReceiverMetricsAfter)
 		firstReceiverExpected := map[string]snapshotBytesMetrics{
 			".rebalancing":  {sentBytes: 0, rcvdBytes: firstSnapshotLength},
@@ -2444,7 +2444,7 @@ func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 	t.Run("second receiver", func(t *testing.T) {
 		// Compare the snapshot metrics for server[2] after receiving the second
 		// snapshot.
-		secReceiverAfter := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */)
+		secReceiverAfter := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */, metrics)
 		secReceiverDelta := getSnapshotMetricsDiff(secReceiverBefore, secReceiverAfter)
 		secReceiverExpected := map[string]snapshotBytesMetrics{
 			".rebalancing": {sentBytes: 0, rcvdBytes: secSnapshotLength},
