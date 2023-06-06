@@ -92,6 +92,18 @@ func TestDoctorZipDir(t *testing.T) {
 		})
 	})
 
+	t.Run("recreate-json", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor recreate zipdir testdata/doctor/debugzip-json")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_recreate_zipdir-json"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
 	t.Run("deprecated doctor zipdir with verbose", func(t *testing.T) {
 		out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip 21.11-52 --verbose")
 		if err != nil {
