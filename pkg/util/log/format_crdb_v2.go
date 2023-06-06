@@ -47,6 +47,10 @@ type formatCrdbV2 struct {
 	// colorProfileName is the name of the color profile, used for
 	// documentation purposes.
 	colorProfileName string
+	// loc is the time zone to use. When non-nil, it forces the
+	// presentation of a time zone specification after the time stamp.
+	// The corresponding code path is much slower.
+	loc *time.Location
 }
 
 func (f *formatCrdbV2) setOption(k string, v string) error {
@@ -67,6 +71,18 @@ func (f *formatCrdbV2) setOption(k string, v string) error {
 				"Possible values: none, auto, ansi, 256color.")
 		}
 		f.colorProfileName = v
+		return nil
+
+	case "timezone":
+		l, err := timeutil.LoadLocation(v)
+		if err != nil {
+			return errors.Wrapf(err, "invalid timezone: %q", v)
+		}
+		if l == time.UTC {
+			// Avoid triggering the slow path in the entry formatter.
+			l = nil
+		}
+		f.loc = l
 		return nil
 
 	default:
@@ -226,6 +242,7 @@ Additional options recognized via ` + "`format-options`" + `:
 | Option | Description |
 |--------|-------------|
 | ` + "`colors`" + ` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+| ` + "`timezone`" + ` | The timezone to use for the timestamp column. The value can be any timezone name recognized by the Go standard library. Default is ` + "`UTC`" + ` |
 
 `)
 
@@ -258,33 +275,47 @@ func (f formatCrdbV2) formatEntry(entry logEntry) *buffer {
 		prefix = cp[ttycolor.Red]
 	}
 	n += copy(tmp, prefix)
-	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
-	// It's worth about 3X. Fprintf is hard.
-	now := timeutil.Unix(0, entry.ts)
-	year, month, day := now.Date()
-	hour, minute, second := now.Clock()
 	// Lyymmdd hh:mm:ss.uuuuuu file:line
 	tmp[n] = severityChar[entry.sev-1]
 	n++
-	if year < 2000 {
-		year = 2000
+
+	if f.loc == nil {
+		// Default time zone (UTC).
+		// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
+		// It's worth about 3X. Fprintf is hard.
+		now := timeutil.Unix(0, entry.ts)
+		year, month, day := now.Date()
+		hour, minute, second := now.Clock()
+		if year < 2000 {
+			year = 2000
+		}
+		n += buf.twoDigits(n, year-2000)
+		n += buf.twoDigits(n, int(month))
+		n += buf.twoDigits(n, day)
+		n += copy(tmp[n:], cp[ttycolor.Gray]) // gray for time, file & line
+		tmp[n] = ' '
+		n++
+		n += buf.twoDigits(n, hour)
+		tmp[n] = ':'
+		n++
+		n += buf.twoDigits(n, minute)
+		tmp[n] = ':'
+		n++
+		n += buf.twoDigits(n, second)
+		tmp[n] = '.'
+		n++
+		n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
+	} else {
+		// Time zone was specified.
+		// Slooooow path.
+		buf.Write(tmp[:n])
+		n = 0
+		now := timeutil.Unix(0, entry.ts).In(f.loc)
+		buf.WriteString(now.Format("060102"))
+		buf.Write(cp[ttycolor.Gray])
+		buf.WriteByte(' ')
+		buf.WriteString(now.Format("15:04:05.000000-070000"))
 	}
-	n += buf.twoDigits(n, year-2000)
-	n += buf.twoDigits(n, int(month))
-	n += buf.twoDigits(n, day)
-	n += copy(tmp[n:], cp[ttycolor.Gray]) // gray for time, file & line
-	tmp[n] = ' '
-	n++
-	n += buf.twoDigits(n, hour)
-	tmp[n] = ':'
-	n++
-	n += buf.twoDigits(n, minute)
-	tmp[n] = ':'
-	n++
-	n += buf.twoDigits(n, second)
-	tmp[n] = '.'
-	n++
-	n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
 	tmp[n] = ' '
 	n++
 	n += buf.someDigits(n, int(entry.gid))
@@ -520,7 +551,7 @@ var (
 	entryREV2 = regexp.MustCompile(
 		`(?m)^` +
 			/* Severity                 */ `(?P<severity>[` + severityChar + `])` +
-			/* Date and time            */ `(?P<datetime>\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
+			/* Date and time            */ `(?P<datetime>\d{6} \d{2}:\d{2}:\d{2}.\d{6}(?:[---+]\d{6})?) ` +
 			/* Goroutine ID             */ `(?:(?P<goroutine>\d+) )` +
 			/* Go standard library flag */ `(\(gostd\) )?` +
 			/* Channel                  */ `(?:(?P<channel>\d+)@)?` +
@@ -714,7 +745,13 @@ func (f entryDecoderV2Fragment) getGoroutine() int64 {
 }
 
 func (f entryDecoderV2Fragment) getTimestamp() (unixNano int64) {
-	t, err := time.Parse(MessageTimeFormat, string(f[v2DateTimeIdx]))
+	ts := string(f[v2DateTimeIdx])
+	timeFormat := MessageTimeFormat
+	if len(ts) > 7 && (ts[len(ts)-7] == '+' || ts[len(ts)-7] == '-') {
+		// The timestamp has a timezone offset.
+		timeFormat = MessageTimeFormatWithTZ
+	}
+	t, err := time.Parse(timeFormat, ts)
 	if err != nil {
 		panic(err)
 	}
