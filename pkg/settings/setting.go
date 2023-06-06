@@ -79,6 +79,9 @@ type NonMaskedSetting interface {
 	// ErrorHint returns a hint message to be displayed to the user when there's
 	// an error.
 	ErrorHint() (bool, string)
+
+	// ValueOrigin returns the origin of the current value.
+	ValueOrigin(ctx context.Context, sv *Values) ValueOrigin
 }
 
 // Class describes the scope of a setting in multi-tenant scenarios. While all
@@ -141,4 +144,18 @@ const (
 	// customization.
 	// In short: "Go ahead but be careful."
 	Public
+)
+
+// ValueOrigin indicates the origin of the current value of a setting, e.g. if
+// it is coming from the in-code default or an explicit override.
+type ValueOrigin uint32
+
+const (
+	// OriginDefault indicates the value in use is the default value.
+	OriginDefault ValueOrigin = iota
+	// OriginExplicitlySet indicates the value is has been set explicitly.
+	OriginExplicitlySet
+	// OriginExternallySet indicates the value has been set externally, such as
+	// via a host-cluster override for this or all tenant(s).
+	OriginExternallySet
 )

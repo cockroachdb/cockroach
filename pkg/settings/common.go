@@ -74,6 +74,15 @@ func (c *common) ErrorHint() (bool, string) {
 	return false, ""
 }
 
+func (c *common) getSlot() slotIdx {
+	return c.slot
+}
+
+// ValueOrigin returns the origin of the current value of the setting.
+func (c *common) ValueOrigin(ctx context.Context, sv *Values) ValueOrigin {
+	return sv.getValueOrigin(ctx, c.slot)
+}
+
 // SetReportable indicates whether a setting's value can show up in SHOW ALL
 // CLUSTER SETTINGS and telemetry reports.
 //
@@ -113,6 +122,8 @@ type internalSetting interface {
 	init(class Class, key, description string, slot slotIdx)
 	isRetired() bool
 	setToDefault(ctx context.Context, sv *Values)
+
+	getSlot() slotIdx
 
 	// isReportable indicates whether the value of the setting can be
 	// included in user-facing reports such as that produced by SHOW ALL
