@@ -371,7 +371,7 @@ func bootstrapCluster(
 					initialValuesOpts.OverrideKey = initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride
 				}
 			}
-			initialValues, tableSplits, err := initialValuesOpts.GetInitialValuesCheckForOverrides()
+			initialValues, tableSplits, err := initialValuesOpts.GenerateInitialValues()
 			if err != nil {
 				return nil, err
 			}
