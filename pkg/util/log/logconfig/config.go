@@ -287,7 +287,8 @@ type StderrSinkConfig struct {
 	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	// NoColor forces the omission of VT color codes in the output even
-	// when stderr is a terminal.
+	// when stderr is a terminal. This option is deprecated; its effects
+	// are equivalent to 'format-options: {colors: none}'.
 	NoColor bool `yaml:"no-color,omitempty"`
 
 	// CommonSinkConfig is the configuration common to all sinks. Note

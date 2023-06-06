@@ -26,88 +26,25 @@ The supported log output formats are documented below.
 
 ## Format `crdb-v1`
 
-This is the legacy file format used from CockroachDB v1.0.
 
-Each log entry is emitted using a common prefix, described below,
-followed by:
+This is a legacy file format used from CockroachDB v1.0.
+
+Each log entry is emitted using a common prefix, described below, followed by:
 
 - The logging context tags enclosed between `[` and `]`, if any. It is possible
   for this to be omitted if there were no context tags.
+- Optionally, a counter column, if the option 'show-counter' is enabled. See below for details.
 - the text of the log entry.
 
-Beware that the text of the log entry can span multiple lines. The following caveats apply:
-
+Beware that the text of the log entry can span multiple lines.
+The following caveats apply:
 
 - The text of the log entry can start with text enclosed between `[` and `]`.
   If there were no logging tags to start with, it is not possible to distinguish between
   logging context tag information and a `[...]` string in the main text of the
-  log entry. This means that this format is ambiguous. For an unambiguous alternative,
-  consider `crdb-v1-count`.
+  log entry. This means that this format is ambiguous.
 
-- The text of the log entry can embed arbitrary application-level strings,
-  including strings that represent log entries. In particular, an accident
-  of implementation can cause the common entry prefix (described below)
-  to also appear on a line of its own, as part of the payload of a previous
-  log entry. There is no automated way to recognize when this occurs.
-  Care must be taken by a human observer to recognize these situations.
-
-- The log entry parser provided by CockroachDB to read log files is faulty
-  and is unable to recognize the aforementioned pitfall; nor can it read
-  entries larger than 64KiB successfully. Generally, use of this internal
-  log entry parser is discouraged for entries written with this format.
-
-See the newer format `crdb-v2` for an alternative
-without these limitations.
-
-### Header lines
-
-At the beginning of each file, a header is printed using a similar format as
-regular log entries. This header reports when the file was created,
-which parameters were used to start the server, the server identifiers
-if known, and other metadata about the running process.
-
-- This header appears to be logged at severity `INFO` (with an `I` prefix
-  at the start of the line) even though it does not really have a severity.
-- The header is printed unconditionally even when a filter is configured to
-  omit entries at the `INFO` level.
-
-### Common log entry prefix
-
-Each line of output starts with the following prefix:
-
-     Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker
-
-| Field           | Description                                                                                                                          |
-|-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| L               | A single character, representing the [log level](logging.html#logging-levels-severities) (e.g., `I` for `INFO`). |
-| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                                |
-| mm              | The month (zero padded; i.e., May is `05`).                                                                                |
-| dd              | The day (zero padded).                                                                                                               |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                                      |
-| goid            | The goroutine id (omitted if zero for use by tests).                                                                                 |
-| chan            | The channel number (omitted if zero for backward compatibility).                                                                     |
-| file            | The file name where the entry originated.                                                                                            |
-| line            | The line number where the entry originated.                                                                                          |
-| marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                                  |
-
-The redactability marker can be empty; in this case, its position in the common prefix is
-a double ASCII space character which can be used to reliably identify this situation.
-
-If the marker ` + redactableIndicator + ` is present, the remainder of the log entry
-contains delimiters (‹...›) around
-fields that are considered sensitive. These markers are automatically recognized
-by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
-
-
-## Format `crdb-v1-count`
-
-This is an alternative, backward-compatible legacy file format used from CockroachDB v2.0.
-
-Each log entry is emitted using a common prefix, described below,
-followed by the text of the log entry.
-
-Beware that the text of the log entry can span multiple lines. The following caveats apply:
-
+  To remove this ambiguity, you can use the option 'show-counter'.
 
 - The text of the log entry can embed arbitrary application-level strings,
   including strings that represent log entries. In particular, an accident
@@ -142,6 +79,9 @@ Each line of output starts with the following prefix:
 
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker tags counter
 
+Reminder, the tags may be omitted; and the counter is only printed if the option
+'show-counter' is specified.
+
 | Field           | Description                                                                                                                          |
 |-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
 | L               | A single character, representing the [log level](logging.html#logging-levels-severities) (e.g., `I` for `INFO`). |
@@ -154,8 +94,8 @@ Each line of output starts with the following prefix:
 | file            | The file name where the entry originated.                                                                                            |
 | line            | The line number where the entry originated.                                                                                          |
 | marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                                  |
-| tags    | The logging tags, enclosed between `[` and `]`. May be absent. |
-| counter | The entry counter. Always present.                                                 |
+| tags            | The logging tags, enclosed between `[` and `]`. May be absent.                                                   |
+| counter         | The entry counter. Only included if 'show-counter' is enabled.                                                                       |
 
 The redactability marker can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
@@ -166,21 +106,41 @@ fields that are considered sensitive. These markers are automatically recognized
 by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
 
+Additional options recognized via `format-options`:
+
+| Option | Description |
+|--------|-------------|
+| `show-counter` | Whether to include the counter column in the line header. Without it, the format may be ambiguous due to the optionality of tags. |
+| `colors` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+
+
+
+## Format `crdb-v1-count`
+
+This format name is an alias for 'crdb-v1' with
+the following format option defaults:
+
+- `show-counter: true`
+- `colors: none`
+
+
 ## Format `crdb-v1-tty`
 
-Same textual format as `crdb-v1`.
+This format name is an alias for 'crdb-v1' with
+the following format option defaults:
 
-In addition, if the output stream happens to be a VT-compatible terminal,
-and the flag `no-color` was *not* set in the configuration, the entries
-are decorated using ANSI color codes.
+- `show-counter: false`
+- `colors: auto`
+
 
 ## Format `crdb-v1-tty-count`
 
-Same textual format as `crdb-v1-count`.
+This format name is an alias for 'crdb-v1' with
+the following format option defaults:
 
-In addition, if the output stream happens to be a VT-compatible terminal,
-and the flag `no-color` was *not* set in the configuration, the entries
-are decorated using ANSI color codes.
+- `show-counter: true`
+- `colors: auto`
+
 
 ## Format `crdb-v2`
 
@@ -306,13 +266,21 @@ the new format, they are prefixed by the `=` continuation
 indicator.
 
 
+Additional options recognized via `format-options`:
+
+| Option | Description |
+|--------|-------------|
+| `colors` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+
+
+
 ## Format `crdb-v2-tty`
 
-Same textual format as `crdb-v2`.
+This format name is an alias for 'crdb-v2' with
+the following format option defaults:
 
-In addition, if the output stream happens to be a VT-compatible terminal,
-and the flag `no-color` was *not* set in the configuration, the entries
-are decorated using ANSI color codes.
+- `colors: auto`
+
 
 ## Format `json`
 

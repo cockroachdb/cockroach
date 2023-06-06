@@ -280,7 +280,7 @@ Type-specific configuration options:
 | Field | Description |
 |--|--|
 | `channels` | the list of logging channels that use this sink. See the [channel selection configuration](#channel-format) section for details.  |
-| `no-color` | forces the omission of VT color codes in the output even when stderr is a terminal. |
+| `no-color` | forces the omission of VT color codes in the output even when stderr is a terminal. This option is deprecated; its effects are equivalent to 'format-options: {colors: none}'. |
 
 
 Configuration options shared across all sink types:
