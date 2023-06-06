@@ -42,6 +42,17 @@ func TestCrdbV1EncodeDecode(t *testing.T) {
 			}
 
 		case "entries":
+			var loc *time.Location
+			if arg, ok := td.Arg("tz"); ok {
+				var err error
+				var tz string
+				arg.Scan(t, 0, &tz)
+				loc, err = timeutil.LoadLocation(tz)
+				if err != nil {
+					td.Fatalf(t, "invalid tz: %v", err)
+				}
+			}
+
 			var inputEntries []logpb.Entry
 			for _, line := range strings.Split(td.Input, "\n") {
 				entry := templateEntry
@@ -54,7 +65,9 @@ func TestCrdbV1EncodeDecode(t *testing.T) {
 			var buf bytes.Buffer
 			// Encode.
 			for _, entry := range inputEntries {
-				_ = FormatLegacyEntry(entry, &buf)
+				lbuf := formatLogEntryInternalV1(entry, false /* header */, true /* showCounter */, nil /* colorProfile */, loc)
+				buf.Write(lbuf.Bytes())
+				putBuffer(lbuf)
 			}
 			// Decode.
 			entryStr := buf.String()

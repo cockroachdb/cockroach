@@ -29,6 +29,10 @@ const severityChar = "IWEF"
 // as used in time.Parse and time.Format.
 const MessageTimeFormat = "060102 15:04:05.999999"
 
+// MessageTimeFormatWithTZ is like MessageTimeFormat but with a numeric
+// time zone included.
+const MessageTimeFormatWithTZ = "060102 15:04:05.999999-070000"
+
 // FormatLegacyEntry writes the contents of the legacy log entry struct to the specified writer.
 func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
 	return FormatLegacyEntryWithOptionalColors(e, w, nil /* cp */)
@@ -37,7 +41,7 @@ func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
 // FormatLegacyEntryWithOptionalColors is like FormatLegacyEntry but the caller can specify
 // a color profile.
 func FormatLegacyEntryWithOptionalColors(e logpb.Entry, w io.Writer, cp ttycolor.Profile) error {
-	buf := formatLogEntryInternalV1(e, false /* isHeader */, true /* showCounter */, cp)
+	buf := formatLogEntryInternalV1(e, false /* isHeader */, true /* showCounter */, cp, nil /* loc */)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err

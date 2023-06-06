@@ -112,6 +112,7 @@ Additional options recognized via `format-options`:
 |--------|-------------|
 | `show-counter` | Whether to include the counter column in the line header. Without it, the format may be ambiguous due to the optionality of tags. |
 | `colors` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+| `timezone` | The timezone to use for the timestamp column. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
 
 
 
@@ -271,6 +272,7 @@ Additional options recognized via `format-options`:
 | Option | Description |
 |--------|-------------|
 | `colors` | The color profile to use. Possible values: none, auto, ansi, 256color. Default is auto. |
+| `timezone` | The timezone to use for the timestamp column. The value can be any timezone name recognized by the Go standard library. Default is `UTC` |
 
 
 
