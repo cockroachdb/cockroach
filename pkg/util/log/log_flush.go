@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 )
 
@@ -28,66 +27,42 @@ type flushSyncWriter interface {
 	io.Writer
 }
 
-// flushActive indicates if a current Flush() is executing. If true,
-// additional calls to Flush() will be a noop and return early, until
-// the current Flush() call has completed.
-var flushActive syncutil.AtomicBool
+// FlushFileSinks explicitly flushes all pending log file I/O.
+// See also flushDaemon() that manages background (asynchronous)
+// flushes, and signalFlusher() that manages flushes in reaction to a
+// user signal.
+func FlushFileSinks() {
+	_ = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
+		l.lockAndFlushAndMaybeSync(true /*doSync*/)
+		return nil
+	})
+}
 
-// Flush explicitly flushes all asynchronous buffered logging sinks,
+// FlushAllSync explicitly flushes all asynchronous buffered logging sinks,
 // including pending log file I/O and buffered network sinks.
 //
 // NB: This is a synchronous operation, and will block until all flushes
 // have completed. Generally only recommended for use in crash reporting
 // scenarios.
-//
-// When flushing buffered network logging sinks, each sink is given a
-// 5-second timeout before we move on to attempt flushing the next.
-func Flush() {
-	if flushActive.Swap(true) {
-		return
-	}
-	defer flushActive.Swap(false)
-
-	// Flush all file sinks.
-	_ = logging.allSinkInfos.iterFileSinks(func(l *fileSink) error {
-		l.lockAndFlushAndMaybeSync(true /*doSync*/)
-		return nil
-	})
-
-	// Flush all buffered network sinks.
+func FlushAllSync() {
+	FlushFileSinks()
 	_ = logging.allSinkInfos.iterBufferedSinks(func(bs *bufferedSink) error {
-		doneCh := make(chan struct{})
-		// Set a timer, so we don't prevent the process from exiting if the
-		// child sink is unavailable & the request hangs.
-		timer := time.NewTimer(5 * time.Second)
-		go func() {
-			// Trigger a synchronous flush by calling output on the bufferedSink
-			// with a `forceSync` option.
-			err := bs.output([]byte{}, sinkOutputOptions{forceSync: true})
-			if err != nil {
-				// We don't want to let errors to stop us from iterating and flushing
-				// the remaining buffered log sinks. Nor do we want to log the error
-				// using the logging system, as it's unlikely to make it to the
-				// destination sink anyway (there's a good chance we're flushing
-				// as part of handling a panic). Display the error.
-				fmt.Fprintf(OrigStderr, "error draining buffered log sink: %v\n", err)
-			}
-			doneCh <- struct{}{}
-		}()
-
-		select {
-		case <-doneCh:
-		case <-timer.C:
-			fmt.Fprintf(OrigStderr, "timed out draining buffered log sink: %T\n", bs.child)
+		// Trigger a synchronous flush by calling output on the bufferedSink
+		// with a `forceSync` option.
+		err := bs.output([]byte{}, sinkOutputOptions{forceSync: true})
+		if err != nil {
+			// We don't want to let errors to stop us from iterating and flushing
+			// the remaining buffered log sinks. Nor do we want to log the error
+			// using the logging system, as it's unlikely to make it to the
+			// destination sink anyway (there's a good chance we're flushing
+			// as part of handling a panic). Display the error and continue.
+			fmt.Printf("Error draining buffered log sink: %v\n", err)
 		}
-		// In the event of errors or timeouts, we still want to attempt to flush
-		// any remaining buffered sinks. Return nil so the iterator can continue.
 		return nil
 	})
 }
 
 func init() {
-	flushActive.Set(false)
 	go flushDaemon()
 	go signalFlusher()
 }
@@ -111,7 +86,7 @@ const syncWarnDuration = 10 * time.Second
 // flushDaemon periodically flushes and syncs the log file buffers.
 // This manages both the primary and secondary loggers.
 //
-// Flush propagates the in-memory buffer inside CockroachDB to the
+// FlushFileSinks propagates the in-memory buffer inside CockroachDB to the
 // in-memory buffer(s) of the OS. The flush is relatively frequent so
 // that a human operator can see "up to date" logging data in the log
 // file.
@@ -147,7 +122,7 @@ func signalFlusher() {
 	ch := sysutil.RefreshSignaledChan()
 	for sig := range ch {
 		Ops.Infof(context.Background(), "%s received, flushing logs", sig)
-		Flush()
+		FlushFileSinks()
 	}
 }
 
@@ -159,5 +134,5 @@ func signalFlusher() {
 func StartAlwaysFlush() {
 	logging.flushWrites.Set(true)
 	// There may be something in the buffers already; flush it.
-	Flush()
+	FlushFileSinks()
 }

@@ -82,7 +82,7 @@ func TestStructuredEventLogging(t *testing.T) {
 	}
 
 	// Ensure that the entries hit the OS so they can be read back below.
-	log.Flush()
+	log.FlushFileSinks()
 
 	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
 		math.MaxInt64, 10000, execLogRe, log.WithMarkedSensitiveData)
@@ -736,7 +736,7 @@ func TestPerfLogging(t *testing.T) {
 		}
 
 		var logRe = regexp.MustCompile(tc.logRe)
-		log.Flush()
+		log.FlushFileSinks()
 		entries, err := log.FetchEntriesFromFiles(
 			start, math.MaxInt64, 1000, logRe, log.WithMarkedSensitiveData,
 		)
