@@ -1431,7 +1431,7 @@ func TestLint(t *testing.T) {
 		if pkgSpecified {
 			skip.IgnoreLint(t, "PKG specified")
 		}
-		ignore := `\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|(_)?generated(_test)?\.go$`
+		ignore := `zcgo*|\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|(_)?generated(_test)?\.go$`
 		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-fast", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)
@@ -2110,15 +2110,13 @@ func TestLint(t *testing.T) {
 			}
 		})
 
-		if !bazel.BuiltWithBazel() {
-			var buf strings.Builder
-			if err := gcassert.GCAssert(&buf, gcassertPaths...); err != nil {
-				t.Fatal(err)
-			}
-			output := buf.String()
-			if len(output) > 0 {
-				t.Fatalf("failed gcassert:\n%s", output)
-			}
+		var buf strings.Builder
+		if err := gcassert.GCAssert(&buf, gcassertPaths...); err != nil {
+			t.Fatal(err)
+		}
+		output := buf.String()
+		if len(output) > 0 {
+			t.Fatalf("failed gcassert:\n%s", output)
 		}
 	})
 
