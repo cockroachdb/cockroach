@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type config struct {
@@ -445,7 +447,8 @@ func (l *sinkInfo) applyConfig(c logconfig.CommonSinkConfig) error {
 	l.criticality = *c.Criticality
 	f, ok := formatters[*c.Format]
 	if !ok {
-		return errors.Newf("unknown format: %q", *c.Format)
+		return errors.WithHintf(errors.Newf("unknown format: %q", *c.Format),
+			"Supported formats: %s.", redact.Safe(strings.Join(formatNames, ", ")))
 	}
 	l.formatter = f()
 	for k, v := range c.FormatOptions {

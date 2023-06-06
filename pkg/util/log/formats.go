@@ -48,7 +48,11 @@ var formatParsers = map[string]string{
 var formatters = func() map[string]func() logFormatter {
 	m := make(map[string]func() logFormatter)
 	r := func(f func() logFormatter) {
-		m[f().formatterName()] = f
+		name := f().formatterName()
+		if _, ok := m[name]; ok {
+			panic("duplicate formatter name: " + name)
+		}
+		m[name] = f
 	}
 	r(func() logFormatter {
 		return &formatCrdbV1{showCounter: false, colorProfile: ttycolor.StderrProfile, colorProfileName: "auto"}
@@ -73,6 +77,14 @@ var formatters = func() map[string]func() logFormatter {
 	r(func() logFormatter { return &formatJSONFull{tags: tagCompact} })
 	r(func() logFormatter { return &formatJSONFull{tags: tagVerbose} })
 	return m
+}()
+
+var formatNames = func() (res []string) {
+	for name := range formatters {
+		res = append(res, name)
+	}
+	sort.Strings(res)
+	return res
 }()
 
 // GetFormatterDocs returns the embedded documentation for all the
