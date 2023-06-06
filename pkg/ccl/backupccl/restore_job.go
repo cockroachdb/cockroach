@@ -416,6 +416,7 @@ func restore(
 			numNodes,
 			numImportSpans,
 			simpleImportSpans,
+			details.ExecutionLocality,
 			progCh,
 		)
 	}
