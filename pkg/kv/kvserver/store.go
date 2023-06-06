@@ -3264,6 +3264,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseHolderCount              int64
 		leaseExpirationCount          int64
 		leaseEpochCount               int64
+		leaseLivenessCount            int64
 		raftLeaderNotLeaseHolderCount int64
 		raftLeaderInvalidLeaseCount   int64
 		quiescentCount                int64
@@ -3333,6 +3334,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			case roachpb.LeaseEpoch:
 				leaseEpochCount++
 			}
+			if metrics.LivenessLease {
+				leaseLivenessCount++
+			}
 		}
 		if metrics.Quiescent {
 			quiescentCount++
@@ -3396,6 +3400,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
+	s.metrics.LeaseLivenessCount.Update(leaseLivenessCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
 	s.metrics.UninitializedCount.Update(uninitializedCount)
 	s.metrics.AverageQueriesPerSecond.Update(averageQueriesPerSecond)
