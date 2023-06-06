@@ -95,8 +95,8 @@ func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
 			if err := w.wg.SyncWait(); err != nil {
 				log.Fatalf(ctx, "SyncWait error: %+v", err)
 			}
-			w.wg.Close()
 			w.cb.run()
+			w.wg.Close()
 		case <-stopper.ShouldQuiesce():
 			return
 		}
@@ -108,7 +108,9 @@ func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
 // durably committed. It may never be called in case the stopper stops.
 //
 // The syncWaiter will be Closed after its SyncWait method completes. It must
-// not be Closed by the caller.
+// not be Closed by the caller. The cb is called before the syncWaiter is
+// closed, in case the cb implementation needs to extract something form the
+// syncWaiter.
 //
 // If the SyncWaiterLoop has already been stopped, the callback will never be
 // called.
