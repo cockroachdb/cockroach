@@ -719,10 +719,7 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 		if len(results) > 0 || allComplete || err != nil {
 			return results, err
 		}
-		s.results.wait()
-		// Check whether the Streamer has been canceled or closed while we were
-		// waiting for the results.
-		if err = ctx.Err(); err != nil {
+		if err = s.results.wait(ctx); err != nil {
 			s.results.setError(err)
 			return nil, err
 		}
