@@ -1373,11 +1373,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
 	fn(ctx)
 
-	auditlogging.UserAuditLogConfig.SetOnChange(
-		&execCfg.Settings.SV, func(ctx context.Context) {
-			auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings)
-		})
-	auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings)
+	auditlogging.UserAuditEnterpriseParamsHook = func(st *cluster.Settings, clusterID uuid.UUID) func() (*cluster.Settings, uuid.UUID) {
+		return func() (*cluster.Settings, uuid.UUID) {
+			return st, clusterID
+		}
+	}(execCfg.Settings, cfg.ClusterIDContainer.Get())
+
+	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
 
 	return &SQLServer{
 		ambientCtx:                     cfg.BaseConfig.AmbientCtx,
