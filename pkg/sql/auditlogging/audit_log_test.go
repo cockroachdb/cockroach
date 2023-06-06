@@ -22,11 +22,11 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	datadriven.RunTest(t, datapathutils.TestDataPath(t, "parse"),
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "Parse"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "multiline":
-				config, err := parse(td.Input)
+				config, err := Parse(td.Input)
 				if err != nil {
 					return fmt.Sprintf("error: %v\n", err)
 				}
