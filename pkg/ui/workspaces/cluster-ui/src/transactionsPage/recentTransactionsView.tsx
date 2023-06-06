@@ -22,6 +22,7 @@ import {
   RecentTransaction,
   RecentStatementFilters,
   RecentTransactionFilters,
+  ExecutionStatus,
 } from "src/recentExecutions";
 import LoadingError from "src/sqlActivity/errorComponent";
 import {
@@ -54,7 +55,6 @@ export type RecentTransactionsViewStateProps = {
   transactions: RecentTransaction[];
   sessionsError: Error | null;
   filters: RecentTransactionFilters;
-  executionStatus: string[];
   sortSetting: SortSetting;
   internalAppNamePrefix: string;
   isTenant?: boolean;
@@ -78,7 +78,6 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
   transactions,
   sessionsError,
   filters,
-  executionStatus,
   internalAppNamePrefix,
   maxSizeApiReached,
 }: RecentTransactionsViewProps) => {
@@ -171,6 +170,7 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
 
   const apps = getAppsFromRecentExecutions(transactions, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
+  const executionStatuses = Object.values(ExecutionStatus);
 
   const filteredTransactions = filterRecentTransactions(
     transactions,
@@ -201,7 +201,7 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
           <Filter
             activeFilters={countActiveFilters}
             onSubmitFilters={onSubmitFilters}
-            executionStatuses={executionStatus.sort()}
+            executionStatuses={executionStatuses}
             showExecutionStatus={true}
             appNames={apps}
             filters={filters}

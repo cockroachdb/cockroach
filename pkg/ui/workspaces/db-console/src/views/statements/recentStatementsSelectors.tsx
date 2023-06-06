@@ -16,7 +16,6 @@ import {
 import {
   selectRecentStatements,
   selectAppName,
-  selectExecutionStatus,
   selectClusterLocksMaxApiSizeReached,
 } from "src/selectors";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
@@ -57,7 +56,6 @@ export const mapStateToRecentStatementViewProps = (state: AdminUIState) => ({
   selectedColumns: selectedColumnsLocalSetting.selectorToArray(state),
   sortSetting: sortSettingLocalSetting.selector(state),
   statements: selectRecentStatements(state),
-  executionStatus: selectExecutionStatus(),
   sessionsError: state.cachedData?.sessions.lastError,
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),
