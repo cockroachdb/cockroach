@@ -17,7 +17,6 @@ import {
 import {
   selectAppName,
   selectRecentTransactions,
-  selectExecutionStatus,
   selectClusterLocksMaxApiSizeReached,
 } from "src/selectors";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
@@ -58,7 +57,6 @@ export const mapStateToRecentTransactionsPageProps = (state: AdminUIState) => ({
   transactions: selectRecentTransactions(state),
   sessionsError: state.cachedData?.sessions.lastError,
   filters: filtersLocalSetting.selector(state),
-  executionStatus: selectExecutionStatus(),
   sortSetting: sortSettingLocalSetting.selector(state),
   internalAppNamePrefix: selectAppName(state),
   maxSizeApiReached: selectClusterLocksMaxApiSizeReached(state),

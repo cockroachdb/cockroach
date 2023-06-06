@@ -18,7 +18,7 @@ import {
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
-import { RecentStatement, RecentStatementFilters } from "src/recentExecutions";
+import { RecentStatement, RecentStatementFilters, ExecutionStatus } from "src/recentExecutions";
 import { Filter } from "src/queryFilter";
 import LoadingError from "src/sqlActivity/errorComponent";
 import {
@@ -56,7 +56,6 @@ export type RecentStatementsViewStateProps = {
   sortSetting: SortSetting;
   sessionsError: Error | null;
   filters: RecentStatementFilters;
-  executionStatus: string[];
   internalAppNamePrefix: string;
   isTenant?: boolean;
   maxSizeApiReached?: boolean;
@@ -75,7 +74,6 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   statements,
   sessionsError,
   filters,
-  executionStatus,
   internalAppNamePrefix,
   isTenant,
   maxSizeApiReached,
@@ -170,6 +168,10 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   const apps = getAppsFromRecentExecutions(statements, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
 
+  // The "Idle" execution status does not apply to statements.
+  const executionStatuses = Object.values(ExecutionStatus).filter(
+    status => status != ExecutionStatus.Idle,
+  );
   const filteredStatements = filterRecentStatements(
     statements,
     filters,
@@ -198,7 +200,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
           <Filter
             activeFilters={countActiveFilters}
             onSubmitFilters={onSubmitFilters}
-            executionStatuses={executionStatus.sort()}
+            executionStatuses={executionStatuses}
             showExecutionStatus={true}
             appNames={apps}
             filters={filters}
