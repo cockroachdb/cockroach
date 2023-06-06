@@ -72,6 +72,12 @@ func NewInternalSessionData(
 
 	sdMutIterator.applyOnEachMutator(func(m sessionDataMutator) {
 		for varName, v := range varGen {
+			if varName == "optimizer_use_histograms" {
+				// Do not use histograms when optimizing internal executor
+				// queries. This causes a significant performance regression.
+				// TODO(#102954): Diagnose and fix this.
+				continue
+			}
 			if v.Set != nil {
 				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
 				if hasDefault {
