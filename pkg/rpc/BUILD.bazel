@@ -122,6 +122,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/ts/tspb",
         "//pkg/util",
+        "//pkg/util/circuit",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
