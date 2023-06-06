@@ -148,11 +148,19 @@ import "C"
 			krbDir = filepath.Join(bazelBin, "c-deps/libkrb5_foreign")
 		}
 	}
-	cppFlags := fmt.Sprintf("-I%s", filepath.Join(jemallocDir, "include"))
-	ldFlags := fmt.Sprintf("-L%s -L%s", filepath.Join(jemallocDir, "lib"), filepath.Join(projDir, "lib"))
+
+	tempToPersistentDirs := make(map[string]string, 3)
+	tempToPersistentDirs[jemallocDir] = filepath.Join(workspace, "bin", "c-deps", filepath.Base(jemallocDir))
+	tempToPersistentDirs[projDir] = filepath.Join(workspace, "bin", "c-deps", filepath.Base(projDir))
 	if krbDir != "" {
-		cppFlags += fmt.Sprintf(" -I%s", filepath.Join(krbDir, "include"))
-		ldFlags += fmt.Sprintf(" -L%s", filepath.Join(krbDir, "lib"))
+		tempToPersistentDirs[krbDir] = filepath.Join(workspace, "bin", "c-deps", filepath.Base(krbDir))
+	}
+
+	cppFlags := fmt.Sprintf("-I%s", filepath.Join(tempToPersistentDirs[jemallocDir], "include"))
+	ldFlags := fmt.Sprintf("-L%s -L%s", filepath.Join(tempToPersistentDirs[jemallocDir], "lib"), filepath.Join(tempToPersistentDirs[projDir], "lib"))
+	if krbDir != "" {
+		cppFlags += fmt.Sprintf(" -I%s", filepath.Join(tempToPersistentDirs[krbDir], "include"))
+		ldFlags += fmt.Sprintf(" -L%s", filepath.Join(tempToPersistentDirs[krbDir], "lib"))
 	}
 
 	cgoPkgs := []string{
@@ -175,6 +183,25 @@ import "C"
 		}{Package: filepath.Base(cgoPkg), CPPFlags: cppFlags, LDFlags: ldFlags})
 		if err != nil {
 			return err
+		}
+	}
+
+	// Copy jemallocDir, projDir, and krbDir to a persistent location (//bin/c-deps).
+	if err := os.MkdirAll(filepath.Join(workspace, "bin", "c-deps"), 0755); err != nil {
+		return err
+	}
+	for dirToCopy := range tempToPersistentDirs {
+		if dirToCopy != "" {
+			copyCmdArgs := []string{"-r", dirToCopy, filepath.Dir(tempToPersistentDirs[dirToCopy])}
+			logCommand("cp", copyCmdArgs...)
+			cmd := exec.Command("cp", copyCmdArgs...)
+			var outBuf, errBuf strings.Builder
+			cmd.Stdout = &outBuf
+			cmd.Stderr = &errBuf
+			cmd.Dir = workspace
+			if err := cmd.Run(); err != nil {
+				return errors.Wrapf(err, "Output: %s - %s", outBuf.String(), errBuf.String())
+			}
 		}
 	}
 	return nil
