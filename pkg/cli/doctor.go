@@ -15,6 +15,7 @@ import (
 	"context"
 	"database/sql/driver"
 	hx "encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -365,23 +366,50 @@ func fromZipDir(
 	_ = builtins.AllBuiltinNames()
 
 	descTable = make(doctor.DescriptorTable, 0)
-	if err := slurp(zipDirPath, "system.descriptor.txt", func(row string) error {
-		fields := strings.Fields(row)
-		last := len(fields) - 1
-		i, err := strconv.Atoi(fields[0])
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse descriptor id %s", fields[0])
-		}
+	if checkIfFileExists(zipDirPath, "system.descriptor.txt") {
+		if err := slurp(zipDirPath, "system.descriptor.txt", func(row string) error {
+			fields := strings.Fields(row)
+			last := len(fields) - 1
+			i, err := strconv.Atoi(fields[0])
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse descriptor id %s", fields[0])
+			}
 
-		descBytes, err := hx.DecodeString(fields[last])
-		if err != nil {
-			return errors.Wrapf(err, "failed to decode hex descriptor %d", i)
+			descBytes, err := hx.DecodeString(fields[last])
+			if err != nil {
+				return errors.Wrapf(err, "failed to decode hex descriptor %d", i)
+			}
+			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			descTable = append(descTable, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
+			return nil
+		}); err != nil {
+			return nil, nil, nil, err
+		}
+	} else {
+		descTableJSON := make([]struct {
+			ID         string `json:"id"`
+			Descriptor string `json:"hex_descriptor"`
+		}, 0)
+		if err := parseJSONFile(zipDirPath, "system.descriptor.json", &descTableJSON); err != nil {
+			return nil, nil, nil, errors.Wrapf(err, "failed to parse system.descriptor.json")
 		}
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		descTable = append(descTable, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
-		return nil
-	}); err != nil {
-		return nil, nil, nil, err
+		for _, desc := range descTableJSON {
+			var err error
+			row := doctor.DescriptorTableRow{
+				ModTime: ts,
+			}
+			row.ID, err = strconv.ParseInt(desc.ID, 10, 64)
+			if err != nil {
+				return nil, nil, nil, errors.Wrapf(err, "failed to decode hex descriptor: (%s)", desc.ID)
+			}
+
+			row.DescBytes = make([]byte, hx.DecodedLen(len(desc.Descriptor)))
+			if _, err := hx.Decode(row.DescBytes, []byte(desc.Descriptor)); err != nil {
+				return nil, nil, nil, errors.Wrapf(err, "failed to decode hex descriptor: (%s)", desc.Descriptor)
+			}
+			descTable = append(descTable, row)
+		}
 	}
 
 	// Handle old debug zips where the namespace table dump is from namespace2.
@@ -393,86 +421,192 @@ func fromZipDir(
 		}
 		namespaceFileName = "system.namespace.txt"
 	}
-
 	namespaceTable = make(doctor.NamespaceTable, 0)
-	if err := slurp(zipDirPath, namespaceFileName, func(row string) error {
-		fields := strings.Fields(row)
-		parID, err := strconv.Atoi(fields[0])
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse parent id %s", fields[0])
-		}
-		parSchemaID, err := strconv.Atoi(fields[1])
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse parent schema id %s", fields[1])
-		}
-		id, err := strconv.Atoi(fields[3])
-		if err != nil {
-			if fields[3] == "NULL" {
-				id = int(descpb.InvalidID)
-			} else {
-				return errors.Wrapf(err, "failed to parse id %s", fields[3])
+	if checkIfFileExists(zipDirPath, namespaceFileName) {
+		if err := slurp(zipDirPath, namespaceFileName, func(row string) error {
+			fields := strings.Fields(row)
+			parID, err := strconv.Atoi(fields[0])
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse parent id %s", fields[0])
 			}
+			parSchemaID, err := strconv.Atoi(fields[1])
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse parent schema id %s", fields[1])
+			}
+			id, err := strconv.Atoi(fields[3])
+			if err != nil {
+				if fields[3] == "NULL" {
+					id = int(descpb.InvalidID)
+				} else {
+					return errors.Wrapf(err, "failed to parse id %s", fields[3])
+				}
+			}
+			// Attempt to unquote any strings, if they aren't quoted,
+			// we will use the original raw string.
+			unquotedName := fields[2]
+			if updatedName := strings.TrimSuffix(strings.TrimPrefix(unquotedName, "\""), "\""); updatedName != unquotedName {
+				unquotedName = strings.Replace(updatedName, "\"\"", "\"", -1)
+			}
+			namespaceTable = append(namespaceTable, doctor.NamespaceTableRow{
+				NameInfo: descpb.NameInfo{
+					ParentID: descpb.ID(parID), ParentSchemaID: descpb.ID(parSchemaID), Name: unquotedName,
+				},
+				ID: int64(id),
+			})
+			return nil
+		}); err != nil {
+			return nil, nil, nil, err
 		}
-		// Attempt to unquote any strings, if they aren't quoted,
-		// we will use the original raw string.
-		unquotedName := fields[2]
-		if updatedName := strings.TrimSuffix(strings.TrimPrefix(unquotedName, "\""), "\""); updatedName != unquotedName {
-			unquotedName = strings.Replace(updatedName, "\"\"", "\"", -1)
+	} else {
+		namespaceTableJSON := make([]struct {
+			ID             string `json:"id"`
+			ParentID       string `json:"parentID"`
+			ParentSchemaID string `json:"parentSchemaID"`
+			Name           string `json:"name"`
+		}, 0)
+		if err := parseJSONFile(zipDirPath, "system.namespace.json", &namespaceTableJSON); err != nil {
+			return nil, nil, nil, errors.Wrapf(err, "failed to parse system.descriptor.json")
 		}
-		namespaceTable = append(namespaceTable, doctor.NamespaceTableRow{
-			NameInfo: descpb.NameInfo{
-				ParentID: descpb.ID(parID), ParentSchemaID: descpb.ID(parSchemaID), Name: unquotedName,
-			},
-			ID: int64(id),
-		})
-		return nil
-	}); err != nil {
-		return nil, nil, nil, err
+		for _, namespace := range namespaceTableJSON {
+			row := doctor.NamespaceTableRow{
+				NameInfo: descpb.NameInfo{
+					Name: namespace.Name,
+				},
+			}
 
+			id, err := strconv.ParseInt(namespace.ParentID, 10, 64)
+			if len(namespace.ParentID) > 0 && err != nil {
+				return nil, nil, nil, errors.Wrapf(err, "failed to decode namespace ParentID %v", namespace)
+			}
+			row.ParentID = descpb.ID(id)
+			id, err = strconv.ParseInt(namespace.ParentSchemaID, 10, 64)
+			if len(namespace.ParentSchemaID) > 0 && err != nil {
+				return nil, nil, nil, errors.Wrapf(err, "failed to decode namespace ParentSchemaID %v", namespace)
+			}
+			row.ParentSchemaID = descpb.ID(id)
+			id, err = strconv.ParseInt(namespace.ID, 10, 64)
+			if len(namespace.ID) > 0 && err != nil {
+				return nil, nil, nil, errors.Wrapf(err, "failed to decode namespace ID %v", namespace)
+			}
+			row.ID = id
+			namespaceTable = append(namespaceTable,
+				row)
+		}
 	}
 
 	jobsTable = make(doctor.JobsTable, 0)
-	if err := slurp(zipDirPath, "system.jobs.txt", func(row string) error {
-		fields := strings.Fields(row)
-		md := jobs.JobMetadata{}
-		md.Status = jobs.Status(fields[1])
+	if checkIfFileExists(zipDirPath, "system.jobs.txt") {
+		if err := slurp(zipDirPath, "system.jobs.txt", func(row string) error {
+			fields := strings.Fields(row)
+			md := jobs.JobMetadata{}
+			md.Status = jobs.Status(fields[1])
 
-		id, err := strconv.Atoi(fields[0])
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse job id %s", fields[0])
-		}
-		md.ID = jobspb.JobID(id)
-
-		last := len(fields) - 1
-		payloadBytes, err := hx.DecodeString(fields[last-1])
-		if err != nil {
-			// TODO(postamar): remove this check once payload redaction is improved
-			if fields[last-1] == "NULL" {
-				return nil
+			id, err := strconv.Atoi(fields[0])
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse job id %s", fields[0])
 			}
-			return errors.Wrapf(err, "job %d: failed to decode hex payload", id)
-		}
-		md.Payload = &jobspb.Payload{}
-		if err := protoutil.Unmarshal(payloadBytes, md.Payload); err != nil {
-			return errors.Wrap(err, "failed unmarshalling job payload")
-		}
+			md.ID = jobspb.JobID(id)
 
-		progressBytes, err := hx.DecodeString(fields[last])
-		if err != nil {
-			return errors.Wrapf(err, "job %d: failed to decode hex progress", id)
-		}
-		md.Progress = &jobspb.Progress{}
-		if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
-			return errors.Wrap(err, "failed unmarshalling job progress")
-		}
+			last := len(fields) - 1
+			payloadBytes, err := hx.DecodeString(fields[last-1])
+			if err != nil {
+				// TODO(postamar): remove this check once payload redaction is improved
+				if fields[last-1] == "NULL" {
+					return nil
+				}
+				return errors.Wrapf(err, "job %d: failed to decode hex payload", id)
+			}
+			md.Payload = &jobspb.Payload{}
+			if err := protoutil.Unmarshal(payloadBytes, md.Payload); err != nil {
+				return errors.Wrap(err, "failed unmarshalling job payload")
+			}
 
-		jobsTable = append(jobsTable, md)
-		return nil
-	}); err != nil {
-		return nil, nil, nil, err
+			progressBytes, err := hx.DecodeString(fields[last])
+			if err != nil {
+				return errors.Wrapf(err, "job %d: failed to decode hex progress", id)
+			}
+			md.Progress = &jobspb.Progress{}
+			if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
+				return errors.Wrap(err, "failed unmarshalling job progress")
+			}
+
+			jobsTable = append(jobsTable, md)
+			return nil
+		}); err != nil {
+			return nil, nil, nil, err
+		}
+	} else {
+		jobsTableJSON := make([]struct {
+			ID       string `json:"id"`
+			Status   string `json:"status"`
+			Payload  string `json:"hex_payload"`
+			Progress string `json:"hex_progress"`
+		}, 0)
+		if err := parseJSONFile(zipDirPath, "system.jobs.json", &jobsTableJSON); err != nil {
+			return nil, nil, nil, errors.Wrapf(err, "failed to parse system.descriptor.json")
+		}
+		for _, job := range jobsTableJSON {
+			row := jobs.JobMetadata{
+				Status: jobs.Status(job.Status),
+			}
+			id, err := strconv.ParseInt(job.ID, 10, 64)
+			if len(job.ID) > 0 && err != nil {
+				return nil, nil, nil, errors.Wrapf(err, "failed to decode job ID %v", job)
+			}
+			row.ID = jobspb.JobID(id)
+			// Skip NULL job payloads.
+			if job.Payload == "NULL" {
+				continue
+			}
+			payloadBytes, err := hx.DecodeString(job.Payload)
+			if err != nil {
+				return nil, nil, nil, errors.Wrapf(err, "job %d: failed to decode hex payload", id)
+			}
+			row.Payload = &jobspb.Payload{}
+			if err := protoutil.Unmarshal(payloadBytes, row.Payload); err != nil {
+				return nil, nil, nil, errors.Wrap(err, "failed unmarshalling job payload")
+			}
+
+			progressBytes, err := hx.DecodeString(job.Progress)
+			if err != nil && job.Progress != "NULL" {
+				return nil, nil, nil, errors.Wrapf(err, "job %d: failed to decode hex progress", id)
+			}
+			row.Progress = &jobspb.Progress{}
+			if err := protoutil.Unmarshal(progressBytes, row.Progress); err != nil {
+				return nil, nil, nil, errors.Wrap(err, "failed unmarshalling job progress")
+			}
+			jobsTable = append(jobsTable,
+				row)
+		}
+	}
+	return descTable, namespaceTable, jobsTable, nil
+}
+
+func checkIfFileExists(zipDirPath string, fileName string) bool {
+	_, err := os.Stat(path.Join(zipDirPath, fileName))
+	return err == nil
+}
+
+// readJsonArray reads the given file as an array of JSON structs.
+func parseJSONFile(zipDirPath string, fileName string, result interface{}) error {
+	filePath := path.Join(zipDirPath, fileName)
+	// Check for existence of companion .err.txt file.
+	_, err := os.Stat(filePath + ".err.txt")
+	if err == nil {
+		// A .err.txt file exists.
+		fmt.Printf("WARNING: errors occurred during the production of %s, contents may be missing or incomplete.\n", fileName)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		// Handle unexpected errors.
+		return err
 	}
 
-	return descTable, namespaceTable, jobsTable, nil
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	decoder := json.NewDecoder(f)
+	return decoder.Decode(result)
 }
 
 // slurp reads a file in zipDirPath and processes its contents.
