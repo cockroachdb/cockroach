@@ -242,15 +242,20 @@ func (p *peer) maybeDelete(ctx context.Context, now time.Time) {
 	// Release metrics in the same critical section as p.deleted=true
 	// to make sure the metrics are not updated after release, since that
 	// causes the aggregate metrics to drift.
+	//
+	// We delete from the map first, then mark the peer as deleted. The converse
+	// works too, but it makes for flakier tests because it's possible to see the
+	// metrics change but the peer still being in the map.
+
+	p.peers.mu.Lock()
+	delete(p.peers.mu.m, p.k)
+	p.peers.mu.Unlock()
 
 	p.mu.Lock()
 	p.mu.deleted = true
 	p.peerMetrics.release()
 	p.mu.Unlock()
 
-	p.peers.mu.Lock()
-	delete(p.peers.mu.m, p.k)
-	p.peers.mu.Unlock()
 }
 
 func (p *peer) onInitialHeartbeatSucceeded(
