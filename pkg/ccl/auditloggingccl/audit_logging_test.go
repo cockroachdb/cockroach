@@ -1,14 +1,12 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sql
+package auditloggingccl
 
 import (
 	"context"
@@ -21,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -32,6 +31,24 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRoleBasedAuditEnterpriseGated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+
+	testQuery := `SET CLUSTER SETTING sql.log.user_audit = 'ALL ALL'`
+
+	// Test that we cannot change the cluster setting when enterprise is disabled.
+	enableEnterprise := utilccl.TestingDisableEnterprise()
+	rootRunner.ExpectErr(t, "role-based audit logging requires enterprise license", testQuery)
+	// Enable enterprise.
+	enableEnterprise()
+	// Test that we can change the cluster setting when enterprise is enabled.
+	rootRunner.Exec(t, testQuery)
+}
 
 func TestSingleRoleAuditLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
