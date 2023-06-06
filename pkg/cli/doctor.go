@@ -413,10 +413,20 @@ func fromZipDir(
 				return errors.Wrapf(err, "failed to parse id %s", fields[3])
 			}
 		}
-
+		// Attempt to unquote any strings, if they aren't quoted,
+		// we will use the original raw string.
+		unquotedName := fields[2]
+		if len(unquotedName) > 0 && unquotedName[0] == '"' {
+			unquotedName = unquotedName[1:]
+		}
+		if len(unquotedName) > 0 && unquotedName[len(unquotedName)-1] == '"' {
+			unquotedName = unquotedName[:len(unquotedName)-1]
+			// Next transform double quotes into single quotes.
+			unquotedName = strings.Replace(unquotedName, "\"\"", "\"", -1)
+		}
 		namespaceTable = append(namespaceTable, doctor.NamespaceTableRow{
 			NameInfo: descpb.NameInfo{
-				ParentID: descpb.ID(parID), ParentSchemaID: descpb.ID(parSchemaID), Name: fields[2],
+				ParentID: descpb.ID(parID), ParentSchemaID: descpb.ID(parSchemaID), Name: unquotedName,
 			},
 			ID: int64(id),
 		})
