@@ -5187,9 +5187,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 	}
 }
 
-// Test that DistSender.computeSendRUMultiplier returns the right computed read
-// and write RU multipliers.
-func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
+func TestDistSenderComputeNetworkCost(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -5209,11 +5207,19 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 	// Set regional cost multiplier table.
 	//                     | us-east1 | eu-central1 | asia-southeast1
 	//     -----------------------------------------------------------
-	//        us-east1     |    1     |     1.5     |       2.6
-	//       eu-central1   |   1.5    |      1      |       3.5
-	//     asia-southeast1 |   2.6    |     3.5     |        1
-	tenantcostmodel.RegionalCostMultiplierTableSetting.Override(ctx, &st.SV,
-		`{"regions":["us-east1","eu-central1","asia-southeast1"],"matrix":[[1,1.5,2.6],[1,3.5],[1]]}`)
+	//        us-east1     |    0     |      1      |       1.5
+	//       eu-central1   |    2     |      0      |       2.5
+	//     asia-southeast1 |    3     |     3.5     |        0
+	costTable := `{"regionPairs": [
+		{"fromRegion": "us-east1", "toRegion": "eu-central1", "cost": 1},
+		{"fromRegion": "us-east1", "toRegion": "asia-southeast1", "cost": 1.5},
+		{"fromRegion": "eu-central1", "toRegion": "us-east1", "cost": 2},
+		{"fromRegion": "eu-central1", "toRegion": "asia-southeast1", "cost": 2.5},
+		{"fromRegion": "asia-southeast1", "toRegion": "us-east1", "cost": 3},
+		{"fromRegion": "asia-southeast1", "toRegion": "eu-central1", "cost": 3.5}
+	]}`
+	require.NoError(t, tenantcostmodel.CrossRegionNetworkCostSetting.Validate(nil, costTable))
+	tenantcostmodel.CrossRegionNetworkCostSetting.Override(ctx, &st.SV, costTable)
 
 	modelCfg := tenantcostmodel.ConfigFromSettings(&st.SV)
 
@@ -5262,15 +5268,15 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 		desc          *roachpb.RangeDescriptor
 		replicas      ReplicaSlice
 		curReplica    *roachpb.ReplicaDescriptor
-		expectedRead  tenantcostmodel.RUMultiplier
-		expectedWrite tenantcostmodel.RUMultiplier
+		expectedRead  tenantcostmodel.NetworkCost
+		expectedWrite tenantcostmodel.NetworkCost
 	}{
 		{
 			name:          "no kv interceptor",
 			cfg:           &DistSenderConfig{},
 			desc:          newRangeDescriptor(5),
-			expectedRead:  1,
-			expectedWrite: 5,
+			expectedRead:  0,
+			expectedWrite: 0,
 		},
 		{
 			name: "no cost config",
@@ -5278,8 +5284,8 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 				KVInterceptor: &mockTenantSideCostController{},
 			},
 			desc:          newRangeDescriptor(2),
-			expectedRead:  1,
-			expectedWrite: 2,
+			expectedRead:  0,
+			expectedWrite: 0,
 		},
 		{
 			name: "no locality in current node",
@@ -5287,22 +5293,8 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
 			},
 			desc:          newRangeDescriptor(1),
-			expectedRead:  1,
-			expectedWrite: 1,
-		},
-		{
-			name: "replicas=nil/no replica slice",
-			cfg: &DistSenderConfig{
-				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
-				NodeDescs:     &mockNodeStore{}, // no output replicas
-				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
-					{Key: "region", Value: "eu-central1"},
-				}},
-			},
-			desc:          newRangeDescriptor(8),
-			replicas:      nil, // no input replicas
-			expectedRead:  1,
-			expectedWrite: 8,
+			expectedRead:  0,
+			expectedWrite: 0,
 		},
 		{
 			name: "replicas=nil/replicas no locality",
@@ -5324,13 +5316,20 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 			desc: newRangeDescriptor(2),
 			// Points to descriptor with NodeID 2.
 			curReplica:    &roachpb.ReplicaDescriptor{NodeID: 2, ReplicaID: 3},
-			expectedRead:  1,
-			expectedWrite: 2,
+			expectedRead:  0,
+			expectedWrite: 0,
 		},
 		{
 			name: "replicas!=nil/replicas no locality",
 			cfg: &DistSenderConfig{
 				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
+				NodeDescs: &mockNodeStore{
+					nodes: []roachpb.NodeDescriptor{
+						{NodeID: 1, Address: util.UnresolvedAddr{}},
+						{NodeID: 2, Address: util.UnresolvedAddr{}},
+						{NodeID: 3, Address: util.UnresolvedAddr{}},
+					},
+				},
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "eu-central1"},
 				}},
@@ -5342,8 +5341,8 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 				makeReplicaInfo(3, ""), // Missing region.
 			},
 			curReplica:    &roachpb.ReplicaDescriptor{ReplicaID: 3},
-			expectedRead:  1,
-			expectedWrite: 10,
+			expectedRead:  0,
+			expectedWrite: 0,
 		},
 		{
 			name: "some node descriptors not in gossip",
@@ -5351,9 +5350,9 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
-						makeNodeDescriptor(1, "us-east1"),        // 1.5
-						makeNodeDescriptor(2, "eu-central1"),     // 1
-						makeNodeDescriptor(3, "asia-southeast1"), // 3.5
+						makeNodeDescriptor(1, "us-east1"),        // 2.0
+						makeNodeDescriptor(2, "eu-central1"),     // 0
+						makeNodeDescriptor(3, "asia-southeast1"), // 2.5
 					},
 				},
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
@@ -5362,11 +5361,10 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 					{Key: "dc", Value: "dc3"},
 				}},
 			},
-			desc: newRangeDescriptor(6),
-			// Points to descriptor with NodeID 6.
+			desc:          newRangeDescriptor(6),
 			curReplica:    &roachpb.ReplicaDescriptor{NodeID: 6, ReplicaID: 7},
-			expectedRead:  1,
-			expectedWrite: 9,
+			expectedRead:  0,
+			expectedWrite: 2.0 + 2.5,
 		},
 		{
 			name: "all node descriptors in gossip",
@@ -5374,7 +5372,7 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
-						makeNodeDescriptor(1, "us-east1"), // 2.6
+						makeNodeDescriptor(1, "us-east1"), // 3.0
 					},
 				},
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
@@ -5383,9 +5381,9 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 			},
 			desc: newRangeDescriptor(1),
 			// Points to descriptor with NodeID 1.
-			curReplica:    &roachpb.ReplicaDescriptor{ReplicaID: 2},
-			expectedRead:  2.6,
-			expectedWrite: 2.6,
+			curReplica:    &roachpb.ReplicaDescriptor{NodeID: 1, ReplicaID: 2},
+			expectedRead:  1.5,
+			expectedWrite: 3.0,
 		},
 		{
 			name: "local operations on global table",
@@ -5393,9 +5391,9 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
-						makeNodeDescriptor(1, "us-east1"),        // 1 * 3
-						makeNodeDescriptor(2, "eu-central1"),     // 1.5
-						makeNodeDescriptor(3, "asia-southeast1"), // 2.6
+						makeNodeDescriptor(1, "us-east1"),        // 0 * 3
+						makeNodeDescriptor(2, "eu-central1"),     // 1.0
+						makeNodeDescriptor(3, "asia-southeast1"), // 1.5
 					},
 				},
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
@@ -5411,8 +5409,8 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 			}(),
 			// Points to descriptor with NodeID 1.
 			curReplica:    &roachpb.ReplicaDescriptor{ReplicaID: 2},
-			expectedRead:  1,
-			expectedWrite: 7.1,
+			expectedRead:  0,
+			expectedWrite: 1.0 + 1.5,
 		},
 		{
 			name: "remote operations on global table",
@@ -5420,9 +5418,9 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
-						makeNodeDescriptor(1, "us-east1"),        // 2.6 * 3
+						makeNodeDescriptor(1, "us-east1"),        // 3.0
 						makeNodeDescriptor(2, "eu-central1"),     // 3.5
-						makeNodeDescriptor(3, "asia-southeast1"), // 1
+						makeNodeDescriptor(3, "asia-southeast1"), // 0
 					},
 				},
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
@@ -5436,25 +5434,24 @@ func TestDistSenderComputeSendRUMultiplier(t *testing.T) {
 				rd.InternalReplicas[4].NodeID = 1
 				return rd
 			}(),
-			// Points to descriptor with NodeID 1.
-			curReplica:    &roachpb.ReplicaDescriptor{ReplicaID: 2},
-			expectedRead:  2.6,
-			expectedWrite: 12.3,
+			curReplica:    &roachpb.ReplicaDescriptor{NodeID: 1, ReplicaID: 2},
+			expectedRead:  1.5,
+			expectedWrite: 3.0*3 + 3.5,
 		},
 	} {
-		for _, isRead := range []bool{true, false} {
-			t.Run(fmt.Sprintf("isRead=%t/%s", isRead, tc.name), func(t *testing.T) {
+		for _, isWrite := range []bool{true, false} {
+			t.Run(fmt.Sprintf("isWrite=%t/%s", isWrite, tc.name), func(t *testing.T) {
 				tc.cfg.AmbientCtx = log.MakeTestingAmbientContext(tracing.NewTracer())
 				tc.cfg.RPCContext = rpcContext
 				tc.cfg.RangeDescriptorDB = rddb
 				tc.cfg.Settings = st
 				ds := NewDistSender(*tc.cfg)
 
-				res := ds.computeSendRUMultiplier(ctx, tc.desc, tc.replicas, tc.curReplica, isRead)
-				if isRead {
-					require.InDelta(t, float64(tc.expectedRead), float64(res), 0.01)
-				} else {
+				res := ds.computeNetworkCost(ctx, tc.desc, tc.curReplica, isWrite)
+				if isWrite {
 					require.InDelta(t, float64(tc.expectedWrite), float64(res), 0.01)
+				} else {
+					require.InDelta(t, float64(tc.expectedRead), float64(res), 0.01)
 				}
 			})
 		}
