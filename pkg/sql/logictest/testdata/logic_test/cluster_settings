@@ -78,6 +78,21 @@ WHERE variable IN ('sql.defaults.default_int_size')
 ----
 sql.defaults.default_int_size  4
 
+query TTTT
+SELECT variable, value, default_value, origin FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.index_recommendation.drop_unused_duration')
+----
+sql.index_recommendation.drop_unused_duration  168h0m0s 168h0m0s no-override
+
+statement ok
+SET CLUSTER SETTING sql.index_recommendation.drop_unused_duration = '10s'
+
+query TTTT
+SELECT variable, value, default_value, origin FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.index_recommendation.drop_unused_duration')
+----
+sql.index_recommendation.drop_unused_duration  10s 168h0m0s override
+
 user root
 
 statement ok
