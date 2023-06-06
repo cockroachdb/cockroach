@@ -434,11 +434,8 @@ var InitialScanOnlyUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, Opt
 // ParquetFormatUnsupportedOptions is options that are not supported with the
 // parquet format.
 //
-// OptKeyInValue is disallowed because parquet files have no concept of key
-// columns, so there is no reason to emit duplicate key datums.
-//
 // TODO(#103129): add support for some of these
-var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptDiff, OptKeyInValue, OptTopicInValue)
+var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptDiff, OptTopicInValue)
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter.
