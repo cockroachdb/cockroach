@@ -252,7 +252,7 @@ func TestReconnectAfterAddressChange(t *testing.T) {
 				}
 			}
 
-			return checkMetrics(clientCtx.Metrics(), 0, 1, 0, true)
+			return checkMetrics(clientCtx.Metrics(), 0, 1, 1, true)
 		})
 	}
 
