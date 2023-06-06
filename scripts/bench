@@ -10,7 +10,8 @@ EOF
   exit 1
 fi
 
-cd "$(dirname $0)/.."
+cd "$(git rev-parse --show-toplevel)"
+
 if [[ $# < 1 || $# > 2 ]]; then
   cat 1>&2 <<EOF
 Usage: BENCHES=regexp PKG=./pkg/yourpkg $0 oldbranch [newbranch]
@@ -41,12 +42,17 @@ echo "Writing to ${dest}"
 shas=($OLD $NEW)
 names=($OLDNAME $NEWNAME)
 
+benchtime=${T:-}
+if [[ benchtime ]]; then
+   benchtime="--bench-time=$benchtime"
+fi
+
 for (( i=0; i<${#shas[@]}; i+=1 )); do
   name=${names[i]}
   sha=${shas[i]}
   echo "Switching to $name"
   git checkout -q "$sha"
-  (set -x; ./dev bench ${PKG} --timeout=${BENCHTIMEOUT:-5m} --filter=${BENCHES} --count=10 --bench-mem -v --stream-output --ignore-cache > "${dest}/bench.${name}" 2> "${dest}/log.txt")
+  (set -x; ./dev bench ${PKG} --timeout=${BENCHTIMEOUT:-5m} --filter=${BENCHES} --count=${N:-10} $benchtime --bench-mem -v --stream-output --ignore-cache | tee "${dest}/bench.${name}" 2> "${dest}/log.txt")
 done
 
 benchstat "${dest}/bench.$OLDNAME" "${dest}/bench.$NEWNAME"
