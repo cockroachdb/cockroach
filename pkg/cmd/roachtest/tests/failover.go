@@ -157,6 +157,7 @@ func runFailoverChaos(
 
 	// Create cluster, and set up failers for all failure modes.
 	opts := option.DefaultStartOpts()
+	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
@@ -348,6 +349,7 @@ func runFailoverPartialLeaseGateway(
 
 	// Create cluster.
 	opts := option.DefaultStartOpts()
+	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
@@ -501,6 +503,7 @@ func runFailoverPartialLeaseLeader(
 	// n1-n3, to precisely place system ranges, since we'll have to disable the
 	// replicate queue shortly.
 	opts := option.DefaultStartOpts()
+	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
@@ -656,6 +659,7 @@ func runFailoverPartialLeaseLiveness(
 
 	// Create cluster.
 	opts := option.DefaultStartOpts()
+	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
@@ -799,6 +803,7 @@ func runFailoverNonSystem(
 
 	// Create cluster.
 	opts := option.DefaultStartOpts()
+	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
@@ -940,6 +945,7 @@ func runFailoverLiveness(
 
 	// Create cluster. Don't schedule a backup as this roachtest reports to roachperf.
 	opts := option.DefaultStartOptsNoBackups()
+	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
@@ -1085,6 +1091,7 @@ func runFailoverSystemNonLiveness(
 
 	// Create cluster.
 	opts := option.DefaultStartOpts()
+	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
