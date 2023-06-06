@@ -3151,8 +3151,13 @@ func (r *Replica) followerSendSnapshot(
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
-		if r.store.shouldIncrementCrossRegionSnapshotMetrics(ctx, req.CoordinatorReplica, req.RecipientReplica) {
+		isCrossRegion, isCrossZone := r.store.shouldIncrementCrossLocalitySnapshotMetrics(
+			ctx, req.CoordinatorReplica, req.RecipientReplica)
+		if isCrossRegion {
 			r.store.metrics.RangeSnapShotCrossRegionSentBytes.Inc(inc)
+		}
+		if isCrossZone {
+			r.store.metrics.RangeSnapShotCrossZoneSentBytes.Inc(inc)
 		}
 
 		switch header.Priority {

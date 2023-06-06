@@ -2296,12 +2296,12 @@ func getExpectedSnapshotSizeBytes(
 }
 
 // This test verifies the accuracy of snapshot metrics -
-// `range.snapshots.[rebalancing|cross-region].rcvd-bytes` and
-// `range.snapshots.[rebalancing|cross-region].sent-bytes`. It involves adding
-// two new replicas on different nodes within the cluster, resulting in two
-// learner snapshots sent cross region. The test then compares the metrics prior
-// to and after sending the snapshot to verify the accuracy.
-func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
+// `range.snapshots.[rebalancing|cross-region|cross-zone].rcvd-bytes` and
+// `range.snapshots.[rebalancing|cross-region|cross-zone].sent-bytes`. It
+// involves adding two new replicas on different nodes within the cluster,
+// resulting in two learner snapshots sent across. The test then compares the
+// metrics prior to and after sending the snapshot to verify the accuracy.
+func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2325,25 +2325,22 @@ func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 	}
 
 	// The initial setup ensures the correct configuration for three nodes (with
-	// different localities), single-range. Note that server[2] is configured
-	// without the inclusion of a "region" tier key.
+	// different localities), single-range.
 	const numNodes = 3
 	serverArgs := make(map[int]base.TestServerArgs)
+
+	// The servers localities are configured so that the first snapshot sent from
+	// server0 to server1 is cross-region but not cross-zone. The second snapshot
+	// sent from server0 to server2 is cross-zone but not cross-region.
+	serverLocalilty := [numNodes]roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}}},
+		{Tiers: []roachpb.Tier{{Key: "az", Value: "us-east-2"}}},
+	}
 	for i := 0; i < numNodes; i++ {
-		if i == 2 {
-			serverArgs[i] = base.TestServerArgs{
-				Locality: roachpb.Locality{
-					Tiers: []roachpb.Tier{{Key: "zone", Value: fmt.Sprintf("us-east-%va", i)}},
-				},
-				Knobs: knobs,
-			}
-		} else {
-			serverArgs[i] = base.TestServerArgs{
-				Locality: roachpb.Locality{
-					Tiers: []roachpb.Tier{{Key: "region", Value: fmt.Sprintf("us-east-%v", i)}},
-				},
-				Knobs: knobs,
-			}
+		serverArgs[i] = base.TestServerArgs{
+			Locality: serverLocalilty[i],
+			Knobs:    knobs,
 		}
 	}
 
@@ -2393,16 +2390,16 @@ func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 		return snapshotLength
 	}
 
-	metrics := []string{".rebalancing", ".recovery", ".unknown", ".cross-region", ""}
+	metrics := []string{".rebalancing", ".recovery", ".unknown", ".cross-region", ".cross-zone", ""}
 	// Record the snapshot metrics before anything has been sent / received.
 	senderBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */, metrics)
 	firstReceiverBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
 	secReceiverBefore := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */, metrics)
 
-	// The first replica is added as a non-voter to help avoid issues in stress
-	// testing. A possible explanation is - if the first replica was added as a
-	// non-voter, it can be stuck in a state to receive the snapshot. This can
-	// cause failure to reach quorum during the second snapshot transfer.
+	// The first replica is added as a non-voter to help avoid failure in stress
+	// testing. A possible explanation in the failure is - if the first replica
+	// was added as a voter, it can be stuck in a state to receive the snapshot.
+	// This can cause failure to reach quorum during the second snapshot transfer.
 	firstSnapshotLength := sendSnapshotToServer(1, tc.AddNonVoters)
 	secSnapshotLength := sendSnapshotToServer(2, tc.AddVoters)
 	totalSnapshotLength := firstSnapshotLength + secSnapshotLength
@@ -2418,10 +2415,13 @@ func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 			".rebalancing": {sentBytes: totalSnapshotLength, rcvdBytes: 0},
 			".recovery":    {sentBytes: 0, rcvdBytes: 0},
 			".unknown":     {sentBytes: 0, rcvdBytes: 0},
-			// Assert that the cross-region metrics should remain unchanged (since
-			// server[2]'s locality does not include a "region" tier key).
+			// The first snapshot was sent from server0 to server1, so it is
+			// cross-region but not cross-zone.
 			".cross-region": {sentBytes: firstSnapshotLength, rcvdBytes: 0},
-			"":              {sentBytes: totalSnapshotLength, rcvdBytes: 0},
+			// The second snapshot was sent from server0 to server2, so it is
+			// cross-zone but not cross-region.
+			".cross-zone": {sentBytes: secSnapshotLength, rcvdBytes: 0},
+			"":            {sentBytes: totalSnapshotLength, rcvdBytes: 0},
 		}
 		require.Equal(t, senderExpected, senderDelta)
 	})
@@ -2432,10 +2432,13 @@ func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 		firstReceiverMetricsAfter := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
 		firstReceiverDelta := getSnapshotMetricsDiff(firstReceiverBefore, firstReceiverMetricsAfter)
 		firstReceiverExpected := map[string]snapshotBytesMetrics{
-			".rebalancing":  {sentBytes: 0, rcvdBytes: firstSnapshotLength},
-			".recovery":     {sentBytes: 0, rcvdBytes: 0},
-			".unknown":      {sentBytes: 0, rcvdBytes: 0},
+			".rebalancing": {sentBytes: 0, rcvdBytes: firstSnapshotLength},
+			".recovery":    {sentBytes: 0, rcvdBytes: 0},
+			".unknown":     {sentBytes: 0, rcvdBytes: 0},
+			// The first snapshot was sent from server0 to server1, so it is
+			// cross-region but not cross-zone.
 			".cross-region": {sentBytes: 0, rcvdBytes: firstSnapshotLength},
+			".cross-zone":   {sentBytes: 0, rcvdBytes: 0},
 			"":              {sentBytes: 0, rcvdBytes: firstSnapshotLength},
 		}
 		require.Equal(t, firstReceiverExpected, firstReceiverDelta)
@@ -2450,9 +2453,10 @@ func TestRebalancingAndCrossRegionSnapshotMetrics(t *testing.T) {
 			".rebalancing": {sentBytes: 0, rcvdBytes: secSnapshotLength},
 			".recovery":    {sentBytes: 0, rcvdBytes: 0},
 			".unknown":     {sentBytes: 0, rcvdBytes: 0},
-			// Assert that the cross-region metrics should remain unchanged (since
-			// server[2]'s locality does not include a "region" tier key).
+			// The second snapshot was sent from server0 to server2, so it is
+			// cross-zone but not cross-region.
 			".cross-region": {sentBytes: 0, rcvdBytes: 0},
+			".cross-zone":   {sentBytes: 0, rcvdBytes: secSnapshotLength},
 			"":              {sentBytes: 0, rcvdBytes: secSnapshotLength},
 		}
 		require.Equal(t, secReceiverExpected, secReceiverDelta)

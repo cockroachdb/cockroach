@@ -972,17 +972,20 @@ func (s *Store) checkSnapshotOverlapLocked(
 	return nil
 }
 
-// shouldIncrementCrossRegionSnapshotMetrics returns true if the two replicas
-// given are cross-region, and false otherwise.
-func (s *Store) shouldIncrementCrossRegionSnapshotMetrics(
+// shouldIncrementCrossLocalitySnapshotMetrics returns (bool, bool) - indicating
+// if the two given replicas are cross-region and cross-zone respectively.
+func (s *Store) shouldIncrementCrossLocalitySnapshotMetrics(
 	ctx context.Context, firstReplica roachpb.ReplicaDescriptor, secReplica roachpb.ReplicaDescriptor,
-) bool {
-	isCrossRegion, err := s.cfg.StorePool.IsCrossRegion(firstReplica, secReplica)
-	if err != nil {
-		log.VEventf(ctx, 2, "unable to determine if snapshot is cross region %v", err)
-		return false
+) (bool, bool) {
+	isCrossRegion, regionErr, isCrossZone, zoneErr := s.cfg.StorePool.IsCrossRegionCrossZone(
+		firstReplica, secReplica)
+	if regionErr != nil {
+		log.VEventf(ctx, 2, "unable to determine if snapshot is cross region %v", regionErr)
 	}
-	return isCrossRegion
+	if zoneErr != nil {
+		log.VEventf(ctx, 2, "unable to determine if snapshot is cross zone %v", zoneErr)
+	}
+	return isCrossRegion, isCrossZone
 }
 
 // receiveSnapshot receives an incoming snapshot via a pre-opened GRPC stream.
@@ -1102,9 +1105,13 @@ func (s *Store) receiveSnapshot(
 	recordBytesReceived := func(inc int64) {
 		s.metrics.RangeSnapshotRcvdBytes.Inc(inc)
 
-		if s.shouldIncrementCrossRegionSnapshotMetrics(
-			ctx, header.RaftMessageRequest.FromReplica, header.RaftMessageRequest.ToReplica) {
+		isCrossRegion, isCrossZone := s.shouldIncrementCrossLocalitySnapshotMetrics(
+			ctx, header.RaftMessageRequest.FromReplica, header.RaftMessageRequest.ToReplica)
+		if isCrossRegion {
 			s.metrics.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
+		}
+		if isCrossZone {
+			s.metrics.RangeSnapShotCrossZoneRcvdBytes.Inc(inc)
 		}
 
 		switch header.Priority {
