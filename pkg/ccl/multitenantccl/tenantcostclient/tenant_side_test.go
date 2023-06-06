@@ -165,12 +165,12 @@ func (ts *testState) stop() {
 }
 
 type cmdArgs struct {
-	count        int64
-	bytes        int64
-	repeat       int64
-	label        string
-	wait         bool
-	ruMultiplier float64
+	count       int64
+	bytes       int64
+	repeat      int64
+	label       string
+	wait        bool
+	networkCost float64
 }
 
 func parseBytesVal(arg datadriven.CmdArg) (int64, error) {
@@ -234,15 +234,17 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 				d.Fatalf(t, "invalid wait value")
 			}
 
-		case "ruMultiplier":
+		case "networkCost":
 			if len(args.Vals) != 1 {
-				d.Fatalf(t, "expected one value for ruMultiplier")
+				d.Fatalf(t, "expected one value for networkCost")
 			}
 			val, err := strconv.ParseFloat(args.Vals[0], 64)
 			if err != nil {
-				d.Fatalf(t, "invalid ruMultiplier value")
+				d.Fatalf(t, "invalid networkCost value")
 			}
-			res.ruMultiplier = val
+			res.networkCost = val
+		default:
+			d.Fatalf(t, "uknown command: '%s'", args.Key)
 		}
 	}
 	return res
@@ -313,24 +315,18 @@ func (ts *testState) request(
 	}
 
 	var writeCount, readCount, writeBytes, readBytes int64
-	var writeRUMultiplier, readRUMultiplier tenantcostmodel.RUMultiplier
+	var writeNetworkCost, readNetworkCost tenantcostmodel.NetworkCost
 	if isWrite {
 		writeCount = args.count
 		writeBytes = args.bytes
-		writeRUMultiplier = tenantcostmodel.RUMultiplier(args.ruMultiplier)
-		if writeRUMultiplier == 0 {
-			writeRUMultiplier = 1
-		}
+		writeNetworkCost = tenantcostmodel.NetworkCost(args.networkCost)
 	} else {
 		readCount = args.count
 		readBytes = args.bytes
-		readRUMultiplier = tenantcostmodel.RUMultiplier(args.ruMultiplier)
-		if readRUMultiplier == 0 {
-			readRUMultiplier = 1
-		}
+		readNetworkCost = tenantcostmodel.NetworkCost(args.networkCost)
 	}
-	reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes, writeRUMultiplier)
-	respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes, readRUMultiplier)
+	reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes, writeNetworkCost)
+	respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes, readNetworkCost)
 
 	for ; repeat > 0; repeat-- {
 		ts.runOperation(t, d, args.label, func() {
@@ -788,7 +784,7 @@ func TestWaitingRU(t *testing.T) {
 
 	// Immediately consume the initial 10K RUs.
 	require.NoError(t, ctrl.OnResponseWait(ctx,
-		tenantcostmodel.TestingRequestInfo(1, 1, 10237952, 1), tenantcostmodel.ResponseInfo{}))
+		tenantcostmodel.TestingRequestInfo(1, 1, 10237952, 0), tenantcostmodel.ResponseInfo{}))
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -806,7 +802,7 @@ func TestWaitingRU(t *testing.T) {
 	// Send 20 KV requests for 1K RU each.
 	const count = 20
 	const fillRate = 100
-	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, 1)
+	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, 0)
 	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0, 0)
 
 	testutils.SucceedsWithin(t, func() error {
