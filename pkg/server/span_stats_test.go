@@ -8,23 +8,23 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package server_test
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -34,15 +34,13 @@ import (
 func TestLocalSpanStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{DisableCanAckBeforeApplication: true},
-		},
-	})
-	s := serv.(*TestServer)
-	defer s.Stopper().Stop(ctx)
+	numNodes := 3
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s := tc.Server(0).(*server.TestServer)
+
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	// Create a number of ranges using splits.
@@ -104,15 +102,15 @@ func TestLocalSpanStats(t *testing.T) {
 	}
 
 	testCases := []testCase{
-		{spans[0], 4, 6},
-		{spans[1], 1, 3},
-		{spans[2], 2, 5},
-		{spans[3], 2, 1},
-		{spans[4], 2, 3},
-		{spans[5], 1, 2},
+		{spans[0], 4, int64(numNodes * 6)},
+		{spans[1], 1, int64(numNodes * 3)},
+		{spans[2], 2, int64(numNodes * 5)},
+		{spans[3], 2, int64(numNodes * 1)},
+		{spans[4], 2, int64(numNodes * 3)},
+		{spans[5], 1, int64(numNodes * 2)},
 	}
 	// Multi-span request
-	multiResult, err := s.status.getLocalStats(ctx,
+	multiResult, err := s.StatusServer().(serverpb.StatusServer).SpanStats(ctx,
 		&roachpb.SpanStatsRequest{
 			NodeID: "0",
 			Spans:  spans,
@@ -127,10 +125,30 @@ func TestLocalSpanStats(t *testing.T) {
 
 		// Assert expected values from multi-span request
 		spanStats := multiResult.SpanToStats[tcase.span.String()]
-		require.Equal(t, spanStats.RangeCount, tcase.expectedRanges, fmt.Sprintf(
-			"Multi-span: expected %d ranges in span [%s - %s], found %d", tcase.expectedRanges, rSpan.Key.String(), rSpan.EndKey.String(), spanStats.RangeCount))
-		require.Equal(t, spanStats.TotalStats.LiveCount, tcase.expectedKeys, fmt.Sprintf(
-			"Multi-span: expected %d keys in span [%s - %s], found %d", tcase.expectedKeys, rSpan.Key.String(), rSpan.EndKey.String(), spanStats.TotalStats.LiveCount))
+		require.Equal(
+			t,
+			tcase.expectedRanges,
+			spanStats.RangeCount,
+			fmt.Sprintf(
+				"Multi-span: expected %d ranges in span [%s - %s], found %d",
+				tcase.expectedRanges,
+				rSpan.Key.String(),
+				rSpan.EndKey.String(),
+				spanStats.RangeCount,
+			),
+		)
+		require.Equal(
+			t,
+			tcase.expectedKeys,
+			spanStats.TotalStats.LiveCount,
+			fmt.Sprintf(
+				"Multi-span: expected %d keys in span [%s - %s], found %d",
+				tcase.expectedKeys,
+				rSpan.Key.String(),
+				rSpan.EndKey.String(),
+				spanStats.TotalStats.LiveCount,
+			),
+		)
 	}
 }
 
@@ -193,22 +211,24 @@ func BenchmarkSpanStats(b *testing.B) {
 					var spans []roachpb.Span
 
 					// Create a table spans
-					var spanStartKey roachpb.Key
 					for i := 0; i < ts.numSpans; i++ {
-						spanStartKey = nil
+						spanStartKey := makeKey(
+							tenantPrefix,
+							[]byte{byte(i)},
+						)
+						spanEndKey := makeKey(
+							tenantPrefix,
+							[]byte{byte(i + 1)},
+						)
 						// Create ranges.
-						var key roachpb.Key
 						for j := 0; j < ts.numRanges; j++ {
-							key = makeKey(tenantPrefix, []byte(strconv.Itoa(i*j)))
-							if spanStartKey == nil {
-								spanStartKey = key
-							}
-							_, _, err := tc.Server(0).SplitRange(key)
+							splitKey := makeKey(spanStartKey, []byte{byte(j)})
+							_, _, err := tc.Server(0).SplitRange(splitKey)
 							require.NoError(b, err)
 						}
 						spans = append(spans, roachpb.Span{
 							Key:    spanStartKey,
-							EndKey: key,
+							EndKey: spanEndKey,
 						})
 					}
 

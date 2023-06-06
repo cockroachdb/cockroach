@@ -15,7 +15,8 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -39,7 +40,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 	// Response level error
 	var respErr error
 
-	spansPerNode, err := s.getSpansPerNode(ctx, req, s.distSender)
+	spansPerNode, err := s.getSpansPerNode(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +87,6 @@ func (s *systemStatusServer) spanStatsFanOut(
 			} else {
 				res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
 				res.SpanToStats[spanStr].TotalStats.Add(spanStats.TotalStats)
-				res.SpanToStats[spanStr].RangeCount += spanStats.RangeCount
 			}
 		}
 	}
@@ -114,41 +114,48 @@ func (s *systemStatusServer) getLocalStats(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
 ) (*roachpb.SpanStatsResponse, error) {
 	var res = &roachpb.SpanStatsResponse{SpanToStats: make(map[string]*roachpb.SpanStats)}
-	ri := kvcoord.MakeRangeIterator(s.distSender)
-
-	// For each span
-	for _, span := range req.Spans {
-		rSpan, err := keys.SpanAddr(span)
-		if err != nil {
-			return nil, err
+	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		for _, span := range req.Spans {
+			spanStats, err := s.statsForSpan(ctx, txn, span)
+			if err != nil {
+				return err
+			}
+			// Note: Even if this function retries, this side effect is safe.
+			res.SpanToStats[span.String()] = spanStats
 		}
-		// Seek to the span's start key.
-		ri.Seek(ctx, rSpan.Key, kvcoord.Ascending)
-		spanStats, err := s.statsForSpan(ctx, ri, rSpan)
-		if err != nil {
-			return nil, err
-		}
-		res.SpanToStats[span.String()] = spanStats
-	}
-	return res, nil
+		return nil
+	})
+	return res, err
 }
 
 func (s *systemStatusServer) statsForSpan(
-	ctx context.Context, ri kvcoord.RangeIterator, rSpan roachpb.RSpan,
+	ctx context.Context, txn *kv.Txn, span roachpb.Span,
 ) (*roachpb.SpanStats, error) {
-	// Seek to the span's start key.
-	ri.Seek(ctx, rSpan.Key, kvcoord.Ascending)
+	kvs, err := kvclient.ScanMetaKVs(ctx, txn, span)
+	if err != nil {
+		return nil, err
+	}
+
+	var descriptors []roachpb.RangeDescriptor
+	for _, metaKv := range kvs {
+		var rangeDescriptor roachpb.RangeDescriptor
+		err := metaKv.ValueProto(&rangeDescriptor)
+		if err != nil {
+			return nil, err
+		}
+		descriptors = append(descriptors, rangeDescriptor)
+	}
+
 	spanStats := &roachpb.SpanStats{}
 	var fullyContainedKeysBatch []roachpb.Key
-	var err error
+	rSpan, err := keys.SpanAddr(span)
+	if err != nil {
+		return nil, err
+	}
 	// Iterate through the span's ranges.
-	for {
-		if !ri.Valid() {
-			return nil, ri.Error()
-		}
+	for _, desc := range descriptors {
 
 		// Get the descriptor for the current range of the span.
-		desc := ri.Desc()
 		descSpan := desc.RSpan()
 		spanStats.RangeCount += 1
 
@@ -200,11 +207,6 @@ func (s *systemStatusServer) statsForSpan(
 				return nil, err
 			}
 		}
-
-		if !ri.NeedAnother(rSpan) {
-			break
-		}
-		ri.Next(ctx)
 	}
 	// If we still have some remaining ranges, request range stats for the current batch.
 	if len(fullyContainedKeysBatch) > 0 {
@@ -270,28 +272,57 @@ func (s *systemStatusServer) getSpanStatsInternal(
 }
 
 func (s *systemStatusServer) getSpansPerNode(
-	ctx context.Context, req *roachpb.SpanStatsRequest, ds *kvcoord.DistSender,
+	ctx context.Context, req *roachpb.SpanStatsRequest,
 ) (map[roachpb.NodeID][]roachpb.Span, error) {
 	// Mapping of node ids to spans with a replica on the node.
 	spansPerNode := make(map[roachpb.NodeID][]roachpb.Span)
 
-	// Iterate over the request spans.
-	for _, span := range req.Spans {
-		rSpan, err := keys.SpanAddr(span)
+	// Get the node ids belonging to the span.
+	var nodeIDs []roachpb.NodeID
+	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		// Iterate over the request spans.
+		for _, span := range req.Spans {
+			nodeIDs, err = nodeIDsForSpan(ctx, txn, span)
+			if err != nil {
+				return err
+			}
+			// Add the span to the map for each of the node IDs it belongs to.
+			for _, nodeID := range nodeIDs {
+				spansPerNode[nodeID] = append(spansPerNode[nodeID], span)
+			}
+		}
+		return nil
+	})
+
+	return spansPerNode, err
+}
+
+// nodeIDsForSpan returns a list of nodeIDs that contain at least one replica
+// for the argument span. Descriptors are found via ScanMetaKVs.
+func nodeIDsForSpan(ctx context.Context, txn *kv.Txn, span roachpb.Span) ([]roachpb.NodeID, error) {
+	nodeIDs := make(map[roachpb.NodeID]struct{})
+	kvs, err := kvclient.ScanMetaKVs(ctx, txn, span)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, metaKV := range kvs {
+		var rangeDescriptor roachpb.RangeDescriptor
+		err := metaKV.ValueProto(&rangeDescriptor)
 		if err != nil {
 			return nil, err
 		}
-		// Get the node ids belonging to the span.
-		nodeIDs, _, err := nodeIDsAndRangeCountForSpan(ctx, ds, rSpan)
-		if err != nil {
-			return nil, err
-		}
-		// Add the span to the map for each of the node IDs it belongs to.
-		for _, nodeID := range nodeIDs {
-			spansPerNode[nodeID] = append(spansPerNode[nodeID], span)
+		for _, repl := range rangeDescriptor.Replicas().Descriptors() {
+			nodeIDs[repl.NodeID] = struct{}{}
 		}
 	}
-	return spansPerNode, nil
+
+	nodeIDList := make([]roachpb.NodeID, 0, len(nodeIDs))
+	for id := range nodeIDs {
+		nodeIDList = append(nodeIDList, id)
+	}
+
+	return nodeIDList, nil
 }
 
 func flushBatchedContainedKeys(
