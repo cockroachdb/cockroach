@@ -10,7 +10,10 @@
 
 package settings
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Setting is the interface exposing the metadata for a cluster setting.
 //
@@ -159,3 +162,10 @@ const (
 	// via a host-cluster override for this or all tenant(s).
 	OriginExternallySet
 )
+
+func (v ValueOrigin) String() string {
+	if v > OriginExternallySet {
+		return fmt.Sprintf("invalid (%d)", v)
+	}
+	return [...]string{"default", "override", "external-override"}[v]
+}
