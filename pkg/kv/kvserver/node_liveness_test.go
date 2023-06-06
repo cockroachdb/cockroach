@@ -667,14 +667,14 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	verifyLiveness(t, tc)
 	pauseNodeLivenessHeartbeatLoops(tc)
 	nl := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
-	lMap := nl.GetIsLiveMap()
+	lMap := nl.ScanNodeVitalityFromCache()
 	l1, _ := nl.GetLiveness(1)
 	l2, _ := nl.GetLiveness(2)
 	l3, _ := nl.GetLiveness(3)
-	expectedLMap := livenesspb.IsLiveMap{
-		1: {Liveness: l1.Liveness, IsLive: true},
-		2: {Liveness: l2.Liveness, IsLive: true},
-		3: {Liveness: l3.Liveness, IsLive: true},
+	expectedLMap := livenesspb.NodeVitalityMap{
+		1: l1.Liveness.CreateNodeVitality(livenesspb.VitalityAlive, true),
+		2: l2.Liveness.CreateNodeVitality(livenesspb.VitalityAlive, false),
+		3: l3.Liveness.CreateNodeVitality(livenesspb.VitalityAlive, false),
 	}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
@@ -703,14 +703,14 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	})
 
 	// Now verify only node 0 is live.
-	lMap = nl.GetIsLiveMap()
+	lMap = nl.ScanNodeVitalityFromCache()
 	l1, _ = nl.GetLiveness(1)
 	l2, _ = nl.GetLiveness(2)
 	l3, _ = nl.GetLiveness(3)
-	expectedLMap = livenesspb.IsLiveMap{
-		1: {Liveness: l1.Liveness, IsLive: true},
-		2: {Liveness: l2.Liveness, IsLive: false},
-		3: {Liveness: l3.Liveness, IsLive: false},
+	expectedLMap = livenesspb.NodeVitalityMap{
+		1: l1.Liveness.CreateNodeVitality(livenesspb.VitalityAlive, true),
+		2: l2.Liveness.CreateNodeVitality(livenesspb.VitalityUnavailable, false),
+		3: l3.Liveness.CreateNodeVitality(livenesspb.VitalityUnavailable, false),
 	}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
@@ -742,11 +742,11 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 	nl := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
 	actualLMapNodes := make(map[roachpb.NodeID]struct{})
 	originalExpiration := testStartTime + nl.TestingGetLivenessThreshold().Nanoseconds()
-	for id, l := range nl.GetIsLiveMap() {
-		if a, e := l.Epoch, int64(1); a != e {
+	for id, v := range nl.ScanNodeVitalityFromCache() {
+		if a, e := v.Liveness.Epoch, int64(1); a != e {
 			t.Errorf("liveness record had epoch %d, wanted %d", a, e)
 		}
-		if a, e := l.Expiration.WallTime, originalExpiration; a < e {
+		if a, e := v.Liveness.Expiration.WallTime, originalExpiration; a < e {
 			t.Errorf("liveness record had expiration %d, wanted %d", a, e)
 		}
 		actualLMapNodes[id] = struct{}{}
@@ -773,15 +773,15 @@ func TestNodeLivenessGetLivenesses(t *testing.T) {
 
 	// Verify that node liveness receives the change.
 	actualLMapNodes = make(map[roachpb.NodeID]struct{})
-	for id, l := range nl.GetIsLiveMap() {
-		if a, e := l.Epoch, int64(1); a != e {
+	for id, v := range nl.ScanNodeVitalityFromCache() {
+		if a, e := v.Liveness.Epoch, int64(1); a != e {
 			t.Errorf("liveness record had epoch %d, wanted %d", a, e)
 		}
 		expectedExpiration := originalExpiration
-		if l.NodeID == 1 {
+		if v.Liveness.NodeID == 1 {
 			expectedExpiration += nl.TestingGetLivenessThreshold().Nanoseconds() + 1
 		}
-		if a, e := l.Expiration.WallTime, expectedExpiration; a < e {
+		if a, e := v.Liveness.Expiration.WallTime, expectedExpiration; a < e {
 			t.Errorf("liveness record had expiration %d, wanted %d", a, e)
 		}
 		actualLMapNodes[id] = struct{}{}

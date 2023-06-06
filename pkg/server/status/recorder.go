@@ -444,7 +444,7 @@ func (mr *MetricsRecorder) getNetworkActivity(
 ) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
 	activity := make(map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity)
 	if mr.nodeLiveness != nil {
-		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
+		isLiveMap := mr.nodeLiveness.ScanNodeVitalityFromCache()
 
 		var currentAverages map[roachpb.NodeID]time.Duration
 		if mr.remoteClocks != nil {
@@ -452,7 +452,7 @@ func (mr *MetricsRecorder) getNetworkActivity(
 		}
 		for nodeID, entry := range isLiveMap {
 			na := statuspb.NodeStatus_NetworkActivity{}
-			if entry.IsLive {
+			if entry.IsAlive() {
 				if latency, ok := currentAverages[nodeID]; ok {
 					na.Latency = latency.Nanoseconds()
 				}

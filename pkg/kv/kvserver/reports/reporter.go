@@ -208,9 +208,8 @@ func (stats *Reporter) update(
 		return allStores[id]
 	}
 
-	isLiveMap := stats.liveness.GetIsLiveMap()
 	isNodeLive := func(nodeID roachpb.NodeID) bool {
-		return isLiveMap[nodeID].IsLive
+		return stats.liveness.GetNodeVitalityFromCache(nodeID).IsAlive()
 	}
 
 	nodeLocalities := make(map[roachpb.NodeID]roachpb.Locality, len(allStores))

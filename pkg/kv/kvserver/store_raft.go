@@ -663,7 +663,6 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 		return false
 	}
 
-	livenessMap, _ := s.livenessMap.Load().(livenesspb.IsLiveMap)
 	ioThresholds := s.ioThresholds.Current()
 
 	// Record the CPU time processing the request for this replica. This is
@@ -672,7 +671,7 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	start := timeutil.Now()
 	ctx := r.raftCtx
 
-	exists, err := r.tick(ctx, livenessMap, ioThresholds)
+	exists, err := r.tick(ctx, ioThresholds)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
 	}
@@ -691,14 +690,7 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 //	If a quorum of replica in a Raft group is alive and at least
 //	one of these replicas is up-to-date, the Raft group will catch
 //	up any of the live, lagging replicas.
-//
-// Note that this mechanism can race with concurrent invocations of processTick,
-// which may have a copy of the previous livenessMap where the now-live node is
-// down. Those instances should be rare, however, and we expect the newly live
-// node to eventually unquiesce the range.
 func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
-	s.updateLivenessMap()
-
 	s.mu.replicasByRangeID.Range(func(r *Replica) {
 		r.mu.RLock()
 		quiescent := r.mu.quiescent
@@ -753,10 +745,6 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			// Update the liveness map.
-			if s.cfg.NodeLiveness != nil {
-				s.updateLivenessMap()
-			}
 			s.updateIOThresholdMap()
 
 			s.unquiescedReplicas.Lock()
@@ -798,30 +786,6 @@ func (s *Store) updateIOThresholdMap() {
 		log.Infof(
 			s.AnnotateCtx(context.Background()), "pausable stores: %+v", cur)
 	}
-}
-
-func (s *Store) updateLivenessMap() {
-	nextMap := s.cfg.NodeLiveness.GetIsLiveMap()
-	for nodeID, entry := range nextMap {
-		if entry.IsLive {
-			continue
-		}
-		// Liveness claims that this node is down, but ConnHealth gets the last say
-		// because we'd rather quiesce a range too little than one too often. Note
-		// that this policy is different from the one governing the releasing of
-		// proposal quota; see comments over there.
-		//
-		// NB: This has false negatives. If a node doesn't have a conn open to it
-		// when ConnHealth is called, then ConnHealth will return
-		// rpc.ErrNotHeartbeated regardless of whether the node is up or not. That
-		// said, for the nodes that matter, we're likely talking to them via the
-		// Raft transport, so ConnHealth should usually indicate a real problem if
-		// it gives us an error back. The check can also have false positives if the
-		// node goes down after populating the map, but that matters even less.
-		entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
-		nextMap[nodeID] = entry
-	}
-	s.livenessMap.Store(nextMap)
 }
 
 // Since coalesced heartbeats adds latency to heartbeat messages, it is

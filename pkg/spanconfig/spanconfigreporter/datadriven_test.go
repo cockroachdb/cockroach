@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -242,13 +243,21 @@ func newMockCluster(
 	}
 }
 
-// GetIsLiveMap implements spanconfigreporter.Liveness.
-func (s *mockCluster) GetIsLiveMap() livenesspb.IsLiveMap {
-	isLiveMap := livenesspb.IsLiveMap{}
+// ScanNodeVitalityFromCache implements spanconfigreporter.Liveness.
+func (s *mockCluster) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	isLiveMap := make(livenesspb.NodeVitalityMap)
 	for nid, isLive := range s.liveness {
-		isLiveMap[nid] = livenesspb.IsLiveMapEntry{
-			IsLive: isLive,
+		health := livenesspb.VitalityAlive
+		if !isLive {
+			health = livenesspb.VitalityDead
 		}
+		livenesspb.Liveness{
+			NodeID:     nid,
+			Epoch:      1,
+			Expiration: hlc.LegacyTimestamp{},
+			Draining:   false,
+			Membership: livenesspb.MembershipStatus_ACTIVE,
+		}.CreateNodeVitality(health, true)
 	}
 	return isLiveMap
 }

@@ -944,14 +944,6 @@ func (nl *NodeLiveness) Self() (_ livenesspb.Liveness, ok bool) {
 	return rec.Liveness, true
 }
 
-// GetIsLiveMap returns a map of nodeID to boolean liveness status of
-// each node. This excludes nodes that were removed completely (dead +
-// decommissioning).
-// TODO(baptist): Remove.
-func (nl *NodeLiveness) GetIsLiveMap() livenesspb.IsLiveMap {
-	return nl.cache.GetIsLiveMap()
-}
-
 // ScanNodeVitalityFromCache returns a map of nodeID to boolean liveness status
 // of each node from the cache. This excludes nodes that were decommissioned.
 // Decommissioned nodes are kept in the KV store and the cache forever, but are

@@ -35,7 +35,7 @@ func (s *systemStatusServer) ProblemRanges(
 		ProblemsByNodeID: make(map[roachpb.NodeID]serverpb.ProblemRangesResponse_NodeProblems),
 	}
 
-	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	var isLiveMap map[roachpb.NodeID]livenesspb.NodeVitality
 	// If there is a specific nodeID requested, limited the responses to
 	// just that node.
 	if len(req.NodeID) > 0 {
@@ -43,9 +43,9 @@ func (s *systemStatusServer) ProblemRanges(
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
-		isLiveMap = livenesspb.IsLiveMap{
-			requestedNodeID: livenesspb.IsLiveMapEntry{IsLive: true},
-		}
+		isLiveMap = map[roachpb.NodeID]livenesspb.NodeVitality{requestedNodeID: s.nodeLiveness.GetNodeVitalityFromCache(requestedNodeID)}
+	} else {
+		isLiveMap = s.nodeLiveness.ScanNodeVitalityFromCache()
 	}
 
 	type nodeResponse struct {

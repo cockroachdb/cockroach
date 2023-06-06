@@ -166,7 +166,7 @@ func replicaIsSuspect(repl *Replica) bool {
 		return ok && !liveness.Membership.Active()
 	}
 
-	livenessMap := repl.store.cfg.NodeLiveness.GetIsLiveMap()
+	livenessMap := repl.store.cfg.NodeLiveness.ScanNodeVitalityFromCache()
 	switch raftStatus.SoftState.RaftState {
 	// If a replica is a candidate, then by definition it has lost contact with
 	// its leader and possibly the rest of the Raft group, so consider it suspect.
@@ -181,7 +181,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	// conditions, but if it fails it will be GCed within 12 hours anyway.
 	case raft.StateFollower:
 		leadDesc, ok := repl.Desc().GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead))
-		if !ok || !livenessMap[leadDesc.NodeID].IsLive {
+		if !ok || !livenessMap[leadDesc.NodeID].IsAlive() {
 			return true
 		}
 
@@ -190,7 +190,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	// which must cause the stale leader to relinquish its lease and GC itself.
 	case raft.StateLeader:
 		if !repl.Desc().Replicas().CanMakeProgress(func(d roachpb.ReplicaDescriptor) bool {
-			return livenessMap[d.NodeID].IsLive
+			return livenessMap[d.NodeID].IsAlive()
 		}) {
 			return true
 		}
