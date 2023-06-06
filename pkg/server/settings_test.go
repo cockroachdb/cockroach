@@ -276,7 +276,7 @@ func TestSettingsShowAll(t *testing.T) {
 	if len(rows) < 2 {
 		t.Fatalf("show all returned too few rows (%d)", len(rows))
 	}
-	const expColumns = 5
+	const expColumns = 7
 	if len(rows[0]) != expColumns {
 		t.Fatalf("show all must return %d columns, found %d", expColumns, len(rows[0]))
 	}
