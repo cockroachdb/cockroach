@@ -114,9 +114,14 @@ type SpanResolverIterator interface {
 
 	// ReplicaInfo returns information about the replica that has been picked for
 	// the current range.
+	//
+	// ignoreMisplannedRanges boolean indicates whether the placement of the
+	// TableReaders according to this replica choice should **not** result in
+	// creating of Ranges ProducerMetadata.
+	//
 	// A RangeUnavailableError is returned if there's no information in nodeDescs
 	// about any of the replicas.
-	ReplicaInfo(ctx context.Context) (roachpb.ReplicaDescriptor, error)
+	ReplicaInfo(ctx context.Context) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error)
 }
 
 // spanResolver implements SpanResolver.
@@ -142,12 +147,13 @@ func NewSpanResolver(
 	return &spanResolver{
 		st: st,
 		oracle: replicaoracle.NewOracle(policy, replicaoracle.Config{
-			NodeDescs:  nodeDescs,
-			NodeID:     nodeID,
-			Locality:   locality,
-			Settings:   st,
-			Clock:      clock,
-			RPCContext: rpcCtx,
+			NodeDescs:   nodeDescs,
+			NodeID:      nodeID,
+			Locality:    locality,
+			Settings:    st,
+			Clock:       clock,
+			RPCContext:  rpcCtx,
+			LatencyFunc: distSender.LatencyFunc(),
 		}),
 		distSender: distSender,
 	}
@@ -272,7 +278,7 @@ func (it *spanResolverIterator) Desc() roachpb.RangeDescriptor {
 // ReplicaInfo is part of the SpanResolverIterator interface.
 func (it *spanResolverIterator) ReplicaInfo(
 	ctx context.Context,
-) (roachpb.ReplicaDescriptor, error) {
+) (roachpb.ReplicaDescriptor, bool, error) {
 	if !it.Valid() {
 		panic(it.Error())
 	}
@@ -280,16 +286,19 @@ func (it *spanResolverIterator) ReplicaInfo(
 	// If we've assigned the range before, return that assignment.
 	rngID := it.it.Desc().RangeID
 	if repl, ok := it.queryState.AssignedRanges[rngID]; ok {
-		return repl, nil
+		return repl.ReplDesc, repl.IgnoreMisplannedRanges, nil
 	}
 
-	repl, err := it.oracle.ChoosePreferredReplica(
+	repl, ignoreMisplannedRanges, err := it.oracle.ChoosePreferredReplica(
 		ctx, it.txn, it.it.Desc(), it.it.Leaseholder(), it.it.ClosedTimestampPolicy(), it.queryState)
 	if err != nil {
-		return roachpb.ReplicaDescriptor{}, err
+		return roachpb.ReplicaDescriptor{}, false, err
 	}
 	prev := it.queryState.RangesPerNode.GetDefault(int(repl.NodeID))
 	it.queryState.RangesPerNode.Set(int(repl.NodeID), prev+1)
-	it.queryState.AssignedRanges[rngID] = repl
-	return repl, nil
+	it.queryState.AssignedRanges[rngID] = replicaoracle.ReplicaDescriptorEx{
+		ReplDesc:               repl,
+		IgnoreMisplannedRanges: ignoreMisplannedRanges,
+	}
+	return repl, ignoreMisplannedRanges, nil
 }
