@@ -224,7 +224,7 @@ func (fit *fakeSpanResolverIterator) Desc() roachpb.RangeDescriptor {
 // ReplicaInfo is part of the SpanResolverIterator interface.
 func (fit *fakeSpanResolverIterator) ReplicaInfo(
 	_ context.Context,
-) (roachpb.ReplicaDescriptor, error) {
+) (roachpb.ReplicaDescriptor, bool, error) {
 	n := fit.ranges[0].replica
-	return roachpb.ReplicaDescriptor{NodeID: n.NodeID}, nil
+	return roachpb.ReplicaDescriptor{NodeID: n.NodeID}, false, nil
 }
