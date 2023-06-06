@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvisstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -509,7 +508,6 @@ type systemStatusServer struct {
 	stores             *kvserver.Stores
 	nodeLiveness       *liveness.NodeLiveness
 	spanConfigReporter spanconfig.Reporter
-	distSender         *kvcoord.DistSender
 	rangeStatsFetcher  *rangestats.Fetcher
 	node               *Node
 }
@@ -619,7 +617,6 @@ func newSystemStatusServer(
 	serverIterator ServerIterator,
 	spanConfigReporter spanconfig.Reporter,
 	clock *hlc.Clock,
-	distSender *kvcoord.DistSender,
 	rangeStatsFetcher *rangestats.Fetcher,
 	node *Node,
 ) *systemStatusServer {
@@ -647,7 +644,6 @@ func newSystemStatusServer(
 		stores:             stores,
 		nodeLiveness:       nodeLiveness,
 		spanConfigReporter: spanConfigReporter,
-		distSender:         distSender,
 		rangeStatsFetcher:  rangeStatsFetcher,
 		node:               node,
 	}
