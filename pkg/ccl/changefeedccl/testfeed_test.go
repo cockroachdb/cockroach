@@ -1042,47 +1042,58 @@ func (f *cloudFeedFactory) Feed(
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
-	if createStmt.Select != nil {
-		createStmt.Options = append(createStmt.Options,
-			// Normally, cloud storage requires key_in_value; but if we use bare envelope,
-			// this option is not required.  However, we need it to make this
-			// test feed work -- so, set it.
-			tree.KVOption{Key: changefeedbase.OptKeyInValue},
-		)
-	}
-	// Determine if we can enable the parquet format if the changefeed is not
-	// being created with incompatible options. If it can be enabled, we will use
-	// parquet format with a probability of 0.4.
-	parquetPossible := includeParquestTestMetadata
+	// By default, changefeeds use JSON if no format is specified.
+	formatSpecified := false
+	format := string(changefeedbase.OptFormatJSON)
 	explicitEnvelope := false
 	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptFormat {
+			// Strip quotes from the format string.
+			fmtCtx := tree.NewFmtCtx(tree.FmtBareStrings)
+			opt.Value.Format(fmtCtx)
+			format = fmtCtx.String()
+			formatSpecified = true
+		}
 		if string(opt.Key) == changefeedbase.OptEnvelope {
 			explicitEnvelope = true
 		}
-		if string(opt.Key) == changefeedbase.OptFormat &&
-			opt.Value.String() != string(changefeedbase.OptFormatParquet) {
-			parquetPossible = false
-			break
-		}
-		for o := range changefeedbase.ParquetFormatUnsupportedOptions {
-			if o == string(opt.Key) {
-				parquetPossible = false
-				break
+	}
+
+	if !formatSpecified {
+		// Determine if we can enable the parquet format if the changefeed is not
+		// being created with incompatible options. If it can be enabled, we will use
+		// parquet format with a probability of 0.4.
+		parquetPossible := includeParquestTestMetadata
+		for _, opt := range createStmt.Options {
+			for o := range changefeedbase.ParquetFormatUnsupportedOptions {
+				if o == string(opt.Key) {
+					parquetPossible = false
+					break
+				}
 			}
 		}
+		randNum := rand.Intn(5)
+		if randNum < 0 {
+			parquetPossible = false
+		}
+		if parquetPossible {
+			log.Infof(context.Background(), "using parquet format")
+			createStmt.Options = append(
+				createStmt.Options,
+				tree.KVOption{
+					Key:   changefeedbase.OptFormat,
+					Value: tree.NewStrVal(string(changefeedbase.OptFormatParquet)),
+				},
+			)
+			format = string(changefeedbase.OptFormatParquet)
+		}
 	}
-	randNum := rand.Intn(5)
-	if randNum < 0 {
-		parquetPossible = false
-	}
-	if parquetPossible {
-		log.Infof(context.Background(), "using parquet format")
-		createStmt.Options = append(
-			createStmt.Options,
-			tree.KVOption{
-				Key:   changefeedbase.OptFormat,
-				Value: tree.NewStrVal(string(changefeedbase.OptFormatParquet)),
-			},
+
+	// If not using parquet, this feed factory requires
+	// key_in_value to be able to extract keys from rows.
+	if format != string(changefeedbase.OptFormatParquet) {
+		createStmt.Options = append(createStmt.Options,
+			tree.KVOption{Key: changefeedbase.OptKeyInValue},
 		)
 	}
 

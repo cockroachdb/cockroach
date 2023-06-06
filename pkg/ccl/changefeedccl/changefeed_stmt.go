@@ -946,7 +946,7 @@ func validateSink(
 
 func requiresKeyInValue(s Sink) bool {
 	switch s.getConcreteType() {
-	case sinkTypeCloudstorage, sinkTypeWebhook:
+	case sinkTypeWebhook:
 		return true
 	default:
 		return false
