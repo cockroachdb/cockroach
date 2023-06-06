@@ -34,6 +34,6 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- \
                                       --test_env TC_SERVER_URL=$TC_SERVER_URL \
                                       --test_timeout=25200 '--test_filter=TestMetaCrossVersion$' \
                                       --define gotags=bazel,invariants \
-                                      --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' -maxtime 6h -maxfails 1 -stderr -p 1" \
+                                      --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' -maxtime 6h -maxfails 1 -timeout 20m -stderr -p 1" \
                                       $test_args \
                                       --test_output streamed
