@@ -482,7 +482,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	if err := b.maybeRelocateJobExecution(ctx, p, details.ExecutionLocality); err != nil {
+	if err := maybeRelocateJobExecution(ctx, b.job.ID(), p, details.ExecutionLocality); err != nil {
 		return err
 	}
 
@@ -880,8 +880,8 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 	}
 }
 
-func (b *backupResumer) maybeRelocateJobExecution(
-	ctx context.Context, p sql.JobExecContext, locality roachpb.Locality,
+func maybeRelocateJobExecution(
+	ctx context.Context, jobID jobspb.JobID, p sql.JobExecContext, locality roachpb.Locality,
 ) error {
 	if locality.NonEmpty() {
 		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(p.ExecCfg().JobRegistry.ID())
@@ -891,7 +891,7 @@ func (b *backupResumer) maybeRelocateJobExecution(
 		if ok, missedTier := current.Locality.Matches(locality); !ok {
 			log.Infof(ctx,
 				"BACKUP job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
-				b.job.ID(), current.NodeID, missedTier.String(),
+				jobID, current.NodeID, missedTier.String(),
 			)
 
 			instancesInRegion, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, locality)
@@ -904,7 +904,7 @@ func (b *backupResumer) maybeRelocateJobExecution(
 			var res error
 			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				var err error
-				res, err = p.ExecCfg().JobRegistry.RelocateLease(ctx, txn, b.job.ID(), dest.InstanceID, dest.SessionID)
+				res, err = p.ExecCfg().JobRegistry.RelocateLease(ctx, txn, jobID, dest.InstanceID, dest.SessionID)
 				return err
 			}); err != nil {
 				return errors.Wrapf(err, "failed to relocate job coordinator to %d", dest.InstanceID)

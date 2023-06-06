@@ -1517,6 +1517,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	p := execCtx.(sql.JobExecContext)
 	r.execCfg = p.ExecCfg()
 
+	if err := maybeRelocateJobExecution(ctx, r.job.ID(), p, details.ExecutionLocality); err != nil {
+		return err
+	}
+
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
