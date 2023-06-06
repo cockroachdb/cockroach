@@ -31,7 +31,7 @@ import (
 // expensive dataset restore only if it doesn't.
 //
 // The function disables auto stats collection and ensures that table statistics
-// are present for all TPCH tables.
+// are present for all TPCH tables. It also disables the merge queue.
 func loadTPCHDataset(
 	ctx context.Context,
 	t test.Test,
@@ -40,7 +40,6 @@ func loadTPCHDataset(
 	sf int,
 	m cluster.Monitor,
 	roachNodes option.NodeListOption,
-	disableMergeQueue bool,
 ) (retErr error) {
 	_, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
 	if retErr != nil {
@@ -55,10 +54,8 @@ func loadTPCHDataset(
 			}
 		}
 	}()
-	if disableMergeQueue {
-		if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
+		t.Fatal(err)
 	}
 
 	if _, err := db.ExecContext(ctx, `USE tpch`); err == nil {

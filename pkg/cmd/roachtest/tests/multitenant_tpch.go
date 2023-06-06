@@ -49,9 +49,7 @@ func runMultiTenantTPCH(
 			t.Fatal(err)
 		}
 		t.Status("restoring TPCH dataset for Scale Factor 1 in ", setupNames[setupIdx])
-		if err := loadTPCHDataset(
-			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
-		); err != nil {
+		if err := loadTPCHDataset(ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All()); err != nil {
 			t.Fatal(err)
 		}
 		for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
