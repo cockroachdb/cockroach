@@ -478,7 +478,10 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 				return err
 			}
 			if cutoverReached {
-				sip.cutoverCh <- struct{}{}
+				select {
+				case sip.cutoverCh <- struct{}{}:
+				case <-stopPoller:
+				}
 				return nil
 			}
 		}
