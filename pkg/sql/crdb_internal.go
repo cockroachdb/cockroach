@@ -2063,7 +2063,9 @@ CREATE TABLE crdb_internal.cluster_settings (
   value         STRING NOT NULL,
   type          STRING NOT NULL,
   public        BOOL NOT NULL, -- whether the setting is documented, which implies the user can expect support.
-  description   STRING NOT NULL
+  description   STRING NOT NULL,
+  default_value STRING NOT NULL,
+  is_overridden BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if hasPriv, err := func() (bool, error) {
@@ -2110,12 +2112,19 @@ CREATE TABLE crdb_internal.cluster_settings (
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
 			desc := setting.Description()
+			defaultVal, err := setting.DecodeToString(setting.EncodedDefault())
+			if err != nil {
+				defaultVal = setting.EncodedDefault()
+			}
+			isOverridden := strVal != defaultVal
 			if err := addRow(
 				tree.NewDString(k),
 				tree.NewDString(strVal),
 				tree.NewDString(setting.Typ()),
 				tree.MakeDBool(tree.DBool(isPublic)),
 				tree.NewDString(desc),
+				tree.NewDString(defaultVal),
+				tree.MakeDBool(tree.DBool(isOverridden)),
 			); err != nil {
 				return err
 			}

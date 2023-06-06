@@ -78,6 +78,12 @@ WHERE variable IN ('sql.defaults.default_int_size')
 ----
 sql.defaults.default_int_size  4
 
+query TTTB
+SELECT variable, value, default_value, is_overridden FROM [SHOW ALL CLUSTER SETTINGS]
+WHERE variable IN ('sql.defaults.default_int_size')
+----
+sql.defaults.default_int_size  4 4 f
+
 user root
 
 statement ok
