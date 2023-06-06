@@ -405,3 +405,11 @@ func (l *lexer) Unimplemented(feature string) {
 		FeatureName: feature,
 	}
 }
+
+func (l *lexer) GetTypeFromValidSQLSyntax(sqlStr string) (tree.ResolvableTypeReference, error) {
+	return parser.GetTypeFromValidSQLSyntax(sqlStr)
+}
+
+func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.PLpgSQLExpr, error) {
+	return parser.ParseExpr(sqlStr)
+}

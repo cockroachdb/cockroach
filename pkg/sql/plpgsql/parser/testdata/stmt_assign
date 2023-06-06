@@ -7,8 +7,8 @@ END
 ----
 DECLARE
 BEGIN
-ASSIGN johnny := null
-ASSIGN gyro := 7 + 7
+johnny := NULL;
+gyro := 7 + 7;
 END
 <NOT DONE YET>
 
@@ -20,7 +20,7 @@ END
 ----
 DECLARE
 BEGIN
-ASSIGN a := null
+a := NULL;
 END
 <NOT DONE YET>
 
