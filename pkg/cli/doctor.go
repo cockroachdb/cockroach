@@ -313,6 +313,19 @@ FROM system.namespace`
 	stmt = `
 SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs
 `
+	checkSystemJobs := `SELECT count(*) FROM "".crdb_internal.system_jobs LIMIT 1`
+	_, err = sqlConn.QueryRow(ctx, checkSystemJobs)
+	// On versions after 23.1, we have a new table called crdb_internal.system_jobs,
+	// if its not available fall back to system.jobs
+	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+		if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedTable {
+			stmt = `
+SELECT id, status, payload, progress FROM system.jobs
+`
+		}
+	} else if err != nil {
+		return nil, nil, nil, err
+	}
 	jobsTable = make(doctor.JobsTable, 0)
 
 	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
@@ -325,12 +338,10 @@ SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs
 		}
 		md.Progress = &jobspb.Progress{}
 		// Progress is a nullable column, so have to check for nil here.
-		progressBytes, ok := vals[3].([]byte)
-		if !ok {
-			return errors.Errorf("unexpected NULL progress on job row: %v", md)
-		}
-		if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
-			return err
+		if progressBytes, ok := vals[3].([]byte); ok {
+			if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
+				return err
+			}
 		}
 		jobsTable = append(jobsTable, md)
 		return nil
