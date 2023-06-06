@@ -72,6 +72,7 @@ type updater struct {
 type Updater interface {
 	Set(ctx context.Context, key string, value EncodedValue) error
 	ResetRemaining(ctx context.Context)
+	SetValueOrigin(ctx context.Context, key string, origin ValueOrigin)
 }
 
 // A NoopUpdater ignores all updates.
@@ -82,6 +83,8 @@ func (u NoopUpdater) Set(ctx context.Context, key string, value EncodedValue) er
 
 // ResetRemaining implements Updater. It is a no-op.
 func (u NoopUpdater) ResetRemaining(context.Context) {}
+
+func (u NoopUpdater) SetValueOrigin(ctx context.Context, key string, origin ValueOrigin) {}
 
 // NewUpdater makes an Updater.
 func NewUpdater(sv *Values) Updater {
@@ -165,6 +168,13 @@ func (u updater) Set(ctx context.Context, key string, value EncodedValue) error 
 // ResetRemaining sets all settings not updated by the updater to their default values.
 func (u updater) ResetRemaining(ctx context.Context) {
 	for k, v := range registry {
+
+		if _, hasOverride := u.m[k]; hasOverride {
+			u.sv.setValueOrigin(ctx, v.getSlot(), OriginExplicitlySet)
+		} else {
+			u.sv.setValueOrigin(ctx, v.getSlot(), OriginDefault)
+		}
+
 		if u.sv.NonSystemTenant() && v.Class() == SystemOnly {
 			// Don't try to reset system settings on a non-system tenant.
 			continue
@@ -172,5 +182,13 @@ func (u updater) ResetRemaining(ctx context.Context) {
 		if _, ok := u.m[k]; !ok {
 			v.setToDefault(ctx, u.sv)
 		}
+	}
+}
+
+// SetValueOrigin sets the origin of the value of a given setting.
+func (u updater) SetValueOrigin(ctx context.Context, key string, origin ValueOrigin) {
+	d, ok := registry[key]
+	if ok {
+		u.sv.setValueOrigin(ctx, d.getSlot(), origin)
 	}
 }
