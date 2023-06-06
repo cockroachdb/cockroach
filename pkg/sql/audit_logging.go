@@ -46,7 +46,7 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(ctx context.Context) {
 	}
 
 	// Use reduced audit config is enabled.
-	if auditlogging.UserAuditEnableReducedConfig.Get(&p.execCfg.Settings.SV) {
+	if auditlogging.UserAuditReducedConfigEnabled(&p.execCfg.Settings.SV) {
 		p.logReducedAuditConfig(ctx)
 		return
 	}
@@ -119,5 +119,5 @@ func (p *planner) shouldNotRoleBasedAudit() bool {
 	// Do not do audit work if the cluster setting is empty.
 	// Do not emit audit events for reserved users/roles. This does not omit the root user.
 	// Do not emit audit events for internal planners.
-	return auditlogging.UserAuditLogConfig.Get(&p.execCfg.Settings.SV) == "" || p.User().IsReserved() || p.isInternalPlanner
+	return auditlogging.UserAuditLogConfigEmpty(&p.execCfg.Settings.SV) || p.User().IsReserved() || p.isInternalPlanner
 }

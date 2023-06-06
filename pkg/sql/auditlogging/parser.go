@@ -20,15 +20,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// parse parses the provided audit logging configuration.
-func parse(input string) (*AuditConfig, error) {
+// Parse parses the provided audit logging configuration.
+func Parse(input string) (*AuditConfig, error) {
 	tokens, err := rulebasedscanner.Tokenize(input)
 	if err != nil {
 		return nil, err
 	}
 
 	config := EmptyAuditConfig()
-	config.settings = make([]AuditSetting, len(tokens.Lines))
+	config.Settings = make([]AuditSetting, len(tokens.Lines))
 	// settingsRoleMap keeps track of the roles we've already written in the config
 	settingsRoleMap := make(map[username.SQLUsername]interface{}, len(tokens.Lines))
 	for i, line := range tokens.Lines {
@@ -42,7 +42,7 @@ func parse(input string) (*AuditConfig, error) {
 			return nil, errors.Newf("duplicate role listed: %v", setting.Role)
 		}
 		settingsRoleMap[setting.Role] = i
-		config.settings[i] = setting
+		config.Settings[i] = setting
 		if setting.Role.Normalized() == allUserRole {
 			config.allRoleAuditSettingIdx = i
 		}
