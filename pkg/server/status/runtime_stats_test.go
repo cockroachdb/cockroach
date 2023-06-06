@@ -44,7 +44,7 @@ func TestStructuredEventLogging(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	// Ensure that the entry hits the OS so it can be read back below.
-	log.Flush()
+	log.FlushFileSinks()
 
 	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
 		math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)

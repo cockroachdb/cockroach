@@ -83,10 +83,10 @@
 //
 // # Output
 //
-// Log output is buffered and written periodically using Flush.
-// Programs should call Flush before exiting to guarantee all
+// Log output is buffered and written periodically using FlushFileSinks.
+// Programs should call FlushFileSinks before exiting to guarantee all
 // log output is written to files. Note that buffered network sinks also
-// exist. If you'd like to flush these as well, call Flush.
+// exist. If you'd like to flush these as well, call FlushAllSync.
 //
 // By default, all log statements write to files in a temporary directory.
 // This package provides several flags that modify this behavior.

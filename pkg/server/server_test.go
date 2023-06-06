@@ -592,7 +592,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 	var fatal bool
 	defer log.ResetExitFunc()
 	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
-		defer log.Flush()
+		defer log.FlushFileSinks()
 		if r == exit.FatalError() {
 			fatal = true
 		}
