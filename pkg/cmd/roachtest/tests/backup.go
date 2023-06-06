@@ -304,11 +304,18 @@ func disableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) ve
 				gatewayDB := c.Conn(ctx, t.L(), nodeID)
 				defer gatewayDB.Close()
 
-				row := gatewayDB.QueryRow(`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running'`)
-				var count int
-				require.NoError(t, row.Scan(&count))
-				if count != 0 {
-					return errors.Newf("node is still running %d jobs", count)
+				var runningJobIDs []jobspb.JobID
+				row, err := gatewayDB.Query(`SELECT job_id FROM [SHOW JOBS] WHERE status = 'running'`)
+				require.NoError(t, err)
+				for row.Next() {
+					var jobID int64
+					require.NoError(t, row.Scan(&jobID))
+					runningJobIDs = append(runningJobIDs, jobspb.JobID(jobID))
+				}
+				require.NoError(t, row.Close())
+
+				if len(runningJobIDs) != 0 {
+					return errors.Newf("node is still running %d jobs: %v", len(runningJobIDs), runningJobIDs)
 				}
 				return nil
 			})
