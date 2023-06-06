@@ -733,13 +733,16 @@ func MachineTypeToCPUs(s string) int {
 	{
 		// GCE machine types.
 		var v int
-		if _, err := fmt.Sscanf(s, "n1-standard-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
 			return v
 		}
-		if _, err := fmt.Sscanf(s, "n1-highcpu-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
 			return v
 		}
-		if _, err := fmt.Sscanf(s, "n1-highmem-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "n2-highcpu-%d", &v); err == nil {
+			return v
+		}
+		if _, err := fmt.Sscanf(s, "n2-highmem-%d", &v); err == nil {
 			return v
 		}
 	}
@@ -758,12 +761,12 @@ func MachineTypeToCPUs(s string) int {
 			return 8
 		case "4xlarge":
 			return 16
-		case "9xlarge":
-			return 36
+		case "8xlarge":
+			return 32
 		case "12xlarge":
 			return 48
-		case "18xlarge":
-			return 72
+		case "16xlarge":
+			return 64
 		case "24xlarge":
 			return 96
 		}
@@ -1277,6 +1280,11 @@ func (c *clusterImpl) validate(
 			// machine types the benefit of the doubt.
 			if vmCPUs > 0 && vmCPUs < cpus {
 				return fmt.Errorf("node %d has %d CPUs, test requires %d", i, vmCPUs, cpus)
+			}
+			// Clouds typically don't support odd numbers of vCPUs; they can result in subtle performance issues.
+			// N.B. Some machine families, e.g., n2 in GCE, do not support 1 vCPU. (See AWSMachineType and GCEMachineType.)
+			if vmCPUs > 1 && vmCPUs&1 == 1 {
+				return fmt.Errorf("node %d has an _odd_ number of CPUs (%d)", i, vmCPUs)
 			}
 		}
 	}
