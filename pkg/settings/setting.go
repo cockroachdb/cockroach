@@ -159,3 +159,7 @@ const (
 	// via a host-cluster override for this or all tenant(s).
 	OriginExternallySet
 )
+
+func (v ValueOrigin) String() string {
+	return [...]string{"default", "override", "external-override"}[v]
+}
