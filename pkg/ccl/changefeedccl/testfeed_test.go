@@ -30,7 +30,7 @@ import (
 	pubsubv1 "cloud.google.com/go/pubsub/apiv1"
 	pb "cloud.google.com/go/pubsub/apiv1/pubsubpb"
 	"cloud.google.com/go/pubsub/pstest"
-	"github.com/Shopify/sarama"
+	"github.com/HonoreDB/sarama"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
