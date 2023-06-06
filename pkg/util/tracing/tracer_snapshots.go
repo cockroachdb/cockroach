@@ -13,12 +13,12 @@ package tracing
 import (
 	"bufio"
 	"context"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -202,18 +202,7 @@ func (t *Tracer) generateSnapshot() SpansSnapshot {
 	})
 
 	// Collect and parse the goroutine stack traces.
-
-	// We don't know how big the traces are, so grow a few times if they don't
-	// fit. Start large, though.
-	var stacks []byte
-	for n := 1 << 20; /* 1mb */ n <= (1 << 29); /* 512mb */ n *= 2 {
-		stacks = make([]byte, n)
-		nbytes := runtime.Stack(stacks, true /* all */)
-		if nbytes < len(stacks) {
-			stacks = stacks[:nbytes]
-			break
-		}
-	}
+	stacks := allstacks.Get()
 
 	splits := strings.Split(string(stacks), "\n\n")
 	stackMap := make(map[int]string, len(splits))

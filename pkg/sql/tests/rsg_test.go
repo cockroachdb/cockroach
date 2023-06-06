@@ -18,7 +18,6 @@ import (
 	"math/rand"
 	"os"
 	"regexp"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -40,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -229,9 +229,8 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 						return nil
 					}
 				}
-				b := make([]byte, 1024*1024)
-				n := runtime.Stack(b, true)
-				t.Logf("%s\n", b[:n])
+				b := allstacks.GetWithBuf(make([]byte, 1024*1024))
+				t.Logf("%s\n", b)
 				// Now see if we can execute a SELECT 1. This is useful because sometimes an
 				// exec timeout is because of a slow-executing statement, and other times
 				// it's because the server is completely wedged. This is an automated way

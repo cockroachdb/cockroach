@@ -72,6 +72,7 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/skip",
+        "//pkg/util/allstacks",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
