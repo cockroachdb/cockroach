@@ -292,7 +292,7 @@ func (s *SettingsWatcher) maybeSet(ctx context.Context, name string, sv settings
 		}
 	} else {
 		if !hasOverride {
-			s.setLocked(ctx, name, sv.val)
+			s.setLocked(ctx, name, sv.val, settings.OriginExplicitlySet)
 		}
 	}
 }
@@ -309,7 +309,9 @@ type settingsValue struct {
 const versionSettingKey = "version"
 
 // set the current value of a setting.
-func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val settings.EncodedValue) {
+func (s *SettingsWatcher) setLocked(
+	ctx context.Context, key string, val settings.EncodedValue, origin settings.ValueOrigin,
+) {
 	// Both the system tenant and secondary tenants no longer use this code
 	// path to propagate cluster version changes (they rely on
 	// BumpClusterVersion instead). The secondary tenants however, still rely
@@ -335,6 +337,7 @@ func (s *SettingsWatcher) setLocked(ctx context.Context, key string, val setting
 	if err := s.mu.updater.Set(ctx, key, val); err != nil {
 		log.Warningf(ctx, "failed to set setting %s to %s: %v", redact.Safe(key), val.Value, err)
 	}
+	s.mu.updater.SetValueOrigin(ctx, key, origin)
 }
 
 // setDefaultLocked sets a setting to its default value.
@@ -348,7 +351,7 @@ func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key string) {
 		Value: setting.EncodedDefault(),
 		Type:  setting.Typ(),
 	}
-	s.setLocked(ctx, key, val)
+	s.setLocked(ctx, key, val, settings.OriginDefault)
 }
 
 // updateOverrides updates the overrides map and updates any settings
@@ -384,7 +387,7 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) {
 		}
 		// A new override was added or an existing override has changed.
 		s.mu.overrides[key] = val
-		s.setLocked(ctx, key, val)
+		s.setLocked(ctx, key, val, settings.OriginExternallySet)
 	}
 
 	// Clean up any overrides that were removed.
@@ -395,7 +398,7 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) {
 			// Reset the setting to the value in the settings table (or the default
 			// value).
 			if sv, ok := s.mu.values[key]; ok && !sv.tombstone {
-				s.setLocked(ctx, key, sv.val)
+				s.setLocked(ctx, key, sv.val, settings.OriginExplicitlySet)
 			} else {
 				s.setDefaultLocked(ctx, key)
 			}
