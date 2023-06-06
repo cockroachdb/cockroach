@@ -228,6 +228,23 @@ var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+// BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
+var EnableBackpressureFromKafkaThrottle = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.enable_backpressure_from_kafka_throttle",
+	"if true, kafka changefeeds will slow down and apply backpressure upon getting a Throttle response from a Kafka broker",
+	util.ConstantWithMetamorphicTestBool("changefeed.enable_backpressure_from_kafka_throttle", true),
+).WithPublic()
+
+// BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
+var KafkaThrottlingSensitivity = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"changefeed.kafka_throttling_sensitivity",
+	"controls how aggressively kafka changefeeds adjust their throughput in response to repeated throttle responses",
+	0.01,
+	settings.NonNegativeFloat,
+).WithPublic()
+
 // UseMuxRangeFeed enables the use of MuxRangeFeed RPC.
 var UseMuxRangeFeed = settings.RegisterBoolSetting(
 	settings.TenantWritable,

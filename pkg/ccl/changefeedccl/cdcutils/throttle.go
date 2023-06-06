@@ -66,6 +66,11 @@ func (t *Throttler) AcquireFlushQuota(ctx context.Context) error {
 	return waitQuota(ctx, 1, t.flushLimiter, t.metrics.FlushPushbackNanos)
 }
 
+// UpdateBytePerSecondRate updates only the ByteRate of t.
+func (t *Throttler) UpdateBytePerSecondRate(newRate float64) {
+	t.byteLimiter.UpdateLimit(quotapool.Limit(newRate), int64(newRate))
+}
+
 func (t *Throttler) updateConfig(config changefeedbase.SinkThrottleConfig) {
 	setLimits := func(rl *quotapool.RateLimiter, rate, burst float64) {
 		// set rateBudget to unlimited if rate is 0.
