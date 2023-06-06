@@ -93,7 +93,6 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 	flushDoneSignal := make(chan struct{})
 	defer func() {
 		statsFlush.SetFlushDoneSignalCh(nil)
-		close(flushDoneSignal)
 	}()
 
 	statsFlush.SetFlushDoneSignalCh(flushDoneSignal)
