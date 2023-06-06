@@ -1,0 +1,34 @@
+# Test verifies that sst could be added to the feed and will delivered as is
+# if feed uses sst handler.
+create-feed startKey=a endKey=z readSSTs=true
+----
+ok
+
+# We need to make sure that sst is added when feed is already running
+wait-feed
+----
+ok
+
+put-keys
+ key=b, val=1
+----
+ok
+
+add-sst ts=sstTs
+ key=a, val=4
+ key=b, val=5
+ key=c, val=6
+----
+ok
+
+wait-feed
+----
+ok
+
+dump-feed
+----
+sst span=[a, c+), ts=sstTs
+ key=a, val=4, ts=sstTs
+ key=b, val=5, ts=sstTs
+ key=c, val=6, ts=sstTs
+key=b, val=1
