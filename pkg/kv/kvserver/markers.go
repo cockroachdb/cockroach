@@ -38,6 +38,7 @@ var errMarkCanRetryReplicationChangeWithUpdatedDesc = errors.New("should retry w
 func IsRetriableReplicationChangeError(err error) bool {
 	return errors.Is(err, errMarkCanRetryReplicationChangeWithUpdatedDesc) ||
 		IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
+		IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err) ||
 		isSnapshotError(err)
 }
 
@@ -105,4 +106,14 @@ var errMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot = errors.New(
 // periodically requested in maybeTransferRaftLeadershipToLeaseholderLocked.
 func IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err error) bool {
 	return errors.Is(err, errMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot)
+}
+
+// IsLeaseTransferRejectedBecauseTargetCannotReceiveLease returns true if err
+// (assumed to have been emitted by the current leaseholder when processing a
+// lease transfer request) indicates that the target replica is not qualified to
+// receive the lease. This could be because the current leaseholder has an
+// outdated view of the target replica's state.
+func IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err error) bool {
+	return errors.Is(err, roachpb.ErrReplicaNotFound) ||
+		errors.Is(err, roachpb.ErrReplicaCannotHoldLease)
 }
