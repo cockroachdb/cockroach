@@ -13,10 +13,6 @@ package spanconfigreporter_test
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
-	"testing"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -27,11 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
+	"sort"
+	"strings"
+	"testing"
 )
 
 // TestDataDriven is a data-driven test for spanconfig.Reporter. It offers
@@ -242,13 +242,22 @@ func newMockCluster(
 	}
 }
 
-// GetIsLiveMap implements spanconfigreporter.Liveness.
-func (s *mockCluster) GetIsLiveMap() livenesspb.IsLiveMap {
-	isLiveMap := livenesspb.IsLiveMap{}
+// ScanNodeVitalityFromCache implements spanconfigreporter.Liveness.
+func (s *mockCluster) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	isLiveMap := make(livenesspb.NodeVitalityMap)
+	now = hlc.Timestamp{WallTime: }
 	for nid, isLive := range s.liveness {
-		isLiveMap[nid] = livenesspb.IsLiveMapEntry{
-			IsLive: isLive,
+		descUpdateTime := now
+		if !isLive {
+			descUpdateTime = descUpdateTime.
 		}
+		livenesspb.Liveness{
+			NodeID:     nid,
+			Epoch:      1,
+			Expiration: hlc.LegacyTimestamp{},
+			Draining:   false,
+			Membership: livenesspb.MembershipStatus_ACTIVE,
+		}.CreateNodeVitality(now, descUpdateTime, descUnavailableTime, connected, timeUntilNodeDead)
 	}
 	return isLiveMap
 }

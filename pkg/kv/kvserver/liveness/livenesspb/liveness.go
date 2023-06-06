@@ -150,19 +150,6 @@ func ValidateTransition(old Liveness, newStatus MembershipStatus) (bool, error) 
 	return true, nil
 }
 
-// IsLiveMapEntry encapsulates data about current liveness for a
-// node based on the liveness range.
-// TODO(abaptist): This should only be used for epoch leases as it uses an
-// overly strict version of liveness. Once epoch leases are removed, this will
-// be also.
-type IsLiveMapEntry struct {
-	Liveness
-	IsLive bool
-}
-
-// IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
-type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
-
 // NodeVitality should be used any place other than epoch leases where it is
 // necessary to determine if a node is currently alive and what its health is.
 // Aliveness and deadness are concepts that refer to our best guess of the
@@ -217,6 +204,13 @@ const (
 	ConsistencyQueue
 	AdminHealthCheck
 	DecommissionCheck
+	SpanConfigConformance
+	ReplicaProgress
+	Metrics
+	LeaseCampaign
+	RangeQuiesience
+	NetworkMap
+	LossOfQuorum
 )
 
 func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
@@ -237,7 +231,29 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 		return nv.isAvailableNotDraining()
 	case DecommissionCheck:
 		return nv.isAlive()
+	case SpanConfigConformance:
+		return nv.isAlive()
+	case ReplicaProgress:
+		return nv.isAliveAndConnected()
+	case Metrics:
+		return nv.isAlive()
+	case LeaseCampaign:
+		{
+			if !nv.isValid() {
+				// If we don't know about the leader in our liveness map, then we err on the side
+				// of caution and don't campaign, so assume it is alive.
+				return true
+			}
+			return nv.isAlive()
+		}
+	case RangeQuiesience:
+		return nv.isAliveAndConnected()
+	case NetworkMap:
+		return nv.connected
+	case LossOfQuorum:
+		return nv.isAlive()
 	}
+
 	// TODO(baptist): Should be an assertion that we don't know this uasge.
 	return false
 }
@@ -508,7 +524,7 @@ func (nv *NodeVitality) TestRestartNode() {
 // directly look at timestamps, so the status must be manually updated.
 type TestNodeVitalityEntry struct {
 	Liveness Liveness
-	alive    bool
+	Alive    bool
 }
 
 // TestNodeVitality is a test class for simulating and modifying NodeLiveness
@@ -525,7 +541,7 @@ func TestCreateNodeVitality(ids ...roachpb.NodeID) TestNodeVitality {
 	for _, id := range ids {
 		m[id] = TestNodeVitalityEntry{
 			Liveness: Liveness{},
-			alive:    true,
+			Alive:    true,
 		}
 	}
 	return m
@@ -535,7 +551,7 @@ func (e TestNodeVitalityEntry) convert() NodeVitality {
 	clock := hlc.NewClockForTesting(hlc.NewHybridManualClock())
 
 	now := clock.Now()
-	if e.alive {
+	if e.Alive {
 		return e.Liveness.CreateNodeVitality(now, now, hlc.Timestamp{}, true, time.Second, time.Second)
 	} else {
 		return e.Liveness.CreateNodeVitality(now, now.AddDuration(-time.Hour), hlc.Timestamp{}, true, time.Second, time.Second)
@@ -562,4 +578,33 @@ func (m TestNodeVitality) ScanNodeVitalityFromCache() NodeVitalityMap {
 		nvm[key] = entry.convert()
 	}
 	return nvm
+}
+
+// Create a node vitality record that is either dead or alive by all accounts.
+func FakeNodeVitality(alive bool) NodeVitality {
+	if alive {
+		return NodeVitality{
+			nodeID:               1,
+			connected:            true,
+			now:                  hlc.Timestamp{}.AddDuration(time.Nanosecond),
+			timeUntilNodeDead:    time.Second,
+			timeAfterNodeSuspect: time.Second,
+			livenessExpiration:   hlc.Timestamp{}.AddDuration(2 * time.Nanosecond),
+			livenessEpoch:        1,
+			liveness: Liveness{
+				NodeID:     1,
+				Epoch:      1,
+				Expiration: hlc.Timestamp{}.AddDuration(2 * time.Nanosecond).ToLegacyTimestamp(),
+			},
+		}
+	} else {
+		return NodeVitality{
+			nodeID:    1,
+			connected: false,
+			liveness: Liveness{
+				NodeID: 1,
+				Epoch:  1,
+			},
+		}
+	}
 }

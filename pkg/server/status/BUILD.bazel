@@ -49,6 +49,7 @@ go_library(
         "//pkg/kv/kvbase",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/rpc",

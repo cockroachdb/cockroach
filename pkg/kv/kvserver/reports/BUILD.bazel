@@ -22,6 +22,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

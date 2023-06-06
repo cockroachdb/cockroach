@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -258,7 +259,7 @@ func createTestStoreWithoutStart(
 		NodeDescs:          mockNodeStore{desc: nodeDesc},
 		RPCContext:         rpcContext,
 		RPCRetryOptions:    &retry.Options{},
-		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(cfg.Gossip)), // TODO
+		NodeDialer:         cfg.NodeDialer,
 		FirstRangeProvider: rangeProv,
 		TestingKnobs: kvcoord.ClientTestingKnobs{
 			TransportFactory: kvcoord.SenderTransportFactory(cfg.AmbientCtx.Tracer, &storeSender),
@@ -274,6 +275,23 @@ func createTestStoreWithoutStart(
 	}, ds)
 	require.Nil(t, cfg.DB)
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, txnCoordSenderFactory, cfg.Clock, stopper)
+	nlActive, nlRenewal := cfg.NodeLivenessDurations()
+	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
+		AmbientCtx:              log.AmbientContext{},
+		Stopper:                 stopper,
+		Settings:                cfg.Settings,
+		Gossip:                  cfg.Gossip,
+		Clock:                   cfg.Clock,
+		DB:                      cfg.DB,
+		LivenessThreshold:       nlActive,
+		RenewalDuration:         nlRenewal,
+		HistogramWindowInterval: 0,
+		OnNodeDecommissioned:    nil,
+		OnNodeDecommissioning:   nil,
+		Engines:                 []storage.Engine{eng},
+		OnSelfHeartbeat:         nil,
+		NodeDialer:              cfg.NodeDialer,
+	})
 	store := NewStore(ctx, *cfg, eng, nodeDesc)
 	storeSender.Sender = store
 

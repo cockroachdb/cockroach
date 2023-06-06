@@ -57,7 +57,7 @@ var conformanceReportRateLimit = settings.RegisterFloatSetting(
 // Liveness is the subset of the interface satisfied by CRDB's node liveness
 // component that the reporter relies on.
 type Liveness interface {
-	GetIsLiveMap() livenesspb.IsLiveMap
+	ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap
 }
 
 // Reporter is used to figure out whether ranges backing specific spans conform
@@ -153,7 +153,7 @@ func (r *Reporter) SpanConfigConformance(
 	report := roachpb.SpanConfigConformanceReport{}
 	unavailableNodes := make(map[roachpb.NodeID]struct{})
 
-	isLiveMap := r.dep.Liveness.GetIsLiveMap()
+	isLiveMap := r.dep.Liveness.ScanNodeVitalityFromCache()
 	for _, span := range spans {
 		if err := r.dep.Scan(ctx, int(rangeDescPageSize.Get(&r.settings.SV)),
 			func() { report = roachpb.SpanConfigConformanceReport{} /* init */ },
@@ -167,7 +167,7 @@ func (r *Reporter) SpanConfigConformance(
 
 					status := desc.Replicas().ReplicationStatus(
 						func(rDesc roachpb.ReplicaDescriptor) bool {
-							isLive := isLiveMap[rDesc.NodeID].IsLive
+							isLive := isLiveMap[rDesc.NodeID].IsLive(livenesspb.SpanConfigConformance)
 							if !isLive {
 								unavailableNodes[rDesc.NodeID] = struct{}{}
 							}
