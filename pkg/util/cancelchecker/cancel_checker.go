@@ -12,7 +12,6 @@ package cancelchecker
 
 import (
 	"context"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -25,12 +24,12 @@ import (
 // TODO(yuzefovich): audit all processors to make sure that the ones that should
 // use the cancel checker actually do so.
 type CancelChecker struct {
-	done *uint32
+	*ctxutil.FastDoneCheckerContext
 }
 
 // Check returns an error if the associated query has been canceled.
 func (c *CancelChecker) Check() error {
-	if c.done != nil && atomic.LoadUint32(c.done) != 0 {
+	if c.ContextDone() {
 		return QueryCanceledError
 	}
 	return nil
@@ -38,19 +37,9 @@ func (c *CancelChecker) Check() error {
 
 // Reset resets this cancel checker with a fresh context.
 func (c *CancelChecker) Reset(ctx context.Context) {
-	var done uint32
-	*c = CancelChecker{
-		done: &done,
-	}
-
-	if ctx.Done() != nil {
-		if err := ctxutil.WhenDone(ctx, func(err error) {
-			atomic.StoreUint32(&done, 1)
-		}); err != nil {
-			// err can only be non nil if Done() is nil, which we know is false.
-			panic(err)
-		}
-	}
+	var doneChecker ctxutil.FastDoneCheckerContext
+	doneChecker.Init(ctx)
+	c.FastDoneCheckerContext = &doneChecker
 }
 
 // QueryCanceledError is an error representing query cancellation.
