@@ -168,6 +168,14 @@ export function getActiveExecutionsFromSessions(
   };
 }
 
+export function getExecututionStatuses(): string[] {
+  const execStatuses: string[] = [];
+  for (const execStatus in ExecutionStatus) {
+    execStatuses.push(execStatus);
+  }
+  return execStatuses.sort();
+}
+
 export function getAppsFromActiveExecutions(
   executions: ActiveExecution[] | null,
   internalAppNamePrefix: string,

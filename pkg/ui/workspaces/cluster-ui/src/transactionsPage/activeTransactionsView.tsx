@@ -30,7 +30,10 @@ import {
   getFullFiltersAsStringRecord,
   inactiveFiltersState,
 } from "../queryFilter";
-import { getAppsFromActiveExecutions } from "../activeExecutions/activeStatementUtils";
+import {
+  getAppsFromActiveExecutions,
+  getExecututionStatuses,
+} from "../activeExecutions/activeStatementUtils";
 import { ActiveTransactionsSection } from "src/activeExecutions/activeTransactionsSection";
 import { Pagination } from "src/pagination";
 
@@ -54,7 +57,6 @@ export type ActiveTransactionsViewStateProps = {
   transactions: ActiveTransaction[];
   sessionsError: Error | null;
   filters: ActiveTransactionFilters;
-  executionStatus: string[];
   sortSetting: SortSetting;
   internalAppNamePrefix: string;
   isTenant?: boolean;
@@ -78,7 +80,6 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   transactions,
   sessionsError,
   filters,
-  executionStatus,
   internalAppNamePrefix,
   maxSizeApiReached,
 }: ActiveTransactionsViewProps) => {
@@ -171,6 +172,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
 
   const apps = getAppsFromActiveExecutions(transactions, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
+  const executionStatuses = getExecututionStatuses();
 
   const filteredTransactions = filterActiveTransactions(
     transactions,
@@ -201,7 +203,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
           <Filter
             activeFilters={countActiveFilters}
             onSubmitFilters={onSubmitFilters}
-            executionStatuses={executionStatus.sort()}
+            executionStatuses={executionStatuses}
             showExecutionStatus={true}
             appNames={apps}
             filters={filters}
