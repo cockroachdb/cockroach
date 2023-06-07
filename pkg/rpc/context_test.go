@@ -1532,7 +1532,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 	// Context.ConnHealth() for the remote node moves to UNAVAILABLE because of
 	// the (application-level) heartbeats performed by rpc.Context, but the
 	// behavior of our heartbeats in the face of transport failures is
-	// sufficiently tested in TestHeartbeatHealthTransport.
+	// sufficiently tested elsewhere.
 	log.Infof(ctx, "test done")
 	return nil
 }
