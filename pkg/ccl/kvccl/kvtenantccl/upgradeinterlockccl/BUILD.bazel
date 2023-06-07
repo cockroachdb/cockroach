@@ -1,0 +1,11 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "upgradeinterlockccl_test",
+    srcs = ["generated_test.go"],
+    deps = [
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
+)
