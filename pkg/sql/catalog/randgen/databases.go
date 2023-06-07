@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
 	"github.com/cockroachdb/errors"
 )
@@ -57,7 +57,7 @@ func (g *testSchemaGenerator) genDatabases(ctx context.Context) {
 
 		g.models.db.ID = id
 		g.models.db.Name = dbName
-		g.models.db.Schemas[tree.PublicSchema] = descpb.DatabaseDescriptor_SchemaInfo{ID: publicSchemaID}
+		g.models.db.Schemas[catconstants.PublicSchemaName] = descpb.DatabaseDescriptor_SchemaInfo{ID: publicSchemaID}
 		db := dbdesc.NewBuilder(&g.models.db).BuildCreatedMutableDatabase()
 		g.cfg.GeneratedCounts.Databases++
 		g.newDesc(ctx, db)

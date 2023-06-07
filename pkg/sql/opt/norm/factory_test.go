@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -40,7 +41,7 @@ func TestSimplifyFilters(t *testing.T) {
 	var f norm.Factory
 	f.Init(context.Background(), &evalCtx, cat)
 
-	tn := tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a")
+	tn := tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "a")
 	a := f.Metadata().AddTable(cat.Table(tn), tn)
 	ax := a.ColumnID(0)
 

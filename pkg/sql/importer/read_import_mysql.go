@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -540,7 +541,7 @@ func mysqlTableToCockroach(
 			fromCols := i.Source
 			toTable := tree.MakeTableNameWithSchema(
 				safeName(i.ReferencedTable.Qualifier),
-				tree.PublicSchemaName,
+				catconstants.PublicSchemaName,
 				safeName(i.ReferencedTable.Name),
 			)
 			toCols := i.ReferencedColumns

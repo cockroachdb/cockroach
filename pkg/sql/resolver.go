@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -843,13 +844,13 @@ func (l *internalLookupCtx) GetSchemaName(
 	// drop the public schema in v21.2 or v22.1.
 	if !dbDesc.HasPublicSchemaWithDescriptor() {
 		if id == keys.PublicSchemaID {
-			return tree.PublicSchema, true, nil
+			return catconstants.PublicSchemaName, true, nil
 		}
 	}
 
 	if parentDBID == keys.SystemDatabaseID {
 		if id == keys.SystemPublicSchemaID {
-			return tree.PublicSchema, true, nil
+			return catconstants.PublicSchemaName, true, nil
 		}
 	}
 
@@ -987,7 +988,7 @@ func (l *internalLookupCtx) getSchemaNameByID(id descpb.ID) (string, error) {
 	// TODO(richardjcai): Remove this in 22.2, once it is guaranteed that
 	//    public schemas are regular UDS.
 	if id == keys.PublicSchemaID {
-		return tree.PublicSchema, nil
+		return catconstants.PublicSchemaName, nil
 	}
 	schema, err := l.getSchemaByID(id)
 	if err != nil {
@@ -1033,7 +1034,7 @@ func getTableNameFromTableDescriptor(
 	var parentSchemaName tree.Name
 	// TODO(richardjcai): Remove this in 22.2.
 	if table.GetParentSchemaID() == keys.PublicSchemaID {
-		parentSchemaName = tree.PublicSchemaName
+		parentSchemaName = catconstants.PublicSchemaName
 	} else {
 		parentSchema, err := l.getSchemaByID(table.GetParentSchemaID())
 		if err != nil {
@@ -1060,7 +1061,7 @@ func getTypeNameFromTypeDescriptor(
 	var parentSchemaName string
 	// TODO(richardjcai): Remove this in 22.2.
 	if typ.GetParentSchemaID() == keys.PublicSchemaID {
-		parentSchemaName = tree.PublicSchema
+		parentSchemaName = catconstants.PublicSchemaName
 	} else {
 		parentSchema, err := l.getSchemaByID(typ.GetParentSchemaID())
 		if err != nil {
@@ -1100,7 +1101,7 @@ func getFunctionNameFromFunctionDescriptor(
 	var scName string
 	// TODO(richardjcai): Remove this in 22.2.
 	if fn.GetParentSchemaID() == keys.PublicSchemaID {
-		scName = tree.PublicSchema
+		scName = catconstants.PublicSchemaName
 	} else {
 		sc, err := l.getSchemaByID(fn.GetParentSchemaID())
 		if err != nil {

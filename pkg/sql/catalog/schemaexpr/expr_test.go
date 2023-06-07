@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -32,7 +33,7 @@ func TestValidateExpr(t *testing.T) {
 
 	database := tree.Name("foo")
 	table := tree.Name("bar")
-	tn := tree.MakeTableNameWithSchema(database, tree.PublicSchemaName, table)
+	tn := tree.MakeTableNameWithSchema(database, catconstants.PublicSchemaName, table)
 
 	desc := testTableDesc(
 		string(table),

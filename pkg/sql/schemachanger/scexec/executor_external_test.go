@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -125,7 +126,7 @@ CREATE TABLE db.t (
    CONSTRAINT check_foo CHECK (i > 0)
 )`)
 
-		tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "t")
+		tn := tree.MakeTableNameWithSchema("db", catconstants.PublicSchemaName, "t")
 		require.NoError(t, ti.db.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) (err error) {
@@ -241,7 +242,7 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.db.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) (err error) {
-			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
+			tn := tree.MakeTableNameWithSchema("db", catconstants.PublicSchemaName, "foo")
 			_, fooTable, err := descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), &tn)
 			require.NoError(t, err)
 

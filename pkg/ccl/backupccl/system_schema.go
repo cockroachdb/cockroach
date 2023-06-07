@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -912,7 +913,7 @@ func GetSystemTableIDsToExcludeFromClusterBackup(
 	for systemTableName, backupConfig := range systemTableBackupConfiguration {
 		if backupConfig.shouldIncludeInClusterBackup == optOutOfClusterBackup {
 			err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-				tn := tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(systemTableName))
+				tn := tree.MakeTableNameWithSchema("system", catconstants.PublicSchemaName, tree.Name(systemTableName))
 				_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).MaybeGet(), &tn)
 				isNotFoundErr := errors.Is(err, catalog.ErrDescriptorNotFound)
 				if err != nil && !isNotFoundErr {

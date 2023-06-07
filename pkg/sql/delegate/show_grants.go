@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -143,7 +144,7 @@ SELECT database_name,
 		for _, db := range dbNames {
 			name := cat.SchemaName{
 				CatalogName:     tree.Name(db),
-				SchemaName:      tree.Name(tree.PublicSchema),
+				SchemaName:      tree.Name(catconstants.PublicSchemaName),
 				ExplicitCatalog: true,
 				ExplicitSchema:  true,
 			}
