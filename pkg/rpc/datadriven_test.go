@@ -43,14 +43,19 @@ import (
 )
 
 /*
-TestReconnection supports input data:
+TestReconnection supports the following input data:
   - tick <duration>
-  - dial id=X class=(def|sys|rf)
-  - connect id=X class=(def|sys|rf)
-  - set-hb-err id=X <decommissioned=(false|true)>
-  - reset-hb-err id=X
+  - dial <node> class=(def|sys|rf)
+  - connect <node> class=(def|sys|rf)
+  - set-hb-err <node> <decommissioned=(false|true)>
+  - reset-hb-err <node>
   - soon [healthy=<n>] [unhealthy=<n>] [inactive=<n>]
-    verify metrics in context report number of healthy and unhealthy connections
+    Verify that metrics in report matching number of healthy and unhealthy connections.
+
+Time is automatically ticked by 1s per command. The environment currently sets
+up n1 with two listeners, which are addressed via <node> as `n1` and `n1'`.
+Additional copies of n1 or additional nodes can be added in setupEnv() or via
+(to be added) DSL.
 */
 func TestReconnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
