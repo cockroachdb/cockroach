@@ -949,6 +949,12 @@ func (ie *InternalExecutor) execInternal(
 			}); err != nil {
 			return nil, err
 		}
+		if err := stmtBuf.Push(ctx, Sync{
+			// This is a Sync in the simple protocol, so it isn't marked as explicit.
+			ExplicitFromClient: false,
+		}); err != nil {
+			return nil, err
+		}
 	} else {
 		resPos = 2
 		if err := stmtBuf.Push(
@@ -977,9 +983,12 @@ func (ie *InternalExecutor) execInternal(
 		); err != nil {
 			return nil, err
 		}
-	}
-	if err := stmtBuf.Push(ctx, Sync{}); err != nil {
-		return nil, err
+		if err := stmtBuf.Push(ctx, Sync{
+			// This is a Sync in the extended protocol, so it's marked as explicit.
+			ExplicitFromClient: true,
+		}); err != nil {
+			return nil, err
+		}
 	}
 	r = &rowsIterator{
 		r:       rw,
