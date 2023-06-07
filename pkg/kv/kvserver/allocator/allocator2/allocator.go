@@ -60,7 +60,9 @@ type Allocator interface {
 	//   of integration, we could relax this and synthesize this list as a
 	//   function of (a) timestamp of the gossiped load, (b) timestamp of the
 	//   proposed change, (c) timestamp of the latest leaseholderStores slice
-	//   that shows the change as being enacted.
+	//   that shows the change as being enacted. See
+	//   storeState.computePendingChangesReflectedInLatestLoad for such an
+	//   attempt.
 	//
 	// - storeLoadMsg.storeRanges does not need to be the complete list of
 	//   ranges -- it can be filtered down to only the ranges for which the
