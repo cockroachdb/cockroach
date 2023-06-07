@@ -72,7 +72,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	}
 
 	t.Run("writes before range", func(t *testing.T) {
-		if err := batch.ClearUnversioned(outsideKey.Key); !isWriteSpanErr(err) {
+		if err := batch.ClearUnversioned(outsideKey.Key, storage.ClearOptions{}); !isWriteSpanErr(err) {
 			t.Errorf("ClearUnversioned: unexpected error %v", err)
 		}
 		if err := batch.ClearRawRange(outsideKey.Key, outsideKey2.Key, true, true); !isWriteSpanErr(err) {
@@ -93,7 +93,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 	})
 
 	t.Run("writes after range", func(t *testing.T) {
-		if err := batch.ClearUnversioned(outsideKey3.Key); !isWriteSpanErr(err) {
+		if err := batch.ClearUnversioned(outsideKey3.Key, storage.ClearOptions{}); !isWriteSpanErr(err) {
 			t.Errorf("ClearUnversioned: unexpected error %v", err)
 		}
 		if err := batch.ClearRawRange(insideKey2.Key, outsideKey4.Key, true, true); !isWriteSpanErr(err) {
@@ -303,7 +303,7 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 	}
 
 	for _, batch := range []storage.Batch{batchBefore, batchNonMVCC} {
-		if err := batch.ClearUnversioned(wkey.Key); !isWriteSpanErr(err) {
+		if err := batch.ClearUnversioned(wkey.Key, storage.ClearOptions{}); !isWriteSpanErr(err) {
 			t.Errorf("ClearUnversioned: unexpected error %v", err)
 		}
 		{

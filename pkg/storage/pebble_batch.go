@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
@@ -58,6 +59,7 @@ type pebbleBatch struct {
 	iterStatsReporter                iterStatsReporter
 	batchStatsReporter               batchStatsReporter
 	settings                         *cluster.Settings
+	mayWriteSizedDeletes             bool
 	shouldWriteLocalTimestamps       bool
 	shouldWriteLocalTimestampsCached bool
 }
@@ -112,7 +114,15 @@ func newPebbleBatch(
 		iterStatsReporter:  iterStatsReporter,
 		batchStatsReporter: batchStatsReporter,
 		settings:           settings,
+		// NB: We do not use settings.Version.IsActive because we do not
+		// generally have a guarantee that the cluster version has been
+		// initialized. As a part of initializing a store, we use a Batch to
+		// write the store identifer key; this is written before any cluster
+		// version has been initialized.
+		mayWriteSizedDeletes: settings.Version.ActiveVersionOrEmpty(context.TODO()).
+			IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones),
 	}
+
 	pb.wrappedIntentWriter = wrapIntentWriter(pb)
 	return pb
 }
@@ -277,43 +287,49 @@ func (p *pebbleBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 }
 
 // ClearMVCC implements the Batch interface.
-func (p *pebbleBatch) ClearMVCC(key MVCCKey) error {
+func (p *pebbleBatch) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	if key.Timestamp.IsEmpty() {
 		panic("ClearMVCC timestamp is empty")
 	}
-	return p.clear(key)
+	return p.clear(key, opts)
 }
 
 // ClearUnversioned implements the Batch interface.
-func (p *pebbleBatch) ClearUnversioned(key roachpb.Key) error {
-	return p.clear(MVCCKey{Key: key})
+func (p *pebbleBatch) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
+	return p.clear(MVCCKey{Key: key}, opts)
 }
 
 // ClearIntent implements the Batch interface.
 func (p *pebbleBatch) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
 ) error {
 	var err error
-	p.scratch, err = p.wrappedIntentWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, p.scratch)
+	p.scratch, err = p.wrappedIntentWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, p.scratch, opts)
 	return err
 }
 
 // ClearEngineKey implements the Batch interface.
-func (p *pebbleBatch) ClearEngineKey(key EngineKey) error {
+func (p *pebbleBatch) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
 	p.buf = key.EncodeToBuf(p.buf[:0])
-	return p.batch.Delete(p.buf, nil)
+	if !opts.ValueSizeKnown || !p.mayWriteSizedDeletes {
+		return p.batch.Delete(p.buf, nil)
+	}
+	return p.batch.DeleteSized(p.buf, opts.ValueSize, nil)
 }
 
-func (p *pebbleBatch) clear(key MVCCKey) error {
+func (p *pebbleBatch) clear(key MVCCKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
 
 	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], key)
-	return p.batch.Delete(p.buf, nil)
+	if !opts.ValueSizeKnown || !p.mayWriteSizedDeletes {
+		return p.batch.Delete(p.buf, nil)
+	}
+	return p.batch.DeleteSized(p.buf, opts.ValueSize, nil)
 }
 
 // SingleClearEngineKey implements the Batch interface.
