@@ -60,8 +60,9 @@ func TestConnectingToDownNode(t *testing.T) {
 		const n = 100
 		for i := 0; i < n; i++ {
 			tBegin := timeutil.Now()
-			_, err = rpcCtx.GRPCDialNode(ln.Addr().String(), 1, DefaultClass).Connect(ctx)
-			require.True(t, errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)))
+			_, err = rpcCtx.GRPCDialNode(ln.Addr().String(), 1, DefaultClass).
+				Connect(ctx)
+			require.True(t, errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)), "%+v", err)
 			dur += timeutil.Since(tBegin)
 		}
 		avg := dur / n

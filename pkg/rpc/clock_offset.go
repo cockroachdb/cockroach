@@ -29,7 +29,7 @@ import (
 type RemoteClockMetrics struct {
 	ClockOffsetMeanNanos   *metric.Gauge
 	ClockOffsetStdDevNanos *metric.Gauge
-	LatencyHistogramNanos  metric.IHistogram
+	RoundTripLatency       metric.IHistogram
 }
 
 // avgLatencyMeasurementAge determines how to exponentially weight the
@@ -52,10 +52,22 @@ var (
 		Measurement: "Clock Offset",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaLatencyHistogramNanos = metric.Metadata{
-		Name:        "round-trip-latency",
-		Help:        "Distribution of round-trip latencies with other nodes",
-		Measurement: "Roundtrip Latency",
+
+	metaConnectionRoundTripLatency = metric.Metadata{
+		// NB: the name is legacy and should not be changed since customers
+		// rely on it.
+		Name: "round-trip-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+This only reflects successful heartbeats and measures gRPC overhead as well as
+possible head-of-line blocking. Elevated values in this metric may hint at
+network issues and/or saturation, but they are no proof of them. CPU overload
+can similarly elevate this metric. The operator should look towards OS-level
+metrics such as packet loss, retransmits, etc, to conclusively diagnose network
+issues. Heartbeats are not very frequent (~seconds), so they may not capture
+rare or short-lived degradations.
+`,
+		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 )
@@ -138,11 +150,14 @@ func newRemoteClockMonitor(
 	r.metrics = RemoteClockMetrics{
 		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
 		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
-		LatencyHistogramNanos: metric.NewHistogram(metric.HistogramOptions{
+		RoundTripLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
-			Metadata: metaLatencyHistogramNanos,
+			Metadata: metaConnectionRoundTripLatency,
 			Duration: histogramWindowInterval,
-			Buckets:  metric.IOLatencyBuckets,
+			// NB: the choice of IO over Network buckets is somewhat debatable, but
+			// it's fine. Heartbeats can take >1s which the IO buckets can represent,
+			// but the Network buckets top out at 1s.
+			Buckets: metric.IOLatencyBuckets,
 		}),
 	}
 	return &r
@@ -262,7 +277,7 @@ func (r *RemoteClockMonitor) UpdateOffset(
 		newLatencyf := float64(roundTripLatency.Nanoseconds())
 		prevAvg := info.avgNanos.Value()
 		info.avgNanos.Add(newLatencyf)
-		r.metrics.LatencyHistogramNanos.RecordValue(roundTripLatency.Nanoseconds())
+		r.metrics.RoundTripLatency.RecordValue(roundTripLatency.Nanoseconds())
 
 		// See: https://github.com/cockroachdb/cockroach/issues/96262
 		// See: https://github.com/cockroachdb/cockroach/issues/98066
@@ -375,4 +390,37 @@ func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Durati
 
 func (r RemoteOffset) isStale(ttl time.Duration, now time.Time) bool {
 	return r.measuredAt().Add(ttl).Before(now)
+}
+
+func updateClockOffsetTracking(
+	ctx context.Context,
+	remoteClocks *RemoteClockMonitor,
+	nodeID roachpb.NodeID,
+	sendTime, serverTime, receiveTime time.Time,
+	toleratedOffset time.Duration,
+) (time.Duration, RemoteOffset, error) {
+	pingDuration := receiveTime.Sub(sendTime)
+	if remoteClocks == nil {
+		// Only a server connecting to another server needs to check clock
+		// offsets. A CLI command does not need to update its local HLC, nor does
+		// it care that strictly about client-server latency, nor does it need to
+		// track the offsets.
+
+		return pingDuration, RemoteOffset{}, nil
+	}
+
+	var offset RemoteOffset
+	if pingDuration <= maximumPingDurationMult*toleratedOffset {
+		// Offset and error are measured using the remote clock reading
+		// technique described in
+		// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+		// However, we assume that drift and min message delay are 0, for
+		// now.
+		offset.MeasuredAt = receiveTime.UnixNano()
+		offset.Uncertainty = (pingDuration / 2).Nanoseconds()
+		remoteTimeNow := serverTime.Add(pingDuration / 2)
+		offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
+	}
+	remoteClocks.UpdateOffset(ctx, nodeID, offset, pingDuration)
+	return pingDuration, offset, remoteClocks.VerifyClockOffset(ctx)
 }

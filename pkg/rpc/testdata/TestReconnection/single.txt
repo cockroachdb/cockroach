@@ -1,0 +1,71 @@
+# This basic test operates against a single server. It establishes a healthy
+# DefaultClass connection, then interrupts the heartbeat, lets the peer reconnect,
+# then adds a SystemClass and RangeFeedClass connection, and interrupts heartbeats
+# again. At each step, metrics are verified via `soon`.
+dial n1 class=def
+----
+ok
+
+soon healthy=1
+----
+ok
+
+connect n1 class=def
+----
+ok
+
+set-hb-err n1
+----
+ok
+
+soon unhealthy=1
+----
+ok
+
+show n1 class=def
+----
+tripped:   true
+inactive:  false
+deletable: false
+
+# Trying to reconnect, we are stopped by the
+# circuit breaker.
+connect n1 class=def
+----
+error code: ‹Unknown› [tripped=true]
+
+reset-hb-err n1
+----
+ok
+
+soon n1 healthy=1
+----
+ok
+
+connect n1 class=def
+----
+ok
+
+connect n1 class=sys
+----
+ok
+
+soon n1 healthy=2
+----
+ok
+
+connect n1 class=rf
+----
+ok
+
+soon healthy=3
+----
+ok
+
+set-hb-err n1
+----
+ok
+
+soon n1 unhealthy=3
+----
+ok

@@ -445,7 +445,8 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 		StoreID:   1,
 		ReplicaID: 1,
 	}
-	clientTransport := rttc.AddNode(clientReplica.NodeID)
+	_ = rttc.AddNode(clientReplica.NodeID)
+	rttc.GossipNode(serverReplica.NodeID, &util.UnresolvedAddr{NetworkField: "invalid", AddressField: "127.0.0.1:999999999"})
 
 	// Sending repeated messages should begin dropping once the circuit breaker
 	// does trip.
@@ -464,7 +465,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 	// snuck in.
 	testutils.SucceedsSoon(t, func() error {
 		if !rttc.Send(clientReplica, serverReplica, 1, raftpb.Message{Commit: 2}) {
-			clientTransport.GetCircuitBreaker(serverReplica.NodeID, rpc.DefaultClass).Reset()
+			return errors.New("messages still dropped")
 		}
 		select {
 		case req := <-serverChannel.ch:

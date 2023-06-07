@@ -90,6 +90,12 @@ func (b *Breaker) Signal() Signal {
 	return b.mu.errAndCh
 }
 
+// Probe forces the breaker probe to run (if it is not already running),
+// even if the breaker is not currently tripped.
+func (b *Breaker) Probe() {
+	b.maybeTriggerProbe(true /* force */)
+}
+
 // HasMark returns whether the error has an error mark that is unique to this
 // breaker. In other words, the error originated at this Breaker.
 //
@@ -146,7 +152,7 @@ func (b *Breaker) Report(err error) {
 		// and we don't want a self-perpetuating loop of probe invocations. Instead,
 		// we only probe when clients are actively asking the Breaker for its
 		// status, via Breaker.Signal.
-		b.maybeTriggerProbe()
+		b.maybeTriggerProbe(false /* force */)
 	}
 }
 
@@ -224,9 +230,9 @@ func TestingSetTripped(b *Breaker, err error) (undo func()) {
 	}
 }
 
-func (b *Breaker) maybeTriggerProbe() {
+func (b *Breaker) maybeTriggerProbe(force bool) {
 	b.mu.Lock()
-	if b.mu.probing || b.mu.errAndCh.err == nil {
+	if b.mu.probing || (!force && b.mu.errAndCh.err == nil) {
 		b.mu.Unlock()
 		// A probe is already running or the breaker is not currently tripped. The
 		// latter case can occur since maybeTriggerProbe is invoked from
@@ -270,7 +276,7 @@ func (b *Breaker) maybeTriggerProbe() {
 
 func (b *Breaker) newErrAndCh() *errAndCh {
 	return &errAndCh{
-		maybeTriggerProbe: b.maybeTriggerProbe,
+		maybeTriggerProbe: func() { b.maybeTriggerProbe(false /* force */) },
 		ch:                make(chan struct{}),
 	}
 }

@@ -80,6 +80,11 @@ message NotLeaseHolderError {
 message NodeUnavailableError {
 }
 
+// A NodeDecommissionedError is returned when trying to connect from or to a
+// peer that is known to have been decommissioned.
+message NodeDecommissionedError {
+}
+
 // An UnsupportedRequestError indicates that the recipient node
 // does not know how to handle the type of request received.
 message UnsupportedRequestError {

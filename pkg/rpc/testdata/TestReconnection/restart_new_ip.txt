@@ -1,0 +1,76 @@
+# This test demonstrates that the rpc connection
+# pool handles the case in which a node is listening
+# on two separate addresses.
+# Even though this is not something that should occur
+# in production, misconfiguration could conceivably
+# create that situation. Also, nodes restarting and
+# moving between IP addresses in the process could,
+# for a short moment, lead to a situation that looks
+# almost indistinguishable.
+#
+# The test then proceeds to demonstrate that when one
+# of the two connections goes unhealthy, it will enter
+# inactive mode, but can also recover from that when
+# needed (and possible).
+#
+# All in all, this test demonstrates satisfactory
+# handling of the case in which a node restarts
+# under a new IP address.
+connect n1 class=def
+----
+ok
+
+soon healthy=1
+----
+ok
+
+connect n1' class=def
+----
+ok
+
+soon healthy=2
+----
+ok
+
+set-hb-err n1
+----
+ok
+
+# When n1 fails, it sees the healthy
+# connection to n1' and goes into inactive
+# mode.
+soon healthy=1 inactive=1
+----
+ok
+
+set-hb-err n1'
+----
+ok
+
+# When n1' also trips, it will be marked
+# as unhealthy.
+soon healthy=0 unhealthy=1 inactive=1
+----
+ok
+
+reset-hb-err n1 n1'
+----
+ok
+
+# Despite heartbeats not failing, the connection
+# to n1 remains inactive. It needs some activity
+# to trigger the probe.
+soon healthy=1 inactive=1
+----
+ok
+
+# This attempt kicks off a probe, but doesn't wait for the probe.
+connect n1 class=def
+----
+error code: ‹Unknown› [tripped=true]
+
+# However, the probe *was* kicked off and heals the peer
+# soon.
+soon healthy=2
+----
+ok
