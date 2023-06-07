@@ -779,12 +779,6 @@ func (c *cluster) PushTransaction(
 func (c *cluster) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
 ) *kvpb.Error {
-	var obsStr string
-	if obs := intent.ClockWhilePending; obs != (roachpb.ObservedTimestamp{}) {
-		obsStr = fmt.Sprintf(" and clock observation {%d %v}", obs.NodeID, obs.Timestamp)
-	}
-	log.Eventf(ctx, "resolving intent %s for txn %s with %s status%s",
-		intent.Key, intent.Txn.ID.Short(), intent.Status, obsStr)
 	c.m.OnLockUpdated(ctx, &intent)
 	return nil
 }
@@ -793,7 +787,6 @@ func (c *cluster) ResolveIntent(
 func (c *cluster) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
 ) *kvpb.Error {
-	log.Eventf(ctx, "resolving a batch of %d intent(s)", len(intents))
 	for _, intent := range intents {
 		if err := c.ResolveIntent(ctx, intent, opts); err != nil {
 			return err
