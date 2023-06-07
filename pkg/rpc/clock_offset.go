@@ -391,3 +391,37 @@ func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Durati
 func (r RemoteOffset) isStale(ttl time.Duration, now time.Time) bool {
 	return r.measuredAt().Add(ttl).Before(now)
 }
+
+// TODO(during review): move to clock_offset.go after dust has settled.
+func updateClockOffsetTracking(
+	ctx context.Context,
+	remoteClocks *RemoteClockMonitor,
+	nodeID roachpb.NodeID,
+	sendTime, serverTime, receiveTime time.Time,
+	toleratedOffset time.Duration,
+) (time.Duration, RemoteOffset, error) {
+	pingDuration := receiveTime.Sub(sendTime)
+	if remoteClocks == nil {
+		// Only a server connecting to another server needs to check clock
+		// offsets. A CLI command does not need to update its local HLC, nor does
+		// it care that strictly about client-server latency, nor does it need to
+		// track the offsets.
+
+		return pingDuration, RemoteOffset{}, nil
+	}
+
+	var offset RemoteOffset
+	if pingDuration <= maximumPingDurationMult*toleratedOffset {
+		// Offset and error are measured using the remote clock reading
+		// technique described in
+		// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+		// However, we assume that drift and min message delay are 0, for
+		// now.
+		offset.MeasuredAt = receiveTime.UnixNano()
+		offset.Uncertainty = (pingDuration / 2).Nanoseconds()
+		remoteTimeNow := serverTime.Add(pingDuration / 2)
+		offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
+	}
+	remoteClocks.UpdateOffset(ctx, nodeID, offset, pingDuration)
+	return pingDuration, offset, remoteClocks.VerifyClockOffset(ctx)
+}
