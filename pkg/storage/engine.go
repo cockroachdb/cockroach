@@ -631,8 +631,12 @@ type Writer interface {
 	// actually removes entries from the storage engine, rather than inserting
 	// MVCC tombstones.
 	//
+	// If the caller knows the size of the value that is being cleared, they
+	// should set ClearOptions.{ValueSizeKnown, ValueSize} accordingly to
+	// improve the storage engine's ability to prioritize compactions.
+	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCC(key MVCCKey) error
+	ClearMVCC(key MVCCKey, opts ClearOptions) error
 	// ClearUnversioned removes an unversioned item from the db. It is for use
 	// with inline metadata (not intents) and other unversioned keys (like
 	// Range-ID local keys). It does not affect range keys.
@@ -835,6 +839,34 @@ type Writer interface {
 	// not buffered. Buffered writers are expected to always give a monotonically
 	// increasing size.
 	BufferedSize() int
+}
+
+// TODO(jackson): Consider propagating ClearOptions through additional Writer
+// functions, like ClearEngineKey and ClearUnversioned.
+
+// ClearOptions holds optional parameters to methods that clear keys from the
+// storage engine.
+type ClearOptions struct {
+	// ValueSizeKnown indicates whether the ValueSize carries a meaningful
+	// value. If false, ValueSize is ignored.
+	ValueSizeKnown bool
+	// ValueSize may be provided to indicate the size of the existing KV
+	// record's value that is being removed. ValueSize should be the encoded
+	// value size that the storage engine observes. If the value is a
+	// MVCCMetadata, ValueSize should be the length of the encoded MVCCMetadata.
+	// If the value is a MVCCValue, ValueSize should be the length of the
+	// encoded MVCCValue.
+	//
+	// Setting ValueSize and ValueSizeKnown improves the storage engine's
+	// ability to estimate space amplification and prioritize compactions.
+	// Without it, compaction heuristics rely on average value sizes which are
+	// susceptible to over and under estimation.
+	//
+	// If the true value size is unknown, leave ValueSizeKnown false.
+	// Correctness is not compromised if ValueSize is incorrect; the underlying
+	// key will always be cleared regardless of whether its value size matches
+	// the provided value.
+	ValueSize uint32
 }
 
 // ReadWriter is the read/write interface to an engine's data.

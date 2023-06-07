@@ -990,7 +990,7 @@ func cmdClear(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(nil)
 	return e.withWriter("clear", func(rw storage.ReadWriter) error {
-		return rw.ClearMVCC(storage.MVCCKey{Key: key, Timestamp: ts})
+		return rw.ClearMVCC(storage.MVCCKey{Key: key, Timestamp: ts}, storage.ClearOptions{})
 	})
 }
 
