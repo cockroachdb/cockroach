@@ -187,6 +187,11 @@ func CheckForInvalidDescriptors(t testing.TB, sqlDB *gosql.DB) {
 	// acquisition and allows the query to fetch all descriptors in the cluster.
 	rows, err := sqlDB.Query(`SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
 	if err != nil {
+		if testutils.IsError(err, "role .* was concurrently dropped") {
+			// Some tests do not restore users, so the user who owned this session may
+			// no longer exist.
+			return
+		}
 		t.Fatal(err)
 	}
 	invalidIDs, err := sqlutils.RowsToDataDrivenOutput(rows)
