@@ -2781,6 +2781,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 				transactionFingerprintID,
 			)
 		}
+
 		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart)
 		if err != nil {
 			if log.V(1) {
@@ -2790,6 +2791,10 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 		}
 		// If we have a commitTimestamp, we should use it.
 		ex.previousTransactionCommitTimestamp.Forward(ev.commitTimestamp)
+	}
+
+	if telemetryLoggingEnabled.Get(&ex.server.cfg.Settings.SV) {
+		ex.server.TelemetryLoggingMetrics.onTxnFinish(ev.txnID.String())
 	}
 }
 
