@@ -119,6 +119,7 @@ func ReadFile(parquetFile string) (meta ReadDatumsMetadata, datums [][]tree.Datu
 		return ReadDatumsMetadata{}, nil, err
 	}
 
+	var colNames []string
 	startingRowIdx := 0
 	for rg := 0; rg < reader.NumRowGroups(); rg++ {
 		rgr := reader.RowGroup(rg)
@@ -126,11 +127,18 @@ func ReadFile(parquetFile string) (meta ReadDatumsMetadata, datums [][]tree.Datu
 		for i := int64(0); i < rowsInRowGroup; i++ {
 			readDatums = append(readDatums, make([]tree.Datum, rgr.NumColumns()))
 		}
+		if rg == 0 {
+			colNames = make([]string, 0, rgr.NumColumns())
+		}
 
 		for colIdx := 0; colIdx < rgr.NumColumns(); colIdx++ {
 			col, err := rgr.Column(colIdx)
 			if err != nil {
 				return ReadDatumsMetadata{}, nil, err
+			}
+
+			if rg == 0 {
+				colNames = append(colNames, col.Descriptor().Name())
 			}
 
 			dec, err := decoderFromFamilyAndType(oid.Oid(typOids[colIdx]), types.Family(typFamilies[colIdx]))
@@ -154,7 +162,7 @@ func ReadFile(parquetFile string) (meta ReadDatumsMetadata, datums [][]tree.Datu
 	}
 
 	for i := 0; i < len(readDatums); i++ {
-		readDatums[i] = squashTuples(readDatums[i], tupleColumns)
+		readDatums[i] = squashTuples(readDatums[i], tupleColumns, colNames)
 	}
 
 	return makeDatumMeta(reader, readDatums), readDatums, nil
@@ -411,11 +419,14 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 			ValidateDatum(t, arr1[i], arr2[i])
 		}
 	case types.TupleFamily:
-		arr1 := expected.(*tree.DTuple).D
-		arr2 := actual.(*tree.DTuple).D
-		require.Equal(t, len(arr1), len(arr2))
-		for i := 0; i < len(arr1); i++ {
-			ValidateDatum(t, arr1[i], arr2[i])
+		t1 := expected.(*tree.DTuple)
+		t2 := actual.(*tree.DTuple)
+		require.Equal(t, len(t1.D), len(t2.D))
+		for i := 0; i < len(t1.D); i++ {
+			ValidateDatum(t, t1.D[i], t2.D[i])
+		}
+		if t1.ResolvedType().TupleLabels() != nil {
+			require.Equal(t, t1.ResolvedType().TupleLabels(), t2.ResolvedType().TupleLabels())
 		}
 	case types.EnumFamily:
 		require.Equal(t, expected.(*tree.DEnum).LogicalRep, actual.(*tree.DEnum).LogicalRep)
@@ -544,14 +555,25 @@ type dNullTupleType struct {
 }
 
 // squashTuples takes an array of datums and merges groups of adjacent datums
-// into tuples using the passed intervals. Example:
+// into tuples using the supplied intervals. The provided column names will be
+// used as tuple labels.
 //
-// Input: ["0", "1", "2", "3", "4", "5", "6"] [[0, 1], [3, 3], [4, 6]]
-// Output: [("0", "1"), "2", ("3"), ("4", "5", "6")]
+// For example:
+//
+// Input:
+//
+//	datumRow = ["0", "1", "2", "3", "4", "5", "6"]
+//	tupleColIndexes = [[0, 1], [3, 3], [4, 6]]
+//	colNames = ["a", "b", "c", "d", "e", "f", "g"]
+//
+// Output:
+//
+//	[(a: "0", b: "1"), "2", (d: "3"), (e: "4", f: "5", g: "6")]
 //
 // Behavior is undefined if the intervals are not sorted, not disjoint,
-// not ascending, or out of bounds.
-func squashTuples(datumRow []tree.Datum, tupleColIndexes [][]int) []tree.Datum {
+// not ascending, or out of bounds. The number of elements in datumRow
+// should be equal to the number of labels in colNames.
+func squashTuples(datumRow []tree.Datum, tupleColIndexes [][]int, colNames []string) []tree.Datum {
 	if len(tupleColIndexes) == 0 {
 		return datumRow
 	}
@@ -559,6 +581,7 @@ func squashTuples(datumRow []tree.Datum, tupleColIndexes [][]int) []tree.Datum {
 	var updatedDatums []tree.Datum
 	var currentTupleDatums []tree.Datum
 	var currentTupleTypes []*types.T
+	var currentTupleLabels []string
 	for i, d := range datumRow {
 		if tupleIdx < len(tupleColIndexes) {
 			tupleUpperIdx := tupleColIndexes[tupleIdx][1]
@@ -567,18 +590,19 @@ func squashTuples(datumRow []tree.Datum, tupleColIndexes [][]int) []tree.Datum {
 			if i >= tupleLowerIdx && i <= tupleUpperIdx {
 				currentTupleDatums = append(currentTupleDatums, d)
 				currentTupleTypes = append(currentTupleTypes, d.ResolvedType())
-
+				currentTupleLabels = append(currentTupleLabels, colNames[i])
 				if i == tupleUpperIdx {
 					// Check for marker that indicates the entire tuple is NULL.
 					if currentTupleDatums[0] == dNullTuple {
 						updatedDatums = append(updatedDatums, tree.DNull)
 					} else {
-						tupleDatum := tree.MakeDTuple(types.MakeTuple(currentTupleTypes), currentTupleDatums...)
+						tupleDatum := tree.MakeDTuple(types.MakeLabeledTuple(currentTupleTypes, currentTupleLabels), currentTupleDatums...)
 						updatedDatums = append(updatedDatums, &tupleDatum)
 					}
 
 					currentTupleTypes = []*types.T{}
 					currentTupleDatums = []tree.Datum{}
+					currentTupleLabels = []string{}
 
 					tupleIdx += 1
 				}
