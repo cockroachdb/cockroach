@@ -331,11 +331,11 @@ func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 // not greater than any previous point key passed to this Writer (according to
 // the comparator configured during writer creation). `Close` cannot have been
 // called.
-func (fw *SSTWriter) ClearMVCC(key MVCCKey) error {
+func (fw *SSTWriter) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	if key.Timestamp.IsEmpty() {
 		panic("ClearMVCC timestamp is empty")
 	}
-	return fw.clear(key)
+	return fw.clear(key, opts)
 }
 
 // ClearUnversioned implements the Writer interface. An error is returned if
@@ -343,7 +343,7 @@ func (fw *SSTWriter) ClearMVCC(key MVCCKey) error {
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
 func (fw *SSTWriter) ClearUnversioned(key roachpb.Key) error {
-	return fw.clear(MVCCKey{Key: key})
+	return fw.clear(MVCCKey{Key: key}, ClearOptions{})
 }
 
 // ClearIntent implements the Writer interface. An error is returned if it is
@@ -372,12 +372,17 @@ func (fw *SSTWriter) ClearEngineKey(key EngineKey) error {
 // An error is returned if it is not greater than any previous point key
 // passed to this Writer (according to the comparator configured during writer
 // creation). `Close` cannot have been called.
-func (fw *SSTWriter) clear(key MVCCKey) error {
+func (fw *SSTWriter) clear(key MVCCKey, opts ClearOptions) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Clear on a closed writer")
 	}
 	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	fw.DataSize += int64(len(key.Key))
+	// TODO(jackson): We could use opts.ValueSize if known, but it would require
+	// additional logic around ensuring the cluster version is at least
+	// V23_2_UseSizedPebblePointTombstones. It's probably not worth it until we
+	// can unconditionally use it; I don't believe we ever write point
+	// tombstones to sstables constructed within Cockroach.
 	return fw.fw.Delete(fw.scratch)
 }
 

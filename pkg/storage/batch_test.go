@@ -861,7 +861,8 @@ func TestDecodeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	e, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
+	e, err := Open(context.Background(), InMemory(),
+		cluster.MakeTestingClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	assert.NoError(t, err)
 	defer e.Close()
 
@@ -923,7 +924,7 @@ func TestPebbleBatchReader(t *testing.T) {
 	require.NoError(t, b.PutEngineRangeKey(roachpb.Key("rangeFrom"), roachpb.Key("rangeTo"), []byte{7}, []byte("engineRangeKey")))
 
 	// Clear some already empty keys.
-	require.NoError(t, b.ClearMVCC(pointKey("mvccKey", 9)))
+	require.NoError(t, b.ClearMVCC(pointKey("mvccKey", 9), ClearOptions{}))
 	require.NoError(t, b.ClearMVCCRangeKey(rangeKey("rangeFrom", "rangeTo", 9)))
 	require.NoError(t, b.ClearRawRange(roachpb.Key("clearFrom"), roachpb.Key("clearTo"), true, true))
 

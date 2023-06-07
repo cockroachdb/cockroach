@@ -2027,7 +2027,10 @@ func mvccPutInternal(
 					iter = nil // prevent accidental use below
 				}
 
-				if err := writer.ClearMVCC(oldVersionKey); err != nil {
+				if err := writer.ClearMVCC(oldVersionKey, ClearOptions{
+					ValueSizeKnown: true,
+					ValueSize:      uint32(prevValSize),
+				}); err != nil {
 					return false, err
 				}
 			} else if writeTimestamp.Less(metaTimestamp) {
@@ -2605,22 +2608,27 @@ func MVCCClearTimeRange(
 	// This can be a big win for reverting bulk-ingestion of clustered data as the
 	// entire span may likely match and thus could be cleared in one ClearRange
 	// instead of hundreds of thousands of individual Clears.
-	buf := make([]MVCCKey, clearRangeThreshold)
+	type bufferedKey struct {
+		MVCCKey
+		valLen uint32
+	}
+	buf := make([]bufferedKey, clearRangeThreshold)
 	var bufSize int
 	var clearRangeStart MVCCKey
 
-	clearMatchingKey := func(k MVCCKey) {
+	clearMatchingKey := func(k MVCCKey, valLen uint32) {
 		if len(clearRangeStart.Key) == 0 {
 			// Currently buffering keys to clear one-by-one.
 			if bufSize < clearRangeThreshold {
 				buf[bufSize].Key = append(buf[bufSize].Key[:0], k.Key...)
 				buf[bufSize].Timestamp = k.Timestamp
+				buf[bufSize].valLen = valLen
 				bufSize++
 			} else {
 				// Buffer is now full -- switch to just tracking the start of the range
 				// from which we will clear when we either see a non-matching key or if
 				// we finish iterating.
-				clearRangeStart = buf[0]
+				clearRangeStart = buf[0].MVCCKey
 				bufSize = 0
 			}
 		}
@@ -2637,13 +2645,13 @@ func MVCCClearTimeRange(
 		} else if bufSize > 0 {
 			var encodedBufSize int64
 			for i := 0; i < bufSize; i++ {
-				encodedBufSize += int64(buf[i].EncodedSize())
+				encodedBufSize += int64(buf[i].MVCCKey.EncodedSize())
 			}
 			// Even though we didn't get a large enough number of keys to switch to
 			// clearrange, the byte size of the keys we did get is now too large to
 			// encode them all within the byte size limit, so use clearrange anyway.
 			if batchByteSize+encodedBufSize >= maxBatchByteSize {
-				if err := rw.ClearMVCCVersions(buf[0], nonMatch); err != nil {
+				if err := rw.ClearMVCCVersions(buf[0].MVCCKey, nonMatch); err != nil {
 					return err
 				}
 				batchByteSize += int64(buf[0].EncodedSize() + nonMatch.EncodedSize())
@@ -2657,7 +2665,10 @@ func MVCCClearTimeRange(
 							return err
 						}
 					} else {
-						if err := rw.ClearMVCC(buf[i]); err != nil {
+						if err := rw.ClearMVCC(buf[i].MVCCKey, ClearOptions{
+							ValueSizeKnown: true,
+							ValueSize:      buf[i].valLen,
+						}); err != nil {
 							return err
 						}
 					}
@@ -2906,7 +2917,7 @@ func MVCCClearTimeRange(
 		clearedMetaKey.Key = clearedMetaKey.Key[:0]
 
 		if startTime.Less(k.Timestamp) && k.Timestamp.LessEq(endTime) {
-			clearMatchingKey(k)
+			clearMatchingKey(k, uint32(valueLen))
 			clearedMetaKey.Key = append(clearedMetaKey.Key[:0], k.Key...)
 			clearedMeta.KeyBytes = MVCCVersionTimestampSize
 			clearedMeta.ValBytes = int64(valueLen)
@@ -4752,7 +4763,10 @@ func mvccResolveWriteIntent(
 			if err = rw.PutMVCC(newKey, newValue); err != nil {
 				return false, err
 			}
-			if err = rw.ClearMVCC(oldKey); err != nil {
+			if err = rw.ClearMVCC(oldKey, ClearOptions{
+				ValueSizeKnown: true,
+				ValueSize:      uint32(len(v)),
+			}); err != nil {
 				return false, err
 			}
 
@@ -4834,7 +4848,10 @@ func mvccResolveWriteIntent(
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
 
 	// First clear the provisional value.
-	if err := rw.ClearMVCC(latestKey); err != nil {
+	if err := rw.ClearMVCC(latestKey, ClearOptions{
+		ValueSizeKnown: true,
+		ValueSize:      uint32(meta.ValBytes),
+	}); err != nil {
 		return false, err
 	}
 
@@ -5388,11 +5405,15 @@ func MVCCGarbageCollect(
 			if !unsafeIterKey.IsValue() {
 				break
 			}
+
+			var clearOpts ClearOptions
 			if ms != nil {
 				valLen, valIsTombstone, err := iter.MVCCValueLenAndIsTombstone()
 				if err != nil {
 					return err
 				}
+				clearOpts.ValueSizeKnown = true
+				clearOpts.ValueSize = uint32(valLen)
 				keySize := MVCCVersionTimestampSize
 				valSize := int64(valLen)
 
@@ -5415,7 +5436,7 @@ func MVCCGarbageCollect(
 				ms.Add(updateStatsOnGC(gcKey.Key, keySize, valSize, false /* metaKey */, fromNS))
 			}
 			count++
-			if err := rw.ClearMVCC(unsafeIterKey); err != nil {
+			if err := rw.ClearMVCC(unsafeIterKey, clearOpts); err != nil {
 				return err
 			}
 			prevNanos = unsafeIterKey.Timestamp.WallTime
@@ -7025,7 +7046,10 @@ func ReplacePointTombstonesWithRangeTombstones(
 		clearedKey.Key = append(clearedKey.Key[:0], key.Key...)
 		clearedKey.Timestamp = key.Timestamp
 		clearedKeySize := int64(EncodedMVCCKeyPrefixLength(clearedKey.Key))
-		if err := rw.ClearMVCC(key); err != nil {
+		if err := rw.ClearMVCC(key, ClearOptions{
+			ValueSizeKnown: true,
+			ValueSize:      uint32(valueLen),
+		}); err != nil {
 			return err
 		}
 

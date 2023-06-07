@@ -14,6 +14,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
@@ -58,6 +59,7 @@ type pebbleBatch struct {
 	iterStatsReporter                iterStatsReporter
 	batchStatsReporter               batchStatsReporter
 	settings                         *cluster.Settings
+	mayWriteSizedDeletes             bool
 	shouldWriteLocalTimestamps       bool
 	shouldWriteLocalTimestampsCached bool
 }
@@ -112,7 +114,12 @@ func newPebbleBatch(
 		iterStatsReporter:  iterStatsReporter,
 		batchStatsReporter: batchStatsReporter,
 		settings:           settings,
+		mayWriteSizedDeletes: settings.Version.IsActive(
+			context.TODO(),
+			clusterversion.V23_2_UseSizedPebblePointTombstones,
+		),
 	}
+
 	pb.wrappedIntentWriter = wrapIntentWriter(pb)
 	return pb
 }
@@ -277,16 +284,16 @@ func (p *pebbleBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 }
 
 // ClearMVCC implements the Batch interface.
-func (p *pebbleBatch) ClearMVCC(key MVCCKey) error {
+func (p *pebbleBatch) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	if key.Timestamp.IsEmpty() {
 		panic("ClearMVCC timestamp is empty")
 	}
-	return p.clear(key)
+	return p.clear(key, opts)
 }
 
 // ClearUnversioned implements the Batch interface.
 func (p *pebbleBatch) ClearUnversioned(key roachpb.Key) error {
-	return p.clear(MVCCKey{Key: key})
+	return p.clear(MVCCKey{Key: key}, ClearOptions{})
 }
 
 // ClearIntent implements the Batch interface.
@@ -307,13 +314,16 @@ func (p *pebbleBatch) ClearEngineKey(key EngineKey) error {
 	return p.batch.Delete(p.buf, nil)
 }
 
-func (p *pebbleBatch) clear(key MVCCKey) error {
+func (p *pebbleBatch) clear(key MVCCKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
 
 	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], key)
-	return p.batch.Delete(p.buf, nil)
+	if !opts.ValueSizeKnown || !p.mayWriteSizedDeletes {
+		return p.batch.Delete(p.buf, nil)
+	}
+	return p.batch.DeleteSized(p.buf, opts.ValueSize, nil)
 }
 
 // SingleClearEngineKey implements the Batch interface.
