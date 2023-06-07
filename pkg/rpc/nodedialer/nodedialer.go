@@ -214,13 +214,9 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 // "hint" to use a connection if it already exists, but simultaneously kick off
 // a connection attempt in the background if it doesn't and always return
 // immediately. It is only used today by DistSQL and it should probably be
-// removed and moved into that code.
-//
-// TODO(during PR): callers can now just blindly dial because circuit breakers are built
-// into rpc.Context, meaning the only blocking dial is the very first time a peer is tried
-// after this node has booted up. Callers who don't even want to block there can use a
-// newly introduced n.DialConn (returning `*rpc.Connection`) and then verify `conn.Health()`
-// prior to `conn.Connect(ctx)`.
+// removed and moved into that code. Also, as of #99191, we have stateful
+// circuit breakers that probe in the background and so whatever exactly it
+// is the caller really wants can likely be achieved by more direct means.
 func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	err := n.ConnHealth(nodeID, class)
 	if err == nil {
