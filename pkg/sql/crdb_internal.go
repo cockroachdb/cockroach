@@ -2331,7 +2331,7 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateQueriesTable(ctx, addRow, response)
+		return populateQueriesTable(ctx, p, addRow, response)
 	},
 }
 
@@ -2349,13 +2349,37 @@ var crdbInternalClusterQueriesTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateQueriesTable(ctx, addRow, response)
+		return populateQueriesTable(ctx, p, addRow, response)
 	},
 }
 
 func populateQueriesTable(
-	ctx context.Context, addRow func(...tree.Datum) error, response *serverpb.ListSessionsResponse,
+	ctx context.Context,
+	p *planner,
+	addRow func(...tree.Datum) error,
+	response *serverpb.ListSessionsResponse,
 ) error {
+	shouldRedactQuery := false
+	// Check if the user is admin.
+	if isAdmin, err := p.HasAdminRole(ctx); err != nil {
+		return err
+	} else if !isAdmin {
+		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
+		// privileges.
+		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+			return err
+		} else if hasViewActivityRedacted {
+			// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
+			// over VIEWACTIVITY.
+			shouldRedactQuery = true
+		} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
+			return err
+		} else if !hasViewActivity {
+			// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
+			// return insufficient privileges error.
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+	}
 	for _, session := range response.Sessions {
 		sessionID := getSessionID(session)
 		for _, query := range session.ActiveQueries {
@@ -2400,6 +2424,10 @@ func populateQueriesTable(
 
 			// Interpolate placeholders into the SQL statement.
 			sql := formatActiveQuery(query)
+			// If the user does not have the correct privileges, show the query without literals or constants.
+			if shouldRedactQuery {
+				sql = query.SqlNoConstants
+			}
 			if err := addRow(
 				tree.NewDString(query.ID),
 				txnID,
