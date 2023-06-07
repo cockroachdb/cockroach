@@ -12,7 +12,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 7 elements transitioning toward PUBLIC
+    │   ├── • 9 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 3}
     │   │   │   │ WRITE_ONLY → PUBLIC
@@ -38,7 +38,13 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
     │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
     │   │   ├── • ColumnName:{DescID: 104, Name: k, ColumnID: 3}
@@ -98,6 +104,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │   │   │   └── • Precedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
     │   │   │         rule: "index dependents exist before index becomes public"
     │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
     │   │   ├── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
     │   │   │     ABSENT → PUBLIC
     │   │   │
@@ -130,7 +142,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
     │   │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │
-    │   └── • 17 Mutation operations
+    │   └── • 19 Mutation operations
     │       │
     │       ├── • SetColumnName
     │       │     ColumnID: 3
@@ -142,6 +154,18 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │       │     TableID: 104
     │       │
     │       ├── • RefreshStats
+    │       │     TableID: 104
+    │       │
+    │       ├── • AddColumnToIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 3
+    │       │     Kind: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • AddColumnToIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 4
+    │       │     Kind: 2
     │       │     TableID: 104
     │       │
     │       ├── • SetColumnName
