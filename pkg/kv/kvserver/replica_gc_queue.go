@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -106,6 +107,7 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 			failures:                 store.metrics.ReplicaGCQueueFailures,
 			pending:                  store.metrics.ReplicaGCQueuePending,
 			processingNanos:          store.metrics.ReplicaGCQueueProcessingNanos,
+			disabledConfig:           kvserverbase.ReplicaGCQueueEnabled,
 		},
 	)
 	return rgcq
