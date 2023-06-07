@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -183,6 +184,7 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 			failures:             store.metrics.RaftLogQueueFailures,
 			pending:              store.metrics.RaftLogQueuePending,
 			processingNanos:      store.metrics.RaftLogQueueProcessingNanos,
+			disabledConfig:       kvserverbase.RaftLogQueueEnabled,
 		},
 	)
 	return rlq

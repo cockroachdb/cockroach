@@ -332,8 +332,8 @@ type queueConfig struct {
 	// want to try to replicate a range until we know which zone it is in and
 	// therefore how many replicas are required).
 	acceptsUnsplitRanges bool
-	// processDestroyedReplicas controls whether or not we want to process replicas
-	// that have been destroyed but not GCed.
+	// processDestroyedReplicas controls whether or not we want to process
+	// replicas that have been destroyed but not GCed.
 	processDestroyedReplicas bool
 	// processTimeout returns the timeout for processing a replica.
 	processTimeoutFunc queueProcessTimeoutFunc
@@ -343,10 +343,14 @@ type queueConfig struct {
 	failures *metric.Counter
 	// pending is a gauge measuring current replica count pending.
 	pending *metric.Gauge
-	// processingNanos is a counter measuring total nanoseconds spent processing replicas.
+	// processingNanos is a counter measuring total nanoseconds spent processing
+	// replicas.
 	processingNanos *metric.Counter
 	// purgatory is a gauge measuring current replica count in purgatory.
 	purgatory *metric.Gauge
+	// disabledConfig is a reference to the cluster setting that controls enabling
+	// and disabling queues.
+	disabledConfig *settings.BoolSetting
 }
 
 // baseQueue is the base implementation of the replicaQueue interface. Queue
@@ -440,8 +444,7 @@ type baseQueue struct {
 		priorityQ      priorityQueue                      // The priority queue
 		purgatory      map[roachpb.RangeID]PurgatoryError // Map of replicas to processing errors
 		stopped        bool
-		// Some tests in this package disable queues.
-		disabled bool
+		disabled       bool
 	}
 }
 
@@ -494,6 +497,10 @@ func newBaseQueue(name string, impl queueImpl, store *Store, cfg queueConfig) *b
 		},
 	}
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
+	bq.SetDisabled(!cfg.disabledConfig.Get(&store.cfg.Settings.SV))
+	cfg.disabledConfig.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
+		bq.SetDisabled(!cfg.disabledConfig.Get(&store.cfg.Settings.SV))
+	})
 
 	return &bq
 }
