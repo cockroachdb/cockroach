@@ -166,3 +166,18 @@ func TestParseExtendedOptions(t *testing.T) {
 	require.Equal(t, kvs.Get("intervalstyle"), "ISO_8601")
 	require.Equal(t, kvs.Get("custom_option.custom_option"), "test2")
 }
+
+func TestEncodeExtendedOptions(t *testing.T) {
+	kvs := url.Values{}
+	kvs.Set("user", "test")
+	kvs.Set("a b", "test")
+	kvs.Set("test", "c d")
+	kvs.Set(`a\ b`, `c\d`)
+
+	opts := EncodeExtendedOptions(kvs)
+	require.Equal(t, `-ca\ b=test -ca\\\ b=c\\d -ctest=c\ d -cuser=test `, opts)
+
+	kv2, err := ParseExtendedOptions(opts)
+	require.NoError(t, err)
+	require.Equal(t, kvs, kv2)
+}
