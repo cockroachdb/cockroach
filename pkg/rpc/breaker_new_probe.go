@@ -27,8 +27,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 )
 
-// TODO(during review): when dust has settled, rename to breakerDisabled().
-func (p *peer) disabled() bool {
+func (p *peer) breakerDisabled() bool {
 	return !enableRPCCircuitBreakers.Get(&p.opts.Settings.SV)
 }
 
@@ -230,7 +229,7 @@ func (p *peer) maybeDelete(ctx context.Context, now time.Time) {
 		return
 	}
 
-	if !p.disabled() && !snap.deletable(now) {
+	if !p.breakerDisabled() && !snap.deletable(now) {
 		return
 	}
 
