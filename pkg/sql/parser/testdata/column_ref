@@ -1,0 +1,23 @@
+parse
+SELECT {TABLE:123}.a FROM t;
+----
+SELECT {TABLE:123}.a FROM t -- normalized!
+SELECT ({TABLE:123}.a) FROM t -- fully parenthesized
+SELECT {TABLE:123}.a FROM t -- literals removed
+SELECT {TABLE:123}._ FROM _ -- identifiers removed
+
+parse
+SELECT {TABLE:123}.a FROM t WHERE {TABLE:123}.b > 20 ORDER BY {TABLE:123}.b;
+----
+SELECT {TABLE:123}.a FROM t WHERE {TABLE:123}.b > 20 ORDER BY {TABLE:123}.b -- normalized!
+SELECT ({TABLE:123}.a) FROM t WHERE (({TABLE:123}.b) > (20)) ORDER BY ({TABLE:123}.b) -- fully parenthesized
+SELECT {TABLE:123}.a FROM t WHERE {TABLE:123}.b > _ ORDER BY {TABLE:123}.b -- literals removed
+SELECT {TABLE:123}._ FROM _ WHERE {TABLE:123}._ > 20 ORDER BY {TABLE:123}._ -- identifiers removed
+
+parse
+SELECT {TABLE:123}.a + {TABLE:321}.a FROM t1 JOIN t2 ON {TABLE:123}.b = {TABLE:321}.b GROUP BY {TABLE:123}.a + {TABLE:321}.a HAVING {TABLE:123}.a + {TABLE:321}.a > 1;
+----
+SELECT {TABLE:123}.a + {TABLE:321}.a FROM t1 JOIN t2 ON {TABLE:123}.b = {TABLE:321}.b GROUP BY {TABLE:123}.a + {TABLE:321}.a HAVING ({TABLE:123}.a + {TABLE:321}.a) > 1 -- normalized!
+SELECT (({TABLE:123}.a) + ({TABLE:321}.a)) FROM t1 JOIN t2 ON (({TABLE:123}.b) = ({TABLE:321}.b)) GROUP BY (({TABLE:123}.a) + ({TABLE:321}.a)) HAVING (((({TABLE:123}.a) + ({TABLE:321}.a))) > (1)) -- fully parenthesized
+SELECT {TABLE:123}.a + {TABLE:321}.a FROM t1 JOIN t2 ON {TABLE:123}.b = {TABLE:321}.b GROUP BY {TABLE:123}.a + {TABLE:321}.a HAVING ({TABLE:123}.a + {TABLE:321}.a) > _ -- literals removed
+SELECT {TABLE:123}._ + {TABLE:321}._ FROM _ JOIN _ ON {TABLE:123}._ = {TABLE:321}._ GROUP BY {TABLE:123}._ + {TABLE:321}._ HAVING ({TABLE:123}._ + {TABLE:321}._) > 1 -- identifiers removed

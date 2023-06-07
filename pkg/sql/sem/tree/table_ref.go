@@ -10,7 +10,11 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+)
 
 // ID is a custom type for {Database,Table}Descriptor IDs.
 type ID = catid.ColumnID
@@ -58,3 +62,32 @@ func (n *TableRef) String() string { return AsString(n) }
 
 // tableExpr implements the TableExpr interface.
 func (n *TableRef) tableExpr() {}
+
+// TableIDRef represents a table by its descriptor ID.
+type TableIDRef struct {
+	ID int64
+}
+
+func (expr *TableIDRef) Format(ctx *FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("{TABLE:%v}", expr.ID))
+}
+
+func (expr *TableIDRef) WalkTableExpr(visitor Visitor) TableExpr {
+	return expr
+}
+
+// ColumnNameRef represent a column prefixed with a table id reference.
+type ColumnNameRef struct {
+	Table      *TableIDRef
+	ColumnName Name
+}
+
+// Format implements the NodeFormatter interface.
+func (expr *ColumnNameRef) Format(ctx *FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("{TABLE:%d}.", expr.Table.ID))
+	expr.ColumnName.Format(ctx)
+}
+
+func (expr *ColumnNameRef) String() string {
+	return AsString(expr)
+}
