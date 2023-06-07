@@ -362,7 +362,7 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 
 		// Verify the payload in the system.job_info is the same as what we read
 		// from system.jobs.
-		require.NoError(t, infoStorage.Iterate(ctx, legacyPayloadKey, func(infoKey string, value []byte) error {
+		require.NoError(t, infoStorage.Iterate(ctx, LegacyPayloadKey, func(infoKey string, value []byte) error {
 			data, err := protoutil.Marshal(&expectedPayload)
 			if err != nil {
 				panic(err)
@@ -373,7 +373,7 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 
 		// Verify the progress in the system.job_info is the same as what we read
 		// from system.jobs.
-		require.NoError(t, infoStorage.Iterate(ctx, legacyProgressKey, func(infoKey string, value []byte) error {
+		require.NoError(t, infoStorage.Iterate(ctx, LegacyProgressKey, func(infoKey string, value []byte) error {
 			data, err := protoutil.Marshal(&expectedProgress)
 			if err != nil {
 				panic(err)
