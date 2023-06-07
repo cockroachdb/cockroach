@@ -76,7 +76,7 @@ func registerFailover(r registry.Registry) {
 				Name:                "failover/chaos" + suffix,
 				Owner:               registry.OwnerKV,
 				Timeout:             60 * time.Minute,
-				Cluster:             r.MakeClusterSpec(10, spec.CPU(4), spec.PreferLocalSSD(false)), // uses disk stalls
+				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.PreferLocalSSD(false)), // uses disk stalls
 				Leases:              leases,
 				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -90,7 +90,7 @@ func registerFailover(r registry.Registry) {
 			Owner:     registry.OwnerKV,
 			Benchmark: true,
 			Timeout:   30 * time.Minute,
-			Cluster:   r.MakeClusterSpec(8, spec.CPU(4)),
+			Cluster:   r.MakeClusterSpec(8, spec.CPU(2)),
 			Leases:    leases,
 			Run:       runFailoverPartialLeaseGateway,
 		})
@@ -100,7 +100,7 @@ func registerFailover(r registry.Registry) {
 			Owner:     registry.OwnerKV,
 			Benchmark: true,
 			Timeout:   30 * time.Minute,
-			Cluster:   r.MakeClusterSpec(7, spec.CPU(4)),
+			Cluster:   r.MakeClusterSpec(7, spec.CPU(2)),
 			Leases:    leases,
 			Run:       runFailoverPartialLeaseLeader,
 		})
@@ -110,7 +110,7 @@ func registerFailover(r registry.Registry) {
 			Owner:     registry.OwnerKV,
 			Benchmark: true,
 			Timeout:   30 * time.Minute,
-			Cluster:   r.MakeClusterSpec(8, spec.CPU(4)),
+			Cluster:   r.MakeClusterSpec(8, spec.CPU(2)),
 			Leases:    leases,
 			Run:       runFailoverPartialLeaseLiveness,
 		})
@@ -133,7 +133,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
-				Cluster:             r.MakeClusterSpec(7, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
+				Cluster:             r.MakeClusterSpec(7, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
 				Leases:              leases,
 				SkipPostValidations: postValidation,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -145,7 +145,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
-				Cluster:             r.MakeClusterSpec(5, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
+				Cluster:             r.MakeClusterSpec(5, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
 				Leases:              leases,
 				SkipPostValidations: postValidation,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -157,7 +157,7 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
-				Cluster:             r.MakeClusterSpec(7, spec.CPU(4), spec.PreferLocalSSD(!usePD)),
+				Cluster:             r.MakeClusterSpec(7, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
 				Leases:              leases,
 				SkipPostValidations: postValidation,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -244,7 +244,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		}
 		err := c.RunE(ctx, c.Node(10), fmt.Sprintf(
 			`./cockroach workload run kv --read-percent %d --write-seq R%d `+
-				`--concurrency 256 --max-rate 8192 --timeout 1m --tolerate-errors `+
+				`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 				`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-2}`,
 			readPercent, insertCount))
 		if ctx.Err() != nil {
