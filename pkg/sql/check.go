@@ -882,7 +882,7 @@ func newCheckViolationErr(
 func newNotNullViolationErr(
 	notNullColName string, tableColumns []catalog.Column, violatingRow tree.Datums,
 ) error {
-	return pgerror.Newf(pgcode.NotNullViolation,
+	return pgerror.Newf(pgcode.CheckViolation,
 		"validation of column %q NOT NULL failed on row: %s",
 		notNullColName, labeledRowValues(tableColumns, violatingRow))
 }
