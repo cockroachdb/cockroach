@@ -952,3 +952,24 @@ query T
 SELECT j FROM json_subscript_test WHERE j['other_field'] = '2' ORDER BY id
 ----
 {"other_field": 2}
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/49144.
+# Check that json columns can be compared.
+
+statement ok
+CREATE TABLE test_49144 (
+    value jsonb
+);
+INSERT INTO test_49144 VALUES ('{"c": 2}'), ('{"c": 2.5}'), ('{"c": 3}')
+
+query T
+SELECT * FROM test_49144 WHERE ("test_49144"."value" -> 'c') > '2' ORDER BY 1
+----
+{"c": 2.5}
+{"c": 3}
+
+query T
+SELECT * FROM test_49144 WHERE ("test_49144"."value" -> 'c') > '2.33' ORDER BY 1
+----
+{"c": 2.5}
+{"c": 3}
