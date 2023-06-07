@@ -258,19 +258,23 @@ type granterWithLockedCalls interface {
 // The interface is used by the entity that periodically looks at load and
 // computes the tokens to grant (ioLoadListener).
 type granterWithIOTokens interface {
-	// setAvailableTokens bounds the available {io,elastic disk bandwidth}
-	// tokens that can be granted to the value provided in the
-	// {io,elasticDiskBandwidth}Tokens parameter. elasticDiskBandwidthTokens
-	// bounds what can be granted to elastic work, and is based on disk
-	// bandwidth being a bottleneck resource. These are not tight bounds when
-	// the callee has negative available tokens, due to the use of
-	// granter.tookWithoutPermission, since in that the case the callee
-	// increments that negative value with the value provided by tokens. This
-	// method needs to be called periodically. The return value is the number of
-	// used tokens in the interval since the prior call to this method. Note
-	// that tokensUsed can be negative, though that will be rare, since it is
+	// setAvailableTokens bounds the available {io,elastic disk bandwidth} tokens
+	// that can be granted to the value provided in the
+	// {io,elasticDiskBandwidth}Tokens parameter. elasticDiskBandwidthTokens bounds
+	// what can be granted to elastic work, and is based on disk bandwidth being a
+	// bottleneck resource. These are not tight bounds when the callee has negative
+	// available tokens, due to the use of granter.tookWithoutPermission, since in
+	// that the case the callee increments that negative value with the value
+	// provided by tokens. This method needs to be called periodically.
+	// {io, elasticDiskBandwidth}TokensCapacity is the ceiling up to which we allow
+	// elastic or disk bandwidth tokens to accumulate. The return value is the
+	// number of used tokens in the interval since the prior call to this method.
+	// Note that tokensUsed can be negative, though that will be rare, since it is
 	// possible for tokens to be returned.
-	setAvailableTokens(ioTokens int64, elasticDiskBandwidthTokens int64) (tokensUsed int64)
+	setAvailableTokens(
+		ioTokens int64, elasticDiskBandwidthTokens int64,
+		ioTokensCapacity int64, elasticDiskBandwidthTokensCapacity int64,
+	) (tokensUsed int64)
 	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used
 	// since the last such call.
 	getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64
