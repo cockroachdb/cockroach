@@ -215,7 +215,7 @@ func (p *peer) breakerDisabled() bool {
 // launch starts the probe in the background. The probe typically runs forever[1],
 // and has the following high-level structure (dashes reflect call depth).
 //
-// - run: loops "forever", one loop per failed connection.
+// - run: loops "forever", except when connection is pending deletion, see [1].
 // -- runOnce: starts a new *ClientConn and maintains it until it errors out.
 // --- runSingleHeartbeat: performs the first heartbeat.
 // --- onInitialHeartbeatSucceeded: signals the conn future (*ClientConn now accessible).
@@ -223,7 +223,10 @@ func (p *peer) breakerDisabled() bool {
 // ---- onSubsequentHeartbeatSucceeded: metric updates.
 // - onHeartbeatFailed: state transition into failed state (breaker, logging, etc).
 //
-// [1]: see comment on `peer` for exceptions.
+// [1]: see comment on `peer` for exceptions, and (*peer).shouldDeleteAfter for
+// an entry point into the code. In brief, if an unhealthy peer is suspected of
+// being obsolete, the probe only runs when the breaker is checked by a caller.
+// After a generous timeout, the peer is removed if still unhealthy.
 func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 	// Acquire mu just to show that we can, as the caller is supposed
 	// to not hold the lock.
