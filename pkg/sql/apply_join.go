@@ -301,12 +301,13 @@ func runPlanInsidePlan(
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
+		evalContextSubquery := params.p.ExtendedEvalContextCopyAndReset()
 		subqueryResultMemAcc := params.p.Mon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		if !execCfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx,
 			params.p,
-			params.extendedEvalCtx.copy,
+			func() *extendedEvalContext { return evalContextSubquery },
 			plan.subqueryPlans,
 			recv,
 			&subqueryResultMemAcc,
@@ -341,9 +342,28 @@ func runPlanInsidePlan(
 
 	finishedSetupFn, cleanup := getFinishedSetupFn(&plannerCopy)
 	defer cleanup()
+	var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
+	if len(plan.cascades) != 0 ||
+		len(plan.checkPlans) != 0 {
+		serialEvalCtx := plannerCopy.ExtendedEvalContextCopyAndReset()
+		evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
+			if usedConcurrently {
+				return plannerCopy.ExtendedEvalContextCopyAndReset()
+			}
+			// Reuse the same object if this factory is not used concurrently.
+			return serialEvalCtx
+		}
+	}
 	execCfg.DistSQLPlanner.PlanAndRun(
 		ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
 	)
+	execCfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
+		ctx, &plannerCopy, evalCtxFactory, &plannerCopy.curPlan.planComponents, recv,
+	)
+	if recv.commErr != nil {
+		return recv.commErr
+	}
+
 	return resultWriter.Err()
 }
 

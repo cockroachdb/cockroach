@@ -547,6 +547,16 @@ func internalExtendedEvalCtx(
 	return ret
 }
 
+// ExtendedEvalContextCopyAndReset returns a function that produces
+// extendedEvalContexts for parallel subquery, cascade, and check execution.
+func (p *planner) ExtendedEvalContextCopyAndReset() *extendedEvalContext {
+	evalCtx := p.ExtendedEvalContextCopy()
+	evalCtx.Placeholders = &p.semaCtx.Placeholders
+	evalCtx.Annotations = &p.semaCtx.Annotations
+	evalCtx.SessionID = p.ExtendedEvalContext().SessionID
+	return evalCtx
+}
+
 // SemaCtx provides access to the planner's SemaCtx.
 func (p *planner) SemaCtx() *tree.SemaContext {
 	return &p.semaCtx
