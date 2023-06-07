@@ -458,6 +458,8 @@ github.com/cockroachdb/errors v1.8.1/go.mod h1:qGwQn6JmZ+oMjuLwjWzUNqblqk0xl4CVV
 github.com/cockroachdb/errors v1.8.8/go.mod h1:z6VnEL3hZ/2ONZEvG7S5Ym0bU2AqPcEKnIiA1wbsSu0=
 github.com/cockroachdb/errors v1.9.0 h1:B48dYem5SlAY7iU8AKsgedb4gH6mo+bDkbtLIvM/a88=
 github.com/cockroachdb/errors v1.9.0/go.mod h1:vaNcEYYqbIqB5JhKBhFV9CneUqeuEbB2OYJBK4GBNYQ=
+github.com/cockroachdb/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8 h1:RmZ0yGEr5nfc/y2Pgt9A4YU3bB1OtfIDIw4xJgr+GZk=
+github.com/cockroachdb/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8/go.mod h1:i+srOieUHQl4y/EwlGOpuYtoKG7nb2uhtA/hrFsFTsc=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55/go.mod h1:QqVqNIiRhLqJXif5C9wbM4JydBhrAF2WDMxkv5xkyxQ=
 github.com/cockroachdb/google-api-go-client v0.80.1-0.20221117193156-6a9f7150cb93 h1:4OctRhiOrTL8zT3udFWOyb2DNIipaGawQudxVt4wcdQ=
@@ -2249,8 +2251,6 @@ go.etcd.io/etcd/client/pkg/v3 v3.5.0/go.mod h1:IJHfcCEKxYu1Os13ZdwCwIUTUVGYTSAM3
 go.etcd.io/etcd/client/v2 v2.305.0/go.mod h1:h9puh54ZTgAKtEbut2oe9P4L/oqKCVB6xsXlzd7alYQ=
 go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560 h1:U/PIBuOTa8JXLPKF81Xh7xhIjA0jbpyqFWUPIiT4Ilc=
 go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560/go.mod h1:0HiXlybqS+XtfgnNkiEZWwGXYYEhWsWL8fDVdZzb7is=
-go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8 h1:aRP8pJvbOsFy8SaZ0tcWeV4RYTlp8ZIWS49usJjO4Ac=
-go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8/go.mod h1:i+srOieUHQl4y/EwlGOpuYtoKG7nb2uhtA/hrFsFTsc=
 go.mongodb.org/mongo-driver v1.0.3/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.1/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.2/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
