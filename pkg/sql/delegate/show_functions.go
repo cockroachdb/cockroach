@@ -35,7 +35,7 @@ func (d *delegator) delegateShowFunctions(n *tree.ShowFunctions) (tree.Statement
 	// name to have an explicit catalog but no explicit schema. This would arise
 	// when doing SHOW FUNCTIONS FROM <db>. Without this logic, we would not show the
 	// tables from other schemas than public.
-	if name.ExplicitSchema && name.ExplicitCatalog && name.SchemaName == tree.PublicSchemaName &&
+	if name.ExplicitSchema && name.ExplicitCatalog && name.SchemaName == catconstants.PublicSchemaName &&
 		n.ExplicitSchema && !n.ExplicitCatalog && n.SchemaName == name.CatalogName {
 		name.SchemaName, name.ExplicitSchema = "", false
 	}

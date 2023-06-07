@@ -20,7 +20,7 @@ go_library(
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",

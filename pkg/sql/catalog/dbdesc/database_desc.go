@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -212,7 +212,7 @@ func (desc *immutable) HasPublicSchemaWithDescriptor() bool {
 	if desc.ID == keys.SystemDatabaseID {
 		return false
 	}
-	_, found := desc.Schemas[tree.PublicSchema]
+	_, found := desc.Schemas[catconstants.PublicSchemaName]
 	return found
 }
 
