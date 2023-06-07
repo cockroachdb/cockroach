@@ -113,7 +113,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 
 	cmdPos++
-	if err = buf.Push(ctx, Sync{}); err != nil {
+	if err = buf.Push(ctx, Sync{ExplicitFromClient: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -139,7 +139,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmdPos++
-	if err = buf.Push(ctx, Sync{}); err != nil {
+	if err = buf.Push(ctx, Sync{ExplicitFromClient: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -213,7 +213,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 
 	cmdPos++
-	if err = buf.Push(ctx, Sync{}); err != nil {
+	if err = buf.Push(ctx, Sync{ExplicitFromClient: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -408,7 +408,7 @@ CREATE TEMPORARY TABLE foo();
 	for _, stmt := range stmts {
 		require.NoError(t, stmtBuf.Push(ctx, ExecStmt{Statement: stmt}))
 	}
-	require.NoError(t, stmtBuf.Push(ctx, Sync{}))
+	require.NoError(t, stmtBuf.Push(ctx, Sync{ExplicitFromClient: false}))
 
 	done := make(chan error)
 	go func() {
