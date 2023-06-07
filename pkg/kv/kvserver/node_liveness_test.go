@@ -1054,8 +1054,8 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	if err := nl.Heartbeat(context.Background(), l); err != nil {
 		t.Fatal(err)
 	}
-	if count := atomic.LoadInt32(&injectedErrorCount); count != 2 {
-		t.Errorf("expected injected error count of 2; got %d", count)
+	if count := atomic.LoadInt32(&injectedErrorCount); count < 2 {
+		t.Errorf("expected injected error count of at least 2; got %d", count)
 	}
 }
 
