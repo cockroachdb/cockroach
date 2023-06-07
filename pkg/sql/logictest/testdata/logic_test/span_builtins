@@ -66,3 +66,13 @@ SELECT encode(crdb_internal.trim_tenant_prefix('\xfe8828a09b'), 'hex');
 fe8828a09b
 
 subtest end
+
+subtest fingerprint_handles_null_args
+
+query error StartKey cannot be NULL
+SELECT crdb_internal.fingerprint(ARRAY[NULL, NULL]::BYTES[], now(), false);
+
+query error EndKey cannot be NULL
+SELECT crdb_internal.fingerprint(ARRAY['\\x8989', NULL]::BYTES[], now(), false);
+
+subtest end
