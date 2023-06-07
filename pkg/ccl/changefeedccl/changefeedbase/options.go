@@ -433,7 +433,7 @@ var InitialScanOnlyUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, Opt
 
 // ParquetFormatUnsupportedOptions is options that are not supported with the
 // parquet format.
-var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptEndTime, OptTopicInValue)
+var ParquetFormatUnsupportedOptions OptionsSet = makeStringSet(OptTopicInValue)
 
 // AlterChangefeedUnsupportedOptions are changefeed options that we do not allow
 // users to alter.
