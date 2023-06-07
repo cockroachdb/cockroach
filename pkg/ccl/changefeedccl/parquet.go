@@ -13,13 +13,16 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
 )
@@ -68,6 +71,7 @@ func newParquetSchemaDefintion(
 
 const parquetOptUpdatedTimestampColName = metaSentinel + changefeedbase.OptUpdatedTimestamps
 const parquetOptMVCCTimestampColName = metaSentinel + changefeedbase.OptMVCCTimestamps
+const parquetOptDiffColName = metaSentinel + changefeedbase.OptDiff
 
 func appendMetadataColsToSchema(
 	columnNames []string, columnTypes []*types.T, encodingOpts changefeedbase.EncodingOptions,
@@ -79,6 +83,10 @@ func appendMetadataColsToSchema(
 	if encodingOpts.MVCCTimestamps {
 		columnNames = append(columnNames, parquetOptMVCCTimestampColName)
 		columnTypes = append(columnTypes, types.String)
+	}
+	if encodingOpts.Diff {
+		columnNames = append(columnNames, parquetOptDiffColName)
+		columnTypes = append(columnTypes, types.Json)
 	}
 	return columnNames, columnTypes
 }
@@ -154,6 +162,38 @@ func populateDatums(
 	if encodingOpts.MVCCTimestamps {
 		datums = append(datums, tree.NewDString(timestampToString(mvcc)))
 	}
+	if encodingOpts.Diff {
+		if prevRow.IsDeleted() {
+			datums = append(datums, tree.DNull)
+		} else {
+			keys := make([]string, 0, len(prevRow.ResultColumns()))
+			_ = prevRow.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
+				keys = append(keys, col.Name)
+				return nil
+			})
+			valueBuilder, err := json.NewFixedKeysObjectBuilder(keys)
+			if err != nil {
+				return err
+			}
+
+			if err := prevRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+				j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+				if err != nil {
+					return err
+				}
+				return valueBuilder.Set(col.Name, j)
+			}); err != nil {
+				return err
+			}
+
+			j, err := valueBuilder.Build()
+			if err != nil {
+				return err
+			}
+			datums = append(datums, tree.NewDJSON(j))
+		}
+	}
+
 	return nil
 }
 
@@ -226,6 +266,11 @@ func addParquetTestMetadata(
 	if encodingOpts.MVCCTimestamps {
 		valuesInOrder = append(valuesInOrder, parquetOptMVCCTimestampColName)
 		valueCols[parquetOptMVCCTimestampColName] = idx
+		idx += 1
+	}
+	if encodingOpts.Diff {
+		valuesInOrder = append(valuesInOrder, parquetOptDiffColName)
+		valueCols[parquetOptDiffColName] = idx
 		idx += 1
 	}
 
