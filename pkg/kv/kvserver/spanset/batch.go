@@ -522,11 +522,11 @@ func (s spanSetWriter) checkAllowed(key roachpb.Key) error {
 	return nil
 }
 
-func (s spanSetWriter) ClearMVCC(key storage.MVCCKey) error {
+func (s spanSetWriter) ClearMVCC(key storage.MVCCKey, opts storage.ClearOptions) error {
 	if err := s.checkAllowed(key.Key); err != nil {
 		return err
 	}
-	return s.w.ClearMVCC(key)
+	return s.w.ClearMVCC(key, opts)
 }
 
 func (s spanSetWriter) ClearUnversioned(key roachpb.Key) error {
