@@ -342,6 +342,17 @@ func runPlanInsidePlan(
 	execCfg.DistSQLPlanner.PlanAndRun(
 		ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
 	)
+	evalCtxFactory2 := func(usedConcurrently bool) *extendedEvalContext {
+		return evalCtxFactory()
+	}
+
+	execCfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
+		ctx, &plannerCopy, evalCtxFactory2, &plannerCopy.curPlan.planComponents, recv,
+	)
+	if recv.commErr != nil {
+		return recv.commErr
+	}
+
 	return resultWriter.Err()
 }
 

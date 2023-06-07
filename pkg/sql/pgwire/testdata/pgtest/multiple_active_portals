@@ -1306,3 +1306,27 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 subtest end
+
+subtest mytest
+
+send
+Query {"String": "DROP TABLE IF EXISTS xy;"}
+Query {"String": "DROP FUNCTION IF EXISTS f;"}
+Query {"String": "CREATE TABLE xy (x INT, y INT);"}
+Query {"String": "CREATE FUNCTION f() RETURNS SETOF RECORD LANGUAGE SQL AS $$ INSERT INTO xy VALUES (1, 1), (2, 2) RETURNING *; $$"}
+Parse {"Name": "qbieber", "Query": "SELECT f();"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "qbieber"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+
+subtest end

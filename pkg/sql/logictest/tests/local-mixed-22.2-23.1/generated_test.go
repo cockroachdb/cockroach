@@ -2039,6 +2039,13 @@ func TestLogic_udf_delete(
 	runLogicTest(t, "udf_delete")
 }
 
+func TestLogic_udf_fk(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_fk")
+}
+
 func TestLogic_udf_insert(
 	t *testing.T,
 ) {
