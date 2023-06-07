@@ -67,10 +67,6 @@ const (
 	maximumPingDurationMult = 2
 )
 
-type serverOpts struct {
-	interceptor func(fullMethod string) error
-}
-
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.

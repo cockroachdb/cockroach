@@ -85,6 +85,10 @@ var sourceAddr = func() net.Addr {
 	return nil
 }()
 
+type serverOpts struct {
+	interceptor func(fullMethod string) error
+}
+
 // ServerOption is a configuration option passed to NewServer.
 type ServerOption func(*serverOpts)
 
