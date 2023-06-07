@@ -161,6 +161,12 @@ var (
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaConnsWaitingToHash = metric.Metadata{
+		Name:        "sql.conns_waiting_to_hash",
+		Help:        "Number of SQL connection attempts that are being throttled in order to limit password hashing concurrency",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaBytesIn = metric.Metadata{
 		Name:        "sql.bytesin",
 		Help:        "Number of sql bytes received",
@@ -311,6 +317,7 @@ type ServerMetrics struct {
 	BytesOutCount               *metric.Counter
 	Conns                       *metric.Gauge
 	NewConns                    *metric.Counter
+	ConnsWaitingToHash          *metric.Gauge
 	ConnLatency                 metric.IHistogram
 	ConnFailures                *metric.Counter
 	PGWireCancelTotalCount      *metric.Counter
@@ -324,10 +331,11 @@ func makeServerMetrics(
 	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
 ) ServerMetrics {
 	return ServerMetrics{
-		BytesInCount:  metric.NewCounter(MetaBytesIn),
-		BytesOutCount: metric.NewCounter(MetaBytesOut),
-		Conns:         metric.NewGauge(MetaConns),
-		NewConns:      metric.NewCounter(MetaNewConns),
+		BytesInCount:       metric.NewCounter(MetaBytesIn),
+		BytesOutCount:      metric.NewCounter(MetaBytesOut),
+		Conns:              metric.NewGauge(MetaConns),
+		NewConns:           metric.NewCounter(MetaNewConns),
+		ConnsWaitingToHash: metric.NewGauge(MetaConnsWaitingToHash),
 		ConnLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: MetaConnLatency,
