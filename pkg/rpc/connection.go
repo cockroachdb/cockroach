@@ -20,8 +20,6 @@ import (
 
 // Connection is a wrapper around grpc.ClientConn. It prevents the underlying
 // connection from being used until it has been validated via heartbeat.
-//
-// TODO(during review): when dust settles, move to a new file.
 type Connection struct {
 	// Fields in this struct are only ever mutated from the circuit breaker probe,
 	// but they may be read widely (many callers hold a *Connection).
