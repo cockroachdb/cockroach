@@ -91,9 +91,9 @@ type flushReq struct {
 }
 
 type rowEvent struct {
-	key             []byte
-	val             []byte
-	topicDescriptor TopicDescriptor
+	key   []byte
+	val   []byte
+	topic string
 
 	alloc kvevent.Alloc
 	mvcc  hlc.Timestamp
@@ -167,8 +167,8 @@ func freeSinkBatchEvent(b *sinkBatch) {
 // EmitRow implements the Sink interface.
 func (s *batchingSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
@@ -177,7 +177,7 @@ func (s *batchingSink) EmitRow(
 	payload := newRowEvent()
 	payload.key = key
 	payload.val = value
-	payload.topicDescriptor = topic
+	payload.topic = topic.name
 	payload.mvcc = mvcc
 	payload.alloc = alloc
 
@@ -304,6 +304,13 @@ func (s *batchingSink) newBatchBuffer(topic string) *sinkBatch {
 	return batch
 }
 
+func (s *batchingSink) NameTopic(topic TopicDescriptor) (string, error) {
+	if s.topicNamer != nil {
+		return s.topicNamer.Name(topic)
+	}
+	return "", nil
+}
+
 // runBatchingWorker combines 1 or more row events into batches, sending the IO
 // requests out either once the batch is full or a flush request arrives.
 func (s *batchingSink) runBatchingWorker(ctx context.Context) {
@@ -416,16 +423,6 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 				inflight += 1
 
-				var topic string
-				var err error
-				if s.topicNamer != nil {
-					topic, err = s.topicNamer.Name(r.topicDescriptor)
-					if err != nil {
-						s.handleError(err)
-						continue
-					}
-				}
-
 				// If the timer isn't pending then this message is the first message to
 				// arrive either ever or since the timer last triggered a flush,
 				// therefore we're going from 0 messages batched to 1, and should
@@ -435,6 +432,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 					isTimerPending = true
 				}
 
+				topic := r.topic
 				batchBuffer, ok := topicBatches[topic]
 				if !ok {
 					batchBuffer = s.newBatchBuffer(topic)

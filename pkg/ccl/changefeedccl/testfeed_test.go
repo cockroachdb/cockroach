@@ -622,7 +622,7 @@ func (s *notifyFlushSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
 	prevRow cdcevent.Row,
-	topic TopicDescriptor,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
@@ -1065,6 +1065,10 @@ func (f *cloudFeedFactory) Feed(
 		}
 		if string(opt.Key) == changefeedbase.OptFormat &&
 			opt.Value.String() != string(changefeedbase.OptFormatParquet) {
+			parquetPossible = false
+			break
+		}
+		if string(opt.Key) == changefeedbase.OptOrdering && opt.Value.String() == string(changefeedbase.OptOrderingTotal) {
 			parquetPossible = false
 			break
 		}

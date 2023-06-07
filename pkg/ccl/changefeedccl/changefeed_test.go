@@ -260,6 +260,134 @@ func TestChangefeedBasics(t *testing.T) {
 	// cloudStorageTest is a regression test for #36994.
 }
 
+func TestChangefeedTotalOrderingInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 1000)`)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// Disallow any processing of resolved spans on the frontier to simulate
+		// not being able to note progress on an aggregator.
+		knobs.FilterFrontierResolvedSpan = func() bool {
+			return true
+		}
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH ordering='total'`)
+		defer closeFeed(t, foo)
+
+		// On initial scan, the feed should emit events regardless of never
+		// observing resolved progress on the frontier as all events are expected to
+		// have the same timestamp.
+		foundMsg := false
+		for msg, err := foo.Next(); msg != nil; msg, err = foo.Next() {
+			require.NoError(t, err)
+			if msg.Key != nil {
+				foundMsg = true
+				break
+			}
+		}
+		require.True(t, foundMsg)
+	}
+
+	// enterprise test needs work to sort rows by crdb_internal_mvcc_timestamp
+	cdcTestWithSystem(t, testFn, feedTestOmitSinks("enterprise"))
+}
+
+func TestChangefeedTotalOrderingBasics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// By the time this is available the old sinks won't be enabled.
+		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.new_webhook_sink_enabled = true")
+		sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.new_pubsub_sink_enabled = true")
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		for i := 0; i < 1000; i++ {
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+		}
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total', resolved='5s'`)
+		defer closeFeed(t, foo)
+		for i := 1000; i < 2000; i++ {
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+		}
+
+		var expectedBackfillMessages []string
+		for i := 0; i < 1000; i++ {
+			expectedBackfillMessages = append(expectedBackfillMessages, fmt.Sprintf(
+				`foo: [%d]->{"after": {"a": %d}}`, i, i,
+			))
+		}
+		var expectedMessages []string
+		for i := 1000; i < 2000; i++ {
+			expectedMessages = append(expectedMessages, fmt.Sprintf(
+				`foo: [%d]->{"after": {"a": %d}}`, i, i,
+			))
+		}
+
+		assertPayloadsStripTs(t, foo, expectedBackfillMessages)
+		assertPayloadsTotalOrdering(t, foo, expectedMessages)
+	}
+
+	// enterprise test needs work to sort rows by crdb_internal_mvcc_timestamp
+	cdcTest(t, testFn, feedTestOmitSinks("enterprise"))
+}
+
+func TestChangefeedTotalOrderingMultiNode(t *testing.T) {
+	defer log.Scope(t).Close(t)
+
+	cluster, db, cleanup := startTestCluster(t)
+	defer cleanup()
+
+	f := makeKafkaFeedFactory(cluster, db)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+	sqlDB.ExecMultiple(t,
+		`INSERT INTO foo (a) SELECT * FROM generate_series(1, 1000);`,
+		`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));`,
+		`ALTER TABLE foo SCATTER;`,
+	)
+
+	foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH updated, ordering='total', resolved='1s', initial_scan='yes'`)
+	defer closeFeed(t, foo)
+	var expectedBackfillMessages []string
+	for i := 1; i <= 1000; i++ {
+		expectedBackfillMessages = append(expectedBackfillMessages, fmt.Sprintf(
+			`foo: [%d]->{"after": {"a": %d}}`, i, i,
+		))
+	}
+	assertPayloadsStripTs(t, foo, expectedBackfillMessages)
+
+	for i := 1001; i <= 2000; i++ {
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+	}
+	sqlDB2 := sqlutils.MakeSQLRunner(cluster.ServerConn(1))
+	for i := 2001; i <= 3000; i++ {
+		sqlDB2.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+	}
+	sqlDB3 := sqlutils.MakeSQLRunner(cluster.ServerConn(2))
+	for i := 3001; i <= 4000; i++ {
+		sqlDB3.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d)`, i))
+	}
+
+	var expectedMessages []string
+	for i := 1001; i <= 4000; i++ {
+		expectedMessages = append(expectedMessages, fmt.Sprintf(
+			`foo: [%d]->{"after": {"a": %d}}`, i, i,
+		))
+	}
+	assertPayloadsTotalOrdering(t, foo, expectedMessages)
+}
+
 func TestChangefeedBasicQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1078,7 +1206,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
 			}
-			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, changefeedbase.OptOrderingNone)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
 				t.Error(err)
@@ -7876,10 +8004,14 @@ func (s *memoryHoggingSink) Dial() error {
 	return nil
 }
 
+func (s *memoryHoggingSink) NameTopic(topic TopicDescriptor) (string, error) {
+	return "", nil
+}
+
 func (s *memoryHoggingSink) EmitRow(
 	ctx context.Context,
-	topic TopicDescriptor,
 	key, value []byte,
+	topic sinkTopic,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
@@ -8189,7 +8321,7 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 					nada, expectTimeout,
 					func(ctx context.Context) error {
 						return assertPayloadsBaseErr(
-							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, false)
+							ctx, nada, []string{`nada: [2]->{"after": {}}`}, false, changefeedbase.OptOrderingNone)
 					})
 				return nil
 			}, 20*expectTimeout))

@@ -1330,7 +1330,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 				expectedValues[j] = fmt.Sprintf(`foo: [%d]->{"after": {"val": %d}}`, j, j)
 				expectedValues[j+numRowsPerTable] = fmt.Sprintf(`bar: [%d]->{"after": {"val": %d}}`, j, j)
 			}
-			return assertPayloadsBaseErr(context.Background(), testFeed, expectedValues, false, false)
+			return assertPayloadsBaseErr(context.Background(), testFeed, expectedValues, false, changefeedbase.OptOrderingNone)
 		})
 
 		defer func() {
