@@ -2344,7 +2344,7 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateQueriesTable(ctx, addRow, response)
+		return populateQueriesTable(ctx, p, addRow, response)
 	},
 }
 
@@ -2362,13 +2362,36 @@ var crdbInternalClusterQueriesTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateQueriesTable(ctx, addRow, response)
+		return populateQueriesTable(ctx, p, addRow, response)
 	},
 }
 
 func populateQueriesTable(
-	ctx context.Context, addRow func(...tree.Datum) error, response *serverpb.ListSessionsResponse,
+	ctx context.Context,
+	p *planner,
+	addRow func(...tree.Datum) error,
+	response *serverpb.ListSessionsResponse,
 ) error {
+	// Validate users have correct permission/role.
+	hasPermission, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	if err != nil {
+		return err
+	}
+	if !hasPermission {
+		return noViewActivityOrViewActivityRedactedRoleError(p.User())
+	}
+	isAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	// Check if we should redact the queries.
+	var shouldRedactQuery bool
+	if !isAdmin {
+		shouldRedactQuery, err = p.HasViewActivityRedacted(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	for _, session := range response.Sessions {
 		sessionID := getSessionID(session)
 		for _, query := range session.ActiveQueries {
@@ -2413,6 +2436,10 @@ func populateQueriesTable(
 
 			// Interpolate placeholders into the SQL statement.
 			sql := formatActiveQuery(query)
+			// If the user does not have the correct privileges, show the query without literals or constants.
+			if shouldRedactQuery {
+				sql = query.SqlNoConstants
+			}
 			if err := addRow(
 				tree.NewDString(query.ID),
 				txnID,

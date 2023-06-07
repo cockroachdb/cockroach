@@ -1423,3 +1423,89 @@ user root
 
 statement ok
 REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+# Test privileges for queries tables.
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.cluster_queries
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_queries
+
+user root
+
+# Grant VIEWACTIVITYREDACTED to testuser.
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+user testuser
+
+# testuser should be able to see the queries tables.
+statement ok
+SELECT * FROM crdb_internal.cluster_queries
+
+statement ok
+SELECT * FROM crdb_internal.node_queries
+
+# Revoke VIEWACTIVITYREDACTED from testuser and grant them VIEWACTIVITY.
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+# testuser should be able to see the queries tables.
+statement ok
+SELECT * FROM crdb_internal.node_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.transaction_contention_events
+
+# Test query redaction.
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+# Run a sleep query from root and verify that it is redacted.
+statement async sleepQuery count 1
+SELECT pg_sleep(3)
+
+user testuser
+
+query TT
+SELECT user_name, query FROM crdb_internal.cluster_queries WHERE user_name = 'root'
+----
+root  SELECT pg_sleep(_)
+
+user root
+
+awaitstatement sleepQuery
+
+# Grant VIEWACTIVITY to testuser and revoke VIEWACTIVITYREDACTED.
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+# Run a sleep query from root and verify that it is not redacted.
+statement async sleepQuery count 1
+SELECT pg_sleep(3)
+
+user testuser
+
+query TT
+SELECT user_name, query FROM crdb_internal.cluster_queries WHERE user_name = 'root'
+----
+root  SELECT pg_sleep(3)
+
+user root
+
+awaitstatement sleepQuery
