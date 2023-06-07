@@ -103,6 +103,8 @@ type virtualIndex struct {
 	incomplete bool
 }
 
+type populateFunc func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error
+
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	// Exactly one of the populate and generator fields should be defined for
@@ -115,7 +117,7 @@ type virtualSchemaTable struct {
 	// populate, if non-nil, is a function that is used when creating a
 	// valuesNode. This function eagerly loads every row of the virtual table
 	// during initialization of the valuesNode.
-	populate func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error
+	populate populateFunc
 
 	// indexes, if non empty, is a slice of populate methods that also take a
 	// constraint, only generating rows that match the constraint. The order of

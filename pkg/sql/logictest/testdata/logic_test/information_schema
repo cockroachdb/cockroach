@@ -469,6 +469,7 @@ crdb_internal       statement_statistics_persisted
 crdb_internal       statement_statistics_persisted_v22_2
 crdb_internal       super_regions
 crdb_internal       system_jobs
+crdb_internal       system_privileges
 crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       table_row_statistics
@@ -812,6 +813,7 @@ statement_statistics_persisted
 statement_statistics_persisted_v22_2
 super_regions
 system_jobs
+system_privileges
 table_columns
 table_indexes
 table_row_statistics
@@ -1199,6 +1201,7 @@ system         crdb_internal       statement_statistics_persisted          SYSTE
 system         crdb_internal       statement_statistics_persisted_v22_2    SYSTEM VIEW  NO                  1
 system         crdb_internal       super_regions                           SYSTEM VIEW  NO                  1
 system         crdb_internal       system_jobs                             SYSTEM VIEW  NO                  1
+system         crdb_internal       system_privileges                       SYSTEM VIEW  NO                  1
 system         crdb_internal       table_columns                           SYSTEM VIEW  NO                  1
 system         crdb_internal       table_indexes                           SYSTEM VIEW  NO                  1
 system         crdb_internal       table_row_statistics                    SYSTEM VIEW  NO                  1
@@ -3182,6 +3185,7 @@ NULL     public   system         crdb_internal       statement_statistics_persis
 NULL     public   system         crdb_internal       statement_statistics_persisted_v22_2    SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                           SELECT          NO            YES
 NULL     public   system         crdb_internal       system_jobs                             SELECT          NO            YES
+NULL     public   system         crdb_internal       system_privileges                       SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                           SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                           SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                    SELECT          NO            YES
@@ -3836,6 +3840,7 @@ NULL     public   system         crdb_internal       statement_statistics_persis
 NULL     public   system         crdb_internal       statement_statistics_persisted_v22_2    SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                           SELECT          NO            YES
 NULL     public   system         crdb_internal       system_jobs                             SELECT          NO            YES
+NULL     public   system         crdb_internal       system_privileges                       SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                           SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                           SELECT          NO            YES
 NULL     public   system         crdb_internal       table_row_statistics                    SELECT          NO            YES

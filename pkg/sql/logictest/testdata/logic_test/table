@@ -629,6 +629,7 @@ statement_statistics_persisted          NULL
 statement_statistics_persisted_v22_2    NULL
 super_regions                           NULL
 system_jobs                             NULL
+system_privileges                       NULL
 table_columns                           NULL
 table_indexes                           NULL
 table_row_statistics                    NULL

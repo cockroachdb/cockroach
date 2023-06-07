@@ -437,7 +437,7 @@ vectorized: true
         │       │               │         table: pg_class@pg_class_oid_idx
         │       │               │
         │       │               └── • filter
-        │       │                   │ filter: (objsubid = 0) AND (classoid = 4294967106)
+        │       │                   │ filter: (objsubid = 0) AND (classoid = 4294967105)
         │       │                   │
         │       │                   └── • virtual table
         │       │                         table: pg_description@pg_description_objoid_idx

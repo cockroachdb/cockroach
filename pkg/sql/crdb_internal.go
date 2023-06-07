@@ -207,6 +207,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalShowTenantCapabilitiesCacheTableID: crdbInternalShowTenantCapabilitiesCache,
+		catconstants.CrdbInternalSystemPrivilegesTableID:            crdbInternalSystemPrivileges,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -8033,4 +8034,49 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		}
 		return nil
 	},
+}
+
+func populateFromQuery(query string, op string) populateFunc {
+	return func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (retErr error) {
+		rows, err := p.ExecCfg().InternalDB.Executor().QueryIteratorEx(
+			ctx,
+			op,
+			nil,
+			sessiondata.RootUserSessionDataOverride,
+			query,
+		)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			retErr = errors.CombineErrors(retErr, rows.Close())
+		}()
+		for {
+			ok, err := rows.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
+			err = addRow(rows.Cur()...)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+var crdbInternalSystemPrivileges = virtualSchemaTable{
+	comment: `vtable backing SHOW SYSTEM GRANTS`,
+	schema: `
+CREATE TABLE crdb_internal.system_privileges (
+	username STRING NOT NULL,
+	path STRING NOT NULL,
+	privileges STRING[] NOT NULL,
+	grant_options STRING[] NOT NULL,
+	user_id OID NOT NULL
+);`,
+	populate: populateFromQuery("SELECT * FROM system.privileges", "select_system_privileges"),
 }

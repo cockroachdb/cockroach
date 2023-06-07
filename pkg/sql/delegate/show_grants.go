@@ -70,12 +70,12 @@ SELECT a.username AS grantee,
        a.privilege
        IN (
           SELECT unnest(grant_options)
-            FROM system.privileges
+            FROM crdb_internal.system_privileges
            WHERE username = a.username
         ) AS is_grantable
   FROM (
         SELECT username, unnest(privileges) AS privilege
-          FROM system.privileges
+          FROM crdb_internal.system_privileges
        ) AS a
 `
 	const externalConnectionPrivilegeQuery = `

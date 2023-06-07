@@ -104,6 +104,7 @@ test           crdb_internal       statement_statistics_persisted          publi
 test           crdb_internal       statement_statistics_persisted_v22_2    public   SELECT          false
 test           crdb_internal       super_regions                           public   SELECT          false
 test           crdb_internal       system_jobs                             public   SELECT          false
+test           crdb_internal       system_privileges                       public   SELECT          false
 test           crdb_internal       table_columns                           public   SELECT          false
 test           crdb_internal       table_indexes                           public   SELECT          false
 test           crdb_internal       table_row_statistics                    public   SELECT          false

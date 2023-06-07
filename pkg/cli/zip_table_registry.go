@@ -397,6 +397,14 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			to_hex(progress) AS "hex_progress"
 			FROM crdb_internal.system_jobs`,
 	},
+	"crdb_internal.system_privileges": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"username",
+			"path",
+			"privileges",
+			"grant_options",
+		},
+	},
 	"crdb_internal.kv_node_liveness": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
