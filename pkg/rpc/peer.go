@@ -720,7 +720,9 @@ func hasSiblingConn(peers map[peerKey]*peer, self peerKey) (healthy, ok bool) {
 		if self == other {
 			continue // exclude self
 		}
-		otherSnap := otherPeer.snap() // this would deadlock if called on `self`
+		// NB: we're careful not to call snap() on self because it might be locked
+		// already.
+		otherSigCh := otherPeer.b.Signal().C()
 
 		if self.NodeID == 0 {
 			if other.TargetAddr != self.TargetAddr {
@@ -756,7 +758,7 @@ func hasSiblingConn(peers map[peerKey]*peer, self peerKey) (healthy, ok bool) {
 		// a direct access to the peer by a client should start
 		// the probe. Checking that the breaker channel is open
 		// accomplishes that.
-		case <-otherSnap.c.Signal().C():
+		case <-otherSigCh:
 		default:
 			healthy = true
 		}
