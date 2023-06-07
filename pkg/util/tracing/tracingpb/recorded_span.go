@@ -12,7 +12,6 @@ package tracingpb
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -53,13 +52,17 @@ func (r Recording) Len() int {
 // LogMessageField is the field name used for the log message in a LogRecord.
 const LogMessageField = "event"
 
+// String implements fmt.Stringer.
 func (s *RecordedSpan) String() string {
-	sb := strings.Builder{}
-	sb.WriteString(fmt.Sprintf("=== %s (id: %d parent: %d)\n", s.Operation, s.SpanID, s.ParentSpanID))
+	return redact.Sprint(s).StripMarkers()
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *RecordedSpan) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("=== %s (id: %d parent: %d)\n", redact.Safe(s.Operation), s.SpanID, s.ParentSpanID)
 	for _, ev := range s.Logs {
-		sb.WriteString(fmt.Sprintf("%s %s\n", ev.Time.UTC().Format(time.RFC3339Nano), ev.Msg()))
+		w.Printf("%s %s\n", redact.Safe(ev.Time.UTC().Format(time.RFC3339Nano)), ev.Msg())
 	}
-	return sb.String()
 }
 
 // Structured visits the data passed to RecordStructured for the Span from which
@@ -196,7 +199,7 @@ func (m OperationMetadata) SafeFormat(s redact.SafePrinter, _ rune) {
 	if m.ContainsUnfinished {
 		s.Printf(", unfinished")
 	}
-	s.Print("}")
+	s.SafeRune('}')
 }
 
 func (c CapturedStack) String() string {

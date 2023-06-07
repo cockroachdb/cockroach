@@ -1565,10 +1565,10 @@ def go_deps():
         name = "com_github_cockroachdb_redact",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/redact",
-        sha256 = "7778b1e4485e4f17f35e5e592d87eb99c29e173ac9507801d000ad76dd0c261e",
-        strip_prefix = "github.com/cockroachdb/redact@v1.1.3",
+        sha256 = "9a723dfbb1627ae2f2b5d1374a59d6188ae9796e6dfb9a4622a4eb94321a4fac",
+        strip_prefix = "github.com/cockroachdb/redact@v1.1.4",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/redact/com_github_cockroachdb_redact-v1.1.3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/redact/com_github_cockroachdb_redact-v1.1.4.zip",
         ],
     )
     go_repository(
@@ -10984,10 +10984,10 @@ def go_deps():
         name = "org_golang_x_time",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/time",
-        sha256 = "2cc0a1d1bfa40badddc16c2715ff58502fe53422894bbe09d1b0de90a8845888",
-        strip_prefix = "golang.org/x/time@v0.1.0",
+        sha256 = "b151d95b9250e6aab7e53ea08bf6a9ca31c2aa964723baa1df28082589f01b21",
+        strip_prefix = "github.com/cockroachdb/x-time@v0.3.1-0.20230525123634-71747adb5d5c",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/time/org_golang_x_time-v0.1.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/x-time/com_github_cockroachdb_x_time-v0.3.1-0.20230525123634-71747adb5d5c.zip",
         ],
     )
     go_repository(
