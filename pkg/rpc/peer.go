@@ -347,7 +347,6 @@ func (p *peer) runOnce(ctx context.Context, report func(error)) error {
 	return p.runHeartbeatUntilFailure(ctx, connFailedCh)
 }
 
-// TODO(during review): move once the review dust has settled.
 func runSingleHeartbeat(
 	ctx context.Context,
 	heartbeatClient HeartbeatClient,
@@ -455,7 +454,6 @@ func runSingleHeartbeat(
 // RPC connection, returning once a heartbeat fails. The ctx passed as argument
 // must be derived from rpcCtx.masterCtx, so that it respects the same
 // cancellation policy.
-// TODO(during review): move once the review dust has settled.
 func (p *peer) runHeartbeatUntilFailure(
 	ctx context.Context, connFailedCh <-chan connectivity.State,
 ) error {
