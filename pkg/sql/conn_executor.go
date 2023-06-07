@@ -2487,7 +2487,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		if err := ex.clientComm.Flush(pos); err != nil {
 			return err
 		}
-		if err := ex.stmtBuf.seekToNextBatch(); err != nil {
+		requireSyncFromClient := cmd.isExtendedProtocolCmd()
+		if err := ex.stmtBuf.seekToNextBatch(requireSyncFromClient); err != nil {
 			return err
 		}
 	case rewind:
