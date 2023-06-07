@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -771,6 +772,12 @@ func (b *builderState) ResolvePrefix(
 ) (dbElts scbuildstmt.ElementResultSet, scElts scbuildstmt.ElementResultSet) {
 	db, sc := b.cr.MustResolvePrefix(b.ctx, prefix)
 	b.ensureDescriptor(db.GetID())
+	if sc.SchemaKind() == catalog.SchemaVirtual {
+		panic(sqlerrors.NewCannotModifyVirtualSchemaError(sc.GetName()))
+	}
+	if sc.SchemaKind() == catalog.SchemaTemporary {
+		panic(unimplemented.NewWithIssue(104687, "cannot create UDFs under a temporary schema"))
+	}
 	b.ensureDescriptor(sc.GetID())
 	b.mustBeValidSchema(prefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
 	return b.descCache[db.GetID()].ers, b.descCache[sc.GetID()].ers

@@ -3466,3 +3466,31 @@ query I
 SELECT f_103869('sq_103869')
 ----
 2
+
+# This test ensures the error message is understandable when creating a
+# function under a virtual or temporary schema.
+subtest udf_under_virtual_or_temp_schemas_102964
+
+statement error crdb_internal is a virtual schema and cannot be modified
+CREATE FUNCTION crdb_internal.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement error information_schema is a virtual schema and cannot be modified
+CREATE FUNCTION information_schema.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement error pg_catalog is a virtual schema and cannot be modified
+CREATE FUNCTION pg_catalog.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement error pg_extension is a virtual schema and cannot be modified
+CREATE FUNCTION pg_extension.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+statement ok
+SET experimental_enable_temp_tables=on;
+
+statement ok
+CREATE TEMP TABLE t_102964 (i INT PRIMARY KEY);
+
+let $temp_schema_102964
+SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%';
+
+statement error pgcode 0A000 unimplemented: cannot create UDFs under a temporary schema
+CREATE FUNCTION $temp_schema_102964.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
