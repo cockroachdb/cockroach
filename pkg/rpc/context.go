@@ -2084,6 +2084,14 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		conns.mu.m = map[peerKey]*peer{}
 	}
 
+	p := rpcCtx.newPeer(k)
+	// (Asynchronously) Start the probe (= heartbeat loop). The breaker is healthy
+	// right now (it was just created) but the call to `.Probe` will launch the
+	// probe[1] regardless.
+	//
+	// [1]: see (*peer).launch.
+	p.b.Probe()
+
 	// NB: we used to also insert into `peerKey{target, 0, class}` so that
 	// callers that may pass a zero NodeID could coalesce onto the connection
 	// with the "real" NodeID. This caused issues over the years[^1][^2] and
@@ -2092,13 +2100,6 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	// [^1]: https://github.com/cockroachdb/cockroach/issues/37200
 	// [^2]: https://github.com/cockroachdb/cockroach/pull/89539
 
-	p := rpcCtx.newPeer(k)
-	// (Asynchronously) Start the probe (= heartbeat loop). The breaker is healthy
-	// right now (it was just created) but the call to `.Probe` will launch the
-	// probe[1] regardless.
-	//
-	// [1]: see (*peer).launch.
-	p.b.Probe()
 	conns.mu.m[k] = p
 	return p.snap().c
 }
