@@ -220,7 +220,6 @@ type mockCluster struct {
 	store    *spanconfigstore.Store
 }
 
-var _ spanconfigreporter.Liveness = &mockCluster{}
 var _ constraint.StoreResolver = &mockCluster{}
 var _ rangedesc.Scanner = &mockCluster{}
 var _ spanconfig.StoreReader = &mockCluster{}
@@ -245,6 +244,16 @@ func newMockCluster(
 // ScanNodeVitalityFromCache implements spanconfigreporter.Liveness.
 func (s *mockCluster) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 	return s.liveness.ScanNodeVitalityFromCache()
+}
+
+func (s *mockCluster) GetNodeVitalityFromCache(id roachpb.NodeID) livenesspb.NodeVitality {
+	return s.liveness.GetNodeVitalityFromCache(id)
+}
+
+func (s *mockCluster) ScanNodeVitalityFromKV(
+	ctx context.Context,
+) (livenesspb.NodeVitalityMap, error) {
+	return s.liveness.ScanNodeVitalityFromKV(ctx)
 }
 
 // GetStoreDescriptor implements constraint.StoreResolver.
