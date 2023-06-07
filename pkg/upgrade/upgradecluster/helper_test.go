@@ -180,7 +180,7 @@ func TestClusterNodes(t *testing.T) {
 		nl := livenesspb.TestCreateNodeVitality(1, 2, 3)
 
 		const decommissionedNode = 3
-		nl.Decommission(decommissionedNode)
+		nl.Decommissioned(decommissionedNode, false)
 
 		ns, err := NodesFromNodeLiveness(ctx, nl)
 		if err != nil {

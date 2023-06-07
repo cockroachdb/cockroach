@@ -37,7 +37,7 @@ type Cluster struct {
 type ClusterConfig struct {
 
 	// NodeLiveness is used to determine the set of nodes in the cluster.
-	NodeLiveness NodeLiveness
+	NodeLiveness livenesspb.NodeVitalityInterface
 
 	// Dialer constructs connections to other nodes.
 	Dialer NodeDialer
@@ -57,12 +57,6 @@ type ClusterConfig struct {
 type NodeDialer interface {
 	// Dial returns a grpc connection to the given node.
 	Dial(context.Context, roachpb.NodeID, rpc.ConnectionClass) (*grpc.ClientConn, error)
-}
-
-// NodeLiveness is the subset of the interface satisfied by CRDB's node liveness
-// component that the upgrade manager relies upon.
-type NodeLiveness interface {
-	ScanNodeVitalityFromKV(context.Context) (livenesspb.NodeVitalityMap, error)
 }
 
 // New constructs a new Cluster with the provided dependencies.
