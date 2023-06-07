@@ -11,18 +11,9 @@
 package optionalnodeliveness
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
-
-// Interface is the interface used in Container.
-type Interface interface {
-	GetNodeVitalityFromCache(nodeID roachpb.NodeID) livenesspb.NodeVitality
-	ScanNodeVitalityFromKV(ctx context.Context) (livenesspb.NodeVitalityMap, error)
-}
 
 // Container optionally gives access to liveness information about
 // the KV nodes. It is typically not available to anyone but the system tenant.
@@ -31,13 +22,13 @@ type Container struct {
 }
 
 // MakeContainer initializes an Container wrapping a
-// (possibly nil) *NodeLiveness.
+// (possibly nil) *NodeVitalityInterface.
 //
 // Use of node liveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
 //
 // See TenantSQLDeprecatedWrapper for details.
-func MakeContainer(nl Interface) Container {
+func MakeContainer(nl livenesspb.NodeVitalityInterface) Container {
 	return Container{
 		w: errorutil.MakeTenantSQLDeprecatedWrapper(nl, nl != nil),
 	}
@@ -48,12 +39,12 @@ func MakeContainer(nl Interface) Container {
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *Container) OptionalErr(issue int) (Interface, error) {
+func (nl *Container) OptionalErr(issue int) (livenesspb.NodeVitalityInterface, error) {
 	v, err := nl.w.OptionalErr(issue)
 	if err != nil {
 		return nil, err
 	}
-	return v.(Interface), nil
+	return v.(livenesspb.NodeVitalityInterface), nil
 }
 
 var _ = (*Container)(nil).OptionalErr // silence unused lint
@@ -63,10 +54,10 @@ var _ = (*Container)(nil).OptionalErr // silence unused lint
 //
 // Use of NodeLiveness from within the SQL layer is **deprecated**. Please do
 // not introduce new uses of it.
-func (nl *Container) Optional(issue int) (Interface, bool) {
+func (nl *Container) Optional(issue int) (livenesspb.NodeVitalityInterface, bool) {
 	v, ok := nl.w.Optional()
 	if !ok {
 		return nil, false
 	}
-	return v.(Interface), true
+	return v.(livenesspb.NodeVitalityInterface), true
 }
