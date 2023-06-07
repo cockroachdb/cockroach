@@ -73,6 +73,7 @@ test           crdb_internal       kv_inherited_role_members               publi
 test           crdb_internal       kv_node_liveness                        public   SELECT          false
 test           crdb_internal       kv_node_status                          public   SELECT          false
 test           crdb_internal       kv_store_status                         public   SELECT          false
+test           crdb_internal       kv_system_privileges                    public   SELECT          false
 test           crdb_internal       leases                                  public   SELECT          false
 test           crdb_internal       lost_descriptors_with_data              public   SELECT          false
 test           crdb_internal       node_build_info                         public   SELECT          false

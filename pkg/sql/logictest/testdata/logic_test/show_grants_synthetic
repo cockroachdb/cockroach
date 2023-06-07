@@ -66,3 +66,13 @@ testuser   EXTERNALCONNECTION    true
 testuser   MODIFYCLUSTERSETTING  false
 testuser2  EXTERNALCONNECTION    false
 testuser2  VIEWACTIVITY          true
+
+# SHOW SYSTEM GRANTS FOR <user> should not require admin/root privileges
+subtest show_system_grants_for_non_admin
+
+user testuser
+
+statement ok
+SHOW SYSTEM GRANTS FOR testuser
+
+subtest end
