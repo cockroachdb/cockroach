@@ -737,11 +737,15 @@ func (s *Streamer) Close(ctx context.Context) {
 		s.mu.done = true
 		s.mu.Unlock()
 		s.requestsToServe.close()
-		s.results.close(ctx)
 		// Unblock the coordinator in case it is waiting for the budget.
 		s.budget.mu.waitForBudget.Signal()
 	}
 	s.waitGroup.Wait()
+	if s.results != nil {
+		// The results buffer can only be closed when all goroutines have
+		// exited.
+		s.results.close(ctx)
+	}
 	*s = Streamer{}
 }
 
