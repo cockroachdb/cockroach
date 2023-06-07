@@ -475,13 +475,13 @@ subtest inv_privs
 query error does not have CREATE privilege on database system
 SELECT crdb_internal.generate_test_objects('system.public.foo', 10)
 
-query error cannot CREATE on schema pg_catalog
+query error pg_catalog is a virtual schema and cannot be modified
 SELECT crdb_internal.generate_test_objects('pg_catalog.foo', 10)
 
 statement ok
 SET search_path=pg_catalog,public
 
-query error cannot CREATE on schema pg_catalog
+query error pg_catalog is a virtual schema and cannot be modified
 SELECT crdb_internal.generate_test_objects('foo', 10)
 
 statement ok

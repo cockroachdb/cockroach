@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
         "//pkg/util/mon",
         "//pkg/util/randident",

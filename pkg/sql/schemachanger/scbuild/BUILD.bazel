@@ -50,6 +50,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/mon",

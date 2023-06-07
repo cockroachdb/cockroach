@@ -14,9 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -37,8 +36,7 @@ func (g *testSchemaGenerator) checkCanCreateOnSchema(
 		// created.
 
 	case catalog.SchemaVirtual:
-		panic(genError{pgerror.Newf(pgcode.InsufficientPrivilege,
-			"cannot CREATE on schema %s", sc.GetName())})
+		panic(genError{sqlerrors.NewCannotModifyVirtualSchemaError(sc.GetName())})
 
 	case catalog.SchemaUserDefined:
 		if err := g.ext.cat.CheckPrivilegeForUser(ctx, sc, privilege.CREATE, g.cfg.user); err != nil {
