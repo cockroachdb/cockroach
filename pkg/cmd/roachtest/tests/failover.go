@@ -183,7 +183,6 @@ func registerFailover(r registry.Registry) {
 func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readOnly bool) {
 	require.Equal(t, 10, c.Spec().NodeCount)
 
-	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster, and set up failers for all failure modes.
@@ -240,7 +239,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Run workload on n10 via n1-n2 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	m.Go(func(ctx context.Context) error {
+	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		readPercent := 50
 		if readOnly {
 			readPercent = 100
@@ -258,7 +257,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Start a worker to randomly fail random nodes for 1 minute, with 20 cycles.
 	m.Go(func(ctx context.Context) error {
-		defer cancel() // stop workload when done
+		defer cancelWorkload()
 
 		for i := 0; i < 20; i++ {
 			sleepFor(ctx, t, time.Minute)
@@ -358,7 +357,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Equal(t, 8, c.Spec().NodeCount)
 
-	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
@@ -405,7 +403,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 
 	// Run workload on n8 via n6-n7 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	m.Go(func(ctx context.Context) error {
+	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:6-7}`)
@@ -419,7 +417,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	// (leases) and n6,n7 (gateways), both fully and individually, for 3 cycles.
 	// Leases are only placed on n4.
 	m.Go(func(ctx context.Context) error {
-		defer cancel() // stop workload when done
+		defer cancelWorkload()
 
 		for i := 0; i < 3; i++ {
 			testcases := []struct {
@@ -488,7 +486,6 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
-	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster, disabling leader/leaseholder colocation. We only start
@@ -555,7 +552,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	m.Go(func(ctx context.Context) error {
+	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
@@ -568,7 +565,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	// Start a worker to fail and recover partial partitions between each pair of
 	// n4-n6 for 3 cycles (9 failures total).
 	m.Go(func(ctx context.Context) error {
-		defer cancel() // stop workload when done
+		defer cancelWorkload()
 
 		for i := 0; i < 3; i++ {
 			for _, node := range []int{4, 5, 6} {
@@ -624,7 +621,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Equal(t, 8, c.Spec().NodeCount)
 
-	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
@@ -670,7 +666,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	// Run workload on n8 using n1-n3 as gateways (not partitioned) until test
 	// ends (context cancels).
 	t.L().Printf("running workload")
-	m.Go(func(ctx context.Context) error {
+	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, c.Node(8), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
@@ -684,7 +680,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	// and workload leaseholders n5-n7 for 1 minute each, 3 times per node for 9
 	// times total.
 	m.Go(func(ctx context.Context) error {
-		defer cancel() // stop workload when done
+		defer cancelWorkload()
 
 		for i := 0; i < 3; i++ {
 			for _, node := range []int{5, 6, 7} {
@@ -740,7 +736,6 @@ func runFailoverNonSystem(
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
-	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
@@ -782,7 +777,7 @@ func runFailoverNonSystem(
 
 	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	m.Go(func(ctx context.Context) error {
+	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
@@ -794,7 +789,7 @@ func runFailoverNonSystem(
 
 	// Start a worker to fail and recover n4-n6 in order.
 	m.Go(func(ctx context.Context) error {
-		defer cancel() // stop workload when done
+		defer cancelWorkload()
 
 		for i := 0; i < 3; i++ {
 			for _, node := range []int{4, 5, 6} {
@@ -850,7 +845,6 @@ func runFailoverLiveness(
 ) {
 	require.Equal(t, 5, c.Spec().NodeCount)
 
-	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
@@ -898,7 +892,7 @@ func runFailoverLiveness(
 
 	// Run workload on n5 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	m.Go(func(ctx context.Context) error {
+	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, c.Node(5), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
@@ -910,7 +904,7 @@ func runFailoverLiveness(
 
 	// Start a worker to fail and recover n4.
 	m.Go(func(ctx context.Context) error {
-		defer cancel() // stop workload when done
+		defer cancelWorkload()
 
 		for i := 0; i < 9; i++ {
 			sleepFor(ctx, t, time.Minute)
@@ -964,7 +958,6 @@ func runFailoverSystemNonLiveness(
 ) {
 	require.Equal(t, 7, c.Spec().NodeCount)
 
-	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	// Create cluster.
@@ -1011,7 +1004,7 @@ func runFailoverSystemNonLiveness(
 
 	// Run workload on n7 via n1-n3 as gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	m.Go(func(ctx context.Context) error {
+	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
@@ -1023,7 +1016,7 @@ func runFailoverSystemNonLiveness(
 
 	// Start a worker to fail and recover n4-n6 in order.
 	m.Go(func(ctx context.Context) error {
-		defer cancel() // stop workload when done
+		defer cancelWorkload()
 
 		for i := 0; i < 3; i++ {
 			for _, node := range []int{4, 5, 6} {
