@@ -521,9 +521,6 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			"crdb_internal.revalidate_unique_constraint",
 			"crdb_internal.request_statement_bundle",
 			"crdb_internal.set_compaction_concurrency",
-			// TODO(#97097): Temporarily disable crdb_internal.fingerprint
-			// which produces internal errors for some valid inputs.
-			"crdb_internal.fingerprint",
 		} {
 			skip = skip || strings.Contains(def.Name, substr)
 		}
