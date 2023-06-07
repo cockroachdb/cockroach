@@ -906,11 +906,7 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 	} else if hasAdmin {
 		return true, nil
 	}
-	hasView := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
-	if hasView {
-		return true, nil
-	}
-	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
+	if hasView, err := p.HasViewActivity(ctx); err != nil {
 		return false, err
 	} else if hasView {
 		return true, nil
@@ -931,6 +927,20 @@ func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
 			return true, err
 		}
 		if !hasViewRedacted {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (p *planner) HasViewActivity(ctx context.Context) (bool, error) {
+	hasView := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
+	if !hasView {
+		hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		if err != nil {
+			return true, err
+		}
+		if !hasView {
 			return false, nil
 		}
 	}
