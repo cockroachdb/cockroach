@@ -922,33 +922,35 @@ func (r *raft) hup(t CampaignType) {
 	r.campaign(t)
 }
 
+// errBreak is a sentinel error used to break a callback-based loop.
+var errBreak = errors.New("break")
+
 func (r *raft) hasUnappliedConfChanges() bool {
 	if r.raftLog.applied >= r.raftLog.committed { // in fact applied == committed
 		return false
 	}
+	found := false
 	// Scan all unapplied committed entries to find a config change. Paginate the
 	// scan, to avoid a potentially unlimited memory spike.
-	//
-	// TODO(pavelkalinnikov): this scan does not need to happen each time. It's
-	// possible to scan once to bootstrap, and then maintain the "has unapplied
-	// config changes" predicate throughout the lifetime of this instance, as all
-	// new log entries pass through "for free".
-	const maxSize = entryEncodingSize(16 << 20) // 16 MiB
-	for idx, end := r.raftLog.applied+1, r.raftLog.committed+1; idx < end; {
-		ents, err := r.raftLog.slice(idx, end, maxSize)
-		if err != nil {
-			r.logger.Panicf("unexpected error getting unapplied entries from %d: %v", idx, err)
-		} else if len(ents) == 0 {
-			r.logger.Panicf("could not read unapplied entries in [%d, %d)", idx, end)
-		}
+	lo, hi := r.raftLog.applied+1, r.raftLog.committed+1
+	// Reuse the maxApplyingEntsSize limit because it is used for similar purposes
+	// (limiting the read of unapplied committed entries) when raft sends entries
+	// via the Ready struct for application.
+	// TODO(pavelkalinnikov): find a way to budget memory/bandwidth for this scan
+	// outside the raft package.
+	pageSize := r.raftLog.maxApplyingEntsSize
+	if err := r.raftLog.scan(lo, hi, pageSize, func(ents []pb.Entry) error {
 		for i := range ents {
 			if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
-				return true
+				found = true
+				return errBreak
 			}
 		}
-		idx += uint64(len(ents))
+		return nil
+	}); err != nil && err != errBreak {
+		r.logger.Panicf("error scanning unapplied entries [%d, %d): %v", lo, hi, err)
 	}
-	return false
+	return found
 }
 
 // campaign transitions the raft instance to candidate state. This must only be

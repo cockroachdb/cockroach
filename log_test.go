@@ -980,6 +980,64 @@ func TestSlice(t *testing.T) {
 	}
 }
 
+func TestScan(t *testing.T) {
+	offset := uint64(47)
+	num := uint64(20)
+	last := offset + num
+	half := offset + num/2
+	entries := func(from, to uint64) []pb.Entry {
+		res := make([]pb.Entry, 0, to-from)
+		for i := from; i < to; i++ {
+			res = append(res, pb.Entry{Index: i, Term: i})
+		}
+		return res
+	}
+	entrySize := entsSize(entries(half, half+1))
+
+	storage := NewMemoryStorage()
+	require.NoError(t, storage.ApplySnapshot(pb.Snapshot{
+		Metadata: pb.SnapshotMetadata{Index: offset}}))
+	require.NoError(t, storage.Append(entries(offset+1, half)))
+	l := newLog(storage, raftLogger)
+	l.append(entries(half, last)...)
+
+	// Test that scan() returns the same entries as slice(), on all inputs.
+	for _, pageSize := range []entryEncodingSize{0, 1, 10, 100, entrySize, entrySize + 1} {
+		for lo := offset + 1; lo < last; lo++ {
+			for hi := lo; hi <= last; hi++ {
+				var got []pb.Entry
+				require.NoError(t, l.scan(lo, hi, pageSize, func(e []pb.Entry) error {
+					got = append(got, e...)
+					require.True(t, len(e) == 1 || entsSize(e) <= pageSize)
+					return nil
+				}))
+				want, err := l.slice(lo, hi, noLimit)
+				require.NoError(t, err)
+				require.Equal(t, want, got, "scan() and slice() mismatch on [%d, %d) @ %d", lo, hi, pageSize)
+			}
+		}
+	}
+
+	// Test that the callback error is propagated to the caller.
+	iters := 0
+	require.ErrorIs(t, errBreak, l.scan(offset+1, half, 0, func([]pb.Entry) error {
+		iters++
+		if iters == 2 {
+			return errBreak
+		}
+		return nil
+	}))
+	require.Equal(t, 2, iters)
+
+	// Test that we max out the limit, and not just always return a single entry.
+	// NB: this test works only because the requested range length is even.
+	require.NoError(t, l.scan(offset+1, offset+11, entrySize*2, func(ents []pb.Entry) error {
+		require.Len(t, ents, 2)
+		require.Equal(t, entrySize*2, entsSize(ents))
+		return nil
+	}))
+}
+
 func mustTerm(term uint64, err error) uint64 {
 	if err != nil {
 		panic(err)

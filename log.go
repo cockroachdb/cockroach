@@ -461,6 +461,32 @@ func (l *raftLog) restore(s pb.Snapshot) {
 	l.unstable.restore(s)
 }
 
+// scan visits all log entries in the [lo, hi) range, returning them via the
+// given callback. The callback can be invoked multiple times, with consecutive
+// sub-ranges of the requested range. Returns up to pageSize bytes worth of
+// entries at a time. May return more if a single entry size exceeds the limit.
+//
+// The entries in [lo, hi) must exist, otherwise scan() eventually returns an
+// error (possibly after passing some entries through the callback).
+//
+// If the callback returns an error, scan terminates and returns this error
+// immediately. This can be used to stop the scan early ("break" the loop).
+func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.Entry) error) error {
+	for lo < hi {
+		ents, err := l.slice(lo, hi, pageSize)
+		if err != nil {
+			return err
+		} else if len(ents) == 0 {
+			return fmt.Errorf("got 0 entries in [%d, %d)", lo, hi)
+		}
+		if err := v(ents); err != nil {
+			return err
+		}
+		lo += uint64(len(ents))
+	}
+	return nil
+}
+
 // slice returns a slice of log entries from lo through hi-1, inclusive.
 func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
