@@ -392,7 +392,6 @@ func (r RemoteOffset) isStale(ttl time.Duration, now time.Time) bool {
 	return r.measuredAt().Add(ttl).Before(now)
 }
 
-// TODO(during review): move to clock_offset.go after dust has settled.
 func updateClockOffsetTracking(
 	ctx context.Context,
 	remoteClocks *RemoteClockMonitor,

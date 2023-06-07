@@ -557,7 +557,6 @@ func (p *peer) onSubsequentHeartbeatSucceeded(_ context.Context, now time.Time) 
 	// ConnectionFailures is not updated here.
 }
 
-// TODO(during review): move after dust has settled.
 func maybeLogOnFailedHeartbeat(
 	ctx context.Context,
 	now time.Time,
@@ -713,8 +712,6 @@ func (p PeerSnap) deletable(now time.Time) bool {
 // In both cases, if such a conn exists that became healthy *after* ours became
 // unhealthy, `healthy` will be true. If no such conn exists, (false, false) is
 // returned.
-//
-// TODO(during review): move after dust has settled.
 func hasSiblingConn(peers map[peerKey]*peer, self peerKey) (healthy, ok bool) {
 	for other, otherPeer := range peers {
 		if self == other {
@@ -764,7 +761,6 @@ func hasSiblingConn(peers map[peerKey]*peer, self peerKey) (healthy, ok bool) {
 	return healthy, ok
 }
 
-// TODO(during review): move after dust has settled.
 func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration {
 	peers.mu.RLock()
 	defer peers.mu.RUnlock()
@@ -801,7 +797,6 @@ func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration 
 	return deleteAfter
 }
 
-// TODO(during review): move after dust has settled.
 func touchOldPeers(peers *peerMap, now time.Time) {
 	var sigs []circuit.Signal
 	peers.mu.RLock()
