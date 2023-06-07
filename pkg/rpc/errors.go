@@ -27,7 +27,6 @@ var errQuiescing = status.Error(codes.PermissionDenied, "refusing to dial; node 
 // observed when checking the health during the first connection attempt to a
 // node, as during subsequent periods of an unhealthy connection the circuit
 // breaker error will be returned instead.
-// TODO(during review): move once the review dust has settled.
 var ErrNotHeartbeated = errors.New("not yet heartbeated")
 
 type versionCompatError struct{}
