@@ -1913,6 +1913,24 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
 }
 
+// PlanAndRunPostquery generates a physical plan from a planNode tree and
+// executes it, then runs postquery cascades and checks for the plan.
+func (dsp *DistSQLPlanner) PlanAndRunPostquery(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	planCtx *PlanningCtx,
+	planner *planner,
+	plan planMaybePhysical,
+	recv *DistSQLReceiver,
+	finishedSetupFn func(localFlow flowinfra.Flow),
+	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
+) {
+	dsp.PlanAndRun(ctx, evalCtx, planCtx, planner.Txn(), plan, recv, finishedSetupFn)
+	dsp.PlanAndRunCascadesAndChecks(
+		ctx, planner, evalCtxFactory, &planner.curPlan.planComponents, recv,
+	)
+}
+
 // PlanAndRunCascadesAndChecks runs any cascade and check queries.
 //
 // Because cascades can themselves generate more cascades or check queries, this

@@ -341,8 +341,25 @@ func runPlanInsidePlan(
 
 	finishedSetupFn, cleanup := getFinishedSetupFn(&plannerCopy)
 	defer cleanup()
-	execCfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
+	var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
+	if len(plan.subqueryPlans) != 0 ||
+		len(plan.cascades) != 0 ||
+		len(plan.checkPlans) != 0 {
+		serialEvalCtx := params.p.ExtendedEvalContextCopy()
+		evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
+			// Reuse the same object if this factory is not used concurrently.
+			factoryEvalCtx := serialEvalCtx
+			if usedConcurrently {
+				factoryEvalCtx = params.p.ExtendedEvalContextCopy()
+			}
+			factoryEvalCtx.Placeholders = &plannerCopy.semaCtx.Placeholders
+			factoryEvalCtx.Annotations = &plannerCopy.semaCtx.Annotations
+			factoryEvalCtx.SessionID = plannerCopy.ExtendedEvalContext().SessionID
+			return factoryEvalCtx
+		}
+	}
+	execCfg.DistSQLPlanner.PlanAndRunPostquery(
+		ctx, evalCtx, planCtx, &plannerCopy, plan.main, recv, finishedSetupFn, evalCtxFactory,
 	)
 	return resultWriter.Err()
 }
