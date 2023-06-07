@@ -207,6 +207,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalShowTenantCapabilitiesCacheTableID: crdbInternalShowTenantCapabilitiesCache,
 		catconstants.CrdbInternalInheritedRoleMembersTableID:        crdbInternalInheritedRoleMembers,
+		catconstants.CrdbInternalKVSystemPrivilegesViewID:           crdbInternalKVSystemPrivileges,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -8099,4 +8100,24 @@ CREATE TABLE crdb_internal.kv_inherited_role_members (
 		}
 		return nil
 	},
+}
+
+func resultColsFromColDescs(colDescs []descpb.ColumnDescriptor) colinfo.ResultColumns {
+	result := make(colinfo.ResultColumns, 0, len(colDescs))
+	for _, colDesc := range colDescs {
+		result = append(result, colinfo.ResultColumn{
+			Name: colDesc.Name,
+			Typ:  colDesc.Type,
+		})
+	}
+	return result
+}
+
+var crdbInternalKVSystemPrivileges = virtualSchemaView{
+	comment: `this vtable is a view on system.privileges with the root user and is used to back SHOW SYSTEM GRANTS`,
+	schema: `
+CREATE VIEW crdb_internal.kv_system_privileges AS
+SELECT *
+FROM system.privileges;`,
+	resultColumns: resultColsFromColDescs(systemschema.SystemPrivilegeTable.TableDesc().Columns),
 }
