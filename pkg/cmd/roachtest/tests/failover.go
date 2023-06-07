@@ -550,7 +550,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	t.L().Printf("running workload")
 	m.Go(func(ctx context.Context) error {
 		err := c.RunE(ctx, c.Node(7), `./cockroach workload run kv --read-percent 50 `+
-			`--duration 20m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			`--histograms=`+t.PerfArtifactsDir()+`/stats.json {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
@@ -845,8 +845,8 @@ func runFailoverLiveness(
 	ctx, cancel := context.WithCancel(ctx)
 	rng, _ := randutil.NewTestRand()
 
-	// Create cluster. Don't schedule a backup as this roachtest reports to roachperf.
-	opts := option.DefaultStartOptsNoBackups()
+	// Create cluster.
+	opts := option.DefaultStartOpts()
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
@@ -887,7 +887,7 @@ func runFailoverLiveness(
 	// We also make sure the lease is located on n4.
 	relocateLeases(t, ctx, conn, `range_id = 2`, 4)
 
-	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
+	// Run workload on n5 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	m.Go(func(ctx context.Context) error {
 		err := c.RunE(ctx, c.Node(5), `./cockroach workload run kv --read-percent 50 `+
@@ -1450,8 +1450,8 @@ func waitForUpreplication(
 //
 //  2. We need to know when the replicate queue is done placing both replicas and
 //     leases in accordance with the zone configurations, so that we can wait for
-//     it. SpanConfigConformance should provide this, but current doesn't have a
-//     public API, and doesn't handle lease preferences.
+//     it. SpanConfigConformance should provide this, but currently doesn't have
+//     a public API, and doesn't handle lease preferences.
 //
 //  3. The replicate queue must guarantee that replicas and leases won't escape
 //     their constraints after the initial setup. We see them do so currently.
