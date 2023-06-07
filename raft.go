@@ -913,17 +913,44 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
 		return
 	}
-	ents, err := r.raftLog.slice(r.raftLog.applied+1, r.raftLog.committed+1, noLimit)
-	if err != nil {
-		r.logger.Panicf("unexpected error getting unapplied entries (%v)", err)
-	}
-	if n := numOfPendingConf(ents); n != 0 && r.raftLog.committed > r.raftLog.applied {
-		r.logger.Warningf("%x cannot campaign at term %d since there are still %d pending configuration changes to apply", r.id, r.Term, n)
+	if r.hasUnappliedConfChanges() {
+		r.logger.Warningf("%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
 		return
 	}
 
 	r.logger.Infof("%x is starting a new election at term %d", r.id, r.Term)
 	r.campaign(t)
+}
+
+// errBreak is a sentinel error used to break a callback-based loop.
+var errBreak = errors.New("break")
+
+func (r *raft) hasUnappliedConfChanges() bool {
+	if r.raftLog.applied >= r.raftLog.committed { // in fact applied == committed
+		return false
+	}
+	found := false
+	// Scan all unapplied committed entries to find a config change. Paginate the
+	// scan, to avoid a potentially unlimited memory spike.
+	lo, hi := r.raftLog.applied+1, r.raftLog.committed+1
+	// Reuse the maxApplyingEntsSize limit because it is used for similar purposes
+	// (limiting the read of unapplied committed entries) when raft sends entries
+	// via the Ready struct for application.
+	// TODO(pavelkalinnikov): find a way to budget memory/bandwidth for this scan
+	// outside the raft package.
+	pageSize := r.raftLog.maxApplyingEntsSize
+	if err := r.raftLog.scan(lo, hi, pageSize, func(ents []pb.Entry) error {
+		for i := range ents {
+			if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
+				found = true
+				return errBreak
+			}
+		}
+		return nil
+	}); err != nil && err != errBreak {
+		r.logger.Panicf("error scanning unapplied entries [%d, %d): %v", lo, hi, err)
+	}
+	return found
 }
 
 // campaign transitions the raft instance to candidate state. This must only be
@@ -1983,16 +2010,6 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 	} else {
 		r.uncommittedSize -= s
 	}
-}
-
-func numOfPendingConf(ents []pb.Entry) int {
-	n := 0
-	for i := range ents {
-		if ents[i].Type == pb.EntryConfChange || ents[i].Type == pb.EntryConfChangeV2 {
-			n++
-		}
-	}
-	return n
 }
 
 func releasePendingReadIndexMessages(r *raft) {
