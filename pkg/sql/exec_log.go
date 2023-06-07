@@ -164,7 +164,6 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEventBuilders) != 0
-	maxEventFrequency := TelemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
 	logConsoleQuery := telemetryInternalConsoleQueriesEnabled.Get(&p.execCfg.Settings.SV) &&
 		strings.HasPrefix(p.SessionData().ApplicationName, "$ internal-console")
 
@@ -281,23 +280,27 @@ func (p *planner) maybeLogStatementInternal(
 	if telemetryLoggingEnabled && !p.SessionData().TroubleshootingMode {
 		// We only log to the telemetry channel if enough time has elapsed from
 		// the last event emission.
-		requiredTimeElapsed := 1.0 / float64(maxEventFrequency)
 		tracingEnabled := telemetryMetrics.isTracing(p.curPlan.instrumentation.Tracing())
+
+		isStmtMode := telemetrySamplingMode.Get(&p.execCfg.Settings.SV) == telemetryModeStatement
+
 		// Always sample if one of the scenarios is true:
-		// - the current statement is not of type DML
+		// - on 'statement' sampling and the current statement is not of type DML
+		// - on 'transaction' sampling mode and the current statement is not of type DML and is not a COMMIT
 		// - tracing is enabled for this statement
 		// - this is a query emitted by our console (application_name starts with `$ internal-console`) and
 		// the cluster setting to log console queries is enabled
-		if p.stmt.AST.StatementType() != tree.TypeDML || tracingEnabled || logConsoleQuery {
-			requiredTimeElapsed = 0
-		}
-		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
-			var txnID string
-			// p.txn can be nil for COPY.
-			if p.txn != nil {
-				txnID = p.txn.ID().String()
-			}
+		forceLog := (p.stmt.AST.StatementType() != tree.TypeDML &&
+			(isStmtMode || p.stmt.AST.StatementTag() != "COMMIT")) ||
+			tracingEnabled || logConsoleQuery
 
+		var txnID string
+		// p.txn can be nil for COPY.
+		if p.txn != nil {
+			txnID = p.txn.ID().String()
+		}
+
+		if telemetryMetrics.shouldEmitLog(telemetryMetrics.timeNow(), txnID, forceLog, stmtCount) {
 			var queryLevelStats execstats.QueryLevelStats
 			if stats, ok := p.instrumentation.GetQueryLevelStats(); ok {
 				queryLevelStats = *stats
