@@ -219,52 +219,6 @@ func NewServerEx(
 	}, nil
 }
 
-type connFuture struct {
-	ready chan struct{}
-	cc    *grpc.ClientConn
-	err   error
-}
-
-var _ circuitbreaker.Signal = (*connFuture)(nil)
-
-func (s *connFuture) C() <-chan struct{} {
-	return s.ready
-}
-
-// Err must only be called after C() has been closed.
-func (s *connFuture) Err() error {
-	return s.err
-}
-
-// Conn must only be called after C() has been closed.
-func (s *connFuture) Conn() *grpc.ClientConn {
-	if s.err != nil {
-		return nil
-	}
-	return s.cc
-}
-
-func (s *connFuture) Resolved() bool {
-	select {
-	case <-s.ready:
-		return true
-	default:
-		return false
-	}
-}
-
-// Resolve is idempotent. Only the first call has any effect.
-// Not thread safe.
-func (s *connFuture) Resolve(cc *grpc.ClientConn, err error) {
-	select {
-	case <-s.ready:
-		// Already resolved, noop.
-	default:
-		s.cc, s.err = cc, err
-		close(s.ready)
-	}
-}
-
 // Context is a pool of *grpc.ClientConn that are periodically health-checked,
 // and for which circuit breaking and metrics are provided. Callers can obtain a
 // *Connection via the non-blocking GRPCDialNode method. A *Connection is akin
