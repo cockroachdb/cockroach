@@ -1055,6 +1055,145 @@ func TestShowSessionPrivileges(t *testing.T) {
 	}
 }
 
+// TestShowRedactedActiveStatements tests the crdb_internal.cluster_queries table for system permissions.
+func TestShowRedactedActiveStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	params.Insecure = true
+	ctx, cancel := context.WithCancel(context.Background())
+	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
+	defer s.Stopper().Stop(context.Background())
+
+	// Create four users: one with no special permissions, one with the
+	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
+	// and one with both permissions.
+	_ = sqlDBroot.Exec(t, `CREATE USER noperms`)
+	_ = sqlDBroot.Exec(t, `CREATE USER onlyviewactivity`)
+	_ = sqlDBroot.Exec(t, `CREATE USER onlyviewactivityredacted`)
+	_ = sqlDBroot.Exec(t, `CREATE USER bothperms`)
+	_ = sqlDBroot.Exec(t, `GRANT SYSTEM VIEWACTIVITY TO onlyviewactivity`)
+	_ = sqlDBroot.Exec(t, `GRANT SYSTEM VIEWACTIVITYREDACTED TO onlyviewactivityredacted`)
+	_ = sqlDBroot.Exec(t, `GRANT SYSTEM VIEWACTIVITY TO bothperms`)
+	_ = sqlDBroot.Exec(t, `GRANT SYSTEM VIEWACTIVITYREDACTED TO bothperms`)
+
+	type user struct {
+		username        string
+		canViewTable    bool // Can the user view the `cluster_queries` table?
+		isQueryRedacted bool // Is the user's query redacted?
+		sqlRunner       *sqlutils.SQLRunner
+	}
+
+	// A user with no permissions should not see the table. A user with only
+	// VIEWACTIVITY should be able to see the whole query. A user with only
+	// VIEWACTIVITYREDACTED should see a redacted query. A user with both should
+	// see the redacted query, as VIEWACTIVITYREDACTED takes precedence.
+	users := []user{
+		{"onlyviewactivityredacted", true, true, nil},
+		{"onlyviewactivity", true, false, nil},
+		{"noperms", false, false, nil},
+		{"bothperms", true, true, nil},
+	}
+	for i, tc := range users {
+		pgURL := url.URL{
+			Scheme:   "postgres",
+			User:     url.User(tc.username),
+			Host:     s.ServingSQLAddr(),
+			RawQuery: "sslmode=disable",
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		users[i].sqlRunner = sqlutils.MakeSQLRunner(db)
+
+		// Ensure the session is open.
+		users[i].sqlRunner.Exec(t, `SELECT version()`)
+	}
+
+	// Run a long-running sleep query in the background.
+	startSignal := make(chan struct{})
+	waiter := make(chan struct{})
+	go func() {
+		// Signal that we have started the query.
+		close(startSignal)
+		_, _ = rawSQLDBroot.ExecContext(ctx, `SELECT pg_sleep(30)`)
+		// Signal that we have finished the query.
+		close(waiter)
+	}()
+
+	// Wait for the start signal.
+	<-startSignal
+
+	selectQuery := `SELECT query FROM [SHOW CLUSTER QUERIES] WHERE query LIKE 'SELECT pg_sleep%'`
+
+	testutils.SucceedsSoon(t, func() error {
+		rows := sqlDBroot.Query(t, selectQuery)
+		count := 0
+		for rows.Next() {
+			count++
+			var query string
+			if err := rows.Scan(&query); err != nil {
+				return err
+			}
+			if query != "SELECT pg_sleep(30)" {
+				return errors.Errorf("Expected `SELECT pg_sleep(30)`, got %s", query)
+			}
+		}
+		if count != 1 {
+			return errors.Errorf("expected 1 row, got %d", count)
+		}
+		defer rows.Close()
+		return nil
+	})
+
+	for _, u := range users {
+		t.Run(u.username, func(t *testing.T) {
+			// Make sure that if the user can't view the table, they get an error.
+			if !u.canViewTable {
+				u.sqlRunner.ExpectErr(t, "does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege", selectQuery)
+			} else {
+				rows := u.sqlRunner.Query(t, selectQuery)
+				defer rows.Close()
+				if err := rows.Err(); err != nil {
+					t.Fatal(err)
+				}
+				count := 0
+				for rows.Next() {
+					count++
+
+					var query string
+					if err := rows.Scan(&query); err != nil {
+						t.Fatal(err)
+					}
+
+					t.Log(query)
+					// Make sure that if the user is supposed to see a redacted query, they do.
+					if u.isQueryRedacted {
+						if !strings.HasPrefix(query, "SELECT pg_sleep(_)") {
+							t.Fatalf("Expected `SELECT pg_sleep(_)`, got %s", query)
+						}
+						// Make sure that if the user is supposed to see the full query, they do.
+					} else {
+						if !strings.HasPrefix(query, "SELECT pg_sleep(30)") {
+							t.Fatalf("Expected `SELECT pg_sleep(30)`, got %s", query)
+						}
+					}
+				}
+				if count != 1 {
+					t.Fatalf("expected 1 row, got %d", count)
+				}
+			}
+		})
+	}
+
+	cancel()
+	<-waiter
+}
+
 func TestLintClusterSettingNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
