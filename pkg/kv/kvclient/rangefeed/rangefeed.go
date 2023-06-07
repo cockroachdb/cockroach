@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -266,9 +267,7 @@ func (f *RangeFeed) Close() {
 // will be reset.
 const resetThreshold = 30 * time.Second
 
-// Disable mux rangefeed on 23.1 release.
-// TODO(yevgeniy): Re-enable with metamorphic constant.
-var useMuxRangeFeed = false
+var useMuxRangeFeed = util.ConstantWithMetamorphicTestBool("use-mux-rangefeed", false)
 
 // run will run the RangeFeed until the context is canceled or if the client
 // indicates that an initial scan error is non-recoverable.
