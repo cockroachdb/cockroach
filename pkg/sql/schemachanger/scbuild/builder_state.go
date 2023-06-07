@@ -85,15 +85,14 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	}
 	// Henceforth all possibilities lead to the target and metadata being
 	// overwritten. See below for explanations as to why this is legal.
-	oldTarget := dst.target
-	dst.target = target
-	dst.metadata = meta
+	oldTarget, oldStatementID := dst.target, dst.metadata.StatementID
+	dst.target, dst.metadata = target, meta
 	if dst.metadata.Size() == 0 {
 		// The element has never had a target set before.
 		// We can freely overwrite it.
 		return
 	}
-	if dst.metadata.StatementID == meta.StatementID {
+	if oldStatementID == meta.StatementID {
 		// The element has had a target set before, but it was in the same build.
 		// We can freely overwrite it or unset it.
 		if target.Status() == dst.initial {
