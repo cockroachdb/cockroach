@@ -47,14 +47,6 @@ func (l Liveness) IsLive(now hlc.Timestamp) bool {
 	return now.Less(l.Expiration.ToTimestamp())
 }
 
-// IsDead returns true if the liveness expired more than threshold ago.
-//
-// Note that, because of threshold, IsDead() is not the inverse of IsLive().
-func (l Liveness) IsDead(now hlc.Timestamp, threshold time.Duration) bool {
-	expiration := l.Expiration.ToTimestamp().AddDuration(threshold)
-	return !now.Less(expiration)
-}
-
 // Compare returns an integer comparing two pieces of liveness information,
 // based on which liveness information is more recent.
 func (l Liveness) Compare(o Liveness) int {

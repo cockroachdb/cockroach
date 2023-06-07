@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/deprecatedshowranges"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -2207,7 +2206,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 // a slice containing the liveness record of all nodes that have ever been a part of the
 // cluster.
 func getLivenessResponse(
-	ctx context.Context, nl optionalnodeliveness.Interface,
+	ctx context.Context, nl livenesspb.NodeVitalityInterface,
 ) (*serverpb.LivenessResponse, error) {
 	nodeVitalityMap, err := nl.ScanNodeVitalityFromKV(ctx)
 

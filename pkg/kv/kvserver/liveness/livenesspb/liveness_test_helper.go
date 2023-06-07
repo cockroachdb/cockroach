@@ -43,7 +43,7 @@ func TestCreateNodeVitality(ids ...roachpb.NodeID) TestNodeVitality {
 	return m
 }
 
-func (e TestNodeVitalityEntry) convert() NodeVitality {
+func (e TestNodeVitalityEntry) Convert() NodeVitality {
 	clock := hlc.NewClockForTesting(hlc.NewHybridManualClock())
 	now := clock.Now()
 	if e.Alive {
@@ -58,7 +58,7 @@ func (tnv TestNodeVitality) GetNodeVitalityFromCache(id roachpb.NodeID) NodeVita
 	if !found {
 		return NodeVitality{}
 	}
-	return val.convert()
+	return val.Convert()
 }
 
 // ScanNodeVitalityFromKV is only for testing so doesn't actually scan KV,
@@ -70,7 +70,7 @@ func (tnv TestNodeVitality) ScanNodeVitalityFromKV(_ context.Context) (NodeVital
 func (tnv TestNodeVitality) ScanNodeVitalityFromCache() NodeVitalityMap {
 	nvm := make(NodeVitalityMap, len(tnv))
 	for key, entry := range tnv {
-		nvm[key] = entry.convert()
+		nvm[key] = entry.Convert()
 	}
 	return nvm
 }
@@ -99,10 +99,31 @@ func (tnv TestNodeVitality) AddNode(id roachpb.NodeID) {
 	}
 }
 
-// Decommission marks a given node as decommissioned.
-func (tnv TestNodeVitality) Decommission(id roachpb.NodeID) {
+// Draining marks a given node as draining.
+func (tnv TestNodeVitality) Draining(id roachpb.NodeID, drain bool) {
+	entry := tnv[id]
+	entry.Liveness.Draining = drain
+	tnv[id] = entry
+}
+
+// Decommissioning marks a given node as decommissioning.
+func (tnv TestNodeVitality) Decommissioning(id roachpb.NodeID, alive bool) {
+	entry := tnv[id]
+	entry.Liveness.Membership = MembershipStatus_DECOMMISSIONING
+	entry.Alive = alive
+	tnv[id] = entry
+}
+
+// Decommissioned marks a given node as decommissioned.
+func (tnv TestNodeVitality) Decommissioned(id roachpb.NodeID, alive bool) {
+	now := hlc.NewClockForTesting(hlc.NewHybridManualClock()).Now()
 	entry := tnv[id]
 	entry.Liveness.Membership = MembershipStatus_DECOMMISSIONED
+	// Mark the liveness as expired if not alive.
+	if !alive {
+		entry.Liveness.Expiration = now.AddDuration(-1).ToLegacyTimestamp()
+	}
+	entry.Alive = alive
 	tnv[id] = entry
 }
 
