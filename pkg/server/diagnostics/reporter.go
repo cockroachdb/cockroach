@@ -442,7 +442,7 @@ func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret s
 type stringRedactor struct{}
 
 func (stringRedactor) Primitive(v reflect.Value) error {
-	if v.Kind() == reflect.String && v.String() != "" {
+	if v.Kind() == reflect.String && v.String() != "" && v.CanSet() {
 		v.Set(reflect.ValueOf("_").Convert(v.Type()))
 	}
 	return nil
