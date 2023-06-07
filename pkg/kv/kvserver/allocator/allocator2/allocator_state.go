@@ -27,6 +27,9 @@ type allocatorState struct {
 
 	meansMemo            *meansMemo
 	diversityScoringMemo *diversityScoringMemo
+
+	// TODO(kvoli,sumeer): initialize and use.
+	changeRangeLimiter *storeChangeRateLimiter
 }
 
 func newAllocatorState() *allocatorState {
