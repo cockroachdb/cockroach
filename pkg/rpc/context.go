@@ -22,7 +22,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/VividCortex/ewma"
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -52,7 +51,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
@@ -2308,155 +2306,6 @@ var useDialback = settings.RegisterBoolSetting(
 	"if true, require bidirectional RPC connections between nodes to prevent one-way network unavailability",
 	true,
 )
-
-// TODO(during review): move once the review dust has settled.
-func runSingleHeartbeat(
-	ctx context.Context,
-	heartbeatClient HeartbeatClient,
-	k peerKey,
-	roundTripLatency ewma.MovingAverage,
-	remoteClocks *RemoteClockMonitor, // nil if no RemoteClocks update should be made
-	opts *ContextOptions,
-	heartbeatTimeout time.Duration,
-	preferredDialback PingRequest_DialbackType,
-) error {
-	if !opts.NeedsDialback || !useDialback.Get(&opts.Settings.SV) {
-		preferredDialback = PingRequest_NONE
-	}
-
-	// Pick up any asynchronous update to clusterID and NodeID.
-	clusterID := opts.StorageClusterID.Get()
-
-	var lastOffset RemoteOffset
-	if remoteClocks != nil {
-		lastOffset = remoteClocks.GetOffset(k.NodeID)
-	}
-
-	// The request object. Note that we keep the same object from
-	// heartbeat to heartbeat: we compute a new .Offset at the end of
-	// the current heartbeat as input to the next one.
-	request := &PingRequest{
-		OriginAddr:      opts.Config.AdvertiseAddr,
-		TargetNodeID:    k.NodeID,
-		ServerVersion:   opts.Settings.Version.BinaryVersion(),
-		LocalityAddress: opts.Config.LocalityAddresses,
-		ClusterID:       &clusterID,
-		OriginNodeID:    opts.NodeID.Get(),
-		NeedsDialback:   preferredDialback,
-		Offset:          lastOffset,
-	}
-
-	interceptor := func(context.Context, *PingRequest) error { return nil }
-	if fn := opts.OnOutgoingPing; fn != nil {
-		interceptor = fn
-	}
-
-	var response *PingResponse
-	sendTime := opts.Clock.Now()
-	ping := func(ctx context.Context) error {
-		if err := interceptor(ctx, request); err != nil {
-			return err
-		}
-		var err error
-
-		response, err = heartbeatClient.Ping(ctx, request)
-		return err
-	}
-	var err error
-	if heartbeatTimeout > 0 {
-		err = timeutil.RunWithTimeout(ctx, "conn heartbeat", heartbeatTimeout, ping)
-	} else {
-		err = ping(ctx)
-	}
-
-	if err != nil {
-		log.VEventf(ctx, 2, "received error on ping response from n%d, %v", k.NodeID, err)
-		return err
-	}
-
-	// We verify the cluster name on the initiator side (instead
-	// of the heartbeat service side, as done for the cluster ID
-	// and node ID checks) so that the operator who is starting a
-	// new node in a cluster and mistakenly joins the wrong
-	// cluster gets a chance to see the error message on their
-	// management console.
-	if !opts.Config.DisableClusterNameVerification && !response.DisableClusterNameVerification {
-		err = errors.Wrap(
-			checkClusterName(opts.Config.ClusterName, response.ClusterName),
-			"cluster name check failed on ping response")
-		if err != nil {
-			return err
-		}
-	}
-
-	err = checkVersion(ctx, opts.Settings.Version, response.ServerVersion)
-	if err != nil {
-		err := errors.Mark(err, VersionCompatError)
-		return err
-	}
-
-	receiveTime := opts.Clock.Now()
-
-	pingDuration, _, err := updateClockOffsetTracking(
-		ctx, remoteClocks, k.NodeID,
-		sendTime, timeutil.Unix(0, response.ServerTime), receiveTime,
-		opts.ToleratedOffset,
-	)
-	if err != nil {
-		if opts.FatalOnOffsetViolation {
-			log.Ops.Fatalf(ctx, "%v", err)
-		}
-	} else {
-		roundTripLatency.Add(float64(pingDuration.Nanoseconds())) // source for metrics
-	}
-
-	return nil
-}
-
-// runHeartbeatUntilFailure synchronously runs the heartbeat loop for the given
-// RPC connection, returning once a heartbeat fails. The ctx passed as argument
-// must be derived from rpcCtx.masterCtx, so that it respects the same
-// cancellation policy.
-// TODO(during review): move once the review dust has settled.
-func (p *peer) runHeartbeatUntilFailure(
-	ctx context.Context, connFailedCh <-chan connectivity.State,
-) error {
-	var heartbeatTimer timeutil.Timer
-	defer heartbeatTimer.Stop()
-	// NB: the caller just sent the initial heartbeat, so we don't
-	// queue for an immedidate heartbeat but wait out the interval.
-	heartbeatTimer.Reset(p.heartbeatInterval)
-
-	// If we get here, we know `connFuture` has been resolved (due to the
-	// initial heartbeat having succeeded), so we have a Conn() we can
-	// use.
-	heartbeatClient := NewHeartbeatClient(p.snap().c.connFuture.Conn())
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err() // likely server shutdown
-		case <-heartbeatTimer.C:
-			heartbeatTimer.Read = true
-		case <-connFailedCh:
-			// gRPC has signaled that the connection is now failed, which implies that
-			// we will need to start a new connection (since we set things up that way
-			// using onlyOnceDialer). But we go through the motions and run the
-			// heartbeat so that there is a unified path that reports the error,
-			// in order to provide a good UX.
-		}
-
-		if err := runSingleHeartbeat(
-			ctx, heartbeatClient, p.k, p.peerMetrics.roundTripLatency, p.remoteClocks,
-			p.opts, p.heartbeatTimeout, PingRequest_NON_BLOCKING,
-		); err != nil {
-			return err
-		}
-
-		p.onSubsequentHeartbeatSucceeded(ctx, p.opts.Clock.Now())
-		heartbeatTimer.Reset(p.heartbeatInterval)
-	}
-}
 
 // NewHeartbeatService returns a HeartbeatService initialized from the Context.
 func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
