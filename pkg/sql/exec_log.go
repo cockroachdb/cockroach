@@ -162,7 +162,6 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEventBuilders) != 0
-	maxEventFrequency := TelemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
 
 	// We only consider non-internal SQL statements for telemetry logging unless
 	// the telemetryInternalQueriesEnabled is true.
@@ -277,20 +276,28 @@ func (p *planner) maybeLogStatementInternal(
 	if telemetryLoggingEnabled && !p.SessionData().TroubleshootingMode {
 		// We only log to the telemetry channel if enough time has elapsed from
 		// the last event emission.
-		requiredTimeElapsed := 1.0 / float64(maxEventFrequency)
 		tracingEnabled := telemetryMetrics.isTracing(p.curPlan.instrumentation.Tracing())
 		// Always sample if the current statement is not of type DML or tracing
 		// is enabled for this statement.
+		forceLog := false
 		if p.stmt.AST.StatementType() != tree.TypeDML || tracingEnabled {
-			requiredTimeElapsed = 0
+			forceLog = true
 		}
-		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
-			var txnID string
-			// p.txn can be nil for COPY.
-			if p.txn != nil {
-				txnID = p.txn.ID().String()
-			}
+		var txnID string
+		// p.txn can be nil for COPY.
+		if p.txn != nil {
+			txnID = p.txn.ID().String()
+		}
 
+		isTxnTracked := telemetryMetrics.isObservingTxnExecution(txnID)
+		shouldEmitQuery := isTxnTracked
+		if !isTxnTracked {
+			// We only attempt to update the last log time if we're not already observing
+			// the txn to avoid taking the write lock.
+			shouldEmitQuery, isTxnTracked = telemetryMetrics.maybeUpdateLastLogTime(telemetryMetrics.timeNow(), txnID, forceLog)
+		}
+
+		if shouldEmitQuery {
 			var queryLevelStats execstats.QueryLevelStats
 			if stats, ok := p.instrumentation.GetQueryLevelStats(); ok {
 				queryLevelStats = *stats
@@ -396,9 +403,11 @@ func (p *planner) maybeLogStatementInternal(
 				MvccStepCount:                         queryLevelStats.MvccSteps,
 				MvccValueBytes:                        queryLevelStats.MvccValueBytes,
 				SchemaChangerMode:                     p.curPlan.instrumentation.schemaChangerMode.String(),
+				InInTrackedTxn:                        isTxnTracked,
 			}
 
 			p.logOperationalEventsOnlyExternally(ctx, isCopy, &sampledQuery)
+
 		} else {
 			telemetryMetrics.incSkippedQueryCount()
 		}

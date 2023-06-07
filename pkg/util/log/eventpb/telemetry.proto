@@ -288,9 +288,13 @@ message SampledQuery {
   // if any.
   string schema_changer_mode = 76 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
+  // IsInTrackedTxn is true if this stmt is part of a txn that was tracked by telemetry.
+  // Thus all stmts in the tracked txn should have been logged to telemetry.
+  bool is_in_tracked_txn = 77;
+
   reserved 12;
 
-  // Next available ID: 77.
+  // Next available ID: 78.
 }
 
 
