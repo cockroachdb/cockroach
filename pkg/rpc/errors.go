@@ -29,3 +29,11 @@ var errQuiescing = status.Error(codes.PermissionDenied, "refusing to dial; node 
 // breaker error will be returned instead.
 // TODO(during review): move once the review dust has settled.
 var ErrNotHeartbeated = errors.New("not yet heartbeated")
+
+type versionCompatError struct{}
+
+func (versionCompatError) Error() string {
+	return "version compatibility check failed on ping response"
+}
+
+var VersionCompatError = versionCompatError{}

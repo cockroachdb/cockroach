@@ -97,14 +97,6 @@ type ClientInterceptorInfo struct {
 	StreamInterceptors []grpc.StreamClientInterceptor
 }
 
-type versionCompatError struct{}
-
-func (versionCompatError) Error() string {
-	return "version compatibility check failed on ping response"
-}
-
-var VersionCompatError = versionCompatError{}
-
 // NewServerEx is like NewServer, but also returns the interceptors that have
 // been registered with gRPC for the server. These interceptors can be used
 // manually when bypassing gRPC to call into the server (like the
