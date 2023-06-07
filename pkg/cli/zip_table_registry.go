@@ -351,6 +351,15 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"num_runs",
 		},
 	},
+	"crdb_internal.kv_system_privileges": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"username",
+			"path",
+			"privileges",
+			"grant_options",
+			"user_id",
+		},
+	},
 	"crdb_internal.kv_node_liveness": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",

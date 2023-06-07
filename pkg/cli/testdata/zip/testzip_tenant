@@ -43,6 +43,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [cluster] retrieving SQL data for crdb_internal.kv_store_status... writing output: debug/crdb_internal.kv_store_status.txt...
 [cluster] retrieving SQL data for crdb_internal.kv_store_status: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [cluster] retrieving SQL data for crdb_internal.kv_store_status: creating error output: debug/crdb_internal.kv_store_status.txt.err.txt... done
+[cluster] retrieving SQL data for crdb_internal.kv_system_privileges... writing output: debug/crdb_internal.kv_system_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.partitions... writing output: debug/crdb_internal.partitions.txt... done
 [cluster] retrieving SQL data for crdb_internal.regions... writing output: debug/crdb_internal.regions.txt... done
 [cluster] retrieving SQL data for crdb_internal.schema_changes... writing output: debug/crdb_internal.schema_changes.txt... done
