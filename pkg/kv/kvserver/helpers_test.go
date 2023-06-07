@@ -468,6 +468,12 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	return r.getQueueLastProcessed(ctx, queue)
 }
 
+func (r *Replica) MaybeUnquiesce() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
+}
+
 func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
