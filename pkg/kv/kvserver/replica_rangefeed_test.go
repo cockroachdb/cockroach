@@ -1118,7 +1118,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 	ctx := context.Background()
 	tc, db, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
-	repls := replsForRange(ctx, t, tc, desc, numNodes)
+	repls := replsForRange(ctx, t, tc, desc)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)

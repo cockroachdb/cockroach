@@ -1979,7 +1979,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 		}
 	}
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, numNodes,
+	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
 			ReplicationMode:   base.ReplicationManual,
 			ServerArgsPerNode: serverArgs,
@@ -2389,7 +2389,7 @@ func getLeaseInfoOrFatal(
 func TestRemoveLeaseholder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testcluster.StartTestCluster(t, numNodes,
+	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
