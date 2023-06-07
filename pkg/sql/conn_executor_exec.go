@@ -2780,6 +2780,11 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 				transactionFingerprintID,
 			)
 		}
+
+		if telemetryLoggingEnabled.Get(&ex.server.cfg.Settings.SV) {
+			ex.server.TelemetryLoggingMetrics.onTxnFinish(ev.txnID.String())
+		}
+
 		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart)
 		if err != nil {
 			if log.V(1) {
