@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -29,7 +30,7 @@ import (
 // This is an extra column that will be added to every parquet file which tells
 // us about the type of event that generated a particular row. The types are
 // defined below.
-const parquetCrdbEventTypeColName string = "__crdb__event_type__"
+const parquetCrdbEventTypeColName string = metaSentinel + "event_type"
 
 type parquetEventType int
 
@@ -147,7 +148,7 @@ func (parquetSink *parquetCloudStorageSink) EmitResolvedTimestamp(
 
 	// TODO: Ideally, we do not create a new schema and writer every time
 	// we emit a resolved timestamp. Currently, util/parquet does not support it.
-	writer, err := newParquetWriter(sch, &buf, parquetSink.wrapped.testingKnobs)
+	writer, err := newParquetWriter(sch, &buf)
 	if err != nil {
 		return err
 	}
@@ -183,6 +184,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
+	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
 ) error {
 	s := parquetSink.wrapped
@@ -195,14 +197,14 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	if file.parquetCodec == nil {
 		var err error
 		file.parquetCodec, err = newParquetWriterFromRow(
-			updatedRow, &file.buf, parquetSink.wrapped.testingKnobs,
+			updatedRow, &file.buf, encodingOpts,
 			parquet.WithCompressionCodec(parquetSink.compression))
 		if err != nil {
 			return err
 		}
 	}
 
-	if err := file.parquetCodec.addData(updatedRow, prevRow); err != nil {
+	if err := file.parquetCodec.addData(updatedRow, prevRow, updated, mvcc); err != nil {
 		return err
 	}
 

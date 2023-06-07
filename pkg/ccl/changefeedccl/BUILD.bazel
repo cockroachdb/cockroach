@@ -122,6 +122,7 @@ go_library(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/bitarray",
         "//pkg/util/bufalloc",
+        "//pkg/util/buildutil",
         "//pkg/util/cache",
         "//pkg/util/ctxgroup",
         "//pkg/util/duration",

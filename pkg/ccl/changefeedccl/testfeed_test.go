@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -624,10 +623,11 @@ func (s *notifyFlushSink) EncodeAndEmitRow(
 	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
+	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
 ) error {
 	if sinkWithEncoder, ok := s.Sink.(SinkWithEncoder); ok {
-		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, alloc)
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc)
 	}
 	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.Sink)
 }
@@ -1053,11 +1053,7 @@ func (f *cloudFeedFactory) Feed(
 	// Determine if we can enable the parquet format if the changefeed is not
 	// being created with incompatible options. If it can be enabled, we will use
 	// parquet format with a probability of 0.4.
-	//
-	// TODO: Consider making this knob a global flag so tests that don't
-	//  initialize testing knobs can use parquet metamorphically.
-	knobs := f.s.TestingKnobs().DistSQL.(*execinfra.TestingKnobs).Changefeed
-	parquetPossible := knobs != nil && knobs.(*TestingKnobs).EnableParquetMetadata
+	parquetPossible := includeParquestTestMetadata
 	explicitEnvelope := false
 	for _, opt := range createStmt.Options {
 		if string(opt.Key) == changefeedbase.OptEnvelope {
@@ -1250,17 +1246,27 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 		return err
 	}
 
-	for _, row := range datums {
-		rowCopy := make([]string, len(valueColumnNamesOrdered)-1)
-		copy(rowCopy, valueColumnNamesOrdered[:len(valueColumnNamesOrdered)-1])
-		rowJSONBuilder, err := json.NewFixedKeysObjectBuilder(rowCopy)
-		if err != nil {
-			return err
+	// Extract metadata columns into metaColumnNameSet.
+	extractMetaColumns := func(columnNameSet map[string]int) map[string]int {
+		metaColumnNameSet := make(map[string]int)
+		for colName, colIdx := range columnNameSet {
+			switch colName {
+			case parquetCrdbEventTypeColName:
+				metaColumnNameSet[colName] = colIdx
+			case parquetOptUpdatedTimestampColName:
+				metaColumnNameSet[colName] = colIdx
+			case parquetOptMVCCTimestampColName:
+				metaColumnNameSet[colName] = colIdx
+			default:
+			}
 		}
+		return metaColumnNameSet
+	}
+	metaColumnNameSet := extractMetaColumns(columnNameSet)
 
+	for _, row := range datums {
+		rowJSONBuilder := json.NewObjectBuilder(len(valueColumnNamesOrdered) - len(metaColumnNameSet))
 		keyJSONBuilder := json.NewArrayBuilder(len(primaryKeysNamesOrdered))
-
-		isDeleted := false
 
 		for _, primaryKeyColumnName := range primaryKeysNamesOrdered {
 			datum := row[primaryKeyColumnSet[primaryKeyColumnName]]
@@ -1272,28 +1278,26 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 
 		}
 		for _, valueColumnName := range valueColumnNamesOrdered {
-			if valueColumnName == parquetCrdbEventTypeColName {
-				if *(row[columnNameSet[valueColumnName]].(*tree.DString)) == *parquetEventDelete.DString() {
-					isDeleted = true
-				}
-				break
+			if _, isMeta := metaColumnNameSet[valueColumnName]; isMeta {
+				continue
 			}
+
 			datum := row[columnNameSet[valueColumnName]]
 			j, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
 			if err != nil {
 				return err
 			}
-			if err := rowJSONBuilder.Set(valueColumnName, j); err != nil {
-				return err
-			}
+			rowJSONBuilder.Add(valueColumnName, j)
 		}
 
-		var valueWithAfter *json.FixedKeysObjectBuilder
+		var valueWithAfter *json.ObjectBuilder
+
+		isDeleted := *(row[metaColumnNameSet[parquetCrdbEventTypeColName]].(*tree.DString)) == *parquetEventDelete.DString()
 
 		if envelopeType == changefeedbase.OptEnvelopeBare {
 			valueWithAfter = rowJSONBuilder
 		} else {
-			valueWithAfter, err = json.NewFixedKeysObjectBuilder([]string{"after"})
+			valueWithAfter = json.NewObjectBuilder(1)
 			if err != nil {
 				return err
 			}
@@ -1302,26 +1306,31 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 				if err != nil {
 					return err
 				}
-				if err = valueWithAfter.Set("after", nullJSON); err != nil {
-					return err
-				}
+				valueWithAfter.Add("after", nullJSON)
 			} else {
-				vbJson, err := rowJSONBuilder.Build()
+				vbJson := rowJSONBuilder.Build()
+				valueWithAfter.Add("after", vbJson)
+			}
+
+			if updatedColIdx, updated := metaColumnNameSet[parquetOptUpdatedTimestampColName]; updated {
+				j, err := tree.AsJSON(row[updatedColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
 				if err != nil {
 					return err
 				}
-				if err = valueWithAfter.Set("after", vbJson); err != nil {
+				valueWithAfter.Add(changefeedbase.OptUpdatedTimestamps, j)
+			}
+			if mvccColIdx, mvcc := metaColumnNameSet[parquetOptMVCCTimestampColName]; mvcc {
+				j, err := tree.AsJSON(row[mvccColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
+				if err != nil {
 					return err
 				}
+				valueWithAfter.Add(changefeedbase.OptMVCCTimestamps, j)
 			}
 		}
 
 		keyJSON := keyJSONBuilder.Build()
 
-		rowJSON, err := valueWithAfter.Build()
-		if err != nil {
-			return err
-		}
+		rowJSON := valueWithAfter.Build()
 
 		var keyBuf bytes.Buffer
 		keyJSON.Format(&keyBuf)
