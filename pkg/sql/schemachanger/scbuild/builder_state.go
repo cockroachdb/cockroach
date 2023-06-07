@@ -987,7 +987,7 @@ func (b *builderState) ResolveIndex(
 func (b *builderState) ResolveIndexByName(
 	tableIndexName *tree.TableIndexName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
-	// If a table name is specified, confirm its not a systme table first.
+	// If a table name is specified, confirm it is not a system table first.
 	if tableIndexName.Table.ObjectName != "" {
 		desc := b.resolveRelation(tableIndexName.Table.ToUnresolvedObjectName(), p)
 		if desc == nil {

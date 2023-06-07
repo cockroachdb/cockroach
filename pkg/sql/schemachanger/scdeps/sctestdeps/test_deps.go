@@ -704,7 +704,7 @@ func (s *TestState) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (st
 	}
 	scName := ""
 	if obj.GetParentSchemaID() != descpb.InvalidID {
-		scName = tree.PublicSchema
+		scName = catconstants.PublicSchemaName
 		if obj.GetParentSchemaID() != keys.PublicSchemaID {
 			sc, err := s.mustReadImmutableDescriptor(obj.GetParentSchemaID())
 			if err != nil {

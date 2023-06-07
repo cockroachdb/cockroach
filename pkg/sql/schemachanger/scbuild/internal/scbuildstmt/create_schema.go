@@ -130,7 +130,7 @@ func getSchemaName(b BuildCtx, n *tree.CreateSchema) (schemaName string) {
 // schemaExists returns true if `schema` has already been used.
 func schemaExists(b BuildCtx, schema tree.ObjectNamePrefix) bool {
 	// Check statically known schemas.
-	if schema.Schema() == tree.PublicSchema {
+	if schema.Schema() == catconstants.PublicSchemaName {
 		return true
 	}
 	for virtualSchema := range catconstants.VirtualSchemaNames {

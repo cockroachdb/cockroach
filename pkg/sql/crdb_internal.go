@@ -4051,7 +4051,7 @@ func lookupNamesByKey(
 			// This case shouldn't happen - all schema ids should be available in the
 			// schemaParents map. If it's not, just assume the name of the schema
 			// is public to avoid problems.
-			schemaName = string(tree.PublicSchemaName)
+			schemaName = string(catconstants.PublicSchemaName)
 		}
 		parent := parents[tableID]
 		if parent != 0 {
@@ -4295,7 +4295,7 @@ CREATE TABLE crdb_internal.zones (
 		resolveID := func(id uint32) (parentID, parentSchemaID uint32, name string, err error) {
 			// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
 			if id == keys.PublicSchemaID {
-				return 0, 0, string(tree.PublicSchemaName), nil
+				return 0, 0, string(catconstants.PublicSchemaName), nil
 			}
 			if entry, ok := namespace[descpb.ID(id)]; ok {
 				return uint32(entry.GetParentID()), uint32(entry.GetParentSchemaID()), entry.GetName(), nil

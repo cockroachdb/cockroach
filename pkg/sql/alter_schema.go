@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -64,7 +65,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	// to support this. In order to support it, we have to remove the logic that
 	// automatically re-creates the public schema if it doesn't exist.
 	_, isRename := n.Cmd.(*tree.AlterSchemaRename)
-	if schema.GetName() == tree.PublicSchema && isRename {
+	if schema.GetName() == catconstants.PublicSchemaName && isRename {
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot rename schema %q", n.Schema.String())
 	}
 	switch schema.SchemaKind() {
