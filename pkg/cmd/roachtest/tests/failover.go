@@ -143,6 +143,7 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
+				Tags:                []string{"weekly"},
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				Cluster:             r.MakeClusterSpec(5, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
@@ -155,6 +156,7 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
+				Tags:                []string{"weekly"},
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
 				Cluster:             r.MakeClusterSpec(7, spec.CPU(2), spec.PreferLocalSSD(!usePD)),
