@@ -56,12 +56,12 @@ go_test(
     size = "medium",
     srcs = [
         "main_test.go",
+        "reporter_test.go",
         "update_checker_test.go",
     ],
     args = ["-test.timeout=295s"],
-    tags = ["no-remote"],
+    embed = [":diagnostics"],
     deps = [
-        ":diagnostics",
         "//pkg/base",
         "//pkg/build",
         "//pkg/security/securityassets",
@@ -72,6 +72,7 @@ go_test(
         "//pkg/util/cloudinfo",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_mitchellh_reflectwalk//:reflectwalk",
         "@com_github_stretchr_testify//require",
     ],
 )
