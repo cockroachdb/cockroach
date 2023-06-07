@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -67,7 +68,7 @@ func New() *Catalog {
 			SchemaID: 1,
 			SchemaName: cat.SchemaName{
 				CatalogName:     testDB,
-				SchemaName:      tree.PublicSchemaName,
+				SchemaName:      catconstants.PublicSchemaName,
 				ExplicitSchema:  true,
 				ExplicitCatalog: true,
 			},
@@ -99,14 +100,14 @@ func (tc *Catalog) ResolveSchema(
 		// No luck so far. Compatibility with CockroachDB v1.1: use D.public
 		// instead.
 		toResolve.CatalogName = name.SchemaName
-		toResolve.SchemaName = tree.PublicSchemaName
+		toResolve.SchemaName = catconstants.PublicSchemaName
 		toResolve.ExplicitCatalog = true
 		return tc.resolveSchema(&toResolve)
 	}
 
 	// Neither schema or catalog was specified, so use t.public.
 	toResolve.CatalogName = tree.Name(testDB)
-	toResolve.SchemaName = tree.PublicSchemaName
+	toResolve.SchemaName = catconstants.PublicSchemaName
 	return tc.resolveSchema(&toResolve)
 }
 
@@ -116,7 +117,7 @@ func (tc *Catalog) GetAllSchemaNamesForDB(
 ) ([]cat.SchemaName, error) {
 	var schemaNames []cat.SchemaName
 	var scName cat.SchemaName
-	scName.SchemaName = tree.PublicSchemaName
+	scName.SchemaName = catconstants.PublicSchemaName
 	scName.ExplicitSchema = true
 	scName.CatalogName = tree.Name(dbName)
 	scName.ExplicitCatalog = true
@@ -151,7 +152,7 @@ func (tc *Catalog) ResolveDataSource(
 		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T
 		// instead.
 		toResolve.CatalogName = name.SchemaName
-		toResolve.SchemaName = tree.PublicSchemaName
+		toResolve.SchemaName = catconstants.PublicSchemaName
 		toResolve.ExplicitCatalog = true
 		ds, err = tc.resolveDataSource(&toResolve)
 		if err == nil {
@@ -160,7 +161,7 @@ func (tc *Catalog) ResolveDataSource(
 	} else {
 		// This is a naked data source name. Use the current database.
 		toResolve.CatalogName = tree.Name(testDB)
-		toResolve.SchemaName = tree.PublicSchemaName
+		toResolve.SchemaName = catconstants.PublicSchemaName
 		ds, err = tc.resolveDataSource(&toResolve)
 		if err == nil {
 			return ds, toResolve, nil
@@ -311,7 +312,7 @@ func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.Sch
 			"target database or schema does not exist")
 	}
 
-	if string(toResolve.SchemaName) != tree.PublicSchema {
+	if string(toResolve.SchemaName) != catconstants.PublicSchemaName {
 		return nil, cat.SchemaName{}, pgerror.Newf(pgcode.InvalidName,
 			"schema cannot be modified: %q", tree.ErrString(toResolve))
 	}
@@ -541,7 +542,7 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 			return
 		}
 
-		if name.SchemaName == tree.PublicSchemaName {
+		if name.SchemaName == catconstants.PublicSchemaName {
 			// Use the current database.
 			name.CatalogName = testDB
 			return
@@ -549,13 +550,13 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 
 		// Compatibility with CockroachDB v1.1: use D.public.T.
 		name.CatalogName = name.SchemaName
-		name.SchemaName = tree.PublicSchemaName
+		name.SchemaName = catconstants.PublicSchemaName
 		return
 	}
 
 	// Use the current database.
 	name.CatalogName = testDB
-	name.SchemaName = tree.PublicSchemaName
+	name.SchemaName = catconstants.PublicSchemaName
 }
 
 // Schema implements the cat.Schema interface for testing purposes.

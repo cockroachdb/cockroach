@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -110,7 +111,7 @@ func getIngestingPrivilegesForTableOrSchema(
 		// are granted on object creation.
 		switch privilegeType {
 		case privilege.Schema:
-			if desc.GetName() == tree.PublicSchema {
+			if desc.GetName() == catconstants.PublicSchemaName {
 				updatedPrivileges = catpb.NewPublicSchemaPrivilegeDescriptor()
 			} else {
 				updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)

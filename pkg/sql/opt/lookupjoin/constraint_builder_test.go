@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	tu "github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -356,7 +357,7 @@ func makeFilterBuilder(t *testing.T) testFilterBuilder {
 	if _, err := cat.ExecuteDDL("CREATE TABLE a (i INT PRIMARY KEY, b BOOL)"); err != nil {
 		t.Fatal(err)
 	}
-	tn := tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a")
+	tn := tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "a")
 	tbl := f.Metadata().AddTable(cat.Table(tn), tn)
 	return testFilterBuilder{
 		t:       t,

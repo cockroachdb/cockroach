@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -113,7 +114,7 @@ func getSchemaForCreateTable(
 	// Check we are not creating a table which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
-	if tableName.Schema() == tree.PublicSchema {
+	if tableName.Schema() == catconstants.PublicSchemaName {
 		if _, ok := types.PublicSchemaAliases[tableName.Object()]; ok {
 			return nil, sqlerrors.NewTypeAlreadyExistsError(tableName.String())
 		}

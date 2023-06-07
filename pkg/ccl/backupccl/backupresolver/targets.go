@@ -205,9 +205,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			r.ObjIDsBySchema[desc.GetID()] = make(map[string]*catalog.DescriptorIDSet)
 
 			if !desc.(catalog.DatabaseDescriptor).HasPublicSchemaWithDescriptor() {
-				r.ObjsByName[desc.GetID()][tree.PublicSchema] = make(map[string]descpb.ID)
-				r.SchemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaIDForBackup
-				r.ObjIDsBySchema[desc.GetID()][tree.PublicSchema] = &catalog.DescriptorIDSet{}
+				r.ObjsByName[desc.GetID()][catconstants.PublicSchemaName] = make(map[string]descpb.ID)
+				r.SchemasByName[desc.GetID()][catconstants.PublicSchemaName] = keys.PublicSchemaIDForBackup
+				r.ObjIDsBySchema[desc.GetID()][catconstants.PublicSchemaName] = &catalog.DescriptorIDSet{}
 			}
 		}
 
@@ -267,7 +267,7 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 		// TODO(richardjcai): We can remove this in 22.2, still have to handle
 		// this case in the mixed version cluster.
 		if scID == keys.PublicSchemaIDForBackup {
-			scName = tree.PublicSchema
+			scName = catconstants.PublicSchemaName
 		} else {
 			scDescI, ok := r.DescByID[scID]
 			if !ok {

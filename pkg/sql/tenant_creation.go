@@ -619,7 +619,7 @@ HAVING ($1 = '' OR NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name = $1)
 	return roachpb.MakeTenantID(nextID)
 }
 
-var tenantIDSequenceFQN = tree.MakeTableNameWithSchema(catconstants.SystemDatabaseName, tree.PublicSchemaName, tree.Name(catconstants.TenantIDSequenceTableName))
+var tenantIDSequenceFQN = tree.MakeTableNameWithSchema(catconstants.SystemDatabaseName, catconstants.PublicSchemaName, tree.Name(catconstants.TenantIDSequenceTableName))
 
 // getTenantIDSequenceDesc retrieves a leased descriptor for the
 // sequence system.tenant_id_seq.

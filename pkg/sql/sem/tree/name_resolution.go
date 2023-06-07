@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 )
 
 // This file contains the two major components to name resolution:
@@ -108,14 +107,6 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 }
 
 // Resolution algorithms follow.
-
-const (
-	// PublicSchema is the name of the physical schema in every
-	// database/catalog.
-	PublicSchema string = catconstants.PublicSchemaName
-	// PublicSchemaName is the same, typed as Name.
-	PublicSchemaName Name = Name(PublicSchema)
-)
 
 // QualifiedNameResolver is the helper interface to resolve qualified
 // table names given an ID and the required table kind, as well as the

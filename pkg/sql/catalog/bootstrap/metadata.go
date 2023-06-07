@@ -183,7 +183,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	{
 		publicSchemaValue := roachpb.Value{}
 		publicSchemaValue.SetInt(int64(keys.SystemPublicSchemaID))
-		nameInfo := descpb.NameInfo{ParentID: keys.SystemDatabaseID, Name: tree.PublicSchema}
+		nameInfo := descpb.NameInfo{ParentID: keys.SystemDatabaseID, Name: catconstants.PublicSchemaName}
 		add(catalogkeys.EncodeNameKey(ms.codec, &nameInfo), publicSchemaValue)
 	}
 
