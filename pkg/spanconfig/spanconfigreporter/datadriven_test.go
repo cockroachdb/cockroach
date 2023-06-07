@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -217,11 +216,24 @@ type mockCluster struct {
 
 	nodes    map[roachpb.NodeID]roachpb.NodeDescriptor
 	ranges   map[roachpb.RangeID]roachpb.RangeDescriptor
-	liveness map[roachpb.NodeID]bool
+	liveness livenesspb.TestNodeVitality
 	store    *spanconfigstore.Store
 }
 
-var _ spanconfigreporter.Liveness = &mockCluster{}
+func (s *mockCluster) GetNodeVitalityFromCache(id roachpb.NodeID) livenesspb.NodeVitality {
+	return s.liveness.GetNodeVitalityFromCache(id)
+}
+
+func (s *mockCluster) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	return s.liveness.ScanNodeVitalityFromCache()
+}
+
+func (s *mockCluster) ScanNodeVitalityFromKV(
+	ctx context.Context,
+) (livenesspb.NodeVitalityMap, error) {
+	return s.liveness.ScanNodeVitalityFromKV(ctx)
+}
+
 var _ constraint.StoreResolver = &mockCluster{}
 var _ rangedesc.Scanner = &mockCluster{}
 var _ spanconfig.StoreReader = &mockCluster{}
@@ -230,36 +242,17 @@ func newMockCluster(
 	t *testing.T, st *clustersettings.Settings, scKnobs *spanconfig.TestingKnobs,
 ) *mockCluster {
 	return &mockCluster{
-		t:        t,
-		nodes:    make(map[roachpb.NodeID]roachpb.NodeDescriptor),
-		ranges:   make(map[roachpb.RangeID]roachpb.RangeDescriptor),
-		liveness: make(map[roachpb.NodeID]bool),
+		t:      t,
+		nodes:  make(map[roachpb.NodeID]roachpb.NodeDescriptor),
+		ranges: make(map[roachpb.RangeID]roachpb.RangeDescriptor),
 		store: spanconfigstore.New(
 			roachpb.TestingDefaultSpanConfig(),
 			st,
 			spanconfigstore.NewEmptyBoundsReader(),
 			scKnobs,
 		),
+		liveness: livenesspb.TestCreateNodeVitality(),
 	}
-}
-
-// ScanNodeVitalityFromCache implements spanconfigreporter.Liveness.
-func (s *mockCluster) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
-	isLiveMap := make(livenesspb.NodeVitalityMap)
-	for nid, isLive := range s.liveness {
-		health := livenesspb.VitalityAlive
-		if !isLive {
-			health = livenesspb.VitalityDead
-		}
-		livenesspb.Liveness{
-			NodeID:     nid,
-			Epoch:      1,
-			Expiration: hlc.LegacyTimestamp{},
-			Draining:   false,
-			Membership: livenesspb.MembershipStatus_ACTIVE,
-		}.CreateNodeVitality(health, true)
-	}
-	return isLiveMap
 }
 
 // GetStoreDescriptor implements constraint.StoreResolver.
@@ -316,7 +309,11 @@ func (s *mockCluster) addNode(desc roachpb.NodeDescriptor) {
 func (s *mockCluster) markLive(id roachpb.NodeID, live bool) {
 	_, found := s.nodes[id]
 	require.Truef(s.t, found, "n%d not found", id)
-	s.liveness[id] = live
+	if live {
+		s.liveness[id] = livenesspb.TestNodeVitalityEntry{Health: livenesspb.VitalityAlive}
+	} else {
+		s.liveness[id] = livenesspb.TestNodeVitalityEntry{Health: livenesspb.VitalityDead}
+	}
 }
 
 func (s *mockCluster) addRange(desc roachpb.RangeDescriptor) {

@@ -27,6 +27,16 @@ type NodeLiveness struct {
 	dead map[roachpb.NodeID]struct{}
 }
 
+func (t *NodeLiveness) GetNodeVitalityFromCache(id roachpb.NodeID) livenesspb.NodeVitality {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (t *NodeLiveness) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (t *NodeLiveness) ScanNodeVitalityFromKV(
 	ctx context.Context,
 ) (livenesspb.NodeVitalityMap, error) {

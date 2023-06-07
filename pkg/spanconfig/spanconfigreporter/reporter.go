@@ -54,12 +54,6 @@ var conformanceReportRateLimit = settings.RegisterFloatSetting(
 	},
 )
 
-// Liveness is the subset of the interface satisfied by CRDB's node liveness
-// component that the reporter relies on.
-type Liveness interface {
-	ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap
-}
-
 // Reporter is used to figure out whether ranges backing specific spans conform
 // to the span configs that apply over them. It's a concrete implementation of
 // the spanconfig.Reporter interface.
@@ -86,7 +80,7 @@ type Reporter struct {
 		//   configs from different points in time. If this too becomes a
 		//   problem, we can explicitly generate a snapshot like we do for
 		//   liveness.
-		Liveness
+		livenesspb.NodeVitalityInterface
 		rangedesc.Scanner
 		constraint.StoreResolver
 		spanconfig.StoreReader
@@ -101,7 +95,7 @@ var _ spanconfig.Reporter = &Reporter{}
 
 // New constructs and returns a Reporter.
 func New(
-	liveness Liveness,
+	liveness livenesspb.NodeVitalityInterface,
 	resolver constraint.StoreResolver,
 	reader spanconfig.StoreReader,
 	scanner rangedesc.Scanner,
@@ -125,7 +119,7 @@ func New(
 		r.rateLimiter.UpdateLimit(newLimit, int64(newLimit))
 	})
 
-	r.dep.Liveness = liveness
+	r.dep.NodeVitalityInterface = liveness
 	r.dep.StoreResolver = resolver
 	r.dep.Scanner = scanner
 	r.dep.StoreReader = reader
@@ -153,7 +147,7 @@ func (r *Reporter) SpanConfigConformance(
 	report := roachpb.SpanConfigConformanceReport{}
 	unavailableNodes := make(map[roachpb.NodeID]struct{})
 
-	isLiveMap := r.dep.Liveness.ScanNodeVitalityFromCache()
+	isLiveMap := r.dep.NodeVitalityInterface.ScanNodeVitalityFromCache()
 	for _, span := range spans {
 		if err := r.dep.Scan(ctx, int(rangeDescPageSize.Get(&r.settings.SV)),
 			func() { report = roachpb.SpanConfigConformanceReport{} /* init */ },

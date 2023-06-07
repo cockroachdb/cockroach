@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -40,7 +41,9 @@ type Nodes []Node
 // concurrently with the retrieval of the current set of nodes. Appropriate
 // usage of this entails wrapping it under a stabilizing loop, like we do in
 // EveryNode.
-func NodesFromNodeLiveness(ctx context.Context, nl NodeLiveness) (Nodes, error) {
+func NodesFromNodeLiveness(
+	ctx context.Context, nl livenesspb.NodeVitalityInterface,
+) (Nodes, error) {
 	var ns []Node
 	ls, err := nl.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
