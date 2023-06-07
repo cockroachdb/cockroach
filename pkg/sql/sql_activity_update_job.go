@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -101,7 +102,7 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 		case <-flushDoneSignal:
 			// A flush was done. Set the timer and wait for it to complete.
 			if sqlStatsActivityFlushEnabled.Get(&settings.SV) {
-				updater := newSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB)
+				updater := newSqlActivityUpdater(settings, execCtx.ExecCfg().InternalDB, nil)
 				if err := updater.TransferStatsToActivity(ctx); err != nil {
 					log.Warningf(ctx, "error running sql activity updater job: %v", err)
 					metrics.numErrors.Inc(1)
@@ -159,16 +160,20 @@ func init() {
 }
 
 // newSqlActivityUpdater returns a new instance of sqlActivityUpdater.
-func newSqlActivityUpdater(setting *cluster.Settings, db isql.DB) *sqlActivityUpdater {
+func newSqlActivityUpdater(
+	setting *cluster.Settings, db isql.DB, testingKnobs *sqlstats.TestingKnobs,
+) *sqlActivityUpdater {
 	return &sqlActivityUpdater{
-		st: setting,
-		db: db,
+		st:           setting,
+		db:           db,
+		testingKnobs: testingKnobs,
 	}
 }
 
 type sqlActivityUpdater struct {
-	st *cluster.Settings
-	db isql.DB
+	st           *cluster.Settings
+	testingKnobs *sqlstats.TestingKnobs
+	db           isql.DB
 }
 
 func (u *sqlActivityUpdater) TransferStatsToActivity(ctx context.Context) error {
@@ -250,7 +255,7 @@ func (u *sqlActivityUpdater) transferAllStats(
                   app_name,
                   fingerprint_id,
                   agg_interval,
-                  crdb_internal.merge_stats_metadata(array_agg(metadata))      AS metadata,
+                  max(metadata) as metadata,
                   crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
            FROM system.public.transaction_statistics
            WHERE aggregated_ts = $2
@@ -392,7 +397,7 @@ INTO system.public.transaction_activity
                   ts.app_name,
                   ts.fingerprint_id,
                   ts.agg_interval,
-                  crdb_internal.merge_stats_metadata(array_agg(ts.metadata))    AS metadata,
+                  max(ts.metadata) AS metadata,
                   crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
            FROM system.public.transaction_statistics ts
                     inner join (SELECT fingerprint_id, app_name, agg_interval
@@ -575,22 +580,42 @@ func (u *sqlActivityUpdater) getAostExecutionCount(
 	totalTxnClusterExecCount int64,
 	retErr error,
 ) {
+
+	query := `
+SELECT row_count,
+       ex_sum
+FROM (SELECT count_rows():::int                     AS row_count,
+             COALESCE(sum(execution_count)::int, 0) AS ex_sum
+      FROM system.statement_statistics AS OF SYSTEM TIME follower_read_timestamp()
+      WHERE app_name not like '$ internal%' and aggregated_ts = $1
+      union all
+      SELECT
+          count_rows():::int AS row_count, COALESCE (sum(execution_count)::int, 0) AS ex_sum
+      FROM system.transaction_statistics AS OF SYSTEM TIME follower_read_timestamp()
+      WHERE app_name not like '$ internal%' and aggregated_ts = $1) AS OF SYSTEM TIME follower_read_timestamp()`
+
+	if u.testingKnobs != nil {
+		// We repeat the query in order to avoid formatting the query every time.
+		aost := u.testingKnobs.GetAOSTClause()
+		query = fmt.Sprintf(`
+SELECT row_count,
+       ex_sum
+FROM (SELECT count_rows():::int                     AS row_count,
+             COALESCE(sum(execution_count)::int, 0) AS ex_sum
+      FROM system.statement_statistics %[1]s
+      WHERE app_name not like '$ internal%%' and aggregated_ts = $1
+      union all
+      SELECT
+          count_rows():::int AS row_count, COALESCE (sum(execution_count)::int, 0) AS ex_sum
+      FROM system.transaction_statistics %[1]s
+      WHERE app_name not like '$ internal%%' and aggregated_ts = $1) %[1]s`, aost)
+	}
+
 	it, err := u.db.Executor().QueryIteratorEx(ctx,
 		"activity-flush-count",
 		nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
-		`
-				SELECT row_count, ex_sum FROM (SELECT
-					count_rows():::int AS row_count,
-					COALESCE(sum(execution_count)::int, 0) AS ex_sum
-				FROM system.statement_statistics AS OF SYSTEM TIME follower_read_timestamp()
-				WHERE  app_name not like '$ internal%' and aggregated_ts = $1
-			union all
-				SELECT
-					count_rows():::int AS row_count,
-					COALESCE(sum(execution_count)::int, 0) AS ex_sum
-				FROM system.transaction_statistics AS OF SYSTEM TIME follower_read_timestamp()
-				WHERE app_name not like '$ internal%' and  aggregated_ts = $1) AS OF SYSTEM TIME follower_read_timestamp()`,
+		query,
 		aggTs,
 	)
 
@@ -690,10 +715,11 @@ WHERE aggregated_ts not in (SELECT distinct aggregated_ts FROM system.statement_
 func (u *sqlActivityUpdater) getTableRowCount(
 	ctx context.Context, tableName string,
 ) (rowCount int64, retErr error) {
+	aost := u.testingKnobs.GetAOSTClause()
 	query := fmt.Sprintf(`
 				SELECT
 					count_rows()::int
-				FROM %s AS OF SYSTEM TIME follower_read_timestamp()`, tableName)
+				FROM %s %s`, tableName, aost)
 	datums, err := u.db.Executor().QueryRowEx(ctx,
 		"activity-total-count",
 		nil, /* txn */
