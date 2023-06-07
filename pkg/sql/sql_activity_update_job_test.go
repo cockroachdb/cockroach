@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -20,13 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +97,7 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 
 	execCfg := srv.ExecutorConfig().(ExecutorConfig)
 	st := cluster.MakeTestingClusterSettings()
-	updater := newSqlActivityUpdater(st, execCfg.InternalDB)
+	updater := newSqlActivityUpdater(st, execCfg.InternalDB, nil)
 
 	// Transient failures from AOST queries: https://github.com/cockroachdb/cockroach/issues/97840
 	testutils.SucceedsWithin(t, func() error {
@@ -259,7 +263,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updater := newSqlActivityUpdater(st, execCfg.InternalDB)
+	updater := newSqlActivityUpdater(st, execCfg.InternalDB, nil)
 
 	_, err = db.ExecContext(ctx, "SET tracing = true;")
 	require.NoError(t, err)
@@ -453,4 +457,68 @@ func TestScheduledSQLStatsCompaction(t *testing.T) {
 
 		return nil
 	}, 1*time.Minute)
+}
+
+// TestTransactionActivityMetadata verifies the metadata JSON column of system.transaction_activity are
+// what we expect it to be. This test was added to address #103618.
+func TestTransactionActivityMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "test is too slow to run under race")
+
+	ctx := context.Background()
+	stubTime := timeutil.Now().Truncate(time.Hour)
+	sqlStatsKnobs := &sqlstats.TestingKnobs{
+		StubTimeNow: func() time.Time { return stubTime },
+		AOSTClause:  "AS OF SYSTEM TIME '-1us'",
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlStatsKnobs,
+			UpgradeManager: &upgradebase.TestingKnobs{
+				DontUseJobs:                       true,
+				SkipUpdateSQLActivityJobBootstrap: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+	defer sqlDB.Close()
+
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	st := cluster.MakeTestingClusterSettings()
+	updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "SET SESSION application_name = 'test_txn_activity_table'")
+
+	// Generate some sql stats data.
+	db.Exec(t, "SELECT 1;")
+
+	// Flush and transfer stats.
+	var metadataJSON string
+	s.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
+	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
+	var metadata struct {
+		StmtFingerprintIDs []string `json:"stmtFingerprintIDs,"`
+	}
+
+	require.NoError(t, updater.TransferStatsToActivity(ctx))
+	db.QueryRow(t, "SELECT metadata FROM system.public.transaction_activity LIMIT 1").Scan(&metadataJSON)
+	require.NoError(t, json.Unmarshal([]byte(metadataJSON), &metadata))
+	require.NotEmpty(t, metadata.StmtFingerprintIDs)
+
+	// Do the same but testing transferTopStats.
+	db.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+	db.Exec(t, "SELECT 1")
+
+	// Flush and transfer top stats.
+	s.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+	require.NoError(t, updater.transferTopStats(ctx, stubTime, 100, 100, 100))
+
+	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
+	db.QueryRow(t, "SELECT metadata FROM system.public.transaction_activity LIMIT 1").Scan(&metadataJSON)
+	require.NoError(t, json.Unmarshal([]byte(metadataJSON), &metadata))
+	require.NotEmpty(t, metadata.StmtFingerprintIDs)
 }
