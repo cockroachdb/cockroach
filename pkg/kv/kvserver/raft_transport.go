@@ -517,7 +517,7 @@ func (t *RaftTransport) SendAsync(
 		panic("snapshots must be sent using SendSnapshot")
 	}
 
-	if !t.dialer.GetCircuitBreaker(toNodeID, class).Ready() {
+	if b, ok := t.dialer.GetCircuitBreaker(toNodeID, class); ok && b.Signal().Err() != nil {
 		return false
 	}
 
@@ -582,10 +582,7 @@ func (t *RaftTransport) startProcessNewQueue(
 		}
 		defer cleanup(q)
 		defer t.queues[class].Delete(int64(toNodeID))
-		// NB: we dial without a breaker here because the caller has already
-		// checked the breaker. Checking it again can cause livelock, see:
-		// https://github.com/cockroachdb/cockroach/issues/68419
-		conn, err := t.dialer.DialNoBreaker(ctx, toNodeID, class)
+		conn, err := t.dialer.Dial(ctx, toNodeID, class)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
