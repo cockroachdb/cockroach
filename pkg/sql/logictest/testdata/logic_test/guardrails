@@ -1,3 +1,7 @@
+# LogicTest: !metamorphic-batch-sizes
+# We disable metamorphic batch sizes so that we read a predictable number of
+# rows in each limited scan.
+
 statement ok
 CREATE TABLE guardrails (i INT PRIMARY KEY);
 INSERT INTO guardrails SELECT generate_series(1, 100)
