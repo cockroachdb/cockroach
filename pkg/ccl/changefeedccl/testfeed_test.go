@@ -1262,6 +1262,8 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 				metaColumnNameSet[colName] = colIdx
 			case parquetOptMVCCTimestampColName:
 				metaColumnNameSet[colName] = colIdx
+			case parquetOptDiffColName:
+				metaColumnNameSet[colName] = colIdx
 			default:
 			}
 		}
@@ -1330,6 +1332,13 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 					return err
 				}
 				valueWithAfter.Add(changefeedbase.OptMVCCTimestamps, j)
+			}
+			if mvccColIdx, mvcc := metaColumnNameSet[parquetOptDiffColName]; mvcc {
+				j, err := tree.AsJSON(row[mvccColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
+				if err != nil {
+					return err
+				}
+				valueWithAfter.Add("before", j)
 			}
 		}
 

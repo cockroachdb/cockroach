@@ -269,11 +269,7 @@ func TestChangefeedBasicQuery(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-		// Currently, parquet format (which may be injected by feed() call,  doesn't
-		// know how to handle tuple types (cdc_prev); so, force JSON format.
-		foo := feed(t, f, `
-CREATE CHANGEFEED WITH format='json' 
-AS SELECT *, event_op() AS op, cdc_prev FROM foo`)
+		foo := feed(t, f, `CREATE CHANGEFEED AS SELECT *, event_op() AS op, cdc_prev FROM foo`)
 		defer closeFeed(t, foo)
 
 		// 'initial' is skipped because only the latest value ('updated') is
