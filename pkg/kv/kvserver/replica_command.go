@@ -210,7 +210,7 @@ func splitTxnAttempt(
 	}
 
 	// Log the split into the range event log.
-	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason); err != nil {
+	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason, true /* logAsync */); err != nil {
 		return err
 	}
 
@@ -715,11 +715,7 @@ func (r *Replica) AdminMerge(
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
 		// Log the merge into the range event log.
-		// TODO(spencer): event logging API should accept a batch
-		// instead of a transaction; there's no reason this logging
-		// shouldn't be done in parallel via the batch with the updated
-		// range addressing.
-		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc); err != nil {
+		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc, true /* logAsync */); err != nil {
 			return err
 		}
 
@@ -2418,13 +2414,13 @@ func execChangeReplicasTxn(
 
 			// Log replica change into range event log.
 			err = recordRangeEventsInLog(
-				ctx, txn, true /* added */, crt.Added(), crt.Desc, reason, details, args.logChange,
+				ctx, txn, true /* added */, crt.Added(), crt.Desc, reason, details, true /* logAsync */, args.logChange,
 			)
 			if err != nil {
 				return err
 			}
 			err = recordRangeEventsInLog(
-				ctx, txn, false /* added */, crt.Removed(), crt.Desc, reason, details, args.logChange,
+				ctx, txn, false /* added */, crt.Removed(), crt.Desc, reason, details, true /* logAsync */, args.logChange,
 			)
 			if err != nil {
 				return err
@@ -2502,6 +2498,7 @@ type logChangeFn func(
 	desc roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
+	logAsync bool,
 ) error
 
 func recordRangeEventsInLog(
@@ -2512,6 +2509,7 @@ func recordRangeEventsInLog(
 	rangeDesc *roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
+	logAsync bool,
 	logChange logChangeFn,
 ) error {
 	for _, repDesc := range repDescs {
@@ -2529,7 +2527,7 @@ func recordRangeEventsInLog(
 			}
 		}
 		if err := logChange(
-			ctx, txn, typ, repDesc, *rangeDesc, reason, details,
+			ctx, txn, typ, repDesc, *rangeDesc, reason, details, logAsync,
 		); err != nil {
 			return err
 		}
