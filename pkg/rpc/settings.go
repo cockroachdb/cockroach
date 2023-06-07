@@ -40,7 +40,6 @@ var enableRPCCircuitBreakers = settings.RegisterBoolSetting(
 )
 
 // TODO(baptist): Remove in 23.2 (or 24.1) once validating dialback works for all scenarios.
-// TODO(during review): move once the review dust has settled.
 var useDialback = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	"rpc.dialback.enabled",
