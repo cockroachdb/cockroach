@@ -3685,7 +3685,8 @@ func generateBytes(rng *rand.Rand, min int, max int) []byte {
 }
 
 func createEngWithSeparatedIntents(t *testing.T) Engine {
-	eng, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), MaxSize(1<<20))
+	eng, err := Open(context.Background(), InMemory(),
+		cluster.MakeTestingClusterSettings(), MaxSize(1<<20))
 	require.NoError(t, err)
 	return eng
 }
@@ -3924,7 +3925,7 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	rng := rand.New(rand.NewSource(seed))
 	ctx := context.Background()
 	eng, err := Open(
-		context.Background(), InMemory(), cluster.MakeClusterSettings(),
+		context.Background(), InMemory(), cluster.MakeTestingClusterSettings(),
 		func(cfg *engineConfig) error {
 			cfg.Opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
 			log.Infof(ctx, "lbase: %d", cfg.Opts.LBaseMaxBytes)
@@ -4871,6 +4872,9 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			assertEq(t, engine, "verification", ms, &expMS)
 		})
 	}
+	// Compact the engine; the ForTesting() config option will assert that all
+	// DELSIZED tombstones were appropriately sized.
+	require.NoError(t, engine.Compact())
 }
 
 // TestMVCCGarbageCollectNonDeleted verifies that the first value for
@@ -4916,6 +4920,10 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 				test.expError, err)
 		}
 	}
+
+	// Compact the engine; the ForTesting() config option will assert that all
+	// DELSIZED tombstones were appropriately sized.
+	require.NoError(t, engine.Compact())
 }
 
 // TestMVCCGarbageCollectIntent verifies that an intent cannot be GC'd.
@@ -4950,6 +4958,9 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 	if err := MVCCGarbageCollect(ctx, engine, nil, keys, ts2); err == nil {
 		t.Fatal("expected error garbage collecting an intent")
 	}
+	// Compact the engine; the ForTesting() config option will assert that all
+	// DELSIZED tombstones were appropriately sized.
+	require.NoError(t, engine.Compact())
 }
 
 // TestMVCCGarbageCollectPanicsWithMixOfLocalAndGlobalKeys verifies that
@@ -5152,6 +5163,9 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 			engine := NewDefaultInMemForTesting()
 			defer engine.Close()
 			runTestCase(t, tc, engine)
+			// Compact the engine; the ForTesting() config option will assert
+			// that all DELSIZED tombstones were appropriately sized.
+			require.NoError(t, engine.Compact())
 		})
 	}
 }
@@ -5702,6 +5716,10 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 			expMs, err := ComputeStats(engine, d.rangeStart, d.rangeEnd, tsMax.WallTime)
 			require.NoError(t, err, "failed to compute stats for range")
 			require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
+
+			// Compact the engine; the ForTesting() config option will assert
+			// that all DELSIZED tombstones were appropriately sized.
+			require.NoError(t, engine.Compact())
 		})
 	}
 }
@@ -5956,6 +5974,9 @@ func TestMVCCGarbageCollectClearRangeInlinedValue(t *testing.T) {
 	require.Errorf(t, err, "expected error '%s' but found none", expectedError)
 	require.True(t, testutils.IsError(err, expectedError),
 		"expected error '%s' found '%s'", expectedError, err)
+	// Compact the engine; the ForTesting() config option will assert that all
+	// DELSIZED tombstones were appropriately sized.
+	require.NoError(t, engine.Compact())
 }
 
 func TestMVCCGarbageCollectClearPointsInRange(t *testing.T) {
@@ -6022,6 +6043,10 @@ func TestMVCCGarbageCollectClearPointsInRange(t *testing.T) {
 	expMs, err := ComputeStats(engine, rangeStart, rangeEnd, tsMax.WallTime)
 	require.NoError(t, err, "failed to compute stats for range")
 	require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
+
+	// Compact the engine; the ForTesting() config option will assert that all
+	// DELSIZED tombstones were appropriately sized.
+	require.NoError(t, engine.Compact())
 }
 
 func TestMVCCGarbageCollectClearRangeFailure(t *testing.T) {
