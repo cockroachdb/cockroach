@@ -106,6 +106,16 @@ func (m *monitorImpl) Go(fn func(context.Context) error) {
 	})
 }
 
+// GoWithCancel is like Go, but returns a function that can be used to cancel
+// the goroutine.
+func (m *monitorImpl) GoWithCancel(fn func(context.Context) error) func() {
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.Go(func(_ context.Context) error {
+		return fn(ctx)
+	})
+	return cancel
+}
+
 func (m *monitorImpl) WaitE() error {
 	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
