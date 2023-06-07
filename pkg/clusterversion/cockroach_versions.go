@@ -538,6 +538,17 @@ const (
 	// the system tenant.
 	V23_2_EnableRangeCoalescingForSystemTenant
 
+	// V23_2_PebbleFormatDeleteSizedAndObsolete upgrades Pebble's format major
+	// version to FormatDeleteSizedAndObsolete, allowing use of a new sstable
+	// format version Pebblev4. This version has two improvements:
+	//   a) It allows the use of DELSIZED point tombstones.
+	//   b) It encodes the obsolence of keys in a key-kind bit.
+	V23_2_PebbleFormatDeleteSizedAndObsolete
+
+	// V23_2_UseSizedPebblePointTombstones enables the use of Pebble's new
+	// DeleteSized operations.
+	V23_2_UseSizedPebblePointTombstones
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -934,6 +945,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_EnableRangeCoalescingForSystemTenant,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     V23_2_PebbleFormatDeleteSizedAndObsolete,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 10},
+	},
+	{
+		Key:     V23_2_UseSizedPebblePointTombstones,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 12},
 	},
 
 	// *************************************************

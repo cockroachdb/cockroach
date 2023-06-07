@@ -1437,16 +1437,16 @@ func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 }
 
 // ClearMVCC implements the Engine interface.
-func (p *Pebble) ClearMVCC(key MVCCKey) error {
+func (p *Pebble) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	if key.Timestamp.IsEmpty() {
 		panic("ClearMVCC timestamp is empty")
 	}
-	return p.clear(key)
+	return p.clear(key, opts)
 }
 
 // ClearUnversioned implements the Engine interface.
 func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
-	return p.clear(MVCCKey{Key: key})
+	return p.clear(MVCCKey{Key: key}, ClearOptions{})
 }
 
 // ClearIntent implements the Engine interface.
@@ -1463,11 +1463,15 @@ func (p *Pebble) ClearEngineKey(key EngineKey) error {
 	return p.db.Delete(key.Encode(), pebble.Sync)
 }
 
-func (p *Pebble) clear(key MVCCKey) error {
+func (p *Pebble) clear(key MVCCKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	return p.db.Delete(EncodeMVCCKey(key), pebble.Sync)
+	if !opts.ValueSizeKnown || !p.settings.Version.IsActive(context.TODO(), clusterversion.V23_2_UseSizedPebblePointTombstones) {
+		return p.db.Delete(EncodeMVCCKey(key), pebble.Sync)
+	}
+	// Use DeleteSized to propagate the value size.
+	return p.db.DeleteSized(EncodeMVCCKey(key), opts.ValueSize, pebble.Sync)
 }
 
 // SingleClearEngineKey implements the Engine interface.
@@ -2086,6 +2090,9 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	var formatVers pebble.FormatMajorVersion
 	// Cases are ordered from newer to older versions.
 	switch {
+	case !version.Less(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete)):
+		formatVers = pebble.ExperimentalFormatDeleteSizedAndObsolete
+
 	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnableFlushableIngest)):
 		formatVers = pebble.FormatFlushableIngest
 
@@ -2331,7 +2338,7 @@ func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCC(key MVCCKey) error {
+func (p *pebbleReadOnly) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	panic("not implemented")
 }
 
