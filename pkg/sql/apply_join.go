@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -298,6 +299,10 @@ func runPlanInsidePlan(
 		defer func() {
 			params.p.curPlan.subqueryPlans = oldSubqueries
 		}()
+		subqueryEvalCtxFactory := func() *extendedEvalContext {
+			return params.p.ExtendedEvalContextCopyAndReset()
+		}
+
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
@@ -306,7 +311,7 @@ func runPlanInsidePlan(
 		if !execCfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx,
 			params.p,
-			params.extendedEvalCtx.copy,
+			subqueryEvalCtxFactory,
 			plan.subqueryPlans,
 			recv,
 			&subqueryResultMemAcc,
@@ -341,9 +346,51 @@ func runPlanInsidePlan(
 
 	finishedSetupFn, cleanup := getFinishedSetupFn(&plannerCopy)
 	defer cleanup()
+	var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
+	if len(plan.cascades) != 0 ||
+		len(plan.checkPlans) != 0 {
+		serialEvalCtx := plannerCopy.ExtendedEvalContextCopyAndReset()
+		evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
+			if usedConcurrently {
+				return plannerCopy.ExtendedEvalContextCopyAndReset()
+			}
+			// Reuse the same object if this factory is not used concurrently.
+			plannerCopy.ExtendedEvalContextReset(serialEvalCtx)
+			return serialEvalCtx
+		}
+	}
 	execCfg.DistSQLPlanner.PlanAndRun(
 		ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
 	)
+	if p := planCtx.getPortalPauseInfo(); p != nil {
+		if buildutil.CrdbTestBuild && p.resumableFlow.flow == nil {
+			checkErr := errors.AssertionFailedf("flow for portal %s cannot be found", plannerCopy.pausablePortal.Name)
+			if recv.commErr != nil {
+				recv.commErr = errors.CombineErrors(recv.commErr, checkErr)
+			} else {
+				return checkErr
+			}
+		}
+		if !p.resumableFlow.cleanup.isComplete {
+			p.resumableFlow.cleanup.appendFunc(namedFunc{
+				fName: "cleanup flow", f: func() {
+					p.resumableFlow.flow.Cleanup(ctx)
+				},
+			})
+		}
+	}
+
+	if recv.commErr != nil || recv.getError() != nil {
+		return recv.commErr
+	}
+
+	execCfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
+		ctx, &plannerCopy, evalCtxFactory, &plannerCopy.curPlan.planComponents, recv,
+	)
+	if recv.commErr != nil {
+		return recv.commErr
+	}
+
 	return resultWriter.Err()
 }
 
