@@ -77,9 +77,7 @@ func TestReconnection(t *testing.T) {
 				env.handleShow(ctx, env.lookupTarget(t, d.CmdArgs...), scanClass(t, d))
 			case "set-hb-err":
 				var dc bool
-				if d.HasArg("decommissioned") {
-					d.ScanArgs(t, "decommissioned", &dc)
-				}
+				d.MaybeScanArgs(t, "decommissioned", &dc)
 				var err error
 				if dc {
 					err = kvpb.NewDecommissionedStatusErrorf(codes.PermissionDenied, "injected decommissioned error")
@@ -94,15 +92,9 @@ func TestReconnection(t *testing.T) {
 				var healthy int64
 				var unhealthy int64
 				var inactive int64
-				if d.HasArg("healthy") {
-					d.ScanArgs(t, "healthy", &healthy)
-				}
-				if d.HasArg("unhealthy") {
-					d.ScanArgs(t, "unhealthy", &unhealthy)
-				}
-				if d.HasArg("inactive") {
-					d.ScanArgs(t, "inactive", &inactive)
-				}
+				d.MaybeScanArgs(t, "healthy", &healthy)
+				d.MaybeScanArgs(t, "unhealthy", &unhealthy)
+				d.MaybeScanArgs(t, "inactive", &inactive)
 				if err := env.handleSoon(healthy, unhealthy, inactive); err != nil {
 					t.Fatalf("%s: %v", d.Pos, err)
 				}
