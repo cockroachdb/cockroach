@@ -61,6 +61,13 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		}
 	}
 
+	scDesc, err := params.p.descCollection.ByName(params.p.Txn()).Get().Schema(params.ctx, n.dbDesc, n.scDesc.GetName())
+	if err != nil {
+		return err
+	}
+	if scDesc.SchemaKind() == catalog.SchemaTemporary {
+		return unimplemented.NewWithIssue(104687, "cannot create UDFs under a temporary schema")
+	}
 	mutScDesc, err := params.p.descCollection.MutableByName(params.p.Txn()).Schema(params.ctx, n.dbDesc, n.scDesc.GetName())
 	if err != nil {
 		return err
