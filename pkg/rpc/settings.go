@@ -18,7 +18,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"google.golang.org/grpc"
 )
+
+func init() {
+	// Disable GRPC tracing. This retains a subset of messages for
+	// display on /debug/requests, which is very expensive for
+	// snapshots. Until we can be more selective about what is retained
+	// in traces, we must disable tracing entirely.
+	// https://github.com/grpc/grpc-go/issues/695
+	grpc.EnableTracing = false
+}
 
 var enableRPCCircuitBreakers = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
@@ -56,6 +66,9 @@ func getWindowSize(name string, c ConnectionClass, defaultSize int) int32 {
 
 const (
 	defaultWindowSize = 65535
+	// The coefficient by which the tolerated offset is multiplied to determine
+	// the maximum acceptable measurement latency.
+	maximumPingDurationMult = 2
 )
 
 var (

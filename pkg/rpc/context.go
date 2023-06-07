@@ -52,21 +52,6 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-func init() {
-	// Disable GRPC tracing. This retains a subset of messages for
-	// display on /debug/requests, which is very expensive for
-	// snapshots. Until we can be more selective about what is retained
-	// in traces, we must disable tracing entirely.
-	// https://github.com/grpc/grpc-go/issues/695
-	grpc.EnableTracing = false
-}
-
-const (
-	// The coefficient by which the tolerated offset is multiplied to determine
-	// the maximum acceptable measurement latency.
-	maximumPingDurationMult = 2
-)
-
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
