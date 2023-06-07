@@ -1650,6 +1650,7 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 	// Parse the arguments to \connect:
 	// it accepts newdb, user, host, port and options in that order.
 	// Each field can be marked as "-" to reuse the current defaults.
+	dbOverride := false
 	switch len(cmd) {
 	case 5:
 		if cmd[4] != "-" {
@@ -1683,6 +1684,7 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 		fallthrough
 	case 1:
 		if cmd[0] != "-" {
+			dbOverride = true
 			if err := newURL.SetOption("database", cmd[0]); err != nil {
 				return err
 			}
@@ -1697,6 +1699,35 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 
 	default:
 		return errors.Newf(`unknown syntax: \c %s`, strings.Join(cmd, " "))
+	}
+
+	// If the URL contained -ccluster=XXX to start with, but the user
+	// is overriding the DB name manually with cluster:XXX, we want
+	// to inject the new name into the `-ccluster` option.
+	if newDB := newURL.GetDatabase(); dbOverride && strings.HasPrefix(newDB, "cluster:") {
+		extraOpts := newURL.GetExtraOptions()
+		if extendedOptsS := extraOpts.Get("options"); extendedOptsS != "" {
+			extendedOpts, err := pgurl.ParseExtendedOptions(extendedOptsS)
+			if err == nil {
+				parts := strings.SplitN(newDB, "/", 2)
+				logicalCluster := parts[0][len("cluster:"):]
+
+				// Override the cluster name in the -ccluster option with the
+				// new specified cluster.
+				extendedOpts.Set("cluster", logicalCluster)
+				if err := newURL.SetOption("options", pgurl.EncodeExtendedOptions(extendedOpts)); err != nil {
+					return err
+				}
+				// Set the requested db name to the remainder of the db string.
+				actualNewDB := ""
+				if len(parts) > 1 {
+					actualNewDB = parts[1]
+				}
+				if err := newURL.SetOption("database", actualNewDB); err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	// If we are reconnecting to the same server with the same user, reuse
