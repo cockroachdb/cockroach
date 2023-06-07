@@ -15,8 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// TODO(during review): once dust settles, rename file to peer_map.go.
-
 type peerMap struct {
 	mu struct {
 		syncutil.RWMutex
