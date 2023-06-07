@@ -15,7 +15,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
-	"fmt"
 	"hash/fnv"
 	"io"
 	"math"
@@ -28,11 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	circuitbreaker "github.com/cockroachdb/cockroach/pkg/util/circuit"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -49,12 +46,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 func init() {
@@ -72,91 +67,8 @@ const (
 	maximumPingDurationMult = 2
 )
 
-const (
-	defaultWindowSize = 65535
-)
-
-func getWindowSize(name string, c ConnectionClass, defaultSize int) int32 {
-	const maxWindowSize = defaultWindowSize * 32
-	s := envutil.EnvOrDefaultInt(name, defaultSize)
-	if s > maxWindowSize {
-		log.Warningf(context.Background(), "%s value too large; trimmed to %d", name, maxWindowSize)
-		s = maxWindowSize
-	}
-	if s <= defaultWindowSize {
-		log.Warningf(context.Background(),
-			"%s RPC will use dynamic window sizes due to %s value lower than %d", c, name, defaultSize)
-	}
-	return int32(s)
-}
-
-var (
-	// for an RPC
-	initialWindowSize = getWindowSize(
-		"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultWindowSize*32)
-	initialConnWindowSize = initialWindowSize * 16 // for a connection
-
-	// for RangeFeed RPC
-	rangefeedInitialWindowSize = getWindowSize(
-		"COCKROACH_RANGEFEED_RPC_INITIAL_WINDOW_SIZE", RangefeedClass, 2*defaultWindowSize /* 128K */)
-)
-
-var enableRPCCircuitBreakers = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
-	"rpc.circuit_breaker.enabled",
-	"enables stateful management of failed connections, including circuit breaking "+
-		"when in unhealthy state; only use in case of issues - logging may be suboptimal "+
-		"and metrics related to connection errors will not be populated correctly",
-	envutil.EnvOrDefaultBool("COCKROACH_RPC_CIRCUIT_BREAKERS_ENABLED", true),
-)
-
-// errQuiescing is returned from client interceptors when the server's
-// stopper is quiescing. The error is constructed to return true in
-// `grpcutil.IsConnectionRejected` which prevents infinite retry loops during
-// cluster shutdown, especially in unit testing.
-var errQuiescing = grpcstatus.Error(codes.PermissionDenied, "refusing to dial; node is quiescing")
-
-// sourceAddr is the environment-provided local address for outgoing
-// connections.
-var sourceAddr = func() net.Addr {
-	const envKey = "COCKROACH_SOURCE_IP_ADDRESS"
-	if sourceAddr, ok := envutil.EnvString(envKey, 0); ok {
-		sourceIP := net.ParseIP(sourceAddr)
-		if sourceIP == nil {
-			panic(fmt.Sprintf("unable to parse %s '%s' as IP address", envKey, sourceAddr))
-		}
-		return &net.TCPAddr{
-			IP: sourceIP,
-		}
-	}
-	return nil
-}()
-
-var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
-
 type serverOpts struct {
 	interceptor func(fullMethod string) error
-}
-
-// ServerOption is a configuration option passed to NewServer.
-type ServerOption func(*serverOpts)
-
-// WithInterceptor adds an additional interceptor. The interceptor is called before
-// streaming and unary RPCs and may inject an error.
-func WithInterceptor(f func(fullMethod string) error) ServerOption {
-	return func(opts *serverOpts) {
-		if opts.interceptor == nil {
-			opts.interceptor = f
-		} else {
-			f := opts.interceptor
-			opts.interceptor = func(fullMethod string) error {
-				if err := f(fullMethod); err != nil {
-					return err
-				}
-				return f(fullMethod)
-			}
-		}
-	}
 }
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -2288,23 +2200,6 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	conns.mu.m[k] = p
 	return p.snap().c
 }
-
-// ErrNotHeartbeated is returned by ConnHealth or Connection.Health when we have
-// not yet performed the first heartbeat. This error will typically only be
-// observed when checking the health during the first connection attempt to a
-// node, as during subsequent periods of an unhealthy connection the circuit
-// breaker error will be returned instead.
-// TODO(during review): move once the review dust has settled.
-var ErrNotHeartbeated = errors.New("not yet heartbeated")
-
-// TODO(baptist): Remove in 23.2 (or 24.1) once validating dialback works for all scenarios.
-// TODO(during review): move once the review dust has settled.
-var useDialback = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
-	"rpc.dialback.enabled",
-	"if true, require bidirectional RPC connections between nodes to prevent one-way network unavailability",
-	true,
-)
 
 // NewHeartbeatService returns a HeartbeatService initialized from the Context.
 func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
