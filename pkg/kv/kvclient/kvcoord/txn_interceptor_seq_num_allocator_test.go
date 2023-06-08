@@ -124,7 +124,7 @@ func TestSequenceNumberAllocationWithStep(t *testing.T) {
 	s.configureSteppingLocked(true /* enabled */)
 
 	for i := 1; i <= 3; i++ {
-		if err := s.stepLocked(ctx); err != nil {
+		if err := s.manualStepReadSeqLocked(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if s.writeSeq != s.readSeq {
@@ -260,7 +260,7 @@ func TestModifyReadSeqNum(t *testing.T) {
 	// 6. repeat step 4.
 
 	// First, do a mutation.
-	if err := s.stepLocked(ctx); err != nil {
+	if err := s.manualStepReadSeqLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	ba := &kvpb.BatchRequest{}
@@ -274,7 +274,7 @@ func TestModifyReadSeqNum(t *testing.T) {
 	cursorSeqNum := s.readSeq
 
 	// Perform another mutation.
-	if err := s.stepLocked(ctx); err != nil {
+	if err := s.manualStepReadSeqLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	ba = &kvpb.BatchRequest{}
@@ -287,7 +287,7 @@ func TestModifyReadSeqNum(t *testing.T) {
 	// Ensure that sending a read at the old seq num doesn't do anything bad and
 	// also passes through the correct seq num.
 	curReadSeq := s.readSeq
-	if err := s.stepLocked(ctx); err != nil {
+	if err := s.manualStepReadSeqLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	s.readSeq = cursorSeqNum
@@ -304,7 +304,7 @@ func TestModifyReadSeqNum(t *testing.T) {
 
 	// Ensure that doing another read after resetting the seq num back to the
 	// newer seq num also doesn't do anything bad.
-	if err := s.stepLocked(ctx); err != nil {
+	if err := s.manualStepReadSeqLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	ba = &kvpb.BatchRequest{}
@@ -319,7 +319,7 @@ func TestModifyReadSeqNum(t *testing.T) {
 
 	// Do another mutation after messing with the read seq nums so that we can
 	// be sure things are still groovy.
-	if err := s.stepLocked(ctx); err != nil {
+	if err := s.manualStepReadSeqLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	ba = &kvpb.BatchRequest{}
@@ -335,7 +335,7 @@ func TestModifyReadSeqNum(t *testing.T) {
 	// Ensure that sending another read at the old seq num doesn't do anything bad
 	// and also passes through the correct seq num.
 	curReadSeq = s.readSeq
-	if err := s.stepLocked(ctx); err != nil {
+	if err := s.manualStepReadSeqLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	s.readSeq = cursorSeqNum
@@ -352,7 +352,7 @@ func TestModifyReadSeqNum(t *testing.T) {
 
 	// Ensure that doing another read after resetting the seq num back to the
 	// newer seq num also doesn't do anything bad.
-	if err := s.stepLocked(ctx); err != nil {
+	if err := s.manualStepReadSeqLocked(ctx); err != nil {
 		t.Fatal(err)
 	}
 	ba = &kvpb.BatchRequest{}
