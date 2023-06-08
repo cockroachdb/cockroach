@@ -354,7 +354,7 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
         │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 109 (f-), Name: "root"}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       ├── • PreviousStagePrecedence dependency from DROPPED Function:{DescID: 109 (f-)}
+        │       ├── • PreviousTransactionPrecedence dependency from DROPPED Function:{DescID: 109 (f-)}
         │       │     rule: "descriptor dropped in transaction before removal"
         │       │
         │       ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 109 (f-), ReferencedDescID: 101 (public)}
