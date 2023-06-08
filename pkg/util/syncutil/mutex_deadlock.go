@@ -47,3 +47,8 @@ func (rw *RWMutex) AssertHeld() {
 // AssertRHeld is a no-op for deadlock mutexes.
 func (rw *RWMutex) AssertRHeld() {
 }
+
+// TryLock always fails for deadlock mutexes.
+func (rw *RWMutex) TryLock() bool {
+	return false
+}
