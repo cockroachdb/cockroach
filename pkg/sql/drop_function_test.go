@@ -67,10 +67,10 @@ CREATE SCHEMA test_sc;
 		require.Equal(t, funcDesc.GetName(), "f")
 
 		require.Equal(t,
-			`SELECT a FROM defaultdb.public.t;
-SELECT b FROM defaultdb.public.t@t_idx_b;
-SELECT c FROM defaultdb.public.t@t_idx_c;
-SELECT a FROM defaultdb.public.v;
+			`SELECT a FROM {TABLE:104};
+SELECT b FROM {TABLE:104}@t_idx_b;
+SELECT c FROM {TABLE:104}@t_idx_c;
+SELECT a FROM {TABLE:106};
 SELECT nextval(105:::REGCLASS);`,
 			funcDesc.GetFunctionBody())
 

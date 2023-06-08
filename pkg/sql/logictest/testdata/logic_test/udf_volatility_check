@@ -20,14 +20,14 @@ CREATE FUNCTION f() RETURNS FLOAT LANGUAGE SQL STABLE AS $$ SELECT random() $$;
 statement error pq: volatile statement not allowed in immutable function: SELECT @1 FROM ROWS FROM \(random\(\)\)
 CREATE FUNCTION f() RETURNS FLOAT LANGUAGE SQL IMMUTABLE AS $$ SELECT @1 FROM random() $$;
 
-statement error pq: volatile statement not allowed in immutable function: SELECT t1\.a FROM test\.public\.t1 JOIN test\.public\.t2 ON t1\.a = \(t2\.a \+ random\(\)::INT8\)
+statement error pq: volatile statement not allowed in immutable function: SELECT {TABLE:106}\.a FROM {TABLE:106} JOIN {TABLE:107} ON {TABLE:106}\.a = \({TABLE:107}\.a \+ random\(\)::INT8\)
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL IMMUTABLE AS $$
   SELECT t1.a
   FROM t1
   JOIN t2 ON t1.a = t2.a + random()::INT
 $$;
 
-statement error pq: volatile statement not allowed in immutable function: SELECT a FROM test\.public\.t1 WHERE b = \(1\.0 \+ random\(\)\)
+statement error pq: volatile statement not allowed in immutable function: SELECT a FROM {TABLE:106} WHERE b = \(1\.0 \+ random\(\)\)
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL IMMUTABLE AS $$
   SELECT a
   FROM t1
@@ -54,14 +54,14 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE SQL STABLE AS $$ SELECT rand
 statement error pq: volatile statement not allowed in immutable function: SELECT @1 FROM ROWS FROM \(random\(\)\)
 CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE SQL IMMUTABLE AS $$ SELECT @1 FROM random() $$;
 
-statement error pq: volatile statement not allowed in immutable function: SELECT t1\.a FROM test\.public\.t1 JOIN test\.public\.t2 ON t1\.a = \(t2\.a \+ random\(\)::INT8\)
+statement error pq: volatile statement not allowed in immutable function: SELECT {TABLE:106}\.a FROM {TABLE:106} JOIN {TABLE:107} ON {TABLE:106}\.a = \({TABLE:107}\.a \+ random\(\)::INT8\)
 CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE SQL IMMUTABLE AS $$
   SELECT t1.a
   FROM t1
   JOIN t2 ON t1.a = t2.a + random()::INT
 $$;
 
-statement error pq: volatile statement not allowed in immutable function: SELECT a FROM test\.public\.t1 WHERE b = \(1\.0 \+ random\(\)\)
+statement error pq: volatile statement not allowed in immutable function: SELECT a FROM {TABLE:106} WHERE b = \(1\.0 \+ random\(\)\)
 CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE SQL IMMUTABLE AS $$
   SELECT a
   FROM t1

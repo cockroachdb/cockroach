@@ -1334,7 +1334,7 @@ SELECT k FROM kv WHERE v = 1;
 SELECT v FROM kv WHERE k = 'Foo';
 $$`
 
-	expectedLogStmt := `CREATE FUNCTION defaultdb.public.f()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT k FROM defaultdb.public.kv WHERE v = ‹1›; SELECT v FROM defaultdb.public.kv WHERE k = ‹'Foo'›;$$`
+	expectedLogStmt := `CREATE FUNCTION defaultdb.public.f()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT k FROM {TABLE:104} WHERE v = ‹1›; SELECT v FROM {TABLE:104} WHERE k = ‹'Foo'›;$$`
 
 	db.Exec(t, stmt)
 

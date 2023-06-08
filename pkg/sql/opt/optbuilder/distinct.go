@@ -194,14 +194,18 @@ func (b *Builder) buildDistinctOn(
 // analyzeDistinctOnArgs analyzes the DISTINCT ON columns and adds the
 // resulting typed expressions to distinctOnScope.
 func (b *Builder) analyzeDistinctOnArgs(
-	distinctOn tree.DistinctOn, inScope, projectionsScope *scope,
+	distinctOn *tree.DistinctOn, inScope, projectionsScope *scope,
 ) (distinctOnScope *scope) {
-	if len(distinctOn) == 0 {
+	if distinctOn == nil {
+		return nil
+	}
+	d := *distinctOn
+	if len(d) == 0 {
 		return nil
 	}
 
 	distinctOnScope = inScope.push()
-	distinctOnScope.cols = make([]scopeColumn, 0, len(distinctOn))
+	distinctOnScope.cols = make([]scopeColumn, 0, len(d))
 
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
@@ -210,15 +214,20 @@ func (b *Builder) analyzeDistinctOnArgs(
 	b.semaCtx.Properties.Require(exprKindDistinctOn.String(), tree.RejectGenerators)
 	inScope.context = exprKindDistinctOn
 
-	for i := range distinctOn {
+	for i := range d {
 		b.analyzeExtraArgument(
-			distinctOn[i],
+			&d[i],
 			inScope,
 			projectionsScope,
 			distinctOnScope,
 			true, /* nullsDefaultOrder */
 		)
 	}
+
+	if b.insideFuncDef {
+		*distinctOn = d
+	}
+
 	return distinctOnScope
 }
 

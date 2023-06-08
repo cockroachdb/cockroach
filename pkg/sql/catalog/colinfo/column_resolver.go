@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // ProcessTargetColumns returns the column descriptors identified by the
@@ -98,7 +99,7 @@ type ColumnResolver struct {
 	}
 }
 
-// FindSourceMatchingName is part of the tree.ColumnItemResolver interface.
+// FindSourceMatchingName is part of the colinfo.ColumnItemResolver interface.
 func (r *ColumnResolver) FindSourceMatchingName(
 	ctx context.Context, tn tree.TableName,
 ) (res NumResolutionResults, prefix *tree.TableName, srcMeta ColumnSourceMeta, err error) {
@@ -109,7 +110,7 @@ func (r *ColumnResolver) FindSourceMatchingName(
 	return ExactlyOne, prefix, nil, nil
 }
 
-// FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
+// FindSourceProvidingColumn is part of the colinfo.ColumnItemResolver interface.
 func (r *ColumnResolver) FindSourceProvidingColumn(
 	ctx context.Context, col tree.Name,
 ) (prefix *tree.TableName, srcMeta ColumnSourceMeta, colHint int, err error) {
@@ -134,7 +135,14 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 	return prefix, nil, colIdx, nil
 }
 
-// Resolve is part of the tree.ColumnItemResolver interface.
+// FindSourceWithID is part of the colinfo.ColumnItemResolver interface.
+func (r *ColumnResolver) FindSourceWithID(
+	ctx context.Context, id int64,
+) (prefix *tree.TableName, srcMeta ColumnSourceMeta, err error) {
+	return nil, nil, errors.AssertionFailedf("FindSourceWithID not implemented")
+}
+
+// Resolve is part of the colinfo.ColumnItemResolver interface.
 func (r *ColumnResolver) Resolve(
 	ctx context.Context, prefix *tree.TableName, srcMeta ColumnSourceMeta, colHint int, col tree.Name,
 ) (ColumnResolutionResult, error) {

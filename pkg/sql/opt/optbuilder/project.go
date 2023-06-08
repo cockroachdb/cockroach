@@ -192,6 +192,11 @@ func (b *Builder) analyzeSelectList(
 		}
 	}
 	if b.insideFuncDef || b.insideViewDef {
+		if b.insideFuncDef {
+			for i := range expansions {
+				expansions[i].Expr, _ = tree.WalkExpr(newColumnPrefixRewriter(inScope), expansions[i].Expr)
+			}
+		}
 		*selects = expansions
 	}
 }

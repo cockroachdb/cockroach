@@ -59,6 +59,11 @@ type ColumnItemResolver interface {
 	Resolve(
 		ctx context.Context, prefix *tree.TableName, srcMeta ColumnSourceMeta, colHint int, col tree.Name,
 	) (ColumnResolutionResult, error)
+
+	// FindSourceWithID searches for a data source with an id.
+	FindSourceWithID(
+		ctx context.Context, id int64,
+	) (prefix *tree.TableName, srcMeta ColumnSourceMeta, err error)
 }
 
 // ColumnSourceMeta is an opaque reference passed through column item resolution.
@@ -143,4 +148,16 @@ func ResolveColumnItem(
 			"no data source matches prefix: %s in this context", c.TableName)
 	}
 	return r.Resolve(ctx, srcName, srcMeta, -1, colName)
+}
+
+// ResolveColumnNameRef performs name resolution for a column prefixed with
+// table id reference.
+func ResolveColumnNameRef(
+	ctx context.Context, r ColumnItemResolver, c *tree.ColumnNameRef,
+) (ColumnResolutionResult, error) {
+	srcName, srcMeta, err := r.FindSourceWithID(ctx, c.Table.ID)
+	if err != nil {
+		return nil, err
+	}
+	return r.Resolve(ctx, srcName, srcMeta, -1, c.ColumnName)
 }
