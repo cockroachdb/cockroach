@@ -324,6 +324,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		createRegionLivenessTables,
 	),
+	upgrade.NewTenantUpgrade(
+		"create txn_exec_insights and stmt_exec_insights tables",
+		toCV(clusterversion.V23_2_AddSystemExecInsightsTable),
+		upgrade.NoPrecondition,
+		systemExecInsightsTableMigration,
+	),
 }
 
 var (
