@@ -17,13 +17,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-var _ = skipExample_demo_locality
-
-func skipExample_demo_locality() {
+func Example_demo_locality() {
 	c := NewCLITest(TestCLIParams{NoServer: true})
 	defer c.Cleanup()
+
+	// This is slow under deadlock as it starts a 9-node cluster which
+	// has a very high simulated latency between each node.
+	if syncutil.DeadlockEnabled {
+		return
+	}
 
 	defer democluster.TestingForceRandomizeDemoPorts()()
 
