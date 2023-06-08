@@ -12,8 +12,8 @@ bazel build //pkg/cmd/bazci --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 BAZCI=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci
 
-bazel build //pkg/cmd/cockroach //pkg/compose/compare/compare:compare_test --config=ci --config=crosslinux --config=test --config=with_ui
-CROSSBIN=$(bazel info bazel-bin --config=ci --config=crosslinux --config=test --config=with_ui)
+bazel build //pkg/cmd/cockroach //pkg/compose/compare/compare:compare_test --config=ci --config=crosslinux --config=test
+CROSSBIN=$(bazel info bazel-bin --config=ci --config=crosslinux --config=test)
 COCKROACH=$CROSSBIN/pkg/cmd/cockroach/cockroach_/cockroach
 COMPAREBIN=$CROSSBIN/pkg/compose/compare/compare/compare_test_/compare_test
 ARTIFACTS_DIR=$PWD/artifacts
