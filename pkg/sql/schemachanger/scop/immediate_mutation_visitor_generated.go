@@ -52,6 +52,8 @@ type ImmediateMutationVisitor interface {
 	MakeWriteOnlyColumnDeleteOnly(context.Context, MakeWriteOnlyColumnDeleteOnly) error
 	RemoveDroppedColumnType(context.Context, RemoveDroppedColumnType) error
 	MakeDeleteOnlyColumnAbsent(context.Context, MakeDeleteOnlyColumnAbsent) error
+	AddOwnerBackReferenceInSequence(context.Context, AddOwnerBackReferenceInSequence) error
+	AddSequenceOwner(context.Context, AddSequenceOwner) error
 	RemoveOwnerBackReferenceInSequence(context.Context, RemoveOwnerBackReferenceInSequence) error
 	RemoveSequenceOwner(context.Context, RemoveSequenceOwner) error
 	RemoveCheckConstraint(context.Context, RemoveCheckConstraint) error
@@ -276,6 +278,16 @@ func (op RemoveDroppedColumnType) Visit(ctx context.Context, v ImmediateMutation
 // Visit is part of the ImmediateMutationOp interface.
 func (op MakeDeleteOnlyColumnAbsent) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.MakeDeleteOnlyColumnAbsent(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddOwnerBackReferenceInSequence) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddOwnerBackReferenceInSequence(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddSequenceOwner) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddSequenceOwner(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
