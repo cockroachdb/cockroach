@@ -157,7 +157,7 @@ dev ui e2e
 bazel info workspace --color=no
 bazel info workspace --color=no
 yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests install
-bazel build //pkg/cmd/cockroach:cockroach --config=with_ui
+bazel build //pkg/cmd/cockroach:cockroach
 yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cypress install
 crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:run
 
@@ -167,7 +167,7 @@ dev ui e2e ./foo/bar
 bazel info workspace --color=no
 bazel info workspace --color=no
 yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests install
-bazel build //pkg/cmd/cockroach:cockroach --config=with_ui
+bazel build //pkg/cmd/cockroach:cockroach
 yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cypress install
 crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:run ./foo/bar
 
@@ -177,7 +177,7 @@ dev ui e2e --headed
 bazel info workspace --color=no
 bazel info workspace --color=no
 yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests install
-bazel build //pkg/cmd/cockroach:cockroach --config=with_ui
+bazel build //pkg/cmd/cockroach:cockroach
 yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cypress install
 crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:debug
 
