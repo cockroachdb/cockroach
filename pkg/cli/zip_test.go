@@ -78,6 +78,7 @@ table_name NOT IN (
 	'forward_dependencies',
 	'gossip_network',
 	'index_columns',
+	'kv_inherited_role_members',
 	'lost_descriptors_with_data',
 	'table_columns',
 	'table_row_statistics',

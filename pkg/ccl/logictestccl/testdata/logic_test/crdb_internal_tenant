@@ -57,6 +57,7 @@ crdb_internal  index_columns                     table  admin  NULL  NULL
 crdb_internal  index_usage_statistics            table  admin  NULL  NULL
 crdb_internal  invalid_objects                   table  admin  NULL  NULL
 crdb_internal  jobs                              table  admin  NULL  NULL
+crdb_internal  kv_inherited_role_members         table  admin  NULL  NULL
 crdb_internal  kv_node_liveness                  table  admin  NULL  NULL
 crdb_internal  kv_node_status                    table  admin  NULL  NULL
 crdb_internal  kv_store_status                   table  admin  NULL  NULL

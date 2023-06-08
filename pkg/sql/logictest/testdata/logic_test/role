@@ -195,6 +195,23 @@ testrole  child_role  false
 testrole  testuser    true
 testuser  child_role  false
 
+query TTBB colnames
+SELECT * FROM "".crdb_internal.kv_inherited_role_members
+----
+role      inheriting_member  member_is_explicit  member_is_admin
+testrole  child_role         true                true
+testuser  child_role         true                false
+admin     root               true                true
+testrole  testuser           true                true
+
+query TTB colnames
+SHOW GRANTS ON ROLE FOR child_role
+----
+role_name  member      is_admin
+testrole   child_role  true
+testrole   testuser    true
+testuser   child_role  false
+
 statement ok
 SET ROLE child_role
 
