@@ -40,4 +40,4 @@ DROP FUNCTION f;
 - [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC]
   {functionId: 109, nullInputBehavior: {nullInputBehavior: CALLED_ON_NULL_INPUT}}
 - [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC]
-  {body: "SELECT a FROM defaultdb.public.t;\nSELECT b FROM defaultdb.public.t@t_idx_b;\nSELECT c FROM defaultdb.public.t@t_idx_c;\nSELECT a FROM defaultdb.public.v;\nSELECT nextval(105:::REGCLASS);", functionId: 109, lang: {lang: SQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [107, 108], usesViews: [{columnIds: [1], viewId: 106}]}
+  {body: "SELECT a FROM {TABLE:104};\nSELECT b FROM {TABLE:104}@t_idx_b;\nSELECT c FROM {TABLE:104}@t_idx_c;\nSELECT a FROM {TABLE:106};\nSELECT nextval(105:::REGCLASS);", functionId: 109, lang: {lang: SQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [107, 108], usesViews: [{columnIds: [1], viewId: 106}]}

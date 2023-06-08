@@ -1,0 +1,190 @@
+exec-ddl
+CREATE TABLE t1 (a INT PRIMARY KEY, b INT, c INT)
+----
+
+exec-ddl
+CREATE TABLE t2 (a INT PRIMARY KEY, b INT, d INT)
+----
+
+exec-ddl
+CREATE OR REPLACE VIEW v1 AS SELECT a FROM t1
+----
+
+# 53 is the id of t1
+# 54 is the id of t2
+# 55 is the id of v1
+
+build
+SELECT a FROM {TABLE:53}
+----
+project
+ ├── columns: a:1!null
+ └── scan t1
+      └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+
+build
+SELECT {TABLE:53}.a FROM {TABLE:53} WHERE {TABLE:53}.b > 20 ORDER BY {TABLE:53}.b;
+----
+sort
+ ├── columns: a:1!null  [hidden: b:2!null]
+ ├── ordering: +2
+ └── project
+      ├── columns: a:1!null b:2!null
+      └── select
+           ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           ├── scan t1
+           │    └── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+           └── filters
+                └── b:2 > 20
+
+build
+SELECT t.a FROM (SELECT a FROM {TABLE:53} WHERE b > 20 ORDER BY b) AS t WHERE t.a > 1 ORDER BY t.a;
+----
+project
+ ├── columns: a:1!null
+ ├── ordering: +1
+ └── select
+      ├── columns: a:1!null b:2!null
+      ├── ordering: +1
+      ├── project
+      │    ├── columns: a:1!null b:2!null
+      │    ├── ordering: +1
+      │    └── select
+      │         ├── columns: a:1!null b:2!null c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         ├── ordering: +1
+      │         ├── scan t1
+      │         │    ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         │    └── ordering: +1
+      │         └── filters
+      │              └── b:2 > 20
+      └── filters
+           └── a:1 > 1
+
+build
+SELECT {TABLE:53}.a, {TABLE:53}.b, {TABLE:53}.c, {TABLE:54}.a, {TABLE:54}.b, {TABLE:54}.d
+FROM {TABLE:53}
+JOIN {TABLE:54} ON c = d
+GROUP BY t1.*, t2.* ORDER BY t1.*, t2.*;
+----
+group-by (streaming)
+ ├── columns: a:1!null b:2 c:3!null a:6!null b:7 d:8!null
+ ├── grouping columns: t1.a:1!null t1.b:2 c:3!null t2.a:6!null t2.b:7 d:8!null
+ ├── ordering: +1,+2,+3,+6,+7,+8
+ └── sort
+      ├── columns: t1.a:1!null t1.b:2 c:3!null t2.a:6!null t2.b:7 d:8!null
+      ├── ordering: +1,+6
+      └── project
+           ├── columns: t1.a:1!null t1.b:2 c:3!null t2.a:6!null t2.b:7 d:8!null
+           └── inner-join (hash)
+                ├── columns: t1.a:1!null t1.b:2 c:3!null t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5 t2.a:6!null t2.b:7 d:8!null t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                ├── scan t1
+                │    └── columns: t1.a:1!null t1.b:2 c:3 t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5
+                ├── scan t2
+                │    └── columns: t2.a:6!null t2.b:7 d:8 t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+                └── filters
+                     └── c:3 = d:8
+
+build
+SELECT {TABLE:53}.a + {TABLE:54}.a
+FROM {TABLE:53} JOIN {TABLE:54} ON {TABLE:53}.b = {TABLE:54}.b
+GROUP BY {TABLE:53}.a + {TABLE:54}.a
+HAVING ({TABLE:53}.a + {TABLE:54}.a) > 1
+ORDER BY {TABLE:53}.a + {TABLE:54}.a
+----
+sort
+ ├── columns: "?column?":11!null
+ ├── ordering: +11
+ └── select
+      ├── columns: column11:11!null
+      ├── group-by (hash)
+      │    ├── columns: column11:11!null
+      │    ├── grouping columns: column11:11!null
+      │    └── project
+      │         ├── columns: column11:11!null
+      │         ├── inner-join (hash)
+      │         │    ├── columns: t1.a:1!null t1.b:2!null c:3 t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5 t2.a:6!null t2.b:7!null d:8 t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+      │         │    ├── scan t1
+      │         │    │    └── columns: t1.a:1!null t1.b:2 c:3 t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5
+      │         │    ├── scan t2
+      │         │    │    └── columns: t2.a:6!null t2.b:7 d:8 t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+      │         │    └── filters
+      │         │         └── t1.b:2 = t2.b:7
+      │         └── projections
+      │              └── t1.a:1 + t2.a:6 [as=column11:11]
+      └── filters
+           └── column11:11 > 1
+
+build
+SELECT {TABLE:53}.a + {TABLE:54}.a
+FROM {TABLE:53} JOIN {TABLE:54} USING (a)
+----
+project
+ ├── columns: "?column?":11!null
+ ├── inner-join (hash)
+ │    ├── columns: t1.a:1!null t1.b:2 c:3 t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5 t2.a:6!null t2.b:7 d:8 t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+ │    ├── scan t1
+ │    │    └── columns: t1.a:1!null t1.b:2 c:3 t1.crdb_internal_mvcc_timestamp:4 t1.tableoid:5
+ │    ├── scan t2
+ │    │    └── columns: t2.a:6!null t2.b:7 d:8 t2.crdb_internal_mvcc_timestamp:9 t2.tableoid:10
+ │    └── filters
+ │         └── t1.a:1 = t2.a:6
+ └── projections
+      └── t1.a:1 + t2.a:6 [as="?column?":11]
+
+build
+SELECT p.a + q.a
+FROM {TABLE:53} AS p
+JOIN {TABLE:54} AS q ON p.b = q.b
+GROUP BY p.a + q.a
+HAVING (p.a + q.a) > 1
+ORDER BY p.a + q.a;
+----
+sort
+ ├── columns: "?column?":11!null
+ ├── ordering: +11
+ └── select
+      ├── columns: column11:11!null
+      ├── group-by (hash)
+      │    ├── columns: column11:11!null
+      │    ├── grouping columns: column11:11!null
+      │    └── project
+      │         ├── columns: column11:11!null
+      │         ├── inner-join (hash)
+      │         │    ├── columns: p.a:1!null p.b:2!null c:3 p.crdb_internal_mvcc_timestamp:4 p.tableoid:5 q.a:6!null q.b:7!null d:8 q.crdb_internal_mvcc_timestamp:9 q.tableoid:10
+      │         │    ├── scan t1 [as=p]
+      │         │    │    └── columns: p.a:1!null p.b:2 c:3 p.crdb_internal_mvcc_timestamp:4 p.tableoid:5
+      │         │    ├── scan t2 [as=q]
+      │         │    │    └── columns: q.a:6!null q.b:7 d:8 q.crdb_internal_mvcc_timestamp:9 q.tableoid:10
+      │         │    └── filters
+      │         │         └── p.b:2 = q.b:7
+      │         └── projections
+      │              └── p.a:1 + q.a:6 [as=column11:11]
+      └── filters
+           └── column11:11 > 1
+
+build
+SELECT DISTINCT ON ({TABLE:53}.a) {TABLE:53}.b FROM {TABLE:53} ORDER BY a;
+----
+distinct-on
+ ├── columns: b:2  [hidden: a:1!null]
+ ├── grouping columns: a:1!null
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: a:1!null b:2
+ │    ├── ordering: +1
+ │    └── scan t1
+ │         ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │         └── ordering: +1
+ └── aggregations
+      └── first-agg [as=b:2]
+           └── b:2
+
+build
+SELECT {TABLE:55}.a FROM {TABLE:55} ORDER BY {TABLE:55}.a;
+----
+project
+ ├── columns: a:1!null
+ ├── ordering: +1
+ └── scan t1
+      ├── columns: a:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      └── ordering: +1

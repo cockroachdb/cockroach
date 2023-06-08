@@ -77,10 +77,10 @@ $$;
 		require.Equal(t, funcDesc.GetName(), "f")
 
 		require.Equal(t,
-			`SELECT a FROM defaultdb.public.t;
-SELECT b FROM defaultdb.public.t@t_idx_b;
-SELECT c FROM defaultdb.public.t@t_idx_c;
-SELECT a FROM defaultdb.public.v;
+			`SELECT a FROM {TABLE:104};
+SELECT b FROM {TABLE:104}@t_idx_b;
+SELECT c FROM {TABLE:104}@t_idx_c;
+SELECT a FROM {TABLE:107};
 SELECT nextval(105:::REGCLASS);`,
 			funcDesc.GetFunctionBody())
 
@@ -317,8 +317,8 @@ $$;
 		require.Equal(t, funcDesc.GetName(), "f")
 
 		require.Equal(t,
-			`SELECT b FROM defaultdb.public.t1@t1_idx_b;
-SELECT a FROM defaultdb.public.v1;
+			`SELECT b FROM {TABLE:104}@t1_idx_b;
+SELECT a FROM {TABLE:108};
 SELECT nextval(106:::REGCLASS);`,
 			funcDesc.GetFunctionBody())
 
@@ -360,8 +360,8 @@ $$;
 		require.Equal(t, funcDesc.GetName(), "f")
 
 		require.Equal(t,
-			`SELECT b FROM defaultdb.public.t2@t2_idx_b;
-SELECT a FROM defaultdb.public.v2;
+			`SELECT b FROM {TABLE:105}@t2_idx_b;
+SELECT a FROM {TABLE:109};
 SELECT nextval(107:::REGCLASS);`,
 			funcDesc.GetFunctionBody())
 
