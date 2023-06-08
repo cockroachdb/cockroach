@@ -12,6 +12,7 @@ package datapathutils
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -21,6 +22,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/stretchr/testify/require"
 )
+
+// DebuggableTempDir returns a temporary directory that is appropriate for
+// retaining leftover artifacts in case the temp fails for debugging.
+// If the test is not executing remotely, or the test is not built with Bazel,
+// then os.TempDir() is returned (the person executing the test should set up
+// their $TMPDIR appropriately so they know where to find these leftover
+// artifacts). If the test is executing remotely, then we instead use
+// TEST_UNDECLARED_OUTPUTS_DIR, and if any files are left-over in this directory
+// after the test exits, then Bazel will package them up into outputs.zip.
+// This function is specifically for when we want to capture left-over artifacts
+// after the test completes; if you are always going to clean up the files you
+// create either way, testutils.TempDir() may be more convenient.
+func DebuggableTempDir() string {
+	if bazel.BuiltWithBazel() {
+		isRemote := os.Getenv("REMOTE_EXEC")
+		if len(isRemote) > 0 {
+			outputs := os.Getenv("TEST_UNDECLARED_OUTPUTS_DIR")
+			if len(outputs) > 0 {
+				return outputs
+			}
+		}
+	}
+	return os.TempDir()
+}
 
 // TestDataPath returns a path to an asset in the testdata directory. It knows
 // to access the right path when executing under bazel.
