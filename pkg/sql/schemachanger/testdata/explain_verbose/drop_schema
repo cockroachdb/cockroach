@@ -213,7 +213,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
         │       ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 106, Name: root}
         │       │     rule: "non-data dependents removed before descriptor"
         │       │
-        │       ├── • PreviousStagePrecedence dependency from DROPPED Schema:{DescID: 106}
+        │       ├── • PreviousTransactionPrecedence dependency from DROPPED Schema:{DescID: 106}
         │       │     rule: "descriptor dropped in transaction before removal"
         │       │
         │       └── • Precedence dependency from ABSENT SchemaParent:{DescID: 106, ReferencedDescID: 104}

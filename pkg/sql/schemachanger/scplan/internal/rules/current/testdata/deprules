@@ -2,7 +2,7 @@ deprules
 ----
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -18,7 +18,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -35,7 +35,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -51,7 +51,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -67,7 +67,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -83,7 +83,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -99,7 +99,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -115,7 +115,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -131,7 +131,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -147,7 +147,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -163,7 +163,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -179,7 +179,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -195,7 +195,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -211,7 +211,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -228,7 +228,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -244,7 +244,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -260,7 +260,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -276,7 +276,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -305,7 +305,7 @@ deprules
     - joinTargetNode($column, $column-Target, $column-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -321,7 +321,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -338,7 +338,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -354,7 +354,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -370,7 +370,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -386,7 +386,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -402,7 +402,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -418,7 +418,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -434,7 +434,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -451,7 +451,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -467,7 +467,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: MERGE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -483,7 +483,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -499,7 +499,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_ABSENT->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -515,7 +515,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -531,7 +531,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_BACKFILL_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -547,7 +547,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -563,7 +563,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -579,7 +579,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_MERGE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -595,7 +595,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -611,7 +611,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -627,7 +627,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -644,7 +644,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -661,7 +661,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -677,7 +677,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -693,7 +693,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -709,7 +709,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -725,7 +725,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -741,7 +741,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -757,7 +757,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -773,7 +773,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -789,7 +789,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -805,7 +805,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -821,7 +821,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -837,7 +837,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -853,7 +853,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -869,7 +869,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGE_ONLY->MERGED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -885,7 +885,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: PUBLIC->TRANSIENT_VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -901,7 +901,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_BACKFILLED->TRANSIENT_DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -917,7 +917,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_BACKFILL_ONLY->TRANSIENT_DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -933,7 +933,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -950,7 +950,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_MERGED->TRANSIENT_WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -966,7 +966,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_MERGE_ONLY->TRANSIENT_WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -982,7 +982,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->TRANSIENT_WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -998,7 +998,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->TRANSIENT_DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -1015,7 +1015,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -1031,7 +1031,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -1047,7 +1047,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1063,7 +1063,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1079,7 +1079,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1096,7 +1096,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1112,7 +1112,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: MERGE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1128,7 +1128,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1144,7 +1144,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1160,7 +1160,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1177,7 +1177,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1193,7 +1193,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1209,7 +1209,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1225,7 +1225,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1241,7 +1241,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1257,7 +1257,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1273,7 +1273,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1289,7 +1289,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -1305,7 +1305,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -1322,7 +1322,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_ABSENT->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -1338,7 +1338,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -1354,7 +1354,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -1370,7 +1370,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -1386,7 +1386,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -1402,7 +1402,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -1418,7 +1418,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -1434,7 +1434,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -1450,7 +1450,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -1467,7 +1467,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -1483,7 +1483,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -1499,7 +1499,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -1515,7 +1515,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -2299,7 +2299,7 @@ deprules
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
 - name: descriptor dropped in transaction before removal
   from: dropped-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: absent-Node
   query:
     - $dropped[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']
@@ -3363,7 +3363,7 @@ deprules
 ----
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -3379,7 +3379,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -3396,7 +3396,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -3412,7 +3412,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -3428,7 +3428,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -3444,7 +3444,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.CheckConstraint'
@@ -3460,7 +3460,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -3476,7 +3476,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -3492,7 +3492,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -3508,7 +3508,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -3524,7 +3524,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -3540,7 +3540,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.Column'
@@ -3556,7 +3556,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -3572,7 +3572,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -3589,7 +3589,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -3605,7 +3605,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -3621,7 +3621,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -3637,7 +3637,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ColumnNotNull'
@@ -3666,7 +3666,7 @@ deprules
     - joinTargetNode($column, $column-Target, $column-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -3682,7 +3682,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -3699,7 +3699,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -3715,7 +3715,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -3731,7 +3731,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -3747,7 +3747,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'ForeignKeyConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.ForeignKeyConstraint'
@@ -3763,7 +3763,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3779,7 +3779,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3795,7 +3795,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3812,7 +3812,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3828,7 +3828,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: MERGE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3844,7 +3844,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3860,7 +3860,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_ABSENT->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3876,7 +3876,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3892,7 +3892,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_BACKFILL_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3908,7 +3908,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3924,7 +3924,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3940,7 +3940,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_MERGE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3956,7 +3956,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3972,7 +3972,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -3988,7 +3988,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4005,7 +4005,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4022,7 +4022,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4038,7 +4038,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4054,7 +4054,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4070,7 +4070,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4086,7 +4086,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4102,7 +4102,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4118,7 +4118,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4134,7 +4134,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4150,7 +4150,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4166,7 +4166,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4182,7 +4182,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4198,7 +4198,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4214,7 +4214,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4230,7 +4230,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGE_ONLY->MERGED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4246,7 +4246,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: PUBLIC->TRANSIENT_VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4262,7 +4262,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_BACKFILLED->TRANSIENT_DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4278,7 +4278,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_BACKFILL_ONLY->TRANSIENT_DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4294,7 +4294,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4311,7 +4311,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_MERGED->TRANSIENT_WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4327,7 +4327,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_MERGE_ONLY->TRANSIENT_WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4343,7 +4343,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->TRANSIENT_WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4359,7 +4359,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_WRITE_ONLY->TRANSIENT_DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4376,7 +4376,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4392,7 +4392,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.PrimaryIndex'
@@ -4408,7 +4408,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4424,7 +4424,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4440,7 +4440,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4457,7 +4457,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4473,7 +4473,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: MERGE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4489,7 +4489,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4505,7 +4505,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4521,7 +4521,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4538,7 +4538,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4554,7 +4554,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4570,7 +4570,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4586,7 +4586,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4602,7 +4602,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4618,7 +4618,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4634,7 +4634,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4650,7 +4650,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'SecondaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.SecondaryIndex'
@@ -4666,7 +4666,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -4683,7 +4683,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_ABSENT->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -4699,7 +4699,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -4715,7 +4715,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -4731,7 +4731,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -4747,7 +4747,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -4763,7 +4763,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -4779,7 +4779,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.TemporaryIndex'
@@ -4795,7 +4795,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -4811,7 +4811,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -4828,7 +4828,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -4844,7 +4844,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -4860,7 +4860,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -4876,7 +4876,7 @@ deprules
     - joinTargetNode($next, $next-Target, $next-Node)
 - name: 'UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
   from: prev-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: next-Node
   query:
     - $prev[Type] = '*scpb.UniqueWithoutIndexConstraint'
@@ -5660,7 +5660,7 @@ deprules
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
 - name: descriptor dropped in transaction before removal
   from: dropped-Node
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   to: absent-Node
   query:
     - $dropped[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.Database', '*scpb.EnumType', '*scpb.Function', '*scpb.Schema', '*scpb.Sequence', '*scpb.Table', '*scpb.View']

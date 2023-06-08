@@ -16,7 +16,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 2;
         │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
         │       │ WRITE_ONLY → ABSENT
         │       │
-        │       └── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+        │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
         │             rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
         │
         └── • 3 Mutation operations

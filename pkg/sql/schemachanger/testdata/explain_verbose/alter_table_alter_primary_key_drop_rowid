@@ -15,7 +15,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │       │   │         rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
@@ -35,7 +35,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
@@ -59,7 +59,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
@@ -79,7 +79,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   ├── • Column:{DescID: 104, ColumnID: 2}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
+│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
 │       │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
@@ -91,7 +91,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │       │ PUBLIC → VALIDATED
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+│       │       └── • PreviousTransactionPrecedence dependency from PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │             rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │
 │       └── • 11 Mutation operations
@@ -223,7 +223,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │       │   │         rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
@@ -243,7 +243,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
@@ -267,7 +267,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
@@ -287,7 +287,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   ├── • Column:{DescID: 104, ColumnID: 2}
 │       │   │   │ PUBLIC → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
+│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
 │       │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: PUBLIC->WRITE_ONLY"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
@@ -299,7 +299,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │       │ PUBLIC → VALIDATED
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+│       │       └── • PreviousTransactionPrecedence dependency from PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │             rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │
 │       └── • 16 Mutation operations
@@ -408,7 +408,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │   │   │   │   │ DELETE_ONLY → WRITE_ONLY
 │   │   │   │   │
-│   │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│   │   │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │   │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │   │   │   │   │
 │   │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
@@ -443,7 +443,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ BACKFILL_ONLY → BACKFILLED
 │   │   │       │
-│   │   │       ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │     rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED"
 │   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
@@ -469,7 +469,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ BACKFILLED → DELETE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from BACKFILLED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       └── • PreviousTransactionPrecedence dependency from BACKFILLED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: BACKFILLED->DELETE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -492,7 +492,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ DELETE_ONLY → MERGE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -515,7 +515,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ MERGE_ONLY → MERGED
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGE_ONLY->MERGED"
 │   │   │
 │   │   └── • 1 Backfill operation
@@ -532,7 +532,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ MERGED → WRITE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from MERGED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: MERGED->WRITE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -555,7 +555,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ WRITE_ONLY → VALIDATED
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │             rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │   │   │
 │   │   └── • 1 Validation operation
@@ -574,7 +574,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
 │   │   │   │   │     rule: "primary index swap"
 │   │   │   │   │
-│   │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │   │     rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: VALIDATED->PUBLIC"
 │   │   │   │   │
 │   │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
@@ -599,7 +599,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   │   ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │   │     rule: "primary index with new columns should exist before temp indexes"
 │   │   │   │   │
-│   │   │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
+│   │   │   │   └── • PreviousTransactionPrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
 │   │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │   │   │   │
 │   │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
@@ -613,7 +613,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
 │   │   │   │   │ PUBLIC → VALIDATED
 │   │   │   │   │
-│   │   │   │   └── • PreviousStagePrecedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+│   │   │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
 │   │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │   │   │   │
 │   │   │   └── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
@@ -673,7 +673,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
 │   │   │   │   │ DELETE_ONLY → WRITE_ONLY
 │   │   │   │   │
-│   │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
+│   │   │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
 │   │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │   │   │   │   │
 │   │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
@@ -705,7 +705,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │       │ BACKFILL_ONLY → BACKFILLED
 │   │   │       │
-│   │   │       ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+│   │   │       ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │       │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED"
 │   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
@@ -728,7 +728,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │       │ BACKFILLED → DELETE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from BACKFILLED PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+│   │   │       └── • PreviousTransactionPrecedence dependency from BACKFILLED PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -751,7 +751,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │       │ DELETE_ONLY → MERGE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -774,7 +774,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │       │ MERGE_ONLY → MERGED
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED"
 │   │   │
 │   │   └── • 1 Backfill operation
@@ -791,7 +791,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │       │ MERGED → WRITE_ONLY
 │   │   │       │
-│   │   │       └── • PreviousStagePrecedence dependency from MERGED PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGED PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
@@ -814,7 +814,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │   └── • PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │       │       │ WRITE_ONLY → VALIDATED
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+│       │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
 │       │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │       │
 │       └── • 1 Validation operation
@@ -832,7 +832,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
@@ -853,7 +853,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
     │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
     │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
@@ -867,7 +867,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
     │   │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
@@ -879,7 +879,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
     │   │   │   │     rule: "column no longer public before dependents"
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from VALIDATED ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
     │   │   │         rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
@@ -900,7 +900,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   └── • PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │       │ VALIDATED → DELETE_ONLY
     │   │       │
-    │   │       └── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │       └── • PreviousTransactionPrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │             rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │
     │   └── • 12 Mutation operations
@@ -973,7 +973,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   │   ├── • SameStagePrecedence dependency from TRANSIENT_VALIDATED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │     rule: "primary index swap"
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
     │   │   │   │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}
@@ -994,7 +994,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ PUBLIC → TRANSIENT_VALIDATED
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │         rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: PUBLIC->TRANSIENT_VALIDATED"
     │   │   │
     │   │   ├── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
@@ -1006,7 +1006,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │   │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
@@ -1018,7 +1018,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
     │   │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
     │   │       │
-    │   │       ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
+    │   │       ├── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
     │   │       │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
     │   │       │
     │   │       └── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
@@ -1035,7 +1035,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
     │   │       │     rule: "dependents removed before index"
     │   │       │
-    │   │       ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+    │   │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
     │   │       │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
     │   │       │
     │   │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
@@ -1088,7 +1088,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ TRANSIENT_VALIDATED → TRANSIENT_DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from TRANSIENT_VALIDATED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from TRANSIENT_VALIDATED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │         rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_VALIDATED->TRANSIENT_WRITE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
@@ -1138,7 +1138,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
         │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │   ├── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │     rule: "PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from TRANSIENT_ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
@@ -1191,7 +1191,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
         │   ├── • Column:{DescID: 104, ColumnID: 2}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 2}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 104, ColumnID: 2}
         │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}

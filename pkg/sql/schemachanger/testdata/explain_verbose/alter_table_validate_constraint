@@ -16,7 +16,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
 │       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
 │       │       │ ABSENT → WRITE_ONLY
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+│       │       └── • PreviousTransactionPrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
 │       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │
 │       ├── • 2 elements transitioning toward ABSENT
@@ -78,7 +78,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
 │       │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
 │       │       │ ABSENT → WRITE_ONLY
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+│       │       └── • PreviousTransactionPrecedence dependency from ABSENT CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
 │       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │
 │       ├── • 2 elements transitioning toward ABSENT
@@ -136,7 +136,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
     │   │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
     │   │       │ WRITE_ONLY → VALIDATED
     │   │       │
-    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
     │   │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │
     │   └── • 1 Validation operation
@@ -152,7 +152,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t VALIDATE CONSTRAINT check_i;
         │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
         │   │   │ VALIDATED → PUBLIC
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
+        │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 3}
         │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │   │   │
         │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 3}
