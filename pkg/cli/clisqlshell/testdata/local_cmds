@@ -1,0 +1,141 @@
+run
+a b c
+----
+3 args:
+"a"
+"b"
+"c"
+
+subtest single_quoting
+
+run
+a 'b c' d
+----
+3 args:
+"a"
+"b c"
+"d"
+
+# Double single quotes are just a single qote.
+run
+a     'b''c'  'd'
+----
+3 args:
+"a"
+"b'c"
+"d"
+
+# Spaces are inside the quoted string.
+# It's possible to combine unquoted and quoted strings.
+run
+a  b'c d'e
+----
+2 args:
+"a"
+"bc de"
+
+# Single quotes can be escaped.
+run
+a 'b\'c'
+----
+2 args:
+"a"
+"b'c"
+
+# Backslashes escaped.
+run
+a 'b\\c'
+----
+2 args:
+"a"
+"b\\c"
+
+# Special characters.
+run
+a 'b\n\t\b\r\fc'
+----
+2 args:
+"a"
+"b\n\t\b\r\fc"
+
+# Check octal escapes are 1-3 digits long, hex sequences 1-2 digits long.
+run
+a 'b\1c\12d\123e\1234f' '\x4y\x45z\x456w'
+----
+3 args:
+"a"
+"b\x01c\ndSeS4f"
+"\x04yEzE6w"
+
+subtest end
+
+subtest double_quoting
+
+# Double quotes are included in the output.
+run
+a "b c"
+----
+2 args:
+"a"
+"\"b c\""
+
+# Double double quotes are included as a single double-quote character.
+run
+a "b c""d e"
+----
+2 args:
+"a"
+"\"b c\"d e\""
+
+# It's possible to combine unquoted and quoted strings.
+run
+a b"c d"e
+----
+2 args:
+"a"
+"b\"c d\"e"
+
+subtest end
+
+subtest incomplete_input
+
+run
+a 'b
+----
+ERROR: unterminated quoted string
+
+run
+a 'b\'
+----
+ERROR: unterminated quoted string
+
+run
+a 'b''
+----
+ERROR: unterminated quoted string
+
+subtest end
+
+subtest backslash_commands
+
+run
+\hello world
+----
+2 args:
+"\\hello"
+"world"
+
+run
+\'hello world' universe
+----
+2 args:
+"\\hello world"
+"universe"
+
+run
+a b\c
+----
+ERROR: invalid command delimiter in input
+HINT: To include a literal backslash, use '\\' inside a quoted string.
+
+subtest end
