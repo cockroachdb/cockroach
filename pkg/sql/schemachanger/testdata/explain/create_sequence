@@ -8,6 +8,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 18 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "INCREMENT"}
  │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "MINVALUE"}
  │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "MAXVALUE"}
@@ -21,12 +22,13 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  │         │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
  │         │    ├── ABSENT → PUBLIC IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
  │         │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (sq1+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
  │         │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
  │         └── 28 Mutation operations
  │              ├── CreateSequenceDescriptor {"SequenceID":104}
+ │              ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
+ │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
  │              ├── SetSequenceOptions {"Key":"INCREMENT","SequenceID":104,"Value":"1"}
  │              ├── SetSequenceOptions {"Key":"MINVALUE","SequenceID":104,"Value":"1"}
  │              ├── SetSequenceOptions {"Key":"MAXVALUE","SequenceID":104,"Value":"9223372036854775..."}
@@ -38,8 +40,6 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"TableID":104}
- │              ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
- │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
  │              ├── UpdateOwner {"Owner":{"DescriptorID":104,"Owner":"root"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"root","WithGrantOption":2}}
@@ -58,6 +58,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 18 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 104 (sq1+)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
       │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 104 (sq1+), Name: "INCREMENT"}
       │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 104 (sq1+), Name: "MINVALUE"}
       │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 104 (sq1+), Name: "MAXVALUE"}
@@ -71,7 +72,6 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
       │    │    ├── PUBLIC → ABSENT PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
       │    │    ├── PUBLIC → ABSENT IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
       │    │    ├── PUBLIC → ABSENT IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
       │    │    ├── PUBLIC → ABSENT Owner:{DescID: 104 (sq1+)}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
       │    │    └── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
@@ -80,6 +80,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
       └── Stage 2 of 2 in PreCommitPhase
            ├── 18 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
            │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "INCREMENT"}
            │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "MINVALUE"}
            │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "MAXVALUE"}
@@ -93,12 +94,13 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
            │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 104 (sq1+), IndexID: 1 (primary+)}
            │    ├── ABSENT → PUBLIC IndexName:{DescID: 104 (sq1+), Name: "primary", IndexID: 1 (primary+)}
            │    ├── ABSENT → PUBLIC IndexColumn:{DescID: 104 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (sq1+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
            │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
            └── 30 Mutation operations
                 ├── CreateSequenceDescriptor {"SequenceID":104}
+                ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
+                ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
                 ├── SetSequenceOptions {"Key":"INCREMENT","SequenceID":104,"Value":"1"}
                 ├── SetSequenceOptions {"Key":"MINVALUE","SequenceID":104,"Value":"1"}
                 ├── SetSequenceOptions {"Key":"MAXVALUE","SequenceID":104,"Value":"9223372036854775..."}
@@ -111,8 +113,6 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
                 ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":104}}
                 ├── MaybeAddSplitForIndex {"IndexID":1,"TableID":104}
                 ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"TableID":104}
-                ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
-                ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
                 ├── UpdateOwner {"Owner":{"DescriptorID":104,"Owner":"root"}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"root","WithGrantOption":2}}
