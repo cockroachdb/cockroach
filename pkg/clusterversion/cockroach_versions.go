@@ -574,6 +574,10 @@ const (
 	// role for all existing functions.
 	V23_2_GrantExecuteToPublic
 
+	// V23_2_AddSystemExecInsightsTable is the version at which Cockroach creates
+	// stmnt_exec_insights and txn_exec_insights system tables.
+	V23_2_AddSystemExecInsightsTable
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -1002,6 +1006,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_GrantExecuteToPublic,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 26},
+	},
+	{
+		Key:     V23_2_AddSystemExecInsightsTable,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 28},
 	},
 
 	// *************************************************
