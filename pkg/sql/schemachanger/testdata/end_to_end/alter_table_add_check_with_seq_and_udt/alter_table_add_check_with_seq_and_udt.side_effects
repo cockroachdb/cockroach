@@ -1,4 +1,4 @@
-/* setup */
+ /* setup */
 CREATE SEQUENCE s;
 CREATE TYPE typ AS ENUM ('a', 'b');
 CREATE TABLE t (i INT PRIMARY KEY, j STRING);

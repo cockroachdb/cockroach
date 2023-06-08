@@ -192,6 +192,10 @@ type SchemaFeatureChecker interface {
 	CanPerformDropOwnedBy(
 		ctx context.Context, role username.SQLUsername,
 	) (bool, error)
+
+	// CanCreateCrossDBSequenceOwnerRef returns if cross database sequence
+	// owner references are allowed.
+	CanCreateCrossDBSequenceOwnerRef() error
 }
 
 // PrivilegeChecker checks an element's privileges.

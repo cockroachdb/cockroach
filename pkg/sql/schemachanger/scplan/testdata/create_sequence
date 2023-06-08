@@ -4,6 +4,7 @@ CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
 StatementPhase stage 1 of 1 with 28 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: INCREMENT}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: MINVALUE}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: MAXVALUE}, PUBLIC], ABSENT] -> PUBLIC
@@ -17,7 +18,6 @@ StatementPhase stage 1 of 1 with 28 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 0}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexName:{DescID: 104, Name: primary, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], ABSENT] -> PUBLIC
@@ -85,12 +85,6 @@ StatementPhase stage 1 of 1 with 28 MutationType ops
       ColumnID: 1
       IndexID: 1
       TableID: 104
-    *scop.AddDescriptorName
-      Namespace:
-        DatabaseID: 100
-        DescriptorID: 104
-        Name: sq1
-        SchemaID: 101
     *scop.UpdateOwner
       Owner:
         DescriptorID: 104
@@ -142,6 +136,7 @@ StatementPhase stage 1 of 1 with 28 MutationType ops
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Sequence:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
     [[SequenceOption:{DescID: 104, Name: INCREMENT}, PUBLIC], PUBLIC] -> ABSENT
     [[SequenceOption:{DescID: 104, Name: MINVALUE}, PUBLIC], PUBLIC] -> ABSENT
     [[SequenceOption:{DescID: 104, Name: MAXVALUE}, PUBLIC], PUBLIC] -> ABSENT
@@ -155,7 +150,6 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 0}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 104, Name: primary, IndexID: 1}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, PUBLIC], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], PUBLIC] -> ABSENT
@@ -165,6 +159,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
 PreCommitPhase stage 2 of 2 with 30 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: INCREMENT}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: MINVALUE}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: MAXVALUE}, PUBLIC], ABSENT] -> PUBLIC
@@ -178,7 +173,6 @@ PreCommitPhase stage 2 of 2 with 30 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 0}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexName:{DescID: 104, Name: primary, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], ABSENT] -> PUBLIC
@@ -249,12 +243,6 @@ PreCommitPhase stage 2 of 2 with 30 MutationType ops
       ColumnID: 1
       IndexID: 1
       TableID: 104
-    *scop.AddDescriptorName
-      Namespace:
-        DatabaseID: 100
-        DescriptorID: 104
-        Name: sq1
-        SchemaID: 101
     *scop.UpdateOwner
       Owner:
         DescriptorID: 104
