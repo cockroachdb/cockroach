@@ -2103,6 +2103,13 @@ func TestTenantLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestTenantLogic_udf_body_rewrite(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_body_rewrite")
+}
+
 func TestTenantLogic_udf_delete(
 	t *testing.T,
 ) {

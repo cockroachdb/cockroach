@@ -1,0 +1,317 @@
+statement ok
+CREATE TABLE t1 (a INT, b INT, c INT);
+CREATE TABLE t2 (a INT, b INT, d INT);
+INSERT INTO t1 VALUES (1, 11, 111), (2, 22, 222), (3, 33, 333);
+INSERT INTO t2 VALUES (1, 11, 111), (2, 22, 222), (3, 33, 333);
+
+# Need to turn declarative schema changer because function `get_body_str`
+# created below would resolve a descriptorless public schema "system.public"
+# which is not supported in declarative schema changer. Declarative schema
+# changer falls back to legacy schema changer, and the descriptor id counter is
+# increased twice. It cause the test to fail due to id inconsistency.
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'off'
+
+statement ok
+CREATE FUNCTION get_body_str(fn_name STRING) RETURNS STRING
+LANGUAGE SQL
+AS $$
+  SELECT crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor', descriptor, false
+  )->'function'->'functionBody'
+  FROM system.descriptor WHERE id = fn_name::regproc::int - 100000;
+$$;
+
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+# Make sure that unqualified columns names are not rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT a FROM t1 WHERE b > 20 ORDER BY b;
+$$
+
+# Make sure table names are rewritten.
+query T
+SELECT get_body_str('f');
+----
+"SELECT a FROM {TABLE:106} WHERE b > 20 ORDER BY b;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+# Make sure function is still executable.
+query I
+SELECT f()
+----
+2
+
+# Make sure that qualified column names are rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT t1.a FROM t1 WHERE t1.b > 20 ORDER BY t1.b;
+$$
+
+# Make sure table names are rewritten.
+query T
+SELECT get_body_str('f');
+----
+"SELECT {TABLE:106}.a FROM {TABLE:106} WHERE {TABLE:106}.b > 20 ORDER BY {TABLE:106}.b;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query I
+SELECT f()
+----
+2
+
+# Make sure that column names from subquery are not rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT t.a FROM (SELECT a FROM t1 WHERE b > 20 ORDER BY b) t WHERE t.a > 1 ORDER BY t.a;
+$$
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT t.a FROM (SELECT a FROM {TABLE:106} WHERE b > 20 ORDER BY b) AS t WHERE t.a > 1 ORDER BY t.a;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query I
+SELECT f()
+----
+2
+
+# Make sure that "ORDER BY star" and "GROUP BY star" are not rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f_order_star() RETURNS RECORD
+LANGUAGE SQL
+AS $$
+  SELECT *
+  FROM t1 JOIN t2 ON c = d
+  GROUP BY t1.*, t2.*
+  ORDER BY t1.*, t2.*;
+$$
+
+query T
+SELECT get_body_str('f_order_star');
+----
+"SELECT {TABLE:106}.a, {TABLE:106}.b, {TABLE:106}.c, {TABLE:107}.a, {TABLE:107}.b, {TABLE:107}.d FROM {TABLE:106} JOIN {TABLE:107} ON c = d GROUP BY t1.*, t2.* ORDER BY t1.*, t2.*;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query T
+SELECT f_order_star()
+----
+(1,11,111,1,11,111)
+
+# Make sure that SRF column in ORDER BY is not rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f_order_srf() RETURNS RECORD
+LANGUAGE SQL
+AS $$
+  SELECT (pg_get_keywords()).* ORDER BY word LIMIT 1
+$$
+
+query T
+SELECT get_body_str('f_order_srf');
+----
+"SELECT (pg_get_keywords()).word, (pg_get_keywords()).catcode, (pg_get_keywords()).catdesc ORDER BY word LIMIT 1;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query T
+SELECT f_order_srf()
+----
+(abort,U,unreserved)
+
+# Make sure qualified column names in JOIN, GROUP BY, HAVING are rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT t1.a + t2.a
+  FROM t1
+  JOIN t2 ON t1.b = t2.b
+  GROUP BY t1.a + t2.a
+  HAVING t1.a + t2.a > 1
+  ORDER BY t1.a + t2.a;
+$$
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT {TABLE:106}.a + {TABLE:107}.a FROM {TABLE:106} JOIN {TABLE:107} ON {TABLE:106}.b = {TABLE:107}.b GROUP BY {TABLE:106}.a + {TABLE:107}.a HAVING ({TABLE:106}.a + {TABLE:107}.a) > 1 ORDER BY {TABLE:106}.a + {TABLE:107}.a;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query I
+SELECT f()
+----
+2
+
+# Make sure unqualified column names in JOIN, GROUP BY, HAVING are not
+# rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT c + d
+  FROM t1
+  JOIN t2 ON c = d
+  GROUP BY c + d
+  HAVING c + d > 1
+  ORDER BY c + d;
+$$
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT c + d FROM {TABLE:106} JOIN {TABLE:107} ON c = d GROUP BY c + d HAVING (c + d) > 1 ORDER BY c + d;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query I
+SELECT f()
+----
+222
+
+# Make sure JOIN USING is not rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT t1.a + t2.a
+  FROM t1
+  JOIN t2 USING (a)
+$$
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT {TABLE:106}.a + {TABLE:107}.a FROM {TABLE:106} JOIN {TABLE:107} USING (a);"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+# Make sure table aliases are not rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT p.a + q.a
+  FROM t1 as p
+  JOIN t2 as q ON p.b = q.b
+  GROUP BY p.a + q.a
+  HAVING p.a + q.a > 1
+  ORDER BY p.a + q.a;
+$$
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT p.a + q.a FROM {TABLE:106} AS p JOIN {TABLE:107} AS q ON p.b = q.b GROUP BY p.a + q.a HAVING (p.a + q.a) > 1 ORDER BY p.a + q.a;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query I
+SELECT f()
+----
+2
+
+# Make sure unqualified DISTINCT ON columns are not rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT DISTINCT ON (a) b FROM t1 ORDER BY a;
+$$
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT DISTINCT ON (a) b FROM {TABLE:106} ORDER BY a;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query I
+SELECT f()
+----
+11
+
+# Make sure qualified DISTINCT ON columns are rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT DISTINCT ON (t1.a) t1.b FROM t1 ORDER BY a;
+$$
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT DISTINCT ON ({TABLE:106}.a) {TABLE:106}.b FROM {TABLE:106} ORDER BY a;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query I
+SELECT f()
+----
+11
+
+# Make sure * expanded columns are rewritten.
+statement ok
+CREATE OR REPLACE FUNCTION f_expand() RETURNS RECORD
+LANGUAGE SQL
+AS $$
+  SELECT *, a FROM t1;
+$$
+
+query T
+SELECT get_body_str('f_expand');
+----
+"SELECT {TABLE:106}.a, {TABLE:106}.b, {TABLE:106}.c, a FROM {TABLE:106};"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query T
+SELECT f_expand()
+----
+(1,11,111,1)
+
+# Make sure * expanded columns are only rewritten for columns from non-aliased source.
+statement ok
+CREATE OR REPLACE FUNCTION f_expand() RETURNS RECORD
+LANGUAGE SQL
+AS $$
+  SELECT * FROM (SELECT *, a FROM t1) t;
+$$
+
+query T
+SELECT get_body_str('f_expand');
+----
+"SELECT t.a, t.b, t.c, t.a FROM (SELECT {TABLE:106}.a, {TABLE:106}.b, {TABLE:106}.c, a FROM {TABLE:106}) AS t;"
+
+# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+
+query T
+SELECT f_expand()
+----
+(1,11,111,1)
+
+# Make sure that unknown table ids should resolve to an error.
+statement error pq: {TABLE:12800}: relation "\[12800\]" does not exist
+SELECT * FROM {TABLE:12800};
+
+statement error pq: relation "\[12800\]" does not exist
+SELECT {TABLE:12800}.a FROM t1;
+
+statement error pq: relation "\[12800\]" does not exist
+SELECT {TABLE:12800}.a FROM {TABLE:106};

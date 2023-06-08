@@ -28,14 +28,18 @@ import (
 // analyzeOrderBy analyzes an Ordering physical property from the ORDER BY
 // clause and adds the resulting typed expressions to orderByScope.
 func (b *Builder) analyzeOrderBy(
-	orderBy tree.OrderBy, inScope, projectionsScope *scope, rejectFlags tree.SemaRejectFlags,
+	orderBy *tree.OrderBy, inScope, projectionsScope *scope, rejectFlags tree.SemaRejectFlags,
 ) (orderByScope *scope) {
 	if orderBy == nil {
 		return nil
 	}
+	ob := *orderBy
+	if len(ob) == 0 {
+		return nil
+	}
 
 	orderByScope = inScope.push()
-	orderByScope.cols = make([]scopeColumn, 0, len(orderBy))
+	orderByScope.cols = make([]scopeColumn, 0, len(ob))
 
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
@@ -44,8 +48,11 @@ func (b *Builder) analyzeOrderBy(
 	b.semaCtx.Properties.Require(exprKindOrderBy.String(), rejectFlags)
 	inScope.context = exprKindOrderBy
 
-	for i := range orderBy {
-		b.analyzeOrderByArg(orderBy[i], inScope, projectionsScope, orderByScope)
+	for i := range ob {
+		b.analyzeOrderByArg(ob[i], inScope, projectionsScope, orderByScope)
+	}
+	if b.insideFuncDef {
+		*orderBy = ob
 	}
 	return orderByScope
 }
@@ -174,7 +181,7 @@ func (b *Builder) analyzeOrderByArg(
 
 	// Analyze the ORDER BY column(s).
 	start := len(orderByScope.cols)
-	b.analyzeExtraArgument(order.Expr, inScope, projectionsScope, orderByScope, nullsDefaultOrder)
+	b.analyzeExtraArgument(&order.Expr, inScope, projectionsScope, orderByScope, nullsDefaultOrder)
 	for i := start; i < len(orderByScope.cols); i++ {
 		col := &orderByScope.cols[i]
 		col.descending = order.Direction == tree.Descending
@@ -203,10 +210,10 @@ func (b *Builder) buildOrderByArg(
 // required to explicitly place nulls first or nulls last (when
 // nullsDefaultOrder is false).
 func (b *Builder) analyzeExtraArgument(
-	expr tree.Expr, inScope, projectionsScope, extraColsScope *scope, nullsDefaultOrder bool,
+	exprIn *tree.Expr, inScope, projectionsScope, extraColsScope *scope, nullsDefaultOrder bool,
 ) {
 	// Unwrap parenthesized expressions like "((a))" to "a".
-	expr = tree.StripParens(expr)
+	expr := tree.StripParens(*exprIn)
 
 	// The logical data source for ORDER BY or DISTINCT ON is the list of column
 	// expressions for a SELECT, as specified in the input SQL text (or an entire
@@ -273,6 +280,11 @@ func (b *Builder) analyzeExtraArgument(
 			)
 		}
 		extraColsScope.addColumn(scopeColName(""), e)
+	}
+
+	// Only do rewrite when the expression is not an alias and ordinal.
+	if b.insideFuncDef && idx == -1 {
+		*exprIn, _ = tree.WalkExpr(newColumnPrefixRewritter(inScope), expr)
 	}
 }
 
