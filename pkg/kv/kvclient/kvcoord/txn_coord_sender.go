@@ -1355,7 +1355,7 @@ func (tc *TxnCoordSender) PrepareRetryableError(
 func (tc *TxnCoordSender) Step(ctx context.Context) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	return tc.interceptorAlloc.txnSeqNumAllocator.stepLocked(ctx)
+	return tc.interceptorAlloc.txnSeqNumAllocator.manualStepReadSeqLocked(ctx)
 }
 
 // GetReadSeqNum is part of the TxnSender interface.
@@ -1388,11 +1388,7 @@ func (tc *TxnCoordSender) ConfigureStepping(
 
 // GetSteppingMode is part of the TxnSender interface.
 func (tc *TxnCoordSender) GetSteppingMode(ctx context.Context) (curMode kv.SteppingMode) {
-	curMode = kv.SteppingDisabled
-	if tc.interceptorAlloc.txnSeqNumAllocator.steppingModeEnabled {
-		curMode = kv.SteppingEnabled
-	}
-	return curMode
+	return tc.interceptorAlloc.txnSeqNumAllocator.steppingMode
 }
 
 // DeferCommitWait is part of the TxnSender interface.
