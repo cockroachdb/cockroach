@@ -60,9 +60,6 @@ func (n *TableRef) Format(ctx *FmtCtx) {
 }
 func (n *TableRef) String() string { return AsString(n) }
 
-// tableExpr implements the TableExpr interface.
-func (n *TableRef) tableExpr() {}
-
 // TableIDRef represents a table by its descriptor ID.
 type TableIDRef struct {
 	ID int64
@@ -72,8 +69,52 @@ func (expr *TableIDRef) Format(ctx *FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("{TABLE:%v}", expr.ID))
 }
 
+func (expr *TableIDRef) String() string {
+	return AsString(expr)
+}
+
 func (expr *TableIDRef) WalkTableExpr(visitor Visitor) TableExpr {
+	newExpr, changed := WalkExpr(visitor, &TableIDRefExpr{TableIDRef: *expr})
+	if changed {
+		switch t := newExpr.(type) {
+		case *TableIDRefExpr:
+			return &t.TableIDRef
+		case *TableNameExpr:
+			return &t.TableName
+		default:
+			panic("TableIDRef cannot be changed to other types other than TableIDRef and TableName")
+		}
+	}
 	return expr
+}
+
+// TableNameExpr is a wrapper of TableName implementing the Expr interface. It's
+// being used as a helper for UDF/View query rewriting where the expression need
+// to be walked by WalkExpr() function. Wrapping TableName because we can't make
+// TableName implement Expr since all Exprs are parenthesized in
+// FmtAlwaysGroupExprs with formatting flag and parenthesized TableName cannot
+// be parsed as valid syntax.
+type TableNameExpr struct {
+	TableName
+}
+
+// TableIDRefExpr is a wrapper of TableIDRef implementing the Expr interface.
+// It's being used as a helper for UDF/View query rewriting where the expression
+// need to be walked by WalkExpr() function. Wrapping TableIDRef because we
+// can't make TableIDRef implement Expr since all Exprs are parenthesized in
+// FmtAlwaysGroupExprs with formatting flag and parenthesized TableIDRef cannot
+// be parsed as valid syntax.
+type TableIDRefExpr struct {
+	TableIDRef
+}
+
+// Format implements the NodeFormatter interface.
+func (expr *TableIDRefExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("{TABLE:%v}", expr.ID))
+}
+
+func (expr *TableIDRefExpr) String() string {
+	return AsString(expr)
 }
 
 // ColumnNameRef represent a column prefixed with a table id reference.

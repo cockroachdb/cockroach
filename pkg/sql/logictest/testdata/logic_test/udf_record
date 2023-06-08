@@ -81,7 +81,7 @@ f_table  CREATE FUNCTION public.f_table()
            CALLED ON NULL INPUT
            LANGUAGE SQL
            AS $$
-           SELECT t.a, t.b FROM test.public.t ORDER BY a LIMIT 1;
+           SELECT test.public.t.a, test.public.t.b FROM test.public.t ORDER BY a LIMIT 1;
          $$
 
 query T
