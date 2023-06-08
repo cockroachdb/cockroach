@@ -330,6 +330,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		grantExecuteToPublicOnAllFunctions,
 	),
+	upgrade.NewTenantUpgrade(
+		"create transaction_execution_insights and statement_execution_insights tables",
+		toCV(clusterversion.V23_2_AddSystemExecInsightsTable),
+		upgrade.NoPrecondition,
+		systemExecInsightsTableMigration,
+	),
 }
 
 var (
