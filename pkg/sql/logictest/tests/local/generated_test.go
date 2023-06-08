@@ -919,6 +919,13 @@ func TestLogic_grant_in_txn(
 	runLogicTest(t, "grant_in_txn")
 }
 
+func TestLogic_grant_inherited(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "grant_inherited")
+}
+
 func TestLogic_grant_on_all_sequences_in_schema(
 	t *testing.T,
 ) {
