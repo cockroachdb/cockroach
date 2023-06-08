@@ -20,7 +20,6 @@ build --flag_alias=dev=//build/toolchains:dev_flag
 build --flag_alias=force_build_cdeps=//build/toolchains:force_build_cdeps_flag
 build --flag_alias=lintonbuild=//build/toolchains:nogo_flag
 build --flag_alias=nolintonbuild=//build/toolchains:nonogo_explicit_flag
-build --flag_alias=with_ui=//pkg/ui:with_ui_flag
 
 build:crdb_test_off --crdb_test_off
 build:cross --cross
@@ -31,7 +30,6 @@ build:nolintonbuild --nolintonbuild
 # Note: nonogo is classically the name of the nolintonbuild configuration.
 build:nonogo --nolintonbuild
 build:test --crdb_test
-build:with_ui --with_ui
 
 # Basic settings.
 build --define gotags=bazel,gss
