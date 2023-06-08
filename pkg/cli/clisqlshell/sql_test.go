@@ -159,8 +159,7 @@ func Example_sql_config() {
 	// 123
 	// # 1 row
 	// sql --set unknownoption -e select 123 as "123"
-	// ERROR: -e: invalid syntax: \set unknownoption
-	// HINT: Try \? for help.
+	// ERROR: -e: unknown variable name: "unknownoption"
 	// sql --set display_format=invalidvalue -e select 123 as "123"
 	// ERROR: -e: \set display_format=invalidvalue: invalid table display format: invalidvalue
 	// HINT: Possible values: tsv, csv, table, records, ndjson, json, sql, html, raw.
