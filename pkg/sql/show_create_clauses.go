@@ -238,6 +238,55 @@ func formatQuerySequencesForDisplay(
 	return fmtCtx.CloseAndGetString(), nil
 }
 
+// formatTableReferenceForDisplay walks the view query and looks for table ID
+// references in the statement. If it finds any, it will replace the IDs with
+// the descriptor's fully qualified name.
+func formatTableReferenceForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool,
+) (string, error) {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		newExpr, err = schemaexpr.ReplaceTableIDsWithFQNames(ctx, expr, semaCtx)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, newExpr, nil
+	}
+
+	var stmts tree.Statements
+	if multiStmt {
+		parsedStmts, err := parser.Parse(queries)
+		if err != nil {
+			return "", err
+		}
+		stmts = make(tree.Statements, len(parsedStmts))
+		for i, stmt := range parsedStmts {
+			stmts[i] = stmt.AST
+		}
+	} else {
+		stmt, err := parser.ParseOne(queries)
+		if err != nil {
+			return "", err
+		}
+		stmts = tree.Statements{stmt.AST}
+	}
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+		if err != nil {
+			return "", err
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		if multiStmt {
+			fmtCtx.WriteString(";")
+		}
+	}
+	return fmtCtx.CloseAndGetString(), nil
+}
+
 // formatViewQueryTypesForDisplay walks the view query and
 // look for serialized user-defined types. If it finds any,
 // it will deserialize it to display its name.

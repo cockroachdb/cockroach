@@ -3276,7 +3276,11 @@ CREATE TABLE crdb_internal.create_function_statements (
 					if err != nil {
 						return err
 					}
-					stmtStrs := strings.Split(seqReplacedBody, "\n")
+					tableIDReplacedBody, err := formatTableReferenceForDisplay(ctx, &p.semaCtx, seqReplacedBody, true /* multiStmt */)
+					if err != nil {
+						return err
+					}
+					stmtStrs := strings.Split(tableIDReplacedBody, "\n")
 					for i := range stmtStrs {
 						stmtStrs[i] = "\t" + stmtStrs[i]
 					}
