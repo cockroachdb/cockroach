@@ -10638,7 +10638,7 @@ CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
 CREATE TYPE sc1.enum1 AS ENUM('Good');
 CREATE SEQUENCE sc1.sq1;
 CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
-  SELECT a FROM sc1.tbl1;
+  SELECT sc1.tbl1.a FROM sc1.tbl1;
   SELECT nextval('sc1.sq1');
 $$;
 `)
@@ -10677,7 +10677,7 @@ $$;
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
 		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
-		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, "SELECT {TABLE:107}.a FROM {TABLE:107};\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
 		require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
@@ -10730,7 +10730,7 @@ $$;
 		require.Equal(t, 112, int(fnDesc.GetParentID()))
 		require.Equal(t, 114, int(fnDesc.GetParentSchemaID()))
 		// Make sure db name and IDs are rewritten in function body.
-		require.Equal(t, "SELECT a FROM db1_new.sc1.tbl1;\nSELECT nextval(118:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, "SELECT {TABLE:115}.a FROM {TABLE:115};\nSELECT nextval(118:::REGCLASS);", fnDesc.GetFunctionBody())
 		require.Equal(t, 100116, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{115, 118}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{116, 117}, fnDesc.GetDependsOnTypes())
@@ -10777,7 +10777,7 @@ CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
 CREATE TYPE sc1.enum1 AS ENUM('Good');
 CREATE SEQUENCE sc1.sq1;
 CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
-  SELECT a FROM sc1.tbl1;
+  SELECT sc1.tbl1.a FROM sc1.tbl1;
   SELECT nextval('sc1.sq1');
 $$;
 `)
@@ -10816,7 +10816,7 @@ $$;
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
 		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
-		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, "SELECT {TABLE:107}.a FROM {TABLE:107};\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
 		require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
@@ -10871,7 +10871,7 @@ $$;
 		require.Equal(t, 107, int(fnDesc.GetParentID()))
 		require.Equal(t, 125, int(fnDesc.GetParentSchemaID()))
 		// Make sure db name and IDs are rewritten in function body.
-		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(129:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, "SELECT {TABLE:126}.a FROM {TABLE:126};\nSELECT nextval(129:::REGCLASS);", fnDesc.GetFunctionBody())
 		require.Equal(t, 100127, int(fnDesc.GetParams()[0].Type.Oid()))
 		require.Equal(t, []descpb.ID{126, 129}, fnDesc.GetDependsOn())
 		require.Equal(t, []descpb.ID{127, 128}, fnDesc.GetDependsOnTypes())
