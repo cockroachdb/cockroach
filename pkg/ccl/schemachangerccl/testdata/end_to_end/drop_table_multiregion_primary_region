@@ -26,7 +26,7 @@ write *eventpb.DropTable to event log:
     tag: DROP TABLE
     user: root
   tableName: multi_region_test_db.public.table_regional_by_table
-## StatementPhase stage 1 of 1 with 17 MutationType ops
+## StatementPhase stage 1 of 1 with 27 MutationType ops
 delete object namespace entry {104 105 table_regional_by_table} -> 108
 upsert descriptor #106
   ...

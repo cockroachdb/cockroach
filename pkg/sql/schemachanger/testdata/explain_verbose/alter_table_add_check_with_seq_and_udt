@@ -17,7 +17,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │       │   ├── • CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
 │       │   │   │ ABSENT → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
 │       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 107 (t), Name: "check_i_j", ConstraintID: 2 (check_i_j+)}
@@ -77,7 +77,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │       │   ├── • CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
 │       │   │   │ ABSENT → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
 │       │   │         rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 107 (t), Name: "check_i_j", ConstraintID: 2 (check_i_j+)}
@@ -154,7 +154,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
     │   │   └── • CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
     │   │       │ WRITE_ONLY → VALIDATED
     │   │       │
-    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
+    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
     │   │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │
     │   └── • 1 Validation operation
@@ -170,7 +170,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
         │   └── • CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
         │       │ VALIDATED → PUBLIC
         │       │
-        │       └── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
+        │       └── • PreviousTransactionPrecedence dependency from VALIDATED CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (#106)], IndexID: 0, ConstraintID: 2 (check_i_j+), ReferencedSequenceIDs: [104 (s)]}
         │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │
         └── • 6 Mutation operations

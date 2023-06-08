@@ -94,16 +94,18 @@ const (
 	// PreviousStagePrecedence indicates that the source (from) of the edge must
 	// be reached before the destination (to), and _must_ do so in a previous
 	// stage.
+	//
+	// This edge kind is only maintained for compatibility with the 23.1 and 22.2
+	// releases via the release_22_2 and release_23_1 rulesets and should not be
+	// used elsewhere.
+	// Deprecated
 	PreviousStagePrecedence
 
-	// PreviousTransactionPrecedence is like PreviousStagePrecedence but does
-	// not allow the transition to occur unless the current phase is at least
-	// PostCommitPhase, because StatementPhase and PreCommitPhase are special
-	// in that they take place in the same transaction.
+	// PreviousTransactionPrecedence indicates that the source (from) of the edge
+	// must be reached before the destination (to), and _must_ do so in a previous
+	// transaction.
 	//
-	// This edge kind is only maintained for compatibility with the 22.2
-	// release via the release_22_2 ruleset and should not be used elsewhere.
-	// Deprecated.
+	// This edge kind is used to enforce the two-version invariant.
 	PreviousTransactionPrecedence
 )
 
