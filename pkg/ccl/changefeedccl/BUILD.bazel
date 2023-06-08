@@ -303,6 +303,7 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
+        "//pkg/util/uuid",
         "//pkg/workload/bank",
         "//pkg/workload/ledger",
         "//pkg/workload/workloadsql",
