@@ -32,7 +32,10 @@ func runMultiTenantTPCH(
 ) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+	start := func() {
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+	}
+	start()
 
 	setupNames := []string{"single-tenant", "multi-tenant"}
 	const numRunsPerQuery = 3
@@ -71,7 +74,21 @@ func runMultiTenantTPCH(
 	// First, use the cluster as a single tenant deployment. It is important to
 	// not create the tenant yet so that the certs directory is not overwritten.
 	singleTenantConn := c.Conn(ctx, t.L(), 1)
+	// Disable merge queue in the system tenant.
+	if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
+		t.Fatal(err)
+	}
 	runTPCH(singleTenantConn, "" /* url */, 0 /* setupIdx */)
+
+	// Restart and wipe the cluster to remove advantage of the second TPCH run.
+	c.Stop(ctx, t.L(), option.DefaultStopOpts())
+	c.Wipe(ctx)
+	start()
+	singleTenantConn = c.Conn(ctx, t.L(), 1)
+	// Disable merge queue in the system tenant.
+	if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Now we create a tenant and run all TPCH queries within it.
 	const (
