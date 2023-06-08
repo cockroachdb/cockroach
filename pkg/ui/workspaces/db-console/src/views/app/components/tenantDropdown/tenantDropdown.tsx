@@ -38,7 +38,7 @@ const TenantDropdown = () => {
     }
   };
 
-  if (tenants.length == 0) {
+  if (tenants.length < 2) {
     return null;
   }
 
@@ -46,7 +46,7 @@ const TenantDropdown = () => {
     <ErrorBoundary>
       <Dropdown
         items={createDropdownItems()}
-        onChange={tenantID => onTenantChange(tenantID)}
+        onChange={(tenantID: string) => onTenantChange(tenantID)}
       >
         <div className="tenant-selected">{"Tenant " + currentTenant}</div>
       </Dropdown>
