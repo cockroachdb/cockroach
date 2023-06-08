@@ -18,12 +18,14 @@
 package kvprober
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -207,6 +209,25 @@ func (p *ProberOps) Write(key roachpb.Key) func(context.Context, *kv.Txn) error 
 		b.Del(key)
 		return txn.CommitInBatch(ctx, b)
 	}
+}
+
+// IsWriteProbe returns true if this batch request is a write probe. It's used
+// in performance-critical hot paths, and must be cheap in the common case.
+func IsWriteProbe(ba *kvpb.BatchRequest) bool {
+	if len(ba.Requests) != 3 {
+		return false
+	} else if ba.Requests[2].GetEndTxn() == nil {
+		return false
+	} else if put := ba.Requests[0].GetPut(); put == nil {
+		return false
+	} else if key := put.RequestHeader.Key; !bytes.HasPrefix(key, keys.LocalRangePrefix) {
+		return false
+	} else if _, suffix, _, err := keys.DecodeRangeKey(key); err != nil {
+		return false
+	} else if !suffix.Equal(keys.LocalRangeProbeSuffix.AsRawKey()) {
+		return false
+	}
+	return true
 }
 
 // validateKey returns an error if the key is not valid for use by the kvprober.

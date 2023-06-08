@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -33,6 +34,12 @@ func (r *Replica) maybeAcquireProposalQuota(
 	// We don't want to delay lease requests or transfers, in particular
 	// expiration lease extensions. These are small and latency-sensitive.
 	if ba.IsSingleRequestLeaseRequest() || ba.IsSingleTransferLeaseRequest() {
+		return nil, nil
+	}
+
+	// Similarly, kvprober write probes should bypass the quota pool, since they
+	// have a low timeout.
+	if kvprober.IsWriteProbe(ba) {
 		return nil, nil
 	}
 
