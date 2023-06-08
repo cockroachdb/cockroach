@@ -174,6 +174,7 @@ go_test(
         "bench_covering_test.go",
         "bench_test.go",
         "create_scheduled_backup_test.go",
+        "data_driven_generated_test.go",  # keep
         "datadriven_test.go",
         "file_sst_sink_test.go",
         "full_cluster_backup_restore_test.go",
@@ -182,6 +183,9 @@ go_test(
         "main_test.go",
         "partitioned_backup_test.go",
         "restore_data_processor_test.go",
+        "restore_entry_cover_generated_test.go",  # keep
+        "restore_memory_monitoring_generated_test.go",  # keep
+        "restore_mid_schema_change_generated_test.go",  # keep
         "restore_mid_schema_change_test.go",
         "restore_old_sequences_test.go",
         "restore_old_versions_test.go",
@@ -206,6 +210,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
+        "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/backupccl/backupdest",
@@ -343,6 +348,31 @@ stringer(
     src = "backup_telemetry.go",
     additional_args = ["-linecomment"],
     typ = "targetScope",
+)
+
+genrule(
+    name = "gen-backupccl-tests",
+    srcs = [
+        "//pkg/ccl/backupccl:testdata",
+    ],
+    outs = [
+        "restore_memory_monitoring_generated_test.go",
+        "data_driven_generated_test.go",
+        "restore_entry_cover_generated_test.go",
+        "restore_mid_schema_change_generated_test.go",
+    ],
+    cmd = """
+        $(location //pkg/ccl/backupccl/testgen) -restore-memory-monitoring=$(location restore_memory_monitoring_generated_test.go) \
+        -data-driven=$(location data_driven_generated_test.go) -restore-entry-cover=$(location restore_entry_cover_generated_test.go) \
+        -restore-mid-schema-change=$(location restore_mid_schema_change_generated_test.go)
+       """,
+    exec_tools = [
+        "//pkg/ccl/backupccl/testgen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 get_x_data(name = "get_x_data")
