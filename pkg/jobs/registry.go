@@ -428,7 +428,7 @@ func createJobsInBatchWithTxn(
 		return nil, err
 	}
 
-	// Insert the job payload and details into the system.jobs_info table if the
+	// Insert the job payload and details into the system.job_info table if the
 	// associated cluster version is active.
 	//
 	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
@@ -676,7 +676,7 @@ func (r *Registry) CreateJobWithTxn(
 			return err
 		}
 
-		// Insert the job payload and details into the system.jobs_info table if the
+		// Insert the job payload and details into the system.job_info table if the
 		// associated cluster version is active.
 		//
 		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
@@ -811,7 +811,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 			return err
 		}
 
-		// Insert the job payload and details into the system.jobs_info table if the
+		// Insert the job payload and details into the system.job_info table if the
 		// associated cluster version is active.
 		//
 		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
