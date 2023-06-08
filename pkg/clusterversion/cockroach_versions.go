@@ -462,7 +462,7 @@ const (
 	V23_1AllowNewSystemPrivileges
 
 	// V23_1JobInfoTableIsBackfilled is a version gate after which the
-	// system.jobs_info table has been backfilled with rows for the payload and
+	// system.job_info table has been backfilled with rows for the payload and
 	// progress of each job in the system.jobs table.
 	V23_1JobInfoTableIsBackfilled
 
