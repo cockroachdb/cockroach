@@ -26,7 +26,7 @@ const TenantDropdown = () => {
   const createDropdownItems = () => {
     return (
       tenants?.map(tenantID => {
-        return { name: "Tenant " + tenantID, value: tenantID };
+        return { name: "Tenant: " + tenantID, value: tenantID };
       }) || []
     );
   };
@@ -38,7 +38,7 @@ const TenantDropdown = () => {
     }
   };
 
-  if (tenants.length == 0) {
+  if (tenants.length < 2) {
     return null;
   }
 
@@ -46,9 +46,9 @@ const TenantDropdown = () => {
     <ErrorBoundary>
       <Dropdown
         items={createDropdownItems()}
-        onChange={tenantID => onTenantChange(tenantID)}
+        onChange={(tenantID: string) => onTenantChange(tenantID)}
       >
-        <div className="tenant-selected">{"Tenant " + currentTenant}</div>
+        <div className="tenant-selected">{"Tenant: " + currentTenant}</div>
       </Dropdown>
     </ErrorBoundary>
   );
