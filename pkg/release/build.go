@@ -181,7 +181,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s", targetTriple, opts.Channel)
 	}
 	buildArgs = append(buildArgs, stampCommand)
-	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
+	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
 	buildArgs = append(buildArgs, configs...)
 	cmd := exec.Command("bazel", buildArgs...)
 	cmd.Dir = pkgDir
