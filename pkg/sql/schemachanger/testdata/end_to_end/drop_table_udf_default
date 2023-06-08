@@ -19,7 +19,7 @@ write *eventpb.DropTable to event log:
     tag: DROP TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 20 MutationType ops
+## StatementPhase stage 1 of 1 with 33 MutationType ops
 delete object namespace entry {100 101 t} -> 105
 upsert descriptor #104
    function:

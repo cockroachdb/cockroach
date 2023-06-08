@@ -90,7 +90,7 @@ func init() {
 			))
 			registerDepRule(
 				ruleName,
-				scgraph.PreviousStagePrecedence,
+				scgraph.PreviousTransactionPrecedence,
 				"prev", "next",
 				func(from, to NodeVars) rel.Clauses {
 					return clausesForTwoVersionEdge(

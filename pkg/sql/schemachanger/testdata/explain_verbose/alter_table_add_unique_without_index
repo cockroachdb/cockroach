@@ -17,7 +17,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 │       │   ├── • UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
 │       │   │   │ ABSENT → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
 │       │   │         rule: "UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j+)}
@@ -64,7 +64,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 │       │   ├── • UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
 │       │   │   │ ABSENT → WRITE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
 │       │   │         rule: "UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │   │
 │       │   └── • ConstraintWithoutIndexName:{DescID: 104 (t), Name: "unique_j", ConstraintID: 2 (unique_j+)}
@@ -113,7 +113,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
     │   │   └── • UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
     │   │       │ WRITE_ONLY → VALIDATED
     │   │       │
-    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
+    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
     │   │             rule: "UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │
     │   └── • 1 Validation operation
@@ -129,7 +129,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
         │   └── • UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
         │       │ VALIDATED → PUBLIC
         │       │
-        │       └── • PreviousStagePrecedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
+        │       └── • PreviousTransactionPrecedence dependency from VALIDATED UniqueWithoutIndexConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (unique_j+)}
         │             rule: "UniqueWithoutIndexConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │
         └── • 3 Mutation operations

@@ -45,7 +45,7 @@ write *eventpb.DropIndex to event log:
     tag: DROP INDEX
     user: root
   tableName: defaultdb.public.v2
-## StatementPhase stage 1 of 1 with 21 MutationType ops
+## StatementPhase stage 1 of 1 with 34 MutationType ops
 delete object namespace entry {100 101 v3} -> 106
 upsert descriptor #105
   ...

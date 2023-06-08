@@ -30,7 +30,7 @@ func init() {
 
 	registerDepRule(
 		"descriptor dropped in transaction before removal",
-		scgraph.PreviousStagePrecedence,
+		scgraph.PreviousTransactionPrecedence,
 		"dropped", "absent",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{

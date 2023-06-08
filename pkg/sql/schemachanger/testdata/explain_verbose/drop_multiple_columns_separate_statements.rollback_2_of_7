@@ -12,12 +12,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 7 elements transitioning toward PUBLIC
+    │   ├── • 9 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 104 (t), ColumnID: 3 (k+)}
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (k+)}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (k+)}
     │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104 (t), Name: "k", ColumnID: 3 (k+)}
@@ -38,7 +38,13 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 1 (t_pkey+)}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 2 (t_expr_k_idx+)}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 2 (t_expr_k_idx+)}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 3 (t_pkey-)}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
     │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
     │   │   ├── • ColumnName:{DescID: 104 (t), Name: "k", ColumnID: 3 (k+)}
@@ -47,7 +53,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │   ├── • Column:{DescID: 104 (t), ColumnID: 2 (j+)}
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 2 (j+)}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 2 (j+)}
     │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+)}
@@ -68,7 +74,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104 (t), ColumnID: 2 (j+)}
     │   │   │   │     rule: "ensure columns are in increasing order"
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr+)}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr+)}
     │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (crdb_internal_idx_expr+)}
@@ -92,11 +98,17 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_expr_k_idx+)}
     │   │   │   │     rule: "index dependents exist before index becomes public"
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx+)}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx+)}
     │   │   │   │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │   │   │
     │   │   │   └── • Precedence dependency from PUBLIC IndexName:{DescID: 104 (t), Name: "t_expr_k_idx", IndexID: 2 (t_expr_k_idx+)}
     │   │   │         rule: "index dependents exist before index becomes public"
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 3 (t_pkey-)}
+    │   │   │     ABSENT → PUBLIC
+    │   │   │
+    │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 3 (k+), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
+    │   │   │     ABSENT → PUBLIC
     │   │   │
     │   │   ├── • ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
     │   │   │     ABSENT → PUBLIC
@@ -121,7 +133,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │   ├── • PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
     │   │   │   │ BACKFILL_ONLY → ABSENT
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 3 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 4 (crdb_internal_index_4_name_placeholder), SourceIndexID: 1 (t_pkey+)}
     │   │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (t_pkey-)}
@@ -133,10 +145,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │   └── • TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
     │   │       │ WRITE_ONLY → DELETE_ONLY
     │   │       │
-    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
     │   │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │
-    │   └── • 17 Mutation operations
+    │   └── • 19 Mutation operations
     │       │
     │       ├── • SetColumnName
     │       │     ColumnID: 3
@@ -148,6 +160,18 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │       │     TableID: 104
     │       │
     │       ├── • RefreshStats
+    │       │     TableID: 104
+    │       │
+    │       ├── • AddColumnToIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 3
+    │       │     Kind: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • AddColumnToIndex
+    │       │     ColumnID: 3
+    │       │     IndexID: 4
+    │       │     Kind: 2
     │       │     TableID: 104
     │       │
     │       ├── • SetColumnName
@@ -232,7 +256,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
         │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
         │       │     rule: "dependents removed before index"
         │       │
-        │       └── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+        │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
         │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │
         └── • 5 Mutation operations

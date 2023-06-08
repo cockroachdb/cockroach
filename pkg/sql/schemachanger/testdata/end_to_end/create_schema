@@ -12,7 +12,7 @@ write *eventpb.CreateSchema to event log:
     statement: CREATE SCHEMA ‹defaultdb›.‹sc›
     tag: CREATE SCHEMA
     user: root
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 8 MutationType ops
 add schema namespace entry {100 0 sc} -> 104
 upsert descriptor #104
   -
@@ -31,7 +31,6 @@ upsert descriptor #104
   +      userProto: root
   +      withGrantOption: "2"
   +    version: 2
-  +  state: ADD
   +  version: "1"
 upsert descriptor #100
   ...

@@ -19,7 +19,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   ├── • SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
     │   │   │   │ MERGE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from MERGE_ONLY SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from MERGE_ONLY SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
     │   │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: MERGE_ONLY->WRITE_ONLY"
     │   │   │
     │   │   ├── • IndexPartitioning:{DescID: 104 (t1), IndexID: 2 (id1-)}
@@ -52,7 +52,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   ├── • TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
     │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexPartitioning:{DescID: 104 (t1), IndexID: 3}
@@ -140,7 +140,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
         │   ├── • SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t1), IndexID: 2 (id1-), TemporaryIndexID: 3, SourceIndexID: 1 (t1_pkey)}
         │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 104 (t1), IndexID: 2 (id1-)}
@@ -167,7 +167,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
         │   ├── • TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t1), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t1_pkey)}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 104 (t1), IndexID: 3}
