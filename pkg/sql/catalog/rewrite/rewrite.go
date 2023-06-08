@@ -911,6 +911,10 @@ func FunctionDescs(
 		if err != nil {
 			return err
 		}
+		fnBody, err = rewriteIDReferencesInUDFBody(fnDesc.Name, fnBody, descriptorRewrites)
+		if err != nil {
+			return err
+		}
 		fnDesc.FunctionBody = fnBody
 
 		// Rewrite type IDs.
@@ -956,4 +960,52 @@ func FunctionDescs(
 		}
 	}
 	return nil
+}
+
+func rewriteIDReferencesInUDFBody(
+	fn string, fnBody string, descriptorRewrites jobspb.DescRewriteMap,
+) (string, error) {
+	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		switch t := expr.(type) {
+		case *tree.ColumnNameRef:
+			if depRewrite, ok := descriptorRewrites[descpb.ID(t.Table.ID)]; ok {
+				return false, &tree.ColumnNameRef{
+					Table:      &tree.TableIDRef{ID: int64(depRewrite.ID)},
+					ColumnName: t.ColumnName,
+				}, nil
+			} else {
+				return false, nil, errors.AssertionFailedf(
+					"cannot restore function %q because referenced table %d was not found",
+					fn, t.Table.ID)
+			}
+		case *tree.TableIDRefExpr:
+			if depRewrite, ok := descriptorRewrites[descpb.ID(t.ID)]; ok {
+				return false, &tree.TableIDRefExpr{TableIDRef: tree.TableIDRef{ID: int64(depRewrite.ID)}}, nil
+			} else {
+				return false, nil, errors.AssertionFailedf(
+					"cannot restore function %q because referenced table %d was not found",
+					fn, t.ID)
+			}
+		}
+		return true, expr, nil
+	}
+
+	stmts, err := parser.Parse(fnBody)
+	if err != nil {
+		return "", err
+	}
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFn)
+		if err != nil {
+			return "", err
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		fmtCtx.WriteString(";")
+	}
+	return fmtCtx.CloseAndGetString(), nil
 }
