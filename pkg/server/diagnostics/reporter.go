@@ -320,6 +320,10 @@ func (r *Reporter) populateSQLInfo(uptime int64, sql *diagnosticspb.SQLInstanceI
 	sql.Uptime = uptime
 }
 
+// collectSchemaInfo is the "old" way of collecting schema information, and it
+// redacted all `*string` type fields in the table descriptors but not `string`
+// type fields. Check out `schematelemetry` package for a better data source for
+// collecting redacted schema information.
 func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescriptor, error) {
 	startKey := keys.MakeSQLCodec(r.TenantID).TablePrefix(keys.DescriptorTableID)
 	endKey := startKey.PrefixEnd()
@@ -442,7 +446,7 @@ func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret s
 type stringRedactor struct{}
 
 func (stringRedactor) Primitive(v reflect.Value) error {
-	if v.Kind() == reflect.String && v.String() != "" {
+	if v.Kind() == reflect.String && v.String() != "" && v.CanSet() {
 		v.Set(reflect.ValueOf("_").Convert(v.Type()))
 	}
 	return nil
