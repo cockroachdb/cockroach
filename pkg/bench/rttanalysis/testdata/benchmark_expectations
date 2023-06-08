@@ -91,6 +91,9 @@ exp,benchmark
 21,Revoke/revoke_all_on_3_tables
 14,RevokeRole/revoke_1_role
 16,RevokeRole/revoke_2_roles
+10,ShowGrants/grant_2_roles
+11,ShowGrants/grant_3_roles
+12,ShowGrants/grant_4_roles
 1,SystemDatabaseQueries/select_system.users_with_empty_database_Name
 1,SystemDatabaseQueries/select_system.users_with_schema_Name
 1,SystemDatabaseQueries/select_system.users_without_schema_Name
