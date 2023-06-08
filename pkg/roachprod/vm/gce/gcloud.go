@@ -315,6 +315,7 @@ func (p *Provider) CreateVolumeSnapshot(
 ) (vm.VolumeSnapshot, error) {
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"create", vsco.Name,
 		"--source-disk", volume.ProviderResourceID,
@@ -336,6 +337,7 @@ func (p *Provider) CreateVolumeSnapshot(
 
 	args = []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"add-labels", vsco.Name,
 		"--labels", s[:len(s)-1],
@@ -355,6 +357,7 @@ func (p *Provider) ListVolumeSnapshots(
 ) ([]vm.VolumeSnapshot, error) {
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"list",
 		"--format", "json(name,id)",
@@ -398,6 +401,7 @@ func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.Volum
 	}
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"delete",
 	}
@@ -438,6 +442,7 @@ func (p *Provider) CreateVolume(
 	}
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"disks",
 		"create", vco.Name,
 		"--size", strconv.Itoa(vco.Size),
@@ -496,6 +501,7 @@ func (p *Provider) CreateVolume(
 		s := sb.String()
 		args = []string{
 			"compute",
+			"--project", p.GetProject(),
 			"disks",
 			"add-labels", vco.Name,
 			"--labels", s[:len(s)-1],
@@ -522,6 +528,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 	{ // Detach disks.
 		args := []string{
 			"compute",
+			"--project", p.GetProject(),
 			"instances",
 			"detach-disk", vm.Name,
 			"--disk", volume.ProviderResourceID,
@@ -535,6 +542,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 	{ // Delete disks.
 		args := []string{
 			"compute",
+			"--project", p.GetProject(),
 			"disks",
 			"delete",
 			volume.ProviderResourceID,
@@ -646,6 +654,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 	// Volume attach.
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"instances",
 		"attach-disk",
 		vm.ProviderID,
@@ -675,6 +684,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 	// Volume auto delete.
 	args = []string{
 		"compute",
+		"--project", p.GetProject(),
 		"instances",
 		"set-disk-auto-delete", vm.ProviderID,
 		"--auto-delete",
