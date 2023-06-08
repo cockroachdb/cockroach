@@ -17,7 +17,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • Column:{DescID: 105 (t), ColumnID: 2 (b+)}
         │   │   │ WRITE_ONLY → PUBLIC
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 105 (t), ColumnID: 2 (b+)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 105 (t), ColumnID: 2 (b+)}
         │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
         │   │   │
         │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 105 (t), Name: "b", ColumnID: 2 (b+)}
@@ -40,7 +40,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • PrimaryIndex:{DescID: 105 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
         │   │   │ BACKFILL_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 105 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 105 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
         │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: BACKFILL_ONLY->DELETE_ONLY"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 105 (t), Name: "t_pkey", IndexID: 2 (t_pkey-)}
@@ -64,7 +64,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   ├── • TemporaryIndex:{DescID: 105 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 105 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 105 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 105 (t), ColumnID: 1 (i), IndexID: 3}

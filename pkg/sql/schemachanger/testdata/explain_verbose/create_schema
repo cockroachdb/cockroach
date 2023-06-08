@@ -12,7 +12,25 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
 │       ├── • 7 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Schema:{DescID: 104 (sc+)}
-│       │   │     ABSENT → DESCRIPTOR_ADDED
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SchemaName:{DescID: 104 (sc+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC Namespace:{DescID: 104 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SchemaParent:{DescID: 104 (sc+), ReferencedDescID: 100 (defaultdb)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 104 (sc+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 104 (sc+), Name: "admin"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 104 (sc+), Name: "root"}
+│       │   │         rule: "dependents exist before descriptor becomes public"
 │       │   │
 │       │   ├── • SchemaName:{DescID: 104 (sc+)}
 │       │   │   │ ABSENT → PUBLIC
@@ -50,7 +68,7 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
 │       │       └── • Precedence dependency from DESCRIPTOR_ADDED Schema:{DescID: 104 (sc+)}
 │       │             rule: "descriptor existence precedes dependents"
 │       │
-│       └── • 7 Mutation operations
+│       └── • 8 Mutation operations
 │           │
 │           ├── • CreateSchemaDescriptor
 │           │     SchemaID: 104
@@ -82,12 +100,15 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
 │           │       UserName: admin
 │           │       WithGrantOption: 2
 │           │
-│           └── • UpdateUserPrivileges
-│                 Privileges:
-│                   DescriptorID: 104
-│                   Privileges: 2
-│                   UserName: root
-│                   WithGrantOption: 2
+│           ├── • UpdateUserPrivileges
+│           │     Privileges:
+│           │       DescriptorID: 104
+│           │       Privileges: 2
+│           │       UserName: root
+│           │       WithGrantOption: 2
+│           │
+│           └── • MarkDescriptorAsPublic
+│                 DescriptorID: 104
 │
 └── • PreCommitPhase
     │
@@ -96,7 +117,7 @@ EXPLAIN (ddl, verbose) CREATE SCHEMA sc;
     │   ├── • 7 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Schema:{DescID: 104 (sc+)}
-    │   │   │     DESCRIPTOR_ADDED → ABSENT
+    │   │   │     PUBLIC → ABSENT
     │   │   │
     │   │   ├── • SchemaName:{DescID: 104 (sc+)}
     │   │   │     PUBLIC → ABSENT

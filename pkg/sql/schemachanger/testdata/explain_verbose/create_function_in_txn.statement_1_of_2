@@ -16,7 +16,25 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
 │       ├── • 7 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Function:{DescID: 105 (t+)}
-│       │   │     ABSENT → DESCRIPTOR_ADDED
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 105 (t+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 105 (t+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "admin"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105 (t+), Name: "root"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 105 (t+)}
+│       │   │         rule: "dependents exist before descriptor becomes public"
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
 │       │   │   │ ABSENT → PUBLIC
@@ -57,7 +75,7 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
 │       │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105 (t+)}
 │       │             rule: "descriptor existence precedes dependents"
 │       │
-│       └── • 9 Mutation operations
+│       └── • 10 Mutation operations
 │           │
 │           ├── • CreateFunctionDescriptor
 │           │     Function:
@@ -105,10 +123,13 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
 │           ├── • UpdateFunctionRelationReferences
 │           │     FunctionID: 105
 │           │
-│           └── • SetObjectParentID
-│                 ObjParent:
-│                   ChildObjectID: 105
-│                   SchemaID: 101
+│           ├── • SetObjectParentID
+│           │     ObjParent:
+│           │       ChildObjectID: 105
+│           │       SchemaID: 101
+│           │
+│           └── • MarkDescriptorAsPublic
+│                 DescriptorID: 105
 │
 └── • PreCommitPhase
     │
@@ -117,7 +138,7 @@ EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT
     │   ├── • 7 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Function:{DescID: 105 (t+)}
-    │   │   │     DESCRIPTOR_ADDED → ABSENT
+    │   │   │     PUBLIC → ABSENT
     │   │   │
     │   │   ├── • SchemaChild:{DescID: 105 (t+), ReferencedDescID: 101 (public)}
     │   │   │     PUBLIC → ABSENT

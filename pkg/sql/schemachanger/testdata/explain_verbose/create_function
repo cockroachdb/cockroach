@@ -33,7 +33,28 @@ $$;
 │       ├── • 8 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Function:{DescID: 110 (f+)}
-│       │   │     ABSENT → DESCRIPTOR_ADDED
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 110 (f+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC FunctionVolatility:{DescID: 110 (f+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 110 (f+)}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "admin"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110 (f+), Name: "root"}
+│       │   │   │     rule: "dependents exist before descriptor becomes public"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 110 (f+)}
+│       │   │         rule: "dependents exist before descriptor becomes public"
 │       │   │
 │       │   ├── • SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
 │       │   │   │ ABSENT → PUBLIC
@@ -80,7 +101,7 @@ $$;
 │       │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110 (f+)}
 │       │             rule: "descriptor existence precedes dependents"
 │       │
-│       └── • 10 Mutation operations
+│       └── • 11 Mutation operations
 │           │
 │           ├── • CreateFunctionDescriptor
 │           │     Function:
@@ -199,10 +220,13 @@ $$;
 │           │       columnids:
 │           │       - 1
 │           │
-│           └── • SetObjectParentID
-│                 ObjParent:
-│                   ChildObjectID: 110
-│                   SchemaID: 101
+│           ├── • SetObjectParentID
+│           │     ObjParent:
+│           │       ChildObjectID: 110
+│           │       SchemaID: 101
+│           │
+│           └── • MarkDescriptorAsPublic
+│                 DescriptorID: 110
 │
 └── • PreCommitPhase
     │
@@ -211,7 +235,7 @@ $$;
     │   ├── • 8 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Function:{DescID: 110 (f+)}
-    │   │   │     DESCRIPTOR_ADDED → ABSENT
+    │   │   │     PUBLIC → ABSENT
     │   │   │
     │   │   ├── • SchemaChild:{DescID: 110 (f+), ReferencedDescID: 101 (public)}
     │   │   │     PUBLIC → ABSENT
