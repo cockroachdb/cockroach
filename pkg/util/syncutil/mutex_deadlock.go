@@ -35,6 +35,11 @@ type Mutex struct {
 func (m *Mutex) AssertHeld() {
 }
 
+// TryLock is a no-op for deadlock mutexes.
+func (rw *Mutex) TryLock() bool {
+	return false
+}
+
 // An RWMutex is a reader/writer mutual exclusion lock.
 type RWMutex struct {
 	deadlock.RWMutex
@@ -46,4 +51,9 @@ func (rw *RWMutex) AssertHeld() {
 
 // AssertRHeld is a no-op for deadlock mutexes.
 func (rw *RWMutex) AssertRHeld() {
+}
+
+// TryLock is a no-op for deadlock mutexes.
+func (rw *RWMutex) TryLock() bool {
+	return false
 }
