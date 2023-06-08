@@ -264,13 +264,11 @@ type writeFn func(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, fmtCtx 
 	defLevels, repLevels []int16) error
 
 // formatDatum writes the datum into the parquet.ByteArray batch alloc using the
-// tree.NodeFormatter interface. It is important that the fmtCtx remains open
-// until after the bytes have been read from the batchAlloc, otherwise the byte
-// slice may point to invalid data.
+// tree.NodeFormatter interface.
 func formatDatum(d tree.Datum, a *batchAlloc, fmtCtx *tree.FmtCtx) {
 	fmtCtx.Reset()
 	d.Format(fmtCtx)
-	a.byteArrayBatch[0] = fmtCtx.Bytes()
+	a.byteArrayBatch[0] = fmtCtx.CopyBytes()
 }
 
 func writeInt32(
@@ -350,11 +348,15 @@ func writeString(
 	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 }
 
-// unsafeGetBytes returns []byte in the underlying string,
-// without incurring copy.
-// This unsafe mechanism is safe to use here because the returned bytes will
-// be copied by the parquet library when writing a datum to a column chunk.
-// See https://groups.google.com/g/golang-nuts/c/Zsfk-VMd_fU/m/O1ru4fO-BgAJ
+// unsafeGetBytes returns []byte in the underlying string, without incurring
+// copy. This is safe to use because neither the string nor byte array should be
+// mutated concurrently. See
+// https://groups.google.com/g/golang-nuts/c/Zsfk-VMd_fU/m/O1ru4fO-BgAJ
+//
+// There is no risk of the string being GC'd while the bytes are in use because
+// unsafe.Pointer prevents the pointee from being garbage collected as long as
+// the pointee is a Go struct. See
+// https://groups.google.com/g/golang-nuts/c/yNis7bQG_rY/m/yaJFoSx1hgIJ
 //
 // TODO(jayant): once we upgrade to Go 1.20, we can replace this with a less unsafe
 // implementation. See https://www.sobyte.net/post/2022-09/string-byte-convertion/

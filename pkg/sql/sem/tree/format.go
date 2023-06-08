@@ -666,6 +666,14 @@ func (ctx *FmtCtx) CloseAndGetString() string {
 	return s
 }
 
+// CopyBytes returns the contents of the unread portion of the buffer by
+// creating a copy.
+func (ctx *FmtCtx) CopyBytes() []byte {
+	b := make([]byte, ctx.Len())
+	copy(b, ctx.Bytes())
+	return b
+}
+
 func (ctx *FmtCtx) alwaysFormatTablePrefix() bool {
 	return ctx.flags.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil
 }

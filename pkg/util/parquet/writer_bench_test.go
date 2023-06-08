@@ -38,7 +38,7 @@ func BenchmarkParquetWriter(b *testing.B) {
 				func(rng *rand.Rand) *types.T {
 					return benchmarkTypes[i]
 				}, rng)
-			datums := makeRandDatums(1, sch, rng)
+			datums := makeRandDatums(1, sch, rng, false)
 
 			schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
 			require.NoError(b, err)
