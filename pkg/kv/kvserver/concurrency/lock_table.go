@@ -458,13 +458,19 @@ type lockTableGuardImpl struct {
 
 		locks map[*lockState]struct{}
 
-		// If this is true, the state has changed and the channel has been
-		// signaled, but what the state should be has not been computed. The call
-		// to CurState() needs to compute that current state. Deferring the
-		// computation makes the waiters do this work themselves instead of making
-		// the call to release locks or update locks or remove the request's claims
-		// on (unheld) locks. This is proportional to number of waiters.
-		mustFindNextLockAfter bool
+		// mustComputeWaitingState is set in context of the state change channel
+		// being signaled. It denotes whether the signaler has already computed the
+		// guard's next waiting state or not.
+		//
+		// If set to true, a call to CurState() must compute the state from scratch,
+		// by resuming its scan. In such cases, the signaler has deferred the
+		// computation work on to the callers, which is proportional to the number
+		// of waiters.
+		//
+		// If set to false, the signaler has already computed this request's next
+		// waiting state. As such, a call to CurState() can simply return the state
+		// without doing any extra work.
+		mustComputeWaitingState bool
 	}
 	// Locks to resolve before scanning again. Doesn't need to be protected by
 	// mu since should only be read after the caller has already synced with mu
@@ -535,14 +541,14 @@ func (g *lockTableGuardImpl) NewStateChan() chan struct{} {
 func (g *lockTableGuardImpl) CurState() waitingState {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if !g.mu.mustFindNextLockAfter {
+	if !g.mu.mustComputeWaitingState {
 		return g.mu.state
 	}
 	// Not actively waiting anywhere so no one else can set
-	// mustFindNextLockAfter to true while this method executes.
-	g.mu.mustFindNextLockAfter = false
+	// mustComputeWaitingState to true while this method executes.
+	g.mu.mustComputeWaitingState = false
 	g.mu.Unlock()
-	g.findNextLockAfter(false /* notify */)
+	g.resumeScan(false /* notify */)
 	g.mu.Lock() // Unlock deferred
 	return g.mu.state
 }
@@ -656,7 +662,7 @@ func (g *lockTableGuardImpl) notify() {
 //
 // REQUIRES: g.mu to be locked.
 func (g *lockTableGuardImpl) doneActivelyWaitingAtLock() {
-	g.mu.mustFindNextLockAfter = true
+	g.mu.mustComputeWaitingState = true
 	g.notify()
 }
 
@@ -669,12 +675,20 @@ func (g *lockTableGuardImpl) isSameTxnAsReservation(ws waitingState) bool {
 	return !ws.held && g.isSameTxn(ws.txn)
 }
 
-// Finds the next lock, after the current one, to actively wait at. If it
-// finds the next lock the request starts actively waiting there, else it is
-// told that it is done waiting. lockTableImpl.finalizedTxnCache is used to
-// accumulate intents to resolve.
-// Acquires g.mu.
-func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
+// resumeScan resumes the request's (receiver's) scan of the lock table. The
+// scan continues until either all overlapping locks in the lock table have been
+// considered and no conflict is found, or until the request encounters a lock
+// that it conflicts with. Either way, the receiver's state is mutated such that
+// a call to ShouldWait will reflect the termination condition. The same applies
+// to the receiver's waitingState; however, if the waitingState does change,
+// the state change channel will only be signaled if notify is supplied as true.
+//
+// Note that the details about scan mechanics are captured on the receiver --
+// information such as what lock spans to scan, where to begin the scan from
+// etc.
+//
+// ACQUIRES: g.mu.
+func (g *lockTableGuardImpl) resumeScan(notify bool) {
 	spans := g.spans.GetSpans(g.str)
 	var span *roachpb.Span
 	resumingInSameSpan := false
@@ -2623,7 +2637,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		g.index = -1
 		g.mu.Lock()
 		g.mu.startWait = false
-		g.mu.mustFindNextLockAfter = false
+		g.mu.mustComputeWaitingState = false
 		g.mu.Unlock()
 		g.toResolve = g.toResolve[:0]
 	}
@@ -2637,7 +2651,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		return g
 	}
 
-	g.findNextLockAfter(true /* notify */)
+	g.resumeScan(true /* notify */)
 	if g.notRemovableLock != nil {
 		// Either waiting at the notRemovableLock, or elsewhere. Either way we are
 		// making forward progress, which ensures liveness.
@@ -2992,8 +3006,9 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 	return heldByTxn
 }
 
-// Iteration helper for findNextLockAfter. Returns the next span to search
-// over, or nil if the iteration is done.
+// Iteration helper for resumeScan. Returns the next span to search over, or nil
+// if the iteration is done.
+//
 // REQUIRES: g.mu is locked.
 func stepToNextSpan(g *lockTableGuardImpl) *roachpb.Span {
 	g.index++
