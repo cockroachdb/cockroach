@@ -992,6 +992,17 @@ CREATE TABLE system.span_stats_tenant_boundaries (
 	CONSTRAINT "primary" PRIMARY KEY (tenant_id),
 	FAMILY "primary" (tenant_id, boundaries)
 );`
+
+	InsightsTableSchema = `
+	CREATE TABLE system.insights (
+		id UUID DEFAULT gen_random_uuid(),
+		insight JSONB NOT NULL,
+		start_time TIMESTAMP AS (parse_timestamp(insight->'transaction'->>'start_time')) STORED,
+		end_time TIMESTAMP AS (parse_timestamp(insight->'transaction'->>'end_time')) STORED,
+		CONSTRAINT "primary" PRIMARY KEY (id),
+    INDEX insights_time_range_idx (start_time DESC, end_time DESC),
+    FAMILY "primary" (insight, start_time, end_time)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1201,6 +1212,7 @@ func MakeSystemTables() []SystemTable {
 		SystemTenantTasksTable,
 		StatementActivityTable,
 		TransactionActivityTable,
+		InsightsTable,
 	}
 }
 
@@ -4019,6 +4031,53 @@ var (
 					catenumpb.IndexColumn_ASC,
 				},
 				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		),
+	)
+
+	insightsStartTimeComputeExpr = `parse_timestamp(insight->'transaction'->>'start_time')`
+	insightsEndTimeComputeExpr   = `parse_timestamp(insight->'transaction'->>'end_time')`
+
+	InsightsTable = makeSystemTable(
+		InsightsTableSchema,
+		systemTable(
+			catconstants.InsightsTableName,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
+				{Name: "insight", ID: 2, Type: types.Jsonb},
+				{Name: "start_time", ID: 3, Type: types.Timestamp, ComputeExpr: &insightsStartTimeComputeExpr},
+				{Name: "end_time", ID: 4, Type: types.Timestamp, ComputeExpr: &insightsEndTimeComputeExpr},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"id", "insight", "start_time", "end_time"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+					DefaultColumnID: 1,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "primary",
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:           "insights_time_range_idx",
+				ID:             2,
+				Unique:         false,
+				KeyColumnNames: []string{"start_time", "end_time"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_DESC,
+					catenumpb.IndexColumn_DESC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{3, 4},
 			},
 		),
 	)

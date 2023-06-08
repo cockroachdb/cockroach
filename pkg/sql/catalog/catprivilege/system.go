@@ -74,6 +74,7 @@ var (
 		catconstants.SpanStatsBuckets,
 		catconstants.SpanStatsSamples,
 		catconstants.SpanStatsTenantBoundaries,
+		catconstants.InsightsTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{

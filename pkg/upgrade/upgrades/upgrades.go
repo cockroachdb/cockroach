@@ -316,6 +316,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		NoTenantUpgradeFunc,
 	),
+	upgrade.NewTenantUpgrade(
+		"create system.insights table",
+		toCV(clusterversion.V23_2_AddSystemInsightsTable),
+		upgrade.NoPrecondition,
+		systemInsightsTableMigration,
+	),
 }
 
 func init() {

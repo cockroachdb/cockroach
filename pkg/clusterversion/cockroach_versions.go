@@ -538,6 +538,10 @@ const (
 	// the system tenant.
 	V23_2_EnableRangeCoalescingForSystemTenant
 
+	// V23_2_AddSystemInsightsTable is the version at which Cockroach cretes
+	// insights system table
+	V23_2_AddSystemInsightsTable
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -934,6 +938,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_EnableRangeCoalescingForSystemTenant,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     V23_2_AddSystemInsightsTable,
+		Version: roachpb.Version{Major: 23, Minor: 2, Internal: 0}, // TBD
 	},
 
 	// *************************************************
