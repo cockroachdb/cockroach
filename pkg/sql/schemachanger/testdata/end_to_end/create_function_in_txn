@@ -19,7 +19,7 @@ write *eventpb.CreateFunction to event log:
       SQL\n\tAS $$SELECT ‹1›;$$"
     tag: CREATE FUNCTION
     user: root
-## StatementPhase stage 1 of 1 with 9 MutationType ops
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #105
   -
   +function:
@@ -47,7 +47,6 @@ upsert descriptor #105
   +      family: IntFamily
   +      oid: 20
   +      width: 64
-  +  state: ADD
   +  version: "1"
   +  volatility: VOLATILE
 upsert descriptor #101

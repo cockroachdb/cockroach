@@ -207,7 +207,7 @@ DROP TYPE defaultdb.typ
 ----
 - from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
@@ -235,7 +235,7 @@ DROP TYPE defaultdb.typ
   rule: descriptor dropped before dependent element removal
 - from: [EnumType:{DescID: 104}, DROPPED]
   to:   [EnumType:{DescID: 104}, ABSENT]
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [EnumType:{DescID: 104}, DROPPED]
   to:   [EnumTypeValue:{DescID: 104, Name: a}, ABSENT]
@@ -534,7 +534,7 @@ DROP TYPE defaultdb.ctyp
 ----
 - from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
   to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
   to:   [Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT]
@@ -562,7 +562,7 @@ DROP TYPE defaultdb.ctyp
   rule: descriptor dropped before dependent element removal
 - from: [CompositeType:{DescID: 106}, DROPPED]
   to:   [CompositeType:{DescID: 106}, ABSENT]
-  kind: PreviousStagePrecedence
+  kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [CompositeType:{DescID: 106}, DROPPED]
   to:   [CompositeTypeAttrName:{DescID: 106, Name: a}, ABSENT]

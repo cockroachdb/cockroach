@@ -8,12 +8,14 @@ EXPLAIN (ddl) ALTER TABLE t DROP COLUMN k CASCADE;
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE; following ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 2 elements transitioning toward ABSENT
+ │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (k-)}
- │         │    └── PUBLIC → ABSENT     ColumnName:{DescID: 104 (t), Name: "k", ColumnID: 3 (k-)}
- │         └── 2 Mutation operations
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 104 (t), Name: "k", ColumnID: 3 (k-)}
+ │         │    └── PUBLIC → ABSENT     IndexColumn:{DescID: 104 (t), ColumnID: 3 (k-), IndexID: 3 (t_pkey+)}
+ │         └── 3 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
- │              └── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
+ │              └── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 3 elements transitioning toward PUBLIC
@@ -23,12 +25,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
  │    │    │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 4 (crdb_internal_index_4_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
- │    │    ├── 7 elements transitioning toward ABSENT
+ │    │    ├── 8 elements transitioning toward ABSENT
  │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 3 (k-)}
  │    │    │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "k", ColumnID: 3 (k-)}
  │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 2 (j-)}
  │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr-)}
  │    │    │    ├── VALIDATED     → PUBLIC SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx-)}
+ │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (k-), IndexID: 4 (crdb_internal_index_4_name_placeholder)}
  │    │    │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
  │    │    │    └── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "crdb_internal_idx_expr", ColumnID: 4 (crdb_internal_idx_expr-)}
  │    │    └── 1 Mutation operation
