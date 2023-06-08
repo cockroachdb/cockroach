@@ -41,7 +41,19 @@ SELECT get_body_str('f');
 ----
 "SELECT a FROM {TABLE:106} WHERE b > 20 ORDER BY b;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+# Make sure show create function deserializes it.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT a FROM test.public.t1 WHERE b > 20 ORDER BY b;
+$$
 
 # Make sure function is still executable.
 query I
@@ -63,7 +75,19 @@ SELECT get_body_str('f');
 ----
 "SELECT {TABLE:106}.a FROM {TABLE:106} WHERE {TABLE:106}.b > 20 ORDER BY {TABLE:106}.b;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+# Make sure show create function deserializes it.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT test.public.t1.a FROM test.public.t1 WHERE test.public.t1.b > 20 ORDER BY test.public.t1.b;
+$$
 
 query I
 SELECT f()
@@ -83,7 +107,18 @@ SELECT get_body_str('f');
 ----
 "SELECT t.a FROM (SELECT a FROM {TABLE:106} WHERE b > 20 ORDER BY b) AS t WHERE t.a > 1 ORDER BY t.a;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT t.a FROM (SELECT a FROM test.public.t1 WHERE b > 20 ORDER BY b) AS t WHERE t.a > 1 ORDER BY t.a;
+$$
 
 query I
 SELECT f()
@@ -106,7 +141,18 @@ SELECT get_body_str('f_order_star');
 ----
 "SELECT {TABLE:106}.a, {TABLE:106}.b, {TABLE:106}.c, {TABLE:107}.a, {TABLE:107}.b, {TABLE:107}.d FROM {TABLE:106} JOIN {TABLE:107} ON c = d GROUP BY t1.*, t2.* ORDER BY t1.*, t2.*;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_order_star]
+----
+CREATE FUNCTION public.f_order_star()
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT test.public.t1.a, test.public.t1.b, test.public.t1.c, test.public.t2.a, test.public.t2.b, test.public.t2.d FROM test.public.t1 JOIN test.public.t2 ON c = d GROUP BY t1.*, t2.* ORDER BY t1.*, t2.*;
+$$
 
 query T
 SELECT f_order_star()
@@ -126,7 +172,18 @@ SELECT get_body_str('f_order_srf');
 ----
 "SELECT (pg_get_keywords()).word, (pg_get_keywords()).catcode, (pg_get_keywords()).catdesc ORDER BY word LIMIT 1;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_order_star]
+----
+CREATE FUNCTION public.f_order_star()
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT test.public.t1.a, test.public.t1.b, test.public.t1.c, test.public.t2.a, test.public.t2.b, test.public.t2.d FROM test.public.t1 JOIN test.public.t2 ON c = d GROUP BY t1.*, t2.* ORDER BY t1.*, t2.*;
+$$
 
 query T
 SELECT f_order_srf()
@@ -151,7 +208,20 @@ SELECT get_body_str('f');
 ----
 "SELECT {TABLE:106}.a + {TABLE:107}.a FROM {TABLE:106} JOIN {TABLE:107} ON {TABLE:106}.b = {TABLE:107}.b GROUP BY {TABLE:106}.a + {TABLE:107}.a HAVING ({TABLE:106}.a + {TABLE:107}.a) > 1 ORDER BY {TABLE:106}.a + {TABLE:107}.a;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+# TODO(chengxiong) make sure ON condition is walked so we show table names in
+# the create statement.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT test.public.t1.a + test.public.t2.a FROM test.public.t1 JOIN test.public.t2 ON {TABLE:106}.b = {TABLE:107}.b GROUP BY test.public.t1.a + test.public.t2.a HAVING (test.public.t1.a + test.public.t2.a) > 1 ORDER BY test.public.t1.a + test.public.t2.a;
+$$
 
 query I
 SELECT f()
@@ -177,7 +247,18 @@ SELECT get_body_str('f');
 ----
 "SELECT c + d FROM {TABLE:106} JOIN {TABLE:107} ON c = d GROUP BY c + d HAVING (c + d) > 1 ORDER BY c + d;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT c + d FROM test.public.t1 JOIN test.public.t2 ON c = d GROUP BY c + d HAVING (c + d) > 1 ORDER BY c + d;
+$$
 
 query I
 SELECT f()
@@ -199,7 +280,18 @@ SELECT get_body_str('f');
 ----
 "SELECT {TABLE:106}.a + {TABLE:107}.a FROM {TABLE:106} JOIN {TABLE:107} USING (a);"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT test.public.t1.a + test.public.t2.a FROM test.public.t1 JOIN test.public.t2 USING (a);
+$$
 
 # Make sure table aliases are not rewritten.
 statement ok
@@ -219,7 +311,18 @@ SELECT get_body_str('f');
 ----
 "SELECT p.a + q.a FROM {TABLE:106} AS p JOIN {TABLE:107} AS q ON p.b = q.b GROUP BY p.a + q.a HAVING (p.a + q.a) > 1 ORDER BY p.a + q.a;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT p.a + q.a FROM test.public.t1 AS p JOIN test.public.t2 AS q ON p.b = q.b GROUP BY p.a + q.a HAVING (p.a + q.a) > 1 ORDER BY p.a + q.a;
+$$
 
 query I
 SELECT f()
@@ -239,7 +342,18 @@ SELECT get_body_str('f');
 ----
 "SELECT DISTINCT ON (a) b FROM {TABLE:106} ORDER BY a;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT DISTINCT ON (a) b FROM test.public.t1 ORDER BY a;
+$$
 
 query I
 SELECT f()
@@ -259,7 +373,18 @@ SELECT get_body_str('f');
 ----
 "SELECT DISTINCT ON ({TABLE:106}.a) {TABLE:106}.b FROM {TABLE:106} ORDER BY a;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f]
+----
+CREATE FUNCTION public.f()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT DISTINCT ON (test.public.t1.a) test.public.t1.b FROM test.public.t1 ORDER BY a;
+$$
 
 query I
 SELECT f()
@@ -279,7 +404,18 @@ SELECT get_body_str('f_expand');
 ----
 "SELECT {TABLE:106}.a, {TABLE:106}.b, {TABLE:106}.c, a FROM {TABLE:106};"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_expand]
+----
+CREATE FUNCTION public.f_expand()
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT test.public.t1.a, test.public.t1.b, test.public.t1.c, a FROM test.public.t1;
+$$
 
 query T
 SELECT f_expand()
@@ -299,7 +435,18 @@ SELECT get_body_str('f_expand');
 ----
 "SELECT t.a, t.b, t.c, t.a FROM (SELECT {TABLE:106}.a, {TABLE:106}.b, {TABLE:106}.c, a FROM {TABLE:106}) AS t;"
 
-# TODO(chengxiong): add SHOW CREATE FUNCTION test.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_expand]
+----
+CREATE FUNCTION public.f_expand()
+  RETURNS RECORD
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT t.a, t.b, t.c, t.a FROM (SELECT test.public.t1.a, test.public.t1.b, test.public.t1.c, a FROM test.public.t1) AS t;
+$$
 
 query T
 SELECT f_expand()

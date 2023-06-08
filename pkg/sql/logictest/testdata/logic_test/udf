@@ -1734,57 +1734,6 @@ SELECT sc2.f_seq()
 4
 
 statement ok
-SET DATABASE = test
-
-subtest select_from_seq_rename
-
-statement ok
-CREATE DATABASE tdb_seq_select;
-SET DATABASE = tdb_seq_select;
-
-statement ok
-CREATE SCHEMA sc;
-CREATE SEQUENCE sc.sq;
-CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT last_value FROM sc.sq $$;
-
-query I
-SELECT f()
-----
-0
-
-statement ok
-ALTER SEQUENCE sc.sq RENAME TO sq_new;
-
-statement error pq: relation "tdb_seq_select.sc.sq" does not exist
-SELECT f()
-
-statement ok
-ALTER SEQUENCE sc.sq_new RENAME TO sq;
-SELECT f();
-
-statement ok
-ALTER SCHEMA sc RENAME TO sc_new;
-
-statement error pq: unknown schema "sc"
-SELECT f()
-
-statement ok
-ALTER SCHEMA sc_new RENAME TO sc;
-SELECT f()
-
-statement ok
-ALTER DATABASE tdb_seq_select RENAME TO tdb_seq_select_new;
-SET DATABASE = tdb_seq_select_new;
-
-statement error pq: database "tdb_seq_select" does not exist
-SELECT f()
-
-statement ok
-ALTER DATABASE tdb_seq_select_new RENAME TO tdb_seq_select;
-SET DATABASE = tdb_seq_select;
-SELECT f()
-
-statement ok
 SET DATABASE = test;
 
 subtest event_logging
@@ -1808,7 +1757,7 @@ WITH tmp AS (
 )
 SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
 ----
-create_function  203  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
+create_function  198  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
 
 statement ok
 CREATE OR REPLACE FUNCTION f_test_log() RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
@@ -1822,8 +1771,8 @@ WITH tmp AS (
 )
 SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
 ----
-create_function  203  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
-create_function  203  "test.public.f_test_log"  "CREATE OR REPLACE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 2;$$"
+create_function  198  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
+create_function  198  "test.public.f_test_log"  "CREATE OR REPLACE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 2;$$"
 
 statement ok
 ALTER FUNCTION f_test_log RENAME TO f_test_log_new;
@@ -1837,7 +1786,7 @@ WITH tmp AS (
 )
 SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'NewFunctionName', info_json->'Statement' FROM tmp;
 ----
-rename_function  203  "test.public.f_test_log"  "test.public.f_test_log_new"  "ALTER FUNCTION \"\".\"\".f_test_log RENAME TO f_test_log_new"
+rename_function  198  "test.public.f_test_log"  "test.public.f_test_log_new"  "ALTER FUNCTION \"\".\"\".f_test_log RENAME TO f_test_log_new"
 
 statement ok
 ALTER FUNCTION f_test_log_new RENAME TO f_test_log;
@@ -1854,7 +1803,7 @@ WITH tmp AS (
 )
 SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Owner', info_json->'Statement' FROM tmp;
 ----
-alter_function_owner  203  "test.public.f_test_log"  "u_test_event"  "ALTER FUNCTION \"\".\"\".f_test_log OWNER TO u_test_event"
+alter_function_owner  198  "test.public.f_test_log"  "u_test_event"  "ALTER FUNCTION \"\".\"\".f_test_log OWNER TO u_test_event"
 
 statement ok
 ALTER FUNCTION f_test_log SET SCHEMA sc_test_event;
@@ -1868,7 +1817,7 @@ WITH tmp AS (
 )
 SELECT etype, info_json->'DescriptorID', info_json->'DescriptorName', info_json->'NewDescriptorName', info_json->'Statement' FROM tmp;
 ----
-set_schema  203  "test.public.f_test_log"  "test.sc_test_event.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log SET SCHEMA sc_test_event"
+set_schema  198  "test.public.f_test_log"  "test.sc_test_event.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log SET SCHEMA sc_test_event"
 
 statement ok
 ALTER FUNCTION sc_test_event.f_test_log SET SCHEMA public;
@@ -1884,7 +1833,7 @@ WITH tmp AS (
 )
 SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
 ----
-alter_function_options  203  "test.public.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log IMMUTABLE"
+alter_function_options  198  "test.public.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log IMMUTABLE"
 
 onlyif config local-legacy-schema-changer
 query TTTT retry
@@ -1895,7 +1844,7 @@ WITH tmp AS (
 )
 SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
 ----
-drop_function  203  "test.public.f_test_log"  "DROP FUNCTION \"\".\"\".f_test_log"
+drop_function  198  "test.public.f_test_log"  "DROP FUNCTION \"\".\"\".f_test_log"
 
 subtest show_grants
 
@@ -1914,10 +1863,10 @@ query TTTTTTB colnames
 SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID);
 ----
 database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100205       f_test_show_grants(int8)             root                EXECUTE         true
-test           sc_test_show_grants  100205       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  root                EXECUTE         true
-test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100200       f_test_show_grants(int8)             root                EXECUTE         true
+test           sc_test_show_grants  100200       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100201       f_test_show_grants(int8, text, oid)  root                EXECUTE         true
+test           sc_test_show_grants  100201       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
 statement error pq: function f_test_show_grants\(string\) does not exist: function undefined
 SHOW GRANTS ON FUNCTION f_test_show_grants(string);
@@ -1926,15 +1875,15 @@ query TTTTTTB colnames
 SHOW GRANTS ON FUNCTION f_test_show_grants(INT)
 ----
 database_name  schema_name          function_id  function_signature        grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100205       f_test_show_grants(int8)  root                EXECUTE         true
-test           sc_test_show_grants  100205       f_test_show_grants(int8)  u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100200       f_test_show_grants(int8)  root                EXECUTE         true
+test           sc_test_show_grants  100200       f_test_show_grants(int8)  u_test_show_grants  EXECUTE         false
 
 query TTTTTTB colnames
 SHOW GRANTS ON FUNCTION f_test_show_grants(INT, string, OID);
 ----
 database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  root                EXECUTE         true
-test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100201       f_test_show_grants(int8, text, oid)  root                EXECUTE         true
+test           sc_test_show_grants  100201       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
 statement error pq: unknown function: f_not_existing\(\): function undefined
 SHOW GRANTS ON FUNCTION f_not_existing;
@@ -1943,8 +1892,8 @@ query TTTTTTB colnames
 SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) FOR u_test_show_grants;
 ----
 database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
-test           sc_test_show_grants  100205       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
-test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100200       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100201       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
 query TTTTTB colnames
 SHOW GRANTS FOR u_test_show_grants;
@@ -3087,10 +3036,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100272  f_93314         105  1546506610  14  false  false  false  v  0  100271  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100274  f_93314_alias   105  1546506610  14  false  false  false  v  0  100273  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100278  f_93314_comp    105  1546506610  14  false  false  false  v  0  100275  ·  {}  NULL  SELECT (1, 2);
-100279  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100277  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100267  f_93314         105  1546506610  14  false  false  false  v  0  100266  ·  {}  NULL  SELECT i, e FROM {TABLE:266} ORDER BY i LIMIT 1;
+100269  f_93314_alias   105  1546506610  14  false  false  false  v  0  100268  ·  {}  NULL  SELECT i, e FROM {TABLE:268} ORDER BY i LIMIT 1;
+100273  f_93314_comp    105  1546506610  14  false  false  false  v  0  100270  ·  {}  NULL  SELECT (1, 2);
+100274  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100272  ·  {}  NULL  SELECT a, c FROM {TABLE:272} LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.

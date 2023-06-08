@@ -112,7 +112,7 @@ f_subquery  CREATE FUNCTION public.f_subquery()
               CALLED ON NULL INPUT
               LANGUAGE SQL
               AS $$
-              SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM test.public.t_onecol) AS foo) AS bar;
+              SELECT bar.a FROM (SELECT a FROM (SELECT test.public.t_onecol.a FROM test.public.t_onecol) AS foo) AS bar;
             $$
 
 query TT

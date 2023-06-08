@@ -363,6 +363,32 @@ func ReplaceSequenceIDsWithFQNames(
 	return newExpr, err
 }
 
+// ReplaceTableIDsWithFQNames replaces all table ID references with fully
+// qualified names.
+func ReplaceTableIDsWithFQNames(
+	ctx context.Context, rootExpr tree.Expr, semaCtx *tree.SemaContext,
+) (tree.Expr, error) {
+	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		switch t := expr.(type) {
+		case *tree.ColumnNameRef:
+			tblName, err := semaCtx.NameResolver.GetQualifiedTableNameByID(ctx, t.Table.ID, tree.ResolveAnyTableKind)
+			if err != nil {
+				return false, expr, err
+			}
+			return false, &tree.ColumnItem{TableName: tblName.ToUnresolvedObjectName(), ColumnName: t.ColumnName}, nil
+		case *tree.TableIDRefExpr:
+			tblName, err := semaCtx.NameResolver.GetQualifiedTableNameByID(ctx, t.ID, tree.ResolveAnyTableKind)
+			if err != nil {
+				return false, expr, err
+			}
+			return false, &tree.TableNameExpr{TableName: *tblName}, nil
+		}
+		return true, expr, nil
+	}
+	newExpr, err := tree.SimpleVisit(rootExpr, replaceFn)
+	return newExpr, err
+}
+
 // GetSeqIDFromExpr takes an expr and looks for a sequence ID in
 // this expr. If it finds one, it will return that ID.
 func GetSeqIDFromExpr(expr tree.Expr) (int64, bool) {
