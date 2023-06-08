@@ -1817,6 +1817,30 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestUnused", func(t *testing.T) {
+		// staticcheck uses 2.4GB of ram (as of 2019-05-10), so don't parallelize it.
+		skip.UnderShort(t)
+		if !bazel.BuiltWithBazel() {
+			skip.IgnoreLint(t, "staticcheck takes care of U1000 in non-Bazel builds")
+		}
+		cmd, stderr, _, err := dirCmd(
+			crdbDir,
+			"unused",
+			pkgScope,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestVectorizedPanics", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
