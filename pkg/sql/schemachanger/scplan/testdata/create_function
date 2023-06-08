@@ -20,9 +20,9 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT nextval('sq1');
 $$;
 ----
-StatementPhase stage 1 of 1 with 10 MutationType ops
+StatementPhase stage 1 of 1 with 11 MutationType ops
   transitions:
-    [[Function:{DescID: 109}, PUBLIC], ABSENT] -> DESCRIPTOR_ADDED
+    [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
@@ -143,9 +143,11 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       ObjParent:
         ChildObjectID: 109
         SchemaID: 101
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 109
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Function:{DescID: 109}, PUBLIC], DESCRIPTOR_ADDED] -> ABSENT
+    [[Function:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionName:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionVolatility:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT

@@ -1464,3 +1464,36 @@ SELECT * FROM t
 1  4  42
 2  5  42
 3  6  42
+
+subtest create-schema
+
+statement ok
+BEGIN
+
+statement ok
+CREATE SCHEMA sc
+
+query TT
+SHOW SCHEMAS
+----
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
+sc                  root
+
+statement ok
+DROP SCHEMA sc
+
+query TT
+SHOW SCHEMAS
+----
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
+
+statement ok
+COMMIT
