@@ -128,9 +128,9 @@ func TestPlanDataDriven(t *testing.T) {
 func validatePlan(t *testing.T, plan *scplan.Plan) {
 	stages := plan.Stages
 	for i, stage := range stages {
-		if stage.IsResetPreCommitStage() {
-			// Skip the reset stage. Otherwise, the re-planned plan will also have
-			// a reset stage and the assertions won't be verified.
+		if stage.Phase == scop.PreCommitPhase && stage.Ordinal == 2 {
+			// Skip the pre-commit main stage. Otherwise, the re-planned plan
+			// will have a reset stage and the assertions won't be verified.
 			continue
 		}
 		expected := make([]scstage.Stage, len(stages[i:]))
