@@ -338,17 +338,6 @@ func evaluateRangeCheckResult(
 func (s *Server) Decommission(
 	ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID,
 ) error {
-
-	// Once a node is fully decommissioned, neither kvclient nor kvprober work from
-	// the node. This does not indicate a service health issue; it is expected behavior.
-	// So we stop kvprober here.
-	//
-	// Without the call to ManualStop, we see errors like the following:
-	// ‹rpc error: code = PermissionDenied desc = n1 was permanently removed from...
-	if targetStatus == livenesspb.MembershipStatus_DECOMMISSIONED {
-		s.kvProber.ManualStop()
-	}
-
 	// If we're asked to decommission ourself we may lose access to cluster RPC,
 	// so we decommission ourself last. We copy the slice to avoid mutating the
 	// input slice.
