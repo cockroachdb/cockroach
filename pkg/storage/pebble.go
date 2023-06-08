@@ -593,7 +593,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	// Enable deletion pacing. This helps prevent disk slowness events on some
 	// SSDs, that kick off an expensive GC if a lot of files are deleted at
 	// once.
-	opts.Experimental.MinDeletionRate = 128 << 20 // 128 MB
+	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	// Validate min/max keys in each SSTable when performing a compaction. This
 	// serves as a simple protection against corruption or programmer-error in
 	// Pebble.
