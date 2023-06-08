@@ -169,15 +169,12 @@ func buildStages(bc buildContext) (stages []Stage) {
 			}
 			copy(resetStage.Before, currentStatuses())
 			copy(resetStage.After, bc.initial)
-			isNoOp := true
-			for i, s := range resetStage.After {
-				if s != resetStage.Before[i] {
-					isNoOp = false
-					break
-				}
-			}
-			if !isNoOp {
-				stages = append(stages, resetStage)
+			stages = append(stages, resetStage)
+			if bc.isStateTerminal(resetStage.After) {
+				// Exit early if the whole schema change is a no-op. This may happen
+				// when doing BEGIN; CREATE SCHEMA sc; DROP SCHEMA sc; COMMIT; for
+				// example.
+				break
 			}
 		}
 		// Build the pre-commit phase's main stage.
@@ -724,13 +721,15 @@ func (bc buildContext) computeExtraOps(cur, next *Stage) []scop.Op {
 	case scop.StatementPhase:
 		return nil
 	case scop.PreCommitPhase:
-		if next == nil {
-			// This is the main stage, followed by no post-commit stages, do nothing.
-			return nil
-		}
-		if next.Phase == scop.PreCommitPhase {
+		if cur.IsResetPreCommitStage() {
 			// This is the reset stage, return the undo op.
 			return []scop.Op{&scop.UndoAllInTxnImmediateMutationOpSideEffects{}}
+		}
+		// At this point this has to be the main stage.
+		// Any subsequent stage would be post-commit.
+		if next == nil {
+			// There are no post-commit stages, therefore do nothing.
+			return nil
 		}
 		// Otherwise, this is the main pre-commit stage, followed by post-commit
 		// stages, add the schema change job creation ops.
