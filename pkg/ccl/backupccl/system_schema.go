@@ -821,6 +821,12 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.SystemMVCCStatisticsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.StatementExecInsightsTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.TransactionExecInsightsTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 func rekeySystemTable(

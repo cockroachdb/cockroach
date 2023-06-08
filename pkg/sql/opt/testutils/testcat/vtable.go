@@ -135,6 +135,8 @@ var systemTables = []string{
 	systemschema.TenantSettingsTableSchema,
 	systemschema.SpanCountTableSchema,
 	systemschema.SystemPrivilegeTableSchema,
+	systemschema.TxnExecutionStatsTableSchema,
+	systemschema.StatementExecutionStatsTableSchema,
 }
 
 func init() {
