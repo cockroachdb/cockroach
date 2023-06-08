@@ -148,11 +148,19 @@ import "C"
 			krbDir = filepath.Join(bazelBin, "c-deps/libkrb5_foreign")
 		}
 	}
-	cppFlags := fmt.Sprintf("-I%s", filepath.Join(jemallocDir, "include"))
-	ldFlags := fmt.Sprintf("-L%s -L%s", filepath.Join(jemallocDir, "lib"), filepath.Join(projDir, "lib"))
+
+	srcToPersistentDirs := make(map[string]string, 3)
+	srcToPersistentDirs[jemallocDir] = filepath.Join(workspace, "bin", "c-deps", filepath.Base(jemallocDir))
+	srcToPersistentDirs[projDir] = filepath.Join(workspace, "bin", "c-deps", filepath.Base(projDir))
 	if krbDir != "" {
-		cppFlags += fmt.Sprintf(" -I%s", filepath.Join(krbDir, "include"))
-		ldFlags += fmt.Sprintf(" -L%s", filepath.Join(krbDir, "lib"))
+		srcToPersistentDirs[krbDir] = filepath.Join(workspace, "bin", "c-deps", filepath.Base(krbDir))
+	}
+
+	cppFlags := fmt.Sprintf("-I%s", filepath.Join(srcToPersistentDirs[jemallocDir], "include"))
+	ldFlags := fmt.Sprintf("-L%s -L%s", filepath.Join(srcToPersistentDirs[jemallocDir], "lib"), filepath.Join(srcToPersistentDirs[projDir], "lib"))
+	if krbDir != "" {
+		cppFlags += fmt.Sprintf(" -I%s", filepath.Join(srcToPersistentDirs[krbDir], "include"))
+		ldFlags += fmt.Sprintf(" -L%s", filepath.Join(srcToPersistentDirs[krbDir], "lib"))
 	}
 
 	cgoPkgs := []string{
@@ -175,6 +183,33 @@ import "C"
 		}{Package: filepath.Base(cgoPkg), CPPFlags: cppFlags, LDFlags: ldFlags})
 		if err != nil {
 			return err
+		}
+	}
+
+	// Copy jemallocDir, projDir, and krbDir to a persistent location (//bin/c-deps).
+	if err := os.MkdirAll(filepath.Join(workspace, "bin", "c-deps"), 0755); err != nil {
+		return err
+	}
+	// Ensure that overwriting existing ones is possible to prevent permissions errors.
+	chmodCmd := exec.Command("chmod", "-R", "755", filepath.Join(workspace, "bin", "c-deps"))
+	var chmodOutBuf, chmodErrBuf strings.Builder
+	chmodCmd.Stderr = &chmodErrBuf
+	chmodCmd.Stdout = &chmodOutBuf
+	if err := chmodCmd.Run(); err != nil {
+		return errors.Wrapf(err, "Output: %s - %s", chmodOutBuf.String(), chmodErrBuf.String())
+	}
+	for dirToCopy := range srcToPersistentDirs {
+		if dirToCopy != "" {
+			copyCmdArgs := []string{"-r", dirToCopy, filepath.Dir(srcToPersistentDirs[dirToCopy])}
+			logCommand("cp", copyCmdArgs...)
+			cmd := exec.Command("cp", copyCmdArgs...)
+			var outBuf, errBuf strings.Builder
+			cmd.Stdout = &outBuf
+			cmd.Stderr = &errBuf
+			cmd.Dir = workspace
+			if err := cmd.Run(); err != nil {
+				return errors.Wrapf(err, "Output: %s - %s", outBuf.String(), errBuf.String())
+			}
 		}
 	}
 	return nil
