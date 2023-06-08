@@ -85,6 +85,11 @@ func (rm *rangeMsg) isDeletedRange() bool {
 type nodeLoadResponse struct {
 	// -1 if this nodeLoadMsg is not a diff. Responder can unilaterally send a
 	// complete load even if the sender asked for a diff.
+	//
+	// TODO(sumeer): the diff story is not properly fleshed out for the local
+	// node in a distributed allocator, since there are also other updates via
+	// AdjustPendingChangesDisposition. We can start with only full state
+	// updates, and add diff support later.
 	lastLoadSeqNum int64
 	curLoadSeqNum  int64
 
