@@ -25,6 +25,7 @@ type Monitor interface {
 	ExpectDeaths(count int32)
 	ResetDeaths()
 	Go(fn func(context.Context) error)
+	GoWithCancel(fn func(context.Context) error) func()
 	WaitE() error
 	Wait()
 }
