@@ -55,6 +55,7 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 	}
 	// Sanity check for duplication options on the sequence.
 	optionsSeen := map[string]bool{}
+	var sequenceOwnedBy *tree.ColumnItem
 	var restartWith *int64
 	for _, opt := range n.Options {
 		_, seenBefore := optionsSeen[opt.Name]
@@ -63,8 +64,7 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		}
 		optionsSeen[opt.Name] = true
 		if opt.Name == tree.SeqOptOwnedBy {
-			panic(scerrors.NotImplementedErrorf(n, "create sequence specifying"+
-				"unsupported sequence options"))
+			sequenceOwnedBy = opt.ColumnItemVal
 		}
 		if opt.Name == tree.SeqOptRestart {
 			restartWith = opt.IntVal
@@ -100,6 +100,14 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		sequenceElem.OptionalRestartWith = &scpb.Sequence_RestartWith{RestartWith: *restartWith}
 	}
 	b.Add(sequenceElem)
+	// Setup the namespace entry.
+	sequenceNamespace := &scpb.Namespace{
+		DatabaseID:   dbElem.DatabaseID,
+		SchemaID:     schemaElem.SchemaID,
+		DescriptorID: sequenceID,
+		Name:         string(n.Name.ObjectName),
+	}
+	b.Add(sequenceNamespace)
 	// Add any sequence options.
 	addSequenceOption := func(key string, value interface{}) {
 		// Nil or empty keys can be skipped.
@@ -124,6 +132,10 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 	addSequenceOption(tree.SeqOptVirtual, tempSequenceOpts.Virtual)
 	addSequenceOption(tree.SeqOptCache, tempSequenceOpts.CacheSize)
 	addSequenceOption(tree.SeqOptAs, tempSequenceOpts.AsIntegerType)
+	// Add any sequence owned by element.
+	if sequenceOwnedBy != nil {
+		maybeAssignSequenceOwner(b, sequenceNamespace, sequenceOwnedBy)
+	}
 	// Add the single column for a sequence.
 	b.Add(&scpb.Column{
 		TableID:  sequenceID,
@@ -165,13 +177,6 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		Kind:          scpb.IndexColumn_KEY,
 		Direction:     catenumpb.IndexColumn_ASC,
 	})
-	// Setup the namespace entry.
-	b.Add(&scpb.Namespace{
-		DatabaseID:   dbElem.DatabaseID,
-		SchemaID:     schemaElem.SchemaID,
-		DescriptorID: sequenceID,
-		Name:         string(n.Name.ObjectName),
-	})
 	// Setup ownership elements.
 	ownerElem, userPrivsElems :=
 		b.BuildUserPrivilegesFromDefaultPrivileges(dbElem, schemaElem, sequenceID, privilege.Sequences, owner)
@@ -181,4 +186,25 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 	}
 	// Log the creation of this sequence.
 	b.LogEventForExistingTarget(sequenceElem)
+}
+
+func maybeAssignSequenceOwner(b BuildCtx, sequence *scpb.Namespace, owner *tree.ColumnItem) {
+	// Resolve the column first to validate its sane.
+	tableElts := b.ResolveTable(owner.TableName, ResolveParams{})
+	_, _, tbl := scpb.FindTable(tableElts)
+	_, _, tblNamespace := scpb.FindNamespace(tableElts)
+	if tblNamespace.DatabaseID != sequence.DatabaseID {
+		if err := b.CanCreateCrossDBSequenceOwnerRef(); err != nil {
+			panic(err)
+		}
+	}
+	// Next resolve the column
+	colElts := b.ResolveColumn(tbl.TableID, owner.ColumnName, ResolveParams{})
+	_, _, col := scpb.FindColumn(colElts)
+	// Create a sequence owner element
+	b.Add(&scpb.SequenceOwner{
+		SequenceID: sequence.DescriptorID,
+		TableID:    tbl.TableID,
+		ColumnID:   col.ColumnID,
+	})
 }

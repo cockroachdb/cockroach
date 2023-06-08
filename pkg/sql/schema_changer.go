@@ -3152,3 +3152,17 @@ func (p *planner) CanPerformDropOwnedBy(
 	}
 	return tree.MustBeDInt(row[0]) == 0, err
 }
+
+// CanCreateCrossDBSequenceOwnerRef returns if cross database sequence
+// owner references are allowed.
+func (p *planner) CanCreateCrossDBSequenceOwnerRef() error {
+	if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.FeatureNotSupported,
+				"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
+				allowCrossDatabaseSeqOwnerSetting),
+			crossDBReferenceDeprecationHint(),
+		)
+	}
+	return nil
+}
