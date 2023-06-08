@@ -1626,6 +1626,13 @@ func CreateSnapshot(
 			crdbVersion = "unknown"
 		}
 		crdbVersion = strings.TrimPrefix(crdbVersion, "cockroach-")
+		// N.B. snapshot name cannot exceed 63 characters, so we use short sha for dev version.
+		if index := strings.Index(crdbVersion, "dev-"); index != -1 {
+			sha := crdbVersion[index+4:]
+			if len(sha) > 7 {
+				crdbVersion = crdbVersion[:index+4] + sha[:7]
+			}
+		}
 
 		labels := map[string]string{
 			"roachprod-node-src-spec": cVM.MachineType,
@@ -1655,6 +1662,9 @@ func CreateSnapshot(
 				snapshotFingerprintInfix := strings.ReplaceAll(
 					fmt.Sprintf("%s-n%d", crdbVersion, len(nodes)), ".", "-")
 				snapshotName := fmt.Sprintf("%s-%s-%04d", vsco.Name, snapshotFingerprintInfix, node)
+				if len(snapshotName) > 63 {
+					return fmt.Errorf("snapshot name %q exceeds 63 characters; shorten name prefix and use description arg. for more context", snapshotName)
+				}
 				volumeSnapshot, err := provider.CreateVolumeSnapshot(l, volume,
 					vm.VolumeSnapshotCreateOpts{
 						Name:        snapshotName,
@@ -1673,7 +1683,6 @@ func CreateSnapshot(
 			return nil
 		}); err != nil {
 			res.Err = err
-			return res, res.Err
 		}
 		return res, nil
 	}); err != nil {
@@ -1746,7 +1755,6 @@ func ApplySnapshots(
 			return nil
 		}); err != nil {
 			res.Err = err
-			return res, res.Err
 		}
 		return res, nil
 	}); err != nil {
@@ -1817,7 +1825,6 @@ func ApplySnapshots(
 			return nil
 		}); err != nil {
 			res.Err = err
-			return res, res.Err
 		}
 		return res, nil
 	})
