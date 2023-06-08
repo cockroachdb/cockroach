@@ -207,11 +207,7 @@ func (w *Writer) setNewRowGroupWriter() error {
 }
 
 func (w *Writer) writeDatumToColChunk(d tree.Datum, datumColIdx int) (err error) {
-	// tree.NewFmtCtx uses an underlying pool, so we can assume there is no
-	// allocation here.
-	fmtCtx := tree.NewFmtCtx(tree.FmtExport)
-	defer fmtCtx.Close()
-	if err = w.sch.cols[datumColIdx].colWriter.Write(d, w.columnChunkWriterCache[datumColIdx], w.ba, fmtCtx); err != nil {
+	if err = w.sch.cols[datumColIdx].colWriter.Write(d, w.columnChunkWriterCache[datumColIdx], w.ba); err != nil {
 		return err
 	}
 
