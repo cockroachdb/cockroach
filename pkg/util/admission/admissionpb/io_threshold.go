@@ -32,19 +32,22 @@ import (
 // max number of compactions). And we will need to incorporate overload due to
 // disk bandwidth bottleneck.
 func (iot *IOThreshold) Score() (float64, bool) {
-	// iot.L0NumFilesThreshold and iot.L0NumSubLevelsThreshold are initialized to
-	// 0 by default, and there appears to be a period of time before we update
-	// iot.L0NumFilesThreshold and iot.L0NumSubLevelsThreshold to their
-	// appropriate values. During this period of time, to prevent dividing by 0
-	// below and Score() returning NaN, we check if iot.L0NumFilesThreshold or
-	// iot.L0NumSubLevelsThreshold are 0 (i.e. currently uninitialized) and
-	// return 0 as the score if so.
-	if iot == nil || iot.L0NumFilesThreshold == 0 || iot.L0NumSubLevelsThreshold == 0 {
+	// iot.L0NumFilesThreshold and iot.L0NumSubLevelsThreshold could be 0 by
+	// default, as there appears to be a period of time before we update
+	// iot.L0NumFilesThreshold and iot.L0NumSublevelsThreshold to their appropriate
+	// values.
+	return iot.ScoreWithThresholds(iot.L0NumFilesThreshold, iot.L0NumSubLevelsThreshold)
+}
+
+func (iot *IOThreshold) ScoreWithThresholds(numFilesThreshold, numSublevelsThreshold int64) (float64, bool) {
+	// Since numFilesThreshold, numSublevelsThreshold can be 0 and we don't want to
+	// return NaN due to division by 0, we return a score of 0 in those cases.
+	if iot == nil || numFilesThreshold == 0 || numSublevelsThreshold == 0 {
 		return 0, false
 	}
 	f := math.Max(
-		float64(iot.L0NumFiles)/float64(iot.L0NumFilesThreshold),
-		float64(iot.L0NumSubLevels)/float64(iot.L0NumSubLevelsThreshold),
+		float64(iot.L0NumFiles)/float64(numFilesThreshold),
+		float64(iot.L0NumSubLevels)/float64(numSublevelsThreshold),
 	)
 	return f, f > 1.0
 }
