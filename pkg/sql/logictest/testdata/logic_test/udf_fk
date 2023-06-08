@@ -36,10 +36,10 @@ CREATE FUNCTION f_fk_p_c(k INT, r INT) RETURNS RECORD AS $$
   INSERT INTO child VALUES (k, r) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c(100, 1);
 
-statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_p(100, 1);
 
 query T
@@ -47,7 +47,7 @@ SELECT f_fk_p_c(100, 1);
 ----
 (100,1)
 
-statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 WITH x AS (SELECT f_fk_c(101, 2)) INSERT INTO parent VALUES (2);
 
 query T
@@ -68,10 +68,10 @@ CREATE FUNCTION f_fk_c_multi(k1 INT, r1 INT, k2 INT, r2 INT) RETURNS SETOF RECOR
   SELECT * FROM child WHERE c = k1 OR c = k2;
 $$ LANGUAGE SQL;
 
-statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_multi(101, 1, 102, 2);
 
-statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_multi(101, 2, 102, 1);
 
 query T rowsort
@@ -96,19 +96,21 @@ CREATE FUNCTION f_fk_c_seq_last(k INT, r INT) RETURNS RECORD AS $$
   SELECT nextval('s');
 $$ LANGUAGE SQL;
 
-statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_seq_last(103,2);
 
-statement error pq: currval\(\): currval of sequence \"test.public.s\" is not yet defined in this session
+statement error pgcode 55000 pq: currval\(\): currval of sequence \"test.public.s\" is not yet defined in this session
 SELECT currval('s');
 
-statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_seq_first(103,2);
 
 query I
 SELECT currval('s');
 ----
 1
+
+subtest end
 
 subtest delete
 
@@ -158,26 +160,36 @@ CREATE FUNCTION f_fk_p_c_del(k INT, r INT) RETURNS RECORD AS $$
   DELETE FROM child WHERE c = k RETURNING *;
 $$ LANGUAGE SQL;
 
-statement ok
+query T
 SELECT f_fk_p_del(4);
+----
+(4)
 
-statement error pq: delete on table "parent" violates foreign key constraint "child_p_fkey" on table "child"\nDETAIL: Key \(p\)=\(3\) is still referenced from table "child"\.
+statement error pgcode 23503 pq: delete on table "parent" violates foreign key constraint "child_p_fkey" on table "child"\nDETAIL: Key \(p\)=\(3\) is still referenced from table "child"\.
 SELECT f_fk_p_del(3);
 
-statement ok
+query T
 SELECT f_fk_c_del(102);
+----
+(102,3)
 
-statement ok
+query T
 SELECT f_fk_p_del(3);
+----
+(3)
 
-statement error pq: delete on table "parent" violates foreign key constraint "child_p_fkey" on table "child"\nDETAIL: Key \(p\)=\(2\) is still referenced from table "child"\.
+statement error pgcode 23503 pq: delete on table "parent" violates foreign key constraint "child_p_fkey" on table "child"\nDETAIL: Key \(p\)=\(2\) is still referenced from table "child"\.
 SELECT f_fk_p_c_del(101,2);
 
-statement ok
+query T
 SELECT f_fk_c_p_del(101,2);
+----
+(2)
 
-statement ok
+query TT
 SELECT f_fk_c_del(100), f_fk_p_del(1);
+----
+(100,1)  (1)
 
 query I rowsort
 SELECT * FROM parent
@@ -187,6 +199,7 @@ query II rowsort
 SELECT * FROM child
 ----
 
+subtest end
 
 subtest upsert
 
@@ -202,15 +215,17 @@ statement ok
 INSERT INTO parent VALUES (1), (3);
 
 # Insert
-statement ok
+query T
 SELECT f_fk_c_ocdu(100,1);
+----
+(100,1)
 
 # Update to value not in parent fails.
-statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_ocdu(100,2);
 
 # Inserting value not in parent fails.
-statement error pq: insert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_ocdu(101,2);
 
 statement ok
@@ -218,11 +233,365 @@ CREATE FUNCTION f_fk_c_ups(k INT, r INT) RETURNS RECORD AS $$
   UPSERT INTO child VALUES (k, r) RETURNING *;
 $$ LANGUAGE SQL;
 
-statement ok
+query T
 SELECT f_fk_c_ups(102,3);
+----
+(102,3)
 
-statement error pq: upsert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: upsert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_ups(102,4);
 
-statement error pq: upsert on table "child" violates foreign key constraint "child_p_fkey"
+statement error pgcode 23503 pq: upsert on table "child" violates foreign key constraint "child_p_fkey"
 SELECT f_fk_c_ups(103,4);
+
+subtest end
+
+subtest cascade
+
+statement ok
+CREATE TABLE parent_cascade (p INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE child_cascade (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent_cascade(p) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+statement ok
+CREATE FUNCTION f_fk_p_cascade(old INT, new INT) RETURNS RECORD AS $$
+  UPDATE parent_cascade SET p = new WHERE p = old RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+INSERT INTO parent_cascade VALUES (1);
+
+statement ok
+INSERT INTO child_cascade VALUES (100,1);
+
+# Test that we can successfully cascade an update one level.
+query T
+SELECT f_fk_p_cascade(1, 2);
+----
+(2)
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+100 2
+
+statement ok
+INSERT INTO child_cascade VALUES (101,2), (102,2);
+
+# Test that UDFs can cascade updates to multiple rows.
+query T
+SELECT f_fk_p_cascade(2, 3);
+----
+(3)
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+100 3
+101 3
+102 3
+
+# Test that two update cascades to the same row result in the final value.
+query TT
+SELECT f_fk_p_cascade(3, 4), f_fk_p_cascade(4, 2);
+----
+(4) (2)
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+100 2
+101 2
+102 2
+
+statement ok
+DROP TABLE child_cascade;
+
+# Make child_cascade with a unique FK so that we can introduce another level of
+# FK references.
+statement ok
+CREATE TABLE child_cascade (
+  c INT PRIMARY KEY,
+  p INT UNIQUE NOT NULL REFERENCES parent_cascade(p) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE grandchild_cascade (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES child_cascade(p) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO child_cascade VALUES (100,2);
+
+statement ok
+INSERT INTO grandchild_cascade VALUES (1000,2);
+
+# Test two levels of cascading updates.
+query T
+SELECT f_fk_p_cascade(2, 3);
+----
+(3)
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+100 3
+
+query II rowsort
+SELECT * FROM grandchild_cascade;
+----
+1000 3
+
+statement ok
+CREATE OR REPLACE FUNCTION f_fk_c(k INT, r INT) RETURNS RECORD AS $$
+  INSERT INTO child_cascade VALUES (k,r) RETURNING *;
+$$ LANGUAGE SQL;
+
+# No updates occur if there is an error in a later UDF.
+statement error pgcode 23503 pq: insert on table "child_cascade" violates foreign key constraint "child_cascade_p_fkey"
+SELECT f_fk_p_cascade(3, 4), f_fk_c(10, 100);
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+100 3
+
+query II rowsort
+SELECT * FROM grandchild_cascade;
+----
+1000 3
+
+statement ok
+CREATE FUNCTION f_fk_p_del_cascade(old INT) RETURNS RECORD AS $$
+  DELETE FROM parent_cascade WHERE p = old RETURNING *;
+$$ LANGUAGE SQL;
+
+# Test two levels of cascading deletes.
+query T
+SELECT f_fk_p_del_cascade(3);
+----
+(3)
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+
+query II rowsort
+SELECT * FROM grandchild_cascade;
+----
+
+statement ok
+INSERT INTO parent_cascade VALUES (1), (2);
+
+statement ok
+INSERT INTO child_cascade VALUES (1, 1), (2, 2);
+
+statement ok
+INSERT INTO grandchild_cascade VALUES (11, 1), (12, 2);
+
+# Test multiple cascading updates to different rows.
+query TT rowsort
+SELECT f_fk_p_cascade(1, 3), f_fk_p_cascade(2, 4);
+----
+(3) (4)
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+1 3
+2 4
+
+query II rowsort
+SELECT * FROM grandchild_cascade;
+----
+11 3
+12 4
+
+# Test an update and multiple deletes, including to the updated row.
+query TTT rowsort
+SELECT f_fk_p_cascade(3, 5), f_fk_p_del_cascade(4), f_fk_p_del_cascade(5);
+----
+(5) (4) (5)
+
+query I rowsort
+SELECT * FROM parent_cascade;
+----
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+
+query II rowsort
+SELECT * FROM grandchild_cascade;
+----
+
+statement ok
+DROP TABLE grandchild_cascade;
+
+statement ok
+DROP TABLE child_cascade;
+
+statement ok
+CREATE TABLE child_cascade (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_cascade(p) ON DELETE SET NULL ON UPDATE SET NULL
+);
+
+statement ok
+INSERT INTO parent_cascade VALUES (3);
+
+statement ok
+INSERT INTO child_cascade VALUES (100,3);
+
+# Test cascading updates with `UPDATE SET NULL`.
+query T
+SELECT f_fk_p_cascade(3, 4);
+----
+(4)
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+100 NULL
+
+statement ok
+INSERT INTO child_cascade VALUES(101, 4);
+
+# Test cascading deletes with `DELETE SET NULL`.
+query T
+SELECT f_fk_p_del_cascade(4);
+----
+(4)
+
+query II rowsort
+SELECT * FROM child_cascade;
+----
+100 NULL
+101 NULL
+
+query I rowsort
+SELECT * FROM parent_cascade;
+----
+
+statement ok
+DROP TABLE child_cascade
+
+subtest end
+
+# Test a query with both an apply join and a UDF with a cascade.
+subtest apply_join
+
+statement ok
+CREATE TABLE child_cascade (
+  c INT PRIMARY KEY,
+  p INT UNIQUE NOT NULL REFERENCES parent_cascade(p) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE grandchild_cascade (
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES child_cascade(p) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+statement ok
+CREATE OR REPLACE FUNCTION f_fk_p_cascade(old INT, new INT) RETURNS RECORD AS $$
+  UPDATE parent_cascade SET p = new WHERE p = old RETURNING *;
+$$ LANGUAGE SQL;
+
+statement ok
+INSERT INTO parent_cascade VALUES (1), (2), (3);
+
+statement ok
+INSERT INTO child_cascade VALUES (1, 1), (2, 2), (3, 3);
+
+statement ok
+INSERT INTO grandchild_cascade VALUES (11, 1), (12, 2), (13, 3);
+
+query IT rowsort
+SELECT
+  (SELECT * FROM (VALUES ((SELECT x FROM (VALUES (1)) AS s (x)) + y))),
+  f_fk_p_cascade(y, y+10)
+FROM
+  (VALUES (1), (2), (3)) AS t (y)
+----
+2 (11)
+3 (12)
+4 (13)
+
+query II rowsort
+SELECT * FROM child_cascade
+----
+1 11
+2 12
+3 13
+
+query II rowsort
+SELECT * FROM grandchild_cascade
+----
+11 11
+12 12
+13 13
+
+# Test multiple cascades in the same function.
+statement ok
+CREATE OR REPLACE FUNCTION f_fk_swap(a INT, b INT) RETURNS RECORD AS $$
+  UPDATE parent_cascade SET p = a+1 WHERE p = b RETURNING *;
+  UPDATE parent_cascade SET p = b WHERE p = a RETURNING *;
+  UPDATE parent_cascade SET p = a WHERE p = a+1 RETURNING *;
+$$ LANGUAGE SQL;
+
+query T
+SELECT f_fk_swap(13, 12);
+----
+(13)
+
+query II rowsort
+SELECT * FROM grandchild_cascade
+----
+11 11
+12 13
+13 12
+
+statement ok
+CREATE TABLE grandchild(
+  c INT PRIMARY KEY,
+  p INT NOT NULL REFERENCES child_cascade(p)
+);
+
+statement ok
+INSERT INTO grandchild VALUES (11,11), (12,13), (13,12);
+
+statement error pgcode 23503 pq: update on table "child_cascade" violates foreign key constraint "grandchild_p_fkey" on table "grandchild"
+SELECT f_fk_p_cascade(13, 14)
+
+statement error pgcode 23503 pq: update on table "child_cascade" violates foreign key constraint "grandchild_p_fkey" on table "grandchild"
+SELECT f_fk_swap(13, 12);
+
+statement ok
+CREATE TABLE selfref (a INT PRIMARY KEY, b INT NOT NULL REFERENCES selfref(a) ON UPDATE CASCADE)
+
+statement ok
+INSERT INTO selfref VALUES (1,1);
+
+statement ok
+CREATE FUNCTION f_selfref(old INT, new INT) RETURNS RECORD AS $$
+  UPDATE selfref SET a = new WHERE a = old RETURNING *;
+$$ LANGUAGE SQL;
+
+# Test a self-referencing FK cascade.
+query T
+SELECT f_selfref(1,2);
+----
+(2,1)
+
+query II
+SELECT * FROM selfref;
+----
+2 2
+
+subtest end

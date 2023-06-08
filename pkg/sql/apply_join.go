@@ -286,6 +286,7 @@ func runPlanInsidePlan(
 
 	plannerCopy := *params.p
 	plannerCopy.curPlan.planComponents = *plan
+
 	// "Pausable portal" execution model is only applicable to the outer
 	// statement since we actually need to execute all inner plans to completion
 	// before we can produce any "outer" rows to be returned to the client, so
@@ -333,6 +334,12 @@ func runPlanInsidePlan(
 		// We don't have "inner" subqueries, so the apply join can only refer to
 		// the "outer" ones.
 		plannerCopy.curPlan.subqueryPlans = params.p.curPlan.subqueryPlans
+		// During cleanup, nil out the inner subquery plans before closing the plan
+		// components. Otherwise, we may inadvertently close nodes that are needed
+		// when executing the outer query.
+		defer func() {
+			plan.subqueryPlans = nil
+		}()
 	}
 
 	distributePlan := getPlanDistribution(
@@ -365,10 +372,13 @@ func runPlanInsidePlan(
 	evalCtxFactory2 := func(usedConcurrently bool) *extendedEvalContext {
 		return evalCtxFactory()
 	}
-
+	plannerCopy.autoCommit = false
 	execCfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
 		ctx, &plannerCopy, evalCtxFactory2, &plannerCopy.curPlan.planComponents, recv,
 	)
+	// We might have appended some cascades or checks to the plannerCopy, so we
+	// need to update the plan for cleanup purposes before proceeding.
+	*plan = plannerCopy.curPlan.planComponents
 	if recv.commErr != nil {
 		return recv.commErr
 	}
