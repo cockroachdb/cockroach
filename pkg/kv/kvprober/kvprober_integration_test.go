@@ -89,9 +89,9 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 	// Once a node is fully decommissioned, neither kvclient nor kvprober work from
 	// the node. This does not indicate a service health issue; it is expected behavior.
-	// So we assert that kvprober running on the to be decommissioned node returns no errors
-	// in case the node is decommissioned.
-	t.Run("decommission doesn't lead to errors", func(t *testing.T) {
+	// So we assert that kvprober running on the decommissioned node does not increment
+	// the error count metric.
+	t.Run("decommission doesn't cause errors", func(t *testing.T) {
 		tc, cleanup := initTestCluster(ctx, t, base.TestingKnobs{})
 		defer cleanup()
 
@@ -467,4 +467,3 @@ func initTestServer(
 		s.Stopper().Stop(context.Background())
 	}
 }
-

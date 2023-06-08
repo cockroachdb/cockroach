@@ -20,6 +20,7 @@ package kvprober
 import (
 	"context"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -39,7 +40,10 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-const putValue = "thekvproberwrotethis"
+const (
+	putValue                           = "thekvproberwrotethis"
+	nodeIsDecommissionedErrorSubstring = "was permanently removed from the cluster at"
+)
 
 // Prober sends queries to KV in a loop. See package docstring for more.
 type Prober struct {
@@ -59,8 +63,6 @@ type Prober struct {
 	// quarantineWritePool pool keeps track of ranges that timed out/errored when
 	// probing and repeatedly probes those ranges until a probe succeeds.
 	quarantineWritePool *quarantinePool
-	// Used to implement manualStop.
-	cancelFunc context.CancelFunc
 }
 
 // Opts provides knobs to control kvprober.Prober.
@@ -287,20 +289,10 @@ func (p *Prober) Metrics() Metrics {
 	return p.metrics
 }
 
-// ManualStops stops the prober from sending more probes. It does not
-// block on the completion of all work the prober is doing.
-func (p *Prober) ManualStop() {
-	log.Health.Infof(context.Background(), "manual stop of kvprober")
-	p.cancelFunc()
-}
-
 // Start causes kvprober to start probing KV. Start returns immediately. Start
 // returns an error only if stopper.RunAsyncTask returns an error.
 func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = logtags.AddTag(ctx, "kvprober", nil /* value */)
-	log.Error(ctx, "starting prober")
-	ctx, p.cancelFunc = context.WithCancel(ctx)
-
 	startLoop := func(ctx context.Context, opName string, probe func(context.Context, planner), pl planner, interval *settings.DurationSetting) error {
 		return stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: opName, SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 			defer logcrash.RecoverAndReportNonfatalPanic(ctx, &p.settings.SV)
@@ -322,8 +314,6 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 					t.Read = true
 					// Jitter added to de-synchronize different nodes' probe loops.
 					t.Reset(d())
-				case <-ctx.Done():
-					return
 				case <-stopper.ShouldQuiesce():
 					return
 				}
@@ -365,6 +355,14 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	if err == nil && step.RangeID == 0 {
 		return
 	}
+	if err != nil && strings.Contains(err.Error(), nodeIsDecommissionedErrorSubstring) {
+		// This is expected, so long as the node is decommissioned. We considered stopping the kvprober
+		// during decommissioning, but we prefer this change, as it is less risky, especially to backport.
+		// We log this error at warning level as an FYI, but we do not increment the error rate metric, so
+		// that operators that alert on kvprober are not alerted of something that is expected.
+		log.Health.Warningf(ctx, "making a plan failed with expected error during decommission: %v", err)
+		return
+	}
 	if err != nil {
 		log.Health.Errorf(ctx, "can't make a plan: %v", err)
 		p.metrics.ProbePlanFailures.Inc(1)
@@ -396,6 +394,10 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 		}
 		return txns.TxnRootKV(ctx, f)
 	})
+	if err != nil && strings.Contains(err.Error(), nodeIsDecommissionedErrorSubstring) {
+		log.Health.Warningf(ctx, "kv.Get(%s), r=%v failed with expected error during decommission: %v", step.Key, step.RangeID, err)
+		return
+	}
 	if err != nil {
 		// TODO(josh): Write structured events with log.Structured.
 		log.Health.Errorf(ctx, "kv.Get(%s), r=%v failed with: %v", step.Key, step.RangeID, err)
@@ -428,6 +430,10 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	if err == nil && step.RangeID == 0 {
 		return
 	}
+	if err != nil && strings.Contains(err.Error(), nodeIsDecommissionedErrorSubstring) {
+		log.Health.Warningf(ctx, "making a plan failed with expected error during decommission: %v", err)
+		return
+	}
 	if err != nil {
 		log.Health.Errorf(ctx, "can't make a plan: %v", err)
 		p.metrics.ProbePlanFailures.Inc(1)
@@ -448,6 +454,12 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 		}
 		return txns.TxnRootKV(ctx, f)
 	})
+	if err != nil && strings.Contains(err.Error(), nodeIsDecommissionedErrorSubstring) {
+		log.Health.Warningf(
+			ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with expected error during decommission: %v", step.Key, step.RangeID, err,
+		)
+		return
+	}
 	if err != nil {
 		added := p.quarantineWritePool.maybeAdd(ctx, step)
 		log.Health.Errorf(
