@@ -315,3 +315,29 @@ SELECT {TABLE:12800}.a FROM t1;
 
 statement error pq: relation "\[12800\]" does not exist
 SELECT {TABLE:12800}.a FROM {TABLE:106};
+
+# Make sure view ID is used instead of source table ID.
+statement ok
+CREATE OR REPLACE VIEW v1 AS SELECT a FROM t1;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT
+LANGUAGE SQL
+AS $$
+  SELECT v1.a FROM v1 ORDER BY v1.a;
+$$
+
+query I
+SELECT 'v1'::REGCLASS::INT
+----
+113
+
+query T
+SELECT get_body_str('f');
+----
+"SELECT {TABLE:113}.a FROM {TABLE:113} ORDER BY {TABLE:113}.a;"
+
+query I
+SELECT f();
+----
+1
