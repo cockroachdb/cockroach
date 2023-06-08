@@ -10484,7 +10484,16 @@ func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
 func parseSpan(arg tree.Datum) (roachpb.Span, error) {
 	arr := tree.MustBeDArray(arg)
 	if arr.Len() != 2 {
-		return roachpb.Span{}, errors.New("expected an array of two elements")
+		return roachpb.Span{}, pgerror.New(pgcode.InvalidParameterValue,
+			"expected an array of two elements")
+	}
+	if arr.Array[0] == tree.DNull {
+		return roachpb.Span{}, pgerror.New(pgcode.InvalidParameterValue,
+			"StartKey cannot be NULL")
+	}
+	if arr.Array[1] == tree.DNull {
+		return roachpb.Span{}, pgerror.New(pgcode.InvalidParameterValue,
+			"EndKey cannot be NULL")
 	}
 	startKey := []byte(tree.MustBeDBytes(arr.Array[0]))
 	endKey := []byte(tree.MustBeDBytes(arr.Array[1]))
