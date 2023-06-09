@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -54,12 +55,15 @@ func optimizePuts(
 	}
 	// Returns false on occurrence of a duplicate key.
 	maybeAddPut := func(key roachpb.Key) bool {
-		// Note that casting the byte slice key to a string does not allocate.
+		// The lookup will not copy key but the put will, but since map doesn't
+		// escape and we don't mutate the keys its safe to not
+		// allocate for both.
+		mapKey := *(*string)(unsafe.Pointer(&key))
 		if unique != nil {
-			if _, ok := unique[string(key)]; ok {
+			if _, ok := unique[mapKey]; ok {
 				return false
 			}
-			unique[string(key)] = struct{}{}
+			unique[mapKey] = struct{}{}
 		}
 		if minKey == nil || bytes.Compare(key, minKey) < 0 {
 			minKey = key
