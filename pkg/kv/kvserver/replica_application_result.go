@@ -164,7 +164,16 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			//
 			// These many possible worlds are a major source of complexity, a
 			// reduction of which is postponed.
-			pErr = r.tryReproposeWithNewLeaseIndex(ctx, cmd)
+			pErr = nil
+			if fn := r.store.TestingKnobs().InjectReproposalError; fn != nil {
+				if err := fn(cmd.proposal); err != nil {
+					pErr = kvpb.NewError(err)
+				}
+			}
+			if pErr == nil { // since we might have injected an error
+				pErr = r.tryReproposeWithNewLeaseIndex(ctx, cmd)
+			}
+
 			if pErr != nil {
 				// An error from tryReproposeWithNewLeaseIndex implies that the current
 				// entry is not superseded (i.e. we don't have a reproposal at a higher

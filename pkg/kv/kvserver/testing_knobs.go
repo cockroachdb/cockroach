@@ -493,6 +493,10 @@ type StoreTestingKnobs struct {
 	// required.
 	BaseQueueInterceptor func(ctx context.Context, bq *baseQueue)
 
+	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndex.
+	// If nil is returned, reproposal will be attempted.
+	InjectReproposalError func(p *ProposalData) error
+
 	// FlowControlTestingKnobs provide fine-grained control over the various
 	// kvflowcontrol components for testing.
 	FlowControlTestingKnobs *kvflowcontrol.TestingKnobs
