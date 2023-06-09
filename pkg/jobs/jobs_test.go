@@ -18,7 +18,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"runtime/pprof"
 	"sort"
 	"strings"
@@ -644,54 +643,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.ResumeStart = true
 		rts.resumeCheckCh <- struct{}{}
 		rts.check(t, jobs.StatusRunning)
-
-		r, err := regexp.Compile("retry txn")
-		require.NoError(t, err)
-
-		executeWithRetriableTxn := func(db *gosql.DB, fn func(txn *gosql.Tx) error) error {
-			txn, err := db.Begin()
-			if err != nil {
-				return err
-			}
-			defer func() {
-				if err != nil {
-					_ = txn.Rollback()
-				}
-
-			}()
-
-			_, err = txn.Exec("SAVEPOINT cockroach_restart")
-			if err != nil {
-				return err
-			}
-
-			maxRetries := 10
-			retryCount := 0
-			for {
-				err = fn(txn)
-				if err == nil {
-					_, err = txn.Exec("RELEASE SAVEPOINT cockroach_restart")
-					if err == nil {
-						return txn.Commit()
-					}
-				}
-
-				if !r.MatchString(err.Error()) {
-					return err
-				}
-
-				_, rollbackErr := txn.Exec("ROLLBACK TO SAVEPOINT cockroach_restart")
-				if rollbackErr != nil {
-					return errors.CombineErrors(rollbackErr, err)
-				}
-
-				retryCount++
-				if retryCount > maxRetries {
-					return errors.Wrap(err, "retries exhausted")
-				}
-			}
-		}
-
+		rts.sqlDB.MaxTxnRetries = 10
 		// Rollback a CANCEL.
 		{
 			txn, err := rts.outerDB.Begin()
@@ -729,7 +681,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		}
 		// Now pause it for reals.
 		{
-			err := executeWithRetriableTxn(rts.outerDB, func(txn *gosql.Tx) error {
+			rts.sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
 				if _, err := txn.Exec("PAUSE JOB $1", job.ID()); err != nil {
 					return err
 				}
@@ -738,9 +690,6 @@ func TestRegistryLifecycle(t *testing.T) {
 				rts.check(t, "")
 				return nil
 			})
-			if err != nil {
-				t.Fatal(err)
-			}
 			rts.check(t, jobs.StatusPaused)
 		}
 		// Rollback a RESUME.
@@ -759,7 +708,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		}
 		// Commit a RESUME.
 		{
-			err := executeWithRetriableTxn(rts.outerDB, func(txn *gosql.Tx) error {
+			rts.sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
 				if _, err := txn.Exec("RESUME JOB $1", job.ID()); err != nil {
 					return err
 				}
@@ -768,9 +717,6 @@ func TestRegistryLifecycle(t *testing.T) {
 				rts.check(t, "")
 				return nil
 			})
-			if err != nil {
-				t.Fatal(err)
-			}
 		}
 		rts.mu.e.ResumeStart = true
 		rts.check(t, jobs.StatusRunning)
