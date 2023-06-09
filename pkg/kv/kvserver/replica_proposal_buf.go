@@ -423,6 +423,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// it's subject to replication admission control. Updated in tandem with
 	// slice above.
 	admitHandles := make([]admitEntHandle, 0, used)
+	// INVARIANT: buf[firstProp:nextProp] lines up with the ents slice.
+	firstProp, nextProp := 0, 0
 	buf := b.arr.asSlice()[:used]
 	defer func() {
 		// Clear buffer.
@@ -513,7 +515,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			propErr, dropped := proposeBatch(raftGroup, b.p.getReplicaID(), ents)
+			propErr, dropped := proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, buf[firstProp:nextProp])
 			if propErr != nil {
 				firstErr = propErr
 				continue
@@ -523,6 +525,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			}
 
 			ents = ents[len(ents):]
+			firstProp, nextProp = i, i
 			admitHandles = admitHandles[len(admitHandles):]
 
 			confChangeCtx := kvserverpb.ConfChangeContext{
@@ -564,6 +567,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			ents = append(ents, raftpb.Entry{
 				Data: p.encodedCommand,
 			})
+			nextProp++
 			log.VEvent(p.ctx, 2, "flushing proposal to Raft")
 
 			// We don't want deduct flow tokens for reproposed commands, and of
@@ -583,7 +587,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		return 0, firstErr
 	}
 
-	propErr, dropped := proposeBatch(raftGroup, b.p.getReplicaID(), ents)
+	propErr, dropped := proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, buf[firstProp:nextProp])
 	if propErr == nil && !dropped {
 		// Now that we know what raft log position[1] this proposal is to end up
 		// in, deduct flow tokens for it. This is done without blocking (we've
@@ -954,8 +958,15 @@ func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
 }
 
 func proposeBatch(
-	raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry,
+	ctx context.Context,
+	raftGroup proposerRaft,
+	replID roachpb.ReplicaID,
+	ents []raftpb.Entry,
+	props []*ProposalData, // must match ents slice
 ) (_ error, dropped bool) {
+	if len(ents) != len(props) {
+		return errors.AssertionFailedf("ents and props don't match up: %v and %v", ents, props), false
+	}
 	if len(ents) == 0 {
 		return nil, false
 	}
