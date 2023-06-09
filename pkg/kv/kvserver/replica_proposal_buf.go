@@ -980,6 +980,11 @@ func proposeBatch(
 		// ignored prior to the introduction of ErrProposalDropped).
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
+		for _, p := range props {
+			if p.ctx != nil {
+				log.Event(p.ctx, "entry dropped")
+			}
+		}
 		return nil, true
 	}
 	return err, false
