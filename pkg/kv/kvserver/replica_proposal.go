@@ -45,6 +45,70 @@ import (
 // ProposalData is data about a command which allows it to be
 // evaluated, proposed to raft, and for the result of the command to
 // be returned to the caller.
+//
+// A proposal (=ProposalData) is created and then handed to the proposal buffer
+// (Replica.mu.proposalBuf) via propBuf.Insert. In the common case, the proposal
+// transfers from there into Replica.mu.proposals (and the raft log) via
+// propBuf.FlushLockedWithRaftGroup (called from handleRaftReady), but instead
+// an additional call to Insert (on behalf of some other proposal) may also do
+// this instead (in case the propBuf fills up). ProposalData itself has no mutex
+// and locking is provided by `Replica.mu` which must always be held when
+// accessing a ProposalData (except before the first insertion into the proposal
+// buffer). However, at the time of writing, this locking is possibly insufficient
+// and the above rule is not adhered to at all times. In particular, during raft
+// application, the ProposalData is mutated without the Replica.mu lock being
+// held in all places. As log application is a well-trodden code path and no
+// relevant data races are known, they are either absent or extremely rare.
+// Still, an improvement seems advisable.
+//
+// This goes for the locking, but also for the lifecycle of ProposalData in
+// aggregate. It is extremely complex due to internal reproposals and the
+// multiple, poorly synchronized, and circular hand-offs that exist between
+// the proposals map and the proposal buffer. The following diagram attempts
+// to describe the status quo.
+//
+//	         created
+//	           │                proposal map, apply
+//	           │[1]             goroutine, and propBuf
+//	           ▼                        ▲    │
+//	┌─┬────►propBuf  ┌────────────┐     │[6] │[2]
+//	│ │        │     │            │     │    ▼
+//	│ │        │[2]  │         proposal map and
+//	│ │        ▼     ▼         apply goroutine
+//	│ │   proposal map────┐       ▲
+//	│ │        │     │    │  [4]  │
+//	│ │[5]     │[3]  │[6] └───────┘
+//	│ │        │     │
+//	│ │        ▼     └──────►proposal map
+//	│ └─apply goroutine      and propBuf
+//	│          │                 │[7]
+//	│          ▼                 ▼
+//	│[8]    finished         apply goroutine and propBuf
+//	│                            │
+//	└────────────────────────────┘
+//
+// [1]: `(*Replica).propose` calls `(*proposalBuf).Insert`
+// [2]: `(*proposalBuf).FlushLockedWithRaftGroup` on the `handleRaftReady`
+// goroutine, or `(*proposalBuf).Insert` for another command on a full
+// `proposalBuf`, or `FlushLockedWithoutProposing` (less interesting).
+// [3]: picked up by `(*replicaDecoder).retrieveLocalProposals` when the log
+// entry has the most recent MaxLeaseIndex (common path)
+// [4]: picked up by `(*replicaDecoder).retrieveLocalProposals` but the log
+// entry is a past incarnation, i.e. `MaxLeaseIndex` of `ProposalData` is newer.
+// In this case, the command will be rejected (apply as a no-op and not signal a
+// result) since a newer copy of it is inflight. (Unhappy path).
+// [5]: log entry failed MaxLeaseIndex check, and we are reproposing with a
+// newer MaxLeaseIndex in `(*Replica).tryReproposeWithNewLeaseIndex`.
+// [6]: while being applied (rejected), the `*ProposalData` may be reinserted
+// into the `propBuf` by `(*Replica).refreshProposalsLocked`, which finds it in
+// the map.
+// [7]: like [3] but the goroutine is now also in the propBuf.
+// [8]: either [5] or the proposal applies successfully but is still in the
+// propBuf since it was there initially. In that latter case we now have a
+// finished proposal in the propBuf
+// (https://github.com/cockroachdb/cockroach/issues/97605)
+//
+// See also the prose near the call to `tryReproposeWithNewLeaseIndex`.
 type ProposalData struct {
 	// The caller's context, used for logging proposals, reproposals, message
 	// sends, but not command application. In order to enable safely tracing events
