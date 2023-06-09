@@ -17,6 +17,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -2173,7 +2174,7 @@ func (q *StoreWorkQueue) gcSequencers() {
 	defer q.sequencersMu.Unlock()
 
 	for rangeID, seq := range q.sequencersMu.s {
-		maxCreateTime := timeutil.FromUnixNanos(seq.maxCreateTime)
+		maxCreateTime := timeutil.FromUnixNanos(atomic.LoadInt64(&seq.maxCreateTime))
 		if q.timeSource.Now().Sub(maxCreateTime) > rangeSequencerGCThreshold.Get(&q.settings.SV) {
 			delete(q.sequencersMu.s, rangeID)
 		}
