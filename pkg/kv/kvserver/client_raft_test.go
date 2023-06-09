@@ -768,9 +768,6 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 						repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
 						require.NotNil(t, repl)
 						status := repl.RaftStatus()
-						if status == nil {
-							return errors.New("raft status not initialized")
-						}
 						if status.RaftState == raft.StateLeader {
 							hasLeader = true
 						}
@@ -1809,7 +1806,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			case <-ticker:
 				// Verify that the leader is node 0.
 				status := leaderRepl.RaftStatus()
-				if status == nil || status.RaftState != raft.StateLeader {
+				if status.RaftState != raft.StateLeader {
 					t.Fatalf("raft leader should be node 0, but got status %+v", status)
 				}
 
@@ -2853,27 +2850,23 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			var latestTerm uint64
 			if td.expectAdvance {
 				testutils.SucceedsSoon(t, func() error {
-					if raftStatus := replica2.RaftStatus(); raftStatus != nil {
-						if term := raftStatus.Term; term <= latestTerm {
-							return errors.Errorf("%d: raft term has not yet advanced: %d", i, term)
-						} else if latestTerm == 0 {
-							latestTerm = term
-						}
-					} else {
-						return errors.Errorf("%d: raft group is not yet initialized", i)
+					raftStatus := replica2.RaftStatus()
+					if term := raftStatus.Term; term <= latestTerm {
+						return errors.Errorf("%d: raft term has not yet advanced: %d", i, term)
+					} else if latestTerm == 0 {
+						latestTerm = term
 					}
 					return nil
 				})
 			} else {
 				for start := timeutil.Now(); timeutil.Since(start) < time.Second; time.Sleep(10 * time.Millisecond) {
-					if raftStatus := replica2.RaftStatus(); raftStatus != nil {
-						if term := raftStatus.Term; term > latestTerm {
-							if latestTerm == 0 {
-								latestTerm = term
-							} else {
-								t.Errorf("%d: raft term unexpectedly advanced: %d", i, term)
-								break
-							}
+					raftStatus := replica2.RaftStatus()
+					if term := raftStatus.Term; term > latestTerm {
+						if latestTerm == 0 {
+							latestTerm = term
+						} else {
+							t.Errorf("%d: raft term unexpectedly advanced: %d", i, term)
+							break
 						}
 					}
 				}
@@ -3662,7 +3655,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	findTerm := func() uint64 {
 		var term uint64
 		for i := 1; i < 4; i++ {
-			s := tc.GetFirstStoreFromServer(t, i).RaftStatus(desc.RangeID)
+			s, _ := tc.GetFirstStoreFromServer(t, i).RaftStatus(desc.RangeID)
 			if s.Term > term {
 				term = s.Term
 			}
@@ -4070,9 +4063,8 @@ func TestTransferRaftLeadership(t *testing.T) {
 
 	// Verify leadership is transferred.
 	testutils.SucceedsSoon(t, func() error {
-		if status := repl0.RaftStatus(); status == nil {
-			return errors.New("raft status is nil")
-		} else if a, e := status.Lead, uint64(rd1.ReplicaID); a != e {
+		status := repl0.RaftStatus()
+		if a, e := status.Lead, uint64(rd1.ReplicaID); a != e {
 			return errors.Errorf("expected raft leader be %d; got %d", e, a)
 		}
 		return nil
@@ -5883,9 +5875,8 @@ func TestRaftCampaignPreVoteCheckQuorum(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	logStatus := func(s *raft.Status) {
+	logStatus := func(s raft.Status) {
 		t.Helper()
-		require.NotNil(t, s)
 		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
 	}
 
@@ -5964,9 +5955,8 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	logStatus := func(s *raft.Status) {
+	logStatus := func(s raft.Status) {
 		t.Helper()
-		require.NotNil(t, s)
 		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
 	}
 
@@ -5998,7 +5988,7 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 	repl3.ForceCampaign(ctx)
 	t.Logf("n3 campaigning")
 
-	var leaderStatus *raft.Status
+	var leaderStatus raft.Status
 	require.Eventually(t, func() bool {
 		for _, repl := range repls {
 			st := repl.RaftStatus()
@@ -6010,7 +6000,7 @@ func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
 				leaderStatus = st
 			}
 		}
-		return leaderStatus != nil
+		return leaderStatus.ID != 0
 	}, 10*time.Second, 500*time.Millisecond)
 	t.Logf("n%d is leader, with bumped term %d", leaderStatus.ID, leaderStatus.Term)
 }
@@ -6098,7 +6088,7 @@ func TestRaftPreVote(t *testing.T) {
 				})
 				defer tc.Stopper().Stop(ctx)
 
-				logStatus := func(s *raft.Status) {
+				logStatus := func(s raft.Status) {
 					t.Helper()
 					require.NotNil(t, s)
 					t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
@@ -6283,7 +6273,7 @@ func TestRaftCheckQuorum(t *testing.T) {
 			})
 			defer tc.Stopper().Stop(ctx)
 
-			logStatus := func(s *raft.Status) {
+			logStatus := func(s raft.Status) {
 				t.Helper()
 				require.NotNil(t, s)
 				t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
@@ -6369,9 +6359,9 @@ func TestRaftCheckQuorum(t *testing.T) {
 			}
 
 			// n2 or n3 should elect a new leader.
-			var leaderStatus *raft.Status
+			var leaderStatus raft.Status
 			require.Eventually(t, func() bool {
-				for _, status := range []*raft.Status{repl2.RaftStatus(), repl3.RaftStatus()} {
+				for _, status := range []raft.Status{repl2.RaftStatus(), repl3.RaftStatus()} {
 					logStatus(status)
 					if status.RaftState == raft.StateLeader {
 						leaderStatus = status
@@ -6392,15 +6382,15 @@ func TestRaftCheckQuorum(t *testing.T) {
 			t.Logf("n1 remains pre-candidate")
 
 			// The existing leader shouldn't have been affected by n1's prevotes.
-			var finalStatus *raft.Status
-			for _, status := range []*raft.Status{repl2.RaftStatus(), repl3.RaftStatus()} {
+			var finalStatus raft.Status
+			for _, status := range []raft.Status{repl2.RaftStatus(), repl3.RaftStatus()} {
 				logStatus(status)
 				if status.RaftState == raft.StateLeader {
 					finalStatus = status
 					break
 				}
 			}
-			require.NotNil(t, finalStatus)
+			require.NotZero(t, finalStatus)
 			require.Equal(t, leaderStatus.ID, finalStatus.ID)
 			require.Equal(t, leaderStatus.Term, finalStatus.Term)
 		})
@@ -6456,7 +6446,7 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	logStatus := func(s *raft.Status) {
+	logStatus := func(s raft.Status) {
 		t.Helper()
 		require.NotNil(t, s)
 		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)

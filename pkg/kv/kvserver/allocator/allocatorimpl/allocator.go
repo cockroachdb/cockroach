@@ -1657,7 +1657,7 @@ func (a Allocator) RebalanceTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
-	raftStatus *raft.Status,
+	raftStatus raft.Status,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo allocator.RangeUsageInfo,
 	filter storepool.StoreFilter,
@@ -1762,7 +1762,7 @@ func (a Allocator) RebalanceTarget(
 		// If we can't (e.g. because we're the leaseholder but not the raft leader),
 		// it's better to simulate the removal with the info that we do have than to
 		// assume that the rebalance is ok (#20241).
-		if targetType == VoterTarget && raftStatus != nil && raftStatus.Progress != nil {
+		if targetType == VoterTarget && raftStatus.Progress != nil {
 			replicaCandidates = simulateFilterUnremovableReplicas(
 				ctx, raftStatus, replicaCandidates, newReplica.ReplicaID)
 		}
@@ -1853,7 +1853,7 @@ func (a Allocator) RebalanceVoter(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
-	raftStatus *raft.Status,
+	raftStatus raft.Status,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo allocator.RangeUsageInfo,
 	filter storepool.StoreFilter,
@@ -1889,7 +1889,7 @@ func (a Allocator) RebalanceNonVoter(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
-	raftStatus *raft.Status,
+	raftStatus raft.Status,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo allocator.RangeUsageInfo,
 	filter storepool.StoreFilter,
@@ -1957,7 +1957,7 @@ func (a *Allocator) ValidLeaseTargets(
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
-		RaftStatus() *raft.Status
+		RaftStatus() raft.Status
 		GetFirstIndex() kvpb.RaftIndex
 		Desc() *roachpb.RangeDescriptor
 	},
@@ -2132,7 +2132,7 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 	conf roachpb.SpanConfig,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
-		RaftStatus() *raft.Status
+		RaftStatus() raft.Status
 		GetFirstIndex() kvpb.RaftIndex
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
@@ -2217,7 +2217,7 @@ func (a *Allocator) TransferLeaseTarget(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		GetRangeID() roachpb.RangeID
-		RaftStatus() *raft.Status
+		RaftStatus() raft.Status
 		GetFirstIndex() kvpb.RaftIndex
 		Desc() *roachpb.RangeDescriptor
 	},
@@ -2485,7 +2485,7 @@ func (a *Allocator) ShouldTransferLease(
 	existing []roachpb.ReplicaDescriptor,
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
-		RaftStatus() *raft.Status
+		RaftStatus() raft.Status
 		GetFirstIndex() kvpb.RaftIndex
 		Desc() *roachpb.RangeDescriptor
 	},
@@ -2837,7 +2837,7 @@ func computeQuorum(nodes int) int {
 // slice. A "behind" replica is one which is not at or past the quorum commit
 // index.
 func FilterBehindReplicas(
-	ctx context.Context, st *raft.Status, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, st raft.Status, replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	var candidates []roachpb.ReplicaDescriptor
 	for _, r := range replicas {
@@ -2854,7 +2854,7 @@ func FilterBehindReplicas(
 // `raftStatus` of a non-raft leader replica.
 func excludeReplicasInNeedOfSnapshots(
 	ctx context.Context,
-	st *raft.Status,
+	st raft.Status,
 	firstIndex kvpb.RaftIndex,
 	replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
@@ -2882,16 +2882,15 @@ func excludeReplicasInNeedOfSnapshots(
 // considered a candidate for removal.
 func simulateFilterUnremovableReplicas(
 	ctx context.Context,
-	raftStatus *raft.Status,
+	status raft.Status,
 	replicas []roachpb.ReplicaDescriptor,
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {
-	status := *raftStatus
 	status.Progress[uint64(brandNewReplicaID)] = tracker.Progress{
 		State: tracker.StateReplicate,
 		Match: status.Commit,
 	}
-	return FilterUnremovableReplicas(ctx, &status, replicas, brandNewReplicaID)
+	return FilterUnremovableReplicas(ctx, status, replicas, brandNewReplicaID)
 }
 
 // FilterUnremovableReplicas removes any unremovable replicas from the supplied
@@ -2902,7 +2901,7 @@ func simulateFilterUnremovableReplicas(
 // it (#17879).
 func FilterUnremovableReplicas(
 	ctx context.Context,
-	raftStatus *raft.Status,
+	raftStatus raft.Status,
 	replicas []roachpb.ReplicaDescriptor,
 	brandNewReplicaID roachpb.ReplicaID,
 ) []roachpb.ReplicaDescriptor {

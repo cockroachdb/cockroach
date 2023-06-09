@@ -173,7 +173,7 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 		var err error
 		repl, _, err = tc.Server(0).GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
-		require.NotNil(t, repl.RaftStatus())
+		require.NotZero(t, repl.RaftStatus())
 		require.Equal(t, !expOnly, repl.IsQuiescent())
 	})
 }

@@ -1044,18 +1044,18 @@ func (s *state) LoadSplitterFor(storeID StoreID) LoadSplitter {
 
 // RaftStatus returns the current raft status for the replica of the Range
 // with ID RangeID, on the store with ID StoreID.
-func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
-	status := &raft.Status{
+func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) raft.Status {
+	status := raft.Status{
 		Progress: make(map[uint64]tracker.Progress),
 	}
 
 	leader, ok := s.LeaseHolderReplica(rangeID)
 	if !ok {
-		return nil
+		return raft.Status{}
 	}
 	rng, ok := s.rng(rangeID)
 	if !ok {
-		return nil
+		return raft.Status{}
 	}
 
 	// TODO(kvoli): The raft leader will always be the current leaseholder

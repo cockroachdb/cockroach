@@ -179,7 +179,7 @@ type State interface {
 	LoadSplitterFor(StoreID) LoadSplitter
 	// RaftStatus returns the current raft status for the replica of the Range
 	// with ID RangeID, on the store with ID StoreID.
-	RaftStatus(RangeID, StoreID) *raft.Status
+	RaftStatus(RangeID, StoreID) raft.Status
 	// RegisterCapacityChangeListener registers a listener which will be
 	// notified on events where there is a lease or replica addition or
 	// removal, for a specific store.

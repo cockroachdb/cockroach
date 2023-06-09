@@ -24,7 +24,7 @@ import (
 )
 
 type splitDelayHelperI interface {
-	RaftStatus(context.Context) (roachpb.RangeID, *raft.Status)
+	RaftStatus(context.Context) (roachpb.RangeID, raft.Status)
 	MaxDelay() time.Duration
 	TickDuration() time.Duration
 	Sleep(context.Context, time.Duration)
@@ -32,18 +32,16 @@ type splitDelayHelperI interface {
 
 type splitDelayHelper Replica
 
-func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *raft.Status) {
+func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, raft.Status) {
 	r := (*Replica)(sdh)
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
-	if raftStatus != nil {
-		updateRaftProgressFromActivity(
-			ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
-			func(replicaID roachpb.ReplicaID) bool {
-				return r.mu.lastUpdateTimes.isFollowerActiveSince(replicaID, timeutil.Now(), r.store.cfg.RangeLeaseDuration)
-			},
-		)
-	}
+	updateRaftProgressFromActivity(
+		ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
+		func(replicaID roachpb.ReplicaID) bool {
+			return r.mu.lastUpdateTimes.isFollowerActiveSince(replicaID, timeutil.Now(), r.store.cfg.RangeLeaseDuration)
+		},
+	)
 	r.mu.RUnlock()
 	return r.RangeID, raftStatus
 }
@@ -90,7 +88,7 @@ func maybeDelaySplitToAvoidSnapshot(ctx context.Context, sdh splitDelayHelperI) 
 		problems = problems[:0]
 		rangeID, raftStatus := sdh.RaftStatus(ctx)
 
-		if raftStatus == nil || raftStatus.RaftState == raft.StateFollower {
+		if raftStatus.RaftState == raft.StateFollower {
 			// Don't delay on followers (we don't have information about the
 			// peers in that state and thus can't determine when it is safe
 			// to continue). This case is hit rarely enough to not matter,

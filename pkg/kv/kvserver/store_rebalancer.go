@@ -146,7 +146,7 @@ type StoreRebalancer struct {
 	storePool               storepool.AllocatorStorePool
 	rr                      RangeRebalancer
 	replicaRankings         *ReplicaRankings
-	getRaftStatusFn         func(replica CandidateReplica) *raft.Status
+	getRaftStatusFn         func(replica CandidateReplica) raft.Status
 	processTimeoutFn        func(replica CandidateReplica) time.Duration
 	objectiveProvider       RebalanceObjectiveProvider
 	subscribedToSpanConfigs func() bool
@@ -174,7 +174,7 @@ func NewStoreRebalancer(
 		allocator:       rq.allocator,
 		storePool:       storePool,
 		replicaRankings: rr,
-		getRaftStatusFn: func(replica CandidateReplica) *raft.Status {
+		getRaftStatusFn: func(replica CandidateReplica) raft.Status {
 			return replica.RaftStatus()
 		},
 		processTimeoutFn: func(replica CandidateReplica) time.Duration {
@@ -204,7 +204,7 @@ func SimulatorStoreRebalancer(
 	storeID roachpb.StoreID,
 	alocator allocatorimpl.Allocator,
 	storePool storepool.AllocatorStorePool,
-	getRaftStatusFn func(replica CandidateReplica) *raft.Status,
+	getRaftStatusFn func(replica CandidateReplica) raft.Status,
 	objectiveProvider RebalanceObjectiveProvider,
 ) *StoreRebalancer {
 	sr := &StoreRebalancer{

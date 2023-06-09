@@ -1434,41 +1434,31 @@ func (r *Replica) setQueueLastProcessed(
 	return r.store.DB().PutInline(ctx, key, &timestamp)
 }
 
-// RaftStatus returns the current raft status of the replica. It returns nil
-// if the Raft group has not been initialized yet.
-func (r *Replica) RaftStatus() *raft.Status {
+// RaftStatus returns the current raft status of the replica.
+func (r *Replica) RaftStatus() raft.Status {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.raftStatusRLocked()
 }
 
-// raftStatusRLocked returns the current raft status of the replica, or
-// nil if the Raft group has not been initialized yet.
+// raftStatusRLocked returns the current raft status of the replica.
 //
 // NB: This incurs deep copies of Status.Config and Status.Progress.Inflights
 // and is not suitable for use in hot paths. See raftSparseStatusRLocked().
-func (r *Replica) raftStatusRLocked() *raft.Status {
-	if rg := r.mu.internalRaftGroup; rg != nil {
-		s := rg.Status()
-		return &s
-	}
-	return nil
+func (r *Replica) raftStatusRLocked() raft.Status {
+	return r.mu.internalRaftGroup.Status()
 }
 
 // raftSparseStatusRLocked returns a sparse Raft status without Config and
-// Progress.Inflights which are expensive to copy, or nil if the Raft group has
-// not been initialized yet. Progress is only populated on the leader.
-func (r *Replica) raftSparseStatusRLocked() *raftSparseStatus {
-	rg := r.mu.internalRaftGroup
-	if rg == nil {
-		return nil
-	}
-	status := &raftSparseStatus{
-		BasicStatus: rg.BasicStatus(),
+// Progress.Inflights which are expensive to copy. Progress is only populated on
+// the leader.
+func (r *Replica) raftSparseStatusRLocked() raftSparseStatus {
+	status := raftSparseStatus{
+		BasicStatus: r.mu.internalRaftGroup.BasicStatus(),
 	}
 	if status.RaftState == raft.StateLeader {
 		status.Progress = map[uint64]tracker.Progress{}
-		rg.WithProgress(func(id uint64, _ raft.ProgressType, pr tracker.Progress) {
+		r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, pr tracker.Progress) {
 			status.Progress[id] = pr
 		})
 	}
@@ -1476,10 +1466,7 @@ func (r *Replica) raftSparseStatusRLocked() *raftSparseStatus {
 }
 
 func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
-	if rg := r.mu.internalRaftGroup; rg != nil {
-		return rg.BasicStatus()
-	}
-	return raft.BasicStatus{}
+	return r.mu.internalRaftGroup.BasicStatus()
 }
 
 // State returns a copy of the internal state of the Replica, along with some
@@ -2216,7 +2203,7 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 		return
 	}
 	raftStatus := r.raftSparseStatusRLocked()
-	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+	if raftStatus.RaftState != raft.StateLeader {
 		return
 	}
 	lhReplicaID := uint64(status.Lease.Replica.ReplicaID)

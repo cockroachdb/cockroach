@@ -1067,7 +1067,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				ctx,
 				sp,
 				emptySpanConfig(),
-				nil,
+				raft.Status{},
 				tc.existing,
 				nil,
 				rangeUsageInfo,
@@ -1142,7 +1142,7 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 			ctx,
 			sp,
 			emptySpanConfig(),
-			nil,
+			raft.Status{},
 			ranges[i].InternalReplicas,
 			nil,
 			rangeUsageInfo,
@@ -1184,7 +1184,7 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 			ctx,
 			sp,
 			emptySpanConfig(),
-			nil,
+			raft.Status{},
 			ranges[i].InternalReplicas,
 			nil,
 			rangeUsageInfo,
@@ -1280,7 +1280,7 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 			ctx,
 			sp,
 			emptySpanConfig(),
-			nil,
+			raft.Status{},
 			[]roachpb.ReplicaDescriptor{{NodeID: 3, StoreID: 3}},
 			nil,
 			rangeUsageInfo,
@@ -1385,7 +1385,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 				ctx,
 				sp,
 				emptySpanConfig(),
-				nil,
+				raft.Status{},
 				c.existing,
 				nil,
 				rangeUsageInfo,
@@ -1670,7 +1670,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 				ctx,
 				sp,
 				emptySpanConfig(),
-				nil,
+				raft.Status{},
 				[]roachpb.ReplicaDescriptor{{StoreID: subtest.testStores[0].StoreID}},
 				nil,
 				rangeUsageInfo,
@@ -1838,7 +1838,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			ctx,
 			sp,
 			emptySpanConfig(),
-			nil,
+			raft.Status{},
 			[]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}},
 			nil,
 			rangeUsageInfo,
@@ -1880,8 +1880,8 @@ type mockRepl struct {
 	replsInNeedOfSnapshot map[roachpb.ReplicaID]struct{}
 }
 
-func (r *mockRepl) RaftStatus() *raft.Status {
-	raftStatus := &raft.Status{
+func (r *mockRepl) RaftStatus() raft.Status {
+	raftStatus := raft.Status{
 		Progress: make(map[uint64]tracker.Progress),
 	}
 	raftStatus.RaftState = raft.StateLeader
@@ -2557,7 +2557,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			ctx,
 			sp,
 			emptySpanConfig(),
-			nil,
+			raft.Status{},
 			tc.existing,
 			nil,
 			rangeUsageInfo,
@@ -2630,7 +2630,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			ctx,
 			sp,
 			emptySpanConfig(),
-			nil,
+			raft.Status{},
 			tc.existing,
 			nil,
 			rangeUsageInfo,
@@ -3493,7 +3493,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			ctx,
 			sp,
 			emptySpanConfig(),
-			nil,
+			raft.Status{},
 			existingRepls,
 			nil,
 			rangeUsageInfo,
@@ -4461,7 +4461,7 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 				ctx,
 				sp,
 				test.conf,
-				nil,
+				raft.Status{},
 				test.existingVoters,
 				test.existingNonVoters,
 				rangeUsageInfo,
@@ -4590,7 +4590,7 @@ func TestAllocatorRebalanceIOOverloadCheck(t *testing.T) {
 				ctx,
 				sp,
 				test.conf,
-				nil,
+				raft.Status{},
 				test.existingVoters,
 				[]roachpb.ReplicaDescriptor{},
 				rangeUsageInfo,
@@ -4648,7 +4648,7 @@ func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
 		ctx,
 		sp,
 		conf,
-		nil,
+		raft.Status{},
 		existingVoters,
 		existingNonVoters,
 		rangeUsageInfo,
@@ -4708,7 +4708,7 @@ func TestNonVotersCannotRebalanceToVoterStores(t *testing.T) {
 		ctx,
 		sp,
 		emptySpanConfig(),
-		nil,
+		raft.Status{},
 		existingVoters,
 		existingNonVoters,
 		rangeUsageInfo,
@@ -5542,7 +5542,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 				ctx,
 				sp,
 				conf,
-				nil,
+				raft.Status{},
 				existingRepls,
 				nil,
 				rangeUsageInfo,
@@ -7941,7 +7941,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			status := &raft.Status{
+			status := raft.Status{
 				Progress: make(map[uint64]tracker.Progress),
 			}
 			status.Lead = c.leader
@@ -8012,7 +8012,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			status := &raft.Status{
+			status := raft.Status{
 				Progress: make(map[uint64]tracker.Progress),
 			}
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
@@ -8070,7 +8070,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			status := &raft.Status{
+			status := raft.Status{
 				Progress: make(map[uint64]tracker.Progress),
 			}
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
@@ -8166,7 +8166,7 @@ func TestAllocatorRebalanceDeterminism(t *testing.T) {
 				ctx,
 				sp,
 				roachpb.TestingDefaultSpanConfig(),
-				nil,
+				raft.Status{},
 				replicas(1, 2, 5),
 				nil,
 				rangeUsageInfo,
@@ -8237,7 +8237,7 @@ func TestAllocatorRebalanceWithScatter(t *testing.T) {
 		ctx,
 		sp,
 		emptySpanConfig(),
-		nil,
+		raft.Status{},
 		replicas(1),
 		nil,
 		rangeUsageInfo,
@@ -8251,7 +8251,7 @@ func TestAllocatorRebalanceWithScatter(t *testing.T) {
 		ctx,
 		sp,
 		emptySpanConfig(),
-		nil,
+		raft.Status{},
 		replicas(1),
 		nil,
 		rangeUsageInfo,
@@ -8366,7 +8366,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				ctx,
 				sp,
 				roachpb.SpanConfig{Constraints: []roachpb.ConstraintsConjunction{constraints}},
-				nil,
+				raft.Status{},
 				existingReplicas,
 				nil,
 				rangeUsageInfo,
@@ -8542,7 +8542,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 						ctx,
 						sp,
 						emptySpanConfig(),
-						nil,
+						raft.Status{},
 						[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
 						nil,
 						rangeUsageInfo,
@@ -8589,7 +8589,7 @@ func Example_rangeCountRebalancing() {
 			ctx,
 			storePool,
 			emptySpanConfig(),
-			nil,
+			raft.Status{},
 			[]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}},
 			nil,
 			rangeUsageInfo,
@@ -8704,7 +8704,7 @@ func qpsBasedRebalanceFn(
 		ctx,
 		storePool,
 		emptySpanConfig(),
-		nil,
+		raft.Status{},
 		[]roachpb.ReplicaDescriptor{{NodeID: candidate.Node.NodeID, StoreID: candidate.StoreID}},
 		nil,
 		rangeUsageInfo,

@@ -245,7 +245,7 @@ func replicaUnavailableError(
 	desc *roachpb.RangeDescriptor,
 	replDesc roachpb.ReplicaDescriptor,
 	lm livenesspb.IsLiveMap,
-	rs *raft.Status,
+	rs raft.Status,
 	closedTS hlc.Timestamp,
 ) error {
 	nonLiveRepls := roachpb.MakeReplicaSet(nil)

@@ -753,7 +753,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		firstIndex := b.p.firstIndex()
 		newLease := p.command.ReplicatedEvalResult.State.Lease
 		newLeaseTarget := newLease.Replica.ReplicaID
-		snapStatus := raftutil.ReplicaMayNeedSnapshot(&status, firstIndex, newLeaseTarget)
+		snapStatus := raftutil.ReplicaMayNeedSnapshot(status, firstIndex, newLeaseTarget)
 		if snapStatus != raftutil.NoSnapshotNeeded && !p.Request.Requests[0].GetTransferLease().BypassSafetyChecks {
 			b.p.rejectProposalWithLeaseTransferRejectedLocked(ctx, p, newLease, snapStatus)
 			return true

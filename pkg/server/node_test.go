@@ -440,7 +440,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	}
 	testutils.SucceedsSoon(t, func() error {
 		for i := 1; i <= initialRanges; i++ {
-			if s.RaftStatus(roachpb.RangeID(i)) == nil {
+			if _, ok := s.RaftStatus(roachpb.RangeID(i)); !ok {
 				return errors.Errorf("Store %d replica %d is not present in raft", s.StoreID(), i)
 			}
 		}

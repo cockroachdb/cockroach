@@ -307,7 +307,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 
 	var rangeUsageInfo allocator.RangeUsageInfo
 
-	status := &raft.Status{
+	status := raft.Status{
 		Progress: make(map[uint64]tracker.Progress),
 	}
 	status.Lead = 1

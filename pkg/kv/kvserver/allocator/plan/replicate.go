@@ -94,7 +94,7 @@ type LeaseCheckReplica interface {
 type AllocatorReplica interface {
 	LeaseCheckReplica
 	RangeUsageInfo() allocator.RangeUsageInfo
-	RaftStatus() *raft.Status
+	RaftStatus() raft.Status
 	GetFirstIndex() kvpb.RaftIndex
 	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 	StoreID() roachpb.StoreID
@@ -540,7 +540,7 @@ func (rp ReplicaPlanner) findRemoveVoter(
 	repl interface {
 		DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
 		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
-		RaftStatus() *raft.Status
+		RaftStatus() raft.Status
 	},
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicationTarget, string, error) {
@@ -567,7 +567,7 @@ func (rp ReplicaPlanner) findRemoveVoter(
 			lastReplAdded = 0
 		}
 		raftStatus := repl.RaftStatus()
-		if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+		if raftStatus.RaftState != raft.StateLeader {
 			// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
 			return roachpb.ReplicationTarget{}, "",
 				benignerror.New(errors.Errorf("not raft leader while range needs removal"))

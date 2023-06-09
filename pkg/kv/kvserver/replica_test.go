@@ -120,7 +120,7 @@ func leaseExpiry(repl *Replica) time.Time {
 }
 
 // Create a Raft status that shows everyone fully up to date.
-func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
+func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) raft.Status {
 	prs := make(map[uint64]tracker.Progress)
 	for _, repl := range repls {
 		prs[uint64(repl.ReplicaID)] = tracker.Progress{
@@ -128,7 +128,7 @@ func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
 			Match: 100,
 		}
 	}
-	return &raft.Status{
+	return raft.Status{
 		BasicStatus: raft.BasicStatus{
 			HardState: raftpb.HardState{Commit: 100},
 			SoftState: raft.SoftState{Lead: 1, RaftState: raft.StateLeader},
@@ -9086,8 +9086,8 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		return m
 	}
-	status := func(lead uint64, progress map[uint64]tracker.Progress) *raftSparseStatus {
-		status := &raftSparseStatus{
+	status := func(lead uint64, progress map[uint64]tracker.Progress) raftSparseStatus {
+		status := raftSparseStatus{
 			Progress: progress,
 		}
 		// The commit index is set so that a progress.Match value of 1 is behind
@@ -9131,7 +9131,7 @@ func TestReplicaMetrics(t *testing.T) {
 		replicas    int32
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
-		raftStatus  *raftSparseStatus
+		raftStatus  raftSparseStatus
 		liveness    livenesspb.IsLiveMap
 		raftLogSize int64
 		expected    ReplicaMetrics
@@ -9964,7 +9964,7 @@ type testQuiescer struct {
 	numProposals           int
 	pendingQuota           bool
 	ticksSinceLastProposal int
-	status                 *raftSparseStatus
+	status                 raftSparseStatus
 	lastIndex              kvpb.RaftIndex
 	raftReady              bool
 	leaseStatus            kvserverpb.LeaseStatus
@@ -9989,10 +9989,10 @@ func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
 }
 
 func (q *testQuiescer) isRaftLeaderRLocked() bool {
-	return q.status != nil && q.status.RaftState == raft.StateLeader
+	return q.status.RaftState == raft.StateLeader
 }
 
-func (q *testQuiescer) raftSparseStatusRLocked() *raftSparseStatus {
+func (q *testQuiescer) raftSparseStatusRLocked() raftSparseStatus {
 	return q.status
 }
 
@@ -10052,7 +10052,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						{NodeID: 3, ReplicaID: 3},
 					},
 				},
-				status: &raftSparseStatus{
+				status: raftSparseStatus{
 					BasicStatus: raft.BasicStatus{
 						ID: 1,
 						HardState: raftpb.HardState{
@@ -10145,10 +10145,6 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.isDestroyed = true
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status = nil
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
@@ -10296,7 +10292,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 	) {
 		t.Run("", func(t *testing.T) {
 			q := &testQuiescer{
-				status: &raftSparseStatus{
+				status: raftSparseStatus{
 					BasicStatus: raft.BasicStatus{
 						ID: 2,
 						HardState: raftpb.HardState{

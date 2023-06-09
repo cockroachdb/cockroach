@@ -100,9 +100,9 @@ func maybeDescriptorChangedError(
 	return false, nil
 }
 
-func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) string {
+func splitSnapshotWarningStr(rangeID roachpb.RangeID, status raft.Status) string {
 	var s string
-	if status != nil && status.RaftState == raft.StateLeader {
+	if status.RaftState == raft.StateLeader {
 		for replicaID, pr := range status.Progress {
 			if replicaID == status.Lead {
 				// TODO(tschottdorf): remove this line once we have picked up
@@ -2806,13 +2806,6 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	}
 
 	status := r.RaftStatus()
-	if status == nil {
-		// This code path is sometimes hit during scatter for replicas that
-		// haven't woken up yet.
-		retErr = benignerror.New(errors.Wrap(errMarkSnapshotError, "raft status not initialized"))
-		return
-	}
-
 	snapUUID := uuid.MakeV4()
 	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, snapType == kvserverpb.SnapshotRequest_INITIAL, recipient.StoreID)
 	// The cleanup function needs to be called regardless of success or failure of
@@ -2951,11 +2944,6 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	replIdx := r.mu.state.RaftAppliedIndex + 1
 
 	status := r.raftStatusRLocked()
-	if status == nil {
-		// This code path is sometimes hit during scatter for replicas that
-		// haven't woken up yet.
-		return errors.Errorf("raft status not initialized")
-	}
 	replTerm := kvpb.RaftTerm(status.Term)
 	r.mu.RUnlock()
 

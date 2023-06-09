@@ -134,7 +134,7 @@ func (sr *SimulatorReplica) GetRangeID() roachpb.RangeID {
 
 // RaftStatus returns the current raft status of the replica. It returns
 // nil if the Raft group has not been initialized yet.
-func (sr *SimulatorReplica) RaftStatus() *raft.Status {
+func (sr *SimulatorReplica) RaftStatus() raft.Status {
 	return sr.state.RaftStatus(sr.rng.RangeID(), sr.repl.StoreID())
 }
 

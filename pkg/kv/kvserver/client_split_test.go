@@ -3450,9 +3450,6 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 			return err
 		}
 		status := repl.RaftStatus()
-		if status == nil {
-			return errors.New("raft group not initialized")
-		}
 		if replicaID := roachpb.ReplicaID(status.ID); replicaID != learnerDescRHS.ReplicaID {
 			return errors.Errorf("expected %d got %d", learnerDescRHS.ReplicaID, replicaID)
 		}

@@ -156,17 +156,7 @@ func replicaIsSuspect(repl *Replica) bool {
 		return false
 	}
 
-	// If a replica doesn't have an active raft group, we should check whether
-	// or not the node is active. If not, we should consider the replica suspect
-	// because it has probably already been removed from its raft group but
-	// doesn't know it. Without this, node decommissioning can stall on such
-	// dormant ranges.
 	raftStatus := repl.RaftStatus()
-	if raftStatus == nil {
-		liveness, ok := repl.store.cfg.NodeLiveness.Self()
-		return ok && !liveness.Membership.Active()
-	}
-
 	livenessMap := repl.store.cfg.NodeLiveness.GetIsLiveMap()
 	switch raftStatus.SoftState.RaftState {
 	// If a replica is a candidate, then by definition it has lost contact with

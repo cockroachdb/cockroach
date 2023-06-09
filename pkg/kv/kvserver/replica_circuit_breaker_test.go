@@ -45,7 +45,7 @@ func TestReplicaUnavailableError(t *testing.T) {
 	rs := raft.Status{}
 	ctx := context.Background()
 	err = errors.DecodeError(ctx, errors.EncodeError(ctx, replicaUnavailableError(
-		wrappedErr, desc, desc.Replicas().AsProto()[0], lm, &rs, hlc.Timestamp{WallTime: ts.UnixNano()}),
+		wrappedErr, desc, desc.Replicas().AsProto()[0], lm, rs, hlc.Timestamp{WallTime: ts.UnixNano()}),
 	))
 	require.True(t, errors.Is(err, wrappedErr), "%+v", err)
 	echotest.Require(t, string(redact.Sprint(err)), datapathutils.TestDataPath(t, "replica_unavailable_error.txt"))

@@ -2632,12 +2632,12 @@ func (s *Store) getOverlappingKeyRangeLocked(
 }
 
 // RaftStatus returns the current raft status of the local replica of
-// the given range.
-func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
+// the given range, or a false bool if no such replica exists.
+func (s *Store) RaftStatus(rangeID roachpb.RangeID) (raft.Status, bool) {
 	if repl, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
-		return repl.RaftStatus()
+		return repl.RaftStatus(), true
 	}
-	return nil
+	return raft.Status{}, false
 }
 
 // ClusterID accessor.

@@ -103,9 +103,6 @@ const (
 	// loadStatusVars exposes prometheus metrics for instant monitoring of CPU load.
 	loadStatusVars = statusPrefix + "load"
 
-	// raftStateDormant is used when there is no known raft state.
-	raftStateDormant = "StateDormant"
-
 	// maxConcurrentRequests is the maximum number of RPC fan-out requests
 	// that will be made at any point of time.
 	maxConcurrentRequests = 100
@@ -2176,13 +2173,7 @@ func (s *systemStatusServer) rangesHelper(
 		Ranges: make([]serverpb.RangeInfo, 0, s.stores.GetStoreCount()),
 	}
 
-	convertRaftStatus := func(raftStatus *raft.Status) serverpb.RaftState {
-		if raftStatus == nil {
-			return serverpb.RaftState{
-				State: raftStateDormant,
-			}
-		}
-
+	convertRaftStatus := func(raftStatus raft.Status) serverpb.RaftState {
 		state := serverpb.RaftState{
 			ReplicaID:      raftStatus.ID,
 			HardState:      raftStatus.HardState,
@@ -2263,7 +2254,7 @@ func (s *systemStatusServer) rangesHelper(
 				Underreplicated:        metrics.Underreplicated,
 				Overreplicated:         metrics.Overreplicated,
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
-				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
+				QuiescentEqualsTicking: metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
 				CircuitBreakerError:    len(state.CircuitBreakerError) > 0,
 				PausedFollowers:        metrics.PausedFollowerCount > 0,

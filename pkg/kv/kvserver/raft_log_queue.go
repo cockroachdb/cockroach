@@ -246,7 +246,6 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 // phase interacts poorly with overly aggressive truncations and can DDOS the
 // Raft snapshot queue.
 func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, error) {
-	rangeID := r.RangeID
 	now := timeutil.Now()
 
 	r.mu.RLock()
@@ -285,13 +284,6 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	r.mu.RUnlock()
 	firstIndex = r.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
 
-	if raftStatus == nil {
-		if log.V(6) {
-			log.Infof(ctx, "the raft group doesn't exist for r%d", rangeID)
-		}
-		return truncateDecision{}, nil
-	}
-
 	// Is this the raft leader? We only propose log truncation on the raft
 	// leader which has the up to date info on followers.
 	if raftStatus.RaftState != raft.StateLeader {
@@ -313,7 +305,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	r.mu.RUnlock()
 
 	input := truncateDecisionInput{
-		RaftStatus:           *raftStatus,
+		RaftStatus:           raftStatus,
 		LogSize:              raftLogSize,
 		MaxLogSize:           targetSize,
 		LogSizeTrusted:       logSizeTrusted,

@@ -94,7 +94,7 @@ type TestingKnobs struct {
 	RaftStatusFn                                  func(r interface {
 		Desc() *roachpb.RangeDescriptor
 		StoreID() roachpb.StoreID
-	}) *raft.Status
+	}) raft.Status
 }
 
 // QPSRebalanceThreshold is much like rangeRebalanceThreshold, but for

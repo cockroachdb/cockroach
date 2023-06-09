@@ -20,17 +20,17 @@ import (
 
 func TestReplicaIsBehind(t *testing.T) {
 	const replicaID = 3
-	makeStatus := func(f func(*raft.Status)) *raft.Status {
-		st := new(raft.Status)
+	makeStatus := func(f func(*raft.Status)) raft.Status {
+		var st raft.Status
 		st.Commit = 10
 		st.Progress = make(map[uint64]tracker.Progress)
-		f(st)
+		f(&st)
 		return st
 	}
 
 	tests := []struct {
 		name   string
-		st     *raft.Status
+		st     raft.Status
 		expect bool
 	}{
 		{
@@ -103,11 +103,6 @@ func TestReplicaIsBehind(t *testing.T) {
 			}),
 			expect: false,
 		},
-		{
-			name:   "nil raft status",
-			st:     nil,
-			expect: true,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -119,17 +114,17 @@ func TestReplicaIsBehind(t *testing.T) {
 func TestReplicaMayNeedSnapshot(t *testing.T) {
 	const firstIndex = 10
 	const replicaID = 3
-	makeStatus := func(f func(*raft.Status)) *raft.Status {
-		st := new(raft.Status)
+	makeStatus := func(f func(*raft.Status)) raft.Status {
+		var st raft.Status
 		st.Commit = 10
 		st.Progress = make(map[uint64]tracker.Progress)
-		f(st)
+		f(&st)
 		return st
 	}
 
 	tests := []struct {
 		name   string
-		st     *raft.Status
+		st     raft.Status
 		expect ReplicaNeedsSnapshotStatus
 	}{
 		{
@@ -192,11 +187,6 @@ func TestReplicaMayNeedSnapshot(t *testing.T) {
 				st.Progress[replicaID] = tracker.Progress{State: tracker.StateReplicate, Match: 10}
 			}),
 			expect: NoSnapshotNeeded,
-		},
-		{
-			name:   "nil raft status",
-			st:     nil,
-			expect: NoRaftStatusAvailable,
 		},
 	}
 	for _, tt := range tests {

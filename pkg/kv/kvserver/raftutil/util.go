@@ -21,11 +21,7 @@ import (
 // according to the raft log. If this function is called with a raft.Status that
 // indicates that our local replica is not the raft leader, we pessimistically
 // assume that replicaID is behind on its log.
-func ReplicaIsBehind(st *raft.Status, replicaID roachpb.ReplicaID) bool {
-	if st == nil {
-		// Testing only.
-		return true
-	}
+func ReplicaIsBehind(st raft.Status, replicaID roachpb.ReplicaID) bool {
 	if st.RaftState != raft.StateLeader {
 		// If we aren't the Raft leader, we aren't tracking the replica's progress,
 		// so we can't be sure it's not behind.
@@ -98,9 +94,6 @@ const (
 	// log truncation. etcd/raft will notice this state after sending the next
 	// MsgApp and move the peer to StateSnapshot.
 	ReplicaMatchBelowLeadersFirstIndex
-
-	// NoRaftStatusAvailable is only possible in tests.
-	NoRaftStatusAvailable
 )
 
 func (s ReplicaNeedsSnapshotStatus) String() string {
@@ -117,8 +110,6 @@ func (s ReplicaNeedsSnapshotStatus) String() string {
 		return "replica in StateSnapshot"
 	case ReplicaMatchBelowLeadersFirstIndex:
 		return "replica's match index below leader's first index"
-	case NoRaftStatusAvailable:
-		return "no raft status available"
 	default:
 		return "unknown ReplicaNeedsSnapshotStatus"
 	}
@@ -129,12 +120,8 @@ func (s ReplicaNeedsSnapshotStatus) String() string {
 // indicates that our local replica is not the raft leader, we pessimistically
 // assume that replicaID may need a snapshot.
 func ReplicaMayNeedSnapshot(
-	st *raft.Status, firstIndex kvpb.RaftIndex, replicaID roachpb.ReplicaID,
+	st raft.Status, firstIndex kvpb.RaftIndex, replicaID roachpb.ReplicaID,
 ) ReplicaNeedsSnapshotStatus {
-	if st == nil {
-		// Testing only.
-		return NoRaftStatusAvailable
-	}
 	if st.RaftState != raft.StateLeader {
 		// If we aren't the Raft leader, we aren't tracking the replica's progress,
 		// so we can't be sure it does not need a snapshot.

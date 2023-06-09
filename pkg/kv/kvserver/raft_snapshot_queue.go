@@ -68,15 +68,13 @@ func (rq *raftSnapshotQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
 	// If a follower needs a snapshot, enqueue at the highest priority.
-	if status := repl.RaftStatus(); status != nil {
-		// raft.Status.Progress is only populated on the Raft group leader.
-		for _, p := range status.Progress {
-			if p.State == tracker.StateSnapshot {
-				if log.V(2) {
-					log.Infof(ctx, "raft snapshot needed, enqueuing")
-				}
-				return true, raftSnapshotPriority
+	// raft.Status.Progress is only populated on the Raft group leader.
+	for _, p := range repl.RaftStatus().Progress {
+		if p.State == tracker.StateSnapshot {
+			if log.V(2) {
+				log.Infof(ctx, "raft snapshot needed, enqueuing")
 			}
+			return true, raftSnapshotPriority
 		}
 	}
 	return false, 0
@@ -86,18 +84,16 @@ func (rq *raftSnapshotQueue) process(
 	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (anyProcessed bool, _ error) {
 	// If a follower requires a Raft snapshot, perform it.
-	if status := repl.RaftStatus(); status != nil {
-		// raft.Status.Progress is only populated on the Raft group leader.
-		for id, p := range status.Progress {
-			if p.State == tracker.StateSnapshot {
-				if log.V(1) {
-					log.Infof(ctx, "sending raft snapshot")
-				}
-				if processed, err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
-					return false, err
-				} else if processed {
-					anyProcessed = true
-				}
+	// raft.Status.Progress is only populated on the Raft group leader.
+	for id, p := range repl.RaftStatus().Progress {
+		if p.State == tracker.StateSnapshot {
+			if log.V(1) {
+				log.Infof(ctx, "sending raft snapshot")
+			}
+			if processed, err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
+				return false, err
+			} else if processed {
+				anyProcessed = true
 			}
 		}
 	}

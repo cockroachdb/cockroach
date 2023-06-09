@@ -39,9 +39,8 @@ type CandidateReplica interface {
 	StoreID() roachpb.StoreID
 	// GetRangeID returns the Range ID.
 	GetRangeID() roachpb.RangeID
-	// RaftStatus returns the current raft status of the replica. It returns
-	// nil if the Raft group has not been initialized yet.
-	RaftStatus() *raft.Status
+	// RaftStatus returns the current raft status of the replica.
+	RaftStatus() raft.Status
 	// GetFirstIndex returns the index of the first entry in the replica's Raft
 	// log.
 	GetFirstIndex() kvpb.RaftIndex

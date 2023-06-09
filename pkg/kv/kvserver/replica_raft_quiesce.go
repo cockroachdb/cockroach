@@ -205,7 +205,7 @@ type quiescer interface {
 	StoreID() roachpb.StoreID
 	descRLocked() *roachpb.RangeDescriptor
 	isRaftLeaderRLocked() bool
-	raftSparseStatusRLocked() *raftSparseStatus
+	raftSparseStatusRLocked() raftSparseStatus
 	raftBasicStatusRLocked() raft.BasicStatus
 	raftLastIndexRLocked() kvpb.RaftIndex
 	hasRaftReadyRLocked() bool
@@ -288,31 +288,31 @@ func shouldReplicaQuiesce(
 	leaseStatus kvserverpb.LeaseStatus,
 	livenessMap livenesspb.IsLiveMap,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
-) (*raftSparseStatus, laggingReplicaSet, bool) {
+) (raftSparseStatus, laggingReplicaSet, bool) {
 	if !q.isRaftLeaderRLocked() { // fast path
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	if ticks := q.ticksSinceLastProposalRLocked(); ticks < quiesceAfterTicks {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: proposed %d ticks ago", ticks)
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	// Fast path: don't quiesce expiration-based leases, since they'll likely be
 	// renewed soon. The lease may not be ours, but in that case we wouldn't be
 	// able to quiesce anyway (see leaseholder condition below).
 	if l := leaseStatus.Lease; l.Type() == roachpb.LeaseExpiration && l.Sequence != 0 {
 		log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: proposals pending")
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	// Don't quiesce if there's outstanding quota - it can lead to deadlock. This
 	// condition is largely subsumed by the upcoming replication state check,
@@ -322,46 +322,40 @@ func shouldReplicaQuiesce(
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: replication quota outstanding")
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	if q.mergeInProgressRLocked() {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: merge in progress")
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	if _, err := q.isDestroyedRLocked(); err != nil {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: replica destroyed")
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 
 	if q.hasRaftReadyRLocked() {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: raft ready")
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 
 	status := q.raftSparseStatusRLocked()
-	if status == nil {
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: dormant Raft group")
-		}
-		return nil, nil, false
-	}
 	if status.SoftState.RaftState != raft.StateLeader {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	if status.LeadTransferee != 0 {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: leader transfer to %d in progress", status.LeadTransferee)
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 
 	// Only quiesce if this replica is the leaseholder as well;
@@ -371,7 +365,7 @@ func shouldReplicaQuiesce(
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
 	// equal in order to quiesce.
@@ -380,7 +374,7 @@ func shouldReplicaQuiesce(
 			log.Infof(ctx, "not quiescing: applied (%d) != commit (%d)",
 				status.Applied, status.Commit)
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	lastIndex := q.raftLastIndexRLocked()
 	if kvpb.RaftIndex(status.Commit) != lastIndex {
@@ -388,7 +382,7 @@ func shouldReplicaQuiesce(
 			log.Infof(ctx, "not quiescing: commit (%d) != lastIndex (%d)",
 				status.Commit, lastIndex)
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 
 	if len(pausedFollowers) > 0 {
@@ -401,7 +395,7 @@ func shouldReplicaQuiesce(
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: overloaded followers %v", pausedFollowers)
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 
 	var foundSelf bool
@@ -415,7 +409,7 @@ func shouldReplicaQuiesce(
 				log.Infof(ctx, "not quiescing: could not locate replica %d in progress: %+v",
 					rep.ReplicaID, progress)
 			}
-			return nil, nil, false
+			return raftSparseStatus{}, nil, false
 		} else if progress.Match != status.Applied || progress.State != tracker.StateReplicate {
 			// Skip any node in the descriptor which is not live. Instead, add
 			// the node to the set of replicas lagging the quiescence index.
@@ -431,7 +425,7 @@ func shouldReplicaQuiesce(
 				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d) or state %s not admissible",
 					rep.ReplicaID, progress.Match, status.Applied, progress.State)
 			}
-			return nil, nil, false
+			return raftSparseStatus{}, nil, false
 		}
 	}
 	sort.Sort(lagging)
@@ -440,13 +434,13 @@ func shouldReplicaQuiesce(
 			log.Infof(ctx, "not quiescing: %d not found in progress: %+v",
 				status.ID, status.Progress)
 		}
-		return nil, nil, false
+		return raftSparseStatus{}, nil, false
 	}
 	return status, lagging, true
 }
 
 func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
-	ctx context.Context, status *raftSparseStatus, lagging laggingReplicaSet,
+	ctx context.Context, status raftSparseStatus, lagging laggingReplicaSet,
 ) bool {
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.replicaID, lastToReplica)

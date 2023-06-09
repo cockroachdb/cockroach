@@ -935,9 +935,6 @@ func (s *Store) checkSnapshotOverlapLocked(
 			log.Warningf(ctx, "unable to look up overlapping replica on %s: %v", exReplica, err)
 		} else {
 			inactive := func(r *Replica) bool {
-				if r.RaftStatus() == nil {
-					return true
-				}
 				// TODO(benesch): this check does not detect inactivity on
 				// replicas with epoch-based leases. Since the validity of an
 				// epoch-based lease is tied to the owning node's liveness, the

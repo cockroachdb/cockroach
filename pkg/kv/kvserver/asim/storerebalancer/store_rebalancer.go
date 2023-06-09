@@ -84,7 +84,7 @@ func NewStoreRebalancer(
 	allocator allocatorimpl.Allocator,
 	storePool storepool.AllocatorStorePool,
 	settings *config.SimulationSettings,
-	getRaftStatusFn func(replica kvserver.CandidateReplica) *raft.Status,
+	getRaftStatusFn func(replica kvserver.CandidateReplica) raft.Status,
 ) StoreRebalancer {
 	return newStoreRebalancerControl(start, storeID, controller, allocator, storePool, settings, getRaftStatusFn)
 }
@@ -96,7 +96,7 @@ func newStoreRebalancerControl(
 	allocator allocatorimpl.Allocator,
 	storePool storepool.AllocatorStorePool,
 	settings *config.SimulationSettings,
-	getRaftStatusFn func(replica kvserver.CandidateReplica) *raft.Status,
+	getRaftStatusFn func(replica kvserver.CandidateReplica) raft.Status,
 ) *storeRebalancerControl {
 	sr := kvserver.SimulatorStoreRebalancer(
 		roachpb.StoreID(storeID),

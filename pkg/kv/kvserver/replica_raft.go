@@ -2037,8 +2037,8 @@ func (r *Replica) hasOutstandingSnapshotInFlightToStore(
 }
 
 // HasRaftLeader returns true if the raft group has a raft leader currently.
-func HasRaftLeader(raftStatus *raft.Status) bool {
-	return raftStatus != nil && raftStatus.SoftState.Lead != 0
+func HasRaftLeader(raftStatus raft.Status) bool {
+	return raftStatus.SoftState.Lead != 0
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.

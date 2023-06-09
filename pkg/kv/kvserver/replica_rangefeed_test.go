@@ -804,7 +804,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 				return err
 			}
 			raftStatus := repl.RaftStatus()
-			if raftStatus != nil && raftStatus.RaftState == raft.StateFollower {
+			if raftStatus.RaftState == raft.StateFollower {
 				return nil
 			}
 			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1), false /* bypassSafetyChecks */)

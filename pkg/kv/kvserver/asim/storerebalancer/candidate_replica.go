@@ -63,9 +63,8 @@ func (sr *simulatorReplica) GetRangeID() roachpb.RangeID {
 	return roachpb.RangeID(sr.repl.Range())
 }
 
-// RaftStatus returns the current raft status of the replica. It returns
-// nil if the Raft group has not been initialized yet.
-func (sr *simulatorReplica) RaftStatus() *raft.Status {
+// RaftStatus returns the current raft status of the replica.
+func (sr *simulatorReplica) RaftStatus() raft.Status {
 	return sr.state.RaftStatus(sr.rng.RangeID(), sr.repl.StoreID())
 }
 
@@ -127,8 +126,8 @@ func (sr *simulatorReplica) String() string {
 
 // GetStateRaftStatusFn returns a function that given a candidate replica, will
 // return the raft status associated with it.
-func GetStateRaftStatusFn(s state.State) func(replica kvserver.CandidateReplica) *raft.Status {
-	return func(replica kvserver.CandidateReplica) *raft.Status {
+func GetStateRaftStatusFn(s state.State) func(replica kvserver.CandidateReplica) raft.Status {
+	return func(replica kvserver.CandidateReplica) raft.Status {
 		return s.RaftStatus(state.RangeID(replica.GetRangeID()), state.StoreID(replica.StoreID()))
 	}
 }

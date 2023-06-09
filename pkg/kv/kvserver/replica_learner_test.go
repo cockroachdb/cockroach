@@ -799,9 +799,6 @@ func TestLearnerRaftConfState(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			for _, repl := range repls {
 				status := repl.RaftStatus()
-				if status == nil {
-					return errors.Errorf(`%s is still waking up`, repl)
-				}
 				if _, ok := status.Config.Learners[uint64(id)]; !ok {
 					return errors.Errorf(`%s thinks %d is not a learner`, repl, id)
 				}

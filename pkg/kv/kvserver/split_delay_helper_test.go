@@ -27,13 +27,13 @@ type testSplitDelayHelper struct {
 	numAttempts int
 
 	rangeID    roachpb.RangeID
-	raftStatus *raft.Status
+	raftStatus raft.Status
 	sleep      func()
 
 	slept time.Duration
 }
 
-func (h *testSplitDelayHelper) RaftStatus(context.Context) (roachpb.RangeID, *raft.Status) {
+func (h *testSplitDelayHelper) RaftStatus(context.Context) (roachpb.RangeID, raft.Status) {
 	return h.rangeID, h.raftStatus
 }
 
@@ -65,15 +65,15 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 		h := &testSplitDelayHelper{
 			numAttempts: 0,
 			rangeID:     1,
-			raftStatus:  nil,
+			raftStatus:  raft.Status{},
 		}
 		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
 		assert.Equal(t, "", s)
 		assert.EqualValues(t, 0, h.slept)
 	})
 
-	statusWithState := func(status raft.StateType) *raft.Status {
-		return &raft.Status{
+	statusWithState := func(status raft.StateType) raft.Status {
+		return raft.Status{
 			BasicStatus: raft.BasicStatus{
 				SoftState: raft.SoftState{
 					RaftState: status,
@@ -81,18 +81,6 @@ func TestSplitDelayToAvoidSnapshot(t *testing.T) {
 			},
 		}
 	}
-
-	t.Run("nil", func(t *testing.T) {
-		// Should immediately bail out if raftGroup is nil.
-		h := &testSplitDelayHelper{
-			numAttempts: 5,
-			rangeID:     1,
-			raftStatus:  nil,
-		}
-		s := maybeDelaySplitToAvoidSnapshot(ctx, h)
-		assert.Equal(t, "; delayed by 0.0s to resolve: replica is raft follower (without success)", s)
-		assert.EqualValues(t, 0, h.slept)
-	})
 
 	t.Run("follower", func(t *testing.T) {
 		// Should immediately bail out if run on follower.

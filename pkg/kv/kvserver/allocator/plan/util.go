@@ -123,10 +123,8 @@ func ReplicationChangesForRebalance(
 
 // rangeRaftStatus pretty-prints the Raft progress (i.e. Raft log position) of
 // the replicas.
-func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor) string {
-	if raftStatus == nil {
-		return "[no raft status]"
-	} else if len(raftStatus.Progress) == 0 {
+func rangeRaftProgress(raftStatus raft.Status, replicas []roachpb.ReplicaDescriptor) string {
+	if len(raftStatus.Progress) == 0 {
 		return "[no raft progress]"
 	}
 	var buf bytes.Buffer
