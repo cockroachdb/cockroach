@@ -149,7 +149,7 @@ const dashboards: { [key: string]: GraphDashboard } = {
   },
   ttl: { label: "TTL", component: ttlDashboard, isKvDashboard: false },
   crossClusterReplication: {
-    label: "Cross-Cluster Replication",
+    label: "Physical Cluster Replication",
     component: crossClusterReplicationDashboard,
     isKvDashboard: true,
   },
@@ -396,7 +396,7 @@ export class NodeGraphs extends React.Component<
       .filter(
         option =>
           this.props.crossClusterReplicationEnabled ||
-          option.label !== "Cross-Cluster Replication",
+          option.label !== "Physical Cluster Replication",
       );
 
     return (
