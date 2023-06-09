@@ -60,7 +60,7 @@ data "aws_availability_zone" "zone_detail" {
 resource "aws_vpc" "region_vpc" {
   cidr_block           = "${cidrsubnet("10.0.0.0/8", 8, local.region_number[var.region])}"
   enable_dns_hostnames = true
-  tags {
+  tags = {
     Name               = "${var.label}-vpc-${var.region}"
   }
 }
@@ -88,7 +88,7 @@ resource "aws_subnet" "region_subnets" {
   availability_zone = "${data.aws_availability_zone.zone_detail.*.name[count.index]}"
   vpc_id            = "${aws_vpc.region_vpc.id}"
   cidr_block        = "${cidrsubnet(aws_vpc.region_vpc.cidr_block, 4, local.zone_number[data.aws_availability_zone.zone_detail.*.name_suffix[count.index]])}"
-  tags {
+  tags = {
     Name        = "${var.label}-subnet-${data.aws_availability_zone.zone_detail.*.name[count.index]}"
   }
 }
