@@ -418,6 +418,10 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// and apply them.
 
 	ents := make([]raftpb.Entry, 0, used)
+	// Use this slice to track, for each entry that's proposed to raft, whether
+	// it's subject to replication admission control. Updated in tandem with
+	// slice above.
+	admitHandles := make([]admitEntHandle, 0, used)
 	buf := b.arr.asSlice()[:used]
 	defer func() {
 		// Clear buffer.
@@ -425,11 +429,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			buf[i] = nil
 		}
 	}()
-
-	// Use this slice to track, for each entry that's proposed to raft, whether
-	// it's subject to replication admission control. Updated in tandem with
-	// slice above.
-	admitHandles := make([]admitEntHandle, 0, used)
 
 	// Compute the closed timestamp target, which will be used to assign a closed
 	// timestamp to all proposals in this batch.
