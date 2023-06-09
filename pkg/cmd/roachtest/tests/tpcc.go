@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math"
 	"math/rand"
@@ -807,6 +808,14 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMax:   gceOrAws(cloud, 750, 900),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 3,
+		CPUs:  4,
+
+		LoadWarehouses:  1000,
+		EstimatedMax:    gceOrAws(cloud, 750, 900),
+		SharedProcessMT: true,
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:                        3,
 		CPUs:                         4,
 		EnableDefaultScheduledBackup: true,
@@ -820,6 +829,15 @@ func registerTPCC(r registry.Registry) {
 		LoadWarehouses: gceOrAws(cloud, 3500, 3900),
 		EstimatedMax:   gceOrAws(cloud, 2900, 3500),
 		Tags:           registry.Tags(`aws`),
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 3,
+		CPUs:  16,
+
+		LoadWarehouses:  gceOrAws(cloud, 3500, 3900),
+		EstimatedMax:    gceOrAws(cloud, 2900, 3500),
+		Tags:            registry.Tags(`aws`),
+		SharedProcessMT: true,
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
@@ -1009,6 +1027,9 @@ type tpccBenchSpec struct {
 	// ExpirationLeases enables use of expiration-based leases.
 	ExpirationLeases             bool
 	EnableDefaultScheduledBackup bool
+	// SharedProcessMT, if true, indicates that the cluster should run in
+	// shared-process mode of multi-tenancy.
+	SharedProcessMT bool
 }
 
 // partitions returns the number of partitions specified to the load generator.
@@ -1096,6 +1117,10 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		nameParts = append(nameParts, "lease=expiration")
 	}
 
+	if b.SharedProcessMT {
+		nameParts = append(nameParts, "mt-shared-process")
+	}
+
 	name := strings.Join(nameParts, "/")
 
 	numNodes := b.Nodes + b.LoadConfig.numLoadNodes(b.Distribution)
@@ -1123,12 +1148,10 @@ func loadTPCCBench(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
+	db *gosql.DB,
 	b tpccBenchSpec,
 	roachNodes, loadNode option.NodeListOption,
 ) error {
-	db := c.Conn(ctx, t.L(), 1)
-	defer db.Close()
-
 	// Check if the dataset already exists and is already large enough to
 	// accommodate this benchmarking. If so, we can skip the fixture RESTORE.
 	if _, err := db.ExecContext(ctx, `USE tpcc`); err == nil {
@@ -1176,7 +1199,11 @@ func loadTPCCBench(
 	t.L().Printf("restoring tpcc fixture\n")
 	err := WaitFor3XReplication(ctx, t, db)
 	require.NoError(t, err)
-	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs)
+	var pgurl string
+	if b.SharedProcessMT {
+		pgurl = fmt.Sprintf("{pgurl%s:%s}", roachNodes[:1], appTenantName)
+	}
+	cmd := tpccImportCmd(b.LoadWarehouses, loadArgs, pgurl)
 	if err = c.RunE(ctx, roachNodes[:1], cmd); err != nil {
 		return err
 	}
@@ -1197,9 +1224,13 @@ func loadTPCCBench(
 	maxRate := tpccMaxRate(b.EstimatedMax)
 	rampTime := (1 * rebalanceWait) / 4
 	loadTime := (3 * rebalanceWait) / 4
+	var tenantSuffix string
+	if b.SharedProcessMT {
+		tenantSuffix = fmt.Sprintf(":%s", appTenantName)
+	}
 	cmd = fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
-		"--wait=false --ramp=%s --duration=%s --scatter --tolerate-errors {pgurl%s}",
-		b.LoadWarehouses, b.LoadWarehouses, maxRate, rampTime, loadTime, roachNodes)
+		"--wait=false --ramp=%s --duration=%s --scatter --tolerate-errors {pgurl%s%s}",
+		b.LoadWarehouses, b.LoadWarehouses, maxRate, rampTime, loadTime, roachNodes, tenantSuffix)
 	if _, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd); err != nil {
 		return err
 	}
@@ -1242,6 +1273,14 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	// Don't encrypt in tpccbench tests.
 	startOpts, settings := b.startOpts()
 	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
+
+	var db *gosql.DB
+	if b.SharedProcessMT {
+		db = createInMemoryTenant(ctx, t, c, appTenantName, roachNodes, false /* secure */)
+	} else {
+		db = c.Conn(ctx, t.L(), 1)
+	}
+
 	useHAProxy := b.Chaos
 	const restartWait = 15 * time.Second
 	{
@@ -1271,7 +1310,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		m := c.NewMonitor(ctx, roachNodes)
 		m.Go(func(ctx context.Context) error {
 			t.Status("setting up dataset")
-			return loadTPCCBench(ctx, t, c, b, roachNodes, c.Node(loadNodes[0]))
+			return loadTPCCBench(ctx, t, c, db, b, roachNodes, c.Node(loadNodes[0]))
 		})
 		m.Wait()
 	}
@@ -1367,10 +1406,14 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				}
 				t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
 				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", t.PerfArtifactsDir(), warehouses)
+				var tenantSuffix string
+				if b.SharedProcessMT {
+					tenantSuffix = fmt.Sprintf(":%s", appTenantName)
+				}
 				cmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d "+
-					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s}",
+					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s%s}",
 					b.LoadWarehouses, warehouses, rampDur,
-					loadDur, extraFlags, histogramsPath, sqlGateways)
+					loadDur, extraFlags, histogramsPath, sqlGateways, tenantSuffix)
 				err := c.RunE(ctx, group.loadNodes, cmd)
 				loadDone <- timeutil.Now()
 				if err != nil {
