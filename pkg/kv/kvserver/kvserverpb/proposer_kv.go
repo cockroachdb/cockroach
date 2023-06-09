@@ -74,6 +74,7 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	allowlist.Delta = enginepb.MVCCStatsDelta{}
 	allowlist.WriteTimestamp = hlc.Timestamp{}
 	allowlist.PrevLeaseProposal = nil
+	allowlist.IsProbe = false // probes are trivial, they always get refused in CheckForcedErr
 	allowlist.State = nil
 	return allowlist.IsZero()
 }
