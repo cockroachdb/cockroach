@@ -508,7 +508,7 @@ export const versionsSelector = createSelector(validateNodesSelector, nodes =>
     .value(),
 );
 
-export const numNodesByVersionsSelector = createSelector(
+export const numNodesByVersionsTagSelector = createSelector(
   validateNodesSelector,
   nodes => {
     if (!nodes) {
@@ -516,6 +516,26 @@ export const numNodesByVersionsSelector = createSelector(
     }
     return new Map(
       Object.entries(_.countBy(nodes, node => node?.build_info?.tag)),
+    );
+  },
+);
+
+export const numNodesByVersionsSelector = createSelector(
+  validateNodesSelector,
+  nodes => {
+    if (!nodes) {
+      return new Map();
+    }
+    return new Map(
+      Object.entries(
+        _.countBy(nodes, node => {
+          const serverVersion = node?.desc?.ServerVersion;
+          if (serverVersion) {
+            return `${serverVersion.major_val}.${serverVersion.minor_val}`;
+          }
+          return "";
+        }),
+      ),
     );
   },
 );
