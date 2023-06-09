@@ -13,6 +13,7 @@ package concurrency
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1814,4 +1815,38 @@ func TestLockStateSafeFormat(t *testing.T) {
 	require.EqualValues(t,
 		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8, ts: 0.000000123,7, info: repl epoch: 0, seqs: [1]\n",
 		redact.Sprint(l).Redact())
+}
+
+// TestElideWaitingStateUpdatesConsidersAllFields ensures all fields in the
+// waitingState struct have been considered for inclusion/non-inclusion in the
+// logic of canElideWaitingStateUpdate. The test doesn't check if the
+// inclusion/non-inclusion claims are actually reflected in the logic; however,
+// it does serve as a glorified nudge to consider new fields added to
+// waitingState for inclusion/non-inclusion in canElideWaitingStateUpdate's
+// logic.
+func TestCanElideWaitingStateUpdateConsidersAllFields(t *testing.T) {
+	type inclusionStatus bool
+	const (
+		includeWhenDeciding      inclusionStatus = true
+		doNotIncludeWhenDeciding inclusionStatus = false
+	)
+	fieldMap := map[string]inclusionStatus{
+		"kind":          includeWhenDeciding,
+		"txn":           includeWhenDeciding,
+		"key":           includeWhenDeciding,
+		"held":          includeWhenDeciding,
+		"queuedWriters": doNotIncludeWhenDeciding,
+		"queuedReaders": doNotIncludeWhenDeciding,
+		"guardStrength": doNotIncludeWhenDeciding,
+	}
+	ws := waitingState{}
+	typ := reflect.ValueOf(ws).Type()
+	for i := 0; i < typ.NumField(); i++ {
+		fieldName := typ.Field(i).Name
+		_, ok := fieldMap[fieldName]
+		if !ok {
+			t.Fatalf("%s field not considered", fieldName)
+		}
+		typ.Field(i)
+	}
 }
