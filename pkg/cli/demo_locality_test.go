@@ -14,21 +14,21 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 func Example_demo_locality() {
-	_ = disabledExample_demo_locality
-	fmt.Println("skipped due to flake: https://github.com/cockroachdb/cockroach/issues/99903")
-}
-
-func disabledExample_demo_locality() {
 	c := NewCLITest(TestCLIParams{NoServer: true})
 	defer c.Cleanup()
+
+	// This is slow under deadlock as it starts a 9-node cluster which
+	// has a very high simulated latency between each node.
+	if syncutil.DeadlockEnabled {
+		return
+	}
 
 	defer democluster.TestingForceRandomizeDemoPorts()()
 
