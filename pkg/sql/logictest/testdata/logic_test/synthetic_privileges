@@ -340,3 +340,24 @@ query B
 SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
 ----
 false
+
+# Verify that ALL privilege does not prevent SQL logins.
+subtest all_does_not_include_nosqllogin
+
+statement ok
+GRANT SYSTEM ALL TO testuser
+
+statement ok
+CANCEL SESSION (SELECT session_id FROM [SHOW SESSIONS] WHERE user_name = 'testuser')
+
+user testuser
+
+statement ok
+SELECT 1
+
+user root
+
+statement ok
+REVOKE SYSTEM ALL FROM testuser
+
+subtest end
