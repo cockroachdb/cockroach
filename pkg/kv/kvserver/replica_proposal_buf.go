@@ -520,14 +520,10 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			propErr, dropped := proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, admitHandles, buf[firstProp:nextProp])
+			propErr, _ := proposeBatch(ctx, b.p, raftGroup, b.p.getReplicaID(), ents, admitHandles, buf[firstProp:nextProp])
 			if propErr != nil {
 				firstErr = propErr
 				continue
-			}
-			if !dropped {
-				// TODO(tbg): move into proposeBatch.
-				b.maybeDeductFlowTokens(ctx, admitHandles, ents)
 			}
 
 			ents = ents[len(ents):]
@@ -593,21 +589,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		return 0, firstErr
 	}
 
-	propErr, dropped := proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, admitHandles, buf[firstProp:nextProp])
-	if propErr == nil && !dropped {
-		// Now that we know what raft log position[1] this proposal is to end up
-		// in, deduct flow tokens for it. This is done without blocking (we've
-		// already waited for available flow tokens pre-evaluation). The tokens
-		// will later be returned once we're informed of the entry being
-		// admitted below raft.
-		//
-		// [1]: We're relying on an undocumented side effect of upstream raft
-		//      API where it populates the index and term for the passed in
-		//      slice of entries. See etcd-io/raft#57.
-		//
-		// TODO(tbg): move into proposeBatch.
-		b.maybeDeductFlowTokens(ctx, admitHandles, ents)
-	}
+	propErr, _ := proposeBatch(ctx, b.p, raftGroup, b.p.getReplicaID(), ents, admitHandles, buf[firstProp:nextProp])
 	return used, propErr
 }
 
@@ -967,8 +949,9 @@ func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
 
 func proposeBatch(
 	ctx context.Context,
+	p singleBatchProposer,
 	raftGroup proposerRaft,
-	replID roachpb.ReplicaID,
+	replID roachpb.ReplicaID, // TODO(tbg): can get this from p
 	ents []raftpb.Entry,
 	handles []admitEntHandle,
 	props []*ProposalData, // must match ents slice
@@ -996,11 +979,23 @@ func proposeBatch(
 		}
 		return nil, true
 	}
+	if err == nil {
+		// Now that we know what raft log position[1] this proposal is to end up
+		// in, deduct flow tokens for it. This is done without blocking (we've
+		// already waited for available flow tokens pre-evaluation). The tokens
+		// will later be returned once we're informed of the entry being
+		// admitted below raft.
+		//
+		// [1]: We're relying on an undocumented side effect of upstream raft
+		//      API where it populates the index and term for the passed in
+		//      slice of entries. See etcd-io/raft#57.
+		maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
+	}
 	return err, false
 }
 
-func (b *propBuf) maybeDeductFlowTokens(
-	ctx context.Context, admitHandles []admitEntHandle, ents []raftpb.Entry,
+func maybeDeductFlowTokens(
+	ctx context.Context, h kvflowcontrol.Handle, admitHandles []admitEntHandle, ents []raftpb.Entry,
 ) {
 	if len(admitHandles) != len(ents) || cap(admitHandles) != cap(ents) {
 		panic(
@@ -1017,7 +1012,7 @@ func (b *propBuf) maybeDeductFlowTokens(
 				return "<omitted>"
 			}),
 		)
-		b.p.flowControlHandle(ctx).DeductTokensFor(
+		h.DeductTokensFor(
 			admitHandle.pCtx,
 			admissionpb.WorkPriority(admitHandle.handle.AdmissionPriority),
 			kvflowcontrolpb.RaftLogPosition{
