@@ -64,6 +64,7 @@ func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
 			var r Replica
 			r.mu.state.Desc = &c.oldDesc
 			r.mu.lastReplicaAdded = c.lastReplicaAdded
+			r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration((*replicaFlowControl)(&r), nil, nil)
 			r.store = tc.store
 			r.concMgr = tc.repl.concMgr
 			r.setDescRaftMuLocked(context.Background(), &c.newDesc)

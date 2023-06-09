@@ -17,7 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowtokentracker"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,6 +33,8 @@ type Handle struct {
 	controller kvflowcontrol.Controller
 	metrics    *Metrics
 	clock      *hlc.Clock
+	rangeID    roachpb.RangeID
+	tenantID   roachpb.TenantID
 
 	mu struct {
 		syncutil.Mutex
@@ -42,14 +46,31 @@ type Handle struct {
 		perStreamTokenTracker map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker
 		closed                bool
 	}
+	knobs *kvflowcontrol.TestingKnobs
 }
 
 // New constructs a new Handle.
-func New(controller kvflowcontrol.Controller, metrics *Metrics, clock *hlc.Clock) *Handle {
+func New(
+	controller kvflowcontrol.Controller,
+	metrics *Metrics,
+	clock *hlc.Clock,
+	rangeID roachpb.RangeID,
+	tenantID roachpb.TenantID,
+	knobs *kvflowcontrol.TestingKnobs,
+) *Handle {
+	if metrics == nil { // only nil in tests
+		metrics = NewMetrics(nil)
+	}
+	if knobs == nil {
+		knobs = &kvflowcontrol.TestingKnobs{}
+	}
 	h := &Handle{
 		controller: controller,
 		metrics:    metrics,
 		clock:      clock,
+		rangeID:    rangeID,
+		tenantID:   tenantID,
+		knobs:      knobs,
 	}
 	h.mu.perStreamTokenTracker = map[kvflowcontrol.Stream]*kvflowtokentracker.Tracker{}
 	return h
@@ -125,10 +146,17 @@ func (h *Handle) deductTokensForInner(
 		return nil // unused return value in production code
 	}
 
+	if h.knobs.OverrideTokenDeduction != nil {
+		tokens = h.knobs.OverrideTokenDeduction()
+	}
+
 	for _, c := range h.mu.connections {
-		h.controller.DeductTokens(ctx, pri, tokens, c.Stream())
-		h.mu.perStreamTokenTracker[c.Stream()].Track(ctx, pri, tokens, pos)
-		streams = append(streams, c.Stream())
+		if h.mu.perStreamTokenTracker[c.Stream()].Track(ctx, pri, tokens, pos) {
+			// Only deduct tokens if we're able to track them for subsequent
+			// returns. We risk leaking flow tokens otherwise.
+			h.controller.DeductTokens(ctx, pri, tokens, c.Stream())
+			streams = append(streams, c.Stream())
+		}
 	}
 	return streams
 }
@@ -160,6 +188,14 @@ func (h *Handle) ReturnTokensUpto(
 		return
 	}
 
+	if !stream.TenantID.IsSet() {
+		// NB: The tenant ID is set in the local fast path for token returns,
+		// through the kvflowcontrol.Dispatch. Tecnically we could set the
+		// tenant ID by looking up the local replica and reading it, but it's
+		// easier to do it this way having captured it when the handle was
+		// instantiated.
+		stream.TenantID = h.tenantID
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.mu.closed {
@@ -175,6 +211,13 @@ func (h *Handle) ReturnTokensUpto(
 func (h *Handle) ConnectStream(
 	ctx context.Context, pos kvflowcontrolpb.RaftLogPosition, stream kvflowcontrol.Stream,
 ) {
+	if !stream.TenantID.IsSet() {
+		// See comment in (*Handle).ReturnTokensUpto above where this same check
+		// exists. The callers here do typically have this set, but it doesn't
+		// hurt to be defensive.
+		stream.TenantID = h.tenantID
+	}
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.mu.closed {
@@ -182,6 +225,12 @@ func (h *Handle) ConnectStream(
 		return
 	}
 
+	h.connectStreamLocked(ctx, pos, stream)
+}
+
+func (h *Handle) connectStreamLocked(
+	ctx context.Context, pos kvflowcontrolpb.RaftLogPosition, stream kvflowcontrol.Stream,
+) {
 	if _, ok := h.mu.perStreamTokenTracker[stream]; ok {
 		log.Fatalf(ctx, "reconnecting already connected stream: %s", stream)
 	}
@@ -195,14 +244,63 @@ func (h *Handle) ConnectStream(
 		// that case, this sorting will help avoid deadlocks.
 		return h.mu.connections[i].Stream().StoreID < h.mu.connections[j].Stream().StoreID
 	})
-	h.mu.perStreamTokenTracker[stream] = kvflowtokentracker.New(pos, nil /* knobs */)
+	h.mu.perStreamTokenTracker[stream] = kvflowtokentracker.New(pos, stream, h.knobs)
+	h.metrics.StreamsConnected.Inc(1)
+	log.VInfof(ctx, 1, "connected to stream: %s", stream)
 }
 
 // DisconnectStream is part of the kvflowcontrol.Handle interface.
 func (h *Handle) DisconnectStream(ctx context.Context, stream kvflowcontrol.Stream) {
+	if !stream.TenantID.IsSet() {
+		// See comment in (*Handle).ReturnTokensUpto above where this same check
+		// exists. The callers here do typically have this set, but it doesn't
+		// hurt to be defensive.
+		stream.TenantID = h.tenantID
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.disconnectStreamLocked(ctx, stream)
+}
+
+// ResetStreams is part of the kvflowcontrol.Handle interface.
+func (h *Handle) ResetStreams(ctx context.Context) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.mu.closed {
+		log.Errorf(ctx, "operating on a closed handle")
+		return
+	}
+
+	var streams []kvflowcontrol.Stream
+	var lowerBounds []kvflowcontrolpb.RaftLogPosition
+	for stream, tracker := range h.mu.perStreamTokenTracker {
+		streams = append(streams, stream)
+		lowerBounds = append(lowerBounds, tracker.LowerBound())
+	}
+	for i := range streams {
+		h.disconnectStreamLocked(ctx, streams[i])
+	}
+	for i := range streams {
+		h.connectStreamLocked(ctx, lowerBounds[i], streams[i])
+	}
+}
+
+// Inspect is part of the kvflowcontrol.Handle interface.
+func (h *Handle) Inspect(ctx context.Context) kvflowinspectpb.Handle {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	handle := kvflowinspectpb.Handle{
+		RangeID: h.rangeID,
+	}
+	for _, c := range h.mu.connections {
+		connected := kvflowinspectpb.ConnectedStream{
+			Stream:            h.controller.InspectStream(ctx, c.Stream()),
+			TrackedDeductions: h.mu.perStreamTokenTracker[c.Stream()].Inspect(ctx),
+		}
+		handle.ConnectedStreams = append(handle.ConnectedStreams, connected)
+	}
+	return handle
 }
 
 func (h *Handle) disconnectStreamLocked(ctx context.Context, stream kvflowcontrol.Stream) {
@@ -211,7 +309,7 @@ func (h *Handle) disconnectStreamLocked(ctx context.Context, stream kvflowcontro
 		return
 	}
 	if _, ok := h.mu.perStreamTokenTracker[stream]; !ok {
-		log.Fatalf(ctx, "disconnecting non-existent stream: %s", stream)
+		return
 	}
 
 	h.mu.perStreamTokenTracker[stream].Iter(ctx,
@@ -232,6 +330,8 @@ func (h *Handle) disconnectStreamLocked(ctx context.Context, stream kvflowcontro
 	connection.Disconnect()
 	h.mu.connections = append(h.mu.connections[:streamIdx], h.mu.connections[streamIdx+1:]...)
 
+	log.VInfof(ctx, 1, "disconnected stream: %s", stream)
+	h.metrics.StreamsDisconnected.Inc(1)
 	// TODO(irfansharif): Optionally record lower bound raft log positions for
 	// disconnected streams to guard against regressions when (re-)connecting --
 	// it must be done with higher positions.
@@ -250,8 +350,12 @@ func (h *Handle) Close(ctx context.Context) {
 		return
 	}
 
-	for _, connection := range h.mu.connections {
-		h.disconnectStreamLocked(ctx, connection.Stream())
+	var streams []kvflowcontrol.Stream
+	for stream := range h.mu.perStreamTokenTracker {
+		streams = append(streams, stream)
+	}
+	for _, stream := range streams {
+		h.disconnectStreamLocked(ctx, stream)
 	}
 	h.mu.closed = true
 }

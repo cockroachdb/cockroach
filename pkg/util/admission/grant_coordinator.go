@@ -64,7 +64,8 @@ type StoreGrantCoordinators struct {
 	onLogEntryAdmitted    OnLogEntryAdmitted
 	closeCh               chan struct{}
 
-	disableTickerForTesting bool
+	disableTickerForTesting bool // TODO(irfansharif): Fold into the testing knobs struct below.
+	knobs                   *TestingKnobs
 }
 
 // SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
@@ -187,7 +188,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		sgc.settings,
 		sgc.workQueueMetrics,
 		opts,
-		nil, /* knobs */
+		sgc.knobs,
 		sgc.onLogEntryAdmitted,
 		&coord.mu.Mutex,
 	)
@@ -384,12 +385,13 @@ func NewGrantCoordinators(
 	opts Options,
 	registry *metric.Registry,
 	onLogEntryAdmitted OnLogEntryAdmitted,
+	knobs *TestingKnobs,
 ) GrantCoordinators {
 	metrics := makeGrantCoordinatorMetrics()
 	registry.AddMetricStruct(metrics)
 
 	return GrantCoordinators{
-		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry, onLogEntryAdmitted),
+		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry, onLogEntryAdmitted, knobs),
 		Regular: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry),
 		Elastic: makeElasticGrantCoordinator(ambientCtx, st, registry),
 	}
@@ -412,7 +414,7 @@ func makeElasticGrantCoordinator(
 	elasticCPUInternalWorkQueue := &WorkQueue{}
 	initWorkQueue(elasticCPUInternalWorkQueue, ambientCtx, KVWork, elasticCPUGranter, st,
 		elasticWorkQueueMetrics,
-		workQueueOptions{usesTokens: true}) // will be closed by the embedding *ElasticCPUWorkQueue
+		workQueueOptions{usesTokens: true}, nil /* knobs */) // will be closed by the embedding *ElasticCPUWorkQueue
 	elasticCPUWorkQueue := makeElasticCPUWorkQueue(st, elasticCPUInternalWorkQueue, elasticCPUGranter, elasticCPUGranterMetrics)
 	elasticCPUGrantCoordinator := makeElasticCPUGrantCoordinator(elasticCPUGranter, elasticCPUWorkQueue, schedulerLatencyListener)
 	elasticCPUGranter.setRequester(elasticCPUInternalWorkQueue)
@@ -427,7 +429,11 @@ func makeStoresGrantCoordinators(
 	metrics GrantCoordinatorMetrics,
 	registry *metric.Registry,
 	onLogEntryAdmitted OnLogEntryAdmitted,
+	knobs *TestingKnobs,
 ) *StoreGrantCoordinators {
+	if knobs == nil {
+		knobs = &TestingKnobs{}
+	}
 	// These metrics are shared across all stores and broken down by priority for
 	// the common priorities.
 	// TODO(baptist): Add per-store metrics.
@@ -446,6 +452,7 @@ func makeStoresGrantCoordinators(
 		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
 		workQueueMetrics:            storeWorkQueueMetrics,
 		onLogEntryAdmitted:          onLogEntryAdmitted,
+		knobs:                       knobs,
 	}
 	return storeCoordinators
 }

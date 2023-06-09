@@ -17,6 +17,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -311,6 +312,7 @@ type WorkQueue struct {
 	stopCh       chan struct{}
 
 	timeSource timeutil.TimeSource
+	knobs      *TestingKnobs
 }
 
 var _ requester = &WorkQueue{}
@@ -352,7 +354,7 @@ func makeWorkQueue(
 	opts workQueueOptions,
 ) requester {
 	q := &WorkQueue{}
-	initWorkQueue(q, ambientCtx, workKind, granter, settings, metrics, opts)
+	initWorkQueue(q, ambientCtx, workKind, granter, settings, metrics, opts, nil)
 	return q
 }
 
@@ -364,7 +366,11 @@ func initWorkQueue(
 	settings *cluster.Settings,
 	metrics *WorkQueueMetrics,
 	opts workQueueOptions,
+	knobs *TestingKnobs,
 ) {
+	if knobs == nil {
+		knobs = &TestingKnobs{}
+	}
 	stopCh := make(chan struct{})
 
 	timeSource := opts.timeSource
@@ -383,6 +389,7 @@ func initWorkQueue(
 	q.metrics = metrics
 	q.stopCh = stopCh
 	q.timeSource = timeSource
+	q.knobs = knobs
 
 	func() {
 		q.mu.Lock()
@@ -609,7 +616,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	// threshold for LIFO queueing based on observed admission latency.
 	tenant.priorityStates.requestAtPriority(info.Priority)
 
-	if len(q.mu.tenantHeap) == 0 {
+	if len(q.mu.tenantHeap) == 0 && !q.knobs.DisableWorkQueueFastPath {
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
 		tenant.used += uint64(info.RequestedCount)
@@ -627,8 +634,17 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 				// by either adding more synchronization, getting rid of this
 				// fast path, or swapping this entry from the top-most one in
 				// the waiting heap (and fixing the heap).
+				if log.V(1) {
+					log.Infof(ctx, "fast-path: admitting t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+						tenantID, info.Priority,
+						info.ReplicatedWorkInfo.RangeID,
+						info.ReplicatedWorkInfo.Origin,
+						info.ReplicatedWorkInfo.LogPosition.String(),
+						info.ReplicatedWorkInfo.Ingested,
+					)
+				}
 				q.onAdmittedReplicatedWork.admittedReplicatedWork(
-					roachpb.MustMakeTenantID(tenant.id),
+					roachpb.MustMakeTenantID(tenantID),
 					info.Priority,
 					info.ReplicatedWorkInfo,
 					info.RequestedCount,
@@ -722,6 +738,17 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 
 	q.metrics.recordStartWait(info.Priority)
 	if info.ReplicatedWorkInfo.Enabled {
+		if log.V(1) {
+			log.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+				tenant.waitingWorkHeap.Len(),
+				tenant.id, info.Priority,
+				info.ReplicatedWorkInfo.RangeID,
+				info.ReplicatedWorkInfo.Origin,
+				info.ReplicatedWorkInfo.LogPosition,
+				info.ReplicatedWorkInfo.Ingested,
+			)
+		}
+
 		return // return without waiting (admission is asynchronous)
 	}
 
@@ -828,6 +855,10 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		q.mu.Unlock()
 		return 0
 	}
+	if fn := q.knobs.DisableWorkQueueGranting; fn != nil && fn() {
+		q.mu.Unlock()
+		return 0
+	}
 	tenant := q.mu.tenantHeap[0]
 	var item *waitingWork
 	if len(tenant.waitingWorkHeap) > 0 {
@@ -855,7 +886,16 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	} else {
 		// NB: We don't use grant chains for store tokens, so they don't apply
 		// to replicated writes.
-
+		if log.V(1) {
+			log.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
+				tenant.waitingWorkHeap.Len(),
+				tenant.id, item.priority,
+				item.replicated.RangeID,
+				item.replicated.Origin,
+				item.replicated.LogPosition,
+				item.replicated.Ingested,
+			)
+		}
 		defer releaseWaitingWork(item)
 		q.onAdmittedReplicatedWork.admittedReplicatedWork(
 			roachpb.MustMakeTenantID(tenant.id),
@@ -1968,6 +2008,7 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 	// have a separate goroutine invoke these callbacks (without holding
 	// coord.mu). We could directly invoke here too if not holding the lock.
 	q.onLogEntryAdmitted.AdmittedLogEntry(
+		q.q[wc].ambientCtx,
 		rwi.Origin,
 		pri,
 		q.storeID,
@@ -1982,23 +2023,13 @@ func (q *StoreWorkQueue) admittedReplicatedWork(
 // post-admission bookkeeping.
 type OnLogEntryAdmitted interface {
 	AdmittedLogEntry(
+		ctx context.Context,
 		origin roachpb.NodeID, /* node where the entry originated */
 		pri admissionpb.WorkPriority, /* admission priority of the entry */
 		storeID roachpb.StoreID, /* store on which the entry was admitted */
 		rangeID roachpb.RangeID, /* identifying range for the log entry */
 		pos LogPosition, /* log position of the entry that was admitted*/
 	)
-}
-
-// NoopOnLogEntryAdmitted is a no-op implementation of the OnLogEntryAdmitted
-// interface.
-type NoopOnLogEntryAdmitted struct{}
-
-var _ OnLogEntryAdmitted = &NoopOnLogEntryAdmitted{}
-
-func (n *NoopOnLogEntryAdmitted) AdmittedLogEntry(
-	roachpb.NodeID, admissionpb.WorkPriority, roachpb.StoreID, roachpb.RangeID, LogPosition,
-) {
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has completed.
@@ -2114,7 +2145,7 @@ func makeStoreWorkQueue(
 
 	opts.usesAsyncAdmit = true
 	for i := range q.q {
-		initWorkQueue(&q.q[i], ambientCtx, KVWork, granters[i], settings, metrics, opts)
+		initWorkQueue(&q.q[i], ambientCtx, KVWork, granters[i], settings, metrics, opts, knobs)
 		q.q[i].onAdmittedReplicatedWork = q
 	}
 	// Arbitrary initial value. This will be replaced before any meaningful
@@ -2143,7 +2174,7 @@ func (q *StoreWorkQueue) gcSequencers() {
 	defer q.sequencersMu.Unlock()
 
 	for rangeID, seq := range q.sequencersMu.s {
-		maxCreateTime := timeutil.FromUnixNanos(seq.maxCreateTime)
+		maxCreateTime := timeutil.FromUnixNanos(atomic.LoadInt64(&seq.maxCreateTime))
 		if q.timeSource.Now().Sub(maxCreateTime) > rangeSequencerGCThreshold.Get(&q.settings.SV) {
 			delete(q.sequencersMu.s, rangeID)
 		}

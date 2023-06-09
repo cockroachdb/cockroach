@@ -1,0 +1,66 @@
+# Observe how the integration layer deals with changing raft group members.
+# Start off with a double replicated range r1/t1, with replicas on n1/s1 and
+# n2/s2 (with replica IDs 1-2 respectively).
+init tenant=t1 range=r1 replid=1
+----
+
+state applied=1/10 descriptor=(1,2)
+----
+
+# Set up replid=1 (declared in init above) to be the raft leader. It should end
+# up connected to both replication streams.
+integration op=became-leader
+----
+initialized flow control handle for r1/t1
+connected to replication stream t1/s1 starting at log-position=1/10
+disconnected from replication stream t1/s2
+connected to replication stream t1/s2 starting at log-position=1/10
+
+# Add replid=3. New replicas start off without a match index, in StateProbe, as
+# inactive and paused according to raft (this different from the
+# last-updated-derived activity and CRDB-level follower pausing). This is
+# represented using '3@0:probe:!active:paused' below. As a result, we don't
+# immediately connect to the t1/s3 stream.
+state applied=1/11 descriptor=(1,2,3) progress=(1@11:replicate:active:!paused, 2@11:replicate:active:!paused, 3@0:probe:!active:paused)
+----
+
+integration op=desc-changed
+----
+disconnected from replication stream t1/s3
+
+integration op=raft-ticked
+----
+
+# replid=3 soon enters StateProbe with an up-to-date match index. It's also
+# considered RecentlyActive according to raft, and !MsgAppFlowPaused. This is
+# represented using '3@11:replicate:active:!paused' below. As a result, we
+# connect to the t1/s3 stream.
+state applied=1/11 descriptor=(1,2,3) progress=(1@11:replicate:active:!paused, 2@11:replicate:active:!paused, 3@11:replicate:active:!paused)
+----
+
+integration op=raft-ticked
+----
+connected to replication stream t1/s3 starting at log-position=1/11
+
+# The integration layer maintains internal state about the set of raft group
+# members we're already connected to. Informing it of a descriptor change when
+# there is none simply simply no-ops.
+integration op=desc-changed
+----
+
+# Remove replid=2 and add replid=4 (do so immediately using
+# state==StateReplicate && RecentlyActive && !MsgAppFlowPaused). We should
+# disconnect from t1/s2 and connect out to t1/s4 at the current applied index.
+state applied=1/12 descriptor=(1,3,4) progress=(1@12:replicate:active:!paused, 3@12:replicate:active:!paused, 4@12:replicate:active:!paused)
+----
+
+integration op=desc-changed
+----
+disconnected from replication stream t1/s2
+disconnected from replication stream t1/s4
+
+integration op=raft-ticked
+----
+connected to replication stream t1/s4 starting at log-position=1/12
+
+# vim:ft=sh

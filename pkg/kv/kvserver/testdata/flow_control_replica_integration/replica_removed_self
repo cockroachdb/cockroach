@@ -1,0 +1,31 @@
+# Observe how the integration layer deals with replicas observing themselves
+# being removed from the raft group. 
+#
+# Start off with a triply replicated range r1/t1, with replicas on n1/s1,
+# n2/s2, and n3/s3 (with replica IDs 1-3 respectively).
+init tenant=t1 range=r1 replid=1
+----
+
+state descriptor=(1,2,3) applied=1/10
+----
+
+# Set up replid=1 (declared in init above) to be the raft leader. It should
+# connect to all three replication streams.
+integration op=became-leader
+----
+initialized flow control handle for r1/t1
+connected to replication stream t1/s1 starting at log-position=1/10
+disconnected from replication stream t1/s2
+disconnected from replication stream t1/s3
+connected to replication stream t1/s2 starting at log-position=1/10
+connected to replication stream t1/s3 starting at log-position=1/10
+
+# Remove replid=1 from the descriptor. Observe that the handle just gets closed.
+state descriptor=(2,3,4)
+----
+
+integration op=desc-changed
+----
+closed flow control handle for r1/t1
+
+# vim:ft=sh
