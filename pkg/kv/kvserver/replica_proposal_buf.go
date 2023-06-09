@@ -977,6 +977,7 @@ func proposeBatch(
 				log.Event(p.ctx, "entry dropped")
 			}
 		}
+		p.onErrProposalDropped(ents)
 		return nil, true
 	}
 	if err == nil {
