@@ -2364,7 +2364,7 @@ func (c *clusterImpl) RunWithDetails(
 		testLogger.Printf("> %s\n", strings.Join(args, " "))
 	}
 
-	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, false /* secure */, args)
+	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
 	if err != nil && len(physicalFileName) > 0 {
 		l.Printf("> result: %+v", err)
 		createFailedFile(physicalFileName)
