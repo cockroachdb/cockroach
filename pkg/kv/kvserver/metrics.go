@@ -1084,6 +1084,12 @@ or the delegate being too busy to send.
 		Measurement: "Ticks",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftProposalsDropped = metric.Metadata{
+		Name:        "raft.dropped",
+		Help:        "Number of Raft proposals dropped (this counts individial raftpb.Entry, not raftpb.MsgProp)",
+		Measurement: "Proposals",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftWorkingDurationNanos = metric.Metadata{
 		Name: "raft.process.workingnanos",
 		Help: `Nanoseconds spent in store.processRaft() working.
@@ -2214,6 +2220,7 @@ type StoreMetrics struct {
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
+	RaftProposalsDropped      *metric.Counter
 	RaftQuotaPoolPercentUsed  metric.IHistogram
 	RaftWorkingDurationNanos  *metric.Counter
 	RaftTickingDurationNanos  *metric.Counter
@@ -2835,7 +2842,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DelegateSnapshotInProgress:                   metric.NewGauge(metaDelegateSnapshotInProgress),
 
 		// Raft processing metrics.
-		RaftTicks: metric.NewCounter(metaRaftTicks),
+		RaftTicks:            metric.NewCounter(metaRaftTicks),
+		RaftProposalsDropped: metric.NewCounter(metaRaftProposalsDropped),
 		RaftQuotaPoolPercentUsed: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaRaftQuotaPoolPercentUsed,
 			Duration: histogramWindow,
