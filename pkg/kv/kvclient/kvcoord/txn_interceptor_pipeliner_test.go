@@ -858,7 +858,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
 
 	// Start with pipelining disabled. Should NOT use async consensus.
-	pipelinedWritesEnabled.Override(ctx, &tp.st.SV, false)
+	PipelinedWritesEnabled.Override(ctx, &tp.st.SV, false)
 
 	txn := makeTxnProto()
 	keyA, keyC := roachpb.Key("a"), roachpb.Key("c")
@@ -885,7 +885,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	require.Equal(t, 0, tp.ifWrites.len())
 
 	// Enable pipelining. Should use async consensus.
-	pipelinedWritesEnabled.Override(ctx, &tp.st.SV, true)
+	PipelinedWritesEnabled.Override(ctx, &tp.st.SV, true)
 
 	ba.Requests = nil
 	putArgs2 := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
@@ -913,7 +913,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 
 	// Disable pipelining again. Should NOT use async consensus but should still
 	// make sure to chain on to any overlapping in-flight writes.
-	pipelinedWritesEnabled.Override(ctx, &tp.st.SV, false)
+	PipelinedWritesEnabled.Override(ctx, &tp.st.SV, false)
 
 	ba.Requests = nil
 	putArgs4 := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
