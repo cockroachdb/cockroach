@@ -2066,46 +2066,38 @@ CREATE TABLE crdb_internal.cluster_settings (
   description   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if hasPriv, err := func() (bool, error) {
-			if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
-				return false, err
-			} else if hasAdmin {
-				return true, nil
-			}
-			if hasModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User()); err != nil {
-				return false, err
-			} else if hasModify {
-				return true, nil
-			}
-			if hasSqlModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User()); err != nil {
-				return false, err
-			} else if hasSqlModify {
-				return true, nil
-			}
-			if hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING, p.User()); err != nil {
-				return false, err
-			} else if hasView {
-				return true, nil
-			}
-			if hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
-				return false, err
-			} else if hasModify {
-				return true, nil
-			}
-			if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING); err != nil {
-				return false, err
-			} else if hasView {
-				return true, nil
-			}
-			return false, nil
-		}(); err != nil {
+		hasSqlModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User())
+		if err != nil {
 			return err
-		} else if !hasPriv {
+		}
+		hasModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User())
+		if err != nil {
+			return err
+		}
+		hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING, p.User())
+		if err != nil {
+			return err
+		}
+		if !hasModify {
+			if hasModify, err = p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
+				return err
+			}
+		}
+		if !hasView {
+			if hasView, err = p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING); err != nil {
+				return err
+			}
+		}
+		if !hasModify && !hasSqlModify && !hasView {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"only users with %s, %s or %s system privileges are allowed to read "+
 					"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
+			// If the user has specifically MODIFYSQLCLUSTERSETTING, hide non-sql.defaults settings.
+			if !hasModify && !hasView && hasSqlModify && !strings.HasPrefix(k, "sql.defaults") {
+				continue
+			}
 			setting, _ := settings.LookupForLocalAccess(k, p.ExecCfg().Codec.ForSystemTenant())
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public

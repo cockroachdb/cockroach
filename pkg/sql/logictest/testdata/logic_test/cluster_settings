@@ -88,7 +88,7 @@ user testuser
 statement error only users with the MODIFYCLUSTERSETTING or MODIFYSQLCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
 SET CLUSTER SETTING sql.defaults.default_int_size = 4
 
-# Users with MODIFYSQLCLUSTERSETTING system privilege should be able to see all cluster settings and modify only sql.defaults settings.
+# Users with MODIFYSQLCLUSTERSETTING system privilege should be able to see and modify only sql.defaults settings.
 user root
 
 statement ok
@@ -99,6 +99,11 @@ user testuser
 statement ok
 SHOW CLUSTER SETTINGS
 
+skipif config local-mixed-22.2-23.1
+statement error pq: only users with MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster setting 'diagnostics.reporting.enabled'
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+
+skipif config local-mixed-22.2-23.1
 statement ok
 SET CLUSTER SETTING sql.defaults.default_int_size = 4
 
@@ -108,9 +113,6 @@ SET CLUSTER SETTING diagnostics.reporting.enabled = false
 user root
 
 statement ok
-REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
-
-statement ok
 ALTER USER testuser NOMODIFYCLUSTERSETTING
 
 statement ok
@@ -118,10 +120,23 @@ ALTER USER testuser VIEWCLUSTERSETTING
 
 user testuser
 
-# Users with VIEWCLUSTERSETTING should be able to see non sql.defaults settings but not modify.
+# Users with VIEWCLUSTERSETTING should be able to see non sql.defaults settings but not modify regardless if they have sql modify.
 
 statement error pq: only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'diagnostics.reporting.enabled'
 SET CLUSTER SETTING diagnostics.reporting.enabled = false
+
+query B
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+----
+true
+
+user root 
+
+skipif config local-mixed-22.2-23.1
+statement ok
+REVOKE SYSTEM MODIFYSQLCLUSTERSETTING FROM testuser
+
+user testuser
 
 query B
 SHOW CLUSTER SETTING diagnostics.reporting.enabled
