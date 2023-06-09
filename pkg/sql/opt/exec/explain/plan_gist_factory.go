@@ -617,6 +617,11 @@ func (u *unknownTable) GetDatabaseID() descpb.ID {
 	return 0
 }
 
+// IsSchemaLocked is part of the cat.Table interface.
+func (u *unknownTable) IsSchemaLocked() bool {
+	return false
+}
+
 var _ cat.Table = &unknownTable{}
 
 // unknownTable implements the cat.Index interface and is used to represent
