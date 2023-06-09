@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -155,6 +156,7 @@ func TestIngest(t *testing.T) {
 
 	ctx := context.Background()
 	t.Run("batch=default", func(t *testing.T) {
+		skip.WithIssue(t, 104639, "flaky test")
 		runTestIngest(t, func(_ *cluster.Settings) {})
 	})
 	t.Run("batch=1", func(t *testing.T) {
