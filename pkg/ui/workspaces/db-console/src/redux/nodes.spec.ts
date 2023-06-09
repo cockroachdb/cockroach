@@ -19,7 +19,7 @@ import {
   selectStoreIDsByNodeID,
   LivenessStatus,
   sumNodeStats,
-  numNodesByVersionsSelector,
+  numNodesByVersionsTagSelector,
 } from "./nodes";
 import { nodesReducerObj, livenessReducerObj } from "./apiReducers";
 import { createAdminUIStore } from "./state";
@@ -185,7 +185,7 @@ describe("node data selectors", function () {
     });
   });
 
-  describe("numNodesByVersionsSelector", () => {
+  describe("numNodesByVersionsTagSelector", () => {
     it("correctly returns the different binary versions and the number of associated nodes", () => {
       const data = [
         {
@@ -214,7 +214,7 @@ describe("node data selectors", function () {
         ["v22.1", 2],
         ["v21.1.7", 1],
       ]);
-      expect(numNodesByVersionsSelector(state)).toEqual(expectedResult);
+      expect(numNodesByVersionsTagSelector(state)).toEqual(expectedResult);
     });
   });
 });
