@@ -418,6 +418,12 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// Step can dramatically reduce the number of messages required to commit
 	// and apply them.
 	buf := b.arr.asSlice()[:used]
+	defer func() {
+		// Clear buffer.
+		for i := range buf {
+			buf[i] = nil
+		}
+	}()
 	ents := make([]raftpb.Entry, 0, used)
 
 	// Use this slice to track, for each entry that's proposed to raft, whether
@@ -439,7 +445,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			log.Fatalf(ctx, "unexpected nil proposal in buffer")
 			return 0, nil // unreachable, for linter
 		}
-		buf[i] = nil // clear buffer
 		reproposal := !p.tok.stillTracked()
 
 		// Conditionally reject the proposal based on the state of the raft group.
