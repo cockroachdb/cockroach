@@ -305,7 +305,7 @@ func disableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) ve
 				defer gatewayDB.Close()
 
 				var runningJobIDs []jobspb.JobID
-				row, err := gatewayDB.Query(`SELECT job_id FROM [SHOW JOBS] WHERE status = 'running'`)
+				row, err := gatewayDB.Query(fmt.Sprintf(`SELECT job_id FROM [SHOW JOBS] WHERE status = 'running' AND coordinator_id = %d`, nodeID))
 				require.NoError(t, err)
 				for row.Next() {
 					var jobID int64
