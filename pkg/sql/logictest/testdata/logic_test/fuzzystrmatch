@@ -30,6 +30,22 @@ NULL   a       NULL  NULL
 a      NULL    NULL  NULL
 NULL   NULL    NULL  NULL
 
+statement error levenshtein_less_than argument exceeds maximum length of 255 characters
+SELECT levenshtein_less_than(lpad('', 256, 'x'), '', 4)
+
+statement error levenshtein_less_than argument exceeds maximum length of 255 characters
+SELECT levenshtein_less_than(lpad('', 256, 'x'), '', 4, 2, 3, 4)
+
+query TTII
+SELECT a, b, levenshtein_less_than(a, b, 3), levenshtein_less_than(a, b, 12, 2, 3, 4) FROM fuzzystrmatch_table ORDER BY id
+----
+apple  banana  4     13
+·      pear    4     8
+😄      🐯       1     4
+NULL   a       NULL  NULL
+a      NULL    NULL  NULL
+NULL   NULL    NULL  NULL
+
 query T
 SELECT soundex('hello world!')
 ----
