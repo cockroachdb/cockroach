@@ -142,12 +142,18 @@ type admitEntHandle struct {
 	pCtx   context.Context
 }
 
+type singleBatchProposer interface {
+	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
+	onErrProposalDropped([]raftpb.Entry)
+}
+
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
 type proposer interface {
 	locker() sync.Locker
 	rlocker() sync.Locker
 
 	// The following require the proposer to hold (at least) a shared lock.
+	singleBatchProposer
 	getReplicaID() roachpb.ReplicaID
 	destroyed() destroyStatus
 	firstIndex() kvpb.RaftIndex
@@ -157,7 +163,6 @@ type proposer interface {
 	leaderStatus(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo
 	ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool
 	shouldCampaignOnRedirect(raftGroup proposerRaft) bool
-	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
@@ -187,8 +192,6 @@ type proposer interface {
 		lease *roachpb.Lease,
 		reason raftutil.ReplicaNeedsSnapshotStatus,
 	)
-
-	onErrProposalDropped(ents []raftpb.Entry) // locking is optional
 
 	// leaseDebugRLocked returns info on the current lease.
 	leaseDebugRLocked() string
