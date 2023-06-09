@@ -1201,12 +1201,14 @@ func TestCancelQueriesRace(t *testing.T) {
 		_, _ = sqlDB.ExecContext(ctx, `SELECT pg_sleep(10)`)
 		close(waiter)
 	}()
-	_, _ = sqlDB.ExecContext(ctx, `CANCEL QUERIES (
+	_, err := sqlDB.ExecContext(ctx, `CANCEL QUERIES (
 		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
 	)`)
-	_, _ = sqlDB.ExecContext(ctx, `CANCEL QUERIES (
+	require.NoError(t, err)
+	_, err = sqlDB.ExecContext(ctx, `CANCEL QUERIES (
 		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
 	)`)
+	require.NoError(t, err)
 
 	cancel()
 	<-waiter
