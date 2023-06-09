@@ -516,12 +516,13 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			propErr, dropped := proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, buf[firstProp:nextProp])
+			propErr, dropped := proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, admitHandles, buf[firstProp:nextProp])
 			if propErr != nil {
 				firstErr = propErr
 				continue
 			}
 			if !dropped {
+				// TODO(tbg): move into proposeBatch.
 				b.maybeDeductFlowTokens(ctx, admitHandles, ents)
 			}
 
@@ -588,7 +589,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		return 0, firstErr
 	}
 
-	propErr, dropped := proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, buf[firstProp:nextProp])
+	propErr, dropped := proposeBatch(ctx, raftGroup, b.p.getReplicaID(), ents, admitHandles, buf[firstProp:nextProp])
 	if propErr == nil && !dropped {
 		// Now that we know what raft log position[1] this proposal is to end up
 		// in, deduct flow tokens for it. This is done without blocking (we've
@@ -599,6 +600,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// [1]: We're relying on an undocumented side effect of upstream raft
 		//      API where it populates the index and term for the passed in
 		//      slice of entries. See etcd-io/raft#57.
+		//
+		// TODO(tbg): move into proposeBatch.
 		b.maybeDeductFlowTokens(ctx, admitHandles, ents)
 	}
 	return used, propErr
@@ -965,6 +968,7 @@ func proposeBatch(
 	raftGroup proposerRaft,
 	replID roachpb.ReplicaID,
 	ents []raftpb.Entry,
+	handles []admitEntHandle,
 	props []*ProposalData, // must match ents slice
 ) (_ error, dropped bool) {
 	if len(ents) != len(props) {
