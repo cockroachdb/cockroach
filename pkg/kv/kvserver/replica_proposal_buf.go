@@ -188,6 +188,8 @@ type proposer interface {
 		reason raftutil.ReplicaNeedsSnapshotStatus,
 	)
 
+	onErrProposalDropped(ents []raftpb.Entry) // locking is optional
+
 	// leaseDebugRLocked returns info on the current lease.
 	leaseDebugRLocked() string
 }
@@ -1277,6 +1279,8 @@ func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error
 		return false /* maybeUnquiesceLocked */, fn(raftGroup)
 	})
 }
+
+func (rp *replicaProposer) onErrProposalDropped(ents []raftpb.Entry) {}
 
 func (rp *replicaProposer) leaseDebugRLocked() string {
 	return rp.mu.state.Lease.String()
