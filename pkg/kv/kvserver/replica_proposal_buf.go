@@ -1283,7 +1283,13 @@ func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error
 	})
 }
 
-func (rp *replicaProposer) onErrProposalDropped(ents []raftpb.Entry) {}
+func (rp *replicaProposer) onErrProposalDropped(ents []raftpb.Entry) {
+	// TODO(tbg): could differentiate by reason: uncommitted log size exceeded
+	// or no leader known. Raft doesn't tell us directly but we could figure it
+	// out since we can see whether the RawNode tracks a leader or not (and this
+	// discriminates between case one and two).
+	rp.store.metrics.RaftProposalsDropped.Inc(int64(len(ents)))
+}
 
 func (rp *replicaProposer) leaseDebugRLocked() string {
 	return rp.mu.state.Lease.String()
