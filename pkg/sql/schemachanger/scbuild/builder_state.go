@@ -996,7 +996,7 @@ func (b *builderState) ResolveIndexByName(
 		b.ensureDescriptor(tableDesc.GetParentSchemaID())
 		if catalog.IsSystemDescriptor(tableDesc) {
 			schemaDesc := b.descCache[tableDesc.GetParentSchemaID()].desc
-			panic(catalog.NewMutableAccessToVirtualSchemaError(schemaDesc.(catalog.SchemaDescriptor)))
+			panic(catalog.NewMutableAccessToDescriptorlessSchemaError(schemaDesc.(catalog.SchemaDescriptor)))
 		}
 	}
 
