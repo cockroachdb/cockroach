@@ -211,6 +211,10 @@ for service in apport.service atd.service; do
   systemctl mask $service
 done
 
+{{ if .EnableFIPS }}
+sudo ua enable fips --assume-ye
+{{ end }}
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
@@ -221,18 +225,20 @@ sudo touch /mnt/data1/.roachprod-initialized
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
 func writeStartupScript(
-	extraMountOpts string, fileSystem string, useMultiple bool,
+	extraMountOpts string, fileSystem string, useMultiple bool, enableFIPS bool,
 ) (string, error) {
 	type tmplParams struct {
 		ExtraMountOpts   string
 		UseMultipleDisks bool
 		Zfs              bool
+		EnableFIPS       bool
 	}
 
 	args := tmplParams{
 		ExtraMountOpts:   extraMountOpts,
 		UseMultipleDisks: useMultiple,
 		Zfs:              fileSystem == vm.Zfs,
+		EnableFIPS:       enableFIPS,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")
