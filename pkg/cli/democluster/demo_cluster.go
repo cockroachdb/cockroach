@@ -100,7 +100,7 @@ type transientCluster struct {
 
 // maxNodeInitTime is the maximum amount of time to wait for nodes to
 // be connected.
-const maxNodeInitTime = 30 * time.Second
+const maxNodeInitTime = 60 * time.Second
 
 // secondaryTenantID is the ID of the secondary tenant to use when
 // --multitenant=true.
