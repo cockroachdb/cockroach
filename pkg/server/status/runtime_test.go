@@ -18,7 +18,7 @@ import (
 	"github.com/shirou/gopsutil/v3/net"
 )
 
-func TestSumDiskCounters(t *testing.T) {
+func TestSumAndFilterDiskCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	counters := []DiskStats{
@@ -37,7 +37,10 @@ func TestSumDiskCounters(t *testing.T) {
 			writeCount:     1,
 		},
 	}
-	summed := sumDiskCounters(counters)
+	summed, err := sumAndFilterDiskCounters(counters)
+	if err != nil {
+		t.Fatalf("error: %s", err.Error())
+	}
 	expected := DiskStats{
 		ReadBytes:      2,
 		readCount:      2,
