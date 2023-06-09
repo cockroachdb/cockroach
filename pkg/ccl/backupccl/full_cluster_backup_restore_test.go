@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -135,12 +136,17 @@ CREATE TABLE data2.foo (a int);
 		numUsers = 10
 	}
 
-	sqlDB.Exec(t, "BEGIN")
-	for i := 0; i < numUsers; i++ {
-		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
-		sqlDB.Exec(t, fmt.Sprintf("ALTER USER maxroach%d CREATEDB", i))
-	}
-	sqlDB.Exec(t, "COMMIT")
+	sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
+		for i := 0; i < numUsers; i++ {
+			if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d", i)); err != nil {
+				return err
+			}
+			if _, err := txn.Exec(fmt.Sprintf("ALTER USER maxroach%d CREATEDB", i)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 
 	// Populate system.zones.
 	sqlDB.Exec(t, `ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600`)
@@ -625,11 +631,14 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
-	sqlDB.Exec(t, "BEGIN")
-	for i := 0; i < 1000; i++ {
-		sqlDB.Exec(t, fmt.Sprintf("CREATE USER maxroach%d", i))
-	}
-	sqlDB.Exec(t, "COMMIT")
+	sqlDB.RunWithRetriableTxn(t, func(txn *gosql.Tx) error {
+		for i := 0; i < 1000; i++ {
+			if _, err := txn.Exec(fmt.Sprintf("CREATE USER maxroach%d", i)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/missing-ssts'`)
 
 	// Bugger the backup by removing the SST files. (Note this messes up all of
