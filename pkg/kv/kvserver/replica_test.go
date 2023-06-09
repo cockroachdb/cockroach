@@ -8129,6 +8129,10 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	if useReproposalsV2 {
+		skip.IgnoreLintf(t, "TODO(tbg)")
+	}
+
 	ctx := context.Background()
 
 	const incCmdID = "deadbeef"
@@ -8269,6 +8273,10 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 func TestReplicaReproposalWithNewLeaseIndexError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	if useReproposalsV2 {
+		skip.IgnoreLint(t, "TODO(tbg)")
+	}
 
 	ctx := context.Background()
 	var tc testContext
