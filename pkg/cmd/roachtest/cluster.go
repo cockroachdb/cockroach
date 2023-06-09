@@ -1723,7 +1723,8 @@ func (c *clusterImpl) Stage(
 	}
 	c.status("staging binary")
 	defer c.status("")
-	return errors.Wrap(roachprod.Stage(ctx, l, c.MakeNodes(opts...), "" /* stageOS */, dir, application, versionOrSHA), "cluster.Stage")
+	return errors.Wrap(roachprod.Stage(ctx, l, c.MakeNodes(opts...),
+		"" /* stageOS */, "" /* stageArch */, dir, application, versionOrSHA), "cluster.Stage")
 }
 
 // Get gets files from remote hosts.

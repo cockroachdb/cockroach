@@ -21,6 +21,7 @@ func TestURLsForApplication(t *testing.T) {
 		application string
 		version     string
 		os          string
+		arch        string
 	}
 	tests := []struct {
 		name    string
@@ -42,6 +43,20 @@ func TestURLsForApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "cockroach linux arm64 sha",
+			args: args{
+				application: "cockroach",
+				version:     "563ea3967c98c67d47ede30d895c82315e4b1a77",
+				os:          "linux",
+				arch:        "arm64",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/cockroach.linux-gnu-arm64.563ea3967c98c67d47ede30d895c82315e4b1a77",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos.linux-gnu-arm64.563ea3967c98c67d47ede30d895c82315e4b1a77.so",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos_c.linux-gnu-arm64.563ea3967c98c67d47ede30d895c82315e4b1a77.so",
+			},
+		},
+		{
 			name: "cockroach darwin sha",
 			args: args{
 				application: "cockroach",
@@ -52,6 +67,20 @@ func TestURLsForApplication(t *testing.T) {
 				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/cockroach.darwin-amd64.563ea3967c98c67d47ede30d895c82315e4b1a77",
 				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos.darwin-amd64.563ea3967c98c67d47ede30d895c82315e4b1a77.dylib",
 				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos_c.darwin-amd64.563ea3967c98c67d47ede30d895c82315e4b1a77.dylib",
+			},
+		},
+		{
+			name: "cockroach darwin arm64 sha",
+			args: args{
+				application: "cockroach",
+				version:     "563ea3967c98c67d47ede30d895c82315e4b1a77",
+				os:          "darwin",
+				arch:        "arm64",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/cockroach.darwin-arm64.unsigned.563ea3967c98c67d47ede30d895c82315e4b1a77",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos.darwin-arm64.unsigned.563ea3967c98c67d47ede30d895c82315e4b1a77.dylib",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos_c.darwin-arm64.unsigned.563ea3967c98c67d47ede30d895c82315e4b1a77.dylib",
 			},
 		},
 		{
@@ -92,6 +121,34 @@ func TestURLsForApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "cockroach linux FIPS latest",
+			args: args{
+				application: "cockroach",
+				version:     "",
+				os:          "linux",
+				arch:        "fips",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/cockroach.linux-gnu-amd64-fips.LATEST",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos.linux-gnu-amd64-fips.so.LATEST",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos_c.linux-gnu-amd64-fips.so.LATEST",
+			},
+		},
+		{
+			name: "cockroach linux arm64 latest",
+			args: args{
+				application: "cockroach",
+				version:     "",
+				os:          "linux",
+				arch:        "arm64",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/cockroach.linux-gnu-arm64.LATEST",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos.linux-gnu-arm64.so.LATEST",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos_c.linux-gnu-arm64.so.LATEST",
+			},
+		},
+		{
 			name: "cockroach darwin latest",
 			args: args{
 				application: "cockroach",
@@ -102,6 +159,20 @@ func TestURLsForApplication(t *testing.T) {
 				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/cockroach.darwin-amd64.LATEST",
 				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos.darwin-amd64.dylib.LATEST",
 				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST",
+			},
+		},
+		{
+			name: "cockroach darwin arm64 latest",
+			args: args{
+				application: "cockroach",
+				version:     "",
+				os:          "darwin",
+				arch:        "arm64",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/cockroach.darwin-arm64.unsigned.LATEST",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos.darwin-arm64.unsigned.dylib.LATEST",
+				"https://storage.googleapis.com/cockroach-edge-artifacts-prod/cockroach/lib/libgeos_c.darwin-arm64.unsigned.dylib.LATEST",
 			},
 		},
 		{
@@ -129,6 +200,30 @@ func TestURLsForApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "release linux FIPS",
+			args: args{
+				application: "release",
+				version:     "v22.1.11",
+				os:          "linux",
+				arch:        "fips",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-release-artifacts-prod/cockroach-v22.1.11.linux-amd64-fips.tgz",
+			},
+		},
+		{
+			name: "release linux arm64",
+			args: args{
+				application: "release",
+				version:     "v22.1.11",
+				os:          "linux",
+				arch:        "arm64",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-release-artifacts-prod/cockroach-v22.1.11.linux-arm64.tgz",
+			},
+		},
+		{
 			name: "release darwin",
 			args: args{
 				application: "release",
@@ -137,6 +232,18 @@ func TestURLsForApplication(t *testing.T) {
 			},
 			want: []string{
 				"https://storage.googleapis.com/cockroach-release-artifacts-prod/cockroach-v22.1.11.darwin-10.9-amd64.tgz",
+			},
+		},
+		{
+			name: "release darwin arm64",
+			args: args{
+				application: "release",
+				version:     "v22.1.11",
+				os:          "darwin",
+				arch:        "arm64",
+			},
+			want: []string{
+				"https://storage.googleapis.com/cockroach-release-artifacts-prod/cockroach-v22.1.11.darwin-11.0-arm64.tgz",
 			},
 		},
 		{
@@ -151,6 +258,58 @@ func TestURLsForApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "unsupported arch 'arm63'",
+			args: args{
+				application: "release",
+				version:     "v22.1.11",
+				os:          "darwin",
+				arch:        "arm63",
+			},
+			wantErr: true,
+			want:    nil,
+		},
+		{
+			name: "unsupported arch 'x86'",
+			args: args{
+				application: "release",
+				version:     "v22.1.11",
+				os:          "linux",
+				arch:        "x86",
+			},
+			wantErr: true,
+			want:    nil,
+		},
+		{
+			name: "windows unsupported on arm64",
+			args: args{
+				application: "cockroach",
+				os:          "windows",
+				arch:        "arm64",
+			},
+			wantErr: true,
+			want:    nil,
+		},
+		{
+			name: "windows unsupported with FIPS",
+			args: args{
+				application: "cockroach",
+				os:          "windows",
+				arch:        "fips",
+			},
+			wantErr: true,
+			want:    nil,
+		},
+		{
+			name: "darwin unsupported with FIPS",
+			args: args{
+				application: "cockroach",
+				os:          "darwin",
+				arch:        "fips",
+			},
+			wantErr: true,
+			want:    nil,
+		},
+		{
 			name: "something else",
 			args: args{
 				application: "ccloud",
@@ -163,7 +322,7 @@ func TestURLsForApplication(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := URLsForApplication(tt.args.application, tt.args.version, tt.args.os)
+			got, err := URLsForApplication(tt.args.application, tt.args.version, tt.args.os, tt.args.arch)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("URLsForApplication() error = %v, wantErr %v", err, tt.wantErr)
 				return
