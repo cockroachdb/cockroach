@@ -100,8 +100,24 @@ func registerRustPostgres(r registry.Registry) {
 			t,
 			c,
 			node,
-			" Installing more build essentials",
+			"installing more build essentials",
 			"sudo apt-get install -y pkg-config libssl-dev",
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		// We want to set up port forwarding from :5433 to :26257 because rust-postgres
+		// expects to be able to connect to this port.
+		if err := repeatRunE(
+			ctx,
+			t,
+			c,
+			node,
+			"set up port forwarding",
+			"sudo iptables -t nat -A OUTPUT -p tcp --dport 5433 -j REDIRECT --to-port 26257 "+
+				"&& echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections "+
+				"&& echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections "+
+				"&& sudo apt-get install -y iptables-persistent",
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -115,23 +131,9 @@ func registerRustPostgres(r registry.Registry) {
 
 		status := fmt.Sprintf("running cockroach version %s, using blocklist %s", version, blocklistName)
 		if ignorelist != nil {
-			status = fmt.Sprintf(
-				"Running cockroach %s, using blocklist %s, using ignorelist %s",
-				version,
-				blocklistName,
-				ignorelistName)
+			status += fmt.Sprintf(", using ignorelist %s", ignorelistName)
 		}
 		t.L().Printf("%s", status)
-
-		// We stop the cluster and restart with a port of 5433 since Rust postgres
-		// has all of it's test hardcoded to use that port.
-		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
-
-		// Don't restart the cluster with automatic scheduled backups because roachprod's internal sql
-		// interface, through which the scheduled backup executes, is naive to the port change.
-		startOpts := option.DefaultStartOptsNoBackups()
-		startOpts.RoachprodOpts.ExtraArgs = []string{"--port=5433"}
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 
 		t.Status("Running rust-postgres test suite")
 
