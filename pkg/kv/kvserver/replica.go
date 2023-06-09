@@ -686,7 +686,7 @@ type Replica struct {
 		// raftMu and the entire handleRaftReady loop. Not needed if raftMu is
 		// already held.
 		applyingEntries bool
-		// The replica's Raft group "node".
+		// The replica's Raft group "node". Never nil.
 		internalRaftGroup *raft.RawNode
 
 		// The ID of the leader replica within the Raft group. NB: this is updated

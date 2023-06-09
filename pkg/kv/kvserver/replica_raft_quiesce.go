@@ -125,14 +125,9 @@ func (r *Replica) canUnquiesceRLocked() bool {
 		// then abandoned, and we don't do a good job garbage collecting them at a
 		// later point (see https://github.com/cockroachdb/cockroach/issues/73424),
 		// so it is important that they are cheap. Keeping them quiesced instead of
-		// letting them unquiesce and tick every 200ms indefinitely avoids a
+		// letting them unquiesce and tick every 500ms indefinitely avoids a
 		// meaningful amount of periodic work for each uninitialized replica.
-		r.IsInitialized() &&
-		// A replica's Raft group begins in a dormant state and is initialized
-		// lazily in response to any Raft traffic (see stepRaftGroup) or KV request
-		// traffic (see maybeInitializeRaftGroup). If it has yet to be initialized,
-		// let it remain quiesced. The Raft group will be initialized soon enough.
-		r.mu.internalRaftGroup != nil
+		r.IsInitialized()
 }
 
 // maybeQuiesceRaftMuLockedReplicaMuLocked checks to see if the replica is

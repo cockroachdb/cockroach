@@ -184,7 +184,6 @@ func (fr *fakeReplica) IsDestroyed() (DestroyReason, error) { return destroyReas
 func (fr *fakeReplica) Desc() *roachpb.RangeDescriptor {
 	return &roachpb.RangeDescriptor{RangeID: fr.rangeID, EndKey: roachpb.RKey("z")}
 }
-func (fr *fakeReplica) maybeInitializeRaftGroup(context.Context) {}
 func (fr *fakeReplica) redirectOnOrAcquireLease(
 	context.Context,
 ) (kvserverpb.LeaseStatus, *kvpb.Error) {

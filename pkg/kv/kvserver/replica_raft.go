@@ -646,7 +646,7 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	// We're processing an incoming raft message (from a batch that may
 	// include MsgVotes), so don't campaign if we wake up our raft
 	// group.
-	return r.withRaftGroup(false, func(raftGroup *raft.RawNode) (bool, error) {
+	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		// If we're a follower, and we receive a message from a non-leader replica
 		// while quiesced, we wake up the leader too. This prevents spurious
 		// elections.
@@ -855,7 +855,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
-	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
 		numFlushed, err := r.mu.proposalBuf.FlushLockedWithRaftGroup(ctx, raftGroup)
@@ -1169,7 +1169,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// replica ID ensures that our replica ID could not have changed.
 
 	r.mu.Lock()
-	err = r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+	err = r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
 		if stats.apply.numConfChangeEntries > 0 {
@@ -1304,11 +1304,6 @@ func (r *Replica) tick(
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	// If the raft group is uninitialized, do not initialize on tick.
-	if r.mu.internalRaftGroup == nil {
-		return false, nil
-	}
 
 	if r.mu.quiescent {
 		return false, nil
@@ -1819,7 +1814,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), lastFromReplica)
 	var startKey roachpb.RKey
-	if msg.Type == raftpb.MsgApp && r.mu.internalRaftGroup != nil {
+	if msg.Type == raftpb.MsgApp {
 		// When the follower is potentially an uninitialized replica waiting for
 		// a split trigger, send the replica's StartKey along. See the method
 		// below for more context:
@@ -1919,7 +1914,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 	// by the leader.
 	//
 	// See: https://github.com/cockroachdb/cockroach/issues/87581
-	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil
 	}); err != nil && !errors.Is(err, errRemoved) {
@@ -2055,41 +2050,21 @@ func (s pendingCmdSlice) Less(i, j int) bool {
 	return s[i].command.MaxLeaseIndex < s[j].command.MaxLeaseIndex
 }
 
-// withRaftGroupLocked calls the supplied function with the (lazily
-// initialized) Raft group. The supplied function should return true for the
-// unquiesceAndWakeLeader argument if the replica should be unquiesced (and the
-// leader awoken). See handleRaftReady for an instance of where this value
-// varies.
+// withRaftGroupLocked calls the supplied function with the Raft group. The
+// supplied function should return true for the unquiesceAndWakeLeader argument
+// if the replica should be unquiesced (and the leader awoken). See
+// handleRaftReady for an instance of where this value varies.
 //
 // Requires that Replica.mu is held.
 //
 // If this Replica is in the process of being removed this method will return
 // errRemoved.
 func (r *Replica) withRaftGroupLocked(
-	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+	f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
 	if r.mu.destroyStatus.Removed() {
 		// Callers know to detect errRemoved as non-fatal.
 		return errRemoved
-	}
-
-	if r.mu.internalRaftGroup == nil {
-		ctx := r.AnnotateCtx(context.TODO())
-		raftGroup, err := raft.NewRawNode(newRaftConfig(
-			raft.Storage((*replicaRaftStorage)(r)),
-			uint64(r.replicaID),
-			r.mu.state.RaftAppliedIndex,
-			r.store.cfg,
-			&raftLogger{ctx: ctx},
-		))
-		if err != nil {
-			return err
-		}
-		r.mu.internalRaftGroup = raftGroup
-
-		if mayCampaignOnWake {
-			r.maybeCampaignOnWakeLocked(ctx)
-		}
 	}
 
 	// This wrapper function is a hack to add range IDs to stack traces
@@ -2126,22 +2101,14 @@ func (r *Replica) withRaftGroupLocked(
 // Raft group. It acquires and releases the Replica lock, so r.mu must not be
 // held (or acquired by the supplied function).
 //
-// If mayCampaignOnWake is true, the replica may initiate a raft
-// election if it was previously in a dormant state. Most callers
-// should set this to true, because the prevote feature minimizes the
-// disruption from unnecessary elections. The exception is that we
-// should not initiate an election while handling incoming raft
-// messages (which may include MsgVotes from an election in progress,
-// and this election would be disrupted if we started our own).
-//
 // If this Replica is in the process of being removed this method will return
 // errRemoved.
 func (r *Replica) withRaftGroup(
-	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+	f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.withRaftGroupLocked(mayCampaignOnWake, f)
+	return r.withRaftGroupLocked(f)
 }
 
 func shouldCampaignOnWake(
@@ -2194,8 +2161,7 @@ func shouldCampaignOnWake(
 }
 
 // maybeCampaignOnWakeLocked is called when the range wakes from a
-// dormant state (either the initial "raftGroup == nil" state or after
-// being quiescent) and campaigns for raft leadership if appropriate.
+// quiesced state and campaigns for raft leadership if appropriate.
 func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	// Raft panics if a node that is not currently a member of the
 	// group tries to campaign. This method should never be called

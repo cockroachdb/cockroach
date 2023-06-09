@@ -143,8 +143,13 @@ func (r *Replica) SendWithWriteBytes(
 	// accounting.
 	r.recordBatchRequestLoad(ctx, ba)
 
-	// If the internal Raft group is not initialized, create it and wake the leader.
-	r.maybeInitializeRaftGroup(ctx)
+	// If the internal Raft group is quiesced, wake it and the leader.
+	//
+	// TODO(erikgrinaker): Use maybeUnquiesce() once this merges:
+	// https://github.com/cockroachdb/cockroach/pull/105041
+	r.mu.Lock()
+	r.maybeUnquiesceAndWakeLeaderLocked()
+	r.mu.Unlock()
 
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {

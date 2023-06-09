@@ -255,7 +255,6 @@ type replicaInQueue interface {
 	IsInitialized() bool
 	IsDestroyed() (DestroyReason, error)
 	Desc() *roachpb.RangeDescriptor
-	maybeInitializeRaftGroup(context.Context)
 	redirectOnOrAcquireLease(context.Context) (kvserverpb.LeaseStatus, *kvpb.Error)
 	LeaseStatusAt(context.Context, hlc.ClockTimestamp) kvserverpb.LeaseStatus
 }
@@ -313,10 +312,6 @@ type queueConfig struct {
 	// on a range level and use it to ensure that only one node in the cluster
 	// processes that range.
 	needsLease bool
-	// needsRaftInitialized controls whether the Raft group will be initialized
-	// (if not already initialized) when deciding whether to process this
-	// replica.
-	needsRaftInitialized bool
 	// needsSpanConfigs controls whether this queue requires a valid copy of the
 	// span configs to operate on a replica. Not all queues require it, and it's
 	// unsafe for certain queues to wait on it. For example, a raft snapshot may
@@ -672,10 +667,6 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 
 	if !repl.IsInitialized() {
 		return
-	}
-
-	if bq.needsRaftInitialized {
-		repl.maybeInitializeRaftGroup(ctx)
 	}
 
 	if !bq.acceptsUnsplitRanges {
