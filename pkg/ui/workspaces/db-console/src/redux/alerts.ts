@@ -38,12 +38,16 @@ import {
 } from "./apiReducers";
 import {
   singleVersionSelector,
+  numNodesByVersionsTagSelector,
   numNodesByVersionsSelector,
 } from "src/redux/nodes";
 import { AdminUIState, AppDispatch } from "./state";
 import * as docsURL from "src/util/docs";
 import { getDataFromServer } from "../util/dataFromServer";
-import { selectClusterSettings } from "./clusterSettings";
+import {
+  selectClusterSettings,
+  selectClusterSettingVersion,
+} from "./clusterSettings";
 import { longToInt } from "src/util/fixLong";
 
 export enum AlertLevel {
@@ -141,7 +145,7 @@ export const staggeredVersionDismissedSetting = new LocalSetting(
  * This excludes decommissioned nodes.
  */
 export const staggeredVersionWarningSelector = createSelector(
-  numNodesByVersionsSelector,
+  numNodesByVersionsTagSelector,
   staggeredVersionDismissedSetting.selector,
   (versionsMap, versionMismatchDismissed): Alert => {
     if (versionMismatchDismissed) {
@@ -562,6 +566,51 @@ export const clusterPreserveDowngradeOptionOvertimeSelector = createSelector(
   },
 );
 
+////////////////////////////////////////
+// Upgrade not finalized.
+////////////////////////////////////////
+export const upgradeNotFinalizedDismissedSetting = new LocalSetting(
+  "upgrade_not_finalized_dismissed",
+  localSettingsSelector,
+  false,
+);
+
+/**
+ * Warning when all the nodes are running on the new version, but the cluster is not finalized.
+ */
+export const upgradeNotFinalizedWarningSelector = createSelector(
+  numNodesByVersionsSelector,
+  selectClusterSettingVersion,
+  upgradeNotFinalizedDismissedSetting.selector,
+  (versionsMap, clusterVersion, upgradeNotFinalizedDismissed): Alert => {
+    if (upgradeNotFinalizedDismissed) {
+      return undefined;
+    }
+    // Don't show this warning if nodes are on different versions, since there is
+    // already an alert for that (staggeredVersionWarningSelector).
+    if (!versionsMap || versionsMap.size !== 1 || !clusterVersion) {
+      return undefined;
+    }
+
+    const nodesVersion = versionsMap.keys().next().value;
+    // Prod: node version is 23.1 and cluster version is 23.1.
+    // Dev: node version is 23.1 and cluster version is 23.1-2.
+    if (clusterVersion.startsWith(nodesVersion)) {
+      return undefined;
+    }
+
+    return {
+      level: AlertLevel.WARNING,
+      title: "Upgrade not finalized.",
+      text: `All nodes are running on version ${nodesVersion}, but the cluster is on version ${clusterVersion}.`,
+      dismiss: (dispatch: AppDispatch) => {
+        dispatch(upgradeNotFinalizedDismissedSetting.set(true));
+        return Promise.resolve();
+      },
+    };
+  },
+);
+
 /**
  * Selector which returns an array of all active alerts which should be
  * displayed in the overview list page, these should be non-critical alerts.
@@ -570,6 +619,7 @@ export const clusterPreserveDowngradeOptionOvertimeSelector = createSelector(
 export const overviewListAlertsSelector = createSelector(
   staggeredVersionWarningSelector,
   clusterPreserveDowngradeOptionOvertimeSelector,
+  upgradeNotFinalizedWarningSelector,
   (...alerts: Alert[]): Alert[] => {
     return _.without(alerts, null, undefined);
   },
