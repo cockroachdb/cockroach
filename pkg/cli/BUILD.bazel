@@ -431,14 +431,6 @@ filegroup(
     name = "interactive_tests",
     srcs = glob(
         ["interactive_tests/**"],
-        # TODO(rail): The following tests fail under bazel.
-        # https://github.com/cockroachdb/cockroach/issues/71932, aka
-        # "broken_in_bazel"
-        exclude = [
-            "*/test_multiline_statements.tcl",
-            "*/test_pretty.tcl",
-            "*/test_server_sig.tcl",
-        ],
     ),
     visibility = ["//visibility:public"],
 )
