@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
@@ -25,12 +26,13 @@ go_library(
 
 go_test(
     name = "kvflowcontroller_test",
-    srcs = ["kvflowcontrol_token_adjustment_test.go"],
+    srcs = ["kvflowcontroller_test.go"],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvflowcontroller"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",

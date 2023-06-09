@@ -40,8 +40,7 @@ func (sdh *splitDelayHelper) RaftStatus(ctx context.Context) (roachpb.RangeID, *
 		updateRaftProgressFromActivity(
 			ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
 			func(replicaID roachpb.ReplicaID) bool {
-				return r.mu.lastUpdateTimes.isFollowerActiveSince(
-					ctx, replicaID, timeutil.Now(), r.store.cfg.RangeLeaseDuration)
+				return r.mu.lastUpdateTimes.isFollowerActiveSince(replicaID, timeutil.Now(), r.store.cfg.RangeLeaseDuration)
 			},
 		)
 	}

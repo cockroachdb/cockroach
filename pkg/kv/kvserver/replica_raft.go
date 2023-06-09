@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -227,6 +230,10 @@ func (r *Replica) evalAndPropose(
 		// Continue with proposal...
 	}
 
+	if meta := kvflowcontrol.MetaFromContext(ctx); meta != nil {
+		proposal.raftAdmissionMeta = meta
+	}
+
 	// Attach information about the proposer's lease to the command, for
 	// verification below raft. Lease requests are special since they are not
 	// necessarily proposed under a valid lease (by necessity). Instead, they
@@ -377,6 +384,9 @@ func (r *Replica) propose(
 	// Determine the encoding style for the Raft command.
 	prefix := true
 	entryEncoding := raftlog.EntryEncodingStandardWithoutAC
+	if p.useReplicationAdmissionControl() {
+		entryEncoding = raftlog.EntryEncodingStandardWithAC
+	}
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -451,6 +461,9 @@ func (r *Replica) propose(
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
 		entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
+		if p.useReplicationAdmissionControl() {
+			entryEncoding = raftlog.EntryEncodingSideloadedWithAC
+		}
 		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -460,12 +473,25 @@ func (r *Replica) propose(
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
+	// NB: If (significantly) re-working how raft commands are encoded, make the
+	// equivalent change in raftlog.BenchmarkRaftAdmissionMetaOverhead.
+
 	// Create encoding buffer.
 	preLen := 0
 	if prefix {
 		preLen = raftlog.RaftCommandPrefixLen
 	}
-	cmdLen := p.command.Size()
+
+	raftAdmissionMeta := &kvflowcontrolpb.RaftAdmissionMeta{}
+	var admissionMetaLen int
+	if p.useReplicationAdmissionControl() {
+		// Encode admission metadata data at the start, right after the command
+		// prefix.
+		raftAdmissionMeta = p.raftAdmissionMeta
+		admissionMetaLen = raftAdmissionMeta.Size()
+	}
+
+	cmdLen := p.command.Size() + admissionMetaLen
 	// Allocate the data slice with enough capacity to eventually hold the two
 	// "footers" that are filled later.
 	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
@@ -474,9 +500,40 @@ func (r *Replica) propose(
 	if prefix {
 		raftlog.EncodeRaftCommandPrefix(data, entryEncoding, p.idKey)
 	}
-	// Encode body of command.
+
+	// Encode the body of the command.
 	data = data[:preLen+cmdLen]
-	if _, err := protoutil.MarshalTo(p.command, data[preLen:]); err != nil {
+
+	// Encode below-raft admission data, if any.
+	if p.useReplicationAdmissionControl() {
+		if !prefix {
+			panic("expected to encode prefix for raft commands using replication admission control")
+		}
+		if buildutil.CrdbTestBuild {
+			if p.raftAdmissionMeta.AdmissionOriginNode == roachpb.NodeID(0) {
+				log.Fatalf(ctx, "missing origin node for flow token returns")
+			}
+		}
+		if _, err := protoutil.MarshalTo(
+			raftAdmissionMeta,
+			data[preLen:preLen+admissionMetaLen],
+		); err != nil {
+			return kvpb.NewError(err)
+		}
+		log.VInfof(ctx, 1, "encoded raft admission meta: pri=%s create-time=%d proposer=n%s",
+			admissionpb.WorkPriority(raftAdmissionMeta.AdmissionPriority),
+			raftAdmissionMeta.AdmissionCreateTime,
+			raftAdmissionMeta.AdmissionOriginNode,
+		)
+		// Zero out what we've already encoded and marshaled, out of an
+		// abundance of paranoia.
+		p.command.AdmissionPriority = 0
+		p.command.AdmissionCreateTime = 0
+		p.command.AdmissionOriginNode = 0
+	}
+
+	// Encode the rest of the command.
+	if _, err := protoutil.MarshalTo(p.command, data[preLen+admissionMetaLen:]); err != nil {
 		return kvpb.NewError(err)
 	}
 	p.encodedCommand = data
@@ -1001,6 +1058,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 			m := logstore.MakeMsgStorageAppend(msgStorageAppend)
 			cb := (*replicaSyncCallback)(r)
+			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
+				// Enqueue raft log entries into admission queues. This is
+				// non-blocking; actual admission happens asynchronously.
+				tenantID, _ := r.TenantID()
+				for _, entry := range msgStorageAppend.Entries {
+					if len(entry.Data) == 0 {
+						continue // nothing to do
+					}
+					r.store.cfg.KVAdmissionController.AdmitRaftEntry(
+						ctx, tenantID, r.StoreID(), r.RangeID, entry,
+					)
+				}
+			}
+
 			if state, err = s.StoreEntries(ctx, state, m, cb, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
@@ -1457,7 +1528,7 @@ func (r *Replica) refreshProposalsLocked(
 		return
 	}
 
-	log.VInfof(ctx, 1,
+	log.VInfof(ctx, 2,
 		"pending commands: reproposing %d (at applied index %d, lease applied index %d) %s",
 		len(reproposals), r.mu.state.RaftAppliedIndex,
 		r.mu.state.LeaseAppliedIndex, reason)
@@ -2256,7 +2327,7 @@ func (m lastUpdateTimesMap) updateOnBecomeLeader(descs []roachpb.ReplicaDescript
 // isFollowerActiveSince returns whether the specified follower has made
 // communication with the leader recently (since threshold).
 func (m lastUpdateTimesMap) isFollowerActiveSince(
-	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time, threshold time.Duration,
+	replicaID roachpb.ReplicaID, now time.Time, threshold time.Duration,
 ) bool {
 	lastUpdateTime, ok := m[replicaID]
 	if !ok {

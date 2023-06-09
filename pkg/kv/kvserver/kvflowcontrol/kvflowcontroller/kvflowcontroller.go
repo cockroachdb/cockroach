@@ -13,9 +13,11 @@ package kvflowcontroller
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -26,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// regularTokensPerStream determines the flow tokens available for regular work
+// on a per-stream basis.
 var regularTokensPerStream = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_controller.regular_tokens_per_stream",
@@ -34,6 +38,8 @@ var regularTokensPerStream = settings.RegisterByteSizeSetting(
 	validateTokenRange,
 )
 
+// elasticTokensPerStream determines the flow tokens available for elastic work
+// on a per-stream basis.
 var elasticTokensPerStream = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_controller.elastic_tokens_per_stream",
@@ -65,8 +71,9 @@ type Controller struct {
 		// minutes), clear these out.
 		buckets map[kvflowcontrol.Stream]bucket
 	}
-	metrics *metrics
-	clock   *hlc.Clock
+	metrics  *metrics
+	clock    *hlc.Clock
+	settings *cluster.Settings
 }
 
 var _ kvflowcontrol.Controller = &Controller{}
@@ -74,7 +81,8 @@ var _ kvflowcontrol.Controller = &Controller{}
 // New constructs a new Controller.
 func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock) *Controller {
 	c := &Controller{
-		clock: clock,
+		clock:    clock,
+		settings: settings,
 	}
 
 	regularTokens := kvflowcontrol.Tokens(regularTokensPerStream.Get(&settings.SV))
@@ -115,6 +123,10 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 	return c
 }
 
+func (c *Controller) mode() kvflowcontrol.ModeT {
+	return kvflowcontrol.ModeT(kvflowcontrol.Mode.Get(&c.settings.SV))
+}
+
 // Admit is part of the kvflowcontrol.Controller interface. It blocks until
 // there are flow tokens available for replication over the given stream for
 // work of the given priority.
@@ -135,10 +147,15 @@ func (c *Controller) Admit(
 		tokens := b.tokens[class]
 		c.mu.Unlock()
 
-		if tokens > 0 {
+		if tokens > 0 ||
+			// In addition to letting requests through when there are tokens
+			// being available, we'll also let them through if we're not
+			// applying flow control to their specific work class.
+			c.mode() == kvflowcontrol.ApplyToElastic && class == admissionpb.RegularWorkClass {
+
 			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Infof(ctx, "flow tokens available (pri=%s stream=%s tokens=%s wait-duration=%s)",
-					pri, connection.Stream(), tokens, c.clock.PhysicalTime().Sub(tstart))
+				log.Infof(ctx, "admitted request (pri=%s stream=%s tokens=%s wait-duration=%s mode=%s)",
+					pri, connection.Stream(), tokens, c.clock.PhysicalTime().Sub(tstart), c.mode())
 			}
 
 			// TODO(irfansharif): Right now we continue forwarding admission
@@ -217,6 +234,42 @@ func (c *Controller) ReturnTokens(
 		return // nothing to do
 	}
 	c.adjustTokens(ctx, pri, +tokens, stream)
+}
+
+// Inspect is part of the kvflowcontrol.Controller interface.
+func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var streams []kvflowinspectpb.Stream
+	for stream, b := range c.mu.buckets {
+		streams = append(streams, kvflowinspectpb.Stream{
+			TenantID:               stream.TenantID,
+			StoreID:                stream.StoreID,
+			AvailableRegularTokens: int64(b.tokens[regular]),
+			AvailableElasticTokens: int64(b.tokens[elastic]),
+		})
+	}
+	sort.Slice(streams, func(i, j int) bool { // for determinism
+		if streams[i].TenantID != streams[j].TenantID {
+			return streams[i].TenantID.ToUint64() < streams[j].TenantID.ToUint64()
+		}
+		return streams[i].StoreID < streams[j].StoreID
+	})
+	return streams
+}
+
+// InspectStream is part of the kvflowcontrol.Controller interface.
+func (c *Controller) InspectStream(
+	_ context.Context, stream kvflowcontrol.Stream,
+) kvflowinspectpb.Stream {
+	tokens := c.getTokensForStream(stream)
+	return kvflowinspectpb.Stream{
+		TenantID:               stream.TenantID,
+		StoreID:                stream.StoreID,
+		AvailableRegularTokens: int64(tokens[regular]),
+		AvailableElasticTokens: int64(tokens[elastic]),
+	}
 }
 
 func (c *Controller) adjustTokens(
@@ -362,7 +415,7 @@ func validateTokenRange(b int64) error {
 	return nil
 }
 
-func (c *Controller) testingGetTokensForStream(stream kvflowcontrol.Stream) tokensPerWorkClass {
+func (c *Controller) getTokensForStream(stream kvflowcontrol.Stream) tokensPerWorkClass {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ret := make(map[admissionpb.WorkClass]kvflowcontrol.Tokens)

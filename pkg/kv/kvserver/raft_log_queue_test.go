@@ -405,7 +405,7 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 			}
 			updateRaftProgressFromActivity(ctx, prs, tc.replicas,
 				func(replicaID roachpb.ReplicaID) bool {
-					return tc.lastUpdate.isFollowerActiveSince(ctx, replicaID, tc.now, inactivityThreashold)
+					return tc.lastUpdate.isFollowerActiveSince(replicaID, tc.now, inactivityThreashold)
 				},
 			)
 

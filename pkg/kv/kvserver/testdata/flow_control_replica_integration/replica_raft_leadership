@@ -1,0 +1,85 @@
+# Observe how the integration layer deals with losing/regaining raft
+# leadership. Start off with a triply replicated range r1/t1, with replicas on
+# n1/s1, n2/s2, and n3/s3 (with replica IDs 1-3 respectively).
+init tenant=t1 range=r1 replid=1
+----
+
+state descriptor=(1,2,3) applied=1/10
+----
+
+# Set up replid=1 (declared in init above) to be the raft leader. It should
+# connect to all three replication streams. None of them are paused or
+# inactive. We haven't set up raft progress for any of them here, so we don't
+# filter out streams depending on it, but we'll test that further below.
+integration op=became-leader
+----
+initialized flow control handle for r1/t1
+connected to replication stream t1/s1 starting at log-position=1/10
+disconnected from replication stream t1/s2
+disconnected from replication stream t1/s3
+connected to replication stream t1/s2 starting at log-position=1/10
+connected to replication stream t1/s3 starting at log-position=1/10
+
+# If it loses raft leadership, it should close the underlying handle and all
+# connected replication streams.
+integration op=became-follower
+----
+closed flow control handle for r1/t1
+
+# state applied=1/12 descriptor=(1,2,3,4,5) paused=(2) inactive=(3)
+
+# Modify the descriptor. When re-acquiring leadership, we should connect to all
+# current members of the raft group.
+state applied=1/12 descriptor=(1,2,4)
+----
+
+integration op=became-leader
+----
+initialized flow control handle for r1/t1
+connected to replication stream t1/s1 starting at log-position=1/12
+disconnected from replication stream t1/s2
+disconnected from replication stream t1/s4
+connected to replication stream t1/s2 starting at log-position=1/12
+connected to replication stream t1/s4 starting at log-position=1/12
+
+integration op=became-follower
+----
+closed flow control handle for r1/t1
+
+# Try again, but this time with a paused and another inactive follower. We
+# shouldn't connect to those streams.
+state applied=1/14 descriptor=(1,2,4,5) paused=(4) inactive=(5)
+----
+
+integration op=became-leader
+----
+initialized flow control handle for r1/t1
+connected to replication stream t1/s1 starting at log-position=1/14
+disconnected from replication stream t1/s2
+disconnected from replication stream t1/s4
+disconnected from replication stream t1/s5
+connected to replication stream t1/s2 starting at log-position=1/14
+
+integration op=became-follower
+----
+closed flow control handle for r1/t1
+
+# Try again, but this time with:
+# - replid=4 waiting for a snapshot (it's stuck at index=14, we could've
+#   truncated our log ahead of it), and
+# - replid=5 just being recently added to the raft group, where we don't know
+#   its match index just yet.
+# When acquiring raft leadership, we shouldn't connect to t1/s4 and t1/s5.
+state applied=1/16 descriptor=(1,2,4,5) progress=(1@16:replicate:active:!paused, 2@16:replicate:active:!paused, 4@14:snapshot:!active:paused, 5@0:probe:!active:paused)
+----
+
+integration op=became-leader
+----
+initialized flow control handle for r1/t1
+connected to replication stream t1/s1 starting at log-position=1/16
+disconnected from replication stream t1/s2
+disconnected from replication stream t1/s4
+disconnected from replication stream t1/s5
+connected to replication stream t1/s2 starting at log-position=1/16
+
+# vim:ft=sh

@@ -21,6 +21,22 @@ type TestingKnobs struct {
 	// UntrackTokensInterceptor is invoked whenever tokens are untracked, along
 	// with their corresponding log positions.
 	UntrackTokensInterceptor func(Tokens, kvflowcontrolpb.RaftLogPosition)
+	// OverrideTokenDeduction is used to override how many tokens are deducted
+	// post-evaluation.
+	OverrideTokenDeduction func() Tokens
+	// MaintainStreamsForBehindFollowers is used in tests to maintain
+	// replication streams for behind followers.
+	MaintainStreamsForBehindFollowers func() bool
+	// MaintainStreamsForInactiveFollowers is used in tests to maintain
+	// replication streams for inactive followers.
+	MaintainStreamsForInactiveFollowers func() bool
+	// MaintainStreamsForBrokenRaftTransport is used in tests to maintain
+	// replication streams for followers we're no longer connected to via the
+	// RaftTransport.
+	MaintainStreamsForBrokenRaftTransport func() bool
+	// UseOnlyForScratchRanges enables the use of kvflowcontrol
+	// only for scratch ranges.
+	UseOnlyForScratchRanges bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

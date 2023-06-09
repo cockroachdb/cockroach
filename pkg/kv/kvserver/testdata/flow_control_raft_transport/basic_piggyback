@@ -1,0 +1,40 @@
+# Walk through the basics of the data-driven syntax.
+
+init
+----
+
+# Set up two nodes, each with one store.
+add node=n1 store=s1
+----
+
+add node=n2 store=s2
+----
+
+# Dispatch flow tokens from n1 to n2.
+dispatch from=n1
+node=n2 store=s1 range=r1 pri=normal-pri up-to-log-position=5/20
+node=n2 store=s1 range=r1 pri=low-pri    up-to-log-position=5/21
+----
+
+# Note that they're still pending delivery.
+pending-dispatch from=n1 to=n2
+----
+range=r1 pri=low-pri store=s1 up-to-log-position=log-position=5/21
+range=r1 pri=normal-pri store=s1 up-to-log-position=log-position=5/20
+
+# Send a raft message for r1 from n1 to n2, each node holding a replica with
+# id=1,2 respectively. We expect the tokens to get piggybacked here.
+send range=r1 from=n1/s1/1 to=n2/s2/2 commit=1
+----
+
+# Note that there are no more pending dispatches, and not because they were
+# dropped.
+pending-dispatch from=n1 to=n2
+----
+
+metrics
+----
+node=n1: dispatches-dropped=0
+node=n2: dispatches-dropped=0
+
+# vim:ft=sh

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -125,6 +126,16 @@ type ProposalData struct {
 	// tok identifies the request to the propBuf. Once the proposal is made, the
 	// token will be used to stop tracking this request.
 	tok TrackedRequestToken
+
+	// raftAdmissionMeta captures the metadata we encode as part of the command
+	// when first proposed for replication admission control.
+	raftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
+}
+
+// useReplicationAdmissionControl indicates whether this raft command should
+// be subject to replication admission control.
+func (proposal *ProposalData) useReplicationAdmissionControl() bool {
+	return proposal.raftAdmissionMeta != nil
 }
 
 // finishApplication is called when a command application has finished. The

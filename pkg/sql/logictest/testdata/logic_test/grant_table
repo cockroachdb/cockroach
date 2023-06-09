@@ -69,6 +69,9 @@ test           crdb_internal       kv_catalog_descriptor                   publi
 test           crdb_internal       kv_catalog_namespace                    public   SELECT          false
 test           crdb_internal       kv_catalog_zones                        public   SELECT          false
 test           crdb_internal       kv_dropped_relations                    public   SELECT          false
+test           crdb_internal       kv_flow_control_handles                 public   SELECT          false
+test           crdb_internal       kv_flow_controller                      public   SELECT          false
+test           crdb_internal       kv_flow_token_deductions                public   SELECT          false
 test           crdb_internal       kv_inherited_role_members               public   SELECT          false
 test           crdb_internal       kv_node_liveness                        public   SELECT          false
 test           crdb_internal       kv_node_status                          public   SELECT          false

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -481,6 +482,10 @@ type StoreTestingKnobs struct {
 	// it can be easily extended to validate other properties of baseQueue if
 	// required.
 	BaseQueueInterceptor func(ctx context.Context, bq *baseQueue)
+
+	// FlowControlTestingKnobs provide fine-grained control over the various
+	// kvflowcontrol components for testing.
+	FlowControlTestingKnobs *kvflowcontrol.TestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

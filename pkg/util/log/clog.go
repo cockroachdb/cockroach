@@ -419,6 +419,11 @@ func setActive() {
 	}
 }
 
+// ShowLogs returns whether -show-logs was passed (used for testing).
+func ShowLogs() bool {
+	return logging.showLogs
+}
+
 const fatalErrorPostamble = `
 
 ****************************************************************************

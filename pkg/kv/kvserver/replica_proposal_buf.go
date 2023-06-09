@@ -12,16 +12,21 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -132,10 +137,16 @@ type rangeLeaderInfo struct {
 	leaderEligibleForLease bool
 }
 
+type admitEntHandle struct {
+	handle *kvflowcontrolpb.RaftAdmissionMeta
+	pCtx   context.Context
+}
+
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
 type proposer interface {
 	locker() sync.Locker
 	rlocker() sync.Locker
+
 	// The following require the proposer to hold (at least) a shared lock.
 	getReplicaID() roachpb.ReplicaID
 	destroyed() destroyStatus
@@ -146,6 +157,7 @@ type proposer interface {
 	leaderStatus(ctx context.Context, raftGroup proposerRaft) rangeLeaderInfo
 	ownsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool
 	shouldCampaignOnRedirect(raftGroup proposerRaft) bool
+	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
@@ -407,6 +419,11 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	buf := b.arr.asSlice()[:used]
 	ents := make([]raftpb.Entry, 0, used)
 
+	// Use this slice to track, for each entry that's proposed to raft, whether
+	// it's subject to replication admission control. Updated in tandem with
+	// slice above.
+	admitHandles := make([]admitEntHandle, 0, used)
+
 	// Compute the closed timestamp target, which will be used to assign a closed
 	// timestamp to all proposals in this batch.
 	closedTSTarget := b.p.closedTimestampTarget()
@@ -490,11 +507,17 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			if err := proposeBatch(raftGroup, b.p.getReplicaID(), ents); err != nil {
-				firstErr = err
+			propErr, dropped := proposeBatch(raftGroup, b.p.getReplicaID(), ents)
+			if propErr != nil {
+				firstErr = propErr
 				continue
 			}
+			if !dropped {
+				b.maybeDeductFlowTokens(ctx, admitHandles, ents)
+			}
+
 			ents = ents[len(ents):]
+			admitHandles = admitHandles[len(admitHandles):]
 
 			confChangeCtx := kvserverpb.ConfChangeContext{
 				CommandID: string(p.idKey),
@@ -536,12 +559,38 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				Data: p.encodedCommand,
 			})
 			log.VEvent(p.ctx, 2, "flushing proposal to Raft")
+
+			// We don't want deduct flow tokens for reproposed commands, and of
+			// course for proposals that didn't integrate with kvflowcontrol.
+			shouldAdmit := p.createdAtTicks == p.proposedAtTicks && !reproposal && p.raftAdmissionMeta != nil
+			if !shouldAdmit {
+				admitHandles = append(admitHandles, admitEntHandle{})
+			} else {
+				admitHandles = append(admitHandles, admitEntHandle{
+					handle: p.raftAdmissionMeta,
+					pCtx:   p.ctx,
+				})
+			}
 		}
 	}
 	if firstErr != nil {
 		return 0, firstErr
 	}
-	return used, proposeBatch(raftGroup, b.p.getReplicaID(), ents)
+
+	propErr, dropped := proposeBatch(raftGroup, b.p.getReplicaID(), ents)
+	if propErr == nil && !dropped {
+		// Now that we know what raft log position[1] this proposal is to end up
+		// in, deduct flow tokens for it. This is done without blocking (we've
+		// already waited for available flow tokens pre-evaluation). The tokens
+		// will later be returned once we're informed of the entry being
+		// admitted below raft.
+		//
+		// [1]: We're relying on an undocumented side effect of upstream raft
+		//      API where it populates the index and term for the passed in
+		//      slice of entries. See etcd-io/raft#57.
+		b.maybeDeductFlowTokens(ctx, admitHandles, ents)
+	}
+	return used, propErr
 }
 
 // maybeRejectUnsafeProposalLocked conditionally rejects proposals that are
@@ -900,9 +949,11 @@ func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
 	return b.assignedClosedTimestamp.Forward(closedTS)
 }
 
-func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry) error {
+func proposeBatch(
+	raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry,
+) (_ error, dropped bool) {
 	if len(ents) == 0 {
-		return nil
+		return nil, false
 	}
 	if err := raftGroup.Step(raftpb.Message{
 		Type:    raftpb.MsgProp,
@@ -913,11 +964,41 @@ func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftp
 		// ignored prior to the introduction of ErrProposalDropped).
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
-		return nil
+		return nil, true
 	} else if err != nil {
-		return err
+		return err, false
 	}
-	return nil
+	return nil, false
+}
+
+func (b *propBuf) maybeDeductFlowTokens(
+	ctx context.Context, admitHandles []admitEntHandle, ents []raftpb.Entry,
+) {
+	if len(admitHandles) != len(ents) || cap(admitHandles) != cap(ents) {
+		panic(
+			fmt.Sprintf("mismatched slice sizes: len(admit)=%d len(ents)=%d cap(admit)=%d cap(ents)=%d",
+				len(admitHandles), len(ents), cap(admitHandles), cap(ents)),
+		)
+	}
+	for i, admitHandle := range admitHandles {
+		if admitHandle.handle == nil {
+			continue // nothing to do
+		}
+		log.VInfof(ctx, 1, "bound index/log terms for proposal entry: %s",
+			raft.DescribeEntry(ents[i], func(bytes []byte) string {
+				return "<omitted>"
+			}),
+		)
+		b.p.flowControlHandle(ctx).DeductTokensFor(
+			admitHandle.pCtx,
+			admissionpb.WorkPriority(admitHandle.handle.AdmissionPriority),
+			kvflowcontrolpb.RaftLogPosition{
+				Term:  ents[i].Term,
+				Index: ents[i].Index,
+			},
+			kvflowcontrol.Tokens(int64(len(ents[i].Data))),
+		)
+	}
 }
 
 // FlushLockedWithoutProposing is like FlushLockedWithRaftGroup but it does not
@@ -1257,6 +1338,14 @@ func (rp *replicaProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool
 		r.shouldUseExpirationLeaseRLocked(),
 		r.store.Clock().Now(),
 	)
+}
+
+func (rp *replicaProposer) flowControlHandle(ctx context.Context) kvflowcontrol.Handle {
+	handle, found := rp.mu.replicaFlowControlIntegration.handle()
+	if !found {
+		return kvflowhandle.Noop{}
+	}
+	return handle
 }
 
 // rejectProposalWithRedirectLocked is part of the proposer interface.

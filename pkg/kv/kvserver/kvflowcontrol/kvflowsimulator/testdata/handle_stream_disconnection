@@ -31,13 +31,13 @@ simulate
 #
 # As soon as s3 is disconnected, we see a release of 16MiB of held tokens back
 # into the node-level controller (32MiB -> 48MiB). We see a burst in the number
-# of stream-specific/controller-lvel requests bypassing Admit() due to the
+# of stream-specific/controller-level requests bypassing Admit() due to the
 # stream disconnecting. At the handle-level this just appears as a burst in
 # admitted requests. After s3 disconnects, the handle-level admission rate goes
 # back to what it was before traffic was shaped by s3.
 #
 # TODO(irfansharif): The post-stream disconnection burst might lead to
-# severe over-admission since it may have been long since we observed availble
+# severe over-admission since it may have been long since we observed available
 # tokens for the still connected streams. In fact, many requests that started
 # waiting on the soon-to-be-disconnected-stream are in the same boat, all of
 # which will now get admitted. One thing we could do is to try and observe

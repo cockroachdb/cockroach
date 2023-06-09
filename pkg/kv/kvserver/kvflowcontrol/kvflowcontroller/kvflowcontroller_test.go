@@ -15,8 +15,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -95,7 +97,7 @@ func TestFlowTokenAdjustment(t *testing.T) {
 					adjustments = append(adjustments, adjustment{
 						pri:   pri,
 						delta: delta,
-						post:  controller.testingGetTokensForStream(stream),
+						post:  controller.getTokensForStream(stream),
 					})
 				}
 				return ""
@@ -155,4 +157,76 @@ func (h adjustment) String() string {
 		printTrimmedTokens(h.post[admissionpb.ElasticWorkClass]),
 		comment,
 	)
+}
+
+// TestInspectController tests the Inspect() API.
+func TestInspectController(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	makeStream := func(id uint64) kvflowcontrol.Stream {
+		return kvflowcontrol.Stream{
+			TenantID: roachpb.MustMakeTenantID(id),
+			StoreID:  roachpb.StoreID(id),
+		}
+	}
+	makeInspectStream := func(id uint64, availableElastic, availableRegular int64) kvflowinspectpb.Stream {
+		return kvflowinspectpb.Stream{
+			TenantID:               roachpb.MustMakeTenantID(id),
+			StoreID:                roachpb.StoreID(id),
+			AvailableElasticTokens: availableElastic,
+			AvailableRegularTokens: availableRegular,
+		}
+	}
+	makeConnectedStream := func(id uint64) kvflowcontrol.ConnectedStream {
+		return &mockConnectedStream{
+			stream: makeStream(id),
+		}
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	elasticTokensPerStream.Override(ctx, &st.SV, 8<<20 /* 8 MiB */)
+	regularTokensPerStream.Override(ctx, &st.SV, 16<<20 /* 16 MiB */)
+	controller := New(metric.NewRegistry(), st, hlc.NewClockForTesting(nil))
+
+	// No streams connected -- inspect state should be empty.
+	require.Len(t, controller.Inspect(ctx), 0)
+
+	// Set up a single connected stream, s1/t1, and ensure it shows up in the
+	// Inspect() state.
+	require.NoError(t, controller.Admit(ctx, admissionpb.NormalPri, time.Time{}, makeConnectedStream(1)))
+	require.Len(t, controller.Inspect(ctx), 1)
+	require.Equal(t, controller.Inspect(ctx)[0],
+		makeInspectStream(1, 8<<20 /* 8MiB */, 16<<20 /* 16 MiB */))
+
+	// Deduct some {regular,elastic} tokens from s1/t1 and verify that Inspect()
+	// renders the state correctly.
+	controller.DeductTokens(ctx, admissionpb.NormalPri, kvflowcontrol.Tokens(1<<20 /* 1 MiB */), makeStream(1))
+	controller.DeductTokens(ctx, admissionpb.BulkNormalPri, kvflowcontrol.Tokens(2<<20 /* 2 MiB */), makeStream(1))
+	require.Len(t, controller.Inspect(ctx), 1)
+	require.Equal(t, controller.Inspect(ctx)[0],
+		makeInspectStream(1, 5<<20 /* 8 MiB - 2 MiB - 1 MiB = 5 MiB */, 15<<20 /* 16 MiB - 1 MiB = 15 MiB */))
+
+	// Connect another stream, s1/s2, and ensure it shows up in the Inspect()
+	// state.
+	require.NoError(t, controller.Admit(ctx, admissionpb.BulkNormalPri, time.Time{}, makeConnectedStream(2)))
+	require.Len(t, controller.Inspect(ctx), 2)
+	require.Equal(t, controller.Inspect(ctx)[1],
+		makeInspectStream(2, 8<<20 /* 8MiB */, 16<<20 /* 16 MiB */))
+}
+
+type mockConnectedStream struct {
+	stream kvflowcontrol.Stream
+}
+
+var _ kvflowcontrol.ConnectedStream = &mockConnectedStream{}
+
+func (m *mockConnectedStream) Stream() kvflowcontrol.Stream {
+	return m.stream
+}
+
+func (m *mockConnectedStream) Disconnected() <-chan struct{} {
+	return nil
 }

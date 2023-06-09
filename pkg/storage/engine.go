@@ -984,6 +984,9 @@ type Engine interface {
 	// Used to show the store ID in logs and to initialize the shared object
 	// creator ID (if shared object storage is configured).
 	SetStoreID(ctx context.Context, storeID int32) error
+
+	// GetStoreID is used to retrieve the configured store ID.
+	GetStoreID() (int32, error)
 }
 
 // Batch is the interface for batch specific operations.
