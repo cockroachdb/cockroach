@@ -145,11 +145,10 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// This is slow under race as it starts a 9-node cluster which
+	// This is slow under race and deadlock as it starts a 9-node cluster which
 	// has a very high simulated latency between each node.
 	skip.UnderRace(t)
-
-	skip.WithIssue(t, 99768, "flaky test")
+	skip.UnderDeadlock(t)
 
 	demoCtx := newDemoCtx()
 	// Set up an empty 9-node cluster with simulated latencies.
