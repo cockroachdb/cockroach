@@ -59,7 +59,7 @@ export class Sidebar extends React.Component<SidebarProps> {
     {
       path: "/hotranges",
       text: "Hot Ranges",
-      activeFor: ["/hotranges"],
+      activeFor: ["/hotranges", "/reports/range"],
     },
     { path: "/jobs", text: "Jobs", activeFor: [] },
     { path: "/schedules", text: "Schedules", activeFor: [] },
@@ -67,7 +67,7 @@ export class Sidebar extends React.Component<SidebarProps> {
       path: "/debug",
       text: "Advanced Debug",
       activeFor: ["/reports", "/data-distribution", "/raft", "/keyvisualizer"],
-      ignoreFor: ["/reports/network"],
+      ignoreFor: ["/reports/network", "/reports/range"],
     },
   ];
 
