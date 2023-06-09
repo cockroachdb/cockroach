@@ -970,20 +970,19 @@ func proposeBatch(
 	if len(ents) == 0 {
 		return nil, false
 	}
-	if err := raftGroup.Step(raftpb.Message{
+	err := raftGroup.Step(raftpb.Message{
 		Type:    raftpb.MsgProp,
 		From:    uint64(replID),
 		Entries: ents,
-	}); errors.Is(err, raft.ErrProposalDropped) {
+	})
+	if err != nil && errors.Is(err, raft.ErrProposalDropped) {
 		// Silently ignore dropped proposals (they were always silently
 		// ignored prior to the introduction of ErrProposalDropped).
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
 		return nil, true
-	} else if err != nil {
-		return err, false
 	}
-	return nil, false
+	return err, false
 }
 
 func (b *propBuf) maybeDeductFlowTokens(
