@@ -31,7 +31,8 @@ import (
 // The degree of the inFlightWrites btree.
 const txnPipelinerBtreeDegree = 32
 
-var pipelinedWritesEnabled = settings.RegisterBoolSetting(
+// PipelinedWritesEnabled is the kv.transaction.write_pipelining_enabled cluster setting.
+var PipelinedWritesEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.transaction.write_pipelining_enabled",
 	"if enabled, transactional writes are pipelined through Raft consensus",
@@ -432,7 +433,7 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.Batch
 		return false
 	}
 
-	if !pipelinedWritesEnabled.Get(&tp.st.SV) || tp.disabled {
+	if !PipelinedWritesEnabled.Get(&tp.st.SV) || tp.disabled {
 		return false
 	}
 
