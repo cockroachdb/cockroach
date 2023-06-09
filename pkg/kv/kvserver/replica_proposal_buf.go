@@ -416,6 +416,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// at once. Building up batches of entries and proposing them with a single
 	// Step can dramatically reduce the number of messages required to commit
 	// and apply them.
+
+	ents := make([]raftpb.Entry, 0, used)
 	buf := b.arr.asSlice()[:used]
 	defer func() {
 		// Clear buffer.
@@ -423,7 +425,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			buf[i] = nil
 		}
 	}()
-	ents := make([]raftpb.Entry, 0, used)
 
 	// Use this slice to track, for each entry that's proposed to raft, whether
 	// it's subject to replication admission control. Updated in tandem with
