@@ -58,10 +58,10 @@ func getOpts(optFuncs ...func(*FingerprintOption)) (*FingerprintOption, error) {
 	}
 
 	if fingerprintOpts.Stripped && !fingerprintOpts.StartTime.IsEmpty() {
-		return nil, errors.New("cannot specify Stripped and a start time")
+		return nil, errors.New("cannot specify stripped and a start time")
 	}
 	if fingerprintOpts.Stripped && fingerprintOpts.RevisionHistory {
-		return nil, errors.New("cannot specify Stripped and revision history")
+		return nil, errors.New("cannot specify stripped and revision history")
 	}
 	return fingerprintOpts, nil
 }
@@ -82,10 +82,8 @@ func FingerprintTable(
 	cmd := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(crdb_internal.table_span(%d),true) %s`, tableID, aostCmd)
 
 	if !opts.Stripped {
-		startTime := opts.StartTime.GoTime()
-		microSecondRFC3339Format := "2006-01-02 15:04:05.999999"
-		startTimeStr := startTime.Format(microSecondRFC3339Format)
-		cmd = fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(crdb_internal.table_span(%d),'%s'::TIMESTAMPTZ,%t) %s`, tableID, startTimeStr, opts.RevisionHistory, aostCmd)
+		startTime := opts.StartTime.AsOfSystemTime()
+		cmd = fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(crdb_internal.table_span(%d),'%s'::DECIMAL,%t) %s`, tableID, startTime, opts.RevisionHistory, aostCmd)
 	}
 	var fingerprint int64
 	row := db.QueryRowContext(ctx, cmd)
