@@ -149,6 +149,7 @@ describe("Database Details Page", function () {
       sortSettingTables: { ascending: true, columnTitle: "name" },
       sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [],
+      showIndexRecommendations: false,
     });
   });
 
@@ -181,6 +182,7 @@ describe("Database Details Page", function () {
       nodeRegions: {},
       isTenant: false,
       showNodeRegionsColumn: false,
+      showIndexRecommendations: false,
       viewMode: ViewMode.Tables,
       sortSettingTables: { ascending: true, columnTitle: "name" },
       sortSettingGrants: { ascending: true, columnTitle: "name" },

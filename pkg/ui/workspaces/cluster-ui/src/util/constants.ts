@@ -8,8 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { duration } from "moment-timezone";
-
 export const aggregatedTsAttr = "aggregated_ts";
 export const appAttr = "app";
 export const appNamesAttr = "appNames";
@@ -19,6 +17,7 @@ export const dashQueryString = "dash";
 export const dashboardNameAttr = "dashboard_name";
 export const databaseAttr = "database";
 export const databaseNameAttr = "database_name";
+export const databaseNameCCAttr = "databaseName";
 export const fingerprintIDAttr = "fingerprint_id";
 export const implicitTxnAttr = "implicitTxn";
 export const executionIdAttr = "execution_id";
