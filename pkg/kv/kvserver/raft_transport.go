@@ -916,7 +916,6 @@ func (t *RaftTransport) startProcessNewQueue(
 			}
 		}()
 		defer cleanup(q)
-		defer t.queues[class].Delete(int64(toNodeID))
 		defer func() {
 			t.kvflowControl.mu.Lock()
 			t.queues[class].Delete(int64(toNodeID))
