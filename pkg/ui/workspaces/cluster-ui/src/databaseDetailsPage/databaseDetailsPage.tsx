@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext } from "react";
+import React from "react";
 import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
@@ -31,13 +31,20 @@ import {
   DATE_FORMAT,
   EncodeDatabaseTableUri,
   EncodeDatabaseUri,
+  EncodeUriName,
 } from "src/util/format";
-import { mvccGarbage, syncHistory, unique } from "../util";
+import {
+  getMatchParamByName,
+  mvccGarbage,
+  schemaNameAttr,
+  syncHistory,
+  unique,
+} from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
-import moment, { Moment } from "moment-timezone";
+import { Moment } from "moment-timezone";
 import { Caution } from "@cockroachlabs/icons";
 import { Anchor } from "../anchor";
 import LoadingError from "../sqlActivity/errorComponent";
@@ -52,8 +59,12 @@ import {
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "src/tableStatistics";
 import { Timestamp, Timezone } from "../timestamp";
-import { DatabasesPageDataDatabase } from "../databasesPage";
-import { forEach } from "lodash";
+import {
+  DbDetailsBreadcrumbs,
+  IndexRecWithIconCell,
+  MVCCInfoCell,
+  TableNameCell,
+} from "./helperComponents";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -111,6 +122,7 @@ export interface DatabaseDetailsPageData {
   isTenant?: UIConfigState["isTenant"];
   viewMode: ViewMode;
   showNodeRegionsColumn?: boolean;
+  showIndexRecommendations: boolean;
 }
 
 export interface DatabaseDetailsPageDataTable {
@@ -517,24 +529,6 @@ export class DatabaseDetailsPage extends React.Component<
     }
   }
 
-  formatMVCCInfo = (
-    details: DatabaseDetailsPageDataTableDetails,
-  ): React.ReactElement => {
-    return (
-      <>
-        <p className={cx("multiple-lines-info")}>
-          {format.Percentage(details.livePercentage, 1, 1)}
-        </p>
-        <p className={cx("multiple-lines-info")}>
-          <span className={cx("bold")}>{format.Bytes(details.liveBytes)}</span>{" "}
-          live data /{" "}
-          <span className={cx("bold")}>{format.Bytes(details.totalBytes)}</span>
-          {" total"}
-        </p>
-      </>
-    );
-  };
-
   checkInfoAvailable = (
     error: Error,
     cell: React.ReactNode,
@@ -553,15 +547,7 @@ export class DatabaseDetailsPage extends React.Component<
             Tables
           </Tooltip>
         ),
-        cell: table => (
-          <Link
-            to={EncodeDatabaseTableUri(this.props.name, table.name)}
-            className={cx("icon__container")}
-          >
-            <DatabaseIcon className={cx("icon--s", "icon--primary")} />
-            {table.name}
-          </Link>
-        ),
+        cell: table => <TableNameCell table={table} dbDetails={this.props} />,
         sort: table => table.name,
         className: cx("database-table__col-name"),
         name: "name",
@@ -624,23 +610,16 @@ export class DatabaseDetailsPage extends React.Component<
           </Tooltip>
         ),
         cell: table => {
-          let cell;
-          if (table.details.hasIndexRecommendations) {
-            cell = (
-              <div className={cx("icon__container")}>
-                <Tooltip
-                  placement="bottom"
-                  title="This table has index recommendations. Click the table name to see more details."
-                >
-                  <Caution className={cx("icon--s", "icon--warning")} />
-                </Tooltip>
-                {table.details.indexCount}
-              </div>
-            );
-          } else {
-            cell = table.details.indexCount;
-          }
-          return this.checkInfoAvailable(table.lastError, cell);
+          return table.details.hasIndexRecommendations &&
+            this.props.showIndexRecommendations
+            ? this.checkInfoAvailable(
+                table.lastError,
+                <IndexRecWithIconCell table={table} />,
+              )
+            : this.checkInfoAvailable(
+                table.lastError,
+                table.details.indexCount,
+              );
         },
         sort: table => table.details.indexCount,
         className: cx("database-table__col-index-count"),
@@ -687,7 +666,7 @@ export class DatabaseDetailsPage extends React.Component<
         cell: table =>
           this.checkInfoAvailable(
             table.lastError,
-            this.formatMVCCInfo(table.details),
+            <MVCCInfoCell details={table.details} />,
           ),
         sort: table => table.details.livePercentage,
         className: cx("database-table__col-column-count"),
@@ -842,19 +821,7 @@ export class DatabaseDetailsPage extends React.Component<
     return (
       <div className="root table-area">
         <section className={baseHeadingClasses.wrapper}>
-          <Breadcrumbs
-            items={[
-              { link: "/databases", name: "Databases" },
-              {
-                link: EncodeDatabaseUri(this.props.name),
-                name: "Tables",
-              },
-            ]}
-            divider={
-              <CaretRight className={cx("icon--xxs", "icon--primary")} />
-            }
-          />
-
+          <DbDetailsBreadcrumbs dbName={this.props.name} />
           <h3
             className={`${baseHeadingClasses.tableName} ${cx(
               "icon__container",
