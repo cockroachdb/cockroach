@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -255,6 +256,41 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 		nm.Success.Inc(1)
 	}
 	nm.Latency.RecordValue(d.Nanoseconds())
+}
+
+// getNodeCounterMetrics fetches the count of each specified node metric from
+// the `metricNames` parameter and returns the result as a map. The keys in the
+// map represent the metric metadata names, while the corresponding values
+// indicate the count of each metric. If any of the specified metric cannot be
+// found or is not a counter, the function will return an error.
+//
+// Assumption: 1. The metricNames parameter should consist of string literals
+// that match the metadata names used for metric counters. 2. Each metric name
+// provided in `metricNames` must exist, unique and be a counter type.
+func (nm nodeMetrics) getNodeCounterMetrics(metricsName []string) (map[string]int64, error) {
+	metricCountMap := make(map[string]int64)
+	getFirstDistSenderMetric := func(metricName string) int64 {
+		metricsStruct := reflect.ValueOf(nm)
+		for i := 0; i < metricsStruct.NumField(); i++ {
+			field := metricsStruct.Field(i)
+			switch t := field.Interface().(type) {
+			case *metric.Counter:
+				if t.Name == metricName {
+					return t.Count()
+				}
+			}
+		}
+		return -1
+	}
+
+	for _, metricName := range metricsName {
+		count := getFirstDistSenderMetric(metricName)
+		if count == -1 {
+			return map[string]int64{}, errors.Errorf("cannot find metric for %s", metricName)
+		}
+		metricCountMap[metricName] = count
+	}
+	return metricCountMap, nil
 }
 
 // A Node manages a map of stores (by store ID) for which it serves

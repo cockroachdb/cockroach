@@ -100,19 +100,14 @@ type StoreTestingKnobs struct {
 	// no-op write, and the ForcedError field will be set.
 	TestingPostApplyFilter kvserverbase.ReplicaApplyFilter
 
-	// Currently, TestingBatchRequestFilter and TestingBatchResponseFilter only
-	// intercept Node.Batch() to pass the actual batch request and response byte
-	// count to the test. In addition, they also return a boolean to filter out
-	// changes in node metrics that are irrelevant to our test cases. These
-	// changes often originate from the server set up and are hard to disable.
-	// They can also be easily extended to validate other properties of batch
-	// requests / response if required.
-	//
-	// TestingBatchRequestFilter intercepts Node.Batch() to validate BatchRequest
-	// properties.
+	// TestingBatchRequestFilter intercepts Node.Batch() to pass the actual batch
+	// request byte count to the test. A boolean value is returned here to filter
+	// out changes in node metrics that are irrelevant to the test.
 	TestingBatchRequestFilter func(*kvpb.BatchRequest) bool
-	// TestingBatchResponseFilter intercepts Node.Batch() to validate BatchRequest
-	// properties.
+
+	// TestingBatchResponseFilter intercepts Node.Batch() to pass the actual batch
+	// request byte count to the test. A boolean value is returned here to filter
+	// out changes in node metrics that are irrelevant to the test.
 	TestingBatchResponseFilter func(*kvpb.BatchResponse) bool
 
 	// TestingResponseErrorEvent is called when an error is returned applying
