@@ -20,6 +20,11 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
+func (env *InteractionEnv) handleTickElection(t *testing.T, d datadriven.TestData) error {
+	idx := firstAsNodeIdx(t, d)
+	return env.Tick(idx, env.Nodes[idx].Config.ElectionTick)
+}
+
 func (env *InteractionEnv) handleTickHeartbeat(t *testing.T, d datadriven.TestData) error {
 	idx := firstAsNodeIdx(t, d)
 	return env.Tick(idx, env.Nodes[idx].Config.HeartbeatTick)
