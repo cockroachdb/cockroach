@@ -556,32 +556,44 @@ var optionNames = func() []string {
 	return names
 }()
 
-var setArgsRe = regexp.MustCompile(`^\s*` + // zero or more leading space.
-	`(?P<option>(?:[a-zA-Z_.0-9]|-)+)` + // 1 or more non-space option characters.
-	`(?:` +
-	`\s*(?:=\s*|\s+)` + // separator: either some spaces, or an equal sign surrounded by optional spaces.
-	`(?P<value>` +
-	`"(?:[^"]|\\.)*"` + // value is either a double-quoted string, which might be empty; or
-	`|` +
-	`[^\s"]+` + // value may be a string of non-space, non-quote characters.
-	`))?` + // value, as a whole, is optional.
-	`\s*$`, // either a standalone option or the value can be followed by optional spaces.
-)
-
-func getSetArgs(sargs string) (ok bool, option string, hasValue bool, value string) {
-	m := setArgsRe.FindStringSubmatch(sargs)
-	if m == nil {
+func getSetArgs(args []string) (ok bool, option string, hasValue bool, value string) {
+	if len(args) == 0 {
+		// Used in testing only.
 		return false, "", false, ""
 	}
-	option = m[1]
-	if len(m) == 2 || m[2] == "" {
-		return true, option, false, ""
+
+	if strings.Contains(args[0], "=") {
+		// Syntax: a=b, a= b.
+		parts := strings.SplitN(args[0], "=", 2)
+		args[0] = parts[0]
+		if len(args) == 1 {
+			args = append(args, "")
+		}
+		args[1] = parts[1] + args[1]
+	} else if len(args) >= 2 && strings.HasPrefix(args[1], "=") {
+		// Syntax: a =b, a = b.
+		if len(args) == 2 {
+			args = append(args, "")
+		}
+		args[2] = args[1][1:] + args[2]
+		copy(args[1:], args[2:])
+		args = args[:len(args)-1]
 	}
-	return true, option, true, m[2]
+
+	if len(args) == 1 {
+		return true, args[0], false, ""
+	}
+
+	// This is the same behavior as in postgres: multiple arguments
+	// in set are concatenated together to form the value string.
+	// To introduce spaces, use quotes.
+	return true, args[0], true, strings.Join(args[1:], "")
 }
 
 // handleSet supports the \set client-side command.
-func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cliStateEnum {
+func (c *cliState) handleSet(
+	line string, args []string, nextState, errState cliStateEnum,
+) cliStateEnum {
 	if len(args) == 0 {
 		optData := make([][]string, 0, len(options))
 		for _, n := range optionNames {
@@ -600,20 +612,14 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 		return nextState
 	}
 
-	// For \set, we're not trusting the default field separator which
-	// simply splits at spaces, because it doesn't help us handle
-	// "a=b", "a = b", "a b" and "a =b" effectively.
-	// Regular expressions to the rescue.
-	sargs := strings.Join(args, " ")
-
-	ok, optName, hasValue, val := getSetArgs(sargs)
+	ok, optName, hasValue, val := getSetArgs(args)
 	if !ok {
 		return c.invalidSyntax(errState)
 	}
 
 	opt, ok := options[optName]
 	if !ok {
-		return c.invalidSyntax(errState)
+		return c.cliError(errState, errors.Newf("unknown variable name: %q", optName))
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, optName)
@@ -643,7 +649,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	}
 
 	if err != nil {
-		return c.cliError(errState, errors.Wrapf(err, "\\set %s", sargs))
+		return c.cliError(errState, errors.Wrapf(err, "%s", line))
 	}
 
 	return nextState
@@ -656,7 +662,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	}
 	opt, ok := options[args[0]]
 	if !ok {
-		return c.invalidSyntax(errState)
+		return c.cliError(errState, errors.Newf("unknown variable name: %q", args[0]))
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
 		return c.invalidOptionChange(errState, args[0])
@@ -1350,7 +1356,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	// any, in all cases.
 	line := strings.TrimRight(c.lastInputLine, "; ")
 
-	cmd := strings.Fields(line)
+	cmd, err := scanLocalCmdArgs(line)
+	if err != nil {
+		return c.cliError(cliStartLine, err)
+	}
 	if cmd[0] == `\z` {
 		// psql compatibility.
 		cmd[0] = `\dp`
@@ -1377,7 +1386,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		c.maybeFlushOutput()
 
 	case `\set`:
-		return c.handleSet(cmd[1:], loopState, errState)
+		return c.handleSet(line, cmd[1:], loopState, errState)
 
 	case `\unset`:
 		return c.handleUnset(cmd[1:], loopState, errState)
