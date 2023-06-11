@@ -44,6 +44,10 @@ type NodeVitalityInterface interface {
 // clock.Now().GoTime() rather than clock.PhysicalNow() - the former takes into
 // consideration clock signals from other nodes, the latter doesn't.
 func (l Liveness) IsLive(now hlc.Timestamp) bool {
+	// Special case epoch 0, the expiration time is always 0.
+	if l.Epoch == 0 {
+		return true
+	}
 	return now.Less(l.Expiration.ToTimestamp())
 }
 
