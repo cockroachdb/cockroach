@@ -624,13 +624,6 @@ func (m *managerImpl) TestingSetMaxLocks(maxLocks int64) {
 	m.lt.(*lockTableImpl).setMaxLocks(maxLocks)
 }
 
-func (r *Request) txnMeta() *enginepb.TxnMeta {
-	if r.Txn == nil {
-		return nil
-	}
-	return &r.Txn.TxnMeta
-}
-
 func (r *Request) isSingle(m kvpb.Method) bool {
 	if len(r.Requests) != 1 {
 		return false
