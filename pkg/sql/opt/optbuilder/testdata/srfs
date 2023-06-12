@@ -1137,3 +1137,34 @@ project
       │         └── zip
       │              └── f95615()
       └── filters (true)
+
+# Regression test for issue #95315.
+exec-ddl
+CREATE TABLE t95315 (c1 INT, c2 FLOAT)
+----
+
+# Regression test for issue #95315.
+# A query which uses a project set involving simple column expressions does
+# not error out.
+build
+SELECT 1,c1,c2 FROM t95315 JOIN
+       ROWS FROM (CAST(c1 AS INT), CAST(c2 AS INT)) USING (c1, c2)
+----
+project
+ ├── columns: "?column?":8!null c1:1 c2:2
+ ├── inner-join-apply
+ │    ├── columns: t95315.c1:1 t95315.c2:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5 c1:6 c2:7
+ │    ├── scan t95315
+ │    │    └── columns: t95315.c1:1 t95315.c2:2 rowid:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── project-set
+ │    │    ├── columns: c1:6 c2:7
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         ├── t95315.c1:1
+ │    │         └── t95315.c2:2::INT8
+ │    └── filters
+ │         ├── t95315.c1:1 = c1:6
+ │         └── t95315.c2:2 = c2:7
+ └── projections
+      └── 1 [as="?column?":8]
