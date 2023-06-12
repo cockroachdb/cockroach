@@ -63,7 +63,7 @@ server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries
 server.max_connections_per_gateway	integer	-1	the maximum number of non-superuser SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.
 server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint
-server.oidc_authentication.button_text	string	Login with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)
+server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)
 server.oidc_authentication.client_id	string		sets OIDC client id
 server.oidc_authentication.client_secret	string		sets OIDC client secret

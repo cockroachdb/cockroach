@@ -236,18 +236,18 @@ func TestOIDCEnabled(t *testing.T) {
 }
 
 func TestKeyAndSignedTokenIsValid(t *testing.T) {
-	kastValid, err := newKeyAndSignedToken(32, 32)
+	kastValid, err := newKeyAndSignedToken(32, 32, serverpb.OIDCState_MODE_LOG_IN)
 	require.NoError(t, err)
-	kastModifiedCookie, err := newKeyAndSignedToken(32, 32)
+	kastModifiedCookie, err := newKeyAndSignedToken(32, 32, serverpb.OIDCState_MODE_LOG_IN)
 	require.NoError(t, err)
 	kastModifiedCookie.secretKeyCookie.Value = kastModifiedCookie.secretKeyCookie.Value + "Z"
-	kastModifiedTokenPayload, err := newKeyAndSignedToken(32, 32)
+	kastModifiedTokenPayload, err := newKeyAndSignedToken(32, 32, serverpb.OIDCState_MODE_LOG_IN)
 	require.NoError(t, err)
 	kastModifiedTokenPayload.signedTokenEncoded = kastModifiedCookie.signedTokenEncoded + "Z"
-	kastEmptyCookie, err := newKeyAndSignedToken(32, 32)
+	kastEmptyCookie, err := newKeyAndSignedToken(32, 32, serverpb.OIDCState_MODE_LOG_IN)
 	require.NoError(t, err)
 	kastEmptyCookie.secretKeyCookie.Value = ""
-	kastEmptyToken, err := newKeyAndSignedToken(32, 32)
+	kastEmptyToken, err := newKeyAndSignedToken(32, 32, serverpb.OIDCState_MODE_LOG_IN)
 	require.NoError(t, err)
 	kastEmptyToken.signedTokenEncoded = ""
 
@@ -264,7 +264,8 @@ func TestKeyAndSignedTokenIsValid(t *testing.T) {
 		{"valid cookie, empty token", kastEmptyToken, false, false},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			valid, err := tc.kast.validate()
+			// TODO(todd): Test mode, too?
+			valid, _, err := tc.kast.validate()
 			if tc.expectErr {
 				require.Error(t, err)
 			} else {
