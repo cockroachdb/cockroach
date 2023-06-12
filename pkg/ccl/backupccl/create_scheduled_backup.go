@@ -43,6 +43,7 @@ const (
 	optOnPreviousRunning       = "on_previous_running"
 	optIgnoreExistingBackups   = "ignore_existing_backups"
 	optUpdatesLastBackupMetric = "updates_cluster_last_backup_time_metric"
+	optUpdatesErrorMetrics     = "updates_error_metrics"
 )
 
 var scheduledBackupOptionExpectValues = map[string]exprutil.KVStringOptValidate{
@@ -51,6 +52,7 @@ var scheduledBackupOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 	optOnPreviousRunning:       exprutil.KVStringOptRequireValue,
 	optIgnoreExistingBackups:   exprutil.KVStringOptRequireNoValue,
 	optUpdatesLastBackupMetric: exprutil.KVStringOptRequireNoValue,
+	optUpdatesErrorMetrics:     exprutil.KVStringOptRequireNoValue,
 }
 
 // scheduledBackupGCProtectionEnabled is used to enable and disable the chaining
@@ -291,6 +293,17 @@ func doCreateBackupSchedules(
 		}
 	}
 
+	_, updatesErrorMetrics := scheduleOptions[optUpdatesErrorMetrics]
+
+	if updatesErrorMetrics {
+		// NB: as of 20.2, schedule creation requires admin so this is duplicative
+		// but in the future we might relax so you can schedule anything that you
+		// can backup, but then this cluster-wide metric should be admin-only.
+		if err := p.RequireAdminRole(ctx, optUpdatesErrorMetrics); err != nil {
+			return err
+		}
+	}
+
 	evalCtx := &p.ExtendedEvalContext().Context
 	firstRun, err := scheduleFirstRun(evalCtx, scheduleOptions)
 	if err != nil {
@@ -338,7 +351,7 @@ func doCreateBackupSchedules(
 		}
 		inc, incScheduledBackupArgs, err = makeBackupSchedule(
 			env, p.User(), scheduleLabel, incRecurrence, incrementalScheduleDetails, unpauseOnSuccessID,
-			updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords)
+			updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords, updatesErrorMetrics)
 		if err != nil {
 			return err
 		}
@@ -362,7 +375,7 @@ func doCreateBackupSchedules(
 	var fullScheduledBackupArgs *backuppb.ScheduledBackupExecutionArgs
 	full, fullScheduledBackupArgs, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel, fullRecurrence, details, unpauseOnSuccessID,
-		updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords)
+		updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords, updatesErrorMetrics)
 	if err != nil {
 		return err
 	}
@@ -469,6 +482,7 @@ func makeBackupSchedule(
 	updateLastMetricOnSuccess bool,
 	backupNode *tree.Backup,
 	chainProtectedTimestampRecords bool,
+	updatesErrorMetrics bool,
 ) (*jobs.ScheduledJob, *backuppb.ScheduledBackupExecutionArgs, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(label)
@@ -479,6 +493,7 @@ func makeBackupSchedule(
 		UnpauseOnSuccess:               unpauseOnSuccess,
 		UpdatesLastBackupMetric:        updateLastMetricOnSuccess,
 		ChainProtectedTimestampRecords: chainProtectedTimestampRecords,
+		UpdatesErrorMetrics:            updatesErrorMetrics,
 	}
 	if backupNode.AppendToLatest {
 		args.BackupType = backuppb.ScheduledBackupExecutionArgs_INCREMENTAL

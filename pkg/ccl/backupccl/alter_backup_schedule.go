@@ -312,6 +312,23 @@ func processScheduleOptions(
 				continue
 			}
 			s.incArgs.UpdatesLastBackupMetric = updatesLastBackupMetric
+		case optUpdatesErrorMetrics:
+			// NB: as of 20.2, schedule creation requires admin so this is duplicative
+			// but in the future we might relax so you can schedule anything that you
+			// can backup, but then this cluster-wide metric should be admin-only.
+			if err := p.RequireAdminRole(ctx, optUpdatesErrorMetrics); err != nil {
+				return pgerror.Wrap(err, pgcode.InsufficientPrivilege, "")
+			}
+
+			updatesErrorMetrics, err := strconv.ParseBool(v)
+			if err != nil {
+				return errors.Wrapf(err, "unexpected value for %s: %s", k, v)
+			}
+			s.fullArgs.UpdatesErrorMetrics = updatesErrorMetrics
+			if s.incArgs == nil {
+				continue
+			}
+			s.incArgs.UpdatesErrorMetrics = updatesErrorMetrics
 		default:
 			return errors.Newf("unexpected schedule option: %s = %s", k, v)
 		}
@@ -463,6 +480,7 @@ func processFullBackupRecurrence(
 			s.fullArgs.UpdatesLastBackupMetric,
 			s.incStmt,
 			s.fullArgs.ChainProtectedTimestampRecords,
+			s.fullArgs.UpdatesErrorMetrics,
 		)
 
 		if err != nil {

@@ -107,9 +107,7 @@ func (r *sqlStatsCompactionResumer) maybeNotifyJobTerminated(
 		if jobKnobs != nil && jobKnobs.JobSchedulerEnv != nil {
 			env = jobKnobs.JobSchedulerEnv
 		}
-		return jobs.NotifyJobTermination(
-			ctx, txn, env, r.job.ID(), status, r.job.Details(), r.sj.ScheduleID(),
-		)
+		return jobs.NotifyJobTermination(ctx, txn, env, r.job.ID(), status, nil, r.job.Details(), r.sj.ScheduleID())
 	})
 }
 
@@ -205,6 +203,7 @@ func (e *scheduledSQLStatsCompactionExecutor) NotifyJobTermination(
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.Status,
+	jobErr error,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,

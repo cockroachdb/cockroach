@@ -167,6 +167,7 @@ func (s rowLevelTTLExecutor) NotifyJobTermination(
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.Status,
+	jobErr error,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,

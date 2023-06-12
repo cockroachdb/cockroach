@@ -4451,13 +4451,13 @@ type testKMS struct {
 
 var _ cloud.KMS = &testKMS{}
 
-func (k *testKMS) MasterKeyID() (string, error) {
+func (k *testKMS) MasterKeyID() string {
 	kmsURL, err := url.ParseRequestURI(k.uri)
 	if err != nil {
-		return "", err
+		return ""
 	}
 
-	return strings.TrimPrefix(kmsURL.Path, "/"), nil
+	return strings.TrimPrefix(kmsURL.Path, "/")
 }
 
 // Encrypt appends the KMS URI master key ID to data.
@@ -4602,7 +4602,7 @@ func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
 			testKMS, err := MakeTestKMS(ctx, uri, nil)
 			require.NoError(t, err)
 
-			masterKeyID, err := testKMS.MasterKeyID()
+			masterKeyID := testKMS.MasterKeyID()
 			require.NoError(t, err)
 
 			encryptedDataKey, err := testKMS.Encrypt(ctx, plaintextDataKey)

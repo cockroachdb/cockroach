@@ -185,6 +185,8 @@ message ScheduledBackupExecutionArgs {
    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
 
+  bool updates_error_metrics = 9;
+
   reserved 5;
 }
 
