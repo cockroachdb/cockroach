@@ -2139,9 +2139,6 @@ func (rpcCtx *Context) VerifyDialback(
 
 	baseAddr := util.UnresolvedAddr{NetworkField: "tcp", AddressField: request.OriginAddr}
 	target := locality.LookupAddress(request.LocalityAddress, &baseAddr).AddressField
-	// nodeID may be null for "bootstrapping" requests. In that case we always
-	// assume blocking mode since we can't track connection attempts.
-	nodeID := request.OriginNodeID
 
 	// As a fast-path, determine if we have a healthy system-class connection to
 	// the node that sent us the ping. We use the System class because that is
@@ -2154,10 +2151,10 @@ func (rpcCtx *Context) VerifyDialback(
 	// stateful even across disconnects, i.e. if the connection fails, the health
 	// check will return an error until the connection is re-established.
 	var connHealthErr error
-	if nodeID == 0 {
+	if request.OriginNodeID == 0 {
 		connHealthErr = rpcCtx.GRPCUnvalidatedDial(target).Health() // NB: dials SystemClass
 	} else {
-		connHealthErr = rpcCtx.GRPCDialNode(target, nodeID, SystemClass).Health()
+		connHealthErr = rpcCtx.GRPCDialNode(target, request.OriginNodeID, SystemClass).Health()
 	}
 
 	// We have a successful connection so report success. Any ongoing attempts no
@@ -2167,9 +2164,9 @@ func (rpcCtx *Context) VerifyDialback(
 	}
 
 	log.VEventf(ctx, 2, "unable to verify health on existing conn, trying dialback conn to %s, n%d mode %v, %v",
-		target, nodeID, request.NeedsDialback, connHealthErr)
+		target, request.OriginNodeID, request.NeedsDialback, connHealthErr)
 
-	if nodeID == 0 || request.NeedsDialback == PingRequest_BLOCKING {
+	if request.OriginNodeID == 0 || request.NeedsDialback == PingRequest_BLOCKING {
 		// Since we don't have a successful reverse connection, try and dial back
 		// manually. We don't use the regular dialer pool to avoid a circular dependency:
 		// Dialing through the pool starts with a BLOCKING connection, which the remote
@@ -2180,10 +2177,10 @@ func (rpcCtx *Context) VerifyDialback(
 		ctx = logtags.AddTag(ctx, "dialback", nil)
 		conn, err := rpcCtx.grpcDialRaw(ctx, target, SystemClass, grpc.WithBlock())
 		if err != nil {
-			log.Infof(ctx, "blocking dialback connection failed to %s, n%d, %v", target, nodeID, err)
+			log.Infof(ctx, "blocking dialback connection failed to %s, n%d, %v", target, request.OriginNodeID, err)
 			return err
 		}
-		log.VEventf(ctx, 2, "blocking dialback connection to n%d succeeded", nodeID)
+		log.VEventf(ctx, 2, "blocking dialback connection to n%d succeeded", request.OriginNodeID)
 		_ = conn.Close() // nolint:grpcconnclose
 		return nil
 	} else {
