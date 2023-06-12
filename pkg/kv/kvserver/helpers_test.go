@@ -227,7 +227,7 @@ func (s *Store) RaftSchedulerPriorityIDs() []roachpb.RangeID {
 }
 
 func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
-	liveness.TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, liveness.TestTimeUntilStoreDeadOff)
+	liveness.TimeUntilNodeDead.Override(context.Background(), &cfg.Settings.SV, liveness.TestTimeUntilNodeDeadOff)
 	return storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,

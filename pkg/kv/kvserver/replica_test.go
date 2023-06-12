@@ -11733,7 +11733,7 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 	livenessMap := livenesspb.IsLiveMap{
 		1: livenesspb.IsLiveMapEntry{
 			IsLive:   true,
-			Liveness: livenesspb.Liveness{Expiration: now.Add(1, 0).ToLegacyTimestamp()},
+			Liveness: livenesspb.Liveness{Epoch: 1, Expiration: now.Add(1, 0).ToLegacyTimestamp()},
 		},
 		2: livenesspb.IsLiveMapEntry{
 			// NOTE: we purposefully set IsLive to true in disagreement with the
@@ -11741,7 +11741,7 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 			// in shouldCampaignOnLeaseRequestRedirect and not at whether this node is
 			// reachable from the local node.
 			IsLive:   true,
-			Liveness: livenesspb.Liveness{Expiration: now.Add(-1, 0).ToLegacyTimestamp()},
+			Liveness: livenesspb.Liveness{Epoch: 1, Expiration: now.Add(-1, 0).ToLegacyTimestamp()},
 		},
 	}
 

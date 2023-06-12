@@ -45,7 +45,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	// We're going to manually mark stores dead in this test.
 	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, sp, _ := storepool.CreateTestStorePool(ctx, st,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
@@ -217,7 +217,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	cfg := TestStoreConfig(clock)
 	var stopper *stop.Stopper
 	stopper, _, _, cfg.StorePool, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
-		liveness.TestTimeUntilStoreDead, false, /* deterministic */
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)

@@ -201,8 +201,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		Settings:                cfg.Settings,
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
 		Engines:                 []storage.Engine{ltc.Eng},
+		NodeDialer:              cfg.NodeDialer,
 	})
-	liveness.TimeUntilStoreDead.Override(ctx, &cfg.Settings.SV, liveness.TestTimeUntilStoreDead)
+	liveness.TimeUntilNodeDead.Override(ctx, &cfg.Settings.SV, liveness.TestTimeUntilNodeDead)
 	cfg.StorePool = storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
