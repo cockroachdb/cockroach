@@ -1985,16 +1985,21 @@ type delayingHeader struct {
 func (rpcCtx *Context) makeDialCtx(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) context.Context {
-	dialCtx := rpcCtx.MasterCtx
+	return rpcCtx.wrapCtx(rpcCtx.MasterCtx, target, remoteNodeID, class)
+}
+
+func (rpcCtx *Context) wrapCtx(
+	ctx context.Context, target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+) context.Context {
 	var rnodeID interface{} = remoteNodeID
 	if remoteNodeID == 0 {
 		rnodeID = redact.SafeString("?")
 	}
-	dialCtx = logtags.AddTag(dialCtx, "rnode", rnodeID)
-	dialCtx = logtags.AddTag(dialCtx, "raddr", target)
-	dialCtx = logtags.AddTag(dialCtx, "class", class)
-	dialCtx = logtags.AddTag(dialCtx, "rpc", nil)
-	return dialCtx
+	ctx = logtags.AddTag(ctx, "rnode", rnodeID)
+	ctx = logtags.AddTag(ctx, "raddr", target)
+	ctx = logtags.AddTag(ctx, "class", class)
+	ctx = logtags.AddTag(ctx, "rpc", nil)
+	return ctx
 }
 
 // grpcDialRaw connects to the remote node.
@@ -2178,7 +2183,7 @@ func (rpcCtx *Context) VerifyDialback(
 		// side would try to dial back, which would call into VerifyDialback for this
 		// connection again, etc, for an infinite loop of blocking connections.
 		// A throwaway connection keeps it simple.
-		ctx := rpcCtx.makeDialCtx(target, request.OriginNodeID, SystemClass)
+		ctx := rpcCtx.wrapCtx(ctx, target, request.OriginNodeID, SystemClass)
 		ctx = logtags.AddTag(ctx, "dialback", nil)
 		conn, err := rpcCtx.grpcDialRaw(ctx, target, SystemClass, grpc.WithBlock())
 		if err != nil {
