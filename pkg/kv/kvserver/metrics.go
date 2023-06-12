@@ -1119,6 +1119,14 @@ or the delegate being too busy to send.
 		Measurement: "Proposals",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftProposalsDroppedLeader = metric.Metadata{
+		Name: "raft.dropped_leader",
+		Help: "Number of Raft proposals dropped by a Replica that believes itself to be the leader; " +
+			"each update also increments `raft.dropped` " +
+			"(this counts individial raftpb.Entry, not raftpb.MsgProp)",
+		Measurement: "Proposals",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftWorkingDurationNanos = metric.Metadata{
 		Name: "raft.process.workingnanos",
 		Help: `Nanoseconds spent in store.processRaft() working.
@@ -2262,21 +2270,22 @@ type StoreMetrics struct {
 	DelegateSnapshotInProgress *metric.Gauge
 
 	// Raft processing metrics.
-	RaftTicks                 *metric.Counter
-	RaftProposalsDropped      *metric.Counter
-	RaftQuotaPoolPercentUsed  metric.IHistogram
-	RaftWorkingDurationNanos  *metric.Counter
-	RaftTickingDurationNanos  *metric.Counter
-	RaftCommandsApplied       *metric.Counter
-	RaftLogCommitLatency      metric.IHistogram
-	RaftCommandCommitLatency  metric.IHistogram
-	RaftHandleReadyLatency    metric.IHistogram
-	RaftApplyCommittedLatency metric.IHistogram
-	RaftSchedulerLatency      metric.IHistogram
-	RaftTimeoutCampaign       *metric.Counter
-	RaftStorageReadBytes      *metric.Counter
-	WALBytesWritten           *metric.Gauge
-	WALBytesIn                *metric.Gauge
+	RaftTicks                  *metric.Counter
+	RaftProposalsDropped       *metric.Counter
+	RaftProposalsDroppedLeader *metric.Counter
+	RaftQuotaPoolPercentUsed   metric.IHistogram
+	RaftWorkingDurationNanos   *metric.Counter
+	RaftTickingDurationNanos   *metric.Counter
+	RaftCommandsApplied        *metric.Counter
+	RaftLogCommitLatency       metric.IHistogram
+	RaftCommandCommitLatency   metric.IHistogram
+	RaftHandleReadyLatency     metric.IHistogram
+	RaftApplyCommittedLatency  metric.IHistogram
+	RaftSchedulerLatency       metric.IHistogram
+	RaftTimeoutCampaign        *metric.Counter
+	RaftStorageReadBytes       *metric.Counter
+	WALBytesWritten            *metric.Gauge
+	WALBytesIn                 *metric.Gauge
 
 	// Raft message metrics.
 	//
@@ -2892,8 +2901,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DelegateSnapshotInProgress:                   metric.NewGauge(metaDelegateSnapshotInProgress),
 
 		// Raft processing metrics.
-		RaftTicks:            metric.NewCounter(metaRaftTicks),
-		RaftProposalsDropped: metric.NewCounter(metaRaftProposalsDropped),
+		RaftTicks:                  metric.NewCounter(metaRaftTicks),
+		RaftProposalsDropped:       metric.NewCounter(metaRaftProposalsDropped),
+		RaftProposalsDroppedLeader: metric.NewCounter(metaRaftProposalsDroppedLeader),
 		RaftQuotaPoolPercentUsed: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaRaftQuotaPoolPercentUsed,
 			Duration: histogramWindow,
