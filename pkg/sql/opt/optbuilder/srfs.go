@@ -112,6 +112,8 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		startCols := len(outScope.cols)
 
 		isRecordReturningUDF := def != nil && funcExpr.ResolvedOverload().IsUDF && texpr.ResolvedType().Family() == types.TupleFamily && b.insideDataSource
+		var scalar opt.ScalarExpr
+		_, isScopedColumn := texpr.(*scopeColumn)
 
 		if def == nil || (funcExpr.ResolvedOverload().Class != tree.GeneratorClass && !isRecordReturningUDF) || (b.shouldCreateDefaultColumn(texpr) && !isRecordReturningUDF) {
 			if def != nil && len(funcExpr.ResolvedOverload().ReturnLabels) > 0 {
@@ -123,7 +125,24 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			outCol = outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
 		}
 
-		scalar := b.buildScalar(texpr, inScope, outScope, outCol, nil)
+		if isScopedColumn {
+			// Need to use an out column which doesn't overlap with outer columns. A
+			// project set does not have passthrough columns, so we have to manually
+			// allocate a new column, a task which buildScalar normally does for us in
+			// the non-scopeColumn case.
+			newColID := b.factory.Metadata().AddColumn(alias, texpr.ResolvedType())
+
+			// Function `buildScalar` treats a `scopeColumn` as a passthrough column
+			// for projection when a non-nil `outScope` is passed in, resulting in no
+			// scalar expression being built. Handle this case by passing a nil
+			// `outScope` to `buildScalar`.
+			scalar = b.buildScalar(texpr, inScope, nil, nil, nil)
+
+			// Update the output column to refer to the new column ID.
+			outScope.cols[len(outScope.cols)-1].id = newColID
+		} else {
+			scalar = b.buildScalar(texpr, inScope, outScope, outCol, nil)
+		}
 		numExpectedOutputCols := len(outScope.cols) - startCols
 		cols := make(opt.ColList, 0, numExpectedOutputCols)
 		for j := startCols; j < len(outScope.cols); j++ {

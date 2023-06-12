@@ -2233,3 +2233,38 @@ vectorized: true
       missing stats
       table: customers@customers_pkey
       spans: FULL SCAN
+
+statement ok
+CREATE TABLE t95315 (c1 INT, c2 FLOAT);
+
+# A query which uses a project set involving simple column expressions does
+# not error out.
+query T
+EXPLAIN(VERBOSE) SELECT 1,c1,c2 FROM t95315 JOIN
+        ROWS FROM (CAST(c1 AS INT), CAST(c2 AS INT)) USING (c1, c2);
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: ("?column?", c1, c2)
+│ render ?column?: 1
+│ render c1: c1
+│ render c2: c2
+│
+└── • filter
+    │ columns: (c1, c2, c1, c2)
+    │ estimated row count: 0 (missing stats)
+    │ filter: (c1 = c1) AND (c2 = c2)
+    │
+    └── • project set
+        │ columns: (c1, c2, c1, c2)
+        │ estimated row count: 1,000 (missing stats)
+        │ render 0: c1
+        │ render 1: c2::INT8
+        │
+        └── • scan
+              columns: (c1, c2)
+              estimated row count: 1,000 (missing stats)
+              table: t95315@t95315_pkey
+              spans: FULL SCAN
