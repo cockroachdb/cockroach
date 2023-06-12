@@ -200,9 +200,11 @@ func (p *PGTest) Until(
 			if typ != typErrorResponse {
 				return nil, errors.Errorf("waiting for %T, got %#v", typs[0], errmsg)
 			}
-			var message string
+			var message, detail, hint string
 			if keepErrMsg {
 				message = errmsg.Message
+				detail = errmsg.Detail
+				hint = errmsg.Hint
 			}
 			// ErrorResponse doesn't encode/decode correctly, so
 			// manually append it here.
@@ -210,6 +212,8 @@ func (p *PGTest) Until(
 				Code:           errmsg.Code,
 				Message:        message,
 				ConstraintName: errmsg.ConstraintName,
+				Detail:         detail,
+				Hint:           hint,
 			})
 			typs = typs[1:]
 			continue
