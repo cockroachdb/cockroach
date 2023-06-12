@@ -20,6 +20,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -36,18 +37,19 @@ func init() {
 }
 
 type azureKMSConfig struct {
-	keyName, keyVersion, clientID, clientSecret, tenantID, vaultName, environment string
+	keyName, keyVersion, clientID, clientSecret, tenantID, vaultName, limitedVaultName, environment string
 }
 
 func getAzureKMSConfig() (azureKMSConfig, error) {
 	cfg := azureKMSConfig{
-		keyName:      os.Getenv("AZURE_KMS_KEY_NAME"),
-		keyVersion:   os.Getenv("AZURE_KMS_KEY_VERSION"),
-		clientID:     os.Getenv("AZURE_CLIENT_ID"),
-		clientSecret: os.Getenv("AZURE_CLIENT_SECRET"),
-		tenantID:     os.Getenv("AZURE_TENANT_ID"),
-		vaultName:    os.Getenv("AZURE_VAULT_NAME"),
-		environment:  azure.PublicCloud.Name,
+		keyName:          os.Getenv("AZURE_KMS_KEY_NAME"),
+		keyVersion:       os.Getenv("AZURE_KMS_KEY_VERSION"),
+		clientID:         os.Getenv("AZURE_CLIENT_ID"),
+		clientSecret:     os.Getenv("AZURE_CLIENT_SECRET"),
+		tenantID:         os.Getenv("AZURE_TENANT_ID"),
+		vaultName:        os.Getenv("AZURE_VAULT_NAME"),
+		limitedVaultName: os.Getenv("AZURE_LIMITED_VAULT_NAME"),
+		environment:      azure.PublicCloud.Name,
 	}
 
 	if cfg.keyName == "" || cfg.keyVersion == "" || cfg.clientID == "" || cfg.clientSecret == "" || cfg.tenantID == "" {
@@ -146,4 +148,56 @@ func TestEncryptDecryptAzure(t *testing.T) {
 
 		cloud.KMSEncryptDecrypt(t, uri, kmsEnv)
 	})
+}
+
+func TestAzureKMSInaccessibleError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	cfg, err := getAzureKMSConfig()
+	if err != nil {
+		skip.IgnoreLint(t, "Test not configured for Azure")
+		return
+	}
+	q := make(url.Values)
+	q.Add(AzureEnvironmentKeyParam, cfg.environment)
+	q.Add(AzureClientIDParam, cfg.clientID)
+	q.Add(AzureClientSecretParam, cfg.clientSecret)
+	q.Add(AzureTenantIDParam, cfg.tenantID)
+	q.Add(AzureVaultName, cfg.vaultName)
+
+	t.Run("success-sanity-check", func(t *testing.T) {
+		uri := fmt.Sprintf("%s:///%s/%s?%s", kmsScheme, cfg.keyName, cfg.keyVersion, q.Encode())
+		cloudtestutils.RequireSuccessfulKMS(ctx, t, uri)
+	})
+
+	t.Run("incorrect-credentials", func(t *testing.T) {
+		q2 := make(url.Values)
+		for k, v := range q {
+			q2[k] = v
+		}
+		q2.Set(AzureClientSecretParam, q.Get(AzureClientSecretParam)+"garbage")
+		uri := fmt.Sprintf("%s:///%s/%s?%s", kmsScheme, cfg.keyName, cfg.keyVersion, q2.Encode())
+
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "ClientSecretCredential authentication failed")
+	})
+
+	t.Run("incorrect-kms", func(t *testing.T) {
+		incorrectKey := cfg.keyName + "-non-existent"
+		uri := fmt.Sprintf("%s:///%s/%s?%s", kmsScheme, incorrectKey, cfg.keyVersion, q.Encode())
+
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "KeyNotFound")
+	})
+
+	t.Run("no-kms-permission", func(t *testing.T) {
+		q2 := make(url.Values)
+		for k, v := range q {
+			q2[k] = v
+		}
+		q2.Set(AzureVaultName, cfg.limitedVaultName)
+		uri := fmt.Sprintf("%s:///%s/%s?%s", kmsScheme, "somekey", "00000000000000000000000000000000", q2.Encode())
+
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "not authorized to perform action on resource")
+	})
+
 }
