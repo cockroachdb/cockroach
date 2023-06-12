@@ -85,6 +85,7 @@ func (s schemaTelemetryExecutor) NotifyJobTermination(
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.Status,
+	jobErr error,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,

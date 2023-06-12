@@ -45,6 +45,7 @@ func (s *statusTrackingExecutor) NotifyJobTermination(
 	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus Status,
+	jobErr error,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
@@ -101,9 +102,7 @@ func TestJobTerminationNotification(t *testing.T) {
 	// Pretend it completes multiple runs with terminal statuses.
 	for _, s := range []Status{StatusCanceled, StatusFailed, StatusSucceeded} {
 		require.NoError(t, h.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			return NotifyJobTermination(
-				ctx, txn, h.env, 123, s, nil, schedule.ScheduleID(),
-			)
+			return NotifyJobTermination(ctx, txn, h.env, 123, s, nil, nil, schedule.ScheduleID())
 		}))
 	}
 

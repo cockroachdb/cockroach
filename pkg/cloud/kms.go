@@ -12,6 +12,7 @@ package cloud
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -25,7 +26,7 @@ import (
 type KMS interface {
 	// MasterKeyID will return the identifier used to reference the master key
 	// associated with the KMS object.
-	MasterKeyID() (string, error)
+	MasterKeyID() string
 	// Encrypt returns the ciphertext version of data after encrypting it using
 	// the KMS.
 	Encrypt(ctx context.Context, data []byte) ([]byte, error)
@@ -50,6 +51,14 @@ type KMSFromURIFactory func(ctx context.Context, uri string, env KMSEnv) (KMS, e
 
 // Mapping from KMS scheme to its registered factory method.
 var kmsFactoryMap = make(map[string]KMSFromURIFactory)
+
+type KMSInaccessibleError struct {
+	Cause error
+}
+
+func (e *KMSInaccessibleError) Error() string {
+	return fmt.Sprintf("KMS inaccessible error: %s", e.Cause)
+}
 
 // RegisterKMSFromURIFactory is used by every concrete KMS implementation to
 // register its factory method.
