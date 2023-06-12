@@ -124,7 +124,7 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"BindComplete"}
-{"Type":"ErrorResponse","Code":"23505","ConstraintName":"t_a_key"}
+{"Type":"ErrorResponse","Code":"23505","ConstraintName":"t_a_key","Detail":"Key (a)=(1) already exists."}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
