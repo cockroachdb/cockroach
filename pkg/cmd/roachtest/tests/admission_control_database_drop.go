@@ -44,7 +44,6 @@ func registerDatabaseDrop(r registry.Registry) {
 		Timeout:   10 * time.Hour,
 		Owner:     registry.OwnerAdmissionControl,
 		Benchmark: true,
-		Skip:      "TC builder agents need new GCE permissions",
 		// TODO(irfansharif): Reduce to weekly cadence once stabilized.
 		// Tags:            registry.Tags(`weekly`),
 		Cluster:         clusterSpec,
@@ -228,7 +227,10 @@ func registerDatabaseDrop(r registry.Registry) {
 			// heavy and in the short spurt where we there's a burst of
 			// compactions, we're not using disk bandwidth sufficiently to need
 			// something like disk bandwidth tokens. Find a more appropriate
-			// foreground load to run and refresh this test.
+			// foreground load to run and refresh this test. Look at the
+			// clearrange tests -- it seems more appropriate and there's already
+			// sustained IO token exhaustion, so perhaps just cargocult that
+			// test and use disk snapshots?
 			runTPCE(ctx, t, c, tpceOptions{
 				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
