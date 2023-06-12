@@ -145,7 +145,7 @@ type admitEntHandle struct {
 type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
-	onErrProposalDropped([]raftpb.Entry)
+	onErrProposalDropped([]raftpb.Entry, raft.StateType)
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -962,9 +962,10 @@ func proposeBatch(
 	if len(ents) == 0 {
 		return nil, false
 	}
+	replID := p.getReplicaID()
 	err := raftGroup.Step(raftpb.Message{
 		Type:    raftpb.MsgProp,
-		From:    uint64(p.getReplicaID()),
+		From:    uint64(replID),
 		Entries: ents,
 	})
 	if err != nil && errors.Is(err, raft.ErrProposalDropped) {
@@ -977,7 +978,7 @@ func proposeBatch(
 				log.Event(p.ctx, "entry dropped")
 			}
 		}
-		p.onErrProposalDropped(ents)
+		p.onErrProposalDropped(ents, raftGroup.BasicStatus().RaftState)
 		return nil, true
 	}
 	if err == nil {
@@ -1283,12 +1284,12 @@ func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error
 	})
 }
 
-func (rp *replicaProposer) onErrProposalDropped(ents []raftpb.Entry) {
-	// TODO(tbg): could differentiate by reason: uncommitted log size exceeded
-	// or no leader known. Raft doesn't tell us directly but we could figure it
-	// out since we can see whether the RawNode tracks a leader or not (and this
-	// discriminates between case one and two).
-	rp.store.metrics.RaftProposalsDropped.Inc(int64(len(ents)))
+func (rp *replicaProposer) onErrProposalDropped(ents []raftpb.Entry, stateType raft.StateType) {
+	n := int64(len(ents))
+	rp.store.metrics.RaftProposalsDropped.Inc(n)
+	if stateType == raft.StateLeader {
+		rp.store.metrics.RaftProposalsDroppedLeader.Inc(n)
+	}
 }
 
 func (rp *replicaProposer) leaseDebugRLocked() string {
