@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -251,27 +252,27 @@ func TestBatchRepr(t *testing.T) {
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b WriteBatch) error {
 		repr := b.Repr()
 
-		r, err := NewPebbleBatchReader(repr)
+		r, err := NewBatchReader(repr)
 		require.NoError(t, err)
 
 		const expectedCount = 5
 		require.Equal(t, expectedCount, r.Count())
-		count, err := PebbleBatchCount(repr)
+		count, err := BatchCount(repr)
 		require.NoError(t, err)
 		require.Equal(t, expectedCount, count)
 
 		var ops []string
 		for i := 0; i < r.Count(); i++ {
 			require.True(t, r.Next())
-			switch r.BatchType() {
-			case BatchTypeDeletion:
+			switch r.KeyKind() {
+			case pebble.InternalKeyKindDelete:
 				ops = append(ops, fmt.Sprintf("delete(%s)", string(r.Key())))
-			case BatchTypeValue:
+			case pebble.InternalKeyKindSet:
 				ops = append(ops, fmt.Sprintf("put(%s,%s)", string(r.Key()), string(r.Value())))
-			case BatchTypeMerge:
+			case pebble.InternalKeyKindMerge:
 				// The merge value is a protobuf and not easily displayable.
 				ops = append(ops, fmt.Sprintf("merge(%s)", string(r.Key())))
-			case BatchTypeSingleDeletion:
+			case pebble.InternalKeyKindSingleDelete:
 				ops = append(ops, fmt.Sprintf("single_delete(%s)", string(r.Key())))
 			}
 		}
@@ -886,7 +887,7 @@ func TestDecodeKey(t *testing.T) {
 			}
 			repr := b.Repr()
 
-			r, err := NewPebbleBatchReader(repr)
+			r, err := NewBatchReader(repr)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -904,7 +905,7 @@ func TestDecodeKey(t *testing.T) {
 	}
 }
 
-func TestPebbleBatchReader(t *testing.T) {
+func TestBatchReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -929,37 +930,37 @@ func TestPebbleBatchReader(t *testing.T) {
 
 	// Read it back.
 	expect := []struct {
-		batchType BatchType
+		keyKind   pebble.InternalKeyKind
 		key       string
 		ts        int
 		endKey    string
 		value     []byte
 		rangeKeys []EngineRangeKeyValue
 	}{
-		{BatchTypeValue, "engineKey", 0, "", []byte("engineValue"), nil},
-		{BatchTypeValue, "mvccKey", 1, "", stringValueRaw("mvccValue"), nil},
-		{BatchTypeValue, "mvccTombstone", 1, "", []byte{}, nil},
-		{BatchTypeRangeKeySet, "rangeFrom", 0, "rangeTo", nil, []EngineRangeKeyValue{
+		{pebble.InternalKeyKindSet, "engineKey", 0, "", []byte("engineValue"), nil},
+		{pebble.InternalKeyKindSet, "mvccKey", 1, "", stringValueRaw("mvccValue"), nil},
+		{pebble.InternalKeyKindSet, "mvccTombstone", 1, "", []byte{}, nil},
+		{pebble.InternalKeyKindRangeKeySet, "rangeFrom", 0, "rangeTo", nil, []EngineRangeKeyValue{
 			{Version: []byte{7}, Value: []byte("engineRangeKey")},
 		}},
 
-		{BatchTypeDeletion, "mvccKey", 9, "", nil, nil},
-		{BatchTypeRangeKeyUnset, "rangeFrom", 0, "rangeTo", nil, []EngineRangeKeyValue{
+		{pebble.InternalKeyKindDelete, "mvccKey", 9, "", nil, nil},
+		{pebble.InternalKeyKindRangeKeyUnset, "rangeFrom", 0, "rangeTo", nil, []EngineRangeKeyValue{
 			{Version: EncodeMVCCTimestampSuffix(wallTS(9)), Value: nil},
 		}},
-		{BatchTypeRangeDeletion, "clearFrom", 0, "clearTo", []byte("clearTo\000"), nil},
-		{BatchTypeRangeKeyDelete, "clearFrom", 0, "clearTo", []byte("clearTo\000"), nil},
+		{pebble.InternalKeyKindRangeDelete, "clearFrom", 0, "clearTo", []byte("clearTo\000"), nil},
+		{pebble.InternalKeyKindRangeKeyDelete, "clearFrom", 0, "clearTo", []byte("clearTo\000"), nil},
 	}
 
-	r, err := NewPebbleBatchReader(b.Repr())
+	r, err := NewBatchReader(b.Repr())
 	require.NoError(t, err)
 
 	require.Equal(t, len(expect), r.Count())
 
 	for _, e := range expect {
-		t.Logf("batchType=%v key=%s endKey=%s", e.batchType, e.key, e.endKey)
+		t.Logf("keyKind=%v key=%s endKey=%s", e.keyKind, e.key, e.endKey)
 		require.True(t, r.Next())
-		require.Equal(t, e.batchType, r.BatchType())
+		require.Equal(t, e.keyKind, r.KeyKind())
 
 		key, err := r.MVCCKey()
 		require.NoError(t, err)
@@ -978,12 +979,12 @@ func TestPebbleBatchReader(t *testing.T) {
 			require.Error(t, err)
 		}
 
-		switch e.batchType {
-		case BatchTypeRangeKeySet, BatchTypeRangeKeyUnset:
+		switch e.keyKind {
+		case pebble.InternalKeyKindRangeKeySet, pebble.InternalKeyKindRangeKeyUnset:
 			rkvs, err := r.EngineRangeKeys()
 			require.NoError(t, err)
 			require.Equal(t, e.rangeKeys, rkvs)
-		case BatchTypeDeletion:
+		case pebble.InternalKeyKindDelete:
 			require.Nil(t, e.value)
 		default:
 			require.Equal(t, e.value, r.Value())

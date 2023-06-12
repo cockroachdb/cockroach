@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3/raftpb"
 	"go.opentelemetry.io/otel/attribute"
@@ -425,7 +426,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 		if req.KVBatch != nil {
 			recordBytesReceived(int64(len(req.KVBatch)))
-			batchReader, err := storage.NewPebbleBatchReader(req.KVBatch)
+			batchReader, err := storage.NewBatchReader(req.KVBatch)
 			if err != nil {
 				return noSnap, errors.Wrap(err, "failed to decode batch")
 			}
@@ -433,8 +434,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			timingTag.start("sst")
 			// All batch operations are guaranteed to be point key or range key puts.
 			for batchReader.Next() {
-				switch batchReader.BatchType() {
-				case storage.BatchTypeValue:
+				switch batchReader.KeyKind() {
+				case pebble.InternalKeyKindSet, pebble.InternalKeyKindSetWithDelete:
 					key, err := batchReader.EngineKey()
 					if err != nil {
 						return noSnap, err
@@ -443,7 +444,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 						return noSnap, errors.Wrapf(err, "writing sst for raft snapshot")
 					}
 
-				case storage.BatchTypeRangeKeySet:
+				case pebble.InternalKeyKindRangeKeySet:
 					start, err := batchReader.EngineKey()
 					if err != nil {
 						return noSnap, err
@@ -464,7 +465,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					}
 
 				default:
-					return noSnap, errors.AssertionFailedf("unexpected batch entry type %d", batchReader.BatchType())
+					return noSnap, errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
 				}
 			}
 			timingTag.stop("sst")
