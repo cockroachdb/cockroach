@@ -35,7 +35,6 @@ func registerPruneDanglingSnapshotsAndDisks(r registry.Registry) {
 		Name:            "prune-dangling",
 		Owner:           registry.OwnerTestEng,
 		Cluster:         clusterSpec,
-		Skip:            "TC builder agents need new GCE permissions",
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
