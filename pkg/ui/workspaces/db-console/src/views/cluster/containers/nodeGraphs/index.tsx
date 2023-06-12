@@ -90,8 +90,8 @@ import {
   selectCrossClusterReplicationEnabled,
 } from "src/redux/clusterSettings";
 import { getDataFromServer } from "src/util/dataFromServer";
-import { getCookieValue, SYSTEM_TENANT_NAME } from "src/redux/cookies";
-import { tenantDropdownOptions } from "src/redux/tenants";
+import { getCookieValue } from "src/redux/cookies";
+import { tenantDropdownOptions, isSystemTenant } from "src/redux/tenants";
 
 interface GraphDashboard {
   label: string;
@@ -254,7 +254,7 @@ export class NodeGraphs extends React.Component<
     // settings won't change frequently so it's safe to request one
     // when page is loaded.
     this.props.refreshNodeSettings();
-    if (this.props.currentTenant === SYSTEM_TENANT_NAME) {
+    if (isSystemTenant(this.props.currentTenant)) {
       this.props.refreshTenantsList();
     }
   }
@@ -320,10 +320,9 @@ export class NodeGraphs extends React.Component<
 
     const selectedNode = getMatchParamByName(match, nodeIDAttr) || "";
     const nodeSources = selectedNode !== "" ? [selectedNode] : null;
-    const selectedTenant =
-      currentTenant === SYSTEM_TENANT_NAME
-        ? getMatchParamByName(match, tenantNameAttr) || ""
-        : "";
+    const selectedTenant = isSystemTenant(currentTenant)
+      ? getMatchParamByName(match, tenantNameAttr) || ""
+      : "";
     // When "all" is the selected source, some graphs display a line for every
     // node in the cluster using the nodeIDs collection. However, if a specific
     // node is already selected, these per-node graphs should only display data
@@ -405,7 +404,7 @@ export class NodeGraphs extends React.Component<
         <Helmet title={"Metrics"} />
         <h3 className="base-heading">Metrics</h3>
         <PageConfig>
-          {currentTenant === SYSTEM_TENANT_NAME && tenantOptions.length > 1 && (
+          {isSystemTenant(currentTenant) && tenantOptions.length > 1 && (
             <PageConfigItem>
               <Dropdown
                 title="Tenant"
