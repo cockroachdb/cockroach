@@ -1608,33 +1608,31 @@ func (c *clusterImpl) HealthStatus(
 	return results, nil
 }
 
-// FailOnInvalidDescriptors fails the test if there exists any descriptors in
+// assertValidDescriptors fails the test if there exists any descriptors in
 // the crdb_internal.invalid_objects virtual table.
-func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) {
+func (c *clusterImpl) assertValidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) error {
 	t.L().Printf("checking for invalid descriptors")
-	if err := timeutil.RunWithTimeout(
+	return timeutil.RunWithTimeout(
 		ctx, "invalid descriptors check", 1*time.Minute,
 		func(ctx context.Context) error {
 			return roachtestutil.CheckInvalidDescriptors(ctx, db)
 		},
-	); err != nil {
-		t.Errorf("invalid descriptors check failed: %v", err)
-	}
+	)
 }
 
-// FailOnReplicaDivergence fails the test if
+// assertConsistentReplicas fails the test if
 // crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
 // replicas are inconsistent with each other.
-func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, db *gosql.DB, t *testImpl) {
+func (c *clusterImpl) assertConsistentReplicas(
+	ctx context.Context, db *gosql.DB, t *testImpl,
+) error {
 	t.L().Printf("checking for replica divergence")
-	if err := timeutil.RunWithTimeout(
+	return timeutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
 			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},
-	); err != nil {
-		t.Errorf("consistency check failed: %v", err)
-	}
+	)
 }
 
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
