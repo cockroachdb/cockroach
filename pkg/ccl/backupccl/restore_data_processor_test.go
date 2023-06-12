@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -152,9 +151,6 @@ func clientKVsToEngineKVs(kvs []kv.KeyValue) []storage.MVCCKeyValue {
 
 func TestIngest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 104639, "flaky test")
 
 	ctx := context.Background()
 	t.Run("batch=default", func(t *testing.T) {
@@ -172,6 +168,7 @@ func TestIngest(t *testing.T) {
 
 func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
