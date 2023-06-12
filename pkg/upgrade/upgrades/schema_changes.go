@@ -288,7 +288,6 @@ func indexDescForComparison(idx catalog.Index) *descpb.IndexDescriptor {
 
 	// Clear out the column IDs, but retain their length. Column IDs may
 	// change. Note that we retain the name slices. Those should match.
-	desc.StoreColumnIDs = nil
 	for i := range desc.StoreColumnIDs {
 		desc.StoreColumnIDs[i] = 0
 	}
@@ -297,6 +296,9 @@ func indexDescForComparison(idx catalog.Index) *descpb.IndexDescriptor {
 	}
 	for i := range desc.KeySuffixColumnIDs {
 		desc.KeySuffixColumnIDs[i] = 0
+	}
+	for i := range desc.CompositeColumnIDs {
+		desc.CompositeColumnIDs[i] = 0
 	}
 
 	desc.CreatedAtNanos = 0
