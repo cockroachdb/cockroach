@@ -10,16 +10,25 @@ package oidcccl
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -36,6 +45,7 @@ const (
 	secretCookieName         = "oidc_secret"
 	oidcLoginPath            = "/oidc/v1/login"
 	oidcCallbackPath         = "/oidc/v1/callback"
+	oidcJWTPath              = "/oidc/v1/jwt"
 	genericCallbackHTTPError = "OIDC: unable to complete authentication"
 	genericLoginHTTPError    = "OIDC: unable to initiate authentication"
 	counterPrefix            = "auth.oidc."
@@ -134,6 +144,11 @@ type oidcAuthenticationConf struct {
 	principalRegex  *regexp.Regexp
 	buttonText      string
 	autoLogin       bool
+
+	generateJWTAuthTokenEnabled  bool
+	generateJWTAuthTokenUseToken tokenToUse
+	generateJWTAuthTokenSQLHost  string
+	generateJWTAuthTokenSQLPort  int64
 }
 
 // GetOIDCConf is used to extract certain parts of the OIDC
@@ -144,6 +159,8 @@ func (s *oidcAuthenticationServer) GetOIDCConf() ui.OIDCUIConf {
 		ButtonText: s.conf.buttonText,
 		Enabled:    s.enabled,
 		AutoLogin:  s.conf.autoLogin,
+
+		GenerateJWTAuthTokenEnabled: s.conf.generateJWTAuthTokenEnabled,
 	}
 }
 
@@ -176,6 +193,11 @@ func reloadConfigLocked(
 		principalRegex: regexp.MustCompile(OIDCPrincipalRegex.Get(&st.SV)),
 		buttonText:     OIDCButtonText.Get(&st.SV),
 		autoLogin:      OIDCAutoLogin.Get(&st.SV),
+
+		generateJWTAuthTokenEnabled:  OIDCGenerateJWTAuthTokenEnabled.Get(&st.SV),
+		generateJWTAuthTokenUseToken: tokenToUse(OIDCGenerateJWTAuthTokenUseToken.Get(&st.SV)),
+		generateJWTAuthTokenSQLHost:  OIDCGenerateJWTAuthTokenSQLHost.Get(&st.SV),
+		generateJWTAuthTokenSQLPort:  OIDCGenerateJWTAuthTokenSQLPort.Get(&st.SV),
 	}
 
 	if !server.conf.enabled && conf.enabled {
@@ -306,7 +328,7 @@ var ConfigureOIDC = func(
 			state,
 		}
 
-		valid, err := kast.validate()
+		valid, mode, err := kast.validate()
 		if err != nil {
 			log.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
@@ -315,6 +337,23 @@ var ConfigureOIDC = func(
 		if !valid {
 			log.Error(ctx, "OIDC: invalid client cookie and state token pair")
 			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
+			return
+		}
+		if mode == serverpb.OIDCState_MODE_GENERATE_JWT_AUTH_TOKEN {
+			telemetry.Inc(loginSuccessUseCounter)
+
+			payload, err := json.Marshal(struct{ State, Code string }{
+				State: r.URL.Query().Get(stateKey),
+				Code:  r.URL.Query().Get(codeKey),
+			})
+			if err != nil {
+				log.Error(ctx, "OIDC: failed to marshal state and code (can this happen?)")
+				http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
+			}
+
+			encoded := base64.StdEncoding.EncodeToString(payload)
+			u := url.URL{Path: "/", Fragment: fmt.Sprintf("/jwt/%s", encoded)}
+			http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -381,6 +420,204 @@ var ConfigureOIDC = func(
 		telemetry.Inc(loginSuccessUseCounter)
 	}))
 
+	handleHTTP(oidcJWTPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		// Verify state and errors.
+		oidcAuthentication.mutex.Lock()
+		defer oidcAuthentication.mutex.Unlock()
+
+		if oidcAuthentication.enabled && !oidcAuthentication.initialized {
+			reloadConfigLocked(ctx, oidcAuthentication, locality, st)
+		}
+
+		if !oidcAuthentication.enabled {
+			http.Error(w, "OIDC: disabled", http.StatusBadRequest)
+			return
+		}
+
+		if !oidcAuthentication.conf.generateJWTAuthTokenEnabled {
+			http.Error(w, "OIDC: generate JWT auth token disabled", http.StatusBadRequest)
+			return
+		}
+
+		// We trigger telemetry on this endpoint only when we pass through the enabled gate to maintain
+		// a useful signal.
+		telemetry.Inc(beginCallbackUseCounter)
+
+		state := r.URL.Query().Get(stateKey)
+
+		secretCookie, err := r.Cookie(secretCookieName)
+		if err != nil {
+			log.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
+			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			return
+		}
+
+		kast := keyAndSignedToken{
+			secretCookie,
+			state,
+		}
+
+		// There's no need to check mode because we're only handling the JWT mode here.
+		valid, _, err := kast.validate()
+		if err != nil {
+			log.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
+			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			return
+		}
+		if !valid {
+			log.Error(ctx, "OIDC: invalid client cookie and state token pair")
+			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
+			return
+		}
+
+		credentials, err := oidcAuthentication.oauth2Config.Exchange(ctx, r.URL.Query().Get(codeKey))
+		if err != nil {
+			log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
+			log.Errorf(ctx, "%v", r.URL.Query().Get(codeKey))
+			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			return
+		}
+
+		rawToken := credentials.AccessToken
+		if oidcAuthentication.conf.generateJWTAuthTokenUseToken == useIdToken {
+			rawIDToken, ok := credentials.Extra(idTokenKey).(string)
+			if !ok {
+				log.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
+				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+				return
+			}
+			rawToken = rawIDToken
+		}
+
+		token, err := oidcAuthentication.verifier.Verify(ctx, rawToken)
+		if err != nil {
+			log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
+			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			return
+		}
+
+		var claims map[string]json.RawMessage
+		if err := token.Claims(&claims); err != nil {
+			log.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
+			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			return
+		}
+
+		if log.V(1) {
+			log.Infof(
+				ctx,
+				"attempting to extract SQL username from the payload using the claim key %s and regex %s",
+				oidcAuthentication.conf.claimJSONKey,
+				oidcAuthentication.conf.principalRegex,
+			)
+		}
+
+		// TODO(todd): Consider removing the duplication here with
+		//   jwtAuthenticator.ValidateJWTLogin(). That may be tricky.
+
+		// 1. Extract principals from claims, in the style of
+		//    extractUsernameFromClaims.
+		//
+		// There is also similar code in ValidateJWTLogin, though it's
+		// working with a jwt.Token instead of an *oidc.IDToken.
+		// Apart from the types, is there a meaningful difference, though?
+		// This code would be a little nicer if we had a jwt.Token.
+		var tokenPrincipals []string
+		{
+			var principal string
+			claim := jwtauthccl.JWTAuthClaim.Get(&st.SV)
+
+			if claim == "" || claim == "sub" {
+				principal = token.Subject
+			} else {
+				claimKeys := make([]string, len(claims))
+				i := 0
+				for k := range claims {
+					claimKeys[i] = k
+					i++
+				}
+
+				targetClaim, ok := claims[claim]
+				if !ok {
+					log.Errorf(ctx, "OIDC: failed to complete authentication: invalid JSON claim key: %s", claim)
+					log.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
+					http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+					return
+				}
+				if err := json.Unmarshal(targetClaim, &principal); err != nil {
+					if log.V(1) {
+						log.Infof(ctx, "failed parsing claim as string; attempting to parse as a list")
+					}
+					if err := json.Unmarshal(targetClaim, &tokenPrincipals); err != nil {
+						log.Errorf(ctx, "OIDC: failed to complete authentication: failed to parse value for the claim %s: %v", claim, err)
+						http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+						return
+					}
+				}
+			}
+
+			if len(tokenPrincipals) == 0 {
+				tokenPrincipals = []string{principal}
+			}
+		}
+
+		// 2. Load the identity map.
+		var idMap *identmap.Conf
+		{
+			// TODO(todd): Get the identity map from someplace that's already caching it.
+			val := pgwire.ConnIdentityMapConf.Get(&st.SV)
+			idMap, err = identmap.From(strings.NewReader(val))
+			if err != nil {
+				log.Ops.Warningf(ctx, "invalid %s: %v", val, err)
+				idMap = identmap.Empty()
+			}
+		}
+
+		// 3. Translate principals to SQL usernames, in the style of ValidateJWTLogin:
+		var acceptedUsernames []string
+		{
+			for _, tokenPrincipal := range tokenPrincipals {
+				// Note that ill-mapped usernames don't stop us from proceeding; some principal may still be usable.
+				if usernames, mapFound, _ := idMap.Map(token.Issuer, tokenPrincipal); mapFound {
+					for _, username := range usernames {
+						acceptedUsernames = append(acceptedUsernames, username.Normalized())
+					}
+				} else {
+					if username, err := username.MakeSQLUsernameFromUserInput(tokenPrincipal, username.PurposeValidation); err != nil {
+						acceptedUsernames = append(acceptedUsernames, username.Normalized())
+					}
+				}
+			}
+		}
+
+		body, err := json.MarshalIndent(struct {
+			Usernames []string
+			Password  string
+			Host      string
+			Port      int64
+			Expiry    time.Time
+		}{
+			Usernames: acceptedUsernames,
+			Password:  rawToken,
+			Host:      oidcAuthentication.conf.generateJWTAuthTokenSQLHost,
+			Port:      oidcAuthentication.conf.generateJWTAuthTokenSQLPort,
+			Expiry:    token.Expiry,
+		}, "", "  ")
+
+		if err != nil {
+			log.Error(ctx, "OIDC: failed to marshal connection parameters (can this happen?)")
+			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+		}
+
+		w.Header().Add("Content-Security-Policy", "sandbox")
+		w.Header().Add("Content-Type", "application/json")
+		// Explicitly ignore any errors from writing our body as there's
+		// nothing to be done if the write fails.
+		_, _ = w.Write(body)
+	}))
+
 	handleHTTP(oidcLoginPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -398,7 +635,12 @@ var ConfigureOIDC = func(
 
 		telemetry.Inc(beginAuthUseCounter)
 
-		kast, err := newKeyAndSignedToken(hmacKeySize, stateTokenSize)
+		mode := serverpb.OIDCState_MODE_LOG_IN
+		if r.URL.Query().Has("jwt") {
+			mode = serverpb.OIDCState_MODE_GENERATE_JWT_AUTH_TOKEN
+		}
+
+		kast, err := newKeyAndSignedToken(hmacKeySize, stateTokenSize, mode)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: unable to generate key and signed message: %v", err)
 			http.Error(w, genericLoginHTTPError, http.StatusInternalServerError)
@@ -406,9 +648,7 @@ var ConfigureOIDC = func(
 		}
 
 		http.SetCookie(w, kast.secretKeyCookie)
-		http.Redirect(
-			w, r, oidcAuthentication.oauth2Config.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound,
-		)
+		http.Redirect(w, r, oidcAuthentication.oauth2Config.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound)
 	}))
 
 	reloadConfig(serverCtx, oidcAuthentication, locality, st)
@@ -441,6 +681,18 @@ var ConfigureOIDC = func(
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCAutoLogin.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCGenerateJWTAuthTokenEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCGenerateJWTAuthTokenUseToken.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCGenerateJWTAuthTokenSQLHost.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCGenerateJWTAuthTokenSQLPort.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 

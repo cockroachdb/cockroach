@@ -33,6 +33,11 @@ const (
 	OIDCPrincipalRegexSettingName = baseOIDCSettingName + "principal_regex"
 	OIDCButtonTextSettingName     = baseOIDCSettingName + "button_text"
 	OIDCAutoLoginSettingName      = baseOIDCSettingName + "autologin"
+
+	OIDCGenerateJWTAuthTokenEnabledSettingName  = baseOIDCSettingName + "generate_jwt_auth_token.enabled"
+	OIDCGenerateJWTAuthTokenUseTokenSettingName = baseOIDCSettingName + "generate_jwt_auth_token.use_token"
+	OIDCGenerateJWTAuthTokenSQLHostSettingName  = baseOIDCSettingName + "generate_jwt_auth_token.sql_host"
+	OIDCGenerateJWTAuthTokenSQLPortSettingName  = baseOIDCSettingName + "generate_jwt_auth_token.sql_port"
 )
 
 // OIDCEnabled enables or disabled OIDC login for the DB Console.
@@ -267,7 +272,7 @@ var OIDCButtonText = func() *settings.StringSetting {
 		OIDCButtonTextSettingName,
 		"text to show on button on DB Console login page to login with your OIDC provider "+
 			"(only shown if OIDC is enabled)",
-		"Login with your OIDC provider",
+		"Log in with your OIDC provider",
 	).WithPublic()
 	return s
 }()
@@ -282,5 +287,65 @@ var OIDCAutoLogin = func() *settings.BoolSetting {
 			"automatically redirected to the OIDC login endpoint",
 		false,
 	).WithPublic()
+	return s
+}()
+
+// OIDCGenerateJWTAuthTokenEnabled enables or disables generating JWT auth
+// tokens for cluster SSO with OIDC.
+var OIDCGenerateJWTAuthTokenEnabled = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		OIDCGenerateJWTAuthTokenEnabledSettingName,
+		"enables or disables using OIDC to generate JWT auth tokens for cluster SSO",
+		false,
+	)
+	return s
+}()
+
+type tokenToUse int64
+
+const (
+	useIdToken tokenToUse = iota
+	useAccessToken
+)
+
+// OIDCGenerateJWTAuthTokenUseToken selects which OIDC callback token to use
+// for cluster SSO.
+var OIDCGenerateJWTAuthTokenUseToken = func() *settings.EnumSetting {
+	s := settings.RegisterEnumSetting(
+		settings.TenantWritable,
+		OIDCGenerateJWTAuthTokenUseTokenSettingName,
+		"selects which OIDC callback token to use for cluster SSO",
+		"id_token",
+		map[int64]string{
+			int64(useIdToken):     "id_token",
+			int64(useAccessToken): "access_token",
+		},
+	)
+	return s
+}()
+
+// OIDCGenerateJWTAuthTokenSQLHost stores the host name or address to be used
+// for making SQL connections to the cluster, for display purposes only.
+var OIDCGenerateJWTAuthTokenSQLHost = func() *settings.StringSetting {
+	s := settings.RegisterStringSetting(
+		settings.TenantWritable,
+		OIDCGenerateJWTAuthTokenSQLHostSettingName,
+		"stores the host name or address to be used for making SQL connections to the cluster, for display purposes only",
+		"localhost",
+	)
+	return s
+}()
+
+// OIDCGenerateJWTAuthTokenSQLPort stores the port number to be used for making
+// SQL connections to the cluster, for display purposes only.
+var OIDCGenerateJWTAuthTokenSQLPort = func() *settings.IntSetting {
+	s := settings.RegisterIntSetting(
+		settings.TenantWritable,
+		OIDCGenerateJWTAuthTokenSQLPortSettingName,
+		"stores the port number to be used for making SQL connections to the cluster, for display purposes only",
+		26257,
+		settings.NonNegativeIntWithMaximum(65535),
+	)
 	return s
 }()
