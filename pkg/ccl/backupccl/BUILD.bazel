@@ -352,9 +352,7 @@ stringer(
 
 genrule(
     name = "gen-backupccl-tests",
-    srcs = [
-        "//pkg/ccl/backupccl:testdata",
-    ],
+    srcs = glob(["testdata/**"]),
     outs = [
         "restore_memory_monitoring_generated_test.go",
         "data_driven_generated_test.go",
