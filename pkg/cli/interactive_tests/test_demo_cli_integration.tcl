@@ -88,6 +88,35 @@ send "\\q\r"
 eexpect eof
 end_test
 
+# We're going to check the autocerts feature and switching between tenants after the cluster
+# option has been set in a URL.
+spawn $argv sql --no-line-editor --url "postgresql://root@localhost:26257?options=-ccluster=demoapp"
+eexpect "Welcome"
+eexpect root@
+eexpect "demoapp/defaultdb>"
+send "use postgres;\r"
+eexpect "demoapp/postgres>"
+
+start_test "Check that the session can be switched to the system tenant with the connect command"
+
+send "\\connect cluster:system - - - autocerts\r"
+eexpect root@
+eexpect "system/defaultdb>"
+
+send "\\connect cluster:demoapp - - - autocerts\r"
+eexpect root@
+eexpect "demoapp/defaultdb>"
+
+# Also check the DB name can still be specified.
+send "\\connect cluster:system/postgres - - - autocerts\r"
+eexpect root@
+eexpect "system/postgres>"
+
+end_test
+
+send "\\q\r"
+eexpect eof
+
 start_test "Check that clients can use the unix socket to connect to the app tenant."
 system "$argv sql -u root -e \"alter user root with password 'abc'\""
 set ssldir $env(HOME)/.cockroach-demo
