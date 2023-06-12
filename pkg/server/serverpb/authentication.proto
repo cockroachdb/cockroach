@@ -54,12 +54,24 @@ message SessionCookie {
 // when the identity provider triggers our callback, it returns the same state message back to
 // us so that we can ensure that we're only processing responses that we originated.
 message OIDCState {
+	// Mode describes the behavior of the OIDC callback handler.
+	enum Mode {
+		// MODE_LOG_IN is the default, common case of logging in.
+		MODE_LOG_IN = 0;
+		// MODE_GENERATE_JWT_AUTH_TOKEN is the unusual case of, rather than logging
+		// in, redirecting to bespoke frontend code that generates a JWT auth token
+		// for cluster SSO.
+		MODE_GENERATE_JWT_AUTH_TOKEN = 1;
+	}
+
 	reserved 1;
 	reserved 2;
 	// token is a random string that is sent over to the auth provider to be returned back
 	bytes token = 3;
 	// tokenMAC is an HMAC hash of the random `token` string using the client-side cookie as a key
 	bytes tokenMAC = 4;
+	// mode is the requested behavior of the OIDC callback handler
+	Mode mode = 5;
 }
 
 // LogIn and LogOut are the GRPC APIs used to create web authentication sessions.

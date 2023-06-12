@@ -26,7 +26,10 @@ import {
 } from "src/components";
 import { Text, TextTypes } from "src/components";
 import ErrorCircle from "assets/error-circle.svg";
-import { OIDCLoginConnected } from "src/views/login/oidc";
+import {
+  OIDCGenerateJWTAuthTokenConnected,
+  OIDCLoginConnected,
+} from "src/views/login/oidc";
 
 export interface LoginPageProps {
   loginState: LoginAPIState;
@@ -167,6 +170,7 @@ export class LoginPage extends React.Component<Props> {
                 {this.renderError()}
                 <PasswordLoginForm {...this.props} />
                 <OIDCLoginConnected loginState={loginState} />
+                <OIDCGenerateJWTAuthTokenConnected loginState={loginState} />
               </div>
             </section>
             <section className="section login-page__info">
