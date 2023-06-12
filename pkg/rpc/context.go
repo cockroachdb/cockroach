@@ -2143,16 +2143,21 @@ type delayingHeader struct {
 func (rpcCtx *Context) makeDialCtx(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) context.Context {
-	dialCtx := rpcCtx.MasterCtx
+	return rpcCtx.wrapCtx(rpcCtx.MasterCtx, target, remoteNodeID, class)
+}
+
+func (rpcCtx *Context) wrapCtx(
+	ctx context.Context, target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+) context.Context {
 	var rnodeID interface{} = remoteNodeID
 	if remoteNodeID == 0 {
 		rnodeID = redact.SafeString("?")
 	}
-	dialCtx = logtags.AddTag(dialCtx, "rnode", rnodeID)
-	dialCtx = logtags.AddTag(dialCtx, "raddr", target)
-	dialCtx = logtags.AddTag(dialCtx, "class", class)
-	dialCtx = logtags.AddTag(dialCtx, "rpc", nil)
-	return dialCtx
+	ctx = logtags.AddTag(ctx, "rnode", rnodeID)
+	ctx = logtags.AddTag(ctx, "raddr", target)
+	ctx = logtags.AddTag(ctx, "class", class)
+	ctx = logtags.AddTag(ctx, "rpc", nil)
+	return ctx
 }
 
 // grpcDialRaw connects to the remote node.
@@ -2666,7 +2671,7 @@ func (rpcCtx *Context) VerifyDialback(
 		// WaitForStateChange to detect when the TCP connection is established. This
 		// will keep this connection in the pool after establishment. Wait until
 		// https://github.com/grpc/grpc-go/issues/5496 is completed.
-		ctx := rpcCtx.makeDialCtx(target, 0, SystemClass)
+		ctx := rpcCtx.wrapCtx(ctx, target, 0, SystemClass)
 		conn, err := rpcCtx.grpcDialRaw(ctx, target, SystemClass, grpc.WithBlock())
 		if err != nil {
 			log.Infof(ctx, "blocking dialback connection failed to %s, n%d, %v", target, nodeID, err)
