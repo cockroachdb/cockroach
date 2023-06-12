@@ -220,7 +220,7 @@ case "${cmd}" in
     gcloud compute instances describe ${NAME} --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
     ;;
     *)
-    echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, or sync"
+    echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, or sync"
     exit 1
     ;;
 esac
