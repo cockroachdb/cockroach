@@ -3553,6 +3553,12 @@ var charts = []sectionDescription{
 					"schedules.BACKUP.last-completed-time",
 				},
 			},
+			{
+				Title: "Last Backup Fail Time Due to KMS Inaccessibility",
+				Metrics: []string{
+					"backup.last-failed-time.kms-inaccessible",
+				},
+			},
 		},
 	},
 	{
