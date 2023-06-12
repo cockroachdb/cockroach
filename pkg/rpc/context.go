@@ -2145,11 +2145,22 @@ func (rpcCtx *Context) VerifyDialback(
 	// assume blocking mode since we can't track connection attempts.
 	nodeID := request.OriginNodeID
 
-	// Check in our regular connection map to see if we are healthy. We use the
-	// System class because that is what is important from a liveness perspective.
-	// If we are unable to maintain a healthy connection on the System class we
-	// will fail other connections also.
-	connHealthErr := rpcCtx.ConnHealth(target, nodeID, SystemClass)
+	// As a fast-path, determine if we have a healthy system-class connection to
+	// the node that sent us the ping. We use the System class because that is
+	// what is important from a liveness perspective - if we are unable to
+	// maintain a healthy connection on the System class, other other connections
+	// are bound to fail, too.
+	//
+	// Note that the health check will also trigger a non-blocking dial of the
+	// connection if it hasn't been dialed before, and that this connection is
+	// stateful even across disconnects, i.e. if the connection fails, the health
+	// check will return an error until the connection is re-established.
+	var connHealthErr error
+	if nodeID == 0 {
+		connHealthErr = rpcCtx.GRPCUnvalidatedDial(target).Health() // NB: dials SystemClass
+	} else {
+		connHealthErr = rpcCtx.GRPCDialNode(target, nodeID, SystemClass).Health()
+	}
 
 	// We have a successful connection so report success. Any ongoing attempts no
 	// longer need to be tracked.
