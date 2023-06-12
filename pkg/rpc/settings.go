@@ -34,8 +34,9 @@ var enableRPCCircuitBreakers = settings.RegisterBoolSetting(
 	settings.TenantReadOnly,
 	"rpc.circuit_breaker.enabled",
 	"enables stateful management of failed connections, including circuit breaking "+
-		"when in unhealthy state; only use in case of issues - logging may be suboptimal "+
-		"and metrics related to connection errors will not be populated correctly",
+		"when in unhealthy state; only use in case of issues - logging may be suboptimal, "+
+		"metrics related to connection errors will not be populated correctly, and the "+
+		"'rpc.dialback.enabled' setting will be overridden to 'false'",
 	envutil.EnvOrDefaultBool("COCKROACH_RPC_CIRCUIT_BREAKERS_ENABLED", true),
 )
 
