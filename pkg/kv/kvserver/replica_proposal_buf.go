@@ -143,6 +143,7 @@ type admitEntHandle struct {
 }
 
 type singleBatchProposer interface {
+	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 	onErrProposalDropped([]raftpb.Entry)
 }
@@ -154,7 +155,6 @@ type proposer interface {
 
 	// The following require the proposer to hold (at least) a shared lock.
 	singleBatchProposer
-	getReplicaID() roachpb.ReplicaID
 	destroyed() destroyStatus
 	firstIndex() kvpb.RaftIndex
 	leaseAppliedIndex() kvpb.LeaseAppliedIndex
@@ -520,7 +520,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			propErr, _ := proposeBatch(ctx, b.p, raftGroup, b.p.getReplicaID(), ents, admitHandles, buf[firstProp:nextProp])
+			propErr, _ := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
 			if propErr != nil {
 				firstErr = propErr
 				continue
@@ -589,7 +589,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		return 0, firstErr
 	}
 
-	propErr, _ := proposeBatch(ctx, b.p, raftGroup, b.p.getReplicaID(), ents, admitHandles, buf[firstProp:nextProp])
+	propErr, _ := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
 	return used, propErr
 }
 
@@ -951,7 +951,6 @@ func proposeBatch(
 	ctx context.Context,
 	p singleBatchProposer,
 	raftGroup proposerRaft,
-	replID roachpb.ReplicaID, // TODO(tbg): can get this from p
 	ents []raftpb.Entry,
 	handles []admitEntHandle,
 	props []*ProposalData, // must match ents slice
@@ -964,7 +963,7 @@ func proposeBatch(
 	}
 	err := raftGroup.Step(raftpb.Message{
 		Type:    raftpb.MsgProp,
-		From:    uint64(replID),
+		From:    uint64(p.getReplicaID()),
 		Entries: ents,
 	})
 	if err != nil && errors.Is(err, raft.ErrProposalDropped) {
