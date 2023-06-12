@@ -45,7 +45,7 @@ func registerAutoUpgrade(r registry.Registry) {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 		const stageDuration = 30 * time.Second
-		const timeUntilStoreDead = 90 * time.Second
+		const timeUntilNodeDead = 90 * time.Second
 		const buff = 10 * time.Second
 
 		sleep := func(ts time.Duration) error {
@@ -62,7 +62,7 @@ func registerAutoUpgrade(r registry.Registry) {
 		defer db.Close()
 
 		if _, err := db.ExecContext(ctx,
-			"SET CLUSTER SETTING server.time_until_store_dead = $1", timeUntilStoreDead.String(),
+			"SET CLUSTER SETTING server.time_until_store_dead = $1", timeUntilNodeDead.String(),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -168,7 +168,7 @@ func registerAutoUpgrade(r registry.Registry) {
 		if err := decommissionAndStop(nodeDecommissioned); err != nil {
 			t.Fatal(err)
 		}
-		if err := sleep(timeUntilStoreDead + buff); err != nil {
+		if err := sleep(timeUntilNodeDead + buff); err != nil {
 			t.Fatal(err)
 		}
 
