@@ -367,7 +367,7 @@ type lockTableGuardImpl struct {
 	lt     *lockTableImpl
 
 	// Information about this request.
-	txn                *enginepb.TxnMeta
+	txn                *roachpb.Transaction
 	ts                 hlc.Timestamp
 	spans              *spanset.SpanSet
 	waitPolicy         lock.WaitPolicy
@@ -601,7 +601,7 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 			// Non-locking reads only care about locks, not reservations.
 			return false, nil
 		}
-		if g.isSameTxn(l.reservation.txn) {
+		if g.isSameTxn(l.reservation.txnMeta()) {
 			// Already reserved by this txn.
 			return false, nil
 		}
@@ -644,6 +644,13 @@ func (g *lockTableGuardImpl) doneWaitingAtLock(hasReservation bool, l *lockState
 	g.mu.mustFindNextLockAfter = true
 	g.notify()
 	g.mu.Unlock()
+}
+
+func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
+	if g.txn == nil {
+		return nil
+	}
+	return &g.txn.TxnMeta
 }
 
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
@@ -1103,7 +1110,7 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnC
 	txn, ts := l.getLockHolder()
 	if txn == nil {
 		sb.Printf("  res: req: %d, ", l.reservation.seqNum)
-		writeResInfo(sb, l.reservation.txn, l.reservation.ts)
+		writeResInfo(sb, l.reservation.txnMeta(), l.reservation.ts)
 	} else {
 		writeHolderInfo(sb, txn, ts)
 	}
@@ -1190,7 +1197,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 	if hasReservation {
 		l.reservation.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   l.reservation.txn,
+			WaitingTxn:   l.reservation.txnMeta(),
 			ActiveWaiter: true,
 			Strength:     lock.Exclusive,
 			WaitDuration: now.Sub(l.reservation.mu.curLockWaitStart),
@@ -1203,7 +1210,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		readerGuard := e.Value.(*lockTableGuardImpl)
 		readerGuard.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   readerGuard.txn,
+			WaitingTxn:   readerGuard.txnMeta(),
 			ActiveWaiter: false,
 			Strength:     lock.None,
 			WaitDuration: now.Sub(readerGuard.mu.curLockWaitStart),
@@ -1217,7 +1224,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		writerGuard := qg.guard
 		writerGuard.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   writerGuard.txn,
+			WaitingTxn:   writerGuard.txnMeta(),
 			ActiveWaiter: qg.active,
 			Strength:     lock.Exclusive,
 			WaitDuration: now.Sub(writerGuard.mu.curLockWaitStart),
@@ -1287,7 +1294,7 @@ func (l *lockState) informActiveWaiters() {
 		waitForState.txn = lockHolderTxn
 		waitForState.held = true
 	} else {
-		waitForState.txn = l.reservation.txn
+		waitForState.txn = l.reservation.txnMeta()
 		if !findDistinguished && l.distinguishedWaiter.isSameTxnAsReservation(waitForState) {
 			findDistinguished = true
 			l.distinguishedWaiter = nil
@@ -1375,7 +1382,7 @@ func (l *lockState) tryMakeNewDistinguished() {
 	} else if l.queuedWriters.Len() > 0 {
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
-			if qg.active && (l.reservation == nil || !qg.guard.isSameTxn(l.reservation.txn)) {
+			if qg.active && (l.reservation == nil || !qg.guard.isSameTxn(l.reservation.txnMeta())) {
 				g = qg.guard
 				break
 			}
@@ -1670,7 +1677,7 @@ func (l *lockState) tryActiveWait(
 			// non-transactional request. Ignore the reservation.
 			return false, false
 		}
-		waitForState.txn = l.reservation.txn
+		waitForState.txn = l.reservation.txnMeta()
 	}
 
 	// Incompatible with whoever is holding lock or reservation.
@@ -2545,7 +2552,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g := newLockTableGuardImpl()
 	g.seqNum = atomic.AddUint64(&t.seqNum, 1)
 	g.lt = t
-	g.txn = req.txnMeta()
+	g.txn = req.Txn
 	g.ts = req.Timestamp
 	g.spans = req.LockSpans
 	g.waitPolicy = req.WaitPolicy
