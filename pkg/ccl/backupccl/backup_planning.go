@@ -196,9 +196,10 @@ func resolveOptionsForBackupJobDescription(
 	}
 
 	newOpts := tree.BackupOptions{
-		CaptureRevisionHistory: opts.CaptureRevisionHistory,
-		Detached:               opts.Detached,
-		ExecutionLocality:      opts.ExecutionLocality,
+		CaptureRevisionHistory:          opts.CaptureRevisionHistory,
+		Detached:                        opts.Detached,
+		ExecutionLocality:               opts.ExecutionLocality,
+		UpdatesClusterMonitoringMetrics: opts.UpdatesClusterMonitoringMetrics,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -532,6 +533,7 @@ func backupTypeCheck(
 		exprutil.Bools{
 			backupStmt.Options.CaptureRevisionHistory,
 			backupStmt.Options.IncludeAllSecondaryTenants,
+			backupStmt.Options.UpdatesClusterMonitoringMetrics,
 		}); err != nil {
 		return false, nil, err
 	}
@@ -658,6 +660,16 @@ func backupPlanHook(
 		}
 	}
 
+	var updatesClusterMonitoringMetrics bool
+	if backupStmt.Options.UpdatesClusterMonitoringMetrics != nil {
+		updatesClusterMonitoringMetrics, err = exprEval.Bool(
+			ctx, backupStmt.Options.UpdatesClusterMonitoringMetrics,
+		)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -751,18 +763,19 @@ func backupPlanHook(
 		}
 
 		initialDetails := jobspb.BackupDetails{
-			Destination:                jobspb.BackupDetails_Destination{To: to, IncrementalStorage: incrementalStorage},
-			EndTime:                    endTime,
-			RevisionHistory:            revisionHistory,
-			IncludeAllSecondaryTenants: includeAllSecondaryTenants,
-			IncrementalFrom:            incrementalFrom,
-			FullCluster:                backupStmt.Coverage() == tree.AllDescriptors,
-			ResolvedCompleteDbs:        completeDBs,
-			EncryptionOptions:          &encryptionParams,
-			AsOfInterval:               asOfInterval,
-			Detached:                   detached,
-			ApplicationName:            p.SessionData().ApplicationName,
-			ExecutionLocality:          executionLocality,
+			Destination:                     jobspb.BackupDetails_Destination{To: to, IncrementalStorage: incrementalStorage},
+			EndTime:                         endTime,
+			RevisionHistory:                 revisionHistory,
+			IncludeAllSecondaryTenants:      includeAllSecondaryTenants,
+			IncrementalFrom:                 incrementalFrom,
+			FullCluster:                     backupStmt.Coverage() == tree.AllDescriptors,
+			ResolvedCompleteDbs:             completeDBs,
+			EncryptionOptions:               &encryptionParams,
+			AsOfInterval:                    asOfInterval,
+			Detached:                        detached,
+			ApplicationName:                 p.SessionData().ApplicationName,
+			ExecutionLocality:               executionLocality,
+			UpdatesClusterMonitoringMetrics: updatesClusterMonitoringMetrics,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID

@@ -133,14 +133,14 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 
 		assumeOpt, err := createImpersonateCredentials(ctx, kmsURIParams.assumeRole, kmsURIParams.delegateRoles, kms.DefaultAuthScopes(), credentialsOpt...)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to assume role")
+			return nil, cloud.KMSInaccessible(errors.Wrapf(err, "failed to assume role"))
 		}
 		opts = append(opts, assumeOpt)
 	}
 
 	kmc, err := kms.NewKeyManagementClient(ctx, opts...)
 	if err != nil {
-		return nil, err
+		return nil, cloud.KMSInaccessible(err)
 	}
 
 	// Remove the key version from the cmk if it's present.
@@ -157,8 +157,8 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 }
 
 // MasterKeyID implements the KMS interface.
-func (k *gcsKMS) MasterKeyID() (string, error) {
-	return k.customerMasterKeyID, nil
+func (k *gcsKMS) MasterKeyID() string {
+	return k.customerMasterKeyID
 }
 
 // Encrypt implements the KMS interface.
@@ -178,7 +178,7 @@ func (k *gcsKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
 
 	encryptOutput, err := k.kms.Encrypt(ctx, encryptInput)
 	if err != nil {
-		return nil, err
+		return nil, cloud.KMSInaccessible(err)
 	}
 
 	// Optional, but recommended by GCS.
@@ -212,7 +212,7 @@ func (k *gcsKMS) Decrypt(ctx context.Context, data []byte) ([]byte, error) {
 
 	decryptOutput, err := k.kms.Decrypt(ctx, decryptInput)
 	if err != nil {
-		return nil, err
+		return nil, cloud.KMSInaccessible(err)
 	}
 
 	// Optional, but recommended: perform integrity verification on result.
