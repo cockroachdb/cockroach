@@ -12,6 +12,7 @@ import moment from "moment-timezone";
 import { Duration } from "src/util/format";
 import {
   executeInternalSql,
+  LARGE_RESULT_SIZE,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
 } from "src/api";
@@ -47,6 +48,7 @@ export function getStatementDiagnosticsReports(): Promise<StatementDiagnosticsRe
       },
     ],
     execute: true,
+    max_result_size: LARGE_RESULT_SIZE,
   };
 
   return executeInternalSql<StatementDiagnosticsReport>(req).then(res => {
