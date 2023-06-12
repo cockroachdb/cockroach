@@ -305,6 +305,14 @@ type StoreTestingKnobs struct {
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
 	ReceiveSnapshot func(*kvserverpb.SnapshotRequest_Header) error
+
+	// TestingRaftMessageRequestFilter intercepts Replica.sendRaftMessage(),
+	// Store.HandleRaftUncoalescedRequest(), and
+	// Store.sendQueuedHeartbeatsToNode(). Its purpose is to provide the test with
+	// information about the raft message request. A boolean value is returned
+	// here to filter out metrics changes caused by irrelevant raft messages.
+	TestingRaftMessageRequestFilter func(*kvserverpb.RaftMessageRequest, bool) bool
+
 	// ReplicaAddSkipLearnerRollback causes replica addition to skip the learner
 	// rollback that happens when either the initial snapshot or the promotion of
 	// a learner to a voter fails.

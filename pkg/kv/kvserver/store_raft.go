@@ -302,6 +302,14 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	// count them.
 	s.metrics.RaftRcvdMessages[req.Message.Type].Inc(1)
 
+	shouldIncrement := true
+	if fn := s.cfg.TestingKnobs.TestingRaftMessageRequestFilter; fn != nil {
+		// ShouldIncrement is always set to true in the production environment. The
+		// testing knob is used here to filter out irrelevant metrics changes.
+		shouldIncrement = fn(req, false /* isSent */)
+	}
+	s.checkAndUpdateCrossLocalityRaftMetrics(ctx, req.FromReplica, req.ToReplica, int64(req.Size()), false /* isSent */, shouldIncrement)
+
 	// NB: add a buffer for extra messages, to allow heartbeats getting through
 	// even if MsgApp quota is maxed out by the sender.
 	q, _ := s.raftRecvQueues.LoadOrCreate(req.RangeID,
@@ -841,6 +849,26 @@ func (s *Store) coalescedHeartbeatsLoop(ctx context.Context) {
 	}
 }
 
+// recordCrossLocalityMetrics returns a closure responsible for checking and
+// updating cross-locality metrics based on this store and provided
+// RaftMessageRequest. This closure is subsequently passed as an argument to
+// RaftTransport.SendAsync, allowing Raft transport to update store level
+// metrics.
+func (s *Store) recordCrossLocalityMetrics(
+	ctx context.Context, req *kvserverpb.RaftMessageRequest,
+) func() {
+	return func() {
+		shouldIncrement := true
+		if fn := s.cfg.TestingKnobs.TestingRaftMessageRequestFilter; fn != nil {
+			// ShouldIncrement is always set to true in the production environment. The
+			// testing knob is used here to filter out irrelevant metrics changes.
+			shouldIncrement = fn(req, true /* isSent */)
+		}
+		s.checkAndUpdateCrossLocalityRaftMetrics(ctx, req.FromReplica, req.ToReplica, int64(req.Size()),
+			true /* isSent */, shouldIncrement)
+	}
+}
+
 // sendQueuedHeartbeatsToNode requires that the s.coalescedMu lock is held. It
 // returns the number of heartbeats that were sent.
 func (s *Store) sendQueuedHeartbeatsToNode(
@@ -881,7 +909,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		log.Infof(ctx, "sending raft request (coalesced) %+v", chReq)
 	}
 
-	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
+	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass, s.recordCrossLocalityMetrics(ctx, chReq)) {
 		for _, beat := range beats {
 			if repl, ok := s.mu.replicasByRangeID.Load(beat.RangeID); ok {
 				repl.addUnreachableRemoteReplica(beat.ToReplicaID)

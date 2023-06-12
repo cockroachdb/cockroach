@@ -1857,7 +1857,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		Message:       msg,
 		RangeStartKey: startKey, // usually nil
 	}
-	if !r.sendRaftMessageRequest(ctx, req) {
+	if !r.sendRaftMessageRequest(ctx, req, r.store.recordCrossLocalityMetrics(ctx, req)) {
 		r.mu.Lock()
 		r.mu.droppedMessages++
 		r.mu.Unlock()
@@ -1880,12 +1880,12 @@ func (r *Replica) addUnreachableRemoteReplica(remoteReplica roachpb.ReplicaID) {
 // was dropped. It is the caller's responsibility to call ReportUnreachable on
 // the Raft group.
 func (r *Replica) sendRaftMessageRequest(
-	ctx context.Context, req *kvserverpb.RaftMessageRequest,
+	ctx context.Context, req *kvserverpb.RaftMessageRequest, recordCrossLocalityMetrics func(),
 ) bool {
 	if log.V(4) {
 		log.Infof(ctx, "sending raft request %+v", req)
 	}
-	return r.store.cfg.Transport.SendAsync(req, r.connectionClass.get())
+	return r.store.cfg.Transport.SendAsync(req, r.connectionClass.get(), recordCrossLocalityMetrics)
 }
 
 func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID, snapErr error) {

@@ -2501,7 +2501,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 						Commit:        42,
 					},
 				},
-			}, rpc.DefaultClass); !sent {
+			}, rpc.DefaultClass, nil /* recordCrossLocalityMetrics */); !sent {
 				t.Fatal("failed to send heartbeat")
 			}
 			select {

@@ -2940,7 +2940,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 				ToReplicaID:   replica1.ReplicaID,
 			},
 		},
-	}, rpc.DefaultClass)
+	}, rpc.DefaultClass, nil /* recordCrossLocalityMetrics */)
 	// Execute another replica change to ensure that raft has processed
 	// the heartbeat just sent.
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
@@ -3213,7 +3213,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// dropped messages (see #18355).
 	sendHeartbeat := func() (sent bool) {
 		r := hbReq
-		return fromTransport.SendAsync(&r, rpc.DefaultClass)
+		return fromTransport.SendAsync(&r, rpc.DefaultClass, nil /* recordCrossLocalityMetrics */)
 	}
 	if sent := sendHeartbeat(); !sent {
 		t.Fatal("failed to send heartbeat")
@@ -3723,7 +3723,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
-	}, rpc.DefaultClass) {
+	}, rpc.DefaultClass, nil /* recordCrossLocalityMetrics */) {
 	}
 
 	// The receiver of this message (i.e. replica1) should return an error telling
@@ -4681,7 +4681,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 					StoreID: store.Ident.StoreID,
 				},
 				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: unusedRangeID, ToReplicaID: 1}},
-			}, rpc.DefaultClass)
+			}, rpc.DefaultClass, nil /* recordCrossLocalityMetrics */)
 			repl, err = store.GetReplica(unusedRangeID)
 			return err
 		})

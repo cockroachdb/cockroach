@@ -828,7 +828,7 @@ func (t *RaftTransport) getQueue(
 // or may not actually be sent but if it's false the message definitely was not
 // sent. It is not safe to continue using the reference to the provided request.
 func (t *RaftTransport) SendAsync(
-	req *kvserverpb.RaftMessageRequest, class rpc.ConnectionClass,
+	req *kvserverpb.RaftMessageRequest, class rpc.ConnectionClass, recordCrossLocalityMetrics func(),
 ) (sent bool) {
 	toNodeID := req.ToReplica.NodeID
 	defer func() {
@@ -849,6 +849,16 @@ func (t *RaftTransport) SendAsync(
 
 	if b, ok := t.dialer.GetCircuitBreaker(toNodeID, class); ok && b.Signal().Err() != nil {
 		return false
+	}
+
+	if recordCrossLocalityMetrics != nil {
+		// In tests that do not require monitoring metric changes, SendAsync may be
+		// called with a nil metrics tracking function. Such usage should not occur
+		// in a production environment. The function recordCrossLocalityMetrics is
+		// invoked to increment store metrics for raft messages that are sent and
+		// received. Note that these metrics might include data that will not be
+		// successfully sent later.
+		recordCrossLocalityMetrics()
 	}
 
 	q, existingQueue := t.getQueue(toNodeID, class)

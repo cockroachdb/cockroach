@@ -2155,7 +2155,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 						From: uint64(replicas[1].ReplicaID),
 						Term: term,
 					},
-				}, rpc.DefaultClass); !sent {
+				}, rpc.DefaultClass, nil /* recordCrossLocalityMetrics */); !sent {
 					// SendAsync can return false, indicating the message didn't send.
 					// The most likely reason this test encounters a message failing to
 					// send is the outgoing message queue being full. The queue filling

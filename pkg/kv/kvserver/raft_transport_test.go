@@ -236,7 +236,7 @@ func (rttc *raftTransportTestContext) Send(
 		ToReplica:   to,
 		FromReplica: from,
 	}
-	return rttc.transports[from.NodeID].SendAsync(req, rpc.DefaultClass)
+	return rttc.transports[from.NodeID].SendAsync(req, rpc.DefaultClass, nil /* recordCrossLocalityMetrics */)
 }
 
 func TestSendAndReceive(t *testing.T) {
@@ -319,7 +319,7 @@ func TestSendAndReceive(t *testing.T) {
 				req := baseReq
 				req.Message.Type = messageType
 
-				if !transports[fromNodeID].SendAsync(&req, rpc.DefaultClass) {
+				if !transports[fromNodeID].SendAsync(&req, rpc.DefaultClass, nil /* recordCrossLocalityMetrics */) {
 					t.Errorf("unable to send %s from %d to %d", messageType, fromNodeID, toNodeID)
 				}
 				messageTypeCounts[toStoreID][messageType]++
@@ -389,7 +389,7 @@ func TestSendAndReceive(t *testing.T) {
 	}
 	// NB: argument passed to SendAsync is not safe to use after; make a copy.
 	expReqCopy := *expReq
-	if !transports[storeNodes[fromStoreID]].SendAsync(&expReqCopy, rpc.DefaultClass) {
+	if !transports[storeNodes[fromStoreID]].SendAsync(&expReqCopy, rpc.DefaultClass, nil /* recordCrossLocalityMetrics */) {
 		t.Errorf("unable to send message from %d to %d", fromStoreID, toStoreID)
 	}
 	// NB: we can't use gogoproto's Equal() function here: it will panic
@@ -703,5 +703,5 @@ func TestSendFailureToConnectDoesNotHangRaft(t *testing.T) {
 			ReplicaID: from,
 		},
 		Message: raftpb.Message{To: to, From: from},
-	}, rpc.DefaultClass)
+	}, rpc.DefaultClass, nil)
 }

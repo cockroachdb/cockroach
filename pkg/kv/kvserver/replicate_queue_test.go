@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -1894,8 +1895,12 @@ func (h delayingRaftMessageHandler) HandleRaftRequest(
 		return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 	}
 	go func() {
+		childCtx, sp := tracing.ChildSpan(ctx, "delaying raft message handler")
+		if sp != nil {
+			defer sp.Finish()
+		}
 		time.Sleep(raftDelay)
-		err := h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+		err := h.RaftMessageHandler.HandleRaftRequest(childCtx, req, respStream)
 		if err != nil {
 			log.Infof(ctx, "HandleRaftRequest returned err %s", err)
 		}

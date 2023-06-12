@@ -1027,6 +1027,51 @@ func (s *Store) checkAndUpdateCrossLocalitySnapshotMetrics(
 	}
 }
 
+// checkAndUpdateCrossLocalityRaftMetrics updates store metrics associated with
+// cross-locality raft messages. Cross-region metrics monitor activities across
+// different regions. Cross-zone metrics monitor cross-zone activities within
+// the same region or in cases where region tiers are not configured.
+func (s *Store) checkAndUpdateCrossLocalityRaftMetrics(
+	ctx context.Context,
+	fromReplica roachpb.ReplicaDescriptor,
+	toReplica roachpb.ReplicaDescriptor,
+	inc int64,
+	isSent bool,
+	shouldIncrement bool,
+) {
+	if !shouldIncrement {
+		// shouldIncrement is set to false using testing knob in specific tests to
+		// filter out metrics changes caused by irrelevant raft messages.
+		return
+	}
+	comparisonResult := s.getCrossLocalityComparison(ctx, fromReplica, toReplica)
+	if isSent {
+		s.metrics.RaftSentBytes.Inc(inc)
+		switch comparisonResult {
+		case roachpb.CROSS_REGION_CROSS_ZONE:
+			s.metrics.RaftSentCrossRegionBytes.Inc(inc)
+		case roachpb.SAME_REGION_CROSS_ZONE:
+			s.metrics.RaftSentCrossZoneBytes.Inc(inc)
+		case roachpb.CROSS_REGION_SAME_ZONE:
+			log.VEventf(ctx, 2, "unexpected: cross region but same zone")
+		case roachpb.SAME_REGION_SAME_ZONE:
+			// No metrics or error reporting.
+		}
+	} else {
+		s.metrics.RaftRcvdBytes.Inc(inc)
+		switch comparisonResult {
+		case roachpb.CROSS_REGION_CROSS_ZONE:
+			s.metrics.RaftRcvdCrossRegionBytes.Inc(inc)
+		case roachpb.SAME_REGION_CROSS_ZONE:
+			s.metrics.RaftRcvdCrossZoneBytes.Inc(inc)
+		case roachpb.CROSS_REGION_SAME_ZONE:
+			log.VEventf(ctx, 2, "unexpected: cross region but same zone")
+		case roachpb.SAME_REGION_SAME_ZONE:
+			// No metrics or error reporting.
+		}
+	}
+}
+
 // receiveSnapshot receives an incoming snapshot via a pre-opened GRPC stream.
 func (s *Store) receiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream incomingSnapshotStream,
