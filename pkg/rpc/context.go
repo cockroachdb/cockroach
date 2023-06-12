@@ -2163,10 +2163,15 @@ func (rpcCtx *Context) VerifyDialback(
 		return nil
 	}
 
-	log.VEventf(ctx, 2, "unable to verify health on existing conn, trying dialback conn to %s, n%d mode %v, %v",
-		target, request.OriginNodeID, request.NeedsDialback, connHealthErr)
+	if request.NeedsDialback == PingRequest_NON_BLOCKING {
+		if errors.Is(connHealthErr, ErrNotHeartbeated) {
+			return nil
+		}
+		return connHealthErr
+	} else {
+		log.VEventf(ctx, 2, "unable to verify health on existing conn, trying dialback conn to %s, n%d mode %v, %v",
+			target, request.OriginNodeID, request.NeedsDialback, connHealthErr)
 
-	if request.NeedsDialback == PingRequest_BLOCKING {
 		// Since we don't have a successful reverse connection, try and dial back
 		// manually. We don't use the regular dialer pool to avoid a circular dependency:
 		// Dialing through the pool starts with a BLOCKING connection, which the remote
@@ -2183,10 +2188,5 @@ func (rpcCtx *Context) VerifyDialback(
 		log.VEventf(ctx, 2, "blocking dialback connection to n%d succeeded", request.OriginNodeID)
 		_ = conn.Close() // nolint:grpcconnclose
 		return nil
-	} else {
-		if errors.Is(connHealthErr, ErrNotHeartbeated) {
-			return nil
-		}
-		return connHealthErr
 	}
 }
