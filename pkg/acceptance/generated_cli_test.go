@@ -95,6 +95,13 @@ func TestDockerCLI_test_demo_changefeeds(t *testing.T) {
 	runTestDockerCLI(t, "test_demo_changefeeds", "../cli/interactive_tests/test_demo_changefeeds.tcl")
 }
 
+func TestDockerCLI_test_demo_cli_integration(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_demo_cli_integration", "../cli/interactive_tests/test_demo_cli_integration.tcl")
+}
+
 func TestDockerCLI_test_demo_global(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
