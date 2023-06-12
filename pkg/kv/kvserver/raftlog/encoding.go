@@ -131,9 +131,9 @@ const (
 	RaftCommandPrefixLen = 1 + RaftCommandIDLen
 )
 
-// EncodeRaftCommand encodes a marshaled kvserverpb.RaftCommand using
+// EncodeCommandBytes encodes a marshaled kvserverpb.RaftCommand using
 // the given encoding (one of EntryEncoding{Standard,Sideloaded}With{,out}AC).
-func EncodeRaftCommand(enc EntryEncoding, commandID kvserverbase.CmdIDKey, command []byte) []byte {
+func EncodeCommandBytes(enc EntryEncoding, commandID kvserverbase.CmdIDKey, command []byte) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
 	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], enc, commandID)
 	copy(b[RaftCommandPrefixLen:], command)
