@@ -86,6 +86,7 @@ type scheduledBackupSpec struct {
 	incrementalStorage         []string
 	includeAllSecondaryTenants *bool
 	execLoc                    *string
+	updatesMetrics             *bool
 }
 
 func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
@@ -713,6 +714,16 @@ func makeScheduledBackupSpec(
 		spec.includeAllSecondaryTenants = &includeSecondary
 	}
 
+	if schedule.BackupOptions.UpdatesClusterMonitoringMetrics != nil {
+		updatesMetrics, err := exprEval.Bool(
+			ctx, schedule.BackupOptions.UpdatesClusterMonitoringMetrics,
+		)
+		if err != nil {
+			return nil, err
+		}
+		spec.updatesMetrics = &updatesMetrics
+	}
+
 	return spec, nil
 }
 
@@ -794,6 +805,7 @@ func createBackupScheduleTypeCheck(
 	bools := exprutil.Bools{
 		schedule.BackupOptions.CaptureRevisionHistory,
 		schedule.BackupOptions.IncludeAllSecondaryTenants,
+		schedule.BackupOptions.UpdatesClusterMonitoringMetrics,
 	}
 	if err := exprutil.TypeCheck(
 		ctx, scheduleBackupOp, p.SemaCtx(), stringExprs, bools, stringArrays, opts,

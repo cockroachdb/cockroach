@@ -7,6 +7,7 @@ go_library(
         "alter_backup_planning.go",
         "alter_backup_schedule.go",
         "backup_job.go",
+        "backup_metrics.go",
         "backup_planning.go",
         "backup_planning_tenant.go",
         "backup_processor.go",

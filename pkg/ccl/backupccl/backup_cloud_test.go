@@ -19,11 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 // The tests in this file talk to remote APIs which require credentials.
@@ -228,5 +230,53 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 				backupAndRestore(ctx, t, testCluster, []string{storageURI.String()}, []string{storageURI.String()}, numAccounts, kmsURI)
 			})
 		}
+	}
+}
+
+// TestCloudBackupRestoreKMSInaccessibleMetric tests that backup statements
+// updates the KMSInaccessibleError metric.
+func TestCloudBackupRestoreKMSInaccessibleMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	azureVaultName := os.Getenv("AZURE_VAULT_NAME")
+	if azureVaultName == "" {
+		skip.IgnoreLintf(t, "AZURE_VAULT_NAME env var must be set")
+	}
+
+	for _, tt := range []struct {
+		name string
+		uri  string
+	}{
+		{
+			name: "s3",
+			uri:  "aws-kms:///non-existent-key?AUTH=implicit&REGION=us-east-1",
+		},
+		{
+			name: "gcs",
+			uri:  "gcp-kms:///non-existent-key?AUTH=implicit",
+		},
+		{
+			name: "azure",
+			uri:  fmt.Sprintf("azure-kms:///non-existent-key/000?AUTH=implicit&AZURE_VAULT_NAME=%s", azureVaultName),
+		},
+	} {
+		tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, 1, 1, InitManualReplication)
+		defer cleanupFn()
+
+		t.Run(tt.name, func(t *testing.T) {
+			testStart := timeutil.Now().Unix()
+			bm := tc.Server(0).JobRegistry().(*jobs.Registry).MetricsStruct().Backup.(*BackupMetrics)
+
+			// LastKMSInaccessibleErrorTime should not be set without
+			// updates_cluster_monitoring_metrics despite a KMS error.
+			sqlDB.ExpectErr(t, "failed to encrypt data key", "BACKUP INTO 'userfile:///foo' WITH OPTIONS (kms = $1)", tt.uri)
+			require.Equal(t, bm.LastKMSInaccessibleErrorTime.Value(), int64(0))
+
+			// LastKMSInaccessibleErrorTime should be set with
+			// updates_cluster_monitoring_metrics.
+			sqlDB.ExpectErr(t, "failed to encrypt data key", "BACKUP INTO 'userfile:///foo' WITH OPTIONS (kms = $1, updates_cluster_monitoring_metrics)", tt.uri)
+			require.GreaterOrEqual(t, bm.LastKMSInaccessibleErrorTime.Value(), testStart)
+		})
 	}
 }
