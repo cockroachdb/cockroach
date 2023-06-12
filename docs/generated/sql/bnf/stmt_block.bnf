@@ -1424,6 +1424,7 @@ unreserved_keyword ::=
 	| 'UNSPLIT'
 	| 'UNTIL'
 	| 'UPDATE'
+	| 'UPDATES_CLUSTER_MONITORING_METRICS'
 	| 'UPSERT'
 	| 'USE'
 	| 'USERS'
@@ -2278,6 +2279,8 @@ backup_options ::=
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
 	| include_all_clusters '=' a_expr
+	| 'UPDATES_CLUSTER_MONITORING_METRICS'
+	| 'UPDATES_CLUSTER_MONITORING_METRICS' '=' a_expr
 
 c_expr ::=
 	d_expr
@@ -3989,6 +3992,7 @@ bare_label_keywords ::=
 	| 'UNSPLIT'
 	| 'UNTIL'
 	| 'UPDATE'
+	| 'UPDATES_CLUSTER_MONITORING_METRICS'
 	| 'UPSERT'
 	| 'USE'
 	| 'USER'

@@ -37,6 +37,8 @@ type scheduledBackupExecutor struct {
 type backupMetrics struct {
 	*jobs.ExecutorMetrics
 	*jobs.ExecutorPTSMetrics
+	// TODO(rui): move this to the backup job so it can be controlled by the
+	// updates_cluster_monitoring_metrics option.
 	RpoMetric *metric.Gauge
 }
 
