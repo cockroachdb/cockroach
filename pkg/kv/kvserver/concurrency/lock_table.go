@@ -370,7 +370,7 @@ type lockTableGuardImpl struct {
 	lt     *lockTableImpl
 
 	// Information about this request.
-	txn                *enginepb.TxnMeta
+	txn                *roachpb.Transaction
 	ts                 hlc.Timestamp
 	spans              *lockspanset.LockSpanSet
 	waitPolicy         lock.WaitPolicy
@@ -700,6 +700,13 @@ func (g *lockTableGuardImpl) notify() {
 func (g *lockTableGuardImpl) doneActivelyWaitingAtLock() {
 	g.mu.mustComputeWaitingState = true
 	g.notify()
+}
+
+func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
+	if g.txn == nil {
+		return nil
+	}
+	return &g.txn.TxnMeta
 }
 
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
@@ -1196,7 +1203,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		readerGuard := e.Value.(*lockTableGuardImpl)
 		readerGuard.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   readerGuard.txn,
+			WaitingTxn:   readerGuard.txnMeta(),
 			ActiveWaiter: true, // readers always actively wait at a lock
 			Strength:     lock.None,
 			WaitDuration: now.Sub(readerGuard.mu.curLockWaitStart),
@@ -1210,7 +1217,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 		writerGuard := qg.guard
 		writerGuard.mu.Lock()
 		lockWaiters = append(lockWaiters, lock.Waiter{
-			WaitingTxn:   writerGuard.txn,
+			WaitingTxn:   writerGuard.txnMeta(),
 			ActiveWaiter: qg.active,
 			Strength:     lock.Exclusive,
 			WaitDuration: now.Sub(writerGuard.mu.curLockWaitStart),
@@ -1386,9 +1393,9 @@ func (l *lockState) claimantTxn() (_ *enginepb.TxnMeta, held bool) {
 		// refactored, and we no longer call into this method before readjusting
 		// the queued of writers to make the first one inactive.
 		//panic("first queued writer should be transactional and inactive")
-		return qg.guard.txn, false
+		return qg.guard.txnMeta(), false
 	}
-	return qg.guard.txn, false
+	return qg.guard.txnMeta(), false
 }
 
 // releaseWritersFromTxn removes all waiting writers for the lockState that are
@@ -2701,7 +2708,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g := newLockTableGuardImpl()
 	g.seqNum = atomic.AddUint64(&t.seqNum, 1)
 	g.lt = t
-	g.txn = req.txnMeta()
+	g.txn = req.Txn
 	g.ts = req.Timestamp
 	g.spans = req.LockSpans
 	g.waitPolicy = req.WaitPolicy
