@@ -1852,6 +1852,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Begin recording time series data collected by the status monitor.
+	// The writes will be async; we'll wait for the first one to go through
+	// later in this method, using the returned channel.
+	firstTSDBPollDone := s.tsDB.PollSource(
+		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
+	)
+
 	// Export statistics to graphite, if enabled by configuration.
 	var graphiteOnce sync.Once
 	graphiteEndpoint.SetOnChange(&s.st.SV, func(context.Context) {
@@ -2131,13 +2138,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	log.Event(ctx, "server initialized")
 
-	// Begin recording time series data collected by the status monitor.
-	// This will perform the first write synchronously, which is now
-	// acceptable.
-	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
-	)
-
+	// Wait for the first ts poll to have succeeded before acknowledging server
+	// start. This helps with predictable tests.
+	select {
+	case <-s.stopper.ShouldQuiesce():
+	case <-firstTSDBPollDone:
+	}
 	return maybeImportTS(ctx, s)
 }
 
