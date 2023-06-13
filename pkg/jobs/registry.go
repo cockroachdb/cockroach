@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1217,7 +1218,11 @@ func (r *Registry) stepThroughStateMachine(
 	payload := job.Payload()
 	jobType := payload.Type()
 	if jobErr != nil {
-		log.Errorf(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
+		if pgerror.HasCandidateCode(jobErr) {
+			log.Infof(ctx, "%s job %d: stepping through state %s with error: %v", jobType, job.ID(), status, jobErr)
+		} else {
+			log.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), status, jobErr)
+		}
 	} else {
 		log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)
 	}
