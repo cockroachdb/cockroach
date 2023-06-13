@@ -613,7 +613,7 @@ func crdbInternalTablesDatabaseLookupFunc(
 	var descs nstree.Catalog
 	var err error
 	if useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
-		descs, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.Txn(), db)
+		descs, err = p.Descriptors().GetAllInDatabase(ctx, p.Txn(), db)
 	} else {
 		descs, err = p.Descriptors().GetAllDescriptors(ctx, p.Txn())
 	}
