@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/compengine",
         "//pkg/sql/lexbase",
         "//pkg/sql/scanner",
+        "//pkg/sql/sem/catconstants",
     ],
 )
 

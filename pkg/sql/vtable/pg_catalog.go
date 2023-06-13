@@ -10,6 +10,12 @@
 
 package vtable
 
+import (
+	"strconv"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+)
+
 // PGCatalogAm describes the schema of the pg_catalog.pg_am table.
 // The catalog pg_am stores information about relation access methods.
 // It's important to note that this table changed drastically between Postgres
@@ -308,24 +314,28 @@ CREATE TABLE pg_catalog.pg_depend (
 // PGCatalogDescription describes the schema of the pg_catalog.pg_description
 // table.
 // https://www.postgresql.org/docs/9.5/catalog-pg-description.html,
-const PGCatalogDescription = `
-CREATE TABLE pg_catalog.pg_description (
-	objoid OID,
-	classoid OID,
-	objsubid INT4,
-	description STRING,
-	INDEX(objoid)
-)`
+var PGCatalogDescription = `
+CREATE VIEW pg_catalog.pg_description AS SELECT
+  objoid, classoid, objsubid, description
+FROM crdb_internal.kv_catalog_comments
+WHERE classoid != ` + strconv.Itoa(catconstants.PgCatalogDatabaseTableID) + `
+UNION ALL
+	SELECT
+	oid AS objoid,
+	` + strconv.Itoa(catconstants.PgCatalogProcTableID) + `:::oid AS classoid,
+	0:::INT4 AS objsubid,
+	description AS description
+	FROM crdb_internal.kv_builtin_function_comments
+`
 
 // PGCatalogSharedDescription describes the schema of the
 // pg_catalog.pg_shdescription table.
 // https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html,
-const PGCatalogSharedDescription = `
-CREATE TABLE pg_catalog.pg_shdescription (
-	objoid OID,
-	classoid OID,
-	description STRING
-)`
+var PGCatalogSharedDescription = `
+CREATE VIEW pg_catalog.pg_shdescription AS
+SELECT objoid, classoid, description
+FROM "".crdb_internal.kv_catalog_comments
+WHERE classoid = ` + strconv.Itoa(catconstants.PgCatalogDatabaseTableID) + `:::oid`
 
 // PGCatalogEnum describes the schema of the pg_catalog.pg_enum table.
 // https://www.postgresql.org/docs/9.5/catalog-pg-enum.html,
