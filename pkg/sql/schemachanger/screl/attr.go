@@ -304,10 +304,6 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "DatabaseID"),
 		rel.EntityAttr(Name, "RoleName"),
 	),
-	// Schema elements.
-	rel.EntityMapping(t((*scpb.SchemaName)(nil)),
-		rel.EntityAttr(DescID, "SchemaID"),
-	),
 	// Parent elements.
 	rel.EntityMapping(t((*scpb.SchemaParent)(nil)),
 		rel.EntityAttr(DescID, "SchemaID"),

@@ -128,8 +128,6 @@ func MinElementVersion(el scpb.Element) clusterversion.Key {
 		*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.ForeignKeyConstraintUnvalidated,
 		*scpb.IndexZoneConfig, *scpb.TableSchemaLocked:
 		return clusterversion.V23_1
-	case *scpb.SchemaName:
-		return clusterversion.V23_2
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}

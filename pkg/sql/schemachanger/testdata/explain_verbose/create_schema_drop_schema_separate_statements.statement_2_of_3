@@ -10,7 +10,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA sc;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 7 elements transitioning toward ABSENT
+│       ├── • 6 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 104 (sc-), Name: "sc", ReferencedDescID: 100 (defaultdb)}
 │       │   │   │ PUBLIC → ABSENT
@@ -39,20 +39,14 @@ EXPLAIN (ddl, verbose) DROP SCHEMA sc;
 │       │   ├── • Schema:{DescID: 104 (sc-)}
 │       │   │     PUBLIC → DROPPED
 │       │   │
-│       │   ├── • SchemaParent:{DescID: 104 (sc-), ReferencedDescID: 100 (defaultdb)}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 104 (sc-)}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
-│       │   │
-│       │   └── • SchemaName:{DescID: 104 (sc-)}
+│       │   └── • SchemaParent:{DescID: 104 (sc-), ReferencedDescID: 100 (defaultdb)}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • Precedence dependency from DROPPED Schema:{DescID: 104 (sc-)}
+│       │       └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 104 (sc-)}
 │       │             rule: "descriptor dropped before dependent element removal"
+│       │             rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │
-│       └── • 7 Mutation operations
+│       └── • 6 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 104
@@ -61,10 +55,6 @@ EXPLAIN (ddl, verbose) DROP SCHEMA sc;
 │           │     Parent:
 │           │       ParentDatabaseID: 100
 │           │       SchemaID: 104
-│           │
-│           ├── • NotImplementedForPublicObjects
-│           │     DescID: 104
-│           │     ElementType: scpb.SchemaName
 │           │
 │           ├── • DrainDescriptorName
 │           │     Namespace:

@@ -1639,42 +1639,6 @@ func FindSchemaComment(b ElementStatusIterator) (current Status, target TargetSt
 	return current, target, element
 }
 
-func (e SchemaName) element() {}
-
-// Element implements ElementGetter.
-func (e * ElementProto_SchemaName) Element() Element {
-	return e.SchemaName
-}
-
-// ForEachSchemaName iterates over elements of type SchemaName.
-func ForEachSchemaName(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaName),
-) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaName); ok {
-			fn(current, target, elt)
-		}
-	})
-}
-
-// FindSchemaName finds the first element of type SchemaName.
-func FindSchemaName(b ElementStatusIterator) (current Status, target TargetStatus, element *SchemaName) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaName); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
-	return current, target, element
-}
-
 func (e SchemaParent) element() {}
 
 // Element implements ElementGetter.
@@ -2490,8 +2454,6 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_SchemaChild{ SchemaChild: t}
 		case *SchemaComment:
 			e.ElementOneOf = &ElementProto_SchemaComment{ SchemaComment: t}
-		case *SchemaName:
-			e.ElementOneOf = &ElementProto_SchemaName{ SchemaName: t}
 		case *SchemaParent:
 			e.ElementOneOf = &ElementProto_SchemaParent{ SchemaParent: t}
 		case *SecondaryIndex:
@@ -2583,7 +2545,6 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_Schema)(nil)),
 	((*ElementProto_SchemaChild)(nil)),
 	((*ElementProto_SchemaComment)(nil)),
-	((*ElementProto_SchemaName)(nil)),
 	((*ElementProto_SchemaParent)(nil)),
 	((*ElementProto_SecondaryIndex)(nil)),
 	((*ElementProto_SecondaryIndexPartial)(nil)),
@@ -2656,7 +2617,6 @@ func GetElementTypes() []interface{} {
 	((*Schema)(nil)),
 	((*SchemaChild)(nil)),
 	((*SchemaComment)(nil)),
-	((*SchemaName)(nil)),
 	((*SchemaParent)(nil)),
 	((*SecondaryIndex)(nil)),
 	((*SecondaryIndexPartial)(nil)),
