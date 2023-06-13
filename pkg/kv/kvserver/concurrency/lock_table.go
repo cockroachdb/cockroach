@@ -475,7 +475,24 @@ type lockTableGuardImpl struct {
 	// Locks to resolve before scanning again. Doesn't need to be protected by
 	// mu since should only be read after the caller has already synced with mu
 	// in realizing that it is doneWaiting.
+	//
+	// toResolve should only include replicated locks; for unreplicated locks,
+	// toResolveUnreplicated is used instead.
 	toResolve []roachpb.LockUpdate
+
+	// toResolveUnreplicated is a list of locks (only held with durability
+	// unreplicated) that are known to belong to finalized transactions. Such
+	// locks may be cleared from the lock table (and some requests queueing in the
+	// lock's wait queue may be able to proceed). If set, the request should
+	// perform these actions on behalf of the lock table, either before proceeding
+	// to evaluation, or before waiting on a conflicting lock.
+	//
+	// TODO(arul): We need to push the responsibility of doing so on to a request
+	// because TransactionIsFinalized does not take proactive action. If we
+	// addressed the TODO in TransactionIsFinalized, and taught it to take action
+	// on locks belonging to finalized transactions, we wouldn't need to bother
+	// scanning requests.
+	toResolveUnreplicated []roachpb.LockUpdate
 }
 
 var _ lockTableGuard = &lockTableGuardImpl{}
@@ -711,6 +728,15 @@ func (g *lockTableGuardImpl) isSameTxnAsReservation(ws waitingState) bool {
 	return !ws.held && g.isSameTxn(ws.txn)
 }
 
+// takeToResolveUnreplicated returns the list of unreplicated locks accumulated
+// by the guard for resolution. Ownership, and responsibility to resolve these
+// locks, is passed to the caller.
+func (g *lockTableGuardImpl) takeToResolveUnreplicated() []roachpb.LockUpdate {
+	toResolveUnreplicated := g.toResolveUnreplicated
+	g.toResolveUnreplicated = nil
+	return toResolveUnreplicated
+}
+
 // resumeScan resumes the request's (receiver's) scan of the lock table. The
 // scan continues until either all overlapping locks in the lock table have been
 // considered and no conflict is found, or until the request encounters a lock
@@ -734,12 +760,19 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) {
 		span = &spans[g.index]
 		resumingInSameSpan = true
 	}
-	// Locks that transition to free because of the finalizedTxnCache are GC'd
-	// before returning. Note that these are only unreplicated locks. Replicated
-	// locks are handled via the g.toResolve.
-	var locksToGC []*lockState
 	defer func() {
-		g.lt.tryGCLocks(&g.lt.locks, locksToGC)
+		// Eagerly update any unreplicated locks that are known to belong to
+		// finalized transactions. We do so regardless of whether this request can
+		// proceed to evaluation or needs to wait at some conflicting lock.
+		//
+		// Note that replicated locks are handled differently, using the g.ToResolve
+		// slice. Additionally, they're only resolved when a request is done
+		// waiting and can proceed to evaluation.
+		if toResolveUnreplicated := g.takeToResolveUnreplicated(); len(toResolveUnreplicated) > 0 {
+			for i := range toResolveUnreplicated {
+				g.lt.updateLockInternal(&toResolveUnreplicated[i])
+			}
+		}
 	}()
 
 	for span != nil {
@@ -766,10 +799,7 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) {
 				// Else, past the lock where it stopped waiting. We may not
 				// encounter that lock since it may have been garbage collected.
 			}
-			wait, transitionedToFree := l.tryActiveWait(g, g.str, notify, g.lt.clock)
-			if transitionedToFree {
-				locksToGC = append(locksToGC, l)
-			}
+			wait := l.tryActiveWait(g, g.str, notify, g.lt.clock)
 			if wait {
 				return
 			}
@@ -1637,7 +1667,7 @@ func (l *lockState) clearLockHolder() {
 // Acquires l.mu, g.mu.
 func (l *lockState) tryActiveWait(
 	g *lockTableGuardImpl, str lock.Strength, notify bool, clock *hlc.Clock,
-) (wait bool, transitionedToFree bool) {
+) (wait bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -1649,30 +1679,25 @@ func (l *lockState) tryActiveWait(
 
 	// It is possible that this lock is empty and has not yet been deleted.
 	if l.isEmptyLock() {
-		return false, false
+		return false
 	}
 
 	// Lock is not empty.
 	lockHolderTxn, lockHolderTS := l.getLockHolder()
 	if lockHolderTxn != nil && g.isSameTxn(lockHolderTxn) {
 		// Already locked by this txn.
-		return false, false
+		return false
 	}
 
 	var replicatedLockFinalizedTxn *roachpb.Transaction
+	var unreplicatedLockFinalizedTxn *roachpb.Transaction
 	if lockHolderTxn != nil {
 		finalizedTxn, ok := g.lt.finalizedTxnCache.get(lockHolderTxn.ID)
 		if ok {
 			if l.holder.holder[lock.Replicated].txn == nil {
-				// Only held unreplicated. Release immediately.
-				l.clearLockHolder()
-				if l.lockIsFree() {
-					// Empty lock.
-					return false, true
-				}
-				lockHolderTxn = nil
-				// There is a reservation holder, which may be the caller itself,
-				// so fall through to the processing below.
+				g.toResolveUnreplicated = append(
+					g.toResolveUnreplicated, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: l.key}))
+				unreplicatedLockFinalizedTxn = finalizedTxn
 			} else {
 				replicatedLockFinalizedTxn = finalizedTxn
 			}
@@ -1682,13 +1707,13 @@ func (l *lockState) tryActiveWait(
 	if str == lock.None {
 		if lockHolderTxn == nil {
 			// Non locking reads only care about locks, not reservations.
-			return false, false
+			return false
 		}
 		// Locked by some other txn.
 		// TODO(arul): this will need to change once we start supporting different
 		// lock strengths.
 		if g.ts.Less(lockHolderTS) {
-			return false, false
+			return false
 		}
 		g.mu.Lock()
 		_, alsoLocksWithHigherStrength := g.mu.locks[l]
@@ -1725,7 +1750,7 @@ func (l *lockState) tryActiveWait(
 		// and reservation holders anyway, so I'm not entirely sure what we get by
 		// storing them in the same queue as locking requests.
 		if alsoLocksWithHigherStrength {
-			return false, false
+			return false
 		}
 	}
 
@@ -1733,7 +1758,7 @@ func (l *lockState) tryActiveWait(
 		qg := l.queuedWriters.Front().Value.(*queuedGuard)
 		if qg.guard == g {
 			// Already claimed by this request.
-			return false, false
+			return false
 		}
 		// A non-transactional write request never makes or breaks claims, and only
 		// waits for a claim if the claim holder has a lower seqNum. Note that `str
@@ -1741,7 +1766,7 @@ func (l *lockState) tryActiveWait(
 		if g.txn == nil && qg.guard.seqNum > g.seqNum {
 			// Claimed by a request with a higher seqNum and g is a non-transactional
 			// request. Ignore the claim.
-			return false, false
+			return false
 		}
 	}
 
@@ -1798,7 +1823,7 @@ func (l *lockState) tryActiveWait(
 				g.maybeUpdateWaitingStateLocked(state, notify)
 				// NOTE: we return wait=true not because the request is waiting, but
 				// because it should not continue scanning for conflicting locks.
-				return true, false
+				return true
 			} else {
 				var e *list.Element
 				for e = l.queuedWriters.Back(); e != nil; e = e.Prev() {
@@ -1816,16 +1841,20 @@ func (l *lockState) tryActiveWait(
 			g.mu.locks[l] = struct{}{}
 			waitForState.queuedWriters = l.queuedWriters.Len() // update field
 		}
-		if (replicatedLockFinalizedTxn != nil || !l.holder.locked) && l.queuedWriters.Front().Value.(*queuedGuard) == qg {
+		if (replicatedLockFinalizedTxn != nil ||
+			unreplicatedLockFinalizedTxn != nil ||
+			!l.holder.locked) &&
+			l.queuedWriters.Front().Value.(*queuedGuard) == qg {
+			_ = unreplicatedLockFinalizedTxn
 			// First waiter, so should not wait. NB: this inactive waiter can be
 			// non-transactional.
 			qg.active = false
 			wait = false
 		}
 	} else {
-		if replicatedLockFinalizedTxn != nil {
-			// Don't add to waitingReaders since all readers in waitingReaders are
-			// active waiters, and this request is not an active waiter here.
+		if replicatedLockFinalizedTxn != nil || unreplicatedLockFinalizedTxn != nil {
+			// Non-locking readers do not wait on finalized {replicated,unreplicated}
+			// locks.
 			wait = false
 		} else {
 			l.waitingReaders.PushFront(g)
@@ -1838,7 +1867,7 @@ func (l *lockState) tryActiveWait(
 			g.toResolve = append(
 				g.toResolve, roachpb.MakeLockUpdate(replicatedLockFinalizedTxn, roachpb.Span{Key: l.key}))
 		}
-		return false, false
+		return false
 	}
 	// Make it an active waiter.
 	g.key = l.key
@@ -1856,7 +1885,7 @@ func (l *lockState) tryActiveWait(
 		}
 		g.maybeUpdateWaitingStateLocked(state, notify)
 	}
-	return true, false
+	return true
 }
 
 func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, str lock.Strength) bool {
