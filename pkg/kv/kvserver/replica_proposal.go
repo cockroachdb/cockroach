@@ -213,6 +213,29 @@ type ProposalData struct {
 	// raftAdmissionMeta captures the metadata we encode as part of the command
 	// when first proposed for replication admission control.
 	raftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
+
+	// v2SeenDuringApplication is set to true right at the very beginning of
+	// processing this proposal for application (regardless of what the outcome of
+	// application is). Under useReproposalsV2, a local proposal is bound to an
+	// entry only once and the proposals map entry removed. This flag makes sure
+	// that the proposal buffer won't accidentally reinsert the proposal into the
+	// map. In doing so, this field also addresses locking concerns. As long as
+	// the ProposalData is in the `proposals` map, replicaMu must be held. But
+	// command application unlinks the command from the map and wants to be able
+	// to access it without acquiring replicaMu. The only other actor that can
+	// access the proposal while it is being applied is the proposal buffer (which
+	// always holds replicaMu); since v2SeenDuringApplication is flipped while
+	// under the lock (which log application holds at that point in time) and is
+	// never mutated afterwards, the proposal buffer is allowed to access that
+	// particular field and use it to avoid touching the ProposalData. A similar
+	// strategy is not possible under !useReproposalsV2 because by "design",
+	// proposals may repeatedly leave and re-enter the map and ultimately still
+	// apply successfully.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/97605
+	//
+	// Never set unless useReproposalsV2 is active.
+	v2SeenDuringApplication bool
 }
 
 // useReplicationAdmissionControl indicates whether this raft command should
