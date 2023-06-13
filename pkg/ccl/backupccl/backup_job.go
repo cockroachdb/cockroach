@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -96,30 +95,6 @@ func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Spa
 	return cov.Slice()
 }
 
-// clusterNodeCount returns the approximate number of nodes in the cluster.
-func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
-	g, err := gw.OptionalErr(47970)
-	if err != nil {
-		return 0, err
-	}
-	var nodes int
-	err = g.IterateInfos(
-		gossip.KeyNodeDescPrefix, func(_ string, _ gossip.Info) error {
-			nodes++
-			return nil
-		},
-	)
-	if err != nil {
-		return 0, err
-	}
-	// If we somehow got 0 and return it, a caller may panic if they divide by
-	// such a nonsensical nodecount.
-	if nodes == 0 {
-		return 1, errors.New("failed to count nodes")
-	}
-	return nodes, nil
-}
-
 // backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
@@ -127,6 +102,9 @@ func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 //   - <dir> is given by the user and may be cloud storage
 //   - Each file contains data for a key range that doesn't overlap with any other
 //     file.
+//
+// - numBackupInstances indicates the number of SQL instances that were used to
+// execute the backup.
 func backup(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -141,7 +119,7 @@ func backup(
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
 	execLocality roachpb.Locality,
-) (roachpb.RowCount, error) {
+) (_ roachpb.RowCount, numBackupInstances int, _ error) {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	var lastCheckpoint time.Time
 
@@ -158,12 +136,12 @@ func backup(
 	iterFactory := backupinfo.NewIterFactory(backupManifest, defaultStore, encryption, &kmsEnv)
 	it, err := iterFactory.NewFileIter(ctx)
 	if err != nil {
-		return roachpb.RowCount{}, err
+		return roachpb.RowCount{}, 0, err
 	}
 	defer it.Close()
 	for ; ; it.Next() {
 		if ok, err := it.Valid(); err != nil {
-			return roachpb.RowCount{}, err
+			return roachpb.RowCount{}, 0, err
 		} else if !ok {
 			break
 		}
@@ -196,7 +174,7 @@ func backup(
 		ctx, evalCtx, execCtx.ExecCfg(), physicalplan.DefaultReplicaChooser, execLocality,
 	)
 	if err != nil {
-		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
+		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
 
 	backupSpecs, err := distBackupPlanSpecs(
@@ -217,9 +195,10 @@ func backup(
 		backupManifest.EndTime,
 	)
 	if err != nil {
-		return roachpb.RowCount{}, err
+		return roachpb.RowCount{}, 0, err
 	}
 
+	numBackupInstances = len(backupSpecs)
 	numTotalSpans := 0
 	for _, spec := range backupSpecs {
 		numTotalSpans += len(spec.IntroducedSpans) + len(spec.Spans)
@@ -337,7 +316,7 @@ func backup(
 	}
 
 	if err := ctxgroup.GoAndWait(ctx, jobProgressLoop, checkpointLoop, storePerNodeProgressLoop, runBackup); err != nil {
-		return roachpb.RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
+		return roachpb.RowCount{}, 0, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
 	backupID := uuid.MakeV4()
@@ -375,7 +354,7 @@ func backup(
 				return backupinfo.WriteBackupPartitionDescriptor(ctx, store, filename,
 					encryption, &kmsEnv, &desc)
 			}(); err != nil {
-				return roachpb.RowCount{}, err
+				return roachpb.RowCount{}, 0, err
 			}
 		}
 	}
@@ -388,7 +367,7 @@ func backup(
 	// `BACKUP_METADATA` instead.
 	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.BackupManifestName,
 		encryption, &kmsEnv, backupManifest); err != nil {
-		return roachpb.RowCount{}, err
+		return roachpb.RowCount{}, 0, err
 	}
 
 	// Write a `BACKUP_METADATA` file along with SSTs for all the alloc heavy
@@ -400,13 +379,13 @@ func backup(
 	if backupinfo.WriteMetadataWithExternalSSTsEnabled.Get(&settings.SV) {
 		if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
 			&kmsEnv, backupManifest); err != nil {
-			return roachpb.RowCount{}, err
+			return roachpb.RowCount{}, 0, err
 		}
 	}
 
 	statsTable := getTableStatsForBackup(ctx, statsCache, backupManifest.Descriptors)
 	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
-		return roachpb.RowCount{}, err
+		return roachpb.RowCount{}, 0, err
 	}
 
 	if backupinfo.WriteMetadataSST.Get(&settings.SV) {
@@ -414,13 +393,13 @@ func backup(
 			statsTable.Statistics); err != nil {
 			err = errors.Wrap(err, "writing forward-compat metadata sst")
 			if !build.IsRelease() {
-				return roachpb.RowCount{}, err
+				return roachpb.RowCount{}, 0, err
 			}
 			log.Warningf(ctx, "%+v", err)
 		}
 	}
 
-	return backupManifest.EntryCounts, nil
+	return backupManifest.EntryCounts, numBackupInstances, nil
 }
 
 func releaseProtectedTimestamp(
@@ -742,8 +721,9 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var res roachpb.RowCount
+	var numBackupInstances int
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		res, err = backup(
+		res, numBackupInstances, err = backup(
 			ctx,
 			p,
 			details.URI,
@@ -852,15 +832,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// Collect telemetry.
 	{
-		numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
-		if err != nil {
-			if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
-				return err
-			}
-			log.Warningf(ctx, "unable to determine cluster node count: %v", err)
-			numClusterNodes = 1
-		}
-
 		telemetry.Count("backup.total.succeeded")
 		const mb = 1 << 20
 		sizeMb := res.DataSize / mb
@@ -869,16 +840,20 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if sec > 0 {
 			mbps = mb / sec
 		}
+		if numBackupInstances == 0 {
+			// This can happen when we didn't have anything to back up.
+			numBackupInstances = 1
+		}
 		if details.StartTime.IsEmpty() {
 			telemetry.CountBucketed("backup.duration-sec.full-succeeded", sec)
 			telemetry.CountBucketed("backup.size-mb.full", sizeMb)
 			telemetry.CountBucketed("backup.speed-mbps.full.total", mbps)
-			telemetry.CountBucketed("backup.speed-mbps.full.per-node", mbps/int64(numClusterNodes))
+			telemetry.CountBucketed("backup.speed-mbps.full.per-node", mbps/int64(numBackupInstances))
 		} else {
 			telemetry.CountBucketed("backup.duration-sec.inc-succeeded", sec)
 			telemetry.CountBucketed("backup.size-mb.inc", sizeMb)
 			telemetry.CountBucketed("backup.speed-mbps.inc.total", mbps)
-			telemetry.CountBucketed("backup.speed-mbps.inc.per-node", mbps/int64(numClusterNodes))
+			telemetry.CountBucketed("backup.speed-mbps.inc.per-node", mbps/int64(numBackupInstances))
 		}
 		logutil.LogJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil, res.Rows)
 	}

@@ -1,4 +1,4 @@
-debug doctor examine zipdir testdata/doctor/debugzip
+debug doctor examine zipdir testdata/doctor/debugzip-wth
 ----
 debug doctor examine zipdir testdata/doctor/debugzip 21.1-52
 WARNING: errors occurred during the production of system.jobs.txt, contents may be missing or incomplete.
