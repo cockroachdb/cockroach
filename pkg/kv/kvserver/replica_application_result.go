@@ -115,6 +115,16 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 		case kvserverbase.ProposalRejectionPermanent:
 			cmd.response.Err = pErr
 		case kvserverbase.ProposalRejectionIllegalLeaseIndex:
+			if useReproposalsV2 {
+				// If we're using V2 reproposals, this proposal is actually going to
+				// be fully rejected, but the client won't be listening to it at that
+				// point any more. But we should set the error. (This ends up being
+				// inconsequential but it's the right thing to do).
+				//
+				// TODO(tbg): once useReproposalsV2 is baked in, set the error unconditionally
+				// above the `switch`.
+				cmd.response.Err = pErr
+			}
 			// Reset the error as it's now going to be determined by the outcome of
 			// reproposing (or not); note that tryReproposeWithNewLeaseIndex will
 			// return `nil` if the entry is not eligible for reproposals.
