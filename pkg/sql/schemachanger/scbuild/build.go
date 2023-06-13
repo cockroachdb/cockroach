@@ -104,10 +104,16 @@ func Build(
 	current := make([]scpb.Status, 0, len(bs.output))
 	version := dependencies.ClusterSettings().Version.ActiveVersion(ctx)
 	withLogEvent := make([]scpb.Target, 0, len(bs.output))
+	var extraTargets []struct {
+		e elementState
+		t scpb.Target
+	}
 	for _, e := range bs.output {
-		if e.metadata.Size() == 0 {
+		if e.metadata.Size() == 0 && !shouldElementBeRetainedWithoutMetadata(e.element) {
 			// Exclude targets which weren't explicitly set.
 			// Explicitly-set targets have non-zero values in the target metadata.
+			// Exceptions are data elements which provide hints for skipping
+			// back fills on empty tables.
 			continue
 		}
 		if !version.IsActive(screl.MinElementVersion(e.element)) {
@@ -121,12 +127,32 @@ func Build(
 			// max version.
 			continue
 		}
+
 		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
-		ts.Targets = append(ts.Targets, t)
-		initial = append(initial, e.initial)
-		current = append(current, e.current)
-		if e.withLogEvent {
-			withLogEvent = append(withLogEvent, t)
+		if t.TargetIsLinkedToSchemaChange() {
+			ts.Targets = append(ts.Targets, t)
+			initial = append(initial, e.initial)
+			current = append(current, e.current)
+			if e.withLogEvent {
+				withLogEvent = append(withLogEvent, t)
+			}
+		} else {
+			extraTargets = append(extraTargets, struct {
+				e elementState
+				t scpb.Target
+			}{e: e, t: t})
+		}
+
+	}
+	seenDescriptors := screl.AllTargetDescIDs(ts)
+	// Elements without metadata can only be retained, if some other descriptor
+	// is referencing them. We may have multiple index data and table data's,
+	// but not all of them are relevant if the primary descriptor ID never shows.
+	for _, ex := range extraTargets {
+		if seenDescriptors.Contains(screl.GetDescID(ex.t.Element())) {
+			ts.Targets = append(ts.Targets, ex.t)
+			initial = append(initial, ex.e.initial)
+			current = append(current, ex.e.current)
 		}
 	}
 
@@ -440,4 +466,16 @@ func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 		TreeAnnotator: b.TreeAnnotator,
 		EventLogState: b.EventLogStateWithNewSourceElementID(),
 	}
+}
+
+// shouldElementBeRetainedWithoutMetadata tracks which elements should
+// be retained even if no metadata exists. These elements may contain
+// other hints that are used for planning such as if a table is empty
+// or not.
+func shouldElementBeRetainedWithoutMetadata(element scpb.Element) bool {
+	switch element.(type) {
+	case *scpb.TableData, *scpb.IndexData:
+		return true
+	}
+	return false
 }
