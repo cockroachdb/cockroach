@@ -745,17 +745,11 @@ func (f entryDecoderV2Fragment) getGoroutine() int64 {
 }
 
 func (f entryDecoderV2Fragment) getTimestamp() (unixNano int64) {
-	ts := string(f[v2DateTimeIdx])
-	timeFormat := MessageTimeFormat
-	if len(ts) > 7 && (ts[len(ts)-7] == '+' || ts[len(ts)-7] == '-') {
-		// The timestamp has a timezone offset.
-		timeFormat = MessageTimeFormatWithTZ
-	}
-	t, err := time.Parse(timeFormat, ts)
+	t, err := decodeTimestamp(f[v2DateTimeIdx])
 	if err != nil {
 		panic(err)
 	}
-	return t.UnixNano()
+	return t
 }
 
 func (f entryDecoderV2Fragment) getChannel() logpb.Channel {
