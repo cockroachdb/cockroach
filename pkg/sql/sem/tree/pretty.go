@@ -1172,9 +1172,22 @@ func (node *Update) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *Delete) doc(p *PrettyCfg) pretty.Doc {
 	items := make([]pretty.TableRow, 0, 7)
+	deleteFrom := "DELETE FROM"
+	batch := node.Batch
+	if batch != nil {
+		normalizedBatch, err := batch.Normalize()
+		if err != nil {
+			panic(err)
+		}
+		if normalizedBatch.HasSize {
+			deleteFrom = fmt.Sprintf("DELETE BATCH (SIZE %s) FROM", normalizedBatch.Size)
+		} else {
+			deleteFrom = "DELETE BATCH FROM"
+		}
+	}
 	items = append(items,
 		node.With.docRow(p),
-		p.row("DELETE FROM", p.Doc(node.Table)))
+		p.row(deleteFrom, p.Doc(node.Table)))
 	if len(node.Using) > 0 {
 		items = append(items, p.row("USING", p.Doc(&node.Using)))
 	}
