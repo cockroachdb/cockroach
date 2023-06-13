@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -448,7 +449,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	var scName tree.Name
 	// TODO(richardjcai): Remove this in 22.2.
 	if scID == keys.PublicSchemaID {
-		scName = tree.PublicSchemaName
+		scName = catconstants.PublicSchemaName
 	} else {
 		scDesc, err := oc.planner.Descriptors().ByID(txn).WithoutNonPublic().Get().Schema(ctx, scID)
 		if err != nil {

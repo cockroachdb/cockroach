@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -83,7 +83,7 @@ func InjectDescriptors(
 				return errors.Wrapf(err, "failed to inject namespace entry for database %d", id)
 			}
 			if err := injectNamespaceEntry(
-				tx, id, 0, tree.PublicSchema, keys.PublicSchemaID,
+				tx, id, 0, catconstants.PublicSchemaName, keys.PublicSchemaID,
 			); err != nil {
 				return errors.Wrapf(err, "failed to inject namespace entry for public schema in %d", id)
 			}

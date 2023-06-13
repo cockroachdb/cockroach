@@ -198,9 +198,12 @@ func WrapFunctionDescRefErr(id descpb.ID, err error) error {
 	return errors.Wrapf(err, "referenced function ID %d", errors.Safe(id))
 }
 
-// NewMutableAccessToVirtualSchemaError is returned when trying to mutably
-// access a virtual schema object.
-func NewMutableAccessToVirtualSchemaError(schema SchemaDescriptor) error {
+// NewMutableAccessToDescriptorlessSchemaError is returned when trying to mutably
+// access a descriptorless schema object, including
+// - descriptorless public schemas (deprecated),
+// - temporary schemas,
+// - virtual schemas (pg_catalog, pg_extension, information_schema, and crdb_internal)
+func NewMutableAccessToDescriptorlessSchemaError(schema SchemaDescriptor) error {
 	switch schema.SchemaKind() {
 	case SchemaPublic:
 		return pgerror.New(pgcode.InsufficientPrivilege,

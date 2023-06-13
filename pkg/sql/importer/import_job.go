@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -146,8 +147,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				if err != nil {
 					return err
 				}
-				schemaMetadata.oldSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
-				schemaMetadata.newSchemaIDToName[dbDesc.GetSchemaID(tree.PublicSchema)] = tree.PublicSchema
+				schemaMetadata.oldSchemaIDToName[dbDesc.GetSchemaID(catconstants.PublicSchemaName)] = catconstants.PublicSchemaName
+				schemaMetadata.newSchemaIDToName[dbDesc.GetSchemaID(catconstants.PublicSchemaName)] = catconstants.PublicSchemaName
 
 				preparedDetails, err = r.prepareTablesForIngestion(ctx, p, curDetails, txn.KV(), descsCol,
 					schemaMetadata)
@@ -228,7 +229,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			// If we are importing from PGDUMP, qualify the table name with the schema
 			// name since we support non-public schemas.
 			if details.Format.Format == roachpb.IOFileFormat_PgDump {
-				schemaName := tree.PublicSchema
+				schemaName := catconstants.PublicSchemaName
 				if schema, ok := schemaIDToName[i.Desc.GetUnexposedParentSchemaID()]; ok {
 					schemaName = schema
 				}
@@ -828,7 +829,7 @@ func getPublicSchemaDescForDatabase(
 	if err := sql.DescsTxn(ctx, execCfg, func(
 		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
-		publicSchemaID := db.GetSchemaID(tree.PublicSchema)
+		publicSchemaID := db.GetSchemaID(catconstants.PublicSchemaName)
 		scDesc, err = descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, publicSchemaID)
 		return err
 	}); err != nil {
@@ -1335,7 +1336,7 @@ func constructSchemaAndTableKey(
 	_ clusterversion.Handle,
 ) (schemaAndTableName, error) {
 	schemaName, ok := schemaIDToName[tableDesc.GetUnexposedParentSchemaID()]
-	if !ok && schemaName != tree.PublicSchema {
+	if !ok && schemaName != catconstants.PublicSchemaName {
 		return schemaAndTableName{}, errors.Newf("invalid parent schema %s with ID %d for table %s",
 			schemaName, tableDesc.UnexposedParentSchemaID, tableDesc.GetName())
 	}

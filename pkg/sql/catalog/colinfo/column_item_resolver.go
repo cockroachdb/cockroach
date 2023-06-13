@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -91,7 +92,7 @@ func ResolveAllColumnsSelector(
 		// search name db.public.tbl.* instead.
 		prefix.ExplicitCatalog = true
 		prefix.CatalogName = prefix.SchemaName
-		prefix.SchemaName = tree.PublicSchemaName
+		prefix.SchemaName = catconstants.PublicSchemaName
 		res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
 		if err != nil {
 			return nil, nil, err
@@ -132,7 +133,7 @@ func ResolveColumnItem(
 		// search name db.public.tbl.x instead.
 		prefix.ExplicitCatalog = true
 		prefix.CatalogName = prefix.SchemaName
-		prefix.SchemaName = tree.PublicSchemaName
+		prefix.SchemaName = catconstants.PublicSchemaName
 		res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
 		if err != nil {
 			return nil, err

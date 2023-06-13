@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -47,10 +48,10 @@ type ColumnItemResolverTester interface {
 
 func initColumnItemResolverTester(t *testing.T, ct ColumnItemResolverTester) {
 	ct.AddTable(tree.MakeTableNameWithSchema("", "crdb_internal", "tables"), []tree.Name{"table_name"})
-	ct.AddTable(tree.MakeTableNameWithSchema("db1", tree.PublicSchemaName, "foo"), []tree.Name{"x"})
-	ct.AddTable(tree.MakeTableNameWithSchema("db2", tree.PublicSchemaName, "foo"), []tree.Name{"x"})
+	ct.AddTable(tree.MakeTableNameWithSchema("db1", catconstants.PublicSchemaName, "foo"), []tree.Name{"x"})
+	ct.AddTable(tree.MakeTableNameWithSchema("db2", catconstants.PublicSchemaName, "foo"), []tree.Name{"x"})
 	ct.AddTable(tree.MakeUnqualifiedTableName("bar"), []tree.Name{"x"})
-	ct.AddTable(tree.MakeTableNameWithSchema("db1", tree.PublicSchemaName, "kv"), []tree.Name{"k", "v"})
+	ct.AddTable(tree.MakeTableNameWithSchema("db1", catconstants.PublicSchemaName, "kv"), []tree.Name{"k", "v"})
 }
 
 // RunResolveQualifiedStarTest tests that the given ColumnItemResolverTester
