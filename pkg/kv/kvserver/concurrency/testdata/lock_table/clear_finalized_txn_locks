@@ -162,7 +162,7 @@ num=5
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req1
@@ -199,7 +199,7 @@ num=5
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn3 status=committed
+pushed-txn-updated txn=txn3 status=committed
 ----
 
 release txn=txn4 span=c
@@ -331,7 +331,7 @@ num=3
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req3
@@ -416,7 +416,7 @@ num=2
    queued writers:
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req6
@@ -552,7 +552,7 @@ num=2
    queued writers:
     active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req8
@@ -644,7 +644,7 @@ num=4
  lock: "d"
   holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
 
-txn-finalized txn=txn3 status=aborted
+pushed-txn-updated txn=txn3 status=aborted
 ----
 
 scan r=req9
@@ -681,7 +681,7 @@ Intents to resolve:
  key="a" txn=00000000 status=ABORTED
  key="b" txn=00000000 status=ABORTED
 
-txn-finalized txn=txn4 status=aborted
+pushed-txn-updated txn=txn4 status=aborted
 ----
 
 release txn=txn4 span=c
@@ -722,7 +722,7 @@ num=1
    queued writers:
     active: false req: 11, txn: none
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req11
@@ -765,7 +765,7 @@ num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req12
