@@ -67,6 +67,37 @@ func BuildStages(
 		descIDs:          screl.AllTargetDescIDs(init.TargetState),
 		withSanityChecks: withSanityChecks,
 	}
+	// Determine which op edges can potentially fail later on due to backfill
+	// failures.
+	bc.anyRemainingOpsCanFail = make(map[*screl.Node]bool)
+	for i := range bc.targetState.Targets {
+		t := &bc.targetState.Targets[i]
+		currentStatus := t.TargetStatus
+		anyRemainingCanFail := false
+		for {
+			if n, ok := bc.g.GetNode(t, currentStatus); ok {
+				if oe, ok := bc.g.GetOpEdgeTo(n); ok {
+					bc.anyRemainingOpsCanFail[n] = anyRemainingCanFail
+					// If this can potentially lead to failures, validate
+					// we have ops which are non-mutation types.
+					if oe.CanFail() {
+						for _, op := range oe.Op() {
+							anyRemainingCanFail = anyRemainingCanFail ||
+								op.Type() != scop.MutationType
+						}
+					}
+					currentStatus = oe.From().CurrentStatus
+				} else {
+					// Terminal status
+					bc.anyRemainingOpsCanFail[n] = anyRemainingCanFail
+					break
+				}
+			} else {
+				break
+			}
+
+		}
+	}
 	// Build stages for all remaining phases.
 	stages := buildStages(bc)
 	// Decorate stages with position in plan.
@@ -98,17 +129,18 @@ func BuildStages(
 // buildContext contains the global constants for building the stages.
 // It's read-only everywhere after being initialized in BuildStages.
 type buildContext struct {
-	ctx              context.Context
-	rollback         bool
-	g                *scgraph.Graph
-	scJobID          func() jobspb.JobID
-	targetState      scpb.TargetState
-	initial          []scpb.Status
-	current          []scpb.Status
-	targetToIdx      map[*scpb.Target]int
-	startingPhase    scop.Phase
-	descIDs          catalog.DescriptorIDSet
-	withSanityChecks bool
+	ctx                    context.Context
+	rollback               bool
+	g                      *scgraph.Graph
+	scJobID                func() jobspb.JobID
+	targetState            scpb.TargetState
+	initial                []scpb.Status
+	current                []scpb.Status
+	targetToIdx            map[*scpb.Target]int
+	startingPhase          scop.Phase
+	descIDs                catalog.DescriptorIDSet
+	anyRemainingOpsCanFail map[*screl.Node]bool
+	withSanityChecks       bool
 }
 
 // buildStages builds all stages according to the starting parameters
@@ -320,12 +352,10 @@ func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) 
 		// Determine whether there are any backfill or validation operations
 		// remaining which should prevent the scheduling of any non-revertible
 		// operations. This information will be used when building the current
-		// set of targets below.
+		// set of targets below. We will do this over the set of generated operations,
+		// since some of these may be no-oped for newly created tables.
 		for _, n := range nodes {
-			if oe, ok := bc.g.GetOpEdgeFrom(n); ok && oe.CanFail() {
-				sb.anyRemainingOpsCanFail = true
-				break
-			}
+			sb.anyRemainingOpsCanFail = sb.anyRemainingOpsCanFail || bc.anyRemainingOpsCanFail[n]
 		}
 
 		for i, n := range nodes {

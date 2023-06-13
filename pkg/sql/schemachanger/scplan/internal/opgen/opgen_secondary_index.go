@@ -56,7 +56,12 @@ func init() {
 				}),
 			),
 			to(scpb.Status_BACKFILLED,
-				emit(func(this *scpb.SecondaryIndex) *scop.BackfillIndex {
+				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.BackfillIndex {
+					// No need to backfill indexes for added descriptors, these will
+					// be empty.
+					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+						return nil
+					}
 					return &scop.BackfillIndex{
 						TableID:       this.TableID,
 						SourceIndexID: this.SourceIndexID,
@@ -81,7 +86,12 @@ func init() {
 				}),
 			),
 			to(scpb.Status_MERGED,
-				emit(func(this *scpb.SecondaryIndex) *scop.MergeIndex {
+				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.MergeIndex {
+					// No need to merge indexes for added descriptors, these will
+					// be empty.
+					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+						return nil
+					}
 					return &scop.MergeIndex{
 						TableID:           this.TableID,
 						TemporaryIndexID:  this.TemporaryIndexID,
@@ -104,7 +114,12 @@ func init() {
 				}),
 			),
 			to(scpb.Status_VALIDATED,
-				emit(func(this *scpb.SecondaryIndex) *scop.ValidateIndex {
+				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.ValidateIndex {
+					// No need to backfill validate for added descriptors, these will
+					// be empty.
+					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+						return nil
+					}
 					return &scop.ValidateIndex{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
