@@ -13,8 +13,14 @@ package scmutationexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/errors"
 )
 
 func (i *immediateVisitor) MarkDescriptorAsPublic(
@@ -35,5 +41,29 @@ func (i *immediateVisitor) AddDescriptorName(_ context.Context, op scop.AddDescr
 		Name:           op.Namespace.Name,
 	}
 	i.AddName(op.Namespace.DescriptorID, nameDetails)
+	return nil
+}
+
+func (i *immediateVisitor) SetNameInDescriptor(
+	ctx context.Context, op scop.SetNameInDescriptor,
+) error {
+	mut, err := i.checkOutDescriptor(ctx, op.DescriptorID)
+	if err != nil {
+		return err
+	}
+	switch mut.DescriptorType() {
+	case catalog.Database:
+		mut.(*dbdesc.Mutable).Name = op.Name
+	case catalog.Schema:
+		mut.(*schemadesc.Mutable).Name = op.Name
+	case catalog.Table:
+		mut.(*tabledesc.Mutable).Name = op.Name
+	case catalog.Type:
+		mut.(*typedesc.Mutable).Name = op.Name
+	case catalog.Function, catalog.Any:
+		// functions do not have a namespace entry and their name field is handled
+		// by FunctionName element.
+		return errors.AssertionFailedf("Incorrect descriptor type %v", mut.DescriptorType())
+	}
 	return nil
 }

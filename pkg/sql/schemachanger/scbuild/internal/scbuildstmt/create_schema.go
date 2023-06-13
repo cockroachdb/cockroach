@@ -85,10 +85,6 @@ func CreateSchema(b BuildCtx, n *tree.CreateSchema) {
 		IsVirtual:   false,
 	}
 	b.Add(schemaElem)
-	b.Add(&scpb.SchemaName{
-		SchemaID: schemaID,
-		Name:     schemaName,
-	})
 	b.Add(&scpb.Namespace{
 		DatabaseID:   dbElem.DatabaseID,
 		SchemaID:     0,
