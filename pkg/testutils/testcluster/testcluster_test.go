@@ -12,6 +12,7 @@ package testcluster
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"strconv"
 	"testing"
 	"time"
@@ -272,6 +273,7 @@ func TestStopServer(t *testing.T) {
 
 func TestRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 104740)
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
