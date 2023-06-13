@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -118,10 +119,12 @@ func registerRestore(r registry.Registry) {
 	withPauseSpecs.initTestName()
 
 	r.Add(registry.TestSpec{
-		Name:    withPauseSpecs.testName,
-		Owner:   registry.OwnerDisasterRecovery,
-		Cluster: withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
-		Timeout: withPauseSpecs.timeout,
+		Name:      withPauseSpecs.testName,
+		Owner:     registry.OwnerDisasterRecovery,
+		Benchmark: true,
+		Cluster:   withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
+		Timeout:   withPauseSpecs.timeout,
+
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			rd := makeRestoreDriver(t, c, withPauseSpecs)
@@ -296,7 +299,7 @@ func registerRestore(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{
 				nodes: 9,
 				zones: []string{"us-east-2b", "us-west-2b", "eu-west-1b"}}), // These zones are AWS-specific.
-			backup:  makeBackupSpecs(backupSpecs{}),
+			backup:  makeBackupSpecs(backupSpecs{cloud: spec.AWS}),
 			timeout: 90 * time.Minute,
 		},
 		{
@@ -347,10 +350,11 @@ func registerRestore(r registry.Registry) {
 		sp := sp
 		sp.initTestName()
 		r.Add(registry.TestSpec{
-			Name:    sp.testName,
-			Owner:   registry.OwnerDisasterRecovery,
-			Cluster: sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-			Timeout: sp.timeout,
+			Name:      sp.testName,
+			Owner:     registry.OwnerDisasterRecovery,
+			Benchmark: true,
+			Cluster:   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+			Timeout:   sp.timeout,
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
@@ -434,8 +438,9 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 		// https://github.com/cockroachdb/cockroach/issues/98783.
 		//
 		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
-		s.InstanceType = spec.AWSMachineType(s.CPUs, s.Mem)
+		s.InstanceType, _ = spec.AWSMachineType(s.CPUs, s.Mem, vm.ArchAMD64)
 		s.InstanceType = strings.Replace(s.InstanceType, "d.", ".", 1)
+		s.Arch = vm.ArchAMD64
 	}
 	return s
 }
@@ -668,7 +673,7 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 
 	if rd.c.Spec().Cloud != rd.sp.backup.cloud {
 		// For now, only run the test on the cloud provider that also stores the backup.
-		rd.t.Skip("test configured to run on %s", rd.sp.backup.cloud)
+		rd.t.Skipf("test configured to run on %s", rd.sp.backup.cloud)
 	}
 
 	rd.c.Put(ctx, rd.t.Cockroach(), "./cockroach")

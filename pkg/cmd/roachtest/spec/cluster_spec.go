@@ -63,7 +63,8 @@ func (m MemPerCPU) String() string {
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
 	Cloud        string
-	InstanceType string // auto-chosen if left empty
+	Arch         vm.CPUArch // CPU architecture; auto-chosen if left empty
+	InstanceType string     // auto-chosen if left empty
 	NodeCount    int
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
@@ -189,7 +190,7 @@ func getAzureOpts(machineType string, zones []string) vm.ProviderOpts {
 // RoachprodOpts returns the opts to use when calling `roachprod.Create()`
 // in order to create the cluster described in the spec.
 func (s *ClusterSpec) RoachprodOpts(
-	clusterName string, useIOBarrier bool, enableFIPS bool,
+	clusterName string, useIOBarrier bool, arch vm.CPUArch,
 ) (vm.CreateOpts, vm.ProviderOpts, error) {
 
 	createVMOpts := vm.DefaultCreateOpts()
@@ -222,30 +223,41 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 
 	createVMOpts.GeoDistributed = s.Geo
-	createVMOpts.EnableFIPS = enableFIPS
+	createVMOpts.Arch = string(arch)
 	machineType := s.InstanceType
 	ssdCount := s.SSDs
+
 	if s.CPUs != 0 {
 		// Default to the user-supplied machine type, if any.
 		// Otherwise, pick based on requested CPU count.
+		var selectedArch vm.CPUArch
+
 		if len(machineType) == 0 {
 			// If no machine type was specified, choose one
 			// based on the cloud and CPU count.
 			switch s.Cloud {
 			case AWS:
-				machineType = AWSMachineType(s.CPUs, s.Mem)
+				machineType, selectedArch = AWSMachineType(s.CPUs, s.Mem, arch)
 			case GCE:
-				machineType = GCEMachineType(s.CPUs, s.Mem)
+				machineType, selectedArch = GCEMachineType(s.CPUs, s.Mem, arch)
 			case Azure:
 				machineType = AzureMachineType(s.CPUs, s.Mem)
 			}
+		}
+		if selectedArch != "" && selectedArch != arch {
+			// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
+			// other than grepping cluster creation logs.
+			fmt.Printf("WARN: requested arch %s for machineType %s, but selected %s\n", arch, machineType, selectedArch)
+			createVMOpts.Arch = string(selectedArch)
 		}
 
 		// Local SSD can only be requested
 		// - if configured to prefer doing so,
 		// - if no particular volume size is requested, and,
 		// - on AWS, if the machine type supports it.
-		if s.PreferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) {
+		// - on GCE, if the machine type is not ARM64.
+		if s.PreferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) &&
+			(s.Cloud != GCE || selectedArch != vm.ArchARM64) {
 			// Ensure SSD count is at least 1 if UseLocalSSD is true.
 			if ssdCount == 0 {
 				ssdCount = 1
@@ -278,9 +290,9 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
-	if createVMOpts.EnableFIPS && !(s.Cloud == GCE || s.Cloud == AWS) {
+	if createVMOpts.Arch == string(vm.ArchFIPS) && !(s.Cloud == GCE || s.Cloud == AWS) {
 		return vm.CreateOpts{}, nil, errors.Errorf(
-			"node creation with enableFIPS enabled not yet supported on %s", s.Cloud,
+			"FIPS not yet supported on %s", s.Cloud,
 		)
 	}
 	var providerOpts vm.ProviderOpts

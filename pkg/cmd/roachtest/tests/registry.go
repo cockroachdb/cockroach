@@ -146,14 +146,3 @@ func RegisterTests(r registry.Registry) {
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
 	registerTenantSpanStatsMixedVersion(r)
 }
-
-// RegisterBenchmarks registers all benchmarks to the registry. This powers `roachtest bench`.
-//
-// TODO(tbg): it's unclear that `roachtest bench` is that useful, perhaps we make everything
-// a roachtest but use a `bench` tag to determine what tests to understand as benchmarks.
-func RegisterBenchmarks(r registry.Registry) {
-	registerIndexesBench(r)
-	registerTPCCBench(r)
-	registerKVBench(r)
-	registerTPCHBench(r)
-}

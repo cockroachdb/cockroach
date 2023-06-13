@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -66,15 +66,13 @@ func registerCDCMixedVersions(r registry.Registry) {
 		zones = teamcityAgentZone
 	}
 	r.Add(registry.TestSpec{
-		Name:            "cdc/mixed-versions",
-		Owner:           registry.OwnerTestEng,
-		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones)),
+		Name:  "cdc/mixed-versions",
+		Owner: registry.OwnerTestEng,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones), spec.Arch(vm.ArchAMD64)),
 		Timeout:         timeout,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
-			}
 			runCDCMixedVersions(ctx, t, c, *t.BuildVersion())
 		},
 	})

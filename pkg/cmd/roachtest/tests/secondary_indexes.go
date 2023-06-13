@@ -12,7 +12,6 @@ package tests
 
 import (
 	"context"
-	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -140,9 +139,6 @@ func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
-			}
 			predV, err := version.PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)

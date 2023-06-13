@@ -39,6 +39,7 @@ var (
 	extendLifetime        time.Duration
 	wipePreserveCerts     bool
 	grafanaConfig         string
+	grafanaArch           string
 	grafanaurlOpen        bool
 	grafanaDumpDir        string
 	listDetails           bool
@@ -107,8 +108,9 @@ func initFlags() {
 			vm.AllProviderNames()))
 	createCmd.Flags().BoolVar(&createVMOpts.GeoDistributed,
 		"geo", false, "Create geo-distributed cluster")
-	createCmd.Flags().BoolVar(&createVMOpts.EnableFIPS,
-		"fips", false, "Enable FIPS mode (uses custom AMI)")
+	createCmd.Flags().StringVar(&createVMOpts.Arch, "arch", "",
+		"architecture override for VM [amd64, arm64, fips]; N.B. fips implies amd64 with openssl")
+
 	// N.B. We set "usage=roachprod" as the default, custom label for billing tracking.
 	createCmd.Flags().StringToStringVar(&createVMOpts.CustomLabels,
 		"label", map[string]string{"usage": "roachprod"},
@@ -257,6 +259,9 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 
 	grafanaStartCmd.Flags().StringVar(&grafanaConfig,
 		"grafana-config", "", "URI to grafana json config, supports local and http(s) schemes")
+
+	grafanaStartCmd.Flags().StringVar(&grafanaArch, "arch", "",
+		"binary architecture override [amd64, arm64]")
 
 	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,
 		"open", false, "open the grafana dashboard url on the browser")

@@ -45,6 +45,14 @@ type TestSpec struct {
 	// associated cluster expires. The timeout is always truncated to 10m before
 	// the test's cluster expires.
 	Timeout time.Duration
+	// Denotes whether the test is a roachperf benchmark. If true, the test is expected, but not required, to produce
+	// artifacts in Test.PerfArtifactsDir(), which get exported to the roachperf dashboard
+	// (see getPerfArtifacts() in test_runner.go).
+	// N.B. performance tests may choose to _assert_ on latency, throughput, or some other perf. metric, _without_
+	// exporting artifacts to the dashboard. E.g., see 'registerKVContention' and 'verifyTxnPerSecond'.
+	// N.B. performance tests may have different requirements than correctness tests, e.g., machine type/architecture.
+	// Thus, they must be opted into explicitly via this field.
+	Benchmark bool
 	// Tags is a set of tags associated with the test that allow grouping
 	// tests. If no tags are specified, the set ["default"] is automatically
 	// given.

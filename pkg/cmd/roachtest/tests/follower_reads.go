@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -103,9 +102,6 @@ func registerFollowerReads(r registry.Registry) {
 			spec.CPU(2),
 		),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
-			}
 			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, *t.BuildVersion())
 		},
 	})
