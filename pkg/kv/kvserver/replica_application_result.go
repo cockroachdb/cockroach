@@ -287,7 +287,12 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 		// succeeding in the Raft log for a given command.
 		return nil
 	}
+	return r.tryReproposeWithNewLeaseIndexShared(ctx, cmd.proposal)
+}
 
+func (r *Replica) tryReproposeWithNewLeaseIndexShared(
+	ctx context.Context, p *ProposalData,
+) *kvpb.Error {
 	// We need to track the request again in order to protect its timestamp until
 	// it gets reproposed.
 	// TODO(andrei): Only track if the request consults the ts cache. Some
@@ -319,7 +324,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	if pErr != nil {
 		return pErr
 	}
-	log.VEventf(ctx, 2, "reproposed command %x", cmd.ID)
+	log.VEventf(ctx, 2, "reproposed command %x", p.idKey)
 	return nil
 }
 
