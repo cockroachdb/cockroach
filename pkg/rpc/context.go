@@ -2167,7 +2167,7 @@ func VerifyDialback(
 	// As a fast-path, determine if we have a healthy system-class connection to
 	// the node that sent us the ping. We use the System class because that is
 	// what is important from a liveness perspective - if we are unable to
-	// maintain a healthy connection on the System class, other other connections
+	// maintain a healthy connection on the System class, other connections
 	// are bound to fail, too.
 	//
 	// Note that the health check will also trigger a non-blocking dial of the
@@ -2176,6 +2176,9 @@ func VerifyDialback(
 	// check will return an error until the connection is re-established.
 	var connHealthErr error
 	if request.OriginNodeID == 0 {
+		// The incoming connection was initiated using rpcCtx.GRPCUnvalidatedDial,
+		// so we don't know the origin's NodeID and use gRPCUnvalidatedDial to
+		// inform the fast path as well.
 		connHealthErr = rpcCtx.GRPCUnvalidatedDial(target).Health() // NB: dials SystemClass
 	} else {
 		connHealthErr = rpcCtx.GRPCDialNode(target, request.OriginNodeID, SystemClass).Health()
