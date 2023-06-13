@@ -12,14 +12,20 @@ package stats
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/json"
+	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -62,7 +68,9 @@ const minGoodnessOfFit = 0.95
 //
 // ForecastTableStatistics is deterministic: given the same observations it will
 // return the same forecasts.
-func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []*TableStatistic {
+func ForecastTableStatistics(
+	ctx context.Context, sv *settings.Values, observed []*TableStatistic,
+) []*TableStatistic {
 	// Early sanity check. We'll check this again in forecastColumnStatistics.
 	if len(observed) < minObservationsForForecast {
 		return nil
@@ -106,7 +114,7 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 		latest := observedByCols[colKey][0].CreatedAt
 		at := latest.Add(avgRefresh)
 
-		forecast, err := forecastColumnStatistics(ctx, observedByCols[colKey], at, minGoodnessOfFit)
+		forecast, err := forecastColumnStatistics(ctx, sv, observedByCols[colKey], at, minGoodnessOfFit)
 		if err != nil {
 			log.VEventf(
 				ctx, 2, "could not forecast statistics for table %v columns %s: %v",
@@ -137,7 +145,11 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 // forecastColumnStatistics is deterministic: given the same observations and
 // forecast time, it will return the same forecast.
 func forecastColumnStatistics(
-	ctx context.Context, observed []*TableStatistic, at time.Time, minRequiredFit float64,
+	ctx context.Context,
+	sv *settings.Values,
+	observed []*TableStatistic,
+	at time.Time,
+	minRequiredFit float64,
 ) (forecast *TableStatistic, err error) {
 	if len(observed) < minObservationsForForecast {
 		return nil, errors.New("not enough observations to forecast statistics")
@@ -284,6 +296,61 @@ func forecastColumnStatistics(
 		}
 		forecast.HistogramData = &histData
 		forecast.setHistogramBuckets(hist)
+
+		// Verify that the first two buckets (the initial NULL bucket and the first
+		// non-NULL bucket) both have NumRange=0 and DistinctRange=0. (We must check
+		// this after calling setHistogramBuckets to account for rounding.) See
+		// #93892.
+		for _, bucket := range forecast.Histogram {
+			if bucket.NumRange != 0 || bucket.DistinctRange != 0 {
+				// Build a JSON representation of the first several buckets in each
+				// observed histogram so that we can figure out what happened.
+				const debugBucketCount = 5
+				jsonStats := make([]*JSONStatistic, 0, len(observed))
+
+				addStat := func(stat *TableStatistic) {
+					jsonStat := &JSONStatistic{
+						Name:          stat.Name,
+						CreatedAt:     stat.CreatedAt.String(),
+						Columns:       []string{strconv.FormatInt(int64(stat.ColumnIDs[0]), 10)},
+						RowCount:      stat.RowCount,
+						DistinctCount: stat.DistinctCount,
+						NullCount:     stat.NullCount,
+						AvgSize:       stat.AvgSize,
+					}
+					if err := jsonStat.SetHistogram(stat.HistogramData); err == nil &&
+						len(jsonStat.HistogramBuckets) > debugBucketCount {
+						// Limit the histogram to the first several buckets.
+						jsonStat.HistogramBuckets = jsonStat.HistogramBuckets[0:debugBucketCount]
+					}
+					// Replace UpperBounds with a hash.
+					for i := range jsonStat.HistogramBuckets {
+						hash := md5.Sum([]byte(jsonStat.HistogramBuckets[i].UpperBound))
+						jsonStat.HistogramBuckets[i].UpperBound = fmt.Sprintf("_%x", hash)
+					}
+					jsonStats = append(jsonStats, jsonStat)
+				}
+				addStat(forecast)
+				for i := range observed {
+					addStat(observed[i])
+				}
+				var debugging redact.SafeString
+				if j, err := json.Marshal(jsonStats); err == nil {
+					debugging = redact.SafeString(j)
+				}
+				err := errorutil.UnexpectedWithIssueErrorf(
+					93892,
+					"forecasted histogram had first bucket with non-zero NumRange or DistinctRange: %s",
+					debugging,
+				)
+				errorutil.SendReport(ctx, sv, err)
+				return nil, err
+			}
+			if bucket.UpperBound != tree.DNull {
+				// Stop checking after the first non-NULL bucket.
+				break
+			}
+		}
 	}
 
 	return forecast, nil
