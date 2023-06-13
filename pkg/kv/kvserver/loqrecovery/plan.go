@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -153,7 +154,7 @@ func PlanReplicas(
 	report.PresentStores = availableStoreIDs.storeSliceFromSet()
 	report.TotalReplicas = len(replicas)
 
-	if len(clusterInfo.Descriptors) > 0 {
+	if rangeDescriptorsComplete(clusterInfo.Descriptors) {
 		report.PlannedUpdates, report.Problems, err = planReplicasWithMeta(ctx, clusterInfo.Descriptors,
 			replicasByRangeID, availableStoreIDs)
 	} else {
@@ -287,6 +288,23 @@ func planReplicasWithoutMeta(
 		return problems[i].Span().Key.Compare(problems[j].Span().Key) < 0
 	})
 	return updates, problems, nil
+}
+
+// rangeDescriptorsComplete verifies that descriptor info covers keyspace
+// completely. We can have partial coverage if scan failed mid-way and the tail
+// of meta range is unavailable.
+func rangeDescriptorsComplete(descriptors []roachpb.RangeDescriptor) bool {
+	if len(descriptors) < 1 {
+		return false
+	}
+	prevKey := roachpb.RKeyMin
+	for _, d := range descriptors {
+		if !d.StartKey.Equal(prevKey) {
+			return false
+		}
+		prevKey = d.EndKey
+	}
+	return prevKey.Equal(keys.MaxKey)
 }
 
 // validateReplicaSets evaluates provided set of replicas and an optional
