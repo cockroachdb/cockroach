@@ -58,3 +58,5 @@ ALTER TABLE defaultdb.bar ADD PRIMARY KEY (i)
   {columnId: 1, indexId: 5, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 5, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}

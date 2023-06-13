@@ -27,6 +27,14 @@ DROP INDEX idx1 CASCADE
   {indexId: 2, name: idx1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, ABSENT], PUBLIC]
   {indexId: 2, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 4}, PUBLIC], PUBLIC]
+  {indexId: 4, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 6}, PUBLIC], PUBLIC]
+  {indexId: 6, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 
 build
 DROP INDEX idx2 CASCADE
@@ -47,6 +55,14 @@ DROP INDEX idx2 CASCADE
   {indexId: 4, name: idx2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC]
   {indexId: 4, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 6}, PUBLIC], PUBLIC]
+  {indexId: 6, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 
 build
 DROP INDEX idx3 CASCADE
@@ -105,6 +121,14 @@ DROP INDEX idx3 CASCADE
   {columnId: 4.294967294e+09, name: tableoid, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 105, type: {family: OidFamily, oid: 26}}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 4}, PUBLIC], PUBLIC]
+  {indexId: 4, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 
 build
 DROP INDEX v2@idx CASCADE
@@ -173,3 +197,7 @@ DROP INDEX v2@idx CASCADE
   {indexId: 1, tableId: 107}
 - [[TableData:{DescID: 107, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 107}
+- [[IndexData:{DescID: 106, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 106}
+- [[TableData:{DescID: 106, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 106}

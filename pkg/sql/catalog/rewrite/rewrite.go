@@ -651,6 +651,18 @@ func rewriteSchemaChangerState(
 	var droppedConstraints catalog.ConstraintIDSet
 	for i := 0; i < len(state.Targets); i++ {
 		t := &state.Targets[i]
+		// Since the parent database ID is never written in the descriptorRewrites
+		// map we need to special case certain elements that need their ParentID
+		// re-written.
+		if data := t.GetTableData(); data != nil {
+			rewrite, ok := descriptorRewrites[data.TableID]
+			if !ok {
+				return errors.Errorf("missing rewrite for id %d in %s", data.TableID, screl.ElementString(t.Element()))
+			}
+			data.TableID = rewrite.ID
+			data.DatabaseID = rewrite.ParentID
+			continue
+		}
 		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {
 			if *id == descpb.InvalidID {
 				// Some descriptor ID fields in elements may be deliberately unset.
