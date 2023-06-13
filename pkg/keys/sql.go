@@ -38,7 +38,8 @@ func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 	}
 	rem, tenID, err := encoding.DecodeUvarintAscending(key[1:])
 	if err != nil {
-		return nil, roachpb.TenantID{}, err
+		// NB: adding logging here tends to cause infinite recursion.
+		return nil, roachpb.SystemTenantID, nil //nolint:returnerrcheck
 	}
 	return rem, roachpb.MustMakeTenantID(tenID), nil
 }
