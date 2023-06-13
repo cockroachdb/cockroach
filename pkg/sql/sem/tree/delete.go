@@ -21,6 +21,7 @@ package tree
 
 // Delete represents a DELETE statement.
 type Delete struct {
+	Batch     *Batch
 	With      *With
 	Table     TableExpr
 	Where     *Where
@@ -33,7 +34,9 @@ type Delete struct {
 // Format implements the NodeFormatter interface.
 func (node *Delete) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.With)
-	ctx.WriteString("DELETE FROM ")
+	ctx.WriteString("DELETE ")
+	ctx.FormatNode(node.Batch)
+	ctx.WriteString("FROM ")
 	ctx.FormatNode(node.Table)
 	if len(node.Using) > 0 {
 		ctx.WriteString(" USING ")

@@ -570,6 +570,13 @@ func TestTenantLogic_delete(
 	runLogicTest(t, "delete")
 }
 
+func TestTenantLogic_delete_batch(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "delete_batch")
+}
+
 func TestTenantLogic_dependencies(
 	t *testing.T,
 ) {
