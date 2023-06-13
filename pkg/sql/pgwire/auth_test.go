@@ -133,7 +133,6 @@ import (
 // alongside the "ok" or "ERROR" message.
 func TestAuthenticationAndHBARules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 104381, "flaky test")
 	skip.UnderRace(t, "takes >1min under race")
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
