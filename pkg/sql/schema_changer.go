@@ -2326,6 +2326,12 @@ type GCJobTestingKnobs struct {
 
 	// If true, the GC job will not wait for MVCC GC.
 	SkipWaitingForMVCCGC bool
+
+	// If true, disables the usage of DelRange (i.e. falls back to the legacy
+	// way).
+	// TODO(chengxiong): remove this knob when we figure out how to control the
+	// MVCC GC queue.
+	DisableDelRange bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
