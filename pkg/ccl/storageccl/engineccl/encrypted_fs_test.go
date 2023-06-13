@@ -402,6 +402,7 @@ func TestPebbleEncryption2(t *testing.T) {
 			hlc.Timestamp{},
 			hlc.ClockTimestamp{},
 			roachpb.MakeValueFromBytes([]byte(val)),
+			storage.NoLogicalReplication,
 			nil, /* txn */
 		)
 		require.NoError(t, err)

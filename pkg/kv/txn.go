@@ -439,6 +439,18 @@ func (txn *Txn) DisablePipelining() error {
 	return txn.mu.sender.DisablePipelining()
 }
 
+// MaintainLogicalReplicationState instructs the transaction to maintain
+// logical replication state.
+func (txn *Txn) MaintainLogicalReplicationState(enable bool) error {
+	if txn.typ != RootTxn {
+		return errors.AssertionFailedf("MaintainLogicalReplicationState() called on leaf txn")
+	}
+
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.MaintainLogicalReplicationState(enable)
+}
+
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
 	return &Batch{txn: txn, AdmissionHeader: txn.AdmissionHeader()}

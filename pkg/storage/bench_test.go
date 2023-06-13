@@ -318,7 +318,7 @@ func setupKeysWithIntent(
 				putTxn = &otherTxn
 			}
 			key := makeKey(nil, j)
-			require.NoError(b, MVCCPut(context.Background(), batch, nil, key, ts, hlc.ClockTimestamp{}, value, putTxn))
+			require.NoError(b, MVCCPut(context.Background(), batch, nil, key, ts, hlc.ClockTimestamp{}, value, NoLogicalReplication, putTxn))
 		}
 		require.NoError(b, batch.Commit(true))
 		batch.Close()
@@ -714,7 +714,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 		timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
 		value.InitChecksum(key)
-		if err := MVCCPut(ctx, batch, nil, key, timestamp, hlc.ClockTimestamp{}, value, nil); err != nil {
+		if err := MVCCPut(ctx, batch, nil, key, timestamp, hlc.ClockTimestamp{}, value, NoLogicalReplication, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -889,7 +889,7 @@ func runMVCCPut(
 		for j := 0; j < versions; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, rw, nil, key, ts, hlc.ClockTimestamp{}, value, nil); err != nil {
+			if err := MVCCPut(ctx, rw, nil, key, ts, hlc.ClockTimestamp{}, value, NoLogicalReplication, nil); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -912,7 +912,7 @@ func runMVCCBlindPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, nil); err != nil {
+		if err := MVCCBlindPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, NoLogicalReplication, nil); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -936,7 +936,7 @@ func runMVCCConditionalPut(
 		for i := 0; i < b.N; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, nil); err != nil {
+			if err := MVCCPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, NoLogicalReplication, nil); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -948,7 +948,7 @@ func runMVCCConditionalPut(
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCConditionalPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, expected, CPutFailIfMissing, nil); err != nil {
+		if err := MVCCConditionalPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, expected, CPutFailIfMissing, NoLogicalReplication, nil); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -970,9 +970,7 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindConditionalPut(
-			ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, nil, CPutFailIfMissing, nil,
-		); err != nil {
+		if err := MVCCBlindConditionalPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, nil, CPutFailIfMissing, NoLogicalReplication, nil); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -994,7 +992,7 @@ func runMVCCInitPut(ctx context.Context, b *testing.B, emk engineMaker, valueSiz
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCInitPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, false, nil); err != nil {
+		if err := MVCCInitPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, false, NoLogicalReplication, nil); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -1016,7 +1014,7 @@ func runMVCCBlindInitPut(ctx context.Context, b *testing.B, emk engineMaker, val
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindInitPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, false, nil); err != nil {
+		if err := MVCCBlindInitPut(ctx, eng, nil, key, ts, hlc.ClockTimestamp{}, value, false, NoLogicalReplication, nil); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -1046,7 +1044,7 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, nil); err != nil {
+			if err := MVCCPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, NoLogicalReplication, nil); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -1432,8 +1430,7 @@ func runMVCCGarbageCollect(
 				break
 			}
 			for _, key := range pointKeys {
-				if err := MVCCPut(ctx, batch, nil, key, pts, hlc.ClockTimestamp{}, val,
-					nil); err != nil {
+				if err := MVCCPut(ctx, batch, nil, key, pts, hlc.ClockTimestamp{}, val, NoLogicalReplication, nil); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -1493,7 +1490,7 @@ func runBatchApplyBatchRepr(
 		for i := 0; i < batchSize; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(order[i])))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCBlindPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, nil); err != nil {
+			if err := MVCCBlindPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, NoLogicalReplication, nil); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -1902,7 +1899,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		// Put the keys for this iteration.
 		for j := 0; j < numKeys; j++ {
 			key := makeKey(nil, j)
-			require.NoError(b, MVCCPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, &txn))
+			require.NoError(b, MVCCPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, NoLogicalReplication, &txn))
 		}
 		numPrevKeys = numKeys
 		// Read the keys from the Batch and write them to a sstable to ingest.

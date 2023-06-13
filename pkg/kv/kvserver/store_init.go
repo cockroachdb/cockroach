@@ -205,9 +205,7 @@ func WriteInitialClusterData(
 		for _, kv := range rangeInitialValues {
 			// Initialize the checksums.
 			kv.Value.InitChecksum(kv.Key)
-			if err := storage.MVCCPut(
-				ctx, batch, nil /* ms */, kv.Key, now, hlc.ClockTimestamp{}, kv.Value, nil, /* txn */
-			); err != nil {
+			if err := storage.MVCCPut(ctx, batch, nil, kv.Key, now, hlc.ClockTimestamp{}, kv.Value, storage.NoLogicalReplication, nil); err != nil {
 				return err
 			}
 		}

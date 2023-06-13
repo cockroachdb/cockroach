@@ -36,13 +36,14 @@ func InitPut(
 		args.FailOnTombstones = false
 	}
 
+	lrsHandling := storage.LogicalReplicationBehavior(args.MaintainLogicalReplication)
 	var err error
 	if args.Blind {
-		err = storage.MVCCBlindInitPut(
-			ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, args.Value, args.FailOnTombstones, h.Txn)
+		err = storage.MVCCBlindInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now,
+			args.Value, args.FailOnTombstones, lrsHandling, h.Txn)
 	} else {
-		err = storage.MVCCInitPut(
-			ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, args.Value, args.FailOnTombstones, h.Txn)
+		err = storage.MVCCInitPut(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now,
+			args.Value, args.FailOnTombstones, lrsHandling, h.Txn)
 	}
 	if err != nil {
 		return result.Result{}, err

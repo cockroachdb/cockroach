@@ -196,6 +196,9 @@ func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 // DisablePipelining is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
 
+// MaintainLogicalReplicationState is part of the kv.TxnSender interface.
+func (m *MockTransactionalSender) MaintainLogicalReplicationState(bool) error { return nil }
+
 // PrepareRetryableError is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) PrepareRetryableError(
 	ctx context.Context, msg redact.RedactableString,

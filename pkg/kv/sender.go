@@ -201,6 +201,12 @@ type TxnSender interface {
 	// merges ranges together.
 	DisablePipelining() error
 
+	// MaintainLogicalReplicationState instructs the TxnSender to add
+	// additional logical replication state metadata to each mutation.
+	// This method should be called only for transactions that mutate
+	// tables that are participating in the logical replication.
+	MaintainLogicalReplicationState(enable bool) error
+
 	// ReadTimestamp returns the transaction's current read timestamp.
 	// Note a transaction can be internally pushed forward in time
 	// before committing so this is not guaranteed to be the commit

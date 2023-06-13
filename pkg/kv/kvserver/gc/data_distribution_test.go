@@ -79,8 +79,7 @@ func (ds dataDistribution) setupTest(
 			if txn.WriteTimestamp.IsEmpty() {
 				txn.WriteTimestamp = ts
 			}
-			err := storage.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts,
-				hlc.ClockTimestamp{}, roachpb.Value{RawBytes: kv.Value}, txn)
+			err := storage.MVCCPut(ctx, eng, &ms, kv.Key.Key, ts, hlc.ClockTimestamp{}, roachpb.Value{RawBytes: kv.Value}, storage.NoLogicalReplication, txn)
 			require.NoError(t, err, "failed to insert value for key %s, value length=%d",
 				kv.Key.String(), len(kv.Value))
 		}

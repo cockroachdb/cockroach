@@ -31,10 +31,9 @@ func Delete(
 	h := cArgs.Header
 	reply := resp.(*kvpb.DeleteResponse)
 
+	lrsHandling := storage.LogicalReplicationBehavior(args.MaintainLogicalReplication)
 	var err error
-	reply.FoundKey, err = storage.MVCCDelete(
-		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn,
-	)
+	reply.FoundKey, err = storage.MVCCDelete(ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, lrsHandling, h.Txn)
 	if err != nil {
 		return result.Result{}, err
 	}

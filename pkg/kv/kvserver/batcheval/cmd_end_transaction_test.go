@@ -1200,13 +1200,13 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		// Write a first value at key.
 		v.SetString("a")
 		txn.Sequence = 1
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, storage.NoLogicalReplication, &txn); err != nil {
 			t.Fatal(err)
 		}
 		// Write another value.
 		v.SetString("b")
 		txn.Sequence = 2
-		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, &txn); err != nil {
+		if err := storage.MVCCPut(ctx, batch, nil, k, ts, hlc.ClockTimestamp{}, v, storage.NoLogicalReplication, &txn); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1648,7 +1648,7 @@ func TestResolveLocalLocks(t *testing.T) {
 			txn.Status = roachpb.COMMITTED
 
 			for i := 0; i < numKeys; i++ {
-				err := storage.MVCCPut(ctx, batch, nil, intToKey(i), ts, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("a"), &txn)
+				err := storage.MVCCPut(ctx, batch, nil, intToKey(i), ts, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("a"), storage.NoLogicalReplication, &txn)
 				require.NoError(t, err)
 			}
 			resolvedLocks, externalLocks, err := resolveLocalLocksWithPagination(

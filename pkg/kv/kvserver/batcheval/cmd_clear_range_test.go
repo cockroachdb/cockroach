@@ -153,7 +153,8 @@ func TestCmdClearRange(t *testing.T) {
 				for i := 0; i < tc.keyCount; i++ {
 					key := roachpb.Key(fmt.Sprintf("%04d", i))
 					require.NoError(t, storage.MVCCPut(ctx, eng, nil, key,
-						hlc.Timestamp{WallTime: int64(4+i%2) * 1e9}, hlc.ClockTimestamp{}, value, nil))
+						hlc.Timestamp{WallTime: int64(4+i%2) * 1e9}, hlc.ClockTimestamp{}, value,
+						storage.NoLogicalReplication, nil))
 				}
 
 				// Calculate the range stats.
