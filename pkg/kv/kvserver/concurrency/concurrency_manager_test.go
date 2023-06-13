@@ -84,7 +84,7 @@ import (
 // debug-disable-txn-pushes
 // debug-set-clock           ts=<secs>
 // debug-advance-clock       ts=<secs>
-// debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=<count>
+// debug-set-discovered-locks-threshold-to-consult-txn-status-cache n=<count>
 // debug-set-max-locks n=<count>
 // reset
 func TestConcurrencyManagerBasic(t *testing.T) {
@@ -564,10 +564,10 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.manual.Advance(time.Duration(secs) * time.Second)
 				return ""
 
-			case "debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache":
+			case "debug-set-discovered-locks-threshold-to-consult-txn-status-cache":
 				var n int
 				d.ScanArgs(t, "n", &n)
-				c.setDiscoveredLocksThresholdToConsultFinalizedTxnCache(n)
+				c.setDiscoveredLocksThresholdToConsultTxnStatusCache(n)
 				return ""
 
 			case "debug-set-max-locks":
@@ -949,8 +949,8 @@ func (c *cluster) disableTxnPushes() {
 	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &c.st.SV, time.Hour)
 }
 
-func (c *cluster) setDiscoveredLocksThresholdToConsultFinalizedTxnCache(n int) {
-	concurrency.DiscoveredLocksThresholdToConsultFinalizedTxnCache.Override(context.Background(), &c.st.SV, int64(n))
+func (c *cluster) setDiscoveredLocksThresholdToConsultTxnStatusCache(n int) {
+	concurrency.DiscoveredLocksThresholdToConsultTxnStatusCache.Override(context.Background(), &c.st.SV, int64(n))
 }
 
 // reset clears all request state in the cluster. This avoids portions of tests
