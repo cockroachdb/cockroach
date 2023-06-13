@@ -365,6 +365,9 @@ func (r *Replica) adminSplitWithDescriptor(
 		if !storage.IsValidSplitKey(foundSplitKey) {
 			return reply, errors.Errorf("cannot split range at key %s", splitKey)
 		}
+		if _, _, err := keys.DecodeTenantPrefixE(splitKey.AsRawKey()); err != nil {
+			return reply, errors.Wrapf(err, "checking for valid tenantID")
+		}
 	}
 
 	// If the range starts at the splitKey, we treat the AdminSplit

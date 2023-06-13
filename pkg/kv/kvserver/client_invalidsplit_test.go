@@ -16,59 +16,34 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
-var badKey = append([]byte{'\xfe'}, '\xfd')
-
-func TestInvalidSplit(t *testing.T) {
+func TestSplitAtInvalidTenantPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
+	// badKey is the tenant prefix followed by a "large" byte that indicates
+	// that it should be followed by a separate uvarint encoded key (which is
+	// not there).
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/104796
+	var badKey = append([]byte{'\xfe'}, '\xfd')
 	_, _, err := keys.DecodeTenantPrefix(badKey)
 	t.Log(err)
-	require.NoError(t, err) // used to error before changing DecodeTenantPrefix
+	require.Error(t, err)
 
 	ctx := context.Background()
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 
-	start := func(t *testing.T) *testcluster.TestCluster {
-		serverArgs := base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{InMemory: true, StickyInMemoryEngineID: "1"},
-			},
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
-				},
-			},
-		}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
 
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ServerArgs: serverArgs,
-		})
-		return tc
-	}
-
-	func() {
-		tc := start(t)
-		defer tc.Stopper().Stop(ctx)
-
-		_, _, err = tc.SplitRange(badKey)
-		t.Log(err)
-	}()
-
-	func() {
-		tc := start(t)
-		defer tc.Stopper().Stop(ctx)
-		mergeKey := roachpb.Key(badKey).Prevish(5)
-		desc := tc.LookupRangeOrFatal(t, mergeKey)
-		require.EqualValues(t, badKey, desc.EndKey)
-		_, err = tc.Servers[0].MergeRanges(mergeKey)
-		require.NoError(t, err)
-	}()
+	_, _, err = tc.SplitRange(badKey)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `checking for valid tenantID`)
 }
