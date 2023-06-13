@@ -126,6 +126,28 @@ var AutomaticStatisticsMinStaleRows = func() *settings.IntSetting {
 	return s
 }()
 
+// statsGarbageCollectionInterval controls the interval between running an
+// internal query to delete stats for dropped tables.
+var statsGarbageCollectionInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"sql.stats.garbage_collection_interval",
+	"interval between deleting stats for dropped tables, set to 0 to disable",
+	time.Hour,
+	settings.NonNegativeDuration,
+)
+
+// statsGarbageCollectionLimit controls the limit on the number of dropped
+// tables that we delete stats for as part of the single "garbage sweep" (those
+// beyond the limit will need to wait out statsGarbageCollectionInterval until
+// the next "sweep").
+var statsGarbageCollectionLimit = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.stats.garbage_collection_limit",
+	"limit on the number of dropped tables that stats are deleted for as part of a single statement",
+	1000,
+	settings.PositiveInt,
+)
+
 // DefaultRefreshInterval is the frequency at which the Refresher will check if
 // the stats for each table should be refreshed. It is mutable for testing.
 // NB: Updates to this value after Refresher.Start has been called will not
@@ -554,6 +576,51 @@ func (r *Refresher) Start(
 	}); err != nil {
 		r.startedTasksWG.Done()
 		log.Warningf(ctx, "refresher task failed to start: %v", err)
+	}
+	// Start another task that will periodically run an internal query to delete
+	// stats for dropped tables.
+	r.startedTasksWG.Add(1)
+	if err := stopper.RunAsyncTask(bgCtx, "stats-garbage-collector", func(ctx context.Context) {
+		intervalChangedCh := make(chan struct{}, 1)
+		// The stats-garbage-collector task is started only once globally, so
+		// we'll only add a single OnChange callback.
+		statsGarbageCollectionInterval.SetOnChange(&r.st.SV, func(ctx context.Context) {
+			select {
+			case intervalChangedCh <- struct{}{}:
+			default:
+			}
+		})
+		for {
+			interval := statsGarbageCollectionInterval.Get(&r.st.SV)
+			if interval == 0 {
+				// Zero interval disables the stats garbage collector, so we
+				// block until either it is enabled again or the node is
+				// quiescing.
+				select {
+				case <-intervalChangedCh:
+					continue
+				case <-r.drainAutoStats:
+					return
+				case <-stopper.ShouldQuiesce():
+					return
+				}
+			}
+			select {
+			case <-time.After(interval):
+			case <-intervalChangedCh:
+				continue
+			case <-r.drainAutoStats:
+				return
+			case <-stopper.ShouldQuiesce():
+				return
+			}
+			if err := deleteStatsForDroppedTables(ctx, r.ex, statsGarbageCollectionLimit.Get(&r.st.SV)); err != nil {
+				log.Warningf(ctx, "stats-garbage-collector encountered an error when deleting stats: %v", err)
+			}
+		}
+	}); err != nil {
+		r.startedTasksWG.Done()
+		log.Warningf(ctx, "stats-garbage-collector task failed to start: %v", err)
 	}
 	return nil
 }
