@@ -115,6 +115,7 @@ go_test(
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
