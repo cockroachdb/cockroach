@@ -1892,15 +1892,15 @@ func (r *raft) switchToConfig(cfg tracker.Config, prs tracker.ProgressMap) pb.Co
 	r.isLearner = ok && pr.IsLearner
 
 	if (!ok || r.isLearner) && r.state == StateLeader {
-		// This node is leader and was removed or demoted. We prevent demotions
-		// at the time writing but hypothetically we handle them the same way as
-		// removing the leader: stepping down into the next Term.
+		// This node is leader and was removed or demoted, step down.
 		//
-		// TODO(tbg): step down (for sanity) and ask follower with largest Match
-		// to TimeoutNow (to avoid interruption). This might still drop some
-		// proposals but it's better than nothing.
+		// We prevent demotions at the time writing but hypothetically we handle
+		// them the same way as removing the leader.
 		//
-		// TODO(tbg): test this branch. It is untested at the time of writing.
+		// TODO(tbg): ask follower with largest Match to TimeoutNow (to avoid
+		// interruption). This might still drop some proposals but it's better than
+		// nothing.
+		r.becomeFollower(r.Term, None)
 		return cs
 	}
 
