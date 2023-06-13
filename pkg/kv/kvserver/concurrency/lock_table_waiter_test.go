@@ -101,7 +101,7 @@ type mockLockTable struct {
 	txnFinalizedFn func(txn *roachpb.Transaction)
 }
 
-func (lt *mockLockTable) TransactionIsFinalized(txn *roachpb.Transaction) {
+func (lt *mockLockTable) TransactionUpdated(txn *roachpb.Transaction) {
 	lt.txnFinalizedFn(txn)
 }
 
@@ -915,6 +915,33 @@ func TestTxnCache(t *testing.T) {
 	for i, txnInCache := range c.txns {
 		require.Equal(t, &txns[i+overflow], txnInCache)
 	}
+}
+
+func TestTxnCacheUpdatesTxn(t *testing.T) {
+	var c txnCache
+
+	// Add txn to cache.
+	txnOrig := makeTxnProto("txn")
+	c.add(txnOrig.Clone())
+	txnInCache, ok := c.get(txnOrig.ID)
+	require.True(t, ok)
+	require.Equal(t, txnOrig.WriteTimestamp, txnInCache.WriteTimestamp)
+
+	// Add pushed txn with higher write timestamp.
+	txnPushed := txnOrig.Clone()
+	txnPushed.WriteTimestamp.Forward(txnPushed.WriteTimestamp.Add(1, 0))
+	c.add(txnPushed)
+	txnInCache, ok = c.get(txnOrig.ID)
+	require.True(t, ok)
+	require.NotEqual(t, txnOrig.WriteTimestamp, txnInCache.WriteTimestamp)
+	require.Equal(t, txnPushed.WriteTimestamp, txnInCache.WriteTimestamp)
+
+	// Re-add txn with lower timestamp. Timestamp should not regress.
+	c.add(txnOrig.Clone())
+	txnInCache, ok = c.get(txnOrig.ID)
+	require.True(t, ok)
+	require.NotEqual(t, txnOrig.WriteTimestamp, txnInCache.WriteTimestamp)
+	require.Equal(t, txnPushed.WriteTimestamp, txnInCache.WriteTimestamp)
 }
 
 func BenchmarkTxnCache(b *testing.B) {

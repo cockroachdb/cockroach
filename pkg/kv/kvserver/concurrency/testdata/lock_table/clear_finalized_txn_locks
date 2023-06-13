@@ -169,7 +169,7 @@ global: num=5
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 local: num=0
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req1
@@ -207,7 +207,7 @@ global: num=5
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 local: num=0
 
-txn-finalized txn=txn3 status=committed
+pushed-txn-updated txn=txn3 status=committed
 ----
 
 release txn=txn4 span=c
@@ -341,7 +341,7 @@ global: num=3
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 local: num=0
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req3
@@ -430,7 +430,7 @@ global: num=2
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
 local: num=0
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req6
@@ -573,7 +573,7 @@ global: num=2
     active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
 local: num=0
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req8
@@ -671,7 +671,7 @@ global: num=4
   holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
 local: num=0
 
-txn-finalized txn=txn3 status=aborted
+pushed-txn-updated txn=txn3 status=aborted
 ----
 
 scan r=req9
@@ -709,7 +709,7 @@ Intents to resolve:
  key="a" txn=00000000 status=ABORTED
  key="b" txn=00000000 status=ABORTED
 
-txn-finalized txn=txn4 status=aborted
+pushed-txn-updated txn=txn4 status=aborted
 ----
 
 release txn=txn4 span=c
@@ -753,7 +753,7 @@ global: num=1
     active: false req: 11, txn: none
 local: num=0
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req11
@@ -800,7 +800,7 @@ global: num=1
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
 local: num=0
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req12

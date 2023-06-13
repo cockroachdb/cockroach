@@ -101,7 +101,7 @@ debug-advance-clock ts=123
 ----
 
 # txn1 is the distinguished waiter on key "a". It will push txn2, notice that it
-# is aborted, and then resolve key "a". Once txn2 is in the finalizedTxnCache,
+# is aborted, and then resolve key "a". Once txn2 is in the txnStatusCache,
 # txn1 will create a batch to resolve all other keys together.
 on-txn-updated txn=txn2 status=aborted
 ----

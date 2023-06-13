@@ -3,9 +3,9 @@
 # the lock table, and get resolved.
 # -------------------------------------------------------------------------
 
-# This setting causes the finalized txn cache to be consulted when discovered
+# This setting causes the txn status cache to be consulted when discovered
 # locks > 1.
-debug-set-discovered-locks-threshold-to-consult-finalized-txn-cache n=1
+debug-set-discovered-locks-threshold-to-consult-txn-status-cache n=1
 ----
 
 new-txn name=txn1 ts=10,1 epoch=0
@@ -62,7 +62,7 @@ debug-advance-clock ts=123
 ----
 
 # txn1 is the distinguished waiter on key "a". It will push txn2, notice that it
-# is aborted, and then resolve key "a". This places txn2 in the finalizedTxnCache.
+# is aborted, and then resolve key "a". This places txn2 in the txnStatusCache.
 on-txn-updated txn=txn2 status=aborted
 ----
 [-] update txn: aborting txn2

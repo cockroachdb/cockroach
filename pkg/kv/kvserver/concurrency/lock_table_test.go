@@ -101,12 +101,12 @@ update txn=<name> ts=<int>[,<int>] epoch=<int> span=<start>[,<end>] [ignored-seq
 
  Updates locks for the named transaction.
 
-txn-finalized txn=<name> status=committed|aborted
+pushed-txn-updated txn=<name> status=committed|aborted|pending [ts=<ts>]
 ----
 
  Informs the lock table that the named transaction is finalized.
 
-add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>] [consult-finalized-txn-cache=<bool>]
+add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>] [consult-txn-status-cache=<bool>]
 ----
 <error string>
 
@@ -260,7 +260,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return ""
 
-			case "txn-finalized":
+			case "pushed-txn-updated":
 				var txnName string
 				d.ScanArgs(t, "txn", &txnName)
 				txnMeta, ok := txnsByName[txnName]
@@ -277,10 +277,16 @@ func TestLockTableBasic(t *testing.T) {
 					txn.Status = roachpb.COMMITTED
 				case "aborted":
 					txn.Status = roachpb.ABORTED
+				case "pending":
+					txn.Status = roachpb.PENDING
 				default:
 					return fmt.Sprintf("unknown txn status %s", statusStr)
 				}
-				lt.TransactionIsFinalized(txn)
+				if d.HasArg("ts") {
+					ts := scanTimestamp(t, d)
+					txn.WriteTimestamp.Forward(ts)
+				}
+				lt.PushedTransactionUpdated(txn)
 				return ""
 
 			case "new-request":
@@ -466,13 +472,13 @@ func TestLockTableBasic(t *testing.T) {
 				if d.HasArg("lease-seq") {
 					d.ScanArgs(t, "lease-seq", &seq)
 				}
-				consultFinalizedTxnCache := false
-				if d.HasArg("consult-finalized-txn-cache") {
-					d.ScanArgs(t, "consult-finalized-txn-cache", &consultFinalizedTxnCache)
+				consultTxnStatusCache := false
+				if d.HasArg("consult-txn-status-cache") {
+					d.ScanArgs(t, "consult-txn-status-cache", &consultTxnStatusCache)
 				}
 				leaseSeq := roachpb.LeaseSequence(seq)
 				if _, err := lt.AddDiscoveredLock(
-					&intent, leaseSeq, consultFinalizedTxnCache, g); err != nil {
+					&intent, leaseSeq, consultTxnStatusCache, g); err != nil {
 					return err.Error()
 				}
 				return lt.String()
