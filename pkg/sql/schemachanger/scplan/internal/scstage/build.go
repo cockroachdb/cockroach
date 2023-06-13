@@ -320,11 +320,28 @@ func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) 
 		// Determine whether there are any backfill or validation operations
 		// remaining which should prevent the scheduling of any non-revertible
 		// operations. This information will be used when building the current
-		// set of targets below.
+		// set of targets below. We will do this over the set of generated operations,
+		// since some of these may be no-oped for newly created tables.
 		for _, n := range nodes {
-			if oe, ok := bc.g.GetOpEdgeFrom(n); ok && oe.CanFail() {
-				sb.anyRemainingOpsCanFail = true
+			if sb.anyRemainingOpsCanFail {
 				break
+			}
+			s := n
+			for {
+				if s.CurrentStatus == s.TargetStatus {
+					break
+				}
+				if oe, ok := bc.g.GetOpEdgeFrom(s); ok {
+					for _, op := range oe.Op() {
+						if op.Type() != scop.MutationType {
+							sb.anyRemainingOpsCanFail = true
+							break
+						}
+					}
+					s = oe.To()
+				} else {
+					break
+				}
 			}
 		}
 
