@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	circuitbreaker "github.com/cockroachdb/cockroach/pkg/util/circuit"
@@ -2124,6 +2125,19 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 	}
 }
 
+//go:generate mockgen -destination=mocks_generated_test.go --package=. Dialbacker
+
+type Dialbacker interface {
+	GRPCUnvalidatedDial(string) *Connection
+	GRPCDialNode(string, roachpb.NodeID, ConnectionClass) *Connection
+	grpcDialRaw(
+		context.Context, string, ConnectionClass, ...grpc.DialOption,
+	) (*grpc.ClientConn, error)
+	wrapCtx(
+		ctx context.Context, target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+	) context.Context
+}
+
 // VerifyDialback verifies connectivity from the recipient of a PingRequest back
 // to the sender. If a system-class connection to the sender is healthy or no
 // dialback is requested, the method returns success immediately.
@@ -2135,10 +2149,15 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 //     attempt succeeded.
 //   - for a non-blocking ping, returns the health state of the system-class
 //     connection, with the exception of ErrNotHeartbeated, which maps to `nil`.
-func (rpcCtx *Context) VerifyDialback(
-	ctx context.Context, request *PingRequest, _ *PingResponse, locality roachpb.Locality,
+func VerifyDialback(
+	ctx context.Context,
+	rpcCtx Dialbacker,
+	request *PingRequest,
+	_ *PingResponse,
+	locality roachpb.Locality,
+	sv *settings.Values,
 ) error {
-	if request.NeedsDialback == PingRequest_NONE || !enableRPCCircuitBreakers.Get(&rpcCtx.Settings.SV) {
+	if request.NeedsDialback == PingRequest_NONE || !enableRPCCircuitBreakers.Get(sv) {
 		return nil
 	}
 
@@ -2186,12 +2205,14 @@ func (rpcCtx *Context) VerifyDialback(
 		ctx := rpcCtx.wrapCtx(ctx, target, request.OriginNodeID, SystemClass)
 		ctx = logtags.AddTag(ctx, "dialback", nil)
 		conn, err := rpcCtx.grpcDialRaw(ctx, target, SystemClass, grpc.WithBlock())
+		if conn != nil { // NB: the nil check simplifies mocking in TestVerifyDialback
+			_ = conn.Close() // nolint:grpcconnclose
+		}
 		if err != nil {
 			log.Infof(ctx, "blocking dialback connection failed to %s, n%d, %v", target, request.OriginNodeID, err)
 			return err
 		}
 		log.VEventf(ctx, 2, "blocking dialback connection to n%d succeeded", request.OriginNodeID)
-		_ = conn.Close() // nolint:grpcconnclose
 		return nil
 	}
 }
