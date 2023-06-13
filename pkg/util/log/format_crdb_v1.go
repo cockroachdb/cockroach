@@ -223,25 +223,29 @@ func (f formatCrdbV1) formatEntry(entry logEntry) *buffer {
 		entry.header, f.showCounter, f.colorProfile, f.loc)
 }
 
-// formatEntryInternalV1 renders a log entry.
-// Log lines are colorized depending on severity.
-// It uses a newly allocated *buffer. The caller is responsible
-// for calling putBuffer() afterwards.
-func formatLogEntryInternalV1(
-	entry logpb.Entry, isHeader, showCounter bool, cp ttycolor.Profile, loc *time.Location,
-) *buffer {
-	buf := getBuffer()
-	if entry.Line < 0 {
-		entry.Line = 0 // not a real line number, but acceptable to someDigits
+func writeCrdbHeader(
+	buf *buffer,
+	cp ttycolor.Profile,
+	sev logpb.Severity,
+	ch logpb.Channel,
+	file string,
+	line int,
+	ts int64,
+	loc *time.Location,
+	gid int,
+	redactable bool,
+) {
+	if line < 0 {
+		line = 0 // not a real line number, but acceptable to someDigits
 	}
-	if entry.Severity > severity.FATAL || entry.Severity <= severity.UNKNOWN {
-		entry.Severity = severity.INFO // for safety.
+	if sev > severity.FATAL || sev <= severity.UNKNOWN {
+		sev = severity.INFO // for safety.
 	}
 
 	tmp := buf.tmp[:len(buf.tmp)]
 	var n int
 	var prefix []byte
-	switch entry.Severity {
+	switch sev {
 	case severity.INFO:
 		prefix = cp[ttycolor.Cyan]
 	case severity.WARNING:
@@ -250,17 +254,17 @@ func formatLogEntryInternalV1(
 		prefix = cp[ttycolor.Red]
 	}
 	n += copy(tmp, prefix)
-	tmp[n] = severityChar[entry.Severity-1]
+	// Lyymmdd hh:mm:ss.uuuuuu file:line
+	tmp[n] = severityChar[sev-1]
 	n++
 
 	if loc == nil {
 		// Default time zone (UTC).
 		// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
 		// It's worth about 3X. Fprintf is hard.
-		now := timeutil.Unix(0, entry.Time)
+		now := timeutil.Unix(0, ts)
 		year, month, day := now.Date()
 		hour, minute, second := now.Clock()
-		// Lyymmdd hh:mm:ss.uuuuuu file:line
 		if year < 2000 {
 			year = 2000
 		}
@@ -285,29 +289,32 @@ func formatLogEntryInternalV1(
 		// Slooooow path.
 		buf.Write(tmp[:n])
 		n = 0
-		now := timeutil.Unix(0, entry.Time).In(loc)
+		now := timeutil.Unix(0, ts).In(loc)
 		buf.WriteString(now.Format("060102"))
 		buf.Write(cp[ttycolor.Gray])
 		buf.WriteByte(' ')
 		buf.WriteString(now.Format("15:04:05.000000-070000"))
 	}
+
 	tmp[n] = ' '
 	n++
-	if entry.Goroutine > 0 {
-		n += buf.someDigits(n, int(entry.Goroutine))
+	if gid >= 0 {
+		n += buf.someDigits(n, gid)
 		tmp[n] = ' '
 		n++
 	}
-	if !isHeader && entry.Channel != 0 {
+
+	if ch != 0 {
 		// Prefix the filename with the channel number.
-		n += buf.someDigits(n, int(entry.Channel))
+		n += buf.someDigits(n, int(ch))
 		tmp[n] = '@'
 		n++
 	}
+
 	buf.Write(tmp[:n])
-	buf.WriteString(entry.File)
+	buf.WriteString(file)
 	tmp[0] = ':'
-	n = buf.someDigits(1, int(entry.Line))
+	n = buf.someDigits(1, line)
 	n++
 	// Reset the color to default.
 	n += copy(tmp[n:], cp[ttycolor.Reset])
@@ -316,7 +323,7 @@ func formatLogEntryInternalV1(
 	// If redaction is enabled, indicate that the current entry has
 	// markers. This indicator is used in the log parser to determine
 	// which redaction strategy to adopt.
-	if entry.Redactable {
+	if redactable {
 		copy(tmp[n:], redactableIndicatorBytes)
 		n += len(redactableIndicatorBytes)
 	}
@@ -327,6 +334,26 @@ func formatLogEntryInternalV1(
 	tmp[n] = ' '
 	n++
 	buf.Write(tmp[:n])
+}
+
+// formatEntryInternalV1 renders a log entry.
+// Log lines are colorized depending on severity.
+// It uses a newly allocated *buffer. The caller is responsible
+// for calling putBuffer() afterwards.
+func formatLogEntryInternalV1(
+	entry logpb.Entry, isHeader, showCounter bool, cp ttycolor.Profile, loc *time.Location,
+) *buffer {
+	buf := getBuffer()
+	ch := entry.Channel
+	if isHeader {
+		ch = 0
+	}
+	gid := int(entry.Goroutine)
+	if gid == 0 {
+		// In the -v1 format, a goroutine ID of 0 is hidden.
+		gid = -1
+	}
+	writeCrdbHeader(buf, cp, entry.Severity, ch, entry.File, int(entry.Line), entry.Time, loc, gid, entry.Redactable)
 
 	// The remainder is variable-length and could exceed
 	// the static size of tmp. But we do have an upper bound.
@@ -353,7 +380,8 @@ func formatLogEntryInternalV1(
 
 	// Display the counter if set and enabled.
 	if showCounter && entry.Counter > 0 {
-		n = buf.someDigits(0, int(entry.Counter))
+		tmp := buf.tmp[:len(buf.tmp)]
+		n := buf.someDigits(0, int(entry.Counter))
 		tmp[n] = ' '
 		n++
 		buf.Write(tmp[:n])

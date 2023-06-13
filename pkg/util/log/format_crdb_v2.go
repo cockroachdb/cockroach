@@ -31,9 +31,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
-	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -255,101 +253,8 @@ func (f formatCrdbV2) formatEntry(entry logEntry) *buffer {
 	// preserve cross-version compatibility with at least
 	// one version backwards.
 	buf := getBuffer()
-	if entry.line < 0 {
-		entry.line = 0 // not a real line number, but acceptable to someDigits
-	}
-	if entry.sev > severity.FATAL || entry.sev <= severity.UNKNOWN {
-		entry.sev = severity.INFO // for safety.
-	}
-
-	tmp := buf.tmp[:len(buf.tmp)]
-	var n int
-	var prefix []byte
 	cp := f.colorProfile
-	switch entry.sev {
-	case severity.INFO:
-		prefix = cp[ttycolor.Cyan]
-	case severity.WARNING:
-		prefix = cp[ttycolor.Yellow]
-	case severity.ERROR, severity.FATAL:
-		prefix = cp[ttycolor.Red]
-	}
-	n += copy(tmp, prefix)
-	// Lyymmdd hh:mm:ss.uuuuuu file:line
-	tmp[n] = severityChar[entry.sev-1]
-	n++
-
-	if f.loc == nil {
-		// Default time zone (UTC).
-		// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
-		// It's worth about 3X. Fprintf is hard.
-		now := timeutil.Unix(0, entry.ts)
-		year, month, day := now.Date()
-		hour, minute, second := now.Clock()
-		if year < 2000 {
-			year = 2000
-		}
-		n += buf.twoDigits(n, year-2000)
-		n += buf.twoDigits(n, int(month))
-		n += buf.twoDigits(n, day)
-		n += copy(tmp[n:], cp[ttycolor.Gray]) // gray for time, file & line
-		tmp[n] = ' '
-		n++
-		n += buf.twoDigits(n, hour)
-		tmp[n] = ':'
-		n++
-		n += buf.twoDigits(n, minute)
-		tmp[n] = ':'
-		n++
-		n += buf.twoDigits(n, second)
-		tmp[n] = '.'
-		n++
-		n += buf.nDigits(6, n, now.Nanosecond()/1000, '0')
-	} else {
-		// Time zone was specified.
-		// Slooooow path.
-		buf.Write(tmp[:n])
-		n = 0
-		now := timeutil.Unix(0, entry.ts).In(f.loc)
-		buf.WriteString(now.Format("060102"))
-		buf.Write(cp[ttycolor.Gray])
-		buf.WriteByte(' ')
-		buf.WriteString(now.Format("15:04:05.000000-070000"))
-	}
-	tmp[n] = ' '
-	n++
-	n += buf.someDigits(n, int(entry.gid))
-	tmp[n] = ' '
-	n++
-	if entry.ch != channel.DEV {
-		// Prefix the filename with the channel number.
-		n += buf.someDigits(n, int(entry.ch))
-		tmp[n] = '@'
-		n++
-	}
-	buf.Write(tmp[:n])
-	buf.WriteString(entry.file)
-	tmp[0] = ':'
-	n = buf.someDigits(1, entry.line)
-	n++
-	// Reset the color to default.
-	n += copy(tmp[n:], cp[ttycolor.Reset])
-	tmp[n] = ' '
-	n++
-	// If redaction is enabled, indicate that the current entry has
-	// markers. This indicator is used in the log parser to determine
-	// which redaction strategy to adopt.
-	if entry.payload.redactable {
-		copy(tmp[n:], redactableIndicatorBytes)
-		n += len(redactableIndicatorBytes)
-	}
-	// Note: when the redactable indicator is not introduced
-	// there are two spaces next to each other. This is intended
-	// and should be preserved for backward-compatibility with
-	// 3rd party log parsers.
-	tmp[n] = ' '
-	n++
-	buf.Write(tmp[:n])
+	writeCrdbHeader(buf, cp, entry.sev, entry.ch, entry.file, entry.line, entry.ts, f.loc, int(entry.gid), entry.payload.redactable)
 
 	// The remainder is variable-length and could exceed
 	// the static size of tmp. But we do have a best-case upper bound.
@@ -379,7 +284,8 @@ func (f formatCrdbV2) formatEntry(entry logEntry) *buffer {
 
 	// Display the counter if set and enabled.
 	if entry.counter > 0 {
-		n = buf.someDigits(0, int(entry.counter))
+		tmp := buf.tmp[:len(buf.tmp)]
+		n := buf.someDigits(0, int(entry.counter))
 		buf.Write(cp[ttycolor.Cyan])
 		buf.Write(tmp[:n])
 		buf.Write(cp[ttycolor.Reset])
