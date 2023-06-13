@@ -703,9 +703,9 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 	// We may have received some liveness records from Gossip prior to Start being
 	// called. We need to go through and notify all the callers of them now.
 	for _, entry := range nl.ScanNodeVitalityFromCache() {
-		if entry.IsAlive() {
+		if entry.IsLive(livenesspb.IsAliveNotification) {
 			for _, fn := range nl.onIsLive {
-				fn(entry.Liveness)
+				fn(entry.GetInternalLiveness())
 			}
 		}
 	}
@@ -1065,39 +1065,19 @@ func (nl *NodeLiveness) convertToNodeVitality(l livenesspb.Liveness) livenesspb.
 	// within the liveness threshold. Note that LastUpdatedTime is set
 	// when the store detail is created and will have a non-zero value
 	// even before the first gossip arrives for a store.
-	now := nl.clock.Now()
-	timeUntilNodeDead := TimeUntilNodeDead.Get(&nl.st.SV)
-	suspectDuration := TimeAfterNodeSuspect.Get(&nl.st.SV)
 
-	var health livenesspb.VitalityStatus
-	isLive := l.IsLive(now)
-	isDead := l.IsDead(now, timeUntilNodeDead)
-
-	if isDead {
-		health = livenesspb.VitalityDead
-	} else if isLive {
-		health = livenesspb.VitalityAlive
-	} else {
-		health = livenesspb.VitalityUnavailable
-	}
-
-	// If there is a valid descriptor, check that it is being updated. If we don't
-	// have one it may be because we haven't gotten the first gossip update yet.
-	if lastDescUpdate, valid := nl.cache.LastDescriptorUpdate(l.NodeID); valid {
-		deadAsOf := lastDescUpdate.lastUpdateTime.AddDuration(timeUntilNodeDead)
-		if now.After(deadAsOf) {
-			// If the store descriptor is not being updated, we mark the node as dead
-			// regardless of what liveness says.
-			health = livenesspb.VitalityDead
-		}
-		if lastDescUpdate.lastUnavailableTime.AddDuration(suspectDuration).After(now) {
-			health = livenesspb.VitalitySuspect
-		}
-	}
 	// NB: nodeDialer is nil in some tests.
 	connected := nl.nodeDialer == nil || nl.nodeDialer.ConnHealth(l.NodeID, rpc.SystemClass) == nil
+	lastDescUpdate, _ := nl.cache.LastDescriptorUpdate(l.NodeID)
 
-	return l.CreateNodeVitality(health, connected)
+	return l.CreateNodeVitality(
+		nl.clock.Now(),
+		lastDescUpdate.lastUpdateTime,
+		lastDescUpdate.lastUnavailableTime,
+		connected,
+		TimeUntilNodeDead.Get(&nl.st.SV),
+		TimeAfterNodeSuspect.Get(&nl.st.SV),
+	)
 }
 
 // GetNodeVitalityFromCache returns the current status of the node. This method
@@ -1343,12 +1323,12 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 
 	var liveNodes int64
 	for n, v := range nl.ScanNodeVitalityFromCache() {
-		if v.IsAlive() {
+		if v.IsLive(livenesspb.IsAliveNotification) {
 			liveNodes++
 		}
 		// If this node isn't live, we don't want to report its view of node liveness
 		// because it's more likely to be inaccurate than the view of a live node.
-		if n == selfID && !v.IsAlive() {
+		if n == selfID && !v.IsLive(livenesspb.IsAliveNotification) {
 			return 0
 		}
 	}
