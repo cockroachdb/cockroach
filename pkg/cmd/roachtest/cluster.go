@@ -1473,8 +1473,8 @@ COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure
 }
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
-// The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error {
+// The logs will be placed `dest`, relative to the test's artifacts dir.
+func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest string) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1486,7 +1486,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 	// Don't hang forever if we can't fetch the debug zip.
 	return timeutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
 		const zipName = "debug.zip"
-		path := filepath.Join(c.t.ArtifactsDir(), zipName)
+		path := filepath.Join(c.t.ArtifactsDir(), dest)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
