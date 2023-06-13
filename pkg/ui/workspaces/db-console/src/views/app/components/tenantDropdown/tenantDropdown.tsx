@@ -16,6 +16,7 @@ import React from "react";
 import { Dropdown } from "@cockroachlabs/cluster-ui";
 import ErrorBoundary from "../errorMessage/errorBoundary";
 import "./tenantDropdown.styl";
+import { isSystemTenant } from "src/redux/tenants";
 
 const tenantIDKey = "tenant";
 
@@ -26,7 +27,7 @@ const TenantDropdown = () => {
   const createDropdownItems = () => {
     return (
       tenants?.map(tenantID => {
-        return { name: "Tenant " + tenantID, value: tenantID };
+        return { name: "Tenant: " + tenantID, value: tenantID };
       }) || []
     );
   };
@@ -38,7 +39,7 @@ const TenantDropdown = () => {
     }
   };
 
-  if (tenants.length == 0) {
+  if (!currentTenant || (tenants.length < 2 && isSystemTenant(currentTenant))) {
     return null;
   }
 
@@ -46,9 +47,9 @@ const TenantDropdown = () => {
     <ErrorBoundary>
       <Dropdown
         items={createDropdownItems()}
-        onChange={tenantID => onTenantChange(tenantID)}
+        onChange={(tenantID: string) => onTenantChange(tenantID)}
       >
-        <div className="tenant-selected">{"Tenant " + currentTenant}</div>
+        <div className="tenant-selected">{"Tenant: " + currentTenant}</div>
       </Dropdown>
     </ErrorBoundary>
   );
