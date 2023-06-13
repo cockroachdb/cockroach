@@ -53,21 +53,10 @@ type tenantNode struct {
 }
 
 type createTenantOptions struct {
-	// TODO(ssd): This is a hack to work around the currently tangled state of
-	// cluster management between roachtest and roachprod. createTenantNode
-	// recreates client certs. Only one copy of the client certs are cached
-	// locally, so if we want a client to work against multiple tenants in a
-	// single test, we need to create the certs with all tenants.
-	otherTenantIDs []int
-
 	// Set this to expand the scope of the nodes added to the tenant certs.
 	certNodes option.NodeListOption
 }
 type createTenantOpt func(*createTenantOptions)
-
-func createTenantOtherTenantIDs(ids []int) createTenantOpt {
-	return func(c *createTenantOptions) { c.otherTenantIDs = ids }
-}
 
 func createTenantCertNodes(nodes option.NodeListOption) createTenantOpt {
 	return func(c *createTenantOptions) { c.certNodes = nodes }
