@@ -394,6 +394,7 @@ select table_schema, table_name FROM information_schema.tables
 ----
 crdb_internal       active_range_feeds
 crdb_internal       backward_dependencies
+crdb_internal       builtin_function_comments
 crdb_internal       builtin_functions
 crdb_internal       cluster_contended_indexes
 crdb_internal       cluster_contended_keys
@@ -742,6 +743,7 @@ SELECT table_name FROM "".information_schema.tables WHERE table_catalog = 'other
 ----
 active_range_feeds
 backward_dependencies
+builtin_function_comments
 builtin_functions
 cluster_contended_indexes
 cluster_contended_keys
@@ -1134,6 +1136,7 @@ SELECT * FROM system.information_schema.tables
 table_catalog  table_schema        table_name                              table_type   is_insertable_into  version
 system         crdb_internal       active_range_feeds                      SYSTEM VIEW  NO                  1
 system         crdb_internal       backward_dependencies                   SYSTEM VIEW  NO                  1
+system         crdb_internal       builtin_function_comments               SYSTEM VIEW  NO                  1
 system         crdb_internal       builtin_functions                       SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_contended_indexes               SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_contended_keys                  SYSTEM VIEW  NO                  1
@@ -2932,11 +2935,11 @@ SELECT table_catalog, table_schema, table_name, column_name, column_comment
 FROM information_schema.columns
 WHERE table_name = 't1'
 ----
-table_catalog  table_schema  table_name  column_name    column_comment
-test           public        t1          id             ·
-test           public        t1          name           ·
-test           public        t1          class          ·
-test           public        t1          rowid          ·
+table_catalog  table_schema  table_name  column_name  column_comment
+test           public        t1          id           NULL
+test           public        t1          name         NULL
+test           public        t1          class        NULL
+test           public        t1          rowid        NULL
 
 statement ok
 COMMENT ON COLUMN public.t1.id IS 'identification'
@@ -2949,20 +2952,20 @@ SELECT table_catalog, table_schema, table_name, column_name, column_comment
 FROM information_schema.columns
 WHERE table_name = 't1'
 ----
-table_catalog  table_schema  table_name  column_name    column_comment
-test           public        t1          id             'identification'
-test           public        t1          name           'character'
-test           public        t1          class          ·
-test           public        t1          rowid          ·
+table_catalog  table_schema  table_name  column_name  column_comment
+test           public        t1          id           identification
+test           public        t1          name         character
+test           public        t1          class        NULL
+test           public        t1          rowid        NULL
 
 query TTTTT colnames
 SELECT table_catalog, table_schema, table_name, column_name, column_comment
 FROM information_schema.columns
 WHERE table_name = 't1' AND column_comment != ''
 ----
-table_catalog  table_schema  table_name  column_name    column_comment
-test           public        t1          id             'identification'
-test           public        t1          name           'character'
+table_catalog  table_schema  table_name  column_name  column_comment
+test           public        t1          id           identification
+test           public        t1          name         character
 
 statement ok
 DROP TABLE t1
@@ -3122,6 +3125,7 @@ SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, 
 grantor  grantee  table_catalog  table_schema        table_name                              privilege_type  is_grantable  with_hierarchy
 NULL     public   system         crdb_internal       active_range_feeds                      SELECT          NO            YES
 NULL     public   system         crdb_internal       backward_dependencies                   SELECT          NO            YES
+NULL     public   system         crdb_internal       builtin_function_comments               SELECT          NO            YES
 NULL     public   system         crdb_internal       builtin_functions                       SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_contended_indexes               SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_contended_keys                  SELECT          NO            YES
@@ -3781,6 +3785,7 @@ SELECT * FROM system.information_schema.role_table_grants
 grantor  grantee  table_catalog  table_schema        table_name                              privilege_type  is_grantable  with_hierarchy
 NULL     public   system         crdb_internal       active_range_feeds                      SELECT          NO            YES
 NULL     public   system         crdb_internal       backward_dependencies                   SELECT          NO            YES
+NULL     public   system         crdb_internal       builtin_function_comments               SELECT          NO            YES
 NULL     public   system         crdb_internal       builtin_functions                       SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_contended_indexes               SELECT          NO            YES
 NULL     public   system         crdb_internal       cluster_contended_keys                  SELECT          NO            YES
