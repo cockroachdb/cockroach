@@ -22,8 +22,8 @@ exp,benchmark
 15,AlterTableDropConstraint/alter_table_drop_2_check_constraints
 15,AlterTableDropConstraint/alter_table_drop_3_check_constraints
 9,AlterTableSplit/alter_table_split_at_1_value
-13,AlterTableSplit/alter_table_split_at_2_values
-17,AlterTableSplit/alter_table_split_at_3_values
+11,AlterTableSplit/alter_table_split_at_2_values
+14,AlterTableSplit/alter_table_split_at_3_values
 7,AlterTableUnsplit/alter_table_unsplit_at_1_value
 9,AlterTableUnsplit/alter_table_unsplit_at_2_values
 11,AlterTableUnsplit/alter_table_unsplit_at_3_values
@@ -40,8 +40,8 @@ exp,benchmark
 17,DropDatabase/drop_database_2_tables
 17,DropDatabase/drop_database_3_tables
 26,DropRole/drop_1_role
-34,DropRole/drop_2_roles
-42,DropRole/drop_3_roles
+36,DropRole/drop_2_roles
+45,DropRole/drop_3_roles
 15,DropSequence/drop_1_sequence
 17,DropSequence/drop_2_sequences
 19,DropSequence/drop_3_sequences
@@ -77,6 +77,7 @@ exp,benchmark
 12,ORMQueries/hasura_column_descriptions_8_tables
 5,ORMQueries/hasura_column_descriptions_modified
 4,ORMQueries/information_schema._pg_index_position
+0,ORMQueries/column_descriptions_json_agg
 134,ORMQueries/introspection_description_join
 4,ORMQueries/pg_attribute
 4,ORMQueries/pg_class
@@ -91,6 +92,9 @@ exp,benchmark
 21,Revoke/revoke_all_on_3_tables
 14,RevokeRole/revoke_1_role
 16,RevokeRole/revoke_2_roles
+10,ShowGrants/grant_2_roles
+11,ShowGrants/grant_3_roles
+12,ShowGrants/grant_4_roles
 1,SystemDatabaseQueries/select_system.users_with_empty_database_Name
 1,SystemDatabaseQueries/select_system.users_with_schema_Name
 1,SystemDatabaseQueries/select_system.users_without_schema_Name

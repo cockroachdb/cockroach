@@ -919,6 +919,13 @@ func TestLogic_grant_in_txn(
 	runLogicTest(t, "grant_in_txn")
 }
 
+func TestLogic_grant_inherited(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "grant_inherited")
+}
+
 func TestLogic_grant_on_all_sequences_in_schema(
 	t *testing.T,
 ) {
@@ -980,6 +987,13 @@ func TestLogic_group_join(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "group_join")
+}
+
+func TestLogic_guardrails(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "guardrails")
 }
 
 func TestLogic_hash_join(

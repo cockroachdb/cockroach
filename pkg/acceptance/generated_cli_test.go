@@ -95,6 +95,13 @@ func TestDockerCLI_test_demo_changefeeds(t *testing.T) {
 	runTestDockerCLI(t, "test_demo_changefeeds", "../cli/interactive_tests/test_demo_changefeeds.tcl")
 }
 
+func TestDockerCLI_test_demo_cli_integration(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_demo_cli_integration", "../cli/interactive_tests/test_demo_cli_integration.tcl")
+}
+
 func TestDockerCLI_test_demo_global(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
@@ -277,6 +284,13 @@ func TestDockerCLI_test_log_flags(t *testing.T) {
 	runTestDockerCLI(t, "test_log_flags", "../cli/interactive_tests/test_log_flags.tcl")
 }
 
+func TestDockerCLI_test_multiline_statements(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_multiline_statements", "../cli/interactive_tests/test_multiline_statements.tcl")
+}
+
 func TestDockerCLI_test_multiline_statements_libedit(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
@@ -303,6 +317,13 @@ func TestDockerCLI_test_password(t *testing.T) {
 	defer s.Close(t)
 
 	runTestDockerCLI(t, "test_password", "../cli/interactive_tests/test_password.tcl")
+}
+
+func TestDockerCLI_test_pretty(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_pretty", "../cli/interactive_tests/test_pretty.tcl")
 }
 
 func TestDockerCLI_test_read_only(t *testing.T) {
@@ -338,6 +359,13 @@ func TestDockerCLI_test_server_restart(t *testing.T) {
 	defer s.Close(t)
 
 	runTestDockerCLI(t, "test_server_restart", "../cli/interactive_tests/test_server_restart.tcl")
+}
+
+func TestDockerCLI_test_server_sig(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_server_sig", "../cli/interactive_tests/test_server_sig.tcl")
 }
 
 func TestDockerCLI_test_socket_name(t *testing.T) {

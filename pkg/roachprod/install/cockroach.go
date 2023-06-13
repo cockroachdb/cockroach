@@ -353,7 +353,7 @@ func (c *SyncedCluster) ExecSQL(
 		}
 		resultChan <- result{node: node, output: string(res.CombinedOut)}
 		return res, nil
-	}, WithDisplay(display)); err != nil {
+	}, WithDisplay(display), WithWaitOnFail()); err != nil {
 		return err
 	}
 

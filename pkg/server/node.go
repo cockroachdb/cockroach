@@ -371,7 +371,7 @@ func bootstrapCluster(
 					initialValuesOpts.OverrideKey = initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride
 				}
 			}
-			initialValues, tableSplits, err := initialValuesOpts.GetInitialValuesCheckForOverrides()
+			initialValues, tableSplits, err := initialValuesOpts.GenerateInitialValues()
 			if err != nil {
 				return nil, err
 			}
@@ -433,10 +433,6 @@ func NewNode(
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
 	}
-	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
-		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,
-	)
-	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -1176,9 +1172,7 @@ func (n *Node) batchInternal(
 	if err != nil {
 		return nil, err
 	}
-	if handle.ElasticCPUWorkHandle != nil {
-		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, handle.ElasticCPUWorkHandle)
-	}
+	ctx = handle.AnnotateCtx(ctx)
 
 	var writeBytes *kvadmission.StoreWriteBytes
 	defer func() {

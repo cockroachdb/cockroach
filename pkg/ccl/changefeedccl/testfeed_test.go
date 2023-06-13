@@ -623,10 +623,11 @@ func (s *notifyFlushSink) EncodeAndEmitRow(
 	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
+	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
 ) error {
 	if sinkWithEncoder, ok := s.Sink.(SinkWithEncoder); ok {
-		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, alloc)
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc)
 	}
 	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.Sink)
 }
@@ -1052,7 +1053,7 @@ func (f *cloudFeedFactory) Feed(
 	// Determine if we can enable the parquet format if the changefeed is not
 	// being created with incompatible options. If it can be enabled, we will use
 	// parquet format with a probability of 0.4.
-	parquetPossible := true
+	parquetPossible := includeParquestTestMetadata
 	explicitEnvelope := false
 	for _, opt := range createStmt.Options {
 		if string(opt.Key) == changefeedbase.OptEnvelope {
@@ -1175,19 +1176,19 @@ func extractFieldFromJSONValue(
 
 	if isBare {
 		meta := make(map[string]gojson.RawMessage)
-		if metaVal, haveMeta := parsed[jsonMetaSentinel]; haveMeta {
+		if metaVal, haveMeta := parsed[metaSentinel]; haveMeta {
 			if err := gojson.Unmarshal(metaVal, &meta); err != nil {
 				return nil, nil, errors.Wrapf(err, "unmarshalling json %v", metaVal)
 			}
 			field = meta[fieldName]
 			delete(meta, fieldName)
 			if len(meta) == 0 {
-				delete(parsed, jsonMetaSentinel)
+				delete(parsed, metaSentinel)
 			} else {
 				if metaVal, err = reformatJSON(meta); err != nil {
 					return nil, nil, err
 				}
-				parsed[jsonMetaSentinel] = metaVal
+				parsed[metaSentinel] = metaVal
 			}
 		}
 	} else {
@@ -1245,17 +1246,27 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 		return err
 	}
 
-	for _, row := range datums {
-		rowCopy := make([]string, len(valueColumnNamesOrdered)-1)
-		copy(rowCopy, valueColumnNamesOrdered[:len(valueColumnNamesOrdered)-1])
-		rowJSONBuilder, err := json.NewFixedKeysObjectBuilder(rowCopy)
-		if err != nil {
-			return err
+	// Extract metadata columns into metaColumnNameSet.
+	extractMetaColumns := func(columnNameSet map[string]int) map[string]int {
+		metaColumnNameSet := make(map[string]int)
+		for colName, colIdx := range columnNameSet {
+			switch colName {
+			case parquetCrdbEventTypeColName:
+				metaColumnNameSet[colName] = colIdx
+			case parquetOptUpdatedTimestampColName:
+				metaColumnNameSet[colName] = colIdx
+			case parquetOptMVCCTimestampColName:
+				metaColumnNameSet[colName] = colIdx
+			default:
+			}
 		}
+		return metaColumnNameSet
+	}
+	metaColumnNameSet := extractMetaColumns(columnNameSet)
 
+	for _, row := range datums {
+		rowJSONBuilder := json.NewObjectBuilder(len(valueColumnNamesOrdered) - len(metaColumnNameSet))
 		keyJSONBuilder := json.NewArrayBuilder(len(primaryKeysNamesOrdered))
-
-		isDeleted := false
 
 		for _, primaryKeyColumnName := range primaryKeysNamesOrdered {
 			datum := row[primaryKeyColumnSet[primaryKeyColumnName]]
@@ -1267,28 +1278,26 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 
 		}
 		for _, valueColumnName := range valueColumnNamesOrdered {
-			if valueColumnName == parquetCrdbEventTypeColName {
-				if *(row[columnNameSet[valueColumnName]].(*tree.DString)) == *parquetEventDelete.DString() {
-					isDeleted = true
-				}
-				break
+			if _, isMeta := metaColumnNameSet[valueColumnName]; isMeta {
+				continue
 			}
+
 			datum := row[columnNameSet[valueColumnName]]
 			j, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
 			if err != nil {
 				return err
 			}
-			if err := rowJSONBuilder.Set(valueColumnName, j); err != nil {
-				return err
-			}
+			rowJSONBuilder.Add(valueColumnName, j)
 		}
 
-		var valueWithAfter *json.FixedKeysObjectBuilder
+		var valueWithAfter *json.ObjectBuilder
+
+		isDeleted := *(row[metaColumnNameSet[parquetCrdbEventTypeColName]].(*tree.DString)) == *parquetEventDelete.DString()
 
 		if envelopeType == changefeedbase.OptEnvelopeBare {
 			valueWithAfter = rowJSONBuilder
 		} else {
-			valueWithAfter, err = json.NewFixedKeysObjectBuilder([]string{"after"})
+			valueWithAfter = json.NewObjectBuilder(1)
 			if err != nil {
 				return err
 			}
@@ -1297,26 +1306,31 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 				if err != nil {
 					return err
 				}
-				if err = valueWithAfter.Set("after", nullJSON); err != nil {
-					return err
-				}
+				valueWithAfter.Add("after", nullJSON)
 			} else {
-				vbJson, err := rowJSONBuilder.Build()
+				vbJson := rowJSONBuilder.Build()
+				valueWithAfter.Add("after", vbJson)
+			}
+
+			if updatedColIdx, updated := metaColumnNameSet[parquetOptUpdatedTimestampColName]; updated {
+				j, err := tree.AsJSON(row[updatedColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
 				if err != nil {
 					return err
 				}
-				if err = valueWithAfter.Set("after", vbJson); err != nil {
+				valueWithAfter.Add(changefeedbase.OptUpdatedTimestamps, j)
+			}
+			if mvccColIdx, mvcc := metaColumnNameSet[parquetOptMVCCTimestampColName]; mvcc {
+				j, err := tree.AsJSON(row[mvccColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
+				if err != nil {
 					return err
 				}
+				valueWithAfter.Add(changefeedbase.OptMVCCTimestamps, j)
 			}
 		}
 
 		keyJSON := keyJSONBuilder.Build()
 
-		rowJSON, err := valueWithAfter.Build()
-		if err != nil {
-			return err
-		}
+		rowJSON := valueWithAfter.Build()
 
 		var keyBuf bytes.Buffer
 		keyJSON.Format(&keyBuf)
@@ -1338,6 +1352,29 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 	}
 
 	return nil
+}
+
+// readParquetResolvedPayload reads a resolved timestamp value from the
+// specified parquet file and returns it encoded as JSON.
+func (c *cloudFeed) readParquetResolvedPayload(path string) ([]byte, error) {
+	meta, datums, err := parquet.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if meta.NumRows != 1 || meta.NumCols != 1 {
+		return nil, errors.AssertionFailedf("expected one row with one col containing the resolved timestamp")
+	}
+
+	resolvedDatum := datums[0][0]
+
+	resolved := resolvedRaw{Resolved: resolvedDatum.String()}
+	resolvedBytes, err := gojson.Marshal(resolved)
+	if err != nil {
+		return nil, err
+	}
+
+	return resolvedBytes, nil
 }
 
 // Next implements the TestFeed interface.
@@ -1413,11 +1450,27 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 
+	details, err := c.Details()
+	if err != nil {
+		return err
+	}
+	format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
+
 	if strings.HasSuffix(path, `RESOLVED`) {
-		resolvedPayload, err := os.ReadFile(path)
-		if err != nil {
-			return err
+		var resolvedPayload []byte
+		var err error
+		if format == changefeedbase.OptFormatParquet {
+			resolvedPayload, err = c.readParquetResolvedPayload(path)
+			if err != nil {
+				return err
+			}
+		} else {
+			resolvedPayload, err = os.ReadFile(path)
+			if err != nil {
+				return err
+			}
 		}
+
 		resolvedEntry := &cdctest.TestFeedMessage{Resolved: resolvedPayload}
 		c.rows = append(c.rows, resolvedEntry)
 		c.resolved = path
@@ -1439,12 +1492,6 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return err
 	}
 	defer f.Close()
-	details, err := c.Details()
-	if err != nil {
-		return err
-	}
-
-	format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
 
 	if format == changefeedbase.OptFormatParquet {
 		envelopeType := changefeedbase.EnvelopeType(details.Opts[changefeedbase.OptEnvelope])

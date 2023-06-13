@@ -64,6 +64,18 @@ import {
   StatementFingerprintInsightsCachedState,
 } from "./insights/statementFingerprintInsights";
 import { reducer as txnStats, TxnStatsState } from "./transactionStats";
+import {
+  ClusterSettingsState,
+  reducer as clusterSettings,
+} from "./clusterSettings/clusterSettings.reducer";
+import {
+  KeyedDatabaseDetailsState,
+  reducer as databaseDetails,
+} from "./databaseDetails";
+import {
+  KeyedTableDetailsState,
+  reducer as tableDetails,
+} from "./databaseTableDetails/tableDetails.reducer";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -81,11 +93,14 @@ export type AdminUiState = {
   job: JobDetailsReducerState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
+  databaseDetails: KeyedDatabaseDetailsState;
+  tableDetails: KeyedTableDetailsState;
   stmtInsights: StmtInsightsState;
   txnInsightDetails: TxnInsightDetailsCachedState;
   txnInsights: TxnInsightsState;
   schemaInsights: SchemaInsightsState;
   statementFingerprintInsights: StatementFingerprintInsightsCachedState;
+  clusterSettings: ClusterSettingsState;
 };
 
 export type AppState = {
@@ -111,8 +126,11 @@ export const reducers = combineReducers<AdminUiState>({
   job,
   clusterLocks,
   databasesList,
+  databaseDetails,
+  tableDetails,
   schemaInsights,
   statementFingerprintInsights,
+  clusterSettings,
 });
 
 export const rootActions = {

@@ -1,9 +1,9 @@
 ops
 CREATE SCHEMA sc;
 ----
-StatementPhase stage 1 of 1 with 7 MutationType ops
+StatementPhase stage 1 of 1 with 8 MutationType ops
   transitions:
-    [[Schema:{DescID: 104}, PUBLIC], ABSENT] -> DESCRIPTOR_ADDED
+    [[Schema:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaName:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 104, Name: sc, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
@@ -41,9 +41,11 @@ StatementPhase stage 1 of 1 with 7 MutationType ops
         Privileges: 2
         UserName: root
         WithGrantOption: 2
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 104
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Schema:{DescID: 104}, PUBLIC], DESCRIPTOR_ADDED] -> ABSENT
+    [[Schema:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaName:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 104, Name: sc, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT

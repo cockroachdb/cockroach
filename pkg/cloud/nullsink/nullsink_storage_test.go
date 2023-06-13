@@ -53,6 +53,6 @@ func TestNullSinkReadAndWrite(t *testing.T) {
 	sz, err := s.Size(ctx, "")
 	require.NoError(t, err)
 	require.Equal(t, int64(0), sz)
-	_, err = s.ReadFile(ctx, "")
+	_, _, err = s.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
 	require.True(t, errors.Is(err, io.EOF))
 }

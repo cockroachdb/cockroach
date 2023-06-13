@@ -15,20 +15,31 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
 )
 
+// includeParquestTestMetadata configures the parquet writer to write
+// metadata required for reading parquet files in tests.
+var includeParquestTestMetadata = buildutil.CrdbTestBuild
+
 type parquetWriter struct {
-	inner      *parquet.Writer
-	datumAlloc []tree.Datum
+	inner        *parquet.Writer
+	encodingOpts changefeedbase.EncodingOptions
+	schemaDef    *parquet.SchemaDefinition
+	datumAlloc   []tree.Datum
 }
 
 // newParquetSchemaDefintion returns a parquet schema definition based on the
 // cdcevent.Row and the number of cols in the schema.
-func newParquetSchemaDefintion(row cdcevent.Row) (*parquet.SchemaDefinition, int, error) {
+func newParquetSchemaDefintion(
+	row cdcevent.Row, encodingOpts changefeedbase.EncodingOptions,
+) (*parquet.SchemaDefinition, error) {
 	var columnNames []string
 	var columnTypes []*types.T
 
@@ -39,18 +50,37 @@ func newParquetSchemaDefintion(row cdcevent.Row) (*parquet.SchemaDefinition, int
 		numCols += 1
 		return nil
 	}); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	columnNames = append(columnNames, parquetCrdbEventTypeColName)
 	columnTypes = append(columnTypes, types.String)
 	numCols += 1
 
+	columnNames, columnTypes = appendMetadataColsToSchema(columnNames, columnTypes, encodingOpts)
+
 	schemaDef, err := parquet.NewSchema(columnNames, columnTypes)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	return schemaDef, numCols, nil
+	return schemaDef, nil
+}
+
+const parquetOptUpdatedTimestampColName = metaSentinel + changefeedbase.OptUpdatedTimestamps
+const parquetOptMVCCTimestampColName = metaSentinel + changefeedbase.OptMVCCTimestamps
+
+func appendMetadataColsToSchema(
+	columnNames []string, columnTypes []*types.T, encodingOpts changefeedbase.EncodingOptions,
+) (updatedNames []string, updatedTypes []*types.T) {
+	if encodingOpts.UpdatedTimestamps {
+		columnNames = append(columnNames, parquetOptUpdatedTimestampColName)
+		columnTypes = append(columnTypes, types.String)
+	}
+	if encodingOpts.MVCCTimestamps {
+		columnNames = append(columnNames, parquetOptMVCCTimestampColName)
+		columnTypes = append(columnTypes, types.String)
+	}
+	return columnNames, columnTypes
 }
 
 // newParquetWriterFromRow constructs a new parquet writer which outputs to
@@ -58,37 +88,37 @@ func newParquetSchemaDefintion(row cdcevent.Row) (*parquet.SchemaDefinition, int
 func newParquetWriterFromRow(
 	row cdcevent.Row,
 	sink io.Writer,
-	knobs *TestingKnobs, /* may be nil */
+	encodingOpts changefeedbase.EncodingOptions,
 	opts ...parquet.Option,
 ) (*parquetWriter, error) {
-	schemaDef, numCols, err := newParquetSchemaDefintion(row)
+	schemaDef, err := newParquetSchemaDefintion(row, encodingOpts)
 	if err != nil {
 		return nil, err
 	}
 
-	writerConstructor := parquet.NewWriter
-
-	if knobs.EnableParquetMetadata {
-		if opts, err = addParquetTestMetadata(row, opts); err != nil {
+	if includeParquestTestMetadata {
+		if opts, err = addParquetTestMetadata(row, encodingOpts, opts); err != nil {
 			return nil, err
 		}
-
-		// To use parquet test utils for reading datums, the writer needs to be
-		// configured with additional metadata.
-		writerConstructor = parquet.NewWriterWithReaderMeta
 	}
-
-	writer, err := writerConstructor(schemaDef, sink, opts...)
+	writer, err := newParquetWriter(schemaDef, sink, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return &parquetWriter{inner: writer, datumAlloc: make([]tree.Datum, numCols)}, nil
+	return &parquetWriter{
+		inner:        writer,
+		encodingOpts: encodingOpts,
+		schemaDef:    schemaDef,
+		datumAlloc:   make([]tree.Datum, schemaDef.NumColumns()),
+	}, nil
 }
 
 // addData writes the updatedRow, adding the row's event type. There is no guarantee
 // that data will be flushed after this function returns.
-func (w *parquetWriter) addData(updatedRow cdcevent.Row, prevRow cdcevent.Row) error {
-	if err := populateDatums(updatedRow, prevRow, w.datumAlloc); err != nil {
+func (w *parquetWriter) addData(
+	updatedRow cdcevent.Row, prevRow cdcevent.Row, updated, mvcc hlc.Timestamp,
+) error {
+	if err := populateDatums(updatedRow, prevRow, w.encodingOpts, updated, mvcc, w.datumAlloc); err != nil {
 		return err
 	}
 
@@ -101,7 +131,13 @@ func (w *parquetWriter) close() error {
 }
 
 // populateDatums writes the appropriate datums into the datumAlloc slice.
-func populateDatums(updatedRow cdcevent.Row, prevRow cdcevent.Row, datumAlloc []tree.Datum) error {
+func populateDatums(
+	updatedRow cdcevent.Row,
+	prevRow cdcevent.Row,
+	encodingOpts changefeedbase.EncodingOptions,
+	updated, mvcc hlc.Timestamp,
+	datumAlloc []tree.Datum,
+) error {
 	datums := datumAlloc[:0]
 
 	if err := updatedRow.ForAllColumns().Datum(func(d tree.Datum, _ cdcevent.ResultColumn) error {
@@ -111,6 +147,13 @@ func populateDatums(updatedRow cdcevent.Row, prevRow cdcevent.Row, datumAlloc []
 		return err
 	}
 	datums = append(datums, getEventTypeDatum(updatedRow, prevRow).DString())
+
+	if encodingOpts.UpdatedTimestamps {
+		datums = append(datums, tree.NewDString(timestampToString(updated)))
+	}
+	if encodingOpts.MVCCTimestamps {
+		datums = append(datums, tree.NewDString(timestampToString(mvcc)))
+	}
 	return nil
 }
 
@@ -121,7 +164,9 @@ func populateDatums(updatedRow cdcevent.Row, prevRow cdcevent.Row, datumAlloc []
 // `[0]->{"b": "b", "c": "c"}` with the key columns in square brackets and value
 // columns in a JSON object. The metadata generated by this function contains
 // key and value column names along with their offsets in the parquet file.
-func addParquetTestMetadata(row cdcevent.Row, opts []parquet.Option) ([]parquet.Option, error) {
+func addParquetTestMetadata(
+	row cdcevent.Row, encodingOpts changefeedbase.EncodingOptions, parquetOpts []parquet.Option,
+) ([]parquet.Option, error) {
 	// NB: Order matters. When iterating using ForAllColumns, which is used when
 	// writing datums and defining the schema, the order of columns usually
 	// matches the underlying table. If a composite keys defined, the order in
@@ -134,7 +179,7 @@ func addParquetTestMetadata(row cdcevent.Row, opts []parquet.Option) ([]parquet.
 		keysInOrder = append(keysInOrder, col.Name)
 		return nil
 	}); err != nil {
-		return opts, err
+		return parquetOpts, err
 	}
 
 	// NB: We do not use ForAllColumns here because it will always contain the
@@ -148,7 +193,7 @@ func addParquetTestMetadata(row cdcevent.Row, opts []parquet.Option) ([]parquet.
 		valuesInOrder = append(valuesInOrder, col.Name)
 		return nil
 	}); err != nil {
-		return opts, err
+		return parquetOpts, err
 	}
 
 	// Iterate over ForAllColumns to determine the offets of each column
@@ -167,15 +212,26 @@ func addParquetTestMetadata(row cdcevent.Row, opts []parquet.Option) ([]parquet.
 		idx += 1
 		return nil
 	}); err != nil {
-		return opts, err
+		return parquetOpts, err
 	}
 	valuesInOrder = append(valuesInOrder, parquetCrdbEventTypeColName)
 	valueCols[parquetCrdbEventTypeColName] = idx
 	idx += 1
 
-	opts = append(opts, parquet.WithMetadata(map[string]string{"keyCols": serializeMap(keysInOrder, keyCols)}))
-	opts = append(opts, parquet.WithMetadata(map[string]string{"allCols": serializeMap(valuesInOrder, valueCols)}))
-	return opts, nil
+	if encodingOpts.UpdatedTimestamps {
+		valuesInOrder = append(valuesInOrder, parquetOptUpdatedTimestampColName)
+		valueCols[parquetOptUpdatedTimestampColName] = idx
+		idx += 1
+	}
+	if encodingOpts.MVCCTimestamps {
+		valuesInOrder = append(valuesInOrder, parquetOptMVCCTimestampColName)
+		valueCols[parquetOptMVCCTimestampColName] = idx
+		idx += 1
+	}
+
+	parquetOpts = append(parquetOpts, parquet.WithMetadata(map[string]string{"keyCols": serializeMap(keysInOrder, keyCols)}))
+	parquetOpts = append(parquetOpts, parquet.WithMetadata(map[string]string{"allCols": serializeMap(valuesInOrder, valueCols)}))
+	return parquetOpts, nil
 }
 
 // serializeMap serializes a map to a string. For example, orderedKeys=["b",
@@ -215,4 +271,18 @@ func deserializeMap(s string) (orderedKeys []string, m map[string]int, err error
 		m[key] = value
 	}
 	return orderedKeys, m, nil
+}
+
+// newParquetWriter allocates a new parquet writer using the provided
+// schema definition.
+func newParquetWriter(
+	sch *parquet.SchemaDefinition, sink io.Writer, opts ...parquet.Option,
+) (*parquet.Writer, error) {
+	if includeParquestTestMetadata {
+		// To use parquet test utils for reading datums, the writer needs to be
+		// configured with additional metadata.
+		return parquet.NewWriterWithReaderMeta(sch, sink, opts...)
+	}
+
+	return parquet.NewWriter(sch, sink, opts...)
 }

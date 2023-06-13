@@ -22,12 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/parquet"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,8 +121,10 @@ func TestParquetRows(t *testing.T) {
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, cdcevent.PrevRow, v.Timestamp(), false)
 				require.NoError(t, err)
 
+				encodingOpts := changefeedbase.EncodingOptions{}
+
 				if writer == nil {
-					writer, err = newParquetWriterFromRow(updatedRow, f, &TestingKnobs{EnableParquetMetadata: true}, parquet.WithMaxRowGroupLength(maxRowGroupSize),
+					writer, err = newParquetWriterFromRow(updatedRow, f, encodingOpts, parquet.WithMaxRowGroupLength(maxRowGroupSize),
 						parquet.WithCompressionCodec(parquet.CompressionGZIP))
 					if err != nil {
 						t.Fatalf(err.Error())
@@ -127,12 +132,12 @@ func TestParquetRows(t *testing.T) {
 					numCols = len(updatedRow.ResultColumns()) + 1
 				}
 
-				err = writer.addData(updatedRow, prevRow)
+				err = writer.addData(updatedRow, prevRow, hlc.Timestamp{}, hlc.Timestamp{})
 				require.NoError(t, err)
 
 				// Save a copy of the datums we wrote.
-				datumRow := make([]tree.Datum, len(updatedRow.ResultColumns())+1)
-				err = populateDatums(updatedRow, prevRow, datumRow)
+				datumRow := make([]tree.Datum, writer.schemaDef.NumColumns())
+				err = populateDatums(updatedRow, prevRow, encodingOpts, hlc.Timestamp{}, hlc.Timestamp{}, datumRow)
 				require.NoError(t, err)
 				datums[i] = datumRow
 			}
@@ -161,4 +166,30 @@ func makeRangefeedReaderAndDecoder(
 	decoder, err := cdcevent.NewEventDecoder(ctx, &sqlExecCfg, targets, false, false)
 	require.NoError(t, err)
 	return popRow, cleanup, decoder
+}
+
+func TestParquetResolvedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format=parquet, resolved='10ms'`)
+		defer closeFeed(t, foo)
+
+		firstResolved, _ := expectResolvedTimestamp(t, foo)
+		testutils.SucceedsSoon(t, func() error {
+			nextResolved, _ := expectResolvedTimestamp(t, foo)
+			if !firstResolved.Less(nextResolved) {
+				return errors.AssertionFailedf(
+					"expected resolved timestamp %s to eventually exceed timestamp %s",
+					nextResolved, firstResolved)
+			}
+			return nil
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }

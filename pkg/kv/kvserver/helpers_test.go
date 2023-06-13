@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
@@ -40,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	circuit2 "github.com/cockroachdb/cockroach/pkg/util/circuit"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -124,8 +123,20 @@ func (s *Store) LogReplicaChangeTest(
 	desc roachpb.RangeDescriptor,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
+	logAsync bool,
 ) error {
-	return s.logChange(ctx, txn, changeType, replica, desc, reason, details)
+	return s.logChange(ctx, txn, changeType, replica, desc, reason, details, logAsync)
+}
+
+// LogSplitTest adds a fake split event to the rangelog.
+func (s *Store) LogSplitTest(
+	ctx context.Context,
+	txn *kv.Txn,
+	updatedDesc, newDesc roachpb.RangeDescriptor,
+	reason string,
+	logAsync bool,
+) error {
+	return s.logSplit(ctx, txn, updatedDesc, newDesc, reason, logAsync)
 }
 
 // ReplicateQueuePurgatoryLength returns the number of replicas in replicate
@@ -216,7 +227,7 @@ func (s *Store) RaftSchedulerPriorityIDs() []roachpb.RangeID {
 }
 
 func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
-	liveness.TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, liveness.TestTimeUntilStoreDeadOff)
+	liveness.TimeUntilNodeDead.Override(context.Background(), &cfg.Settings.SV, liveness.TestTimeUntilNodeDeadOff)
 	return storepool.NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,
@@ -237,7 +248,7 @@ func (r *Replica) Store() *Store {
 	return r.store
 }
 
-func (r *Replica) Breaker() *circuit2.Breaker {
+func (r *Replica) Breaker() *circuit.Breaker {
 	return r.breaker.wrapped
 }
 
@@ -330,7 +341,7 @@ func (r *Replica) IsFollowerActiveSince(
 ) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastUpdateTimes.isFollowerActiveSince(ctx, followerID, timeutil.Now(), threshold)
+	return r.mu.lastUpdateTimes.isFollowerActiveSince(followerID, timeutil.Now(), threshold)
 }
 
 // GetTSCacheHighWater returns the high water mark of the replica's timestamp
@@ -469,6 +480,12 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	return r.getQueueLastProcessed(ctx, queue)
 }
 
+func (r *Replica) MaybeUnquiesce() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
+}
+
 func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -498,7 +515,7 @@ func (r *Replica) TripBreaker() {
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
-) *circuit.Breaker {
+) (*circuit.Breaker, bool) {
 	return t.dialer.GetCircuitBreaker(nodeID, class)
 }
 

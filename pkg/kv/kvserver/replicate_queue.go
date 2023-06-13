@@ -571,6 +571,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			pending:            store.metrics.ReplicateQueuePending,
 			processingNanos:    store.metrics.ReplicateQueueProcessingNanos,
 			purgatory:          store.metrics.ReplicateQueuePurgatory,
+			disabledConfig:     kvserverbase.ReplicateQueueEnabled,
 		},
 	)
 	updateFn := func() {
@@ -605,18 +606,9 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 	return rq
 }
 
-func (rq *replicateQueue) enabled() bool {
-	st := rq.store.ClusterSettings()
-	return kvserverbase.ReplicateQueueEnabled.Get(&st.SV)
-}
-
 func (rq *replicateQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
-	if !rq.enabled() {
-		return false, 0
-	}
-
 	return rq.planner.ShouldPlanChange(
 		ctx,
 		now,
@@ -628,11 +620,6 @@ func (rq *replicateQueue) shouldQueue(
 func (rq *replicateQueue) process(
 	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
-	if !rq.enabled() {
-		log.VEventf(ctx, 2, "skipping replication: queue has been disabled")
-		return false, nil
-	}
-
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,

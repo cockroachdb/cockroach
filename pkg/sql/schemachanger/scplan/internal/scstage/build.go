@@ -53,9 +53,16 @@ func BuildStages(
 				return scJobID
 			}
 		}(),
-		targetState:      init.TargetState,
-		initial:          init.Initial,
-		current:          init.Current,
+		targetState: init.TargetState,
+		initial:     init.Initial,
+		current:     init.Current,
+		targetToIdx: func() map[*scpb.Target]int {
+			m := make(map[*scpb.Target]int, len(init.Targets))
+			for i := range init.Targets {
+				m[&init.Targets[i]] = i
+			}
+			return m
+		}(),
 		startingPhase:    phase,
 		descIDs:          screl.AllTargetDescIDs(init.TargetState),
 		withSanityChecks: withSanityChecks,
@@ -98,6 +105,7 @@ type buildContext struct {
 	targetState      scpb.TargetState
 	initial          []scpb.Status
 	current          []scpb.Status
+	targetToIdx      map[*scpb.Target]int
 	startingPhase    scop.Phase
 	descIDs          catalog.DescriptorIDSet
 	withSanityChecks bool
@@ -161,15 +169,12 @@ func buildStages(bc buildContext) (stages []Stage) {
 			}
 			copy(resetStage.Before, currentStatuses())
 			copy(resetStage.After, bc.initial)
-			isNoOp := true
-			for i, s := range resetStage.After {
-				if s != resetStage.Before[i] {
-					isNoOp = false
-					break
-				}
-			}
-			if !isNoOp {
-				stages = append(stages, resetStage)
+			stages = append(stages, resetStage)
+			if bc.isStateTerminal(resetStage.After) {
+				// Exit early if the whole schema change is a no-op. This may happen
+				// when doing BEGIN; CREATE SCHEMA sc; DROP SCHEMA sc; COMMIT; for
+				// example.
+				break
 			}
 		}
 		// Build the pre-commit phase's main stage.
@@ -435,19 +440,7 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 		// to the transaction. For example, dropping a table in an explicit
 		// transaction should make it impossible to query that table later
 		// in the transaction.
-		//
-		// That being said, we can't simply allow any op-edge, or the targets from
-		// previous statements in the same transaction will make progress, which is
-		// undesirable: in the statement phase we only allow up to one transition
-		// per target in the whole transaction. This is somewhat arbitrary but it's
-		// usually enough to ensure the desired in-transaction side effects.
-		//
-		// We enforce this at-most-one-transition constraint by checking whether
-		// the op-edge's origin node status is a potential target status: iff so
-		// then that node is the source node of the target transition path.
-		// Otherwise, it means that at least one transition has already occurred
-		// therefore no further transitions are allowed.
-		return scpb.AsTargetStatus(e.From().CurrentStatus) != scpb.InvalidTarget
+		return true
 	case scop.PreCommitPhase, scop.PostCommitPhase:
 		// We allow non-revertible ops to be included in stages in these phases
 		// only if none of the remaining schema change operations can fail.
@@ -503,7 +496,32 @@ func (sb stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 	_, fromIsCandidate := sb.fulfilling[de.From()]
 	switch de.Kind() {
 
-	case scgraph.PreviousStagePrecedence, scgraph.PreviousTransactionPrecedence:
+	case scgraph.PreviousTransactionPrecedence:
+		if !fromIsFulfilled {
+			// If the source node has not already been fulfilled in an earlier
+			// stage, then we can't consider scheduling the destination node
+			// in the current stage.
+			return true
+		}
+		// At this point, the source node has been fulfilled before the current
+		// stage.
+		if sb.bs.currentPhase > scop.PreCommitPhase {
+			// Post-commit, transactions cannot have multiple stages, therefore
+			// the source node was fulfilled in an earlier transaction and this
+			// inbound dependency is met.
+			return false
+		}
+		// At this point, the current stage is in the statement transaction.
+		// The only way this inbound dependency can be met is if the source node
+		// status is the initial status before the schema change even began,
+		// in which case the node was fulfilled before the statement transaction.
+		idx, ok := sb.bc.targetToIdx[de.From().Target]
+		if !ok {
+			panic(errors.AssertionFailedf("unknown target %q", de.From().Target))
+		}
+		return de.From().CurrentStatus != sb.bc.initial[idx]
+
+	case scgraph.PreviousStagePrecedence:
 		// True iff the source node has not been fulfilled in an earlier stage.
 		return !fromIsFulfilled
 
@@ -703,13 +721,15 @@ func (bc buildContext) computeExtraOps(cur, next *Stage) []scop.Op {
 	case scop.StatementPhase:
 		return nil
 	case scop.PreCommitPhase:
-		if next == nil {
-			// This is the main stage, followed by no post-commit stages, do nothing.
-			return nil
-		}
-		if next.Phase == scop.PreCommitPhase {
+		if cur.IsResetPreCommitStage() {
 			// This is the reset stage, return the undo op.
 			return []scop.Op{&scop.UndoAllInTxnImmediateMutationOpSideEffects{}}
+		}
+		// At this point this has to be the main stage.
+		// Any subsequent stage would be post-commit.
+		if next == nil {
+			// There are no post-commit stages, therefore do nothing.
+			return nil
 		}
 		// Otherwise, this is the main pre-commit stage, followed by post-commit
 		// stages, add the schema change job creation ops.
@@ -800,21 +820,17 @@ func (bc buildContext) removeJobReferenceOp(descID descpb.ID) scop.Op {
 }
 
 func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
-	return nodes(bc.g, bc.targetState.Targets, current)
-}
-
-func nodes(g *scgraph.Graph, targets []scpb.Target, current []scpb.Status) []*screl.Node {
-	nodes := make([]*screl.Node, len(targets))
+	ret := make([]*screl.Node, len(bc.targetState.Targets))
 	for i, status := range current {
-		t := &targets[i]
-		n, ok := g.GetNode(t, status)
+		t := &bc.targetState.Targets[i]
+		n, ok := bc.g.GetNode(t, status)
 		if !ok {
 			panic(errors.AssertionFailedf("could not find node for element %s, target status %s, current status %s",
 				screl.ElementString(t.Element()), t.TargetStatus, status))
 		}
-		nodes[i] = n
+		ret[i] = n
 	}
-	return nodes
+	return ret
 }
 
 // makeDescriptorStates builds the state of the schema change job broken down

@@ -1557,7 +1557,9 @@ func (txn *Txn) AdmissionHeader() kvpb.AdmissionHeader {
 		// the transaction throughput by 10+%. In that experiment 40% of the
 		// BatchRequests evaluated by KV had been assigned high priority due to
 		// locking.
-		h.Priority = int32(admissionpb.LockingPri)
+		if h.Priority < int32(admissionpb.LockingPri) {
+			h.Priority = int32(admissionpb.LockingPri)
+		}
 	}
 	return h
 }

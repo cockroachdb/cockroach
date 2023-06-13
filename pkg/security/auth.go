@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -232,7 +233,7 @@ func IsTenantCertificate(cert *x509.Certificate) bool {
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
 func UserAuthPasswordHook(
-	insecureMode bool, passwordStr string, hashedPassword password.PasswordHash,
+	insecureMode bool, passwordStr string, hashedPassword password.PasswordHash, gauge *metric.Gauge,
 ) UserAuthHook {
 	return func(ctx context.Context, systemIdentity username.SQLUsername, clientConnection bool) error {
 		if systemIdentity.Undefined() {
@@ -252,7 +253,7 @@ func UserAuthPasswordHook(
 			return NewErrPasswordUserAuthFailed(systemIdentity)
 		}
 		ok, err := password.CompareHashAndCleartextPassword(ctx,
-			hashedPassword, passwordStr, GetExpensiveHashComputeSem(ctx))
+			hashedPassword, passwordStr, GetExpensiveHashComputeSemWithGauge(ctx, gauge))
 		if err != nil {
 			return err
 		}

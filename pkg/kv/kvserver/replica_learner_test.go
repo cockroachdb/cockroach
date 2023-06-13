@@ -966,9 +966,10 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	scratchStartKey := tc.ScratchRange(t)
 	g, ctx := errgroup.WithContext(ctx)
 
+	metrics := []string{".rebalancing", ".recovery", ".unknown", ""}
 	// Record the snapshot metrics before anything has been sent / received.
-	senderTotalBefore, senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */)
-	receiverTotalBefore, receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */)
+	senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */, metrics)
+	receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
 
 	// Add a new voting replica, but don't initialize it. Note that
 	// `tc.AddNonVoters` will not return until the newly added non-voter is
@@ -1044,36 +1045,34 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	require.NoError(t, g.Wait())
 
 	// Record the snapshot metrics for the sender after the raft snapshot was sent.
-	senderTotalAfter, senderMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 0)
+	senderMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 0, metrics)
 
 	// Asserts that the raft snapshot (aka recovery snapshot) bytes sent have been
 	// recorded and that it was not double counted in a different metric.
-	senderTotalDelta, senderMapDelta := getSnapshotMetricsDiff(senderTotalBefore, senderMetricsMapBefore, senderTotalAfter, senderMetricsMapAfter)
+	senderMapDelta := getSnapshotMetricsDiff(senderMetricsMapBefore, senderMetricsMapAfter)
 
-	senderTotalExpected := snapshotBytesMetrics{sentBytes: snapshotLength, rcvdBytes: 0}
-	senderMapExpected := map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics{
-		kvserverpb.SnapshotRequest_REBALANCE: {sentBytes: 0, rcvdBytes: 0},
-		kvserverpb.SnapshotRequest_RECOVERY:  {sentBytes: snapshotLength, rcvdBytes: 0},
-		kvserverpb.SnapshotRequest_UNKNOWN:   {sentBytes: 0, rcvdBytes: 0},
+	senderMapExpected := map[string]snapshotBytesMetrics{
+		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
+		".recovery":    {sentBytes: snapshotLength, rcvdBytes: 0},
+		".unknown":     {sentBytes: 0, rcvdBytes: 0},
+		"":             {sentBytes: snapshotLength, rcvdBytes: 0},
 	}
-	require.Equal(t, senderTotalExpected, senderTotalDelta)
 	require.Equal(t, senderMapExpected, senderMapDelta)
 
 	// Record the snapshot metrics for the receiver after the raft snapshot was
 	// received.
-	receiverTotalAfter, receiverMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 1)
+	receiverMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 1, metrics)
 
 	// Asserts that the raft snapshot (aka recovery snapshot) bytes received have
 	// been recorded and that it was not double counted in a different metric.
-	receiverTotalDelta, receiverMapDelta := getSnapshotMetricsDiff(receiverTotalBefore, receiverMetricsMapBefore, receiverTotalAfter, receiverMetricsMapAfter)
+	receiverMapDelta := getSnapshotMetricsDiff(receiverMetricsMapBefore, receiverMetricsMapAfter)
 
-	receiverTotalExpected := snapshotBytesMetrics{sentBytes: 0, rcvdBytes: snapshotLength}
-	receiverMapExpected := map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics{
-		kvserverpb.SnapshotRequest_REBALANCE: {sentBytes: 0, rcvdBytes: 0},
-		kvserverpb.SnapshotRequest_RECOVERY:  {sentBytes: 0, rcvdBytes: snapshotLength},
-		kvserverpb.SnapshotRequest_UNKNOWN:   {sentBytes: 0, rcvdBytes: 0},
+	receiverMapExpected := map[string]snapshotBytesMetrics{
+		".rebalancing": {sentBytes: 0, rcvdBytes: 0},
+		".recovery":    {sentBytes: 0, rcvdBytes: snapshotLength},
+		".unknown":     {sentBytes: 0, rcvdBytes: 0},
+		"":             {sentBytes: 0, rcvdBytes: snapshotLength},
 	}
-	require.Equal(t, receiverTotalExpected, receiverTotalDelta)
 	require.Equal(t, receiverMapExpected, receiverMapDelta)
 }
 
@@ -2189,73 +2188,45 @@ type snapshotBytesMetrics struct {
 	rcvdBytes int64
 }
 
-// getSnapshotBytesMetrics returns metrics on the number of snapshot bytes sent
-// and received by a server. tc and serverIdx specify the index of the target
-// server on the TestCluster TC. The function returns the total number of
-// snapshot bytes sent/received, as well as a map with granular metrics on the
-// number of snapshot bytes sent and received for each type of snapshot. The
-// return value is of the form (totalBytes, granularMetrics), where totalBytes
-// is a `snapshotBytesMetrics` struct containing the total bytes sent/received,
-// and granularMetrics is the map mentioned above.
+// getSnapshotBytesMetrics retrieves the count of each snapshot metric specified
+// in the metricsName associated with the target serverIdx server and returns
+// the result as a map. The keys in the map correspond to the strings in input
+// metricsName. The corresponding value is a `snapshotBytesMetrics` struct
+// containing the total bytes sent/received of the metric.
 func getSnapshotBytesMetrics(
-	t *testing.T, tc *testcluster.TestCluster, serverIdx int,
-) (snapshotBytesMetrics, map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics) {
-	granularMetrics := make(map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics)
+	t *testing.T, tc *testcluster.TestCluster, serverIdx int, metricsName []string,
+) map[string]snapshotBytesMetrics {
+	metrics := make(map[string]snapshotBytesMetrics)
 
-	granularMetrics[kvserverpb.SnapshotRequest_UNKNOWN] = snapshotBytesMetrics{
-		sentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.unknown.sent-bytes"),
-		rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.unknown.rcvd-bytes"),
-	}
-	granularMetrics[kvserverpb.SnapshotRequest_RECOVERY] = snapshotBytesMetrics{
-		sentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.recovery.sent-bytes"),
-		rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.recovery.rcvd-bytes"),
-	}
-	granularMetrics[kvserverpb.SnapshotRequest_REBALANCE] = snapshotBytesMetrics{
-		sentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.rebalancing.sent-bytes"),
-		rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.rebalancing.rcvd-bytes"),
+	findSnapshotBytesMetrics := func(metricName string) snapshotBytesMetrics {
+		sentMetricStr := fmt.Sprintf("range.snapshots%v.sent-bytes", metricName)
+		rcvdMetricStr := fmt.Sprintf("range.snapshots%v.rcvd-bytes", metricName)
+		return snapshotBytesMetrics{
+			sentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), sentMetricStr),
+			rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), rcvdMetricStr),
+		}
 	}
 
-	totalBytes := snapshotBytesMetrics{
-		sentBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.sent-bytes"),
-		rcvdBytes: getFirstStoreMetric(t, tc.Server(serverIdx), "range.snapshots.rcvd-bytes"),
+	for _, v := range metricsName {
+		metrics[v] = findSnapshotBytesMetrics(v)
 	}
-
-	return totalBytes, granularMetrics
+	return metrics
 }
 
-// getSnapshotMetricsDiff returns the delta between snapshot byte metrics
-// recorded at different times. Metrics can be recorded using the
-// getSnapshotBytesMetrics helper function, and the delta is returned in the
-// form (totalBytes, granularMetrics). totalBytes is a
-// snapshotBytesMetrics struct containing the difference in total bytes
-// sent/received, and granularMetrics is the map of snapshotBytesMetrics structs
-// containing deltas for each type of snapshot.
+// getSnapshotMetricsDiff returns the difference between the values of
+// corresponding snapshot metrics in two maps. Assumption: beforeMap and
+// afterMap contain the same set of keys.
 func getSnapshotMetricsDiff(
-	beforeTotal snapshotBytesMetrics,
-	beforeMap map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics,
-	afterTotal snapshotBytesMetrics,
-	afterMap map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics,
-) (snapshotBytesMetrics, map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics) {
-	diffTotal := snapshotBytesMetrics{
-		sentBytes: afterTotal.sentBytes - beforeTotal.sentBytes,
-		rcvdBytes: afterTotal.rcvdBytes - beforeTotal.rcvdBytes,
+	beforeMap map[string]snapshotBytesMetrics, afterMap map[string]snapshotBytesMetrics,
+) map[string]snapshotBytesMetrics {
+	diffMap := make(map[string]snapshotBytesMetrics)
+	for metricName, beforeValue := range beforeMap {
+		diffMap[metricName] = snapshotBytesMetrics{
+			afterMap[metricName].sentBytes - beforeValue.sentBytes,
+			afterMap[metricName].rcvdBytes - beforeValue.rcvdBytes,
+		}
 	}
-	diffMap := map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics{
-		kvserverpb.SnapshotRequest_REBALANCE: {
-			sentBytes: afterMap[kvserverpb.SnapshotRequest_REBALANCE].sentBytes - beforeMap[kvserverpb.SnapshotRequest_REBALANCE].sentBytes,
-			rcvdBytes: afterMap[kvserverpb.SnapshotRequest_REBALANCE].rcvdBytes - beforeMap[kvserverpb.SnapshotRequest_REBALANCE].rcvdBytes,
-		},
-		kvserverpb.SnapshotRequest_RECOVERY: {
-			sentBytes: afterMap[kvserverpb.SnapshotRequest_RECOVERY].sentBytes - beforeMap[kvserverpb.SnapshotRequest_RECOVERY].sentBytes,
-			rcvdBytes: afterMap[kvserverpb.SnapshotRequest_RECOVERY].rcvdBytes - beforeMap[kvserverpb.SnapshotRequest_RECOVERY].rcvdBytes,
-		},
-		kvserverpb.SnapshotRequest_UNKNOWN: {
-			sentBytes: afterMap[kvserverpb.SnapshotRequest_UNKNOWN].sentBytes - beforeMap[kvserverpb.SnapshotRequest_UNKNOWN].sentBytes,
-			rcvdBytes: afterMap[kvserverpb.SnapshotRequest_UNKNOWN].rcvdBytes - beforeMap[kvserverpb.SnapshotRequest_UNKNOWN].rcvdBytes,
-		},
-	}
-
-	return diffTotal, diffMap
+	return diffMap
 }
 
 // This function returns the number of bytes sent for a snapshot. It follows the
@@ -2317,22 +2288,27 @@ func getExpectedSnapshotSizeBytes(
 	return int64(b.Len()), err
 }
 
-// Tests the accuracy of the 'range.snapshots.rebalancing.rcvd-bytes' and
-// 'range.snapshots.rebalancing.sent-bytes' metrics. This test adds a new
-// replica to a cluster, and during the process, a learner snapshot is sent to
-// the new replica.
-func TestRebalancingSnapshotMetrics(t *testing.T) {
+// This test verifies the accuracy of snapshot metrics -
+// `range.snapshots.[rebalancing|cross-region|cross-zone].rcvd-bytes` and
+// `range.snapshots.[rebalancing|cross-region|cross-zone].sent-bytes`. It
+// involves adding two new replicas on different nodes within the cluster,
+// resulting in two learner snapshots sent across. The test then compares the
+// metrics prior to and after sending the snapshot to verify the accuracy.
+func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	knobs, ltk := makeReplicationTestKnobs()
 	ltk.storeKnobs.DisableRaftSnapshotQueue = true
 
-	// Synchronize on the moment before the snapshot gets sent so we can measure
-	// the state at that time.
 	blockUntilSnapshotSendCh := make(chan struct{})
 	blockSnapshotSendCh := make(chan struct{})
 	ltk.storeKnobs.SendSnapshot = func(request *kvserverpb.DelegateSendSnapshotRequest) {
+		// This testing knob allows accurate calculation of expected snapshot bytes
+		// by unblocking the current goroutine when `HandleDelegatedSnapshot` is
+		// about to send the snapshot. In addition, it also blocks the new
+		// goroutine, which was created to send the snapshot, until the calculation
+		// is complete (more info below).
 		close(blockUntilSnapshotSendCh)
 		select {
 		case <-blockSnapshotSendCh:
@@ -2341,69 +2317,142 @@ func TestRebalancingSnapshotMetrics(t *testing.T) {
 		}
 	}
 
+	// The initial setup ensures the correct configuration for three nodes (with
+	// different localities), single-range.
+	const numNodes = 3
+	serverArgs := make(map[int]base.TestServerArgs)
+
+	// The servers localities are configured so that the first snapshot sent from
+	// server0 to server1 is cross-region. The second snapshot sent from server0
+	// to server2 is cross-zone within same region.
+	serverLocality := [numNodes]roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}, {Key: "az", Value: "us-west-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-2"}}},
+	}
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: serverLocality[i],
+			Knobs:    knobs,
+		}
+	}
+
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{Knobs: knobs},
-		ReplicationMode: base.ReplicationManual,
-	})
+	tc := testcluster.StartTestCluster(
+		t, numNodes, base.TestClusterArgs{
+			ServerArgsPerNode: serverArgs,
+			ReplicationMode:   base.ReplicationManual,
+		},
+	)
+
 	defer tc.Stopper().Stop(ctx)
 
 	scratchStartKey := tc.ScratchRange(t)
+	// sendSnapshotFromServer is a testing helper that sends a learner snapshot
+	// from server[0] to server[serverIndex] and returns the expected size (in
+	// bytes) of the snapshot sent.
+	sendSnapshotToServer := func(serverIndex int, changeReplicaFn func(roachpb.Key, ...roachpb.ReplicationTarget) (roachpb.RangeDescriptor, error)) int64 {
+		blockUntilSnapshotSendCh = make(chan struct{})
+		blockSnapshotSendCh = make(chan struct{})
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			// A new replica at servers[serverIndex] is now added to the cluster,
+			// resulting in a learner snapshot to be sent from servers[0] to
+			// servers[serverIndex]. This function is executed in a new goroutine to
+			// help us capture the expected snapshot bytes count accurately.
+			desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+			desc, err := changeReplicaFn(scratchStartKey, tc.Target(serverIndex))
+			scratchStartKey = desc.StartKey.AsRawKey()
+			return err
+		})
 
+		// The current goroutine is blocked until the new goroutine, which has just
+		// been added, is about to send the snapshot (see the testing knob above).
+		// This allows us to calculate the snapshot bytes count accurately,
+		// accounting for any state changes that happen between calling
+		// changeReplicaFn and the snapshot being sent.
+		<-blockUntilSnapshotSendCh
+		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+		snapshotLength, err := getExpectedSnapshotSizeBytes(ctx, store, repl, kvserverpb.SnapshotRequest_INITIAL)
+		require.NoError(t, err)
+
+		close(blockSnapshotSendCh)
+		// Wait the new goroutine (sending the snapshot) to complete before
+		// measuring the after-sending-snapshot metrics.
+		require.NoError(t, g.Wait())
+		return snapshotLength
+	}
+
+	metrics := []string{".rebalancing", ".recovery", ".unknown", ".cross-region", ".cross-zone", ""}
 	// Record the snapshot metrics before anything has been sent / received.
-	senderTotalBefore, senderMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */)
-	receiverTotalBefore, receiverMetricsMapBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */)
+	senderBefore := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */, metrics)
+	firstReceiverBefore := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
+	secReceiverBefore := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */, metrics)
 
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
-		return err
+	// The first replica is added as a non-voter to help avoid failure in stress
+	// testing. A possible explanation in the failure is - if the first replica
+	// was added as a voter, it can be stuck in a state to receive the snapshot.
+	// This can cause failure to reach quorum during the second snapshot transfer.
+	firstSnapshotLength := sendSnapshotToServer(1, tc.AddNonVoters)
+	secSnapshotLength := sendSnapshotToServer(2, tc.AddVoters)
+	totalSnapshotLength := firstSnapshotLength + secSnapshotLength
+
+	// A learner snapshot should have been sent from the sender(server[0]) to the
+	// server[1] and server[2].
+	t.Run("sender", func(t *testing.T) {
+		// Compare the snapshot metrics for the sender after sending two snapshots to
+		// server[1] and server[2].
+		senderAfter := getSnapshotBytesMetrics(t, tc, 0 /* serverIdx */, metrics)
+		senderDelta := getSnapshotMetricsDiff(senderBefore, senderAfter)
+		senderExpected := map[string]snapshotBytesMetrics{
+			".rebalancing": {sentBytes: totalSnapshotLength, rcvdBytes: 0},
+			".recovery":    {sentBytes: 0, rcvdBytes: 0},
+			".unknown":     {sentBytes: 0, rcvdBytes: 0},
+			// The first snapshot was sent from server0 to server1, so it is
+			// cross-region.
+			".cross-region": {sentBytes: firstSnapshotLength, rcvdBytes: 0},
+			// The second snapshot was sent from server0 to server2, so it is
+			// cross-zone within same region.
+			".cross-zone": {sentBytes: secSnapshotLength, rcvdBytes: 0},
+			"":            {sentBytes: totalSnapshotLength, rcvdBytes: 0},
+		}
+		require.Equal(t, senderExpected, senderDelta)
 	})
 
-	// Wait until the snapshot is about to be sent before calculating what the
-	// snapshot size should be. This allows our snapshot measurement to account
-	// for any state changes that happen between calling AddVoters and the
-	// snapshot being sent.
-	<-blockUntilSnapshotSendCh
-	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-	snapshotLength, err := getExpectedSnapshotSizeBytes(ctx, store, repl, kvserverpb.SnapshotRequest_INITIAL)
-	require.NoError(t, err)
+	t.Run("first receiver", func(t *testing.T) {
+		// Compare the snapshot metrics for server[1] after receiving the first
+		// snapshot.
+		firstReceiverMetricsAfter := getSnapshotBytesMetrics(t, tc, 1 /* serverIdx */, metrics)
+		firstReceiverDelta := getSnapshotMetricsDiff(firstReceiverBefore, firstReceiverMetricsAfter)
+		firstReceiverExpected := map[string]snapshotBytesMetrics{
+			".rebalancing": {sentBytes: 0, rcvdBytes: firstSnapshotLength},
+			".recovery":    {sentBytes: 0, rcvdBytes: 0},
+			".unknown":     {sentBytes: 0, rcvdBytes: 0},
+			// The first snapshot was sent from server0 to server1, so it is
+			// cross-region.
+			".cross-region": {sentBytes: 0, rcvdBytes: firstSnapshotLength},
+			".cross-zone":   {sentBytes: 0, rcvdBytes: 0},
+			"":              {sentBytes: 0, rcvdBytes: firstSnapshotLength},
+		}
+		require.Equal(t, firstReceiverExpected, firstReceiverDelta)
+	})
 
-	close(blockSnapshotSendCh)
-	require.NoError(t, g.Wait())
+	t.Run("second receiver", func(t *testing.T) {
+		// Compare the snapshot metrics for server[2] after receiving the second
+		// snapshot.
+		secReceiverAfter := getSnapshotBytesMetrics(t, tc, 2 /* serverIdx */, metrics)
+		secReceiverDelta := getSnapshotMetricsDiff(secReceiverBefore, secReceiverAfter)
+		secReceiverExpected := map[string]snapshotBytesMetrics{
+			".rebalancing": {sentBytes: 0, rcvdBytes: secSnapshotLength},
+			".recovery":    {sentBytes: 0, rcvdBytes: 0},
+			".unknown":     {sentBytes: 0, rcvdBytes: 0},
+			// The second snapshot was sent from server0 to server2, so it is
+			// cross-zone within same region.
+			".cross-region": {sentBytes: 0, rcvdBytes: 0},
+			".cross-zone":   {sentBytes: 0, rcvdBytes: secSnapshotLength},
+			"":              {sentBytes: 0, rcvdBytes: secSnapshotLength},
+		}
+		require.Equal(t, secReceiverExpected, secReceiverDelta)
+	})
 
-	// Record the snapshot metrics for the sender after a voter has been added. A
-	// learner snapshot should have been sent from the sender to the receiver.
-	senderTotalAfter, senderMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 0)
-
-	// Asserts that the learner snapshot (aka rebalancing snapshot) bytes sent
-	// have been recorded and that it was not double counted in a different
-	// metric.
-	senderTotalDelta, senderMapDelta := getSnapshotMetricsDiff(senderTotalBefore, senderMetricsMapBefore, senderTotalAfter, senderMetricsMapAfter)
-
-	senderTotalExpected := snapshotBytesMetrics{sentBytes: snapshotLength, rcvdBytes: 0}
-	senderMapExpected := map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics{
-		kvserverpb.SnapshotRequest_REBALANCE: {sentBytes: snapshotLength, rcvdBytes: 0},
-		kvserverpb.SnapshotRequest_RECOVERY:  {sentBytes: 0, rcvdBytes: 0},
-		kvserverpb.SnapshotRequest_UNKNOWN:   {sentBytes: 0, rcvdBytes: 0},
-	}
-	require.Equal(t, senderTotalExpected, senderTotalDelta)
-	require.Equal(t, senderMapExpected, senderMapDelta)
-
-	// Record the snapshot metrics for the receiver after a voter has been added.
-	receiverTotalAfter, receiverMetricsMapAfter := getSnapshotBytesMetrics(t, tc, 1)
-
-	// Asserts that the learner snapshot (aka rebalancing snapshot) bytes received
-	// have been recorded and that it was not double counted in a different
-	// metric.
-	receiverTotalDelta, receiverMapDelta := getSnapshotMetricsDiff(receiverTotalBefore, receiverMetricsMapBefore, receiverTotalAfter, receiverMetricsMapAfter)
-
-	receiverTotalExpected := snapshotBytesMetrics{sentBytes: 0, rcvdBytes: snapshotLength}
-	receiverMapExpected := map[kvserverpb.SnapshotRequest_Priority]snapshotBytesMetrics{
-		kvserverpb.SnapshotRequest_REBALANCE: {sentBytes: 0, rcvdBytes: snapshotLength},
-		kvserverpb.SnapshotRequest_RECOVERY:  {sentBytes: 0, rcvdBytes: 0},
-		kvserverpb.SnapshotRequest_UNKNOWN:   {sentBytes: 0, rcvdBytes: 0},
-	}
-	require.Equal(t, receiverTotalExpected, receiverTotalDelta)
-	require.Equal(t, receiverMapExpected, receiverMapDelta)
 }

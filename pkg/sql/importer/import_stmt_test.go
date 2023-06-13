@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -71,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -2972,8 +2974,16 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 			func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
 				r.testingKnobs.beforeRunDSP = func() error {
-					aboutToRunDSP <- struct{}{}
-					<-allowRunDSP
+					select {
+					case aboutToRunDSP <- struct{}{}:
+					case <-time.After(testutils.DefaultSucceedsSoonDuration):
+						return errors.New("timed out on aboutToRunDSP")
+					}
+					select {
+					case <-allowRunDSP:
+					case <-time.After(testutils.DefaultSucceedsSoonDuration):
+						return errors.New("timed out on allowRunDSP")
+					}
 					return nil
 				}
 				return r
@@ -3002,16 +3012,38 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 
 	// On the first attempt, we trip the node 3 breaker between distsql planning
 	// and actually running the plan.
-	<-aboutToRunDSP
-	breaker := tc.Server(0).DistSQLServer().(*distsql.ServerImpl).PodNodeDialer.GetCircuitBreaker(roachpb.NodeID(3), rpc.DefaultClass)
-	breaker.Break()
-	allowRunDSP <- struct{}{}
+	select {
+	case <-aboutToRunDSP:
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("timed out on aboutToRunDSP")
+	}
+	{
+		b, ok := tc.Server(0).NodeDialer().(*nodedialer.Dialer).GetCircuitBreaker(roachpb.NodeID(3), rpc.DefaultClass)
+		require.True(t, ok)
+		undo := circuit.TestingSetTripped(b, errors.New("boom"))
+		defer undo()
+	}
+
+	timeout := testutils.DefaultSucceedsSoonDuration
+	select {
+	case allowRunDSP <- struct{}{}:
+	case <-time.After(timeout):
+		t.Fatalf("timed out on allowRunDSP attempt 1")
+	}
 
 	// The failure above should be retried. We expect this to succeed even if we
 	// don't reset the breaker because node 3 should no longer be included in
 	// the plan.
-	<-aboutToRunDSP
-	allowRunDSP <- struct{}{}
+	select {
+	case <-aboutToRunDSP:
+	case <-time.After(timeout):
+		t.Fatalf("timed out on aboutToRunDSP")
+	}
+	select {
+	case allowRunDSP <- struct{}{}:
+	case <-time.After(timeout):
+		t.Fatalf("timed out on allowRunDSP")
+	}
 	require.NoError(t, g.Wait())
 }
 
@@ -6125,7 +6157,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			}))
 			for i, file := range files {
 				require.Equal(t, file, path.Join(dirName, logSubdir, fmt.Sprintf("%d.log", i)))
-				content, err := store.ReadFile(ctx, file)
+				content, _, err := store.ReadFile(ctx, file, cloud.ReadOptions{NoFileSize: true})
 				require.NoError(t, err)
 				descBytes, err := ioctx.ReadAll(ctx, content)
 				require.NoError(t, err)

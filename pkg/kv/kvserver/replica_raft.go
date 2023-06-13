@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -227,6 +230,10 @@ func (r *Replica) evalAndPropose(
 		// Continue with proposal...
 	}
 
+	if meta := kvflowcontrol.MetaFromContext(ctx); meta != nil {
+		proposal.raftAdmissionMeta = meta
+	}
+
 	// Attach information about the proposer's lease to the command, for
 	// verification below raft. Lease requests are special since they are not
 	// necessarily proposed under a valid lease (by necessity). Instead, they
@@ -377,6 +384,9 @@ func (r *Replica) propose(
 	// Determine the encoding style for the Raft command.
 	prefix := true
 	entryEncoding := raftlog.EntryEncodingStandardWithoutAC
+	if p.useReplicationAdmissionControl() {
+		entryEncoding = raftlog.EntryEncodingStandardWithAC
+	}
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -451,6 +461,9 @@ func (r *Replica) propose(
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
 		entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
+		if p.useReplicationAdmissionControl() {
+			entryEncoding = raftlog.EntryEncodingSideloadedWithAC
+		}
 		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -460,12 +473,25 @@ func (r *Replica) propose(
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
+	// NB: If (significantly) re-working how raft commands are encoded, make the
+	// equivalent change in raftlog.BenchmarkRaftAdmissionMetaOverhead.
+
 	// Create encoding buffer.
 	preLen := 0
 	if prefix {
 		preLen = raftlog.RaftCommandPrefixLen
 	}
-	cmdLen := p.command.Size()
+
+	raftAdmissionMeta := &kvflowcontrolpb.RaftAdmissionMeta{}
+	var admissionMetaLen int
+	if p.useReplicationAdmissionControl() {
+		// Encode admission metadata data at the start, right after the command
+		// prefix.
+		raftAdmissionMeta = p.raftAdmissionMeta
+		admissionMetaLen = raftAdmissionMeta.Size()
+	}
+
+	cmdLen := p.command.Size() + admissionMetaLen
 	// Allocate the data slice with enough capacity to eventually hold the two
 	// "footers" that are filled later.
 	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
@@ -474,9 +500,40 @@ func (r *Replica) propose(
 	if prefix {
 		raftlog.EncodeRaftCommandPrefix(data, entryEncoding, p.idKey)
 	}
-	// Encode body of command.
+
+	// Encode the body of the command.
 	data = data[:preLen+cmdLen]
-	if _, err := protoutil.MarshalTo(p.command, data[preLen:]); err != nil {
+
+	// Encode below-raft admission data, if any.
+	if p.useReplicationAdmissionControl() {
+		if !prefix {
+			panic("expected to encode prefix for raft commands using replication admission control")
+		}
+		if buildutil.CrdbTestBuild {
+			if p.raftAdmissionMeta.AdmissionOriginNode == roachpb.NodeID(0) {
+				log.Fatalf(ctx, "missing origin node for flow token returns")
+			}
+		}
+		if _, err := protoutil.MarshalTo(
+			raftAdmissionMeta,
+			data[preLen:preLen+admissionMetaLen],
+		); err != nil {
+			return kvpb.NewError(err)
+		}
+		log.VInfof(ctx, 1, "encoded raft admission meta: pri=%s create-time=%d proposer=n%s",
+			admissionpb.WorkPriority(raftAdmissionMeta.AdmissionPriority),
+			raftAdmissionMeta.AdmissionCreateTime,
+			raftAdmissionMeta.AdmissionOriginNode,
+		)
+		// Zero out what we've already encoded and marshaled, out of an
+		// abundance of paranoia.
+		p.command.AdmissionPriority = 0
+		p.command.AdmissionCreateTime = 0
+		p.command.AdmissionOriginNode = 0
+	}
+
+	// Encode the rest of the command.
+	if _, err := protoutil.MarshalTo(p.command, data[preLen+admissionMetaLen:]); err != nil {
 		return kvpb.NewError(err)
 	}
 	p.encodedCommand = data
@@ -588,11 +645,30 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	// include MsgVotes), so don't campaign if we wake up our raft
 	// group.
 	return r.withRaftGroup(false, func(raftGroup *raft.RawNode) (bool, error) {
-		// We're processing a message from another replica which means that the
-		// other replica is not quiesced, so we don't need to wake the leader.
-		// Note that we avoid campaigning when receiving raft messages, because
-		// we expect the originator to campaign instead.
-		r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
+		// If we're not the leader, and we receive a message from a non-leader
+		// replica while quiesced, we wake up the leader too. This prevents spurious
+		// elections.
+		//
+		// This typically happens in the case of a partial network partition where
+		// some other replica is partitioned away from the leader but can reach this
+		// replica. In that case, the partitioned replica will send us a prevote
+		// message, which we'll typically reject (e.g. because it's behind on its
+		// log, or if CheckQuorum+PreVote is enabled because we have a current
+		// leader). However, if we don't also wake the leader, we'll now have two
+		// unquiesced followers, and eventually they'll call an election that
+		// unseats the leader. If this replica wins (often the case since we're
+		// up-to-date on the log), then we'll immediately transfer leadership back
+		// to the leaseholder, i.e. the old leader, and the cycle repeats.
+		//
+		// Note that such partial partitions will typically result in persistent
+		// mass unquiescence due to the continuous prevotes.
+		if r.mu.quiescent {
+			if !r.isRaftLeaderRLocked() && req.FromReplica.ReplicaID != r.mu.leaderID {
+				r.maybeUnquiesceAndWakeLeaderLocked()
+			} else {
+				r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
+			}
+		}
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		if req.Message.Type == raftpb.MsgSnap {
 			// Occasionally a snapshot message may arrive under an outdated term,
@@ -982,6 +1058,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 			m := logstore.MakeMsgStorageAppend(msgStorageAppend)
 			cb := (*replicaSyncCallback)(r)
+			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
+				// Enqueue raft log entries into admission queues. This is
+				// non-blocking; actual admission happens asynchronously.
+				tenantID, _ := r.TenantID()
+				for _, entry := range msgStorageAppend.Entries {
+					if len(entry.Data) == 0 {
+						continue // nothing to do
+					}
+					r.store.cfg.KVAdmissionController.AdmitRaftEntry(
+						ctx, tenantID, r.StoreID(), r.RangeID, entry,
+					)
+				}
+			}
+
 			if state, err = s.StoreEntries(ctx, state, m, cb, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
@@ -1200,11 +1290,6 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, err error) (removed bool) {
 func (r *Replica) tick(
 	ctx context.Context, livenessMap livenesspb.IsLiveMap, ioThresholdMap *ioThresholdMap,
 ) (bool, error) {
-	r.unreachablesMu.Lock()
-	remotes := r.unreachablesMu.remotes
-	r.unreachablesMu.remotes = nil
-	r.unreachablesMu.Unlock()
-
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -1215,12 +1300,16 @@ func (r *Replica) tick(
 		return false, nil
 	}
 
-	for remoteReplica := range remotes {
-		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
-	}
-
 	if r.mu.quiescent {
 		return false, nil
+	}
+
+	r.unreachablesMu.Lock()
+	remotes := r.unreachablesMu.remotes
+	r.unreachablesMu.remotes = nil
+	r.unreachablesMu.Unlock()
+	for remoteReplica := range remotes {
+		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
 	}
 
 	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
@@ -1439,7 +1528,7 @@ func (r *Replica) refreshProposalsLocked(
 		return
 	}
 
-	log.VInfof(ctx, 1,
+	log.VInfof(ctx, 2,
 		"pending commands: reproposing %d (at applied index %d, lease applied index %d) %s",
 		len(reproposals), r.mu.state.RaftAppliedIndex,
 		r.mu.state.LeaseAppliedIndex, reason)
@@ -2238,7 +2327,7 @@ func (m lastUpdateTimesMap) updateOnBecomeLeader(descs []roachpb.ReplicaDescript
 // isFollowerActiveSince returns whether the specified follower has made
 // communication with the leader recently (since threshold).
 func (m lastUpdateTimesMap) isFollowerActiveSince(
-	ctx context.Context, replicaID roachpb.ReplicaID, now time.Time, threshold time.Duration,
+	replicaID roachpb.ReplicaID, now time.Time, threshold time.Duration,
 ) bool {
 	lastUpdateTime, ok := m[replicaID]
 	if !ok {

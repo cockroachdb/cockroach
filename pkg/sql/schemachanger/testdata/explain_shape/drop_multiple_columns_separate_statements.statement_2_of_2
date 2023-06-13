@@ -8,7 +8,7 @@ EXPLAIN (ddl, shape) ALTER TABLE t DROP COLUMN k CASCADE;
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE; following ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE;
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index t_pkey- in relation t
- │    └── into t_pkey+ (i)
+ │    └── into t_pkey+ (i, k-)
  ├── execute 2 system table mutations transactions
  ├── merge temporary indexes into backfilled indexes in relation t
  │    └── from crdb_internal_index_4_name_placeholder into t_pkey+

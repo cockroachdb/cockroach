@@ -138,7 +138,7 @@ describe("Database Details Page", function () {
     driver.assertProperties({
       loading: false,
       loaded: false,
-      lastError: null,
+      lastError: undefined,
       name: "things",
       search: null,
       filters: defaultFilters,
@@ -149,6 +149,7 @@ describe("Database Details Page", function () {
       sortSettingTables: { ascending: true, columnTitle: "name" },
       sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [],
+      showIndexRecommendations: false,
     });
   });
 
@@ -174,13 +175,14 @@ describe("Database Details Page", function () {
     driver.assertProperties({
       loading: false,
       loaded: true,
-      lastError: null,
+      lastError: undefined,
       name: "things",
       search: null,
       filters: defaultFilters,
       nodeRegions: {},
       isTenant: false,
       showNodeRegionsColumn: false,
+      showIndexRecommendations: false,
       viewMode: ViewMode.Tables,
       sortSettingTables: { ascending: true, columnTitle: "name" },
       sortSettingGrants: { ascending: true, columnTitle: "name" },

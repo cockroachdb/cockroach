@@ -61,6 +61,9 @@ var (
 	// reference error used when cluster creation fails for a test
 	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
 
+	// reference error for any failures during post test assertions
+	errDuringPostAssertions = fmt.Errorf("error during post test assertions")
+
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
@@ -699,7 +702,7 @@ func (r *testRunner) runWorker(
 		t := &testImpl{
 			spec:                   &testToRun.spec,
 			cockroach:              cockroach[arch],
-			cockroachShort:         cockroachShort[arch],
+			cockroachShort:         cockroachEA[arch],
 			deprecatedWorkload:     workload[arch],
 			buildVersion:           binaryVersion,
 			artifactsDir:           artifactsDir,
@@ -878,9 +881,7 @@ fi'`
 // this returns. This happens when the test doesn't respond to cancellation.
 //
 // Args:
-// c: The cluster on which the test will run. runTest() does not wipe or destroy
-//
-//	the cluster.
+// c: The cluster on which the test will run. runTest() does not wipe or destroy  the cluster.
 func (r *testRunner) runTest(
 	ctx context.Context,
 	t *testImpl,
@@ -941,7 +942,7 @@ func (r *testRunner) runTest(
 
 			durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 			if t.Failed() {
-				output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.failureMsg())
+				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", t.failureMsg(), t.ArtifactsDir())
 
 				if teamCity {
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -1061,11 +1062,11 @@ func (r *testRunner) runTest(
 
 	select {
 	case <-testReturnedCh:
-		s := "success"
+		s := "successfully"
 		if t.Failed() {
-			s = "failure"
+			s = "with failure(s)"
 		}
-		t.L().Printf("tearing down after %s; see teardown.log", s)
+		t.L().Printf("test completed %s", s)
 	case <-time.After(timeout):
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
@@ -1073,29 +1074,171 @@ func (r *testRunner) runTest(
 		timedOut = true
 	}
 
-	// From now on, all logging goes to teardown.log to give a clear
-	// separation between operations originating from the test vs the
-	// harness.
-	teardownL, err := c.l.ChildLogger("teardown", logger.QuietStderr, logger.QuietStdout)
-	if err != nil {
-		return err
+	// Replacing the logger is best effort.
+	replaceLogger := func(name string) {
+		logger, err := c.l.ChildLogger(name, logger.QuietStderr, logger.QuietStdout)
+		if err != nil {
+			l.Printf("unable to create logger %s: %s", name, err)
+			return
+		}
+		c.l = logger
+		t.ReplaceL(logger)
 	}
-	l, c.l = teardownL, teardownL
-	t.ReplaceL(teardownL)
 
-	return r.teardownTest(ctx, t, c, timedOut)
+	// Awkward file name to keep it close to test.log.
+	l.Printf("running post test assertions (test-post-assertions.log)")
+	replaceLogger("test-post-assertions")
+
+	// We still want to run the post-test assertions even if the test timed out as it
+	// might provide useful information about the health of the nodes. Any assertion failures
+	// will will be recorded against, and eventually fail, the test.
+	// TODO (miral): consider not running these assertions if the test has already failed
+	if err := r.postTestAssertions(ctx, t, c, 10*time.Minute); err != nil {
+		l.Printf("error during post test assertions: %v; see test-post-assertions.log for details", err)
+	}
+
+	// From now on, all logging goes to test-teardown.log to give a clear separation between
+	// operations originating from the test vs the harness. The only error that can originate here
+	// is from artifact collection, which is best effort and for which we do not fail the test.
+	l.Printf("running test teardown (test-teardown.log)")
+	replaceLogger("test-teardown")
+	if err := r.teardownTest(ctx, t, c, timedOut); err != nil {
+		l.Printf("error during test teardown: %v; see test-teardown.log for details", err)
+	}
+	return nil
 }
 
+// The assertions here are executed after each test, and may result in a test failure. Test authors
+// may opt out of these assertions by setting the relevant `SkipPostValidations` flag in the test spec.
+// An error caused by a timeout will not result in a failure.
+func (r *testRunner) postTestAssertions(
+	ctx context.Context, t *testImpl, c *clusterImpl, timeout time.Duration,
+) error {
+	assertionFailed := false
+	postAssertionErr := func(err error) {
+		assertionFailed = true
+		t.Error(errors.Mark(err, errDuringPostAssertions))
+	}
+
+	postAssertCh := make(chan struct{})
+	_ = r.stopper.RunAsyncTask(ctx, "test-post-assertions", func(ctx context.Context) {
+		defer close(postAssertCh)
+		// When a dead node is detected, the subsequent post validation queries are likely
+		// to hang (reason unclear), and eventually timeout according to the statement_timeout.
+		// If this occurs frequently enough, we can look at skipping post validations on a node
+		// failure (or even on any test failure).
+		if err := c.assertNoDeadNode(ctx, t); err != nil {
+			// Some tests expect dead nodes, so they may opt out of this check.
+			if t.spec.SkipPostValidations&registry.PostValidationNoDeadNodes == 0 {
+				postAssertionErr(err)
+			} else {
+				t.L().Printf("dead node(s) detected but expected")
+			}
+		}
+
+		// We collect all the admin health endpoints in parallel,
+		// and select the first one that succeeds to run the validation queries
+		statuses, err := c.HealthStatus(ctx, t.L(), c.All())
+		if err != nil {
+			postAssertionErr(errors.WithDetail(err, "Unable to check health status"))
+		}
+
+		var db *gosql.DB
+		var validationNode int
+		for _, s := range statuses {
+			if s.Err != nil {
+				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
+				continue
+			}
+
+			if s.Status != http.StatusOK {
+				t.L().Printf("n%d:/health?ready=1 status=%d body=%s", s.Node, s.Status, s.Body)
+				continue
+			}
+
+			if db == nil {
+				db = c.Conn(ctx, t.L(), s.Node)
+				validationNode = s.Node
+			}
+			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
+		}
+
+		// We avoid trying to do this when t.Failed() (and in particular when there
+		// are dead nodes) because for reasons @tbg does not understand this gets
+		// stuck occasionally, which really ruins the roachtest run. The method
+		// below already uses a ctx timeout and SQL statement_timeout, but it does
+		// not seem to be enough.
+		//
+		// TODO(testinfra): figure out why this can still get stuck despite the
+		// above.
+		if db != nil {
+			defer db.Close()
+			t.L().Printf("running validation checks on node %d (<10m)", validationNode)
+			// If this validation fails due to a timeout, it is very likely that
+			// the replica divergence check below will also fail.
+			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
+				if err := c.assertValidDescriptors(ctx, db, t); err != nil {
+					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
+				}
+			}
+			// Detect replica divergence (i.e. ranges in which replicas have arrived
+			// at the same log position with different states).
+			if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
+				if err := c.assertConsistentReplicas(ctx, db, t); err != nil {
+					postAssertionErr(errors.WithDetail(err, "consistency check failed"))
+				}
+			}
+		} else {
+			t.L().Printf("no live node found, skipping validation checks")
+		}
+	})
+
+	select {
+	case <-postAssertCh:
+	case <-time.After(timeout):
+		return errors.Errorf("post test assertions timed out after %s", timeout)
+	}
+
+	if assertionFailed {
+		return errors.New("post test assertion(s) failed")
+	}
+	return nil
+}
+
+// teardownTest is best effort and should not fail a test.
+// Errors during artifact collection will be propagated up.
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) error {
+	var err error
+	if timedOut || t.Failed() {
+		err = r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
+		if err != nil {
+			t.L().Printf("error collecting artifacts: %v", err)
+		}
+	}
 
-	// We still have to collect artifacts and run post-flight checks, and any of
-	// these might hang. So they go into a goroutine and the main goroutine
-	// abandons them after a timeout. We intentionally don't wait for the
-	// goroutines to return, as this too may hang if something doesn't respond to
-	// ctx cancellation.
+	if timedOut {
+		// Shut down the cluster. We only do this on timeout to help the test terminate;
+		// for regular failures, if the --debug flag is used, we want the cluster to stay
+		// around so someone can poke at it.
+		_ = c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
+		// We previously added a timeout failure without cancellation, so we cancel here.
+		if t.mu.cancel != nil {
+			t.mu.cancel()
+		}
+		t.L().Printf("test timed out; check __stacks.log and CRDB logs for goroutine dumps")
+	}
+
+	return err
+}
+
+func (r *testRunner) collectArtifacts(
+	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool, timeout time.Duration,
+) error {
+	// Collecting artifacts may hang so we run it in a goroutine which is abandoned
+	// after a timeout.
 	artifactsCollectedCh := make(chan struct{})
 	_ = r.stopper.RunAsyncTask(ctx, "collect-artifacts", func(ctx context.Context) {
 		// TODO(tbg): make `t` and `logger` resilient to use-after-Close to avoid
@@ -1144,138 +1287,51 @@ func (r *testRunner) teardownTest(
 			}
 		}
 
-		// When a dead node is detected, the subsequent post validation queries are likely
-		// to hang (reason unclear), and eventually timeout according to the statement_timeout.
-		// If this occurs frequently enough, we can look at skipping post validations on a node
-		// failure (or even on any test failure).
-		if err := c.assertNoDeadNode(ctx, t); err != nil {
-			// Some tests expect dead nodes, so they may opt out of this check.
-			if t.spec.SkipPostValidations&registry.PostValidationNoDeadNodes == 0 {
-				t.Error(err)
-			} else {
-				t.L().Printf("dead node(s) detected but expected")
-			}
+		// NB: fetch the logs even when we have a debug zip because
+		// debug zip can't ever get the logs for down nodes.
+		// We only save artifacts for failed tests in CI, so this
+		// duplication is acceptable.
+		// NB: fetch the logs *first* in case one of the other steps
+		// below has problems.
+		t.L().PrintfCtx(ctx, "collecting cluster logs")
+		// Do this before collecting logs to make sure the file gets
+		// downloaded below.
+		if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
+			t.L().Printf("failed to fetch disk uage summary: %s", err)
 		}
-
-		// We collect all the admin health endpoints in parallel,
-		// and select the first one that succeeds to run the validation queries
-		statuses, err := c.HealthStatus(ctx, t.L(), c.All())
-		if err != nil {
-			t.Error(errors.WithDetail(err, "Unable to check health status"))
+		if err := c.FetchLogs(ctx, t.L()); err != nil {
+			t.L().Printf("failed to download logs: %s", err)
 		}
-
-		var db *gosql.DB
-		var validationNode int
-		for _, s := range statuses {
-			if s.Err != nil {
-				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
-				continue
-			}
-
-			if s.Status != http.StatusOK {
-				t.L().Printf("n%d:/health?ready=1 status=%d body=%s", s.Node, s.Status, s.Body)
-				continue
-			}
-
-			if db == nil {
-				db = c.Conn(ctx, t.L(), s.Node)
-				validationNode = s.Node
-			}
-			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
+		if err := c.FetchDmesg(ctx, t.L()); err != nil {
+			t.L().Printf("failed to fetch dmesg: %s", err)
 		}
-
-		// We avoid trying to do this when t.Failed() (and in particular when there
-		// are dead nodes) because for reasons @tbg does not understand this gets
-		// stuck occasionally, which really ruins the roachtest run. The method
-		// below already uses a ctx timeout and SQL statement_timeout, but it does
-		// not seem to be enough.
-		//
-		// TODO(testinfra): figure out why this can still get stuck despite the
-		// above.
-		if db != nil {
-			defer db.Close()
-			t.L().Printf("running validation checks on node %d (<10m)", validationNode)
-			// If this validation fails due to a timeout, it is very likely that
-			// the replica divergence check below will also fail.
-			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
-				c.FailOnInvalidDescriptors(ctx, db, t)
-			}
-			// Detect replica divergence (i.e. ranges in which replicas have arrived
-			// at the same log position with different states).
-			if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
-				c.FailOnReplicaDivergence(ctx, db, t)
-			}
-		} else {
-			t.L().Printf("no live node found, skipping validation checks")
+		if err := c.FetchJournalctl(ctx, t.L()); err != nil {
+			t.L().Printf("failed to fetch journalctl: %s", err)
 		}
-
-		if timedOut || t.Failed() {
-			r.collectClusterArtifacts(ctx, c, t.L())
+		if err := c.FetchCores(ctx, t.L()); err != nil {
+			t.L().Printf("failed to fetch cores: %s", err)
+		}
+		if err := c.CopyRoachprodState(ctx); err != nil {
+			t.L().Printf("failed to copy roachprod state: %s", err)
+		}
+		if err := c.FetchTimeseriesData(ctx, t.L()); err != nil {
+			t.L().Printf("failed to fetch timeseries data: %s", err)
+		}
+		if err := c.FetchDebugZip(ctx, t.L()); err != nil {
+			t.L().Printf("failed to collect zip: %s", err)
 		}
 	})
 
-	const artifactsCollectionTimeout = time.Hour
 	select {
 	case <-artifactsCollectedCh:
-	case <-time.After(artifactsCollectionTimeout):
+	case <-time.After(timeout):
 		// Leak the artifacts collection goroutine. Note that the test may not be
 		// marked as failing here. We intentionally do not trigger it to fail here,
 		// but we could entertain doing so once we have a mechanism that can route
 		// such post-test problems to the test-eng team.
-		t.L().Printf("giving up on artifacts collection after %s", artifactsCollectionTimeout)
-	}
-
-	if timedOut {
-		// Shut down the cluster. We only do this on timeout to help the test terminate;
-		// for regular failures, if the --debug flag is used, we want the cluster to stay
-		// around so someone can poke at it.
-		_ = c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All())
-
-		// We previously added a timeout failure without cancellation, so we cancel here.
-		if t.mu.cancel != nil {
-			t.mu.cancel()
-		}
-		t.L().Printf("test timed out; check __stacks.log and CRDB logs for goroutine dumps")
+		return errors.Errorf("artifact collection timed out after %s", timeout)
 	}
 	return nil
-}
-
-func (r *testRunner) collectClusterArtifacts(
-	ctx context.Context, c *clusterImpl, l *logger.Logger,
-) {
-	// NB: fetch the logs even when we have a debug zip because
-	// debug zip can't ever get the logs for down nodes.
-	// We only save artifacts for failed tests in CI, so this
-	// duplication is acceptable.
-	// NB: fetch the logs *first* in case one of the other steps
-	// below has problems.
-	l.PrintfCtx(ctx, "collecting cluster logs")
-	// Do this before collecting logs to make sure the file gets
-	// downloaded below.
-	if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
-		l.Printf("failed to fetch disk uage summary: %s", err)
-	}
-	if err := c.FetchLogs(ctx, l); err != nil {
-		l.Printf("failed to download logs: %s", err)
-	}
-	if err := c.FetchDmesg(ctx, l); err != nil {
-		l.Printf("failed to fetch dmesg: %s", err)
-	}
-	if err := c.FetchJournalctl(ctx, l); err != nil {
-		l.Printf("failed to fetch journalctl: %s", err)
-	}
-	if err := c.FetchCores(ctx, l); err != nil {
-		l.Printf("failed to fetch cores: %s", err)
-	}
-	if err := c.CopyRoachprodState(ctx); err != nil {
-		l.Printf("failed to copy roachprod state: %s", err)
-	}
-	if err := c.FetchTimeseriesData(ctx, l); err != nil {
-		l.Printf("failed to fetch timeseries data: %s", err)
-	}
-	if err := c.FetchDebugZip(ctx, l); err != nil {
-		l.Printf("failed to collect zip: %s", err)
-	}
 }
 
 func callerName() string {

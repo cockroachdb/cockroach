@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "gce",
@@ -20,6 +20,15 @@ go_library(
         "@org_golang_google_api//cloudbilling/v1beta",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+go_test(
+    name = "gce_test",
+    size = "small",
+    srcs = ["gcloud_test.go"],
+    args = ["-test.timeout=55s"],
+    embed = [":gce"],
+    deps = ["@com_github_stretchr_testify//assert"],
 )
 
 get_x_data(name = "get_x_data")

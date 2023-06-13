@@ -1088,7 +1088,7 @@ func rehash(
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", col.Type()))
 	}
-	cancelChecker.Check()
+	cancelChecker.CheckEveryCall()
 }
 
 // rehash64 takes an element of a key (tuple representing a row of equality
@@ -2148,5 +2148,5 @@ func rehash64(
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", col.Type()))
 	}
-	cancelChecker.Check()
+	cancelChecker.CheckEveryCall()
 }

@@ -447,7 +447,7 @@ func ReadEncryptionOptions(
 	// encrypt the backup recently, so we iterate the ENCRYPTION-INFO
 	// files from latest to oldest.
 	for i := len(files) - 1; i >= 0; i-- {
-		r, err := src.ReadFile(ctx, files[i])
+		r, _, err := src.ReadFile(ctx, files[i], cloud.ReadOptions{NoFileSize: true})
 		if err != nil {
 			return nil, errors.Wrap(err, encryptionReadErrorMsg)
 		}
@@ -491,7 +491,7 @@ func GetEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]
 func WriteEncryptionInfoIfNotExists(
 	ctx context.Context, opts *jobspb.EncryptionInfo, dest cloud.ExternalStorage,
 ) error {
-	r, err := dest.ReadFile(ctx, backupEncryptionInfoFile)
+	r, _, err := dest.ReadFile(ctx, backupEncryptionInfoFile, cloud.ReadOptions{NoFileSize: true})
 	if err == nil {
 		r.Close(ctx)
 		// If the file already exists, then we don't need to create a new one.

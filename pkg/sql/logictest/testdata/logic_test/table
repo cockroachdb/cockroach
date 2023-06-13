@@ -594,9 +594,14 @@ kv_catalog_descriptor                   NULL
 kv_catalog_namespace                    NULL
 kv_catalog_zones                        NULL
 kv_dropped_relations                    NULL
+kv_flow_control_handles                 NULL
+kv_flow_controller                      NULL
+kv_flow_token_deductions                NULL
+kv_inherited_role_members               NULL
 kv_node_liveness                        NULL
 kv_node_status                          NULL
 kv_store_status                         NULL
+kv_system_privileges                    NULL
 leases                                  NULL
 lost_descriptors_with_data              NULL
 node_build_info                         NULL

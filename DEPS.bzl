@@ -1565,20 +1565,20 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "1feff72f06564620e37a6eedb9455545f10d58a696769a742a29afaa4491aeb3",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230529170040-f235f568816e",
+        sha256 = "bc40028824dcefa498abc65518fb211aa0fc28498013d45663ebfee34d39a0bb",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230609131623-fe8461837052",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230529170040-f235f568816e.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230609131623-fe8461837052.zip",
         ],
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/redact",
-        sha256 = "9a723dfbb1627ae2f2b5d1374a59d6188ae9796e6dfb9a4622a4eb94321a4fac",
-        strip_prefix = "github.com/cockroachdb/redact@v1.1.4",
+        sha256 = "11b30528eb0dafc8bc1a5ba39d81277c257cbe6946a7564402f588357c164560",
+        strip_prefix = "github.com/cockroachdb/redact@v1.1.5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/redact/com_github_cockroachdb_redact-v1.1.4.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/redact/com_github_cockroachdb_redact-v1.1.5.zip",
         ],
     )
     go_repository(
@@ -5059,10 +5059,10 @@ def go_deps():
         name = "com_github_jordanlewis_gcassert",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jordanlewis/gcassert",
-        sha256 = "4e6d2be78096ee4158d921af5d388f76bbf6d2638cee052ca628ba70da911704",
-        strip_prefix = "github.com/jordanlewis/gcassert@v0.0.0-20221027203946-81f097ad35a0",
+        sha256 = "3919384e0288d9ce93da816ef227aec2c61b978eb761bd45a7fded957f792dcf",
+        strip_prefix = "github.com/jordanlewis/gcassert@v0.0.0-20230505190637-fed79d91cd5f",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jordanlewis/gcassert/com_github_jordanlewis_gcassert-v0.0.0-20221027203946-81f097ad35a0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jordanlewis/gcassert/com_github_jordanlewis_gcassert-v0.0.0-20230505190637-fed79d91cd5f.zip",
         ],
     )
     go_repository(
@@ -8094,10 +8094,10 @@ def go_deps():
         name = "com_github_stretchr_testify",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/stretchr/testify",
-        sha256 = "a4bf8c814b7dc03e7d2a4b76fc0f686e38f0c6b98fc61afe4422f05983779528",
-        strip_prefix = "github.com/stretchr/testify@v1.8.3",
+        sha256 = "e206daaede0bd03de060bdfbeb984ac2c49b83058753fffc93fe0c220ea87532",
+        strip_prefix = "github.com/stretchr/testify@v1.8.4",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/testify/com_github_stretchr_testify-v1.8.3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/testify/com_github_stretchr_testify-v1.8.4.zip",
         ],
     )
     go_repository(
@@ -10401,10 +10401,10 @@ def go_deps():
         ],
         build_file_proto_mode = "default",
         importpath = "go.etcd.io/raft/v3",
-        sha256 = "1dbe5ec9490f9de393c6b13fb46859b25f36827a10e2ec66af50432757a20c7a",
-        strip_prefix = "go.etcd.io/raft/v3@v3.0.0-20230524085155-eb88ac531002",
+        sha256 = "c0befdb4cef60ab589f6875d541dace26b87db876f3f31f02ed0ae3cc3271f4d",
+        strip_prefix = "go.etcd.io/raft/v3@v3.0.0-20230607113044-515b14280da2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/raft/v3/io_etcd_go_raft_v3-v3.0.0-20230524085155-eb88ac531002.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/raft/v3/io_etcd_go_raft_v3-v3.0.0-20230607113044-515b14280da2.zip",
         ],
     )
     go_repository(

@@ -804,7 +804,11 @@ func backupPlanHook(
 			if !p.ExecCfg().Codec.ForSystemTenant() {
 				return pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can backup other tenants")
 			}
-			initialDetails.SpecificTenantIds = []roachpb.TenantID{roachpb.MustMakeTenantID(backupStmt.Targets.TenantID.ID)}
+			tid, err := roachpb.MakeTenantID(backupStmt.Targets.TenantID.ID)
+			if err != nil {
+				return err
+			}
+			initialDetails.SpecificTenantIds = []roachpb.TenantID{tid}
 		}
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
@@ -1232,17 +1236,23 @@ func getReintroducedSpans(
 	return tableSpans, nil
 }
 
-func getProtectedTimestampTargetForBackup(backupManifest *backuppb.BackupManifest) *ptpb.Target {
+func getProtectedTimestampTargetForBackup(
+	backupManifest *backuppb.BackupManifest,
+) (*ptpb.Target, error) {
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
-		return ptpb.MakeClusterTarget()
+		return ptpb.MakeClusterTarget(), nil
 	}
 
 	if len(backupManifest.Tenants) > 0 {
-		tenantID := make([]roachpb.TenantID, 0)
+		tenantID := make([]roachpb.TenantID, 0, len(backupManifest.Tenants))
 		for _, tenant := range backupManifest.Tenants {
-			tenantID = append(tenantID, roachpb.MustMakeTenantID(tenant.ID))
+			tid, err := roachpb.MakeTenantID(tenant.ID)
+			if err != nil {
+				return nil, err
+			}
+			tenantID = append(tenantID, tid)
 		}
-		return ptpb.MakeTenantsTarget(tenantID)
+		return ptpb.MakeTenantsTarget(tenantID), nil
 	}
 
 	// ResolvedCompleteDBs contains all the "complete" databases being backed up.
@@ -1251,7 +1261,7 @@ func getProtectedTimestampTargetForBackup(backupManifest *backuppb.BackupManifes
 	// result of `BACKUP TABLE db.*`. In both cases we want to write a protected
 	// timestamp record that covers the entire database.
 	if len(backupManifest.CompleteDbs) > 0 {
-		return ptpb.MakeSchemaObjectsTarget(backupManifest.CompleteDbs)
+		return ptpb.MakeSchemaObjectsTarget(backupManifest.CompleteDbs), nil
 	}
 
 	// At this point we are dealing with a `BACKUP TABLE`, so we write a protected
@@ -1263,7 +1273,7 @@ func getProtectedTimestampTargetForBackup(backupManifest *backuppb.BackupManifes
 			tableIDs = append(tableIDs, t.GetID())
 		}
 	}
-	return ptpb.MakeSchemaObjectsTarget(tableIDs)
+	return ptpb.MakeSchemaObjectsTarget(tableIDs), nil
 }
 
 func protectTimestampForBackup(
@@ -1280,7 +1290,10 @@ func protectTimestampForBackup(
 
 	// Resolve the target that the PTS record will protect as part of this
 	// backup.
-	target := getProtectedTimestampTargetForBackup(backupManifest)
+	target, err := getProtectedTimestampTargetForBackup(backupManifest)
+	if err != nil {
+		return err
+	}
 
 	// Records written by the backup job should be ignored when making GC
 	// decisions on any table that has been marked as
@@ -1409,6 +1422,9 @@ func getTenantInfo(
 		)
 	}
 	for i := range tenants {
+		// NB: We use MustMakeTenantID here since the data is
+		// coming from the tenants table and we should only
+		// ever have valid tenant IDs returned to us.
 		prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenants[i].ID))
 		spans = append(spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
 	}

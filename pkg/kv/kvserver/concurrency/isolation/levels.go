@@ -12,6 +12,8 @@
 // concepts used by concurrency control in the key-value layer.
 package isolation
 
+import "github.com/gogo/protobuf/proto"
+
 // WeakerThan returns true if the receiver's strength is weaker than the
 // parameter's strength. It returns false if the two isolation levels are
 // equivalent or if the parameter's strength is weaker than the receiver's.
@@ -42,6 +44,23 @@ func (l Level) ToleratesWriteSkew() bool {
 // for the entire transaction.
 func (l Level) PerStatementReadSnapshot() bool {
 	return l == ReadCommitted
+}
+
+var levelNameLower = map[int32]string{
+	int32(Serializable):  "serializable",
+	int32(Snapshot):      "snapshot",
+	int32(ReadCommitted): "read committed",
+}
+
+func init() {
+	if len(levelNameLower) != len(Level_name) {
+		panic("missing lower-case name for isolation level")
+	}
+}
+
+// StringLower returns the lower-case name of the isolation level.
+func (l Level) StringLower() string {
+	return proto.EnumName(levelNameLower, int32(l))
 }
 
 // SafeValue implements the redact.SafeValue interface.

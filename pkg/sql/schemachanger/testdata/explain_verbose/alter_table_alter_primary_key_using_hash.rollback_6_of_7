@@ -16,7 +16,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   ├── • Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
     │   │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 2 (t_pkey-)}
@@ -31,7 +31,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   ├── • ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 2 (t_pkey-)}
     │   │   │   │ WRITE_ONLY → ABSENT
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 2 (t_pkey-)}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 2 (t_pkey-)}
     │   │   │   │     rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │   │   │
     │   │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
@@ -40,7 +40,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   ├── • CheckConstraint:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
     │   │   │   │ WRITE_ONLY → ABSENT
     │   │   │   │
-    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
     │   │   │   │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │   │   │
     │   │   │   └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_crdb_internal_j_shard_3", ConstraintID: 2 (check_crdb_internal_j_shard_3-)}
@@ -55,7 +55,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   ├── • PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
     │   │   │   │ MERGE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
     │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: MERGE_ONLY->WRITE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 2 (t_pkey-)}
@@ -82,7 +82,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   ├── • TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 4, SourceIndexID: 1 (t_pkey+)}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 4, SourceIndexID: 1 (t_pkey+)}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 4, SourceIndexID: 1 (t_pkey+)}
     │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 3}
@@ -109,13 +109,13 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │   ├── • SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_key-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
     │   │   │   │ MERGE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_key-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_key-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
     │   │   │         rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: MERGE_ONLY->WRITE_ONLY"
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
     │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_i_key-)}
@@ -296,7 +296,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
         │   ├── • Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
         │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 3 (crdb_internal_j_shard_3-)}
@@ -336,7 +336,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
         │   ├── • PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
         │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 2 (t_pkey-)}
@@ -360,7 +360,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
         │   ├── • TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 4, SourceIndexID: 1 (t_pkey+)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 4, SourceIndexID: 1 (t_pkey+)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 4, SourceIndexID: 1 (t_pkey+)}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-), IndexID: 3}
@@ -384,7 +384,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
         │   ├── • SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_key-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_key-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_key-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+)}
         │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_i_key-)}
@@ -414,7 +414,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
         │   ├── • TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 5}

@@ -15,11 +15,12 @@ import {
   DatabaseTablePageData,
   util,
   RecommendationType as RecType,
+  getNodesByRegionString,
+  normalizePrivileges,
 } from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
 import {
-  generateTableID,
   refreshTableDetails,
   refreshNodes,
   refreshIndexStats,
@@ -35,10 +36,8 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import { getNodesByRegionString } from "../utils";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
-import { normalizePrivileges } from "../utils";
 
 const { TableIndexStatsRequest } = cockroach.server.serverpb;
 
@@ -71,8 +70,8 @@ export const mapStateToProps = createSelector(
     isTenant,
     hasAdminRole,
   ): DatabaseTablePageData => {
-    const details = tableDetails[generateTableID(database, table)];
-    const indexStats = indexUsageStats[generateTableID(database, table)];
+    const details = tableDetails[util.generateTableID(database, table)];
+    const indexStats = indexUsageStats[util.generateTableID(database, table)];
     const lastReset = util.TimestampToMoment(indexStats?.data?.last_reset);
     const indexStatsData = _.flatMap(
       indexStats?.data?.statistics,

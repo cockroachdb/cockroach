@@ -308,6 +308,8 @@ func (s *eventStream) flushEvent(ctx context.Context, event *streampb.StreamEven
 		return ctx.Err()
 	case s.streamCh <- tree.Datums{tree.NewDBytes(tree.DBytes(data))}:
 		return nil
+	case <-s.doneChan:
+		return nil
 	}
 }
 

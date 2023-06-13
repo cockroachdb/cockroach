@@ -243,7 +243,7 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// projects needs space for one project, which is set by the flags for
 		// commands that accept a single project.
-		MachineType:          "n1-standard-4",
+		MachineType:          "n2-standard-4",
 		MinCPUPlatform:       "",
 		Zones:                nil,
 		Image:                DefaultImage,
@@ -315,6 +315,7 @@ func (p *Provider) CreateVolumeSnapshot(
 ) (vm.VolumeSnapshot, error) {
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"create", vsco.Name,
 		"--source-disk", volume.ProviderResourceID,
@@ -336,6 +337,7 @@ func (p *Provider) CreateVolumeSnapshot(
 
 	args = []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"add-labels", vsco.Name,
 		"--labels", s[:len(s)-1],
@@ -355,6 +357,7 @@ func (p *Provider) ListVolumeSnapshots(
 ) ([]vm.VolumeSnapshot, error) {
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"list",
 		"--format", "json(name,id)",
@@ -398,6 +401,7 @@ func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.Volum
 	}
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"snapshots",
 		"delete",
 	}
@@ -438,6 +442,7 @@ func (p *Provider) CreateVolume(
 	}
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"disks",
 		"create", vco.Name,
 		"--size", strconv.Itoa(vco.Size),
@@ -496,6 +501,7 @@ func (p *Provider) CreateVolume(
 		s := sb.String()
 		args = []string{
 			"compute",
+			"--project", p.GetProject(),
 			"disks",
 			"add-labels", vco.Name,
 			"--labels", s[:len(s)-1],
@@ -522,6 +528,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 	{ // Detach disks.
 		args := []string{
 			"compute",
+			"--project", p.GetProject(),
 			"instances",
 			"detach-disk", vm.Name,
 			"--disk", volume.ProviderResourceID,
@@ -535,6 +542,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 	{ // Delete disks.
 		args := []string{
 			"compute",
+			"--project", p.GetProject(),
 			"disks",
 			"delete",
 			volume.ProviderResourceID,
@@ -646,6 +654,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 	// Volume attach.
 	args := []string{
 		"compute",
+		"--project", p.GetProject(),
 		"instances",
 		"attach-disk",
 		vm.ProviderID,
@@ -675,6 +684,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 	// Volume auto delete.
 	args = []string{
 		"compute",
+		"--project", p.GetProject(),
 		"instances",
 		"set-disk-auto-delete", vm.ProviderID,
 		"--auto-delete",
@@ -767,7 +777,7 @@ func (p *Provider) GetProjects() []string {
 
 // ConfigureCreateFlags implements vm.ProviderOptions.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
-	flags.StringVar(&o.MachineType, "machine-type", "n1-standard-4", "DEPRECATED")
+	flags.StringVar(&o.MachineType, "machine-type", "n2-standard-4", "DEPRECATED")
 	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
 	flags.StringSliceVar(&o.Zones, "zones", nil, "DEPRECATED")
 	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
@@ -775,7 +785,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&providerInstance.ServiceAccount, ProviderName+"-service-account",
 		providerInstance.ServiceAccount, "Service account to use")
 
-	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n1-standard-4",
+	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
@@ -957,15 +967,15 @@ func (p *Provider) Create(
 	extraMountOpts := ""
 	// Dynamic args.
 	if opts.SSDOpts.UseLocalSSD {
-		// n2-class and c2-class GCP machines cannot be requested with only 1
-		// SSD; minimum number of actual SSDs is 2.
-		// TODO(pbardea): This is more general for machine types that
-		// come in different sizes.
-		// See: https://cloud.google.com/compute/docs/disks/
-		n2MachineTypes := regexp.MustCompile("^[cn]2-.+-16")
-		if n2MachineTypes.MatchString(providerOpts.MachineType) && providerOpts.SSDCount == 1 {
-			fmt.Fprint(os.Stderr, "WARNING: SSD count must be at least 2 for n2 and c2 machine types with 16vCPU. Setting --gce-local-ssd-count to 2.\n")
-			providerOpts.SSDCount = 2
+		if counts, err := AllowedLocalSSDCount(providerOpts.MachineType); err != nil {
+			return err
+		} else {
+			// Make sure the minimum number of local SSDs is met.
+			minCount := counts[0]
+			if providerOpts.SSDCount < minCount {
+				l.Printf("WARNING: SSD count must be at least %d for %q. Setting --gce-local-ssd-count to %d", minCount, providerOpts.MachineType, minCount)
+				providerOpts.SSDCount = minCount
+			}
 		}
 		for i := 0; i < providerOpts.SSDCount; i++ {
 			args = append(args, "--local-ssd", "interface=NVME")
@@ -1057,6 +1067,57 @@ func (p *Provider) Create(
 	}
 
 	return propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
+}
+
+// Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
+// N.B. Only n1, n2 and c2 instances are supported since we don't typically use other instance types.
+// Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
+func AllowedLocalSSDCount(machineType string) ([]int, error) {
+	machineTypes := regexp.MustCompile(`^([cn])(\d+)-.+-(\d+)$`)
+	matches := machineTypes.FindStringSubmatch(machineType)
+
+	if len(matches) >= 3 {
+		family := matches[1] + matches[2]
+		numCpus, err := strconv.Atoi(matches[3])
+		if err != nil {
+			return nil, err
+		}
+		if family == "n1" {
+			return []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, nil
+		}
+		switch family {
+		case "n2":
+			if numCpus <= 10 {
+				return []int{1, 2, 4, 8, 16, 24}, nil
+			}
+			if numCpus <= 20 {
+				return []int{2, 4, 8, 16, 24}, nil
+			}
+			if numCpus <= 40 {
+				return []int{4, 8, 16, 24}, nil
+			}
+			if numCpus <= 80 {
+				return []int{8, 16, 24}, nil
+			}
+			if numCpus <= 128 {
+				return []int{16, 24}, nil
+			}
+		case "c2":
+			if numCpus <= 8 {
+				return []int{1, 2, 4, 8}, nil
+			}
+			if numCpus <= 16 {
+				return []int{2, 4, 8}, nil
+			}
+			if numCpus <= 30 {
+				return []int{4, 8}, nil
+			}
+			if numCpus <= 60 {
+				return []int{8}, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("unsupported machine type: %q", machineType)
 }
 
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
@@ -1494,9 +1555,9 @@ func (p *Provider) ProjectActive(project string) bool {
 // lastComponent splits a url path and returns only the last part. This is
 // used because some fields in GCE APIs are defined using URLs like:
 //
-//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n1-standard-16"
+//	"https://www.googleapis.com/compute/v1/projects/cockroach-shared/zones/us-east1-b/machineTypes/n2-standard-16"
 //
-// We want to strip this down to "n1-standard-16", so we only want the last
+// We want to strip this down to "n2-standard-16", so we only want the last
 // component.
 func lastComponent(url string) string {
 	s := strings.Split(url, "/")

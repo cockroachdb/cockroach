@@ -90,6 +90,10 @@ func (r *Registry) AddMetric(metric Iterable) {
 // AddMetricStruct examines all fields of metricStruct and adds
 // all Iterable or metric.Struct objects to the registry.
 func (r *Registry) AddMetricStruct(metricStruct interface{}) {
+	if r == nil { // for testing convenience
+		return
+	}
+
 	ctx := context.TODO()
 	v := reflect.ValueOf(metricStruct)
 	if v.Kind() == reflect.Ptr {

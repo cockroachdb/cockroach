@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -792,21 +793,23 @@ func TestChangefeedCursor(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-		// To make sure that these timestamps are after 'before' and before
-		// 'after', throw a couple sleeps around them. We round timestamps to
-		// Microsecond granularity for Postgres compatibility, so make the
-		// sleeps 10x that.
+		// NB: The test server is a single node and the hlc clock is a
+		// singleton. Any transaction (ie. `INSERT INTO`) or call to
+		// s.Server.Clock().Now() will share this clock. Any read of the clock
+		// increments its current logical time. Thus, the operations below which
+		// happen in sequence will have strictly increasing logical timestamps.
 		beforeInsert := s.Server.Clock().Now()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'before')`)
-		time.Sleep(10 * time.Microsecond)
+		insertTimestamp := s.Server.Clock().Now()
 
-		var tsLogical string
-		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsLogical)
-		var tsClock time.Time
-		sqlDB.QueryRow(t, `SELECT clock_timestamp()`).Scan(&tsClock)
+		tsLogical := s.Server.Clock().Now()
+		tsClock := timeutil.FromUnixNanos(tsLogical.WallTime)
 
-		time.Sleep(10 * time.Microsecond)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'after')`)
+
+		// Sanity check that operations happened in the expected order.
+		require.True(t, beforeInsert.Less(insertTimestamp) && insertTimestamp.Less(tsLogical) && tsLogical.Less(s.Server.Clock().Now()),
+			fmt.Sprintf("beforeInsert: %s, insertTimestamp: %s, tsLogical: %s", beforeInsert, insertTimestamp, tsLogical))
 
 		// The below function is currently used to test negative timestamp in cursor i.e of the form
 		// "-3us".
@@ -834,7 +837,7 @@ func TestChangefeedCursor(t *testing.T) {
 		// We do not need to override for the remaining cases
 		knobs.OverrideCursor = nil
 
-		fooLogical := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsLogical)
+		fooLogical := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, eval.TimestampToDecimalDatum(tsLogical).String())
 		defer closeFeed(t, fooLogical)
 		assertPayloads(t, fooLogical, []string{
 			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
@@ -863,7 +866,7 @@ func TestChangefeedCursor(t *testing.T) {
 				jobutils.InternalSystemJobsBaseQuery), e.JobID()).Scan(&bytes)
 			var payload jobspb.Payload
 			require.NoError(t, protoutil.Unmarshal(bytes, &payload))
-			require.Equal(t, parseTimeToHLC(t, tsLogical), payload.GetChangefeed().StatementTime)
+			require.Equal(t, tsLogical, payload.GetChangefeed().StatementTime)
 		}
 	}
 
@@ -4196,7 +4199,10 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
 		errChan := make(chan error, 1)
 		knobs.HandleDistChangefeedError = func(err error) error {
-			errChan <- err
+			select {
+			case errChan <- err:
+			default:
+			}
 			return err
 		}
 
@@ -6088,7 +6094,6 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 				DistSQL: &execinfra.TestingKnobs{
 					DrainFast: true,
 					Changefeed: &TestingKnobs{
-						EnableParquetMetadata: true,
 						// Filter out draining nodes; normally we rely on dist sql planner
 						// to do that for us.
 						FilterDrainingNodes: func(
@@ -8168,7 +8173,11 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		nada := feed(t, f, "CREATE CHANGEFEED FOR foo WITH resolved='100ms'")
-		defer closeFeed(t, nada)
+		defer func() {
+			// close could return an error due to the race in withTimeout function
+			// which cancels the job.
+			_ = nada.Close()
+		}()
 
 		expectResolvedTimestamp(t, nada) // Make sure feed is running.
 

@@ -246,6 +246,8 @@
 
 /pkg/geo/                    @cockroachdb/spatial
 
+/pkg/inspectz/               @cockroachdb/admission-control
+
 # The KV team generally owns ./pkg/kv/... but not all of it. By convention,
 # inside of the /pkg/kv tree, we list out rules for each subdirectory, i.e. when
 # a new directory is created CODEOWNERS should mandate a new line below. This
@@ -417,6 +419,7 @@
 /pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/spatial
 /pkg/cmd/generate-bazel-extra/ @cockroachdb/dev-inf
 /pkg/cmd/generate-staticcheck/ @cockroachdb/dev-inf
+/pkg/cmd/generate-cgo/       @cockroachdb/dev-inf
 /pkg/cmd/geoviz/             @cockroachdb/spatial
 /pkg/cmd/github-post/        @cockroachdb/test-eng
 /pkg/cmd/github-pull-request-make/ @cockroachdb/dev-inf
@@ -523,6 +526,7 @@
 /pkg/workload/               @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 /pkg/obs/                    @cockroachdb/obs-inf-prs
 /pkg/obsservice/             @cockroachdb/obs-inf-prs
+/pkg/ccl/auditloggingccl     @cockroachdb/cluster-observability
 
 # Own all bazel files to dev-inf, but don't request reviews for them
 # as they are mostly - but not only - generated code that changes with

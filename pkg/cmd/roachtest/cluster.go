@@ -63,10 +63,10 @@ var (
 	cockroachPath string
 	// maps cpuArch to the corresponding crdb binary's absolute path
 	cockroach = make(map[vm.CPUArch]string)
-	// user-specified path to short crdb binary
-	cockroachShortPath string
-	// maps cpuArch to the corresponding short crdb (i.e., without UI) binary's absolute path
-	cockroachShort = make(map[vm.CPUArch]string)
+	// user-specified path to crdb binary with runtime assertions enabled (EA)
+	cockroachEAPath string
+	// maps cpuArch to the corresponding crdb binary with runtime assertions enabled (EA)
+	cockroachEA = make(map[vm.CPUArch]string)
 	// user-specified path to workload binary
 	workloadPath string
 	// maps cpuArch to the corresponding workload binary's absolute path
@@ -320,15 +320,15 @@ func initBinariesAndLibraries() {
 	}
 	fmt.Printf("Locating and verifying binaries for os=%q, arch=%q\n", defaultOSName, defaultArch)
 
-	// Finds and validates a binary. If the binary 'isRequired', but not found, exit and print the error.
-	resolveBinary := func(binName string, userSpecified string, arch vm.CPUArch, isRequired bool, checkEA bool) (string, error) {
+	// Finds and validates a binary.
+	resolveBinary := func(binName string, userSpecified string, arch vm.CPUArch, exitOnErr bool, checkEA bool) (string, error) {
 		path := binName
 		if userSpecified != "" {
 			path = userSpecified
 		}
 		abspath, err := findBinary(path, defaultOSName, arch, checkEA)
 		if err != nil {
-			if isRequired {
+			if exitOnErr {
 				fmt.Fprintf(os.Stderr, "ERROR: unable to find required binary %q for %q: %v\n", binName, arch, err)
 				os.Exit(1)
 			}
@@ -340,12 +340,18 @@ func initBinariesAndLibraries() {
 		}
 		// Bail out if a path other than the user-specified was found.
 		userPath, err := filepath.Abs(userSpecified)
+		if err != nil {
+			if exitOnErr {
+				fmt.Fprintf(os.Stderr, "ERROR: unable to find required binary %q for %q: %v\n", binName, arch, err)
+				os.Exit(1)
+			}
+			return "", err
+		}
+		if userPath != abspath {
+			err = errors.Errorf("found %q at: %q instead of the user-specified path: %q\n", binName, abspath, userSpecified)
 
-		if err != nil || userPath != abspath {
-			err = errors.Wrapf(err, "ERROR: found %q at: %s instead of the user-specified path: %q\n", binName, abspath, userSpecified)
-
-			if isRequired {
-				fmt.Fprintf(os.Stderr, "%v", err)
+			if exitOnErr {
+				fmt.Fprintf(os.Stderr, "ERROR: unable to find required binary %q for %q: %v\n", binName, arch, err)
 				os.Exit(1)
 			}
 			return "", err
@@ -357,9 +363,9 @@ func initBinariesAndLibraries() {
 
 	cockroach[defaultArch], _ = resolveBinary("cockroach", cockroachPath, defaultArch, true, false)
 	workload[defaultArch], _ = resolveBinary("workload", workloadPath, defaultArch, true, false)
-	cockroachShort[defaultArch], err = resolveBinary("cockroach-short", cockroachShortPath, defaultArch, false, true)
+	cockroachEA[defaultArch], err = resolveBinary("cockroach-ea", cockroachEAPath, defaultArch, false, true)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-short", defaultArch, err)
+		fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", defaultArch, err)
 	}
 
 	if arm64Probability > 0 && defaultArch != vm.ArchARM64 {
@@ -367,9 +373,9 @@ func initBinariesAndLibraries() {
 		// We need to verify we have all the required binaries for arm64.
 		cockroach[vm.ArchARM64], _ = resolveBinary("cockroach", cockroachPath, vm.ArchARM64, true, false)
 		workload[vm.ArchARM64], _ = resolveBinary("workload", workloadPath, vm.ArchARM64, true, false)
-		cockroachShort[vm.ArchARM64], err = resolveBinary("cockroach-short", cockroachShortPath, vm.ArchARM64, false, true)
+		cockroachEA[vm.ArchARM64], err = resolveBinary("cockroach-ea", cockroachEAPath, vm.ArchARM64, false, true)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-short", vm.ArchARM64, err)
+			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", vm.ArchARM64, err)
 		}
 	}
 	if fipsProbability > 0 && defaultArch != vm.ArchFIPS {
@@ -377,9 +383,9 @@ func initBinariesAndLibraries() {
 		// We need to verify we have all the required binaries for fips.
 		cockroach[vm.ArchFIPS], _ = resolveBinary("cockroach", cockroachPath, vm.ArchFIPS, true, false)
 		workload[vm.ArchFIPS], _ = resolveBinary("workload", workloadPath, vm.ArchFIPS, true, false)
-		cockroachShort[vm.ArchFIPS], err = resolveBinary("cockroach-short", cockroachShortPath, vm.ArchFIPS, false, true)
+		cockroachEA[vm.ArchFIPS], err = resolveBinary("cockroach-ea", cockroachEAPath, vm.ArchFIPS, false, true)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-short", vm.ArchFIPS, err)
+			fmt.Fprintf(os.Stderr, "WARN: unable to find %q for %q: %s\n", "cockroach-ea", vm.ArchFIPS, err)
 		}
 	}
 
@@ -417,9 +423,9 @@ func initBinariesAndLibraries() {
 			fmt.Printf("\tworkload %q at: %s\n", arch, path)
 		}
 	}
-	for arch, path := range cockroachShort {
+	for arch, path := range cockroachEA {
 		if path != "" {
-			fmt.Printf("\tcockroach-short %q at: %s\n", arch, path)
+			fmt.Printf("\tcockroach-ea %q at: %s\n", arch, path)
 		}
 	}
 	for arch, paths := range libraryFilePaths {
@@ -732,16 +738,16 @@ func MachineTypeToCPUs(s string) int {
 	{
 		// GCE machine types.
 		var v int
-		if _, err := fmt.Sscanf(s, "n1-standard-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
 			return v
 		}
 		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
 			return v
 		}
-		if _, err := fmt.Sscanf(s, "n1-highcpu-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "n2-highcpu-%d", &v); err == nil {
 			return v
 		}
-		if _, err := fmt.Sscanf(s, "n1-highmem-%d", &v); err == nil {
+		if _, err := fmt.Sscanf(s, "n2-highmem-%d", &v); err == nil {
 			return v
 		}
 	}
@@ -760,12 +766,12 @@ func MachineTypeToCPUs(s string) int {
 			return 8
 		case "4xlarge":
 			return 16
-		case "9xlarge":
-			return 36
+		case "8xlarge":
+			return 32
 		case "12xlarge":
 			return 48
-		case "18xlarge":
-			return 72
+		case "16xlarge":
+			return 64
 		case "24xlarge":
 			return 96
 		}
@@ -1282,6 +1288,11 @@ func (c *clusterImpl) validate(
 			if vmCPUs > 0 && vmCPUs < cpus {
 				return fmt.Errorf("node %d has %d CPUs, test requires %d", i, vmCPUs, cpus)
 			}
+			// Clouds typically don't support odd numbers of vCPUs; they can result in subtle performance issues.
+			// N.B. Some machine families, e.g., n2 in GCE, do not support 1 vCPU. (See AWSMachineType and GCEMachineType.)
+			if vmCPUs > 1 && vmCPUs&1 == 1 {
+				return fmt.Errorf("node %d has an _odd_ number of CPUs (%d)", i, vmCPUs)
+			}
 		}
 	}
 	return nil
@@ -1597,33 +1608,31 @@ func (c *clusterImpl) HealthStatus(
 	return results, nil
 }
 
-// FailOnInvalidDescriptors fails the test if there exists any descriptors in
+// assertValidDescriptors fails the test if there exists any descriptors in
 // the crdb_internal.invalid_objects virtual table.
-func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) {
+func (c *clusterImpl) assertValidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) error {
 	t.L().Printf("checking for invalid descriptors")
-	if err := timeutil.RunWithTimeout(
+	return timeutil.RunWithTimeout(
 		ctx, "invalid descriptors check", 1*time.Minute,
 		func(ctx context.Context) error {
 			return roachtestutil.CheckInvalidDescriptors(ctx, db)
 		},
-	); err != nil {
-		t.Errorf("invalid descriptors check failed: %v", err)
-	}
+	)
 }
 
-// FailOnReplicaDivergence fails the test if
+// assertConsistentReplicas fails the test if
 // crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
 // replicas are inconsistent with each other.
-func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, db *gosql.DB, t *testImpl) {
+func (c *clusterImpl) assertConsistentReplicas(
+	ctx context.Context, db *gosql.DB, t *testImpl,
+) error {
 	t.L().Printf("checking for replica divergence")
-	if err := timeutil.RunWithTimeout(
+	return timeutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
 			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},
-	); err != nil {
-		t.Errorf("consistency check failed: %v", err)
-	}
+	)
 }
 
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
@@ -1950,7 +1959,11 @@ func (c *clusterImpl) PutLibraries(
 		if !contains(libraries, nil, libName) {
 			continue
 		}
-		putPath := filepath.Join(libraryDir, libName)
+		// Get the last extension (e.g., .so) to create a destination file.
+		// N.B. The optional arch-specific extension is elided since the destination doesn't need it, nor does it know
+		// how to resolve it. (E.g., see findLibraryDirectories in geos.go)
+		ext := filepath.Ext(filepath.Base(libraryFilePath))
+		putPath := filepath.Join(libraryDir, libName+ext)
 		if err := c.PutE(
 			ctx,
 			c.l,
@@ -2354,7 +2367,7 @@ func (c *clusterImpl) RunWithDetails(
 		testLogger.Printf("> %s\n", strings.Join(args, " "))
 	}
 
-	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, false /* secure */, args)
+	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
 	if err != nil && len(physicalFileName) > 0 {
 		l.Printf("> result: %+v", err)
 		createFailedFile(physicalFileName)
@@ -2571,19 +2584,7 @@ func (c *clusterImpl) InternalAddr(
 func (c *clusterImpl) InternalIP(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
-	var ips []string
-	addrs, err := c.InternalAddr(ctx, l, node)
-	if err != nil {
-		return nil, err
-	}
-	for _, addr := range addrs {
-		host, err := addrToHost(addr)
-		if err != nil {
-			return nil, err
-		}
-		ips = append(ips, host)
-	}
-	return ips, nil
+	return roachprod.IP(l, c.MakeNodes(node), false)
 }
 
 // ExternalAddr returns the external address in the form host:port for the

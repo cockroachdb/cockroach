@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -244,6 +245,10 @@ type sqlServerOptionalKVArgs struct {
 	// kvStores is used by crdb_internal builtins to access the stores on this
 	// node.
 	kvStoresIterator kvserverbase.StoresIterator
+
+	// inspectzServer is used to power various crdb_internal vtables, exposing
+	// the equivalent of /inspectz but through SQL.
+	inspectzServer inspectzpb.InspectzServer
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -990,6 +995,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TraceCollector:            traceCollector,
 		TenantUsageServer:         cfg.tenantUsageServer,
 		KVStoresIterator:          cfg.kvStoresIterator,
+		InspectzServer:            cfg.inspectzServer,
 		RangeDescIteratorFactory:  cfg.rangeDescIteratorFactory,
 		SyntheticPrivilegeCache: syntheticprivilegecache.New(
 			cfg.Settings, cfg.stopper, cfg.db,
@@ -1374,11 +1380,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
 	fn(ctx)
 
-	auditlogging.UserAuditLogConfig.SetOnChange(
-		&execCfg.Settings.SV, func(ctx context.Context) {
-			auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings)
-		})
-	auditlogging.UpdateAuditConfigOnChange(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings)
+	auditlogging.UserAuditEnterpriseParamsHook = func(st *cluster.Settings, clusterID uuid.UUID) func() (*cluster.Settings, uuid.UUID, error) {
+		return func() (*cluster.Settings, uuid.UUID, error) {
+			return st, clusterID, nil
+		}
+	}(execCfg.Settings, cfg.ClusterIDContainer.Get())
+
+	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
 
 	return &SQLServer{
 		ambientCtx:                     cfg.BaseConfig.AmbientCtx,

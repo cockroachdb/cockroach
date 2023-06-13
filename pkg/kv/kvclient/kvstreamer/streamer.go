@@ -728,10 +728,7 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 		if len(results) > 0 || allComplete || err != nil {
 			return results, err
 		}
-		s.results.wait()
-		// Check whether the Streamer has been canceled or closed while we were
-		// waiting for the results.
-		if err = ctx.Err(); err != nil {
+		if err = s.results.wait(ctx); err != nil {
 			s.results.setError(err)
 			return nil, err
 		}
@@ -749,11 +746,15 @@ func (s *Streamer) Close(ctx context.Context) {
 		s.mu.done = true
 		s.mu.Unlock()
 		s.requestsToServe.close()
-		s.results.close(ctx)
 		// Unblock the coordinator in case it is waiting for the budget.
 		s.budget.mu.waitForBudget.Signal()
 	}
 	s.waitGroup.Wait()
+	if s.results != nil {
+		// The results buffer can only be closed when all goroutines have
+		// exited.
+		s.results.close(ctx)
+	}
 	*s = Streamer{}
 }
 

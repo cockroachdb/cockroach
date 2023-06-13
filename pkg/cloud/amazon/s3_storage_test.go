@@ -447,7 +447,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 		t.Fatalf("conf does not roundtrip: started with %+v, got back %+v", conf, readConf)
 	}
 
-	_, err = s.ReadFile(ctx, "")
+	_, _, err = s.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
 	require.Error(t, err, "")
 	require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "error is not cloud.ErrFileDoesNotExist: %v", err)
 }

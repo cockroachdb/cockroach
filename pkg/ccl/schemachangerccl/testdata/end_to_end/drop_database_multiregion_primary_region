@@ -30,7 +30,7 @@ write *eventpb.DropDatabase to event log:
     statement: DROP DATABASE ‹multi_region_test_db› CASCADE
     tag: DROP DATABASE
     user: root
-## StatementPhase stage 1 of 1 with 47 MutationType ops
+## StatementPhase stage 1 of 1 with 57 MutationType ops
 delete database namespace entry {0 0 multi_region_test_db} -> 104
 delete schema namespace entry {104 0 public} -> 105
 delete object namespace entry {104 105 crdb_internal_region} -> 106

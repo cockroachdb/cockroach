@@ -64,7 +64,8 @@ type StoreGrantCoordinators struct {
 	onLogEntryAdmitted    OnLogEntryAdmitted
 	closeCh               chan struct{}
 
-	disableTickerForTesting bool
+	disableTickerForTesting bool // TODO(irfansharif): Fold into the testing knobs struct below.
+	knobs                   *TestingKnobs
 }
 
 // SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
@@ -88,7 +89,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 			sgc.numStores++
 		}
 		gc.pebbleMetricsTick(startupCtx, m)
-		gc.allocateIOTokensTick()
+		gc.allocateIOTokensTick(unloadedDuration.ticksInAdjustmentInterval())
 	}
 	if sgc.disableTickerForTesting {
 		return
@@ -97,14 +98,16 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	ctx := sgc.ambientCtx.AnnotateCtx(context.Background())
 
 	go func() {
-		var ticks int64
-		ticker := time.NewTicker(ioTokenTickDuration)
+		ticker := tokenAllocationTicker{}
 		done := false
+		var systemLoaded bool // First adjustment interval is unloaded.
+		ticker.adjustmentStart(false /* loaded */)
 		for !done {
+			ticker.tick()
+			remainingTicks := ticker.remainingTicks()
 			select {
-			case <-ticker.C:
-				ticks++
-				if ticks%ticksInAdjustmentInterval == 0 {
+			default:
+				if remainingTicks == 0 {
 					metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
 					if len(metrics) != sgc.numStores {
 						log.Warningf(ctx,
@@ -113,17 +116,26 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					for _, m := range metrics {
 						if unsafeGc, ok := sgc.gcMap.Load(int64(m.StoreID)); ok {
 							gc := (*GrantCoordinator)(unsafeGc)
-							gc.pebbleMetricsTick(ctx, m)
+
+							// We say that the system has load if at least one store is loaded.
+							storeLoaded := gc.pebbleMetricsTick(ctx, m)
+							systemLoaded = systemLoaded || storeLoaded
 							iotc.UpdateIOThreshold(m.StoreID, gc.ioLoadListener.ioThreshold)
 						} else {
 							log.Warningf(ctx,
 								"seeing metrics for unknown storeID %d", m.StoreID)
 						}
 					}
+					// Start a new adjustment interval since there are no ticks remaining
+					// in the current adjustment interval. Note that the next call to
+					// allocateIOTokensTick will belong to the new adjustment interval.
+					ticker.adjustmentStart(systemLoaded)
+					remainingTicks = ticker.remainingTicks()
 				}
+
 				sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
 					gc := (*GrantCoordinator)(unsafeGc)
-					gc.allocateIOTokensTick()
+					gc.allocateIOTokensTick(int64(remainingTicks))
 					// true indicates that iteration should continue after the
 					// current entry has been processed.
 					return true
@@ -132,7 +144,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				done = true
 			}
 		}
-		ticker.Stop()
+		ticker.stop()
 	}()
 }
 
@@ -148,11 +160,11 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		// Setting tokens to unlimited is defensive. We expect that
 		// pebbleMetricsTick and allocateIOTokensTick will get called during
 		// initialization, which will also set these to unlimited.
-		startingIOTokens:                unlimitedTokens / ticksInAdjustmentInterval,
+		startingIOTokens:                unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
 	}
-	kvg.coordMu.availableIOTokens = unlimitedTokens / ticksInAdjustmentInterval
-	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / ticksInAdjustmentInterval
+	kvg.coordMu.availableIOTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
+	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 
 	opts := makeWorkQueueOptions(KVWork)
 	// This is IO work, so override the usesTokens value.
@@ -176,7 +188,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		sgc.settings,
 		sgc.workQueueMetrics,
 		opts,
-		nil, /* knobs */
+		sgc.knobs,
 		sgc.onLogEntryAdmitted,
 		&coord.mu.Mutex,
 	)
@@ -373,12 +385,13 @@ func NewGrantCoordinators(
 	opts Options,
 	registry *metric.Registry,
 	onLogEntryAdmitted OnLogEntryAdmitted,
+	knobs *TestingKnobs,
 ) GrantCoordinators {
 	metrics := makeGrantCoordinatorMetrics()
 	registry.AddMetricStruct(metrics)
 
 	return GrantCoordinators{
-		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry, onLogEntryAdmitted),
+		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry, onLogEntryAdmitted, knobs),
 		Regular: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry),
 		Elastic: makeElasticGrantCoordinator(ambientCtx, st, registry),
 	}
@@ -401,7 +414,7 @@ func makeElasticGrantCoordinator(
 	elasticCPUInternalWorkQueue := &WorkQueue{}
 	initWorkQueue(elasticCPUInternalWorkQueue, ambientCtx, KVWork, elasticCPUGranter, st,
 		elasticWorkQueueMetrics,
-		workQueueOptions{usesTokens: true}) // will be closed by the embedding *ElasticCPUWorkQueue
+		workQueueOptions{usesTokens: true}, nil /* knobs */) // will be closed by the embedding *ElasticCPUWorkQueue
 	elasticCPUWorkQueue := makeElasticCPUWorkQueue(st, elasticCPUInternalWorkQueue, elasticCPUGranter, elasticCPUGranterMetrics)
 	elasticCPUGrantCoordinator := makeElasticCPUGrantCoordinator(elasticCPUGranter, elasticCPUWorkQueue, schedulerLatencyListener)
 	elasticCPUGranter.setRequester(elasticCPUInternalWorkQueue)
@@ -416,7 +429,11 @@ func makeStoresGrantCoordinators(
 	metrics GrantCoordinatorMetrics,
 	registry *metric.Registry,
 	onLogEntryAdmitted OnLogEntryAdmitted,
+	knobs *TestingKnobs,
 ) *StoreGrantCoordinators {
+	if knobs == nil {
+		knobs = &TestingKnobs{}
+	}
 	// These metrics are shared across all stores and broken down by priority for
 	// the common priorities.
 	// TODO(baptist): Add per-store metrics.
@@ -435,6 +452,7 @@ func makeStoresGrantCoordinators(
 		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
 		workQueueMetrics:            storeWorkQueueMetrics,
 		onLogEntryAdmitted:          onLogEntryAdmitted,
+		knobs:                       knobs,
 	}
 	return storeCoordinators
 }
@@ -634,13 +652,13 @@ func NewGrantCoordinatorSQL(
 // pebbleMetricsTick is called every adjustmentInterval seconds and passes
 // through to the ioLoadListener, so that it can adjust the plan for future IO
 // token allocations.
-func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreMetrics) {
-	coord.ioLoadListener.pebbleMetricsTick(ctx, m)
+func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreMetrics) bool {
+	return coord.ioLoadListener.pebbleMetricsTick(ctx, m)
 }
 
 // allocateIOTokensTick tells the ioLoadListener to allocate tokens.
-func (coord *GrantCoordinator) allocateIOTokensTick() {
-	coord.ioLoadListener.allocateTokensTick()
+func (coord *GrantCoordinator) allocateIOTokensTick(remainingTicks int64) {
+	coord.ioLoadListener.allocateTokensTick(remainingTicks)
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	if !coord.mu.grantChainActive {

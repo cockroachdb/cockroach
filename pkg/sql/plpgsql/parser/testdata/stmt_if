@@ -1,10 +1,10 @@
 parse
 DECLARE
 BEGIN
-  IF johnny gyro THEN
+  IF johnnyGyro THEN
     NULL;
     diego := 1 + 2;
-  ELSIF hi hot pants THEN
+  ELSIF hiHotPants THEN
     diego := 7 + 7;
   ELSE
     diego := 0;
@@ -13,39 +13,41 @@ END
 ----
 DECLARE
 BEGIN
-IF johnny gyro THEN
+IF johnnygyro THEN
 	NULL
-	ASSIGN diego := 1 + 2
-ELSIF hi hot pants THEN
-	ASSIGN diego := 7 + 7
+	diego := 1 + 2;
+ELSIF hihotpants THEN
+	diego := 7 + 7;
 ELSE
-	ASSIGN diego := 0
+	diego := 0;
 END IF
-<NOT DONE YET>END
+<NOT DONE YET>
+END
 <NOT DONE YET>
 
 
 parse
 DECLARE
 BEGIN
-  IF johnny gyro THEN
+  IF johnnyGyro THEN
   END IF;
 END
 ----
 DECLARE
 BEGIN
-IF johnny gyro THEN
+IF johnnygyro THEN
 END IF
-<NOT DONE YET>END
+<NOT DONE YET>
+END
 <NOT DONE YET>
 
 feature-count
 DECLARE
 BEGIN
-  IF johnny gyro THEN
+  IF johnnyGyro THEN
     NULL;
     diego := 1 + 2;
-  ELSIF hi hot pants THEN
+  ELSIF hiHotPants THEN
     diego := 7 + 7;
   ELSE
     diego := 0;
@@ -61,13 +63,13 @@ stmt_null: 1
 feature-count
 DECLARE
 BEGIN
-  IF not nested THEN
+  IF notNested THEN
     NULL;
     nested := 1 + 2;
   ELSIF nested THEN
     nested := 7 + 7;
-  ELSIF double nested THEN
-    IF not nested again THEN
+  ELSIF doubleNested THEN
+    IF notNestedAgain THEN
       NULL;
     ELSIF nested THEN
       nested := 7 + 14;

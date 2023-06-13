@@ -15,7 +15,7 @@ until crdb_only
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Hint":"the maximum message size can be configured using the sql.conn.max_read_buffer_message_size cluster setting"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
@@ -30,7 +30,7 @@ until crdb_only
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Hint":"the maximum message size can be configured using the sql.conn.max_read_buffer_message_size cluster setting"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
@@ -52,5 +52,5 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"ParameterDescription","ParameterOIDs":[25]}
 {"Type":"RowDescription","Fields":[{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0},{"Name":"text","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Hint":"the maximum message size can be configured using the sql.conn.max_read_buffer_message_size cluster setting"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

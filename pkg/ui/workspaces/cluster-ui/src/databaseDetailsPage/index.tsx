@@ -9,3 +9,4 @@
 // licenses/APL.txt.
 
 export * from "./databaseDetailsPage";
+export * from "./databaseDetailsConnected";

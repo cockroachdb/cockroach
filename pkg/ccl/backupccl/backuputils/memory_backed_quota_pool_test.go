@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -135,8 +134,7 @@ func TestMemoryBackedQuotaPoolConcurrent(t *testing.T) {
 				nil, nil, 1, 0,
 				cluster.MakeTestingClusterSettings())
 			mm.Start(ctx, nil, mon.NewStandaloneBudget(quota))
-			mem := mm.MakeBoundAccount()
-			mem.Mu = &syncutil.Mutex{}
+			mem := mm.MakeConcurrentBoundAccount()
 
 			qp := NewMemoryBackedQuotaPool(ctx, mm, "test-qp", quota)
 			res := make(chan error, numGoroutines)

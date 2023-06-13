@@ -387,7 +387,7 @@ func (z *zigzagJoiner) Start(ctx context.Context) {
 		ctx, zigzagJoinerProcName, &z.contentionEventsListener,
 		&z.scanStatsListener, &z.tenantConsumptionListener,
 	)
-	z.cancelChecker.Reset(ctx)
+	z.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
 }
 

@@ -191,6 +191,11 @@ const (
 	CrdbInternalSuperRegions
 	CrdbInternalDroppedRelationsViewID
 	CrdbInternalShowTenantCapabilitiesCacheTableID
+	CrdbInternalInheritedRoleMembersTableID
+	CrdbInternalKVSystemPrivilegesViewID
+	CrdbInternalKVFlowControllerID
+	CrdbInternalKVFlowHandlesID
+	CrdbInternalKVFlowTokenDeductions
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

@@ -26,6 +26,7 @@ go_library(
     embed = [":isolation_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//proto"],
 )
 
 go_test(

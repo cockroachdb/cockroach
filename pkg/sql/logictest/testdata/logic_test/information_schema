@@ -434,9 +434,14 @@ crdb_internal       kv_catalog_descriptor
 crdb_internal       kv_catalog_namespace
 crdb_internal       kv_catalog_zones
 crdb_internal       kv_dropped_relations
+crdb_internal       kv_flow_control_handles
+crdb_internal       kv_flow_controller
+crdb_internal       kv_flow_token_deductions
+crdb_internal       kv_inherited_role_members
 crdb_internal       kv_node_liveness
 crdb_internal       kv_node_status
 crdb_internal       kv_store_status
+crdb_internal       kv_system_privileges
 crdb_internal       leases
 crdb_internal       lost_descriptors_with_data
 crdb_internal       node_build_info
@@ -777,9 +782,14 @@ kv_catalog_descriptor
 kv_catalog_namespace
 kv_catalog_zones
 kv_dropped_relations
+kv_flow_control_handles
+kv_flow_controller
+kv_flow_token_deductions
+kv_inherited_role_members
 kv_node_liveness
 kv_node_status
 kv_store_status
+kv_system_privileges
 leases
 lost_descriptors_with_data
 node_build_info
@@ -1164,9 +1174,14 @@ system         crdb_internal       kv_catalog_descriptor                   SYSTE
 system         crdb_internal       kv_catalog_namespace                    SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_catalog_zones                        SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_dropped_relations                    SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_flow_control_handles                 SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_flow_controller                      SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_flow_token_deductions                SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_inherited_role_members               SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_liveness                        SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_status                          SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                         SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_system_privileges                    SYSTEM VIEW  NO                  1
 system         crdb_internal       leases                                  SYSTEM VIEW  NO                  1
 system         crdb_internal       lost_descriptors_with_data              SYSTEM VIEW  NO                  1
 system         crdb_internal       node_build_info                         SYSTEM VIEW  NO                  1
@@ -3147,9 +3162,14 @@ NULL     public   system         crdb_internal       kv_catalog_descriptor      
 NULL     public   system         crdb_internal       kv_catalog_namespace                    SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_catalog_zones                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_dropped_relations                    SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_control_handles                 SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_controller                      SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_token_deductions                SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_inherited_role_members               SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                          SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                         SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_system_privileges                    SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                  SELECT          NO            YES
 NULL     public   system         crdb_internal       lost_descriptors_with_data              SELECT          NO            YES
 NULL     public   system         crdb_internal       node_build_info                         SELECT          NO            YES
@@ -3801,9 +3821,14 @@ NULL     public   system         crdb_internal       kv_catalog_descriptor      
 NULL     public   system         crdb_internal       kv_catalog_namespace                    SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_catalog_zones                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_dropped_relations                    SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_control_handles                 SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_controller                      SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_flow_token_deductions                SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_inherited_role_members               SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_liveness                        SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                          SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                         SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_system_privileges                    SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                  SELECT          NO            YES
 NULL     public   system         crdb_internal       lost_descriptors_with_data              SELECT          NO            YES
 NULL     public   system         crdb_internal       node_build_info                         SELECT          NO            YES

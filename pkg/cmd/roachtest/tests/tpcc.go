@@ -829,6 +829,13 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMax:   gceOrAws(cloud, 750, 900),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes:                        3,
+		CPUs:                         4,
+		EnableDefaultScheduledBackup: true,
+		LoadWarehouses:               1000,
+		EstimatedMax:                 gceOrAws(cloud, 750, 900),
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  16,
 
@@ -1022,7 +1029,8 @@ type tpccBenchSpec struct {
 	// Encryption-At-Rest / EAR).
 	EncryptionEnabled bool
 	// ExpirationLeases enables use of expiration-based leases.
-	ExpirationLeases bool
+	ExpirationLeases             bool
+	EnableDefaultScheduledBackup bool
 }
 
 // partitions returns the number of partitions specified to the load generator.
@@ -1042,6 +1050,7 @@ func (s tpccBenchSpec) partitions() int {
 // startOpts returns any extra start options that the spec requires.
 func (s tpccBenchSpec) startOpts() (option.StartOpts, install.ClusterSettings) {
 	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ScheduleBackups = s.EnableDefaultScheduledBackup
 	settings := install.MakeClusterSettings()
 	// Facilitate diagnosing out-of-memory conditions in tpccbench runs.
 	// See https://github.com/cockroachdb/cockroach/issues/75071.
@@ -1064,6 +1073,9 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	}
 	if b.Chaos {
 		nameParts = append(nameParts, "chaos")
+	}
+	if b.EnableDefaultScheduledBackup {
+		nameParts = append(nameParts, "backups=true")
 	}
 
 	opts := []spec.Option{spec.CPU(b.CPUs)}

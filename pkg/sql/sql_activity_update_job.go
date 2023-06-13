@@ -88,12 +88,11 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 	stopper := execCtx.ExecCfg().DistSQLSrv.Stopper
 	settings := execCtx.ExecCfg().Settings
 	statsFlush := execCtx.ExecCfg().InternalDB.server.sqlStats
-	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeAutoUpdateSQLActivity].(activityUpdaterMetrics)
+	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeAutoUpdateSQLActivity].(ActivityUpdaterMetrics)
 
 	flushDoneSignal := make(chan struct{})
 	defer func() {
 		statsFlush.SetFlushDoneSignalCh(nil)
-		close(flushDoneSignal)
 	}()
 
 	statsFlush.SetFlushDoneSignalCh(flushDoneSignal)
@@ -116,14 +115,16 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 	}
 }
 
-type activityUpdaterMetrics struct {
+// ActivityUpdaterMetrics must be public for metrics to get
+// registered
+type ActivityUpdaterMetrics struct {
 	numErrors *metric.Counter
 }
 
-func (m activityUpdaterMetrics) MetricStruct() {}
+func (m ActivityUpdaterMetrics) MetricStruct() {}
 
 func newActivityUpdaterMetrics() metric.Struct {
-	return activityUpdaterMetrics{
+	return ActivityUpdaterMetrics{
 		numErrors: metric.NewCounter(metric.Metadata{
 			Name:        "jobs.metrics.task_failed",
 			Help:        "Number of metrics sql activity updater tasks that failed",
@@ -334,16 +335,38 @@ func (u *sqlActivityUpdater) transferTopStats(
 	totalStmtClusterExecCount int64,
 	totalTxnClusterExecCount int64,
 ) (retErr error) {
-	// Select the top 500 (controlled by sql.stats.activity.top.max) for
-	// each of execution_count, total execution time, service_latency,cpu_sql_nanos,
-	// contention_time, p99_latency and insert into transaction_activity table.
-	// Up to 3000 rows (sql.stats.activity.top.max * 6) may be added to
-	// transaction_activity.
-	_, err := u.db.Executor().ExecEx(ctx,
-		"activity-flush-txn-transfer-tops",
-		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
-		`
+
+	// Deleting and inserting the activity tables needs to be done in the same
+	// transaction. A user could try to access the table during the update. If
+	// delete was done in a separate txn the user would get no results.
+	errTxn := u.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+
+		// Delete all the rows of the old data from the table for the current
+		// aggregated timestamp. This is necessary because if a customer generates
+		// a lot of fingerprints each time the upsert runs it will add all new rows
+		// instead of updating the existing one. This causes the
+		// transaction_activity to grow too large causing the UI to be slow.
+		_, err := txn.ExecEx(ctx,
+			"activity-flush-txn-transfer-tops",
+			txn.KV(), /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			`DELETE FROM system.public.transaction_activity WHERE aggregated_ts = $1;`,
+			aggTs)
+
+		if err != nil {
+			return err
+		}
+
+		// Select the top 500 (controlled by sql.stats.activity.top.max) for
+		// each of execution_count, total execution time, service_latency,cpu_sql_nanos,
+		// contention_time, p99_latency and insert into transaction_activity table.
+		// Up to 3000 rows (sql.stats.activity.top.max * 6) may be added to
+		// transaction_activity.
+		_, err = txn.ExecEx(ctx,
+			"activity-flush-txn-transfer-tops",
+			txn.KV(), /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			`
 UPSERT
 INTO system.public.transaction_activity
 (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
@@ -410,25 +433,46 @@ INTO system.public.transaction_activity
                     ts.fingerprint_id,
                     ts.agg_interval));
 `,
-		totalStmtClusterExecCount,
-		aggTs,
-		topLimit,
-	)
+			totalStmtClusterExecCount,
+			aggTs,
+			topLimit,
+		)
 
-	if err != nil {
 		return err
+	})
+
+	if errTxn != nil {
+		return errTxn
 	}
 
-	// Select the top 500 (controlled by sql.stats.activity.top.max) for each of
-	// execution_count, total execution time, service_latency, cpu_sql_nanos,
-	// contention_time, p99_latency. Also include all statements that are in the
-	// top N transactions. This is needed so the statement information is
-	// available for the ui so a user can see what is in the transaction.
-	_, err = u.db.Executor().ExecEx(ctx,
-		"activity-flush-stmt-transfer-tops",
-		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
-		`
+	errTxn = u.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+
+		// Delete all the rows of the old data from the table for the current
+		// aggregated timestamp. This is necessary because if a customer generates
+		// a lot of fingerprints each time the upsert runs it will add all new rows
+		// instead of updating the existing one. This causes the
+		// transaction_activity to grow too large causing the UI to be slow.
+		_, err := txn.ExecEx(ctx,
+			"activity-flush-txn-transfer-tops",
+			txn.KV(), /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			`DELETE FROM system.public.statement_activity WHERE aggregated_ts = $1;`,
+			aggTs)
+
+		if err != nil {
+			return err
+		}
+
+		// Select the top 500 (controlled by sql.stats.activity.top.max) for each of
+		// execution_count, total execution time, service_latency, cpu_sql_nanos,
+		// contention_time, p99_latency. Also include all statements that are in the
+		// top N transactions. This is needed so the statement information is
+		// available for the ui so a user can see what is in the transaction.
+		_, err = txn.ExecEx(ctx,
+			"activity-flush-stmt-transfer-tops",
+			txn.KV(), /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			`
 UPSERT
 INTO system.public.statement_activity
 (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
@@ -507,15 +551,18 @@ INTO system.public.statement_activity
                     ss.plan,
                     ss.index_recommendations));
 `,
-		totalTxnClusterExecCount,
-		aggTs,
-		topLimit,
-	)
+			totalTxnClusterExecCount,
+			aggTs,
+			topLimit,
+		)
 
-	return err
+		return err
+	})
+
+	return errTxn
 }
 
-// getAosExecutionCount is used to get the row counts of both the
+// getAostExecutionCount is used to get the row counts of both the
 // system.statement_statistics and system.transaction_statistics.
 // It also gets the total execution count for the specified aggregated
 // timestamp.

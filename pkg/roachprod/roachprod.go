@@ -452,9 +452,7 @@ func SQL(
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
-func IP(
-	ctx context.Context, l *logger.Logger, clusterName string, external bool,
-) ([]string, error) {
+func IP(l *logger.Logger, clusterName string, external bool) ([]string, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
 	}
@@ -466,21 +464,18 @@ func IP(
 	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
 
-	if external {
-		for i := 0; i < len(nodes); i++ {
-			ips[i] = c.VMs[nodes[i]-1].PublicIP
-		}
-	} else {
-		if err := c.Parallel(ctx, l, len(nodes), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-			node := nodes[i]
-			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
-			ips[i] = res.Stdout
-			return res, nil
-		}); err != nil {
-			return nil, err
+	for i := 0; i < len(nodes); i++ {
+		node := nodes[i]
+		if external {
+			ips[i] = c.Host(node)
+		} else {
+			ips[i], err = c.GetInternalIP(node)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
+
 	return ips, nil
 }
 
@@ -924,7 +919,7 @@ func PgURL(
 		if err := c.Parallel(ctx, l, len(nodes), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
+			res.Stdout, res.Err = c.GetInternalIP(node)
 			ips[i] = res.Stdout
 			return res, nil
 		}); err != nil {
@@ -1631,6 +1626,13 @@ func CreateSnapshot(
 			crdbVersion = "unknown"
 		}
 		crdbVersion = strings.TrimPrefix(crdbVersion, "cockroach-")
+		// N.B. snapshot name cannot exceed 63 characters, so we use short sha for dev version.
+		if index := strings.Index(crdbVersion, "dev-"); index != -1 {
+			sha := crdbVersion[index+4:]
+			if len(sha) > 7 {
+				crdbVersion = crdbVersion[:index+4] + sha[:7]
+			}
+		}
 
 		labels := map[string]string{
 			"roachprod-node-src-spec": cVM.MachineType,
@@ -1660,6 +1662,9 @@ func CreateSnapshot(
 				snapshotFingerprintInfix := strings.ReplaceAll(
 					fmt.Sprintf("%s-n%d", crdbVersion, len(nodes)), ".", "-")
 				snapshotName := fmt.Sprintf("%s-%s-%04d", vsco.Name, snapshotFingerprintInfix, node)
+				if len(snapshotName) > 63 {
+					return fmt.Errorf("snapshot name %q exceeds 63 characters; shorten name prefix and use description arg. for more context", snapshotName)
+				}
 				volumeSnapshot, err := provider.CreateVolumeSnapshot(l, volume,
 					vm.VolumeSnapshotCreateOpts{
 						Name:        snapshotName,
@@ -1678,7 +1683,6 @@ func CreateSnapshot(
 			return nil
 		}); err != nil {
 			res.Err = err
-			return res, res.Err
 		}
 		return res, nil
 	}); err != nil {
@@ -1751,7 +1755,6 @@ func ApplySnapshots(
 			return nil
 		}); err != nil {
 			res.Err = err
-			return res, res.Err
 		}
 		return res, nil
 	}); err != nil {
@@ -1822,7 +1825,6 @@ func ApplySnapshots(
 			return nil
 		}); err != nil {
 			res.Err = err
-			return res, res.Err
 		}
 		return res, nil
 	})

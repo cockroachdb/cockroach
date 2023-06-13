@@ -462,7 +462,7 @@ const (
 	V23_1AllowNewSystemPrivileges
 
 	// V23_1JobInfoTableIsBackfilled is a version gate after which the
-	// system.jobs_info table has been backfilled with rows for the payload and
+	// system.job_info table has been backfilled with rows for the payload and
 	// progress of each job in the system.jobs table.
 	V23_1JobInfoTableIsBackfilled
 
@@ -537,6 +537,10 @@ const (
 	// V23_2_EnableRangeCoalescingForSystemTenant enables range coalescing for
 	// the system tenant.
 	V23_2_EnableRangeCoalescingForSystemTenant
+
+	// V23_2_UseACRaftEntryEntryEncodings gates the use of raft entry encodings
+	// that (optionally) embed below-raft admission data.
+	V23_2_UseACRaftEntryEntryEncodings
 
 	// *************************************************
 	// Step (1) Add new versions here.
@@ -934,6 +938,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_EnableRangeCoalescingForSystemTenant,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     V23_2_UseACRaftEntryEntryEncodings,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 10},
 	},
 
 	// *************************************************

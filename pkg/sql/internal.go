@@ -72,6 +72,12 @@ func NewInternalSessionData(
 
 	sdMutIterator.applyOnEachMutator(func(m sessionDataMutator) {
 		for varName, v := range varGen {
+			if varName == "optimizer_use_histograms" {
+				// Do not use histograms when optimizing internal executor
+				// queries. This causes a significant performance regression.
+				// TODO(#102954): Diagnose and fix this.
+				continue
+			}
 			if v.Set != nil {
 				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
 				if hasDefault {
@@ -1088,6 +1094,12 @@ func (ie *InternalExecutor) execInternal(
 			}); err != nil {
 			return nil, err
 		}
+		if err := stmtBuf.Push(ctx, Sync{
+			// This is a Sync in the simple protocol, so it isn't marked as explicit.
+			ExplicitFromClient: false,
+		}); err != nil {
+			return nil, err
+		}
 	} else {
 		if err := stmtBuf.Push(
 			ctx,
@@ -1115,9 +1127,12 @@ func (ie *InternalExecutor) execInternal(
 		); err != nil {
 			return nil, err
 		}
-	}
-	if err := stmtBuf.Push(ctx, Sync{}); err != nil {
-		return nil, err
+		if err := stmtBuf.Push(ctx, Sync{
+			// This is a Sync in the extended protocol, so it's marked as explicit.
+			ExplicitFromClient: true,
+		}); err != nil {
+			return nil, err
+		}
 	}
 	r = &rowsIterator{
 		r:       rw,

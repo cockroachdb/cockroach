@@ -593,7 +593,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	// Enable deletion pacing. This helps prevent disk slowness events on some
 	// SSDs, that kick off an expensive GC if a lot of files are deleted at
 	// once.
-	opts.Experimental.MinDeletionRate = 128 << 20 // 128 MB
+	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	// Validate min/max keys in each SSTable when performing a compaction. This
 	// serves as a simple protection against corruption or programmer-error in
 	// Pebble.
@@ -857,6 +857,21 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 		}
 	}
 	return nil
+}
+
+// GetStoreID returns to configured store ID.
+func (p *Pebble) GetStoreID() (int32, error) {
+	if p == nil {
+		return 0, errors.AssertionFailedf("GetStoreID requires non-nil Pebble")
+	}
+	if p.storeIDPebbleLog == nil {
+		return 0, errors.AssertionFailedf("GetStoreID requires an initialized store ID container")
+	}
+	storeID := p.storeIDPebbleLog.Get()
+	if storeID == 0 {
+		return 0, errors.AssertionFailedf("GetStoreID must be called after calling SetStoreID")
+	}
+	return storeID, nil
 }
 
 // ResolveEncryptedEnvOptions creates the EncryptionEnv and associated file
@@ -1127,6 +1142,13 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// expected to run v22.1 again (hopefully without the crash this time) which
 		// would then rewrite all the stores.
 		if v := cfg.Settings.Version; storeClusterVersion.Less(v.BinaryMinSupportedVersion()) {
+			if storeClusterVersion.Major < clusterversion.DevOffset && v.BinaryVersion().Major >= clusterversion.DevOffset {
+				return nil, errors.Errorf(
+					"store last used with cockroach non-development version v%s "+
+						"cannot be opened by development version v%s",
+					storeClusterVersion, v.BinaryVersion(),
+				)
+			}
 			return nil, errors.Errorf(
 				"store last used with cockroach version v%s "+
 					"is too old for running version v%s (which requires data from v%s or later)",

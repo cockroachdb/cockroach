@@ -360,6 +360,7 @@ go_test(
         "//pkg/cli/clisqlexec",
         "//pkg/cli/democluster",
         "//pkg/cli/exit",
+        "//pkg/cloud",
         "//pkg/clusterversion",
         "//pkg/gossip",
         "//pkg/jobs",
@@ -404,6 +405,7 @@ go_test(
         "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
@@ -430,14 +432,6 @@ filegroup(
     name = "interactive_tests",
     srcs = glob(
         ["interactive_tests/**"],
-        # TODO(rail): The following tests fail under bazel.
-        # https://github.com/cockroachdb/cockroach/issues/71932, aka
-        # "broken_in_bazel"
-        exclude = [
-            "*/test_multiline_statements.tcl",
-            "*/test_pretty.tcl",
-            "*/test_server_sig.tcl",
-        ],
     ),
     visibility = ["//visibility:public"],
 )

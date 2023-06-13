@@ -276,6 +276,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().LargeFullScanRows = 0
 	notStale()
 
+	// Stale txn rows read error.
+	evalCtx.SessionData().TxnRowsReadErr = 1000
+	stale()
+	evalCtx.SessionData().TxnRowsReadErr = 0
+	notStale()
+
 	// Stale null ordered last.
 	evalCtx.SessionData().NullOrderedLast = true
 	stale()

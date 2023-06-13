@@ -19,7 +19,6 @@ build/teamcity-roachtest-invoke.sh \
   tag:aws-weekly \
   --cloud="${CLOUD}" \
   --cluster-id "${TC_BUILD_ID}" \
-  --cockroach "$PWD/bin/cockroach" \
   --artifacts=/artifacts \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --slack-token="${SLACK_TOKEN}"

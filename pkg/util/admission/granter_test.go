@@ -98,7 +98,7 @@ func TestGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
-			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &NoopOnLogEntryAdmitted{})
+			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
 			defer coords.Close()
 			coord = coords.Regular
 			return flushAndReset()
@@ -219,14 +219,49 @@ func TestGranterBasic(t *testing.T) {
 				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
 			)
 
+		case "set-tokens-loop":
+			var ioTokens int
+			var elasticTokens int
+			var loop int
+			d.ScanArgs(t, "io-tokens", &ioTokens)
+			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
+			d.ScanArgs(t, "loop", &loop)
+
+			for loop > 0 {
+				loop--
+				// We are not using a real ioLoadListener, and simply setting the
+				// tokens (the ioLoadListener has its own test).
+				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
+					int64(ioTokens), int64(elasticTokens),
+					int64(ioTokens*250), int64(elasticTokens*250),
+				)
+			}
+			coord.testingTryGrant()
+			return flushAndReset()
+
 		case "set-tokens":
 			var ioTokens int
 			var elasticTokens int
+			var tickInterval int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
 			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
+			if d.HasArg("tick-interval") {
+				d.ScanArgs(t, "tick-interval", &tickInterval)
+			}
+			var burstMultiplier = 1
+			if tickInterval == 1 {
+				burstMultiplier = 250
+			} else if tickInterval == 250 {
+			} else {
+				return "unsupported tick rate"
+			}
+
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
-			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(int64(ioTokens), int64(elasticTokens))
+			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
+				int64(ioTokens), int64(elasticTokens),
+				int64(ioTokens*burstMultiplier), int64(elasticTokens*burstMultiplier),
+			)
 			coord.testingTryGrant()
 			return flushAndReset()
 
@@ -288,7 +323,7 @@ func TestStoreCoordinators(t *testing.T) {
 			return str
 		},
 	}
-	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &NoopOnLogEntryAdmitted{})
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
 	// There is only 1 KVWork requester at this point in initialization, for the
 	// Regular GrantCoordinator.
 	require.Equal(t, 1, len(requesters))
@@ -452,3 +487,17 @@ func (m *testMetricsProvider) setMetricsForStores(stores []int32, metrics pebble
 		})
 	}
 }
+
+type noopOnLogEntryAdmitted struct{}
+
+func (n *noopOnLogEntryAdmitted) AdmittedLogEntry(
+	context.Context,
+	roachpb.NodeID,
+	admissionpb.WorkPriority,
+	roachpb.StoreID,
+	roachpb.RangeID,
+	LogPosition,
+) {
+}
+
+var _ OnLogEntryAdmitted = &noopOnLogEntryAdmitted{}

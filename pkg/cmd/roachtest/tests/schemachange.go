@@ -295,8 +295,8 @@ func findIndexProblem(
 	return nil
 }
 
-func registerSchemaChangeIndexTPCC1000(r registry.Registry) {
-	r.Add(makeIndexAddTpccTest(r.MakeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*2))
+func registerSchemaChangeIndexTPCC800(r registry.Registry) {
+	r.Add(makeIndexAddTpccTest(r.MakeClusterSpec(5, spec.CPU(16)), 800, time.Hour*2))
 }
 
 func registerSchemaChangeIndexTPCC100(r registry.Registry) {
@@ -420,8 +420,8 @@ func makeSchemaChangeBulkIngestTest(
 	}
 }
 
-func registerSchemaChangeDuringTPCC1000(r registry.Registry) {
-	r.Add(makeSchemaChangeDuringTPCC(r.MakeClusterSpec(5, spec.CPU(16)), 1000, time.Hour*3))
+func registerSchemaChangeDuringTPCC800(r registry.Registry) {
+	r.Add(makeSchemaChangeDuringTPCC(r.MakeClusterSpec(5, spec.CPU(16)), 800, time.Hour*3))
 }
 
 func makeSchemaChangeDuringTPCC(

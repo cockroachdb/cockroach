@@ -11,7 +11,9 @@
 package pgurl
 
 import (
+	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -113,4 +115,36 @@ func splitOption(opt, prefix string) (string, string, error) {
 	kv[0] = strings.TrimPrefix(kv[0], prefix)
 
 	return strings.ReplaceAll(kv[0], "-", "_"), kv[1], nil
+}
+
+// EncodeExtendedOptions encodes the given options into a string that can be
+// used as a value for the special option "options".
+func EncodeExtendedOptions(options url.Values) string {
+	keys := make([]string, 0, len(options))
+	for k := range options {
+		keys = append(keys, k)
+	}
+	// sort keys to make the output deterministic.
+	sort.Strings(keys)
+
+	var sb strings.Builder
+	for _, k := range keys {
+		v := options[k]
+		if len(v) == 0 {
+			continue
+		}
+		fmt.Fprintf(&sb, "-c%s=%s ", escapeSpaces(k), escapeSpaces(v[0]))
+	}
+	return sb.String()
+}
+
+func escapeSpaces(v string) string {
+	var sb strings.Builder
+	for _, r := range v {
+		if unicode.IsSpace(r) || r == '\\' {
+			sb.WriteByte('\\')
+		}
+		sb.WriteRune(r)
+	}
+	return sb.String()
 }

@@ -954,6 +954,41 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeSnapShotCrossRegionSentBytes = metric.Metadata{
+		Name:        "range.snapshots.cross-region.sent-bytes",
+		Help:        "Number of snapshot bytes sent cross region",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeSnapShotCrossRegionRcvdBytes = metric.Metadata{
+		Name:        "range.snapshots.cross-region.rcvd-bytes",
+		Help:        "Number of snapshot bytes received cross region",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeSnapShotCrossZoneSentBytes = metric.Metadata{
+		Name: "range.snapshots.cross-zone.sent-bytes",
+		Help: `Number of snapshot bytes sent cross zone within same region or if
+		region tiers are not configured. This count increases for each snapshot sent
+		between different zones within the same region. However, if the region tiers
+		are not configured, this count may also include snapshot data sent between
+		different regions. Ensuring consistent configuration of region and zone
+		tiers across nodes helps to accurately monitor the data transmitted.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeSnapShotCrossZoneRcvdBytes = metric.Metadata{
+		Name: "range.snapshots.cross-zone.rcvd-bytes",
+		Help: `Number of snapshot bytes received cross zone within same region or if
+		region tiers are not configured. This count increases for each snapshot
+		received between different zones within the same region. However, if the
+		region tiers are not configured, this count may also include snapshot data
+		received between different regions. Ensuring consistent configuration of
+		region and zone tiers across nodes helps to accurately monitor the data
+		transmitted.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaRangeSnapshotSendQueueLength = metric.Metadata{
 		Name:        "range.snapshots.send-queue",
 		Help:        "Number of snapshots queued to send",
@@ -2181,6 +2216,10 @@ type StoreMetrics struct {
 	RangeSnapshotRebalancingSentBytes            *metric.Counter
 	RangeSnapshotRecvFailed                      *metric.Counter
 	RangeSnapshotRecvUnusable                    *metric.Counter
+	RangeSnapShotCrossRegionSentBytes            *metric.Counter
+	RangeSnapShotCrossRegionRcvdBytes            *metric.Counter
+	RangeSnapShotCrossZoneSentBytes              *metric.Counter
+	RangeSnapShotCrossZoneRcvdBytes              *metric.Counter
 
 	// Range snapshot queue metrics.
 	RangeSnapshotSendQueueLength     *metric.Gauge
@@ -2803,6 +2842,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotRebalancingSentBytes:            metric.NewCounter(metaRangeSnapshotRebalancingSentBytes),
 		RangeSnapshotRecvFailed:                      metric.NewCounter(metaRangeSnapshotRecvFailed),
 		RangeSnapshotRecvUnusable:                    metric.NewCounter(metaRangeSnapshotRecvUnusable),
+		RangeSnapShotCrossRegionSentBytes:            metric.NewCounter(metaRangeSnapShotCrossRegionSentBytes),
+		RangeSnapShotCrossRegionRcvdBytes:            metric.NewCounter(metaRangeSnapShotCrossRegionRcvdBytes),
+		RangeSnapShotCrossZoneSentBytes:              metric.NewCounter(metaRangeSnapShotCrossZoneSentBytes),
+		RangeSnapShotCrossZoneRcvdBytes:              metric.NewCounter(metaRangeSnapShotCrossZoneRcvdBytes),
 		RangeSnapshotSendQueueLength:                 metric.NewGauge(metaRangeSnapshotSendQueueLength),
 		RangeSnapshotRecvQueueLength:                 metric.NewGauge(metaRangeSnapshotRecvQueueLength),
 		RangeSnapshotSendInProgress:                  metric.NewGauge(metaRangeSnapshotSendInProgress),

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
@@ -86,6 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -207,6 +209,11 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalShowTenantCapabilitiesCacheTableID: crdbInternalShowTenantCapabilitiesCache,
+		catconstants.CrdbInternalInheritedRoleMembersTableID:        crdbInternalInheritedRoleMembers,
+		catconstants.CrdbInternalKVSystemPrivilegesViewID:           crdbInternalKVSystemPrivileges,
+		catconstants.CrdbInternalKVFlowHandlesID:                    crdbInternalKVFlowHandles,
+		catconstants.CrdbInternalKVFlowControllerID:                 crdbInternalKVFlowController,
+		catconstants.CrdbInternalKVFlowTokenDeductions:              crdbInternalKVFlowTokenDeductions,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -2066,46 +2073,38 @@ CREATE TABLE crdb_internal.cluster_settings (
   description   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if hasPriv, err := func() (bool, error) {
-			if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
-				return false, err
-			} else if hasAdmin {
-				return true, nil
-			}
-			if hasModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User()); err != nil {
-				return false, err
-			} else if hasModify {
-				return true, nil
-			}
-			if hasSqlModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User()); err != nil {
-				return false, err
-			} else if hasSqlModify {
-				return true, nil
-			}
-			if hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING, p.User()); err != nil {
-				return false, err
-			} else if hasView {
-				return true, nil
-			}
-			if hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
-				return false, err
-			} else if hasModify {
-				return true, nil
-			}
-			if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING); err != nil {
-				return false, err
-			} else if hasView {
-				return true, nil
-			}
-			return false, nil
-		}(); err != nil {
+		hasSqlModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYSQLCLUSTERSETTING, p.User())
+		if err != nil {
 			return err
-		} else if !hasPriv {
+		}
+		hasModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User())
+		if err != nil {
+			return err
+		}
+		hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING, p.User())
+		if err != nil {
+			return err
+		}
+		if !hasModify {
+			if hasModify, err = p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
+				return err
+			}
+		}
+		if !hasView {
+			if hasView, err = p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING); err != nil {
+				return err
+			}
+		}
+		if !hasModify && !hasSqlModify && !hasView {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"only users with %s, %s or %s system privileges are allowed to read "+
 					"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.MODIFYSQLCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
+			// If the user has specifically MODIFYSQLCLUSTERSETTING, hide non-sql.defaults settings.
+			if !hasModify && !hasView && hasSqlModify && !strings.HasPrefix(k, "sql.defaults") {
+				continue
+			}
 			setting, _ := settings.LookupForLocalAccess(k, p.ExecCfg().Codec.ForSystemTenant())
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
@@ -8041,4 +8040,278 @@ CREATE TABLE crdb_internal.node_tenant_capabilities_cache (
 		}
 		return nil
 	},
+}
+
+var crdbInternalInheritedRoleMembers = virtualSchemaTable{
+	comment: `table listing transitive closure of system.role_members`,
+	schema: `
+CREATE TABLE crdb_internal.kv_inherited_role_members (
+  role               STRING,
+  inheriting_member  STRING,
+  member_is_explicit BOOL,
+  member_is_admin    BOOL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (retErr error) {
+		// Populate explicitMemberships with the contents of system.role_members.
+		// This data structure maps each role to the set of roles it's explicitly
+		// a member of. Consider for example:
+		//     CREATE ROLE a;
+		//     CREATE ROLE b;
+		//     CREATE ROLE c;
+		//     GRANT a TO b;
+		//     GRANT b TO c;
+		// The role `a` is explicitly a member of `b` and the role `c` is
+		// explicitly a member of `b`. The role `c` is also a member of `a`,
+		// but not explicitly, because it inherits the membership through `b`.
+		explicitMemberships := make(map[username.SQLUsername]map[username.SQLUsername]bool)
+		if err := forEachRoleMembership(ctx, p.InternalSQLTxn(), func(role, member username.SQLUsername, isAdmin bool) error {
+			if _, found := explicitMemberships[member]; !found {
+				explicitMemberships[member] = make(map[username.SQLUsername]bool)
+			}
+			explicitMemberships[member][role] = true
+			return nil
+		}); err != nil {
+			return err
+		}
+		// Iterate through all members in order for stability.
+		members := make([]username.SQLUsername, 0, len(explicitMemberships))
+		for m := range explicitMemberships {
+			members = append(members, m)
+		}
+		sort.Slice(members, func(i, j int) bool {
+			return members[i].Normalized() < members[j].Normalized()
+		})
+		for _, member := range members {
+			memberOf, err := p.MemberOfWithAdminOption(ctx, member)
+			if err != nil {
+				return err
+			}
+			explicitRoles := explicitMemberships[member]
+			// Iterate through all roles in order for stability.
+			roles := make([]username.SQLUsername, 0, len(memberOf))
+			for r := range memberOf {
+				roles = append(roles, r)
+			}
+			sort.Slice(roles, func(i, j int) bool {
+				return roles[i].Normalized() < roles[j].Normalized()
+			})
+			for _, r := range roles {
+				if err := addRow(
+					tree.NewDString(r.Normalized()),              // role
+					tree.NewDString(member.Normalized()),         // inheriting_member
+					tree.MakeDBool(tree.DBool(explicitRoles[r])), // member_is_explicit
+					tree.MakeDBool(tree.DBool(memberOf[r])),      // member_is_admin
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	},
+}
+
+func resultColsFromColDescs(colDescs []descpb.ColumnDescriptor) colinfo.ResultColumns {
+	result := make(colinfo.ResultColumns, 0, len(colDescs))
+	for _, colDesc := range colDescs {
+		result = append(result, colinfo.ResultColumn{
+			Name: colDesc.Name,
+			Typ:  colDesc.Type,
+		})
+	}
+	return result
+}
+
+var crdbInternalKVSystemPrivileges = virtualSchemaView{
+	comment: `this vtable is a view on system.privileges with the root user and is used to back SHOW SYSTEM GRANTS`,
+	schema: `
+CREATE VIEW crdb_internal.kv_system_privileges AS
+SELECT *
+FROM system.privileges;`,
+	resultColumns: resultColsFromColDescs(systemschema.SystemPrivilegeTable.TableDesc().Columns),
+}
+
+var crdbInternalKVFlowController = virtualSchemaTable{
+	comment: `node-level view of the kv flow controller, its active streams and available tokens state`,
+	schema: `
+CREATE TABLE crdb_internal.kv_flow_controller (
+  tenant_id                INT NOT NULL,
+  store_id                 INT NOT NULL,
+  available_regular_tokens INT NOT NULL,
+  available_elastic_tokens INT NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowController(ctx, &kvflowinspectpb.ControllerRequest{})
+		if err != nil {
+			return err
+		}
+		for _, stream := range resp.Streams {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(stream.TenantID.ToUint64())),
+				tree.NewDInt(tree.DInt(stream.StoreID)),
+				tree.NewDInt(tree.DInt(stream.AvailableRegularTokens)),
+				tree.NewDInt(tree.DInt(stream.AvailableElasticTokens)),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalKVFlowHandles = virtualSchemaTable{
+	comment: `node-level view of active kv flow control handles, their underlying streams, and tracked state`,
+	schema: `
+CREATE TABLE crdb_internal.kv_flow_control_handles (
+  range_id                 INT NOT NULL,
+  tenant_id                INT NOT NULL,
+  store_id                 INT NOT NULL,
+  total_tracked_tokens     INT NOT NULL,
+  INDEX(range_id)
+);`,
+
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+				if err != nil {
+					return false, err
+				}
+				if !hasRoleOption {
+					return false, noViewActivityOrViewActivityRedactedRoleError(p.User())
+				}
+
+				rangeID := roachpb.RangeID(tree.MustBeDInt(constraint))
+				resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(
+					ctx, &kvflowinspectpb.HandlesRequest{
+						RangeIDs: []roachpb.RangeID{rangeID},
+					})
+				if err != nil {
+					return false, err
+				}
+				return true, populateFlowHandlesResponse(resp, addRow)
+			},
+		},
+	},
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(ctx, &kvflowinspectpb.HandlesRequest{})
+		if err != nil {
+			return err
+		}
+		return populateFlowHandlesResponse(resp, addRow)
+	},
+}
+
+func populateFlowHandlesResponse(
+	resp *kvflowinspectpb.HandlesResponse, addRow func(...tree.Datum) error,
+) error {
+	for _, handle := range resp.Handles {
+		for _, connected := range handle.ConnectedStreams {
+			totalTrackedTokens := int64(0)
+			for _, tracked := range connected.TrackedDeductions {
+				totalTrackedTokens += tracked.Tokens
+			}
+			if err := addRow(
+				tree.NewDInt(tree.DInt(handle.RangeID)),
+				tree.NewDInt(tree.DInt(connected.Stream.TenantID.ToUint64())),
+				tree.NewDInt(tree.DInt(connected.Stream.StoreID)),
+				tree.NewDInt(tree.DInt(totalTrackedTokens)),
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+var crdbInternalKVFlowTokenDeductions = virtualSchemaTable{
+	comment: `node-level view of tracked kv flow tokens`,
+	schema: `
+CREATE TABLE crdb_internal.kv_flow_token_deductions (
+  range_id  INT NOT NULL,
+  tenant_id INT NOT NULL,
+  store_id  INT NOT NULL,
+  priority  STRING NOT NULL,
+  log_term  INT NOT NULL,
+  log_index INT NOT NULL,
+  tokens    INT NOT NULL,
+  INDEX(range_id)
+);`,
+
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+				if err != nil {
+					return false, err
+				}
+				if !hasRoleOption {
+					return false, noViewActivityOrViewActivityRedactedRoleError(p.User())
+				}
+
+				rangeID := roachpb.RangeID(tree.MustBeDInt(constraint))
+				resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(
+					ctx, &kvflowinspectpb.HandlesRequest{
+						RangeIDs: []roachpb.RangeID{rangeID},
+					})
+				if err != nil {
+					return false, err
+				}
+				return true, populateFlowTokensResponse(resp, addRow)
+			},
+		},
+	},
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		hasRoleOption, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.KVFlowHandles(ctx, &kvflowinspectpb.HandlesRequest{})
+		if err != nil {
+			return err
+		}
+		return populateFlowTokensResponse(resp, addRow)
+	},
+}
+
+func populateFlowTokensResponse(
+	resp *kvflowinspectpb.HandlesResponse, addRow func(...tree.Datum) error,
+) error {
+	for _, handle := range resp.Handles {
+		for _, connected := range handle.ConnectedStreams {
+			for _, deduction := range connected.TrackedDeductions {
+				if err := addRow(
+					tree.NewDInt(tree.DInt(handle.RangeID)),
+					tree.NewDInt(tree.DInt(connected.Stream.TenantID.ToUint64())),
+					tree.NewDInt(tree.DInt(connected.Stream.StoreID)),
+					tree.NewDString(admissionpb.WorkPriority(deduction.Priority).String()),
+					tree.NewDInt(tree.DInt(deduction.RaftLogPosition.Term)),
+					tree.NewDInt(tree.DInt(deduction.RaftLogPosition.Index)),
+					tree.NewDInt(tree.DInt(deduction.Tokens)),
+				); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
