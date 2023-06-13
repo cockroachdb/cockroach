@@ -188,6 +188,12 @@ type CommonBufferSinkConfig struct {
 	// FlushTriggerSize is reached, and a new buffer is created once the flushing
 	// is started. Only one flushing operation is active at a time.
 	MaxBufferSize *ByteSize `yaml:"max-buffer-size"`
+
+	// Format describes how the buffer output should be formatted.
+	// Currently 2 options:
+	// newline: default option - separates buffer entries with newline char
+	// json-array: separates entries with ',' and wraps buffer contents in square brackets
+	Format *BufferFormat `yaml:",omitempty"`
 }
 
 // CommonBufferSinkConfigWrapper is a BufferSinkConfig with a special value represented in YAML by
@@ -1070,10 +1076,12 @@ func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error
 		if strings.ToUpper(v) == "NONE" {
 			d := time.Duration(0)
 			s := ByteSize(0)
+			format := BufferFmtNewline
 			w.CommonBufferSinkConfig = CommonBufferSinkConfig{
 				MaxStaleness:     &d,
 				FlushTriggerSize: &s,
 				MaxBufferSize:    &s,
+				Format:           &format,
 			}
 			return nil
 		}
@@ -1129,6 +1137,41 @@ type constrainedString interface {
 	Accept(string)
 	Canonicalize(string) string
 	AllowedSet() []string
+}
+
+const (
+	BufferFmtJsonArray BufferFormat = "json-array"
+	BufferFmtNewline   BufferFormat = "newline"
+)
+
+// BufferFormat is a string restricted to "json-array" and "newline".
+type BufferFormat string
+
+var _ constrainedString = (*BufferFormat)(nil)
+
+// Accept implements the constrainedString interface.
+func (hsm *BufferFormat) Accept(s string) {
+	*hsm = BufferFormat(s)
+}
+
+// Canonicalize implements the constrainedString interface.
+func (BufferFormat) Canonicalize(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// AllowedSet implements the constrainedString interface.
+func (BufferFormat) AllowedSet() []string {
+	return []string{string(BufferFmtJsonArray), string(BufferFmtNewline), "unknown"}
+}
+
+// MarshalYAML implements yaml.Marshaler interface.
+func (hsm BufferFormat) MarshalYAML() (interface{}, error) {
+	return string(hsm), nil
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (hsm *BufferFormat) UnmarshalYAML(fn func(interface{}) error) error {
+	return unmarshalYAMLConstrainedString(hsm, fn)
 }
 
 // unmarshalYAMLConstrainedString is a utility function to unmarshal
