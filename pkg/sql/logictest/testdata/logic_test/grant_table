@@ -64,6 +64,7 @@ test           crdb_internal       index_spans                             publi
 test           crdb_internal       index_usage_statistics                  public   SELECT          false
 test           crdb_internal       invalid_objects                         public   SELECT          false
 test           crdb_internal       jobs                                    public   SELECT          false
+test           crdb_internal       kv_builtin_function_comments            public   SELECT          false
 test           crdb_internal       kv_catalog_comments                     public   SELECT          false
 test           crdb_internal       kv_catalog_descriptor                   public   SELECT          false
 test           crdb_internal       kv_catalog_namespace                    public   SELECT          false
