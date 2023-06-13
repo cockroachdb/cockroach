@@ -21,6 +21,7 @@ go_library(
         "analyze.go",
         "annotation.go",
         "backup.go",
+        "batch.go",
         "changefeed.go",
         "col_name.go",
         "comment_on_column.go",
