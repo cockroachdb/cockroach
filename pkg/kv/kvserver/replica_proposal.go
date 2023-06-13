@@ -256,6 +256,12 @@ func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposal
 //
 // The method is safe to call more than once, but only the first result will be
 // returned to the client.
+//
+// TODO(tbg): a stricter invariant should hold: if a proposal is signaled
+// multiple times, at most one of them is not an AmbiguousResultError. In
+// other words, we get at most one result from log application, all other
+// results are from mechanisms that unblock the client despite not knowing
+// the outcome of the proposal.
 func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 	if proposal.doneCh != nil {
 		proposal.doneCh <- pr
