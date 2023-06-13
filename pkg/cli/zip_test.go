@@ -80,6 +80,7 @@ table_name NOT IN (
 	'gossip_network',
 	'index_columns',
   'index_spans',
+  'kv_builtin_function_comments',
 	'kv_catalog_comments',
 	'kv_catalog_descriptor',
 	'kv_catalog_namespace',
