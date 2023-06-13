@@ -266,7 +266,7 @@ CREATE TABLE t_99316(a INT);
 statement ok
 INSERT INTO system.comments VALUES (4294967122, 't_99316'::regclass::OID, 0, 'bar');
 
-statement error pgcode XX000 internal error: select-comments: invalid comment type 4294967122
+statement error pgcode XX000 internal error: invalid comment type 4294967122
 SELECT * FROM pg_catalog.pg_description WHERE objoid = 't'::regclass::OID;
 
 statement ok

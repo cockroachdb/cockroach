@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/compengine"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 )
 
 // GetCompMethods exposes the completion heuristics defined in this
@@ -266,23 +267,21 @@ func completeObjectInCurrentDatabase(
 	//    - when the completion prefix already includes the `pg_` prefix,
 	//      in which case we can assume the user wants to see these tables.
 	const queryT = `
-WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname %s),
-     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
-             JOIN n ON n.oid = c.relnamespace
-            WHERE reltype != 0
-              AND left(relname, length($1:::STRING)) = $1::STRING
-              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
-SELECT relname AS completion,
-       'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
-       $2:::INT AS start,
-       $3:::INT AS end
-  FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+         SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname %s
+LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
+                ON c.oid = d.objoid AND d.classoid = %d
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
 `
-	query := fmt.Sprintf(queryT, schema)
+	query := fmt.Sprintf(queryT, schema, catconstants.PgCatalogClassTableID)
 	iter, err := c.Query(ctx, query, prefix, start, end, hasSchemaPrefix)
 	return iter, err
 }
@@ -311,18 +310,19 @@ func completeSchemaInCurrentDatabase(
 	}
 
 	c.Trace("completing for %q (%d,%d)", prefix, start, end)
-	const query = `
-SELECT nspname AS completion,
-       'schema' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
-       $2:::INT AS start,
-       $3:::INT AS end
-  FROM pg_catalog.pg_namespace t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
+	const queryT = `
+         SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
+                ON n.oid = d.objoid AND d.classoid = %d
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 `
+	query := fmt.Sprintf(queryT, catconstants.PgCatalogNamespaceTableID)
 	iter, err := c.Query(ctx, query, prefix, start, end)
 	return iter, err
 }
@@ -425,7 +425,7 @@ func completeObjectInOtherDatabase(
 	}
 
 	c.Trace("completing for %q (%d,%d), schema: %q, db: %q", prefix, start, end, schema, dbname)
-	const query = `
+	const queryT = `
 WITH t AS (
 SELECT name, table_id
   FROM "".crdb_internal.tables
@@ -435,14 +435,14 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
 LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+    ON t.table_id = cc.objoid AND cc.classoid = %d
 `
+	query := fmt.Sprintf(queryT, catconstants.PgCatalogClassTableID)
 	iter, err := c.Query(ctx, query, prefix, start, end, dbname, schema)
 	return iter, err
 }
