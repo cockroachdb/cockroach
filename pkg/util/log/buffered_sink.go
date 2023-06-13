@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -53,6 +54,8 @@ type bufferedSink struct {
 	// on which the result of the flush is to be communicated.
 	flushC chan struct{}
 
+	format *bufferFmtConfig
+
 	mu struct {
 		syncutil.Mutex
 		// buf buffers the messages that have yet to be flushed.
@@ -61,6 +64,36 @@ type bufferedSink struct {
 		// future.
 		timer *time.Timer
 	}
+}
+
+type bufferFmtConfig struct {
+	fmtType logconfig.BufferFormat
+
+	// delimiter is the string used to separate log entries
+	delimiter string
+
+	// prefix is the string that is prepended to the entire buffer output
+	prefix string
+
+	// suffix is the string that is appended to the entire buffer output
+	suffix string
+}
+
+func newBufferFmtConfig(bufferFmt *logconfig.BufferFormat) *bufferFmtConfig {
+	fmtType := logconfig.BufferFormat("newline")
+	if bufferFmt != nil {
+		fmtType = *bufferFmt
+	}
+
+	cfg := bufferFmtConfig{delimiter: "\n", fmtType: fmtType}
+
+	if fmtType == logconfig.BufferFmtJsonArray {
+		cfg.suffix = "]"
+		cfg.prefix = "["
+		cfg.delimiter = ","
+	}
+
+	return &cfg
 }
 
 // newBufferedSink creates a bufferedSink that wraps child.
@@ -100,6 +133,7 @@ func newBufferedSink(
 	triggerSize uint64,
 	maxBufferSize uint64,
 	crashOnAsyncFlushErr bool,
+	bufferFmt *logconfig.BufferFormat,
 ) *bufferedSink {
 	if triggerSize != 0 && maxBufferSize != 0 {
 		// Validate triggerSize in relation to maxBufferSize. As explained above, we
@@ -110,6 +144,9 @@ func newBufferedSink(
 				triggerSize, maxBufferSize))
 		}
 	}
+
+	cfg := newBufferFmtConfig(bufferFmt)
+
 	sink := &bufferedSink{
 		child: child,
 		// flushC is a buffered channel, so that an async flush triggered while
@@ -118,6 +155,7 @@ func newBufferedSink(
 		triggerSize:              triggerSize,
 		maxStaleness:             maxStaleness,
 		crashOnAsyncFlushFailure: crashOnAsyncFlushErr,
+		format:                   cfg,
 	}
 	sink.mu.buf.maxSizeBytes = maxBufferSize
 	return sink
@@ -248,7 +286,7 @@ func (bs *bufferedSink) runFlusher(stopC <-chan struct{}) {
 			done = true
 		}
 		bs.mu.Lock()
-		msg, errC := buf.flush()
+		msg, errC := buf.flush(bs.format.prefix, bs.format.suffix, bs.format.delimiter)
 		bs.mu.Unlock()
 		if msg == nil {
 			// Nothing to flush.
@@ -347,8 +385,8 @@ func (b *msgBuf) appendMsg(msg *buffer, errC chan<- error) error {
 
 // flush resets b, returning its contents in concatenated form. If b is empty, a
 // nil buffer is returned.
-func (b *msgBuf) flush() (*buffer, chan<- error) {
-	msg := b.concatMessages()
+func (b *msgBuf) flush(prefix string, suffix string, delimiter string) (*buffer, chan<- error) {
+	msg := b.concatMessages(prefix, suffix, delimiter)
 	b.messages = nil
 	b.sizeBytes = 0
 	errC := b.errC
@@ -359,30 +397,51 @@ func (b *msgBuf) flush() (*buffer, chan<- error) {
 // concatMessages copies over the contents of all the buffers to the first one,
 // which is returned.
 //
-// All buffers but the first one are released to the pool.
-func (b *msgBuf) concatMessages() *buffer {
+// Note that the first buffer is used for writing if there is no prefix provided.
+// All buffers (except potentially the first) are released to the pool.
+func (b *msgBuf) concatMessages(prefix string, suffix string, delimiter string) *buffer {
 	if len(b.messages) == 0 {
 		return nil
 	}
-	var totalSize int
+	totalSize := len(prefix) + len(suffix) + len(delimiter)*(len(b.messages)-1)
 	for _, msg := range b.messages {
-		totalSize += msg.Len() + 1 // leave space for newLine
+		totalSize += msg.Len()
 	}
-	// Append all the messages in the first buffer.
+
+	// Append all the messages in the first buffer, and prepend the prefix string if it exists.
 	buf := b.messages[0]
-	buf.Grow(totalSize - buf.Len())
+
+	if prefix != "" {
+		buf = getBuffer()
+		buf.Grow(totalSize)
+		buf.WriteString(prefix)
+		buf.Write(b.messages[0].Bytes())
+		putBuffer(b.messages[0])
+	} else {
+		buf.Grow(totalSize - buf.Len())
+	}
+
+	// The last buffer is occasionally empty to trigger a flush.
+	// To prevent unexpected formatting output, we'll exclude the last
+	// buffer if it is empty.
+	lastBuf := b.messages[len(b.messages)-1]
+	if lastBuf.Len() == 0 {
+		b.messages = b.messages[:len(b.messages)-1]
+		putBuffer(lastBuf)
+	}
+
 	for i, b := range b.messages {
 		if i == 0 {
-			// First buffer skips putBuffer --
-			// we're still using it and it's a weird size
-			// for reuse.
+			// First buffer skips putBuffer --  we're still using it
+			// or have already put it back.
 			continue
 		}
-		buf.WriteByte('\n')
+		buf.WriteString(delimiter)
 		buf.Write(b.Bytes())
 		// Make b available for reuse.
 		putBuffer(b)
 	}
+	buf.WriteString(suffix)
 	return buf
 }
 
