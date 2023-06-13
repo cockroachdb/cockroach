@@ -335,7 +335,7 @@ func makeState(
 		// but TXN_DROPPED is special and should be cleaned up in memory before
 		// executing on a newer node.
 		cs = protoutil.Clone(cs).(*scpb.DescriptorState)
-		scpb.MigrateDescriptorState(version, cs)
+		scpb.MigrateDescriptorState(version, desc.GetParentID(), cs)
 		if cs == nil {
 			return errors.New("missing schema changer state")
 		}
