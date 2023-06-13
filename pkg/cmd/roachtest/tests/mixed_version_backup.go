@@ -1694,7 +1694,10 @@ func (mvb *mixedVersionBackup) disableJobAdoption(
 			if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 				db := h.Connect(node)
 				var count int
-				err := db.QueryRow(`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running'`).Scan(&count)
+				err := db.QueryRow(fmt.Sprintf(
+					`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running' AND coordinator_id = %d`,
+					node,
+				)).Scan(&count)
 				if err != nil {
 					l.Printf("node %d: error querying running jobs (%s)", node, err)
 					return err
