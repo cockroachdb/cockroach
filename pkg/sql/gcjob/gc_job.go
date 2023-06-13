@@ -510,7 +510,7 @@ func shouldUseDelRange(
 	return details.Tenant == nil &&
 		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
 			// Allow this testing knob to override the storage setting, for convenience.
-			knobs.SkipWaitingForMVCCGC)
+			knobs.SkipWaitingForMVCCGC) && !knobs.DisableDelRange
 }
 
 // waitForWork waits until there is work to do given the gossipUpDateC, the
