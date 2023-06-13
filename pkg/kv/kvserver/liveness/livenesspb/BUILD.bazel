@@ -5,7 +5,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "livenesspb",
-    srcs = ["liveness.go"],
+    srcs = [
+        "liveness.go",
+        "liveness_test_helper.go",
+    ],
     embed = [":livenesspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb",
     visibility = ["//visibility:public"],
