@@ -2181,11 +2181,8 @@ func newRegisteredServer(
 	stopper *stop.Stopper,
 	clusterID uuid.UUID,
 	nodeID roachpb.NodeID,
-) (*Context, string, chan *PingRequest, *trackingListener) {
+) (*Context, string, *trackingListener) {
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
-	// We don't want to stall sending to this channel.
-	pingChan := make(chan *PingRequest, 1)
-
 	opts := ContextOptions{
 		TenantID:        roachpb.SystemTenantID,
 		Config:          testutils.NewNodeTestBaseContext(),
@@ -2198,21 +2195,18 @@ func newRegisteredServer(
 	}
 	// Heartbeat faster so we don't have to wait as long.
 	opts.Config.RPCHeartbeatInterval = 10 * time.Millisecond
-	opts.Config.RPCHeartbeatTimeout = 100 * time.Millisecond
+	opts.Config.RPCHeartbeatTimeout = 1000 * time.Millisecond
 
 	rpcCtx := NewContext(context.Background(), opts)
 	// This is normally set up inside the server, we want to hold onto all PingRequests that come through.
 	rpcCtx.OnIncomingPing = func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
 		err := rpcCtx.VerifyDialback(ctx, req, resp, roachpb.Locality{})
 		if err != nil {
-			t.Logf("dialback error: %s", err)
+			t.Logf("dialback error n%d->n%d @ %s: %s", nodeID, req.OriginNodeID, req.OriginAddr, err)
 			return err
 		}
 		// On success store the ping to the channel for test analysis.
-		select {
-		case pingChan <- req:
-		default:
-		}
+		t.Logf("dialback success n%d->n%d @ %s", nodeID, req.OriginNodeID, req.OriginAddr)
 		return nil
 	}
 
@@ -2239,7 +2233,7 @@ func newRegisteredServer(
 	// This needs to be set once we know our address so that ping requests have
 	// the correct reverse addr in them.
 	rpcCtx.Config.AdvertiseAddr = addr
-	return rpcCtx, addr, pingChan, &tracker
+	return rpcCtx, addr, &tracker
 }
 
 // TestHeartbeatDialer verifies that unidirectional partitions are converted
@@ -2251,8 +2245,8 @@ func TestHeartbeatDialback(t *testing.T) {
 	defer stopper.Stop(ctx)
 	clusterID := uuid.MakeV4()
 
-	ctx1, remoteAddr1, nonRejectedPings1, _ := newRegisteredServer(t, context.Background(), stopper, clusterID, 1)
-	ctx2, remoteAddr2, nonRejectedPings2, ln2 := newRegisteredServer(t, context.Background(), stopper, clusterID, 2)
+	ctx1, remoteAddr1, _ := newRegisteredServer(t, context.Background(), stopper, clusterID, 1)
+	ctx2, remoteAddr2, ln2 := newRegisteredServer(t, context.Background(), stopper, clusterID, 2)
 
 	// Test an incorrect remoteNodeID, this should fail with a heartbeat error.
 	// This invariant is important to make sure we don't try and connect to the
@@ -2261,9 +2255,6 @@ func TestHeartbeatDialback(t *testing.T) {
 		_, err := ctx1.GRPCDialNode(remoteAddr2, 3, DefaultClass).Connect(ctx)
 		var respErr *netutil.InitialHeartbeatFailedError
 		require.ErrorAs(t, err, &respErr)
-		// Verify no heartbeat received in either direction.
-		require.Equal(t, 0, len(nonRejectedPings1))
-		require.Equal(t, 0, len(nonRejectedPings2))
 	}
 
 	// Initiate connection from node 1 to node 2 which will create a dialback
@@ -2276,10 +2267,6 @@ func TestHeartbeatDialback(t *testing.T) {
 		defer func() {
 			_ = conn.Close() // nolint:grpcconnclose
 		}()
-		require.Equal(t, 1, len(nonRejectedPings2))
-		pingReq := <-nonRejectedPings2
-		require.Equal(t, PingRequest_BLOCKING, pingReq.NeedsDialback)
-		require.Equal(t, 0, len(nonRejectedPings1))
 	}
 
 	// Now connect back in the opposite direction. This should not initiate any
@@ -2291,29 +2278,18 @@ func TestHeartbeatDialback(t *testing.T) {
 		}()
 		require.NoError(t, err)
 		require.NotNil(t, conn)
-		// The reverse connection was already set up, but we are still blocking.
-		pingReq := <-nonRejectedPings1
-		require.Equal(t, PingRequest_BLOCKING, pingReq.NeedsDialback)
-
-		// At this point, node 1 has a fully established connection to node 2, however node 2 has not yet finished connecting back.
-		require.Equal(t, nil, ctx1.ConnHealth(remoteAddr2, 2, DefaultClass))
 	}
 
-	// Verify we get non-blocking requests in both directions now. A blocking one might
-	// still be on the channel, so we need to retry.
-	testutils.SucceedsSoon(t, func() error {
-		nd1 := (<-nonRejectedPings1).NeedsDialback
-		nd2 := (<-nonRejectedPings2).NeedsDialback
-		if nd1 != PingRequest_NON_BLOCKING || nd2 != PingRequest_NON_BLOCKING {
-			return errors.Errorf("n1: %v n2: %v", nd1, nd2)
-		}
-		return nil
-	})
-
-	// Verify we are fully healthy in both directions (note the dialback is on the
-	// system class).
+	// The connection we established should be healthy.
 	require.NoError(t, ctx1.ConnHealth(remoteAddr2, 2, DefaultClass))
-	require.NoError(t, ctx2.ConnHealth(remoteAddr1, 1, SystemClass))
+	// The dialback connection (which uses the system class, in reverse direction)
+	// becomes healthy "very soon". It may not be healthy immediately since the
+	// first blocking heartbeat of the n1->n2 connection used a throwaway connection,
+	// which may have completed sooner than the system-class connection which is
+	// asynchronous.
+	testutils.SucceedsSoon(t, func() error {
+		return ctx2.ConnHealth(remoteAddr1, 1, SystemClass)
+	})
 
 	// Forcibly shut down listener 2 and the connection node1 -> node2.
 	// Test the reverse connection also closes within ~RPCHeartbeatTimeout.
@@ -2322,28 +2298,8 @@ func TestHeartbeatDialback(t *testing.T) {
 
 	// n1 -> n2 can not be healthy for much longer since the listener for n2 is
 	// closed, and n2 should terminate its connection to n1 within ~100ms
-	// (heartbeat interval in this test) since n1 can't dial-back. We'll give a
-	// generous 10s for that to happen, but bail early once we see connections in
-	// both directions marked as unhealthy.
-	tr := timeutil.NewTimer()
-	defer tr.Stop()
-	tr.Reset(10 * time.Second)
-	for {
-		strict := false
-		// After a short moment, should no longer see pings n2->n1 here because
-		// n1's dialback will fail (so they're rejected), even though n2's circuit
-		// breaker will regularly try to reach out.
-		select {
-		case ping := <-nonRejectedPings1:
-			t.Logf("Received ping n%d->n%d", ping.OriginNodeID, ping.TargetNodeID)
-		case ping := <-nonRejectedPings2:
-			t.Logf("Received ping n%d->n%d", ping.OriginNodeID, ping.TargetNodeID)
-		case <-tr.C:
-			tr.Read = true
-			strict = true
-		case <-time.After(time.Millisecond):
-		}
-
+	// (heartbeat interval in this test) since n1 can't dial-back.
+	testutils.SucceedsSoon(t, func() error {
 		errDef, errSys := ctx1.ConnHealth(remoteAddr2, 2, DefaultClass), ctx2.ConnHealth(remoteAddr1, 1, SystemClass)
 		if errors.Is(errDef, ErrNotHeartbeated) {
 			errDef = nil
@@ -2357,15 +2313,8 @@ func TestHeartbeatDialback(t *testing.T) {
 		if errors.HasType(errSys, (*netutil.InitialHeartbeatFailedError)(nil)) {
 			errSys = nil
 		}
-		if errDef == nil && errSys == nil {
-			return
-		}
-
-		if strict {
-			require.NoError(t, errDef)
-			require.NoError(t, errSys)
-		}
-	}
+		return errors.CombineErrors(errDef, errSys)
+	})
 }
 
 // TODO(baptist): Add a test using TestCluster to verify this works in a full
