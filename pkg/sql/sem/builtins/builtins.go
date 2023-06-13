@@ -7630,6 +7630,22 @@ expires until the statement bundle is collected`,
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "span", Typ: types.BytesArray},
+				{Name: "start_time", Typ: types.Decimal},
+				{Name: "all_revisions", Typ: types.Bool},
+				// NB: The function can be called with an AOST clause that will be used
+				// as the `end_time` when issuing the ExportRequests for the purposes of
+				// fingerprinting.
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return verboseFingerprint(ctx, evalCtx, args)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "span", Typ: types.BytesArray},
 				{Name: "start_time", Typ: types.TimestampTZ},
 				{Name: "all_revisions", Typ: types.Bool},
 				// NB: The function can be called with an AOST clause that will be used
@@ -7638,17 +7654,7 @@ expires until the statement bundle is collected`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if len(args) != 3 {
-					return nil, errors.New("argument list must have three elements")
-				}
-				span, err := parseSpan(args[0])
-				if err != nil {
-					return nil, err
-				}
-				startTime := tree.MustBeDTimestampTZ(args[1]).Time
-				startTimestamp := hlc.Timestamp{WallTime: startTime.UnixNano()}
-				allRevisions := bool(tree.MustBeDBool(args[2]))
-				return fingerprint(ctx, evalCtx, span, startTimestamp, allRevisions /* stripped */, false)
+				return verboseFingerprint(ctx, evalCtx, args)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,

@@ -2383,6 +2383,7 @@ var builtinOidsArray = []string{
 	2410: `crdb_internal.pretty_value(raw_value: bytes) -> string`,
 	2411: `to_char(date: date, format: string) -> string`,
 	2412: `crdb_internal.unsafe_lock_replica(range_id: int, lock: bool) -> bool`,
+	2413: `crdb_internal.fingerprint(span: bytes[], start_time: decimal, all_revisions: bool) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
