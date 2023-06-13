@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -986,6 +987,7 @@ func backupCollectionDesc(fullSpec, incSpec backupSpec) string {
 // state involved in the mixed-version backup test.
 type mixedVersionBackup struct {
 	cluster    cluster.Cluster
+	t          test.Test
 	roachNodes option.NodeListOption
 	// backup collections that are created along the test
 	collections []*backupCollection
@@ -1010,13 +1012,13 @@ type mixedVersionBackup struct {
 }
 
 func newMixedVersionBackup(
-	c cluster.Cluster, roachNodes option.NodeListOption, dbs ...string,
+	t test.Test, c cluster.Cluster, roachNodes option.NodeListOption, dbs ...string,
 ) *mixedVersionBackup {
 	var tablesLoaded atomic.Bool
 	tablesLoaded.Store(false)
 
 	return &mixedVersionBackup{
-		cluster: c, dbs: dbs, roachNodes: roachNodes, tablesLoaded: &tablesLoaded,
+		t: t, cluster: c, dbs: dbs, roachNodes: roachNodes, tablesLoaded: &tablesLoaded,
 	}
 }
 
@@ -1835,6 +1837,33 @@ func (mvb *mixedVersionBackup) checkFiles(
 	return h.Exec(rng, checkFilesStmt)
 }
 
+// collectFailureArtifacts fetches cockroach logs and a debug.zip and
+// saves them to a directory in the test's artifacts dir. This is done
+// so that we can report multiple restore failures in the same test,
+// and make each failure actionable. If artifacts cannot be collected,
+// the original restore error is returned, along with the error
+// encountered while fetching the artifacts.
+func (mvb *mixedVersionBackup) collectFailureArtifacts(
+	ctx context.Context, l *logger.Logger, restoreErr error, errID int,
+) (error, error) {
+	dirName := fmt.Sprintf("restore_failure_%d", errID)
+	rootDir := filepath.Join(mvb.t.ArtifactsDir(), dirName)
+	logsDir := filepath.Join(rootDir, "logs")
+	if err := os.MkdirAll(filepath.Dir(logsDir), 0755); err != nil {
+		return restoreErr, fmt.Errorf("could not create directory %s: %w", rootDir, err)
+	}
+
+	if err := mvb.cluster.Get(ctx, l, "logs" /* src */, logsDir, mvb.roachNodes); err != nil {
+		return restoreErr, fmt.Errorf("could not fetch logs: %w", err)
+	}
+	zipLocation := filepath.Join(dirName, "debug.zip")
+	if err := mvb.cluster.FetchDebugZip(ctx, l, zipLocation); err != nil {
+		return restoreErr, err
+	}
+
+	return fmt.Errorf("%w (artifacts collected in %s)", restoreErr, dirName), nil
+}
+
 // verifyBackupCollection restores the backup collection passed and
 // verifies that the contents after the restore match the contents
 // when the backup was taken.
@@ -1995,7 +2024,14 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 			}
 			if err := mvb.verifyBackupCollection(ctx, l, rng, h, collection, version); err != nil {
 				l.Printf("restore error: %v", err)
-				restoreErrors = append(restoreErrors, err)
+				// Attempt to collect logs and debug.zip at the time of this
+				// restore failure; if we can't, log the error encountered and
+				// move on.
+				restoreErr, collectionErr := mvb.collectFailureArtifacts(ctx, l, err, len(restoreErrors)+1)
+				if collectionErr != nil {
+					l.Printf("could not collect failure artifacts: %v", collectionErr)
+				}
+				restoreErrors = append(restoreErrors, restoreErr)
 			}
 		}
 	}
@@ -2011,7 +2047,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 
 		msgs := make([]string, 0, len(restoreErrors))
 		for j, err := range restoreErrors {
-			msgs = append(msgs, fmt.Sprintf("%d: %s", j, err.Error()))
+			msgs = append(msgs, fmt.Sprintf("%d: %s", j+1, err.Error()))
 		}
 		return fmt.Errorf("%d errors during restore:\n%s", len(restoreErrors), strings.Join(msgs, "\n"))
 	}
@@ -2066,7 +2102,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				Arg("{pgurl%s}", roachNodes).
 				Option("tolerate-errors")
 
-			backupTest := newMixedVersionBackup(c, roachNodes, "bank", "tpcc")
+			backupTest := newMixedVersionBackup(t, c, roachNodes, "bank", "tpcc")
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
 			mvt.OnStartup("take backup in previous version", backupTest.takePreviousVersionBackup)
