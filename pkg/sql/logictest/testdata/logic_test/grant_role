@@ -32,3 +32,130 @@ GRANT testuser TO public
 
 statement error pgcode 42704 role/user \"public\" does not exist
 REVOKE testuser FROM public
+
+# CREATEROLE should allow a user to GRANT/REVOKE on a role even if they do not
+# have the admin option for that role.
+subtest grant_with_createrole
+
+statement ok
+CREATE USER grantor WITH CREATEROLE;
+CREATE ROLE transitiveadmin;
+GRANT admin TO transitiveadmin
+
+statement ok
+SET ROLE grantor
+
+statement ok
+CREATE ROLE parent1;
+CREATE ROLE child1;
+GRANT parent1 TO child1
+
+# Verify that CREATEROLE is not sufficient to give admin to other users.
+statement error grantor must have admin option on role \"admin\"
+GRANT admin TO child2
+
+# It also shouldn't allow anyone to get admin transitively.
+statement error grantor must have admin option on role \"transitiveadmin\"
+GRANT transitiveadmin TO child2
+
+statement ok
+RESET ROLE
+
+query TTB colnames
+SHOW GRANTS ON ROLE parent1
+----
+role_name  member  is_admin
+parent1    child1  false
+
+statement ok
+SET ROLE grantor;
+REVOKE parent1 FROM child1;
+RESET ROLE
+
+# Without CREATEROLE, the admin option is required to grant a role.
+subtest grant_with_admin_option
+
+statement ok
+CREATE ROLE parent2;
+CREATE ROLE child2;
+GRANT parent2 TO grantor WITH ADMIN OPTION;
+ALTER USER grantor WITH NOCREATEROLE
+
+statement ok
+SET ROLE grantor
+
+statement ok
+GRANT parent2 TO child2
+
+statement ok
+RESET ROLE
+
+query TTB colnames,rowsort
+SHOW GRANTS ON ROLE parent2
+----
+role_name  member   is_admin
+parent2    child2   false
+parent2    grantor  true
+
+statement ok
+SET ROLE grantor;
+REVOKE parent2 FROM child2;
+RESET ROLE
+
+statement ok
+GRANT admin TO grantor;
+SET ROLE grantor
+
+# Verify that testuser can only grant an admin role if it has the admin option
+# on that role.
+statement error grantor must have admin option on role \"transitiveadmin\"
+GRANT transitiveadmin TO child2
+
+statement ok
+RESET ROLE;
+GRANT transitiveadmin TO grantor;
+SET ROLE grantor
+
+statement error grantor must have admin option on role \"transitiveadmin\"
+GRANT transitiveadmin TO child2
+
+statement ok
+RESET ROLE;
+GRANT transitiveadmin TO grantor WITH ADMIN OPTION;
+SET ROLE grantor
+
+# Now that grantor has the admin option on transitiveadmin, it can grant the role.
+statement ok
+GRANT transitiveadmin TO child2
+
+statement ok
+RESET ROLE;
+REVOKE transitiveadmin FROM grantor;
+REVOKE transitiveadmin FROM child2;
+GRANT admin TO grantor WITH ADMIN OPTION
+
+# If grantor has the admin option on admin, it also can grant transitiveadmin.
+statement ok
+GRANT transitiveadmin TO child2
+
+statement ok
+RESET ROLE;
+REVOKE admin FROM grantor;
+REVOKE transitiveadmin FROM child2
+
+# Without CREATEROLE or the admin option, then an error should occur during
+# granting.
+subtest grant_no_privilege
+
+statement ok
+CREATE ROLE parent3;
+CREATE ROLE child3
+
+statement ok
+SET ROLE grantor
+
+statement error grantor must have CREATEROLE or have admin option on role \"parent3\"
+GRANT parent3 TO child3
+
+statement ok
+RESET ROLE

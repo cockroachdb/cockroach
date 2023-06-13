@@ -247,6 +247,7 @@ go_test(
         "batch_spanset_test.go",
         "below_raft_protos_test.go",
         "client_atomic_membership_change_test.go",
+        "client_invalidsplit_test.go",
         "client_lease_test.go",
         "client_merge_test.go",
         "client_metrics_test.go",
