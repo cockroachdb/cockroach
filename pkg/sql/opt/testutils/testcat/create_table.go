@@ -70,11 +70,11 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(&stmt.Table)
 
-	// Assume that every table in the "system", "information_schema" or
-	// "pg_catalog" catalog is a virtual table. This is a simplified assumption
-	// for testing purposes.
+	// Assume that every table in the "system", "information_schema",
+	// "crdb_internal", or "pg_catalog" catalog is a virtual table. This is a
+	// simplified assumption for testing purposes.
 	if stmt.Table.CatalogName == "system" || stmt.Table.SchemaName == "information_schema" ||
-		stmt.Table.SchemaName == "pg_catalog" {
+		stmt.Table.SchemaName == "crdb_internal" || stmt.Table.SchemaName == "pg_catalog" {
 		return tc.createVirtualTable(stmt)
 	}
 
