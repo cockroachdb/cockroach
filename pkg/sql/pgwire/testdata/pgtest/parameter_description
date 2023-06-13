@@ -94,7 +94,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"42P18"}
+{"Type":"ErrorResponse","Code":"42P18","Hint":"consider adding explicit type casts to the placeholder arguments"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
@@ -111,5 +111,5 @@ until mapError=(42883, 42P18)
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"42P18"}
+{"Type":"ErrorResponse","Code":"42P18","Hint":"consider adding explicit type casts to the placeholder arguments"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
