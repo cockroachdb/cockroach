@@ -1964,6 +1964,7 @@ GO_TARGETS = [
     "//pkg/sql/schemachanger/sctest/sctestgen:sctestgen",
     "//pkg/sql/schemachanger/sctest/sctestgen:sctestgen_lib",
     "//pkg/sql/schemachanger/sctest:sctest",
+    "//pkg/sql/schemachanger:schemachanger",
     "//pkg/sql/schemachanger:schemachanger_test",
     "//pkg/sql/scrub/scrubtestutils:scrubtestutils",
     "//pkg/sql/scrub:scrub",
