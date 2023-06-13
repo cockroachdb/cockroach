@@ -43,7 +43,7 @@ func GetStaticSchemaIDMap() map[uint32]string {
 // PgCatalogName is the name of the pg_catalog system schema.
 const PgCatalogName = "pg_catalog"
 
-// PublicSchemaName is the name of the pg_catalog system schema.
+// PublicSchemaName is the name of the public schema.
 const PublicSchemaName = "public"
 
 // UserSchemaName is the alias for schema names for users.

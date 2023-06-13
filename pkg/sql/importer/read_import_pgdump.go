@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -533,7 +534,7 @@ func readPostgresCreateTable(
 	if err != nil {
 		return nil, nil, err
 	}
-	schemaNameToDesc[tree.PublicSchema] =
+	schemaNameToDesc[catconstants.PublicSchemaName] =
 		schemadesc.NewBuilder(publicSchema.SchemaDesc()).BuildExistingMutableSchema()
 
 	// Construct sequence descriptors.
@@ -675,7 +676,7 @@ func readPostgresStmt(
 				case *tree.ForeignKeyConstraintTableDef:
 					if !fks.skip {
 						if con.Table.Schema() == "" {
-							con.Table.SchemaName = tree.PublicSchemaName
+							con.Table.SchemaName = catconstants.PublicSchemaName
 						}
 						schemaObjects.tableFKs[schemaQualifiedTableName] = append(schemaObjects.tableFKs[schemaQualifiedTableName], con)
 					}
@@ -884,7 +885,7 @@ func readPostgresStmt(
 					col,
 					txn.KV(),
 					parentID,
-					dbDesc.GetSchemaID(tree.PublicSchema),
+					dbDesc.GetSchemaID(catconstants.PublicSchemaName),
 					tree.NewUnqualifiedTableName(tree.Name(tableName)),
 				)
 				if err != nil {
@@ -938,7 +939,7 @@ func getSchemaName(sc *tree.ObjectNamePrefix) (string, error) {
 
 func getSchemaAndTableName(tn *tree.TableName) (schemaAndTableName, error) {
 	var ret schemaAndTableName
-	ret.schema = tree.PublicSchema
+	ret.schema = catconstants.PublicSchemaName
 	if tn.Schema() != "" {
 		ret.schema = tn.Schema()
 	}
@@ -949,7 +950,7 @@ func getSchemaAndTableName(tn *tree.TableName) (schemaAndTableName, error) {
 // getTableName variant for UnresolvedObjectName.
 func getSchemaAndTableName2(u *tree.UnresolvedObjectName) (schemaAndTableName, error) {
 	var ret schemaAndTableName
-	ret.schema = tree.PublicSchema
+	ret.schema = catconstants.PublicSchemaName
 	if u.NumParts >= 2 && u.Parts[1] != "" {
 		ret.schema = u.Parts[1]
 	}

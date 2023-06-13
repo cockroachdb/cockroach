@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -159,7 +160,7 @@ func (p *planner) createDatabase(
 	includeCreatePriv := PublicSchemaCreatePrivilegeEnabled.Get(&p.execCfg.Settings.SV)
 	publicSchema := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   id,
-		Name:       tree.PublicSchema,
+		Name:       catconstants.PublicSchemaName,
 		ID:         publicSchemaID,
 		Privileges: catpb.NewPublicSchemaPrivilegeDescriptor(includeCreatePriv),
 		Version:    1,

@@ -1085,7 +1085,7 @@ func resolveTableNamesForIDs(
 				// For backups created in 21.2 and prior, the "public" schema is descriptorless,
 				// and always uses the const `keys.PublicSchemaIDForBackUp` as the "public"
 				// schema ID.
-				scName = tree.PublicSchema
+				scName = catconstants.PublicSchemaName
 			}
 		}
 

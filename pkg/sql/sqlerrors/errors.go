@@ -350,6 +350,11 @@ func NewInvalidVolatilityError(err error) error {
 	return pgerror.Wrap(err, pgcode.InvalidFunctionDefinition, "invalid volatility")
 }
 
+func NewCannotModifyVirtualSchemaError(schema string) error {
+	return pgerror.Newf(pgcode.InsufficientPrivilege,
+		"%s is a virtual schema and cannot be modified", tree.ErrNameString(schema))
+}
+
 // QueryTimeoutError is an error representing a query timeout.
 var QueryTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to statement timeout")
