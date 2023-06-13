@@ -389,6 +389,19 @@ type entryDecoderV1 struct {
 	truncatedLastEntry bool
 }
 
+func decodeTimestamp(fragment []byte) (unixNano int64, err error) {
+	timeFormat := MessageTimeFormat
+	if len(fragment) > 7 && (fragment[len(fragment)-7] == '+' || fragment[len(fragment)-7] == '-') {
+		// The timestamp has a timezone offset.
+		timeFormat = MessageTimeFormatWithTZ
+	}
+	t, err := time.Parse(timeFormat, string(fragment))
+	if err != nil {
+		return 0, err
+	}
+	return t.UnixNano(), nil
+}
+
 // Decode decodes the next log entry into the provided protobuf message.
 func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 	for {
@@ -411,17 +424,11 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
 
 		// Process the timestamp.
-		ts := string(m[2])
-		timeFormat := MessageTimeFormat
-		if len(ts) > 7 && (ts[len(ts)-7] == '+' || ts[len(ts)-7] == '-') {
-			// The timestamp has a timezone offset.
-			timeFormat = MessageTimeFormatWithTZ
-		}
-		t, err := time.Parse(timeFormat, ts)
+		var err error
+		entry.Time, err = decodeTimestamp(m[2])
 		if err != nil {
 			return err
 		}
-		entry.Time = t.UnixNano()
 
 		// Process the goroutine ID.
 		if len(m[3]) > 0 {
