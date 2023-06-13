@@ -348,7 +348,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 		// VerifyDialback verifies if a reverse connection to the sending node can
 		// be established.
-		return rpcContext.VerifyDialback(ctx, req, resp, cfg.Locality)
+		return rpc.VerifyDialback(ctx, rpcContext, req, resp, cfg.Locality, &rpcContext.Settings.SV)
 	}
 
 	registry.AddMetricStruct(rpcContext.Metrics())
