@@ -224,7 +224,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &TransactionStatusError{},
-			expect: "TransactionStatusError: ‹› (REASON_UNKNOWN)",
+			expect: "TransactionStatusError:  (REASON_UNKNOWN)",
 		},
 		{
 			err:    &WriteIntentError{},
@@ -244,7 +244,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &LeaseRejectedError{},
-			expect: "cannot replace lease <empty> with <empty>: ‹›",
+			expect: "cannot replace lease <empty> with <empty>: ",
 		},
 		{err: &NodeUnavailableError{}, expect: "node unavailable; try another peer"},
 		{
@@ -285,7 +285,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &TxnAlreadyEncounteredErrorError{},
-			expect: "txn already encountered an error; cannot be used anymore (previous err: ‹›)",
+			expect: "txn already encountered an error; cannot be used anymore (previous err: )",
 		},
 		{
 			err:    &IntentMissingError{},

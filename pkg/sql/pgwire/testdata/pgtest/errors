@@ -50,7 +50,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"23503","ConstraintName":"fk_p_ref_parent"}
+{"Type":"ErrorResponse","Code":"23503","ConstraintName":"fk_p_ref_parent","Detail":"Key (p)=(1) is not present in table \"parent\"."}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -82,5 +82,5 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"23503","ConstraintName":"foo bar"}
+{"Type":"ErrorResponse","Code":"23503","ConstraintName":"foo bar","Detail":"Key (p)=(1) is not present in table \"parent\"."}
 {"Type":"ReadyForQuery","TxStatus":"I"}

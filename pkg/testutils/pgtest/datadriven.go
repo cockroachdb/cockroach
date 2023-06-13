@@ -271,11 +271,15 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 				Code           string
 				Message        string `json:",omitempty"`
 				ConstraintName string `json:",omitempty"`
+				Detail         string `json:",omitempty"`
+				Hint           string `json:",omitempty"`
 			}{
 				Type:           "ErrorResponse",
 				Code:           code,
 				Message:        errmsg.Message,
 				ConstraintName: errmsg.ConstraintName,
+				Detail:         errmsg.Detail,
+				Hint:           errmsg.Hint,
 			}); err != nil {
 				panic(err)
 			}
