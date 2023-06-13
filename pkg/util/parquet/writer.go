@@ -206,18 +206,6 @@ func (w *Writer) setNewRowGroupWriter() error {
 	return nil
 }
 
-func (w *Writer) writeDatumToColChunk(d tree.Datum, datumColIdx int) (err error) {
-	// tree.NewFmtCtx uses an underlying pool, so we can assume there is no
-	// allocation here.
-	fmtCtx := tree.NewFmtCtx(tree.FmtExport)
-	defer fmtCtx.Close()
-	if err = w.sch.cols[datumColIdx].colWriter.Write(d, w.columnChunkWriterCache[datumColIdx], w.ba, fmtCtx); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // AddRow writes the supplied datums. There is no guarantee
 // that they will be flushed to the sink after AddRow returns.
 func (w *Writer) AddRow(datums []tree.Datum) error {
@@ -240,7 +228,7 @@ func (w *Writer) AddRow(datums []tree.Datum) error {
 	}
 
 	for datumColIdx, d := range datums {
-		if err := w.writeDatumToColChunk(d, datumColIdx); err != nil {
+		if err := w.sch.cols[datumColIdx].colWriter.Write(d, w.columnChunkWriterCache[datumColIdx], w.ba); err != nil {
 			return err
 		}
 	}
