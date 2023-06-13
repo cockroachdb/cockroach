@@ -265,8 +265,10 @@ num=0
 
 # -----------------------------------------------------------------------------
 # req3 waits for replicated and unreplicated locks held by txn2. When txn2 is
-# finalized, the unreplicated lock is removed and the replicated locks are in
-# the list of locks to resolve.
+# finalized, the unreplicated lock is in the list of locks to remove and the
+# replicated locks are in the list of locks to resolve. Requests that are
+# sequencing through the lock table are able to acquire claims on both the
+# replicated and unreplicated locks.
 # -----------------------------------------------------------------------------
 
 new-request r=req3 txn=txn1 ts=10,1 spans=intent@a+intent@b+intent@c
@@ -344,11 +346,16 @@ new: state=doneWaiting
 Intents to resolve:
  key="a" txn=00000000 status=ABORTED
  key="c" txn=00000000 status=ABORTED
+Locks to Remove:
+ key="b" txn=00000000 status=ABORTED
 
 print
 ----
-num=2
+num=3
  lock: "a"
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"

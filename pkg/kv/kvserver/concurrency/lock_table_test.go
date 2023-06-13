@@ -548,7 +548,11 @@ func TestLockTableBasic(t *testing.T) {
 					if stateTransition {
 						toResolveStr = intentsToResolveToStr(g.ResolveBeforeScanning(), true)
 					}
-					return str + "state=doneWaiting" + toResolveStr
+					var toRemoveStr string
+					if stateTransition {
+						toRemoveStr = finalizedUnreplicatedLocksToStr(g.(*lockTableGuardImpl).finalizedUnreplicatedLocks)
+					}
+					return str + "state=doneWaiting" + toResolveStr + toRemoveStr
 				default:
 					d.Fatalf(t, "unexpected state: %v", state.kind)
 				}
@@ -771,6 +775,20 @@ func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) 
 	for i := range toResolve {
 		fmt.Fprintf(&buf, "\n key=%s txn=%s status=%s", toResolve[i].Key,
 			toResolve[i].Txn.ID.Short(), toResolve[i].Status)
+	}
+	return buf.String()
+}
+
+func finalizedUnreplicatedLocksToStr(toRemove []roachpb.LockUpdate) string {
+	if len(toRemove) == 0 {
+		return ""
+	}
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "\n")
+	fmt.Fprintf(&buf, "Locks to Remove:")
+	for i := range toRemove {
+		fmt.Fprintf(&buf, "\n key=%s txn=%s status=%s", toRemove[i].Key,
+			toRemove[i].Txn.ID.Short(), toRemove[i].Status)
 	}
 	return buf.String()
 }
