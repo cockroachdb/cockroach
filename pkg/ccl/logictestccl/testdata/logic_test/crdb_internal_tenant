@@ -24,6 +24,7 @@ SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  active_range_feeds                      table  admin  NULL  NULL
 crdb_internal  backward_dependencies                   table  admin  NULL  NULL
+crdb_internal  builtin_function_comments               table  admin  NULL  NULL
 crdb_internal  builtin_functions                       table  admin  NULL  NULL
 crdb_internal  cluster_contended_indexes               view   admin  NULL  NULL
 crdb_internal  cluster_contended_keys                  view   admin  NULL  NULL
@@ -278,10 +279,10 @@ SELECT * FROM crdb_internal.cluster_contention_events WHERE table_id < 0
 ----
 table_id  index_id  num_contention_events  cumulative_contention_time  key  txn_id  count
 
-query TTTTT colnames
+query TTTTTO colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
-function  signature  category  details  schema
+function  signature  category  details  schema  oid
 
 query ITTITTTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''

@@ -9,6 +9,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vtable",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/sem/catconstants"],
 )
 
 exports_files([

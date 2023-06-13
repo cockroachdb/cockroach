@@ -871,8 +871,9 @@ func (tc *Collection) GetAllInDatabase(
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
+
 	var inDatabaseIDs catalog.DescriptorIDSet
-	_ = ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
+	if err := ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if desc.DescriptorType() == catalog.Schema {
 			if dbID := desc.GetParentID(); dbID != descpb.InvalidID && dbID != db.GetID() {
 				return nil
@@ -884,7 +885,10 @@ func (tc *Collection) GetAllInDatabase(
 		}
 		inDatabaseIDs.Add(desc.GetID())
 		return nil
-	})
+	}); err != nil {
+		return nstree.Catalog{}, err
+	}
+
 	return ret.FilterByIDs(inDatabaseIDs.Ordered()), nil
 }
 

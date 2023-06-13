@@ -554,6 +554,7 @@ select table_name, estimated_row_count from crdb_internal.table_row_statistics;
 ----
 active_range_feeds                      NULL
 backward_dependencies                   NULL
+builtin_function_comments               NULL
 builtin_functions                       NULL
 cluster_contended_indexes               NULL
 cluster_contended_keys                  NULL

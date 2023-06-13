@@ -139,7 +139,16 @@ func init() {
 
 			ct, ok := parsed.AST.(*tree.CreateTable)
 			if !ok {
-				panic(errors.New("virtual table schemas must be CREATE TABLE statements"))
+				cv, ok := parsed.AST.(*tree.CreateView)
+				if !ok {
+					panic(errors.New("virtual table schemas must be CREATE TABLE or CREATE VIEW statements"))
+
+				}
+				// Instead of teaching the test catalog about views, we'll just change
+				// the CREATE VIEW into a CREATE TABLE AS statement.
+				ct = &tree.CreateTable{
+					AsSource: cv.AsSource,
+				}
 			}
 
 			ct.Table.SchemaName = tree.Name(schemaName)

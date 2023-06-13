@@ -29,6 +29,7 @@ test           NULL                NULL                                    root 
 test           crdb_internal       NULL                                    public   USAGE           false
 test           crdb_internal       active_range_feeds                      public   SELECT          false
 test           crdb_internal       backward_dependencies                   public   SELECT          false
+test           crdb_internal       builtin_function_comments               public   SELECT          false
 test           crdb_internal       builtin_functions                       public   SELECT          false
 test           crdb_internal       cluster_contended_indexes               public   SELECT          false
 test           crdb_internal       cluster_contended_keys                  public   SELECT          false
