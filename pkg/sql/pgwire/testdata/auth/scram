@@ -165,7 +165,6 @@ authlog 5
 28 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 29 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
-
 connect user=abc password=abc
 ----
 ok defaultdb
@@ -196,7 +195,6 @@ subtest end
 
 subtest end
 
-
 subtest scram_cert
 
 set_hba
@@ -222,6 +220,16 @@ connect user=testuser
 ----
 ok defaultdb
 
+authlog 6
+.*client_connection_end
+----
+40 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+41 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
+42 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
+43 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"testuser"}
+44 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+45 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
 subtest end
 
 subtest scram_cert/scram
@@ -230,14 +238,43 @@ connect user=foo password=abc
 ----
 ERROR: password authentication failed for user foo (SQLSTATE 28P01)
 
+authlog 6
+.*client_connection_end
+----
+46 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+47 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+48 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with SCRAM authentication","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+49 {"Detail":"user password hash not in SCRAM format","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+50 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+51 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 connect user=abc password=abc
 ----
 ok defaultdb
 
+authlog 6
+.*client_connection_end
+----
+52 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+53 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+54 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with SCRAM authentication","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+55 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+56 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+57 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+
 connect user=abc2 password=abc
 ----
 ok defaultdb
+
+authlog 6
+.*client_connection_end
+----
+58 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+59 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
+60 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with SCRAM authentication","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
+61 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl","User":"abc2"}
+62 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
+63 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -280,7 +317,6 @@ authlog 7
 69 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 70 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 
-
 connect user=abc password=abc
 ----
 ok defaultdb
@@ -294,7 +330,6 @@ authlog 5
 75 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
 76 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
 77 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","Timestamp":"XXX"}
-
 
 subtest end
 
