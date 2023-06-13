@@ -171,11 +171,13 @@ func (cmvt *cdcMixedVersionTester) waitForResolvedTimestamps() versionStep {
 		}()
 
 		var resolved int
-		for range cmvt.timestampsResolved.C {
-			resolved++
-			t.L().Printf("%d of %d timestamps resolved", resolved, resolvedTimestampsPerState)
-			if resolved == resolvedTimestampsPerState {
-				break
+		for resolved < resolvedTimestampsPerState {
+			select {
+			case <-cmvt.timestampsResolved.C:
+				resolved++
+				t.L().Printf("%d of %d timestamps resolved", resolved, resolvedTimestampsPerState)
+			case <-ctx.Done():
+				return
 			}
 		}
 
