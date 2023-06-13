@@ -236,7 +236,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 
 				if withForecast {
-					forecasts := stats.ForecastTableStatistics(ctx, statsList)
+					forecasts := stats.ForecastTableStatistics(ctx, &p.ExtendedEvalContext().Settings.SV, statsList)
 					forecastRows := make([]tree.Datums, 0, len(forecasts))
 					// Iterate in reverse order to match the ORDER BY "columnIDs".
 					for i := len(forecasts) - 1; i >= 0; i-- {
