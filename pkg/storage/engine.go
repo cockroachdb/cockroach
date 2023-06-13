@@ -617,9 +617,9 @@ type Reader interface {
 type Writer interface {
 	// ApplyBatchRepr atomically applies a set of batched updates. Created by
 	// calling Repr() on a batch. Using this method is equivalent to constructing
-	// and committing a batch whose Repr() equals repr. If sync is true, the
-	// batch is synchronously written to disk. It is an error to specify
-	// sync=true if the Writer is a Batch.
+	// and committing a batch whose Repr() equals repr. If sync is true, the batch
+	// is synchronously flushed to the OS and written to disk. It is an error to
+	// specify sync=true if the Writer is a Batch.
 	//
 	// It is safe to modify the contents of the arguments after ApplyBatchRepr
 	// returns.
@@ -1004,9 +1004,12 @@ type WriteBatch interface {
 	Writer
 	// Close closes the batch, freeing up any outstanding resources.
 	Close()
-	// Commit atomically applies any batched updates to the underlying
-	// engine. This is a noop unless the batch was created via NewBatch(). If
-	// sync is true, the batch is synchronously committed to disk.
+	// Commit atomically applies any batched updates to the underlying engine. If
+	// sync is true, the batch is synchronously flushed to the OS and committed to
+	// disk. Otherwise, this call returns before the data is even flushed to the
+	// OS, and it may be lost if the process terminates.
+	//
+	// This is a noop unless the batch was created via NewBatch().
 	Commit(sync bool) error
 	// CommitNoSyncWait atomically applies any batched updates to the underlying
 	// engine and initiates a disk write, but does not wait for that write to
