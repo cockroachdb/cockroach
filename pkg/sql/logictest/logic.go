@@ -1254,7 +1254,19 @@ var _ = ((*logicTest)(nil)).newTestServerCluster
 // bootstrapBinaryPath is given by the config's CockroachGoBootstrapVersion.
 // upgradeBinaryPath is given by the config's CockroachGoUpgradeVersion, or
 // is the locally built version if CockroachGoUpgradeVersion was not specified.
-func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBinaryPath string) {
+func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath string) {
+	logsDir, err := os.MkdirTemp("", "cockroach-logs*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupLogsDir := func() {
+		if t.rootT.Failed() {
+			fmt.Fprintf(os.Stderr, "cockroach logs captured in: %s\n", logsDir)
+		} else {
+			_ = os.RemoveAll(logsDir)
+		}
+	}
+
 	// During config initialization, NumNodes is required to be 3.
 	opts := []testserver.TestServerOpt{
 		testserver.ThreeNodeOpt(),
@@ -1262,6 +1274,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
 		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
 		testserver.PollListenURLTimeoutOpt(120),
+		testserver.CockroachLogsDirOpt(logsDir),
 	}
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
 		// If we're using a cockroach-short binary, that means it was
@@ -1284,7 +1297,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 	}
 
 	t.testserverCluster = ts
-	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
 
 	t.setUser(username.RootUser, 0 /* nodeIdx */)
 }
