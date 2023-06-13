@@ -669,7 +669,7 @@ ANALYZE system.role_options
 statement OK
 ANALYZE system.role_members
 
-query T retry 
+query T retry
 EXPLAIN SHOW USERS
 ----
 distribution: local

@@ -166,6 +166,7 @@ const (
 	CrdbInternalPgCatalogTableIsImplementedTableID
 	CrdbInternalSuperRegions
 	CrdbInternalInheritedRoleMembersTableID
+	CrdbInternalKVSystemPrivilegesViewID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

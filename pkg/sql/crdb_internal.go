@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
@@ -181,6 +182,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalInheritedRoleMembersTableID:        crdbInternalInheritedRoleMembers,
+		catconstants.CrdbInternalKVSystemPrivilegesViewID:           crdbInternalKVSystemPrivileges,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -2802,7 +2804,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 				tree.NewDInt(tree.DInt(fnIDToScID[fnDesc.GetID()])), // schema_id
 				tree.NewDString(fnIDToScName[fnDesc.GetID()]),       // schema_name
 				tree.NewDInt(tree.DInt(fnDesc.GetID())),             // function_id
-				tree.NewDString(fnDesc.GetName()),                   //function_name
+				tree.NewDString(fnDesc.GetName()),                   // function_name
 				tree.NewDString(tree.AsString(treeNode)),            // create_statement
 			)
 			if err != nil {
@@ -6914,4 +6916,23 @@ CREATE TABLE crdb_internal.kv_inherited_role_members (
 		}
 		return nil
 	},
+}
+
+func resultColsFromColDescs(colDescs []descpb.ColumnDescriptor) colinfo.ResultColumns {
+	result := make(colinfo.ResultColumns, 0, len(colDescs))
+	for _, colDesc := range colDescs {
+		result = append(result, colinfo.ResultColumn{
+			Name: colDesc.Name,
+			Typ:  colDesc.Type,
+		})
+	}
+	return result
+}
+
+var crdbInternalKVSystemPrivileges = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.kv_system_privileges AS
+SELECT *
+FROM system.privileges;`,
+	resultColumns: resultColsFromColDescs(systemschema.SystemPrivilegeTable.TableDesc().Columns),
 }
