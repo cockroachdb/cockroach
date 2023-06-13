@@ -90,7 +90,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -6177,11 +6176,7 @@ func getMockTableDesc(
 // methods.
 func TestPublicIndexTableSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	codec := keysutils.TestingSQLCodec
-	execCfg := &sql.ExecutorConfig{
-		Codec: codec,
-	}
-	unusedMap := make(map[tableAndIndex]bool)
+
 	testCases := []struct {
 		name                string
 		tableID             descpb.ID
@@ -6268,29 +6263,49 @@ func TestPublicIndexTableSpans(t *testing.T) {
 		},
 	}
 
-	for _, test := range testCases {
-		tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
-			test.indexes, test.addingIndexes, test.droppingIndexes)
-		t.Run(fmt.Sprintf("%s:%s", "forEachPublicIndexTableSpan", test.name), func(t *testing.T) {
-			var spans []roachpb.Span
-			forEachPublicIndexTableSpan(tableDesc.TableDesc(), unusedMap, codec, func(sp roachpb.Span) {
-				spans = append(spans, sp)
-			})
-			var unmergedSpans []string
-			for _, span := range spans {
-				unmergedSpans = append(unmergedSpans, span.String())
+	for _, useSecondaryTenant := range []bool{false, true} {
+		name, codec := "system", keys.SystemSQLCodec
+		if useSecondaryTenant {
+			const tenantID = 42
+			name, codec = "secondary", keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
+			for _, tc := range testCases {
+				for i, sp := range tc.expectedSpans {
+					tc.expectedSpans[i] = fmt.Sprintf("/Tenant/%d%s", tenantID, sp)
+				}
+				for i, sp := range tc.expectedMergedSpans {
+					tc.expectedMergedSpans[i] = fmt.Sprintf("/Tenant/%d%s", tenantID, sp)
+				}
 			}
-			require.Equal(t, test.expectedSpans, unmergedSpans)
-		})
+		}
+		execCfg := &sql.ExecutorConfig{Codec: codec}
+		unusedMap := make(map[tableAndIndex]bool)
 
-		t.Run(fmt.Sprintf("%s:%s", "spansForAllTableIndexes", test.name), func(t *testing.T) {
-			mergedSpans, err := spansForAllTableIndexes(execCfg, []catalog.TableDescriptor{tableDesc}, nil /* revs */)
-			require.NoError(t, err)
-			var mergedSpanStrings []string
-			for _, mSpan := range mergedSpans {
-				mergedSpanStrings = append(mergedSpanStrings, mSpan.String())
+		t.Run(name, func(t *testing.T) {
+			for _, test := range testCases {
+				tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
+					test.indexes, test.addingIndexes, test.droppingIndexes)
+				t.Run(fmt.Sprintf("%s:%s", "forEachPublicIndexTableSpan", test.name), func(t *testing.T) {
+					var spans []roachpb.Span
+					forEachPublicIndexTableSpan(tableDesc.TableDesc(), unusedMap, codec, func(sp roachpb.Span) {
+						spans = append(spans, sp)
+					})
+					var unmergedSpans []string
+					for _, span := range spans {
+						unmergedSpans = append(unmergedSpans, span.String())
+					}
+					require.Equal(t, test.expectedSpans, unmergedSpans)
+				})
+
+				t.Run(fmt.Sprintf("%s:%s", "spansForAllTableIndexes", test.name), func(t *testing.T) {
+					mergedSpans, err := spansForAllTableIndexes(execCfg, []catalog.TableDescriptor{tableDesc}, nil /* revs */)
+					require.NoError(t, err)
+					var mergedSpanStrings []string
+					for _, mSpan := range mergedSpans {
+						mergedSpanStrings = append(mergedSpanStrings, mSpan.String())
+					}
+					require.Equal(t, test.expectedMergedSpans, mergedSpanStrings)
+				})
 			}
-			require.Equal(t, test.expectedMergedSpans, mergedSpanStrings)
 		})
 	}
 }
