@@ -48,6 +48,13 @@ new: state=doneWaiting
 Intents to resolve:
  key="a" txn=00000000 status=ABORTED
 
+release txn=txn2 span=a
+----
+num=1
+ lock: "a"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+
 print
 ----
 num=1
@@ -96,6 +103,28 @@ resolve-before-scanning r=req1
 Intents to resolve:
  key="b" txn=00000000 status=ABORTED
  key="c" txn=00000000 status=ABORTED
+
+release txn=txn3 span=b
+----
+num=2
+ lock: "a"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+
+release txn=txn3 span=c
+----
+num=2
+ lock: "a"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
 scan r=req1
 ----

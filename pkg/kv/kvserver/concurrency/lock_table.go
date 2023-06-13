@@ -769,10 +769,10 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 		// another concurrent request and removed, or intent resolution could have
 		// happened while this request was waiting (after releasing latches). So
 		// we iterate over all the elements of toResolve and only keep the ones
-		// where removing the lock via the call to updateLockInternal is not a
-		// noop.
+		// where the lock update is still needed. If so, we will actually perform
+		// the lock update during the deferred resolution.
 		for i := range g.toResolve {
-			if heldByTxn := g.lt.updateLockInternal(&g.toResolve[i]); heldByTxn {
+			if g.lt.shouldUpdateLock(&g.toResolve[i]) {
 				g.toResolve[j] = g.toResolve[i]
 				j++
 			}
@@ -2263,23 +2263,22 @@ func removeIgnored(
 
 // Tries to update the lock: noop if this lock is held by a different
 // transaction, else the lock is updated. Returns whether the lockState can be
-// garbage collected, and whether it was held by the txn.
+// garbage collected.
 // Acquires l.mu.
-func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (heldByTxn, gc bool) {
+func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.isEmptyLock() {
-		// Already free. This can happen when an unreplicated lock is removed in
-		// tryActiveWait due to the txn being in the finalizedTxnCache.
-		return false, true
+		// Already free.
+		return false
 	}
 	if !l.isLockedBy(up.Txn.ID) {
-		return false, false
+		return false
 	}
 	if up.Status.IsFinalized() {
 		l.clearLockHolder()
 		gc = l.lockIsFree()
-		return true, gc
+		return gc
 	}
 
 	txn := &up.Txn
@@ -2337,7 +2336,7 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (heldByTxn, gc bool) {
 	if !isLocked {
 		l.clearLockHolder()
 		gc = l.lockIsFree()
-		return true, gc
+		return gc
 	}
 
 	if advancedTs {
@@ -2346,7 +2345,33 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (heldByTxn, gc bool) {
 	// Else no change for waiters. This can happen due to a race between different
 	// callers of UpdateLocks().
 
-	return true, false
+	return false
+}
+
+// shouldUpdateLock determines whether the lock is held by the same transaction
+// as the lock update and, if so, whether the lock's state would be changed if
+// the update was applied to the lock.
+// Acquires l.mu.
+func (l *lockState) shouldUpdateLock(up *roachpb.LockUpdate) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.isEmptyLock() {
+		// Already free.
+		return false
+	}
+	if !l.isLockedBy(up.Txn.ID) {
+		// Not locked by the same transaction.
+		return false
+	}
+	if up.Status.IsFinalized() {
+		// The lock would be cleared.
+		return true
+	}
+	// Check if the lock's timestamp would be advanced.
+	_, beforeTs := l.getLockHolder()
+	ts := up.Txn.WriteTimestamp
+	wouldAdvanceTs := beforeTs.Less(ts)
+	return wouldAdvanceTs
 }
 
 // The lock holder timestamp has increased. Some of the waiters may no longer
@@ -2990,13 +3015,6 @@ func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*lockState) {
 
 // UpdateLocks implements the lockTable interface.
 func (t *lockTableImpl) UpdateLocks(up *roachpb.LockUpdate) error {
-	_ = t.updateLockInternal(up)
-	return nil
-}
-
-// updateLockInternal is where the work for UpdateLocks is done. It
-// returns whether there was a lock held by this txn.
-func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bool) {
 	// NOTE: there is no need to synchronize with enabledMu here. Update only
 	// accesses locks already in the lockTable, but a disabled lockTable will be
 	// empty. If the lock-table scan below races with a concurrent call to clear
@@ -3004,10 +3022,8 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 
 	span := up.Span
 	var locksToGC []*lockState
-	heldByTxn = false
 	changeFunc := func(l *lockState) {
-		held, gc := l.tryUpdateLock(up)
-		heldByTxn = heldByTxn || held
+		gc := l.tryUpdateLock(up)
 		if gc {
 			locksToGC = append(locksToGC, l)
 		}
@@ -3025,7 +3041,23 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 	t.locks.mu.RUnlock()
 
 	t.tryGCLocks(&t.locks, locksToGC)
-	return heldByTxn
+	return nil
+}
+
+// shouldUpdateLock returns whether the provided lock update would change the
+// lock table, or whether it would be a no-op.
+func (t *lockTableImpl) shouldUpdateLock(up *roachpb.LockUpdate) bool {
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+	iter := t.locks.MakeIter()
+	ltRange := &lockState{key: up.Span.Key, endKey: up.Span.EndKey}
+	for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
+		l := iter.Cur()
+		if l.shouldUpdateLock(up) {
+			return true
+		}
+	}
+	return false
 }
 
 // Iteration helper for findNextLockAfter. Returns the next span to search
