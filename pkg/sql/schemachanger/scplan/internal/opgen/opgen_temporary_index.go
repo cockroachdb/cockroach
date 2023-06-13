@@ -28,7 +28,11 @@ func init() {
 						IsSecondaryIndex: this.IsUsingSecondaryEncoding,
 					}
 				}),
-				emit(func(this *scpb.TemporaryIndex) *scop.MaybeAddSplitForIndex {
+				emit(func(this *scpb.TemporaryIndex, md *opGenContext) *scop.MaybeAddSplitForIndex {
+					// Avoid adding splits for tables without any data (i.e. newly created ones).
+					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+						return nil
+					}
 					return &scop.MaybeAddSplitForIndex{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
