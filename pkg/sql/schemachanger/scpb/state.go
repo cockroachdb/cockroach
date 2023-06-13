@@ -94,6 +94,11 @@ func (s *CurrentState) Rollback() {
 	}
 	for i := range s.Targets {
 		t := &s.Targets[i]
+		// If the metadata is not populated this element
+		// only usd for tracking.
+		if !t.TargetIsLinkedToSchemaChange() {
+			continue
+		}
 		switch t.TargetStatus {
 		case Status_ABSENT:
 			t.TargetStatus = Status_PUBLIC
@@ -139,6 +144,16 @@ type ElementGetter interface {
 // Element returns an Element from its wrapper for serialization.
 func (e *ElementProto) Element() Element {
 	return e.GetElementOneOf().(ElementGetter).Element()
+}
+
+// TargetIsLinkedToSchemaChange return if a Target is linked to a schema change.
+func (t *Target) TargetIsLinkedToSchemaChange() bool {
+	return t.Metadata.TargetIsLinkedToSchemaChange()
+}
+
+// TargetIsLinkedToSchemaChange return if a TargetMetadata is linked to a schema change.
+func (t *TargetMetadata) TargetIsLinkedToSchemaChange() bool {
+	return t.Size() > 0
 }
 
 // MakeTarget constructs a new Target. The passed elem must be one of the oneOf

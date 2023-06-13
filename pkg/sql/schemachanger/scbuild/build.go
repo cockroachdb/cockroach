@@ -104,10 +104,18 @@ func Build(
 	current := make([]scpb.Status, 0, len(bs.output))
 	version := dependencies.ClusterSettings().Version.ActiveVersion(ctx)
 	withLogEvent := make([]scpb.Target, 0, len(bs.output))
+	var extraTargets []struct {
+		e elementState
+		t scpb.Target
+	}
 	for _, e := range bs.output {
-		if e.metadata.Size() == 0 {
+		if !e.metadata.TargetIsLinkedToSchemaChange() && !shouldElementBeRetainedWithoutMetadata(e.element) {
 			// Exclude targets which weren't explicitly set.
 			// Explicitly-set targets have non-zero values in the target metadata.
+			// Exceptions are TableData/IndexData elements which allow our planning
+			// execution to skip certain transitions and fences like the two version
+			// invariant. We will only keep these for descriptors going through
+			// a transition.
 			continue
 		}
 		if !version.IsActive(screl.MinElementVersion(e.element)) {
@@ -121,15 +129,37 @@ func Build(
 			// max version.
 			continue
 		}
+
 		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
-		ts.Targets = append(ts.Targets, t)
-		initial = append(initial, e.initial)
-		current = append(current, e.current)
-		if e.withLogEvent {
-			withLogEvent = append(withLogEvent, t)
+		if t.TargetIsLinkedToSchemaChange() {
+			ts.Targets = append(ts.Targets, t)
+			initial = append(initial, e.initial)
+			current = append(current, e.current)
+			if e.withLogEvent {
+				withLogEvent = append(withLogEvent, t)
+			}
+		} else if b.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_2) {
+			extraTargets = append(extraTargets, struct {
+				e elementState
+				t scpb.Target
+			}{e: e, t: t})
+		}
+
+	}
+	seenDescriptors := screl.AllTargetDescIDs(ts)
+	// We are going to retain certain elements for metadata purposes, like
+	// TableData/IndexData elements, which will allow the declarative schema
+	// changer to know if a given table is empty. Once these elements exist
+	// the two-version invariant is applied when making mutations to elements.
+	// Only emit data elements for descriptors if they are references with
+	// some transition.
+	for _, ex := range extraTargets {
+		if seenDescriptors.Contains(screl.GetDescID(ex.t.Element())) {
+			ts.Targets = append(ts.Targets, ex.t)
+			initial = append(initial, ex.e.initial)
+			current = append(current, ex.e.current)
 		}
 	}
-
 	// Ensure none of the involving descriptors have an ongoing schema change,
 	// unless it's newly created.
 	ensureNoConcurrentSchemaChange(&ts, bs)
@@ -441,4 +471,17 @@ func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 		TreeAnnotator: b.TreeAnnotator,
 		EventLogState: b.EventLogStateWithNewSourceElementID(),
 	}
+}
+
+// shouldElementBeRetainedWithoutMetadata tracks which elements should
+// be retained even if no metadata exists. These elements may contain
+// other hints that are used for planning such as TableData/IndexData elements
+// that allow us to skip the two version invariant or backfills/validation
+// at runtime.
+func shouldElementBeRetainedWithoutMetadata(element scpb.Element) bool {
+	switch element.(type) {
+	case *scpb.TableData, *scpb.IndexData:
+		return true
+	}
+	return false
 }
