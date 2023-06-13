@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -129,8 +128,8 @@ func TestDecommissionPreCheckEvaluation(t *testing.T) {
 	require.NoError(t, err)
 	tblBID, err := firstSvr.admin.queryTableID(ctx, username.RootUserName(), "test", "tblB")
 	require.NoError(t, err)
-	startKeyTblA := keysutils.TestingSQLCodec.TablePrefix(uint32(tblAID))
-	startKeyTblB := keysutils.TestingSQLCodec.TablePrefix(uint32(tblBID))
+	startKeyTblA := firstSvr.Codec().TablePrefix(uint32(tblAID))
+	startKeyTblB := firstSvr.Codec().TablePrefix(uint32(tblBID))
 
 	// Split off ranges for tblA and tblB.
 	_, rDescA, err := firstSvr.SplitRange(startKeyTblA)
@@ -234,7 +233,7 @@ func TestDecommissionPreCheckOddToEven(t *testing.T) {
 	runQueries(alterQueries...)
 	tblAID, err := firstSvr.admin.queryTableID(ctx, username.RootUserName(), "test", "tblA")
 	require.NoError(t, err)
-	startKeyTblA := keysutils.TestingSQLCodec.TablePrefix(uint32(tblAID))
+	startKeyTblA := firstSvr.Codec().TablePrefix(uint32(tblAID))
 
 	// Split off range for tblA.
 	_, rDescA, err := firstSvr.SplitRange(startKeyTblA)
