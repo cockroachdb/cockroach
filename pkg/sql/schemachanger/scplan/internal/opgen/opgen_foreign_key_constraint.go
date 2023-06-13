@@ -36,7 +36,10 @@ func init() {
 				}),
 			),
 			to(scpb.Status_VALIDATED,
-				emit(func(this *scpb.ForeignKeyConstraint) *scop.ValidateConstraint {
+				emit(func(this *scpb.ForeignKeyConstraint, md *opGenContext) *scop.ValidateConstraint {
+					if checkIfDescriptorIsWithoutData(this.TableID, md) {
+						return nil
+					}
 					return &scop.ValidateConstraint{
 						TableID:              this.TableID,
 						ConstraintID:         this.ConstraintID,
