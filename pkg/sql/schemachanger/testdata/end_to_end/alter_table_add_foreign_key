@@ -196,6 +196,7 @@ upsert descriptor #105
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    nameMapping:
   +      columns:
@@ -208,7 +209,15 @@ upsert descriptor #105
   +      indexes:
   +        "1": t2_pkey
   +      name: t2
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey›
+  +          FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+  +        statement: ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2 (i)
+  +        statementTag: ALTER TABLE
   +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
      families:
      - columnIds:
   ...
@@ -329,6 +338,7 @@ upsert descriptor #105
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    nameMapping:
   -      columns:
@@ -341,7 +351,15 @@ upsert descriptor #105
   -      indexes:
   -        "1": t2_pkey
   -      name: t2
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey›
+  -          FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+  -        statement: ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2 (i)
+  -        statementTag: ALTER TABLE
   -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      families:
      - columnIds:
   ...

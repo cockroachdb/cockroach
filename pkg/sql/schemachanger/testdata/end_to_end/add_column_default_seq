@@ -314,11 +314,20 @@ upsert descriptor #107
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    nameMapping:
   +      id: 107
   +      name: sq1
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
+  +          NULL DEFAULT nextval(‹'db.public.sq1'›)
+  +        statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
+  +        statementTag: ALTER TABLE
   +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
   +  dependedOnBy:
   +  - byId: true
   +    columnIds:
@@ -639,11 +648,11 @@ upsert descriptor #106
   +  version: "7"
 upsert descriptor #107
   ...
-         id: 107
-         name: sq1
+           statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
+           statementTag: ALTER TABLE
   -    revertible: true
-     dependedOnBy:
-     - byId: true
+       targetRanks: <redacted>
+       targets: <redacted>
   ...
        start: "1"
      unexposedParentSchemaId: 105
@@ -784,10 +793,19 @@ upsert descriptor #107
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    nameMapping:
   -      id: 107
   -      name: sq1
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT
+  -          NULL DEFAULT nextval(‹'db.public.sq1'›)
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      dependedOnBy:
      - byId: true
   ...
