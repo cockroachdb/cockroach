@@ -1,0 +1,95 @@
+set-txn-expiration 100s
+----
+
+set-closed-ts-override lag=1h
+----
+
+init num-nodes=3
+----
+n1, n2, n3
+
+debug "Created 3-node cluster"
+----
+
+put account=1 balance=50
+----
+
+put account=2 balance=50
+----
+
+put account=3 balance=50
+----
+
+debug "Splitting ranges"
+----
+
+split
+----
+
+split account=2
+----
+
+transfer-lease account=1 node-id=1
+----
+
+transfer-lease account=2 node-id=2
+----
+
+debug "Starting txn1, paused on n1->n2"
+----
+
+new-txn name=txn1
+----
+
+pause-resp token=1 txn=txn1 src-node=1 dst-node=2
+----
+
+debug "Starting txn2, paused on txn1's request matching intercept 1"
+----
+
+new-txn name=txn2
+----
+
+pause-resp token=2 txn=txn2
+----
+
+chain release=2 on=1
+----
+
+async op=t2read exec-batch txn=txn2
+  load-balances accounts=3
+----
+
+await op=t2read timeout=1s
+----
+t2read: context canceled while awaiting
+
+debug "Issuing request on txn1 to be caught by interceptor 1 (causing release of interceptor 2)"
+----
+
+async op=t1read exec-batch txn=txn1
+  load-balances accounts=(1,2) for-update=true
+----
+
+await op=t2read timeout=1s
+----
+key: /Table/100/3, value: /INT/50
+
+await op=t1read timeout=10ms
+----
+t1read: context canceled while awaiting
+
+debug "Releasing all interceptors"
+----
+
+release-all
+----
+
+await op=t1read
+----
+key: /Table/100/1, value: /INT/50
+key: /Table/100/2, value: /INT/50
+
+abort-txn name=txn1
+----
+aborted
