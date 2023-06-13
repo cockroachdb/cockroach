@@ -76,7 +76,6 @@ func distRestore(
 	uris []string,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	spanFilter spanCoveringFilter,
-	numNodes int,
 	numImportSpans int,
 	useSimpleImportSpans bool,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
@@ -117,6 +116,7 @@ func distRestore(
 			return nil, nil, err
 		}
 
+		numNodes := len(sqlInstanceIDs)
 		p := planCtx.NewPhysicalPlan()
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
