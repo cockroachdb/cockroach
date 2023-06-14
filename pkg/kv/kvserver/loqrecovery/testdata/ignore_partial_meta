@@ -1,0 +1,54 @@
+# Test verifies that if metadata is incomplete, then it is ignored
+# To verify that, metadata contains descriptors that doesn't require any changes,
+# while replicas contain LOQ case. We expect recovery to be performed
+# regardless of meta. (Note that this can't happen in real life)
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}
+  - { NodeID: 3, StoreID: 3, ReplicaID: 3}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+  RangeAppliedIndex: 15
+  RaftCommittedIndex: 17
+----
+ok
+
+descriptor-data
+- RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}
+----
+ok
+
+collect-replica-info stores=(1)
+----
+ok
+
+# Range 1 replica 1 is recovered despite meta saying it doesn't need to.
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 14
+  NextReplicaID: 15
+Decommissioned nodes:
+[n2, n3]
