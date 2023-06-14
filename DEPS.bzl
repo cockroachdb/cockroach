@@ -1612,6 +1612,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_cockroachdb_tokenbucket",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cockroachdb/tokenbucket",
+        sha256 = "7711efac97ce89c704e84b30c6c73887040d8ba50ce5b286e7113f4af7012339",
+        strip_prefix = "github.com/cockroachdb/tokenbucket@v0.0.0-20230613231145-182959a1fad6",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/tokenbucket/com_github_cockroachdb_tokenbucket-v0.0.0-20230613231145-182959a1fad6.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_cockroachdb_tools",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/tools",
