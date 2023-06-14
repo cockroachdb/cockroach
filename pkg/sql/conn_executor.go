@@ -1208,7 +1208,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx,
 			ex.server.cfg.InternalDB,
 			ex.server.cfg.Codec,
-			ex.sessionID,
+			ex.planner.extendedEvalCtx.SessionID,
 		)
 		if err != nil {
 			log.Errorf(
@@ -1597,8 +1597,6 @@ type connExecutor struct {
 	// queryCancelKey is a 64-bit identifier for the session used by the
 	// pgwire cancellation protocol.
 	queryCancelKey pgwirecancel.BackendKeyData
-
-	sessionID clusterunique.ID
 
 	// activated determines whether activate() was called already.
 	// When this is set, close() must be called to release resources.
@@ -2075,13 +2073,13 @@ func (ex *connExecutor) run(
 	ex.ctxHolder.connCtx = ctx
 	ex.onCancelSession = onCancel
 
-	ex.sessionID = ex.generateID()
-	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex.queryCancelKey, ex)
-	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
+	sessionID := ex.generateID()
+	ex.server.cfg.SessionRegistry.register(sessionID, ex.queryCancelKey, ex)
+	ex.planner.extendedEvalCtx.SessionID = sessionID
 
 	defer func() {
-		ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
-		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, ex.sessionID, ex.serialize())
+		ex.server.cfg.SessionRegistry.deregister(sessionID, ex.queryCancelKey)
+		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, sessionID, ex.serialize())
 		if addErr != nil {
 			err = errors.CombineErrors(err, addErr)
 		}
@@ -3992,7 +3990,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		NumTxnsExecuted:            int32(ex.extraTxnState.txnCounter),
 		TxnFingerprintIDs:          txnFingerprintIDs,
 		LastActiveQuery:            lastActiveQuery,
-		ID:                         ex.sessionID.GetBytes(),
+		ID:                         ex.planner.extendedEvalCtx.SessionID.GetBytes(),
 		AllocBytes:                 ex.mon.AllocBytes(),
 		MaxAllocBytes:              ex.mon.MaximumBytes(),
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,

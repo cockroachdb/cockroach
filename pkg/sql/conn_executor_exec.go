@@ -1881,7 +1881,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 	}
 	commonTxnRowsLimitDetails := eventpb.CommonTxnRowsLimitDetails{
 		TxnID:     ex.state.mu.txn.ID().String(),
-		SessionID: ex.sessionID.String(),
+		SessionID: ex.planner.extendedEvalCtx.SessionID.String(),
 		NumRows:   numRows,
 	}
 	if shouldErr && ex.executorType == executorTypeInternal {
@@ -2904,7 +2904,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
 	recordedTxnStats := sqlstats.RecordedTxnStats{
-		SessionID:               ex.sessionID,
+		SessionID:               ex.planner.extendedEvalCtx.SessionID,
 		TransactionID:           ev.txnID,
 		TransactionTimeSec:      txnTime.Seconds(),
 		StartTime:               txnStart,
