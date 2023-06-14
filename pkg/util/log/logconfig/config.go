@@ -215,6 +215,9 @@ type CommonSinkConfig struct {
 	// Format indicates the entry format to use.
 	Format *string `yaml:",omitempty"`
 
+	// FormatOptions indicates additional options for the format.
+	FormatOptions map[string]string `yaml:"format-options,omitempty"`
+
 	// Redact indicates whether to strip sensitive information before
 	// log events are emitted to this sink.
 	Redact *bool `yaml:",omitempty"`
@@ -290,7 +293,8 @@ type StderrSinkConfig struct {
 	Channels ChannelFilters `yaml:",omitempty,flow"`
 
 	// NoColor forces the omission of VT color codes in the output even
-	// when stderr is a terminal.
+	// when stderr is a terminal. This option is deprecated; its effects
+	// are equivalent to 'format-options: {colors: none}'.
 	NoColor bool `yaml:"no-color,omitempty"`
 
 	// CommonSinkConfig is the configuration common to all sinks. Note

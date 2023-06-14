@@ -51,10 +51,11 @@ func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 		hs.doRequest = doGet
 	}
 
-	f, ok := formatters[*c.Format]
+	fConstructor, ok := formatters[*c.Format]
 	if !ok {
 		panic(errors.AssertionFailedf("unknown format: %q", *c.Format))
 	}
+	f := fConstructor()
 	if f.contentType() != "" {
 		hs.contentType = f.contentType()
 	}
