@@ -143,11 +143,6 @@ type ProposalData struct {
 	sp *tracing.Span
 
 	// idKey uniquely identifies this proposal.
-	// TODO(andrei): idKey is legacy at this point: We could easily key commands
-	// by their MaxLeaseIndex, and doing so should be ok with a stop- the-world
-	// migration. However, various test facilities depend on the command ID for
-	// e.g. replay protection. Later edit: the MaxLeaseIndex assignment has,
-	// however, moved to happen later, at proposal time.
 	idKey kvserverbase.CmdIDKey
 
 	// proposedAtTicks is the (logical) time at which this command was
