@@ -168,7 +168,7 @@ func (s *Server) serveConn(
 	}
 
 	c := newConn(netConn, sArgs, &s.tenantMetrics, connStart, &s.execCfg.Settings.SV)
-	c.alwaysLogAuthActivity = atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
+	c.alwaysLogAuthActivity = s.testingAuthLogEnabled.Get()
 	if s.execCfg.PGWireTestingKnobs != nil {
 		c.afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
 	}
