@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
@@ -96,5 +95,3 @@ disallowed_imports_test(
         "//pkg/sql/sem/tree",
     ],
 )
-
-get_x_data(name = "get_x_data")
