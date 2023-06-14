@@ -1,4 +1,5 @@
-store store-id=5 attrs=ssd,green locality-tiers=region=us-west
+store
+store-id=5 attrs=ssd,green locality-tiers=region=us-west
 ----
 
 remove-store store-id=2
@@ -34,7 +35,8 @@ print
 +blue:
 +region=us-west: 5
 
-store store-id=2 attrs=slow-disk,purple locality-tiers=continent=na,region=us-west
+store 
+store-id=2 attrs=slow-disk,purple locality-tiers=continent=na,region=us-west
 ----
 +ssd: 5
 +green: 5
@@ -57,7 +59,8 @@ print
 +region=us-west: 2, 5
 +continent=na: 2
 
-store store-id=4 attrs=slow-disk,blue locality-tiers=continent=na,region=us-east
+store 
+store-id=4 attrs=slow-disk,blue locality-tiers=continent=na,region=us-east
 ----
 +ssd: 5
 +green: 5
@@ -114,7 +117,8 @@ print
 +continent=na: 2, 4
 -slow-disk: 5
 
-store store-id=5 attrs=slow-disk,green locality-tiers=region=us-east
+store 
+store-id=5 attrs=slow-disk,green locality-tiers=region=us-east
 ----
 +ssd:
 +green: 5
