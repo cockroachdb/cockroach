@@ -45,9 +45,15 @@ const (
 	backfillJobInfoProgressStmt = backfillJobInfoSharedPrefix + jobs.LegacyProgressKey + `', progress` + backfillJobInfoSharedSuffix
 )
 
+// TestingSkipInfoBackfill is a testing hook.
+var TestingSkipInfoBackfill bool
+
 func backfillJobInfoTable(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
+	if TestingSkipInfoBackfill {
+		return nil
+	}
 
 	for step, stmt := range []string{backfillJobInfoPayloadStmt, backfillJobInfoProgressStmt} {
 		var resumeAfter int

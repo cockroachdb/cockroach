@@ -1682,7 +1682,7 @@ func TestJobLifecycle(t *testing.T) {
 			}, registry.MakeJobID(), txn)
 			return errors.New("boom")
 		}))
-		if err := job.Started(ctx); !testutils.IsError(err, "not found in system.jobs table") {
+		if err := job.Started(ctx); !testutils.IsError(err, "job payload not found in system.jobs") {
 			t.Fatalf("unexpected error %v", err)
 		}
 	})
