@@ -497,6 +497,10 @@ type StoreTestingKnobs struct {
 	// If nil is returned, reproposal will be attempted.
 	InjectReproposalError func(p *ProposalData) error
 
+	// LeaseIndexFilter can return nonzero to override the automatically assigned
+	// LeaseAppliedIndex.
+	LeaseIndexFilter func(*ProposalData) kvpb.LeaseAppliedIndex
+
 	// FlowControlTestingKnobs provide fine-grained control over the various
 	// kvflowcontrol components for testing.
 	FlowControlTestingKnobs *kvflowcontrol.TestingKnobs

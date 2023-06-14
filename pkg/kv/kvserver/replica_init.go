@@ -113,6 +113,7 @@ func newUninitializedReplica(
 	r.mu.proposalBuf.testing.allowLeaseProposalWhenNotLeader = store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader
 	r.mu.proposalBuf.testing.dontCloseTimestamps = store.cfg.TestingKnobs.DontCloseTimestamps
 	r.mu.proposalBuf.testing.submitProposalFilter = store.cfg.TestingKnobs.TestingProposalSubmitFilter
+	r.mu.proposalBuf.testing.leaseIndexFilter = store.cfg.TestingKnobs.LeaseIndexFilter
 
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory(leaseHistoryMaxEntries)
