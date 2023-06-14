@@ -183,7 +183,9 @@ func getGCEOpts(
 	}
 	opts.TerminateOnMigration = terminateOnMigration
 	opts.MinCPUPlatform = minCPUPlatform
-	opts.PDVolumeType = volumeType
+	if volumeType != "" {
+		opts.PDVolumeType = volumeType
+	}
 
 	return opts
 }
