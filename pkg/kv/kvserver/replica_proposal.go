@@ -46,7 +46,7 @@ import (
 // evaluated, proposed to raft, and for the result of the command to
 // be returned to the caller.
 //
-// A proposal (=ProposalData) is created and then handed to the proposal buffer
+// A proposal (=ProposalData) is created during write request evaluation and then handed to the proposal buffer
 // (Replica.mu.proposalBuf) via propBuf.Insert. In the common case, the proposal
 // transfers from there into Replica.mu.proposals (and the raft log) via
 // propBuf.FlushLockedWithRaftGroup (called from handleRaftReady), but instead
