@@ -80,7 +80,6 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	settings := install.MakeClusterSettings(install.BinaryOption(predecessorBinary), install.SecureOption(true))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, kvNodes)
-	tenantStartOpt := createTenantOtherTenantIDs([]int{11, 12, 13, 14})
 
 	const tenant11aHTTPPort, tenant11aSQLPort = 8011, 20011
 	const tenant11bHTTPPort, tenant11bSQLPort = 8016, 20016
@@ -98,13 +97,13 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	// Create two instances of tenant 11 so that we can test with two pods
 	// running during migration.
 	const tenantNode = 2
-	tenant11a := createTenantNode(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11aHTTPPort, tenant11aSQLPort, tenantStartOpt)
+	tenant11a := createTenantNode(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11aHTTPPort, tenant11aSQLPort)
 	tenant11a.start(ctx, t, c, predecessorBinary)
 	defer tenant11a.stop(ctx, t, c)
 
 	// Since the certs are created with the createTenantNode call above, we
 	// call the "no certs" version of create tenant here.
-	tenant11b := createTenantNodeNoCerts(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11bHTTPPort, tenant11bSQLPort, tenantStartOpt)
+	tenant11b := createTenantNodeNoCerts(ctx, t, c, kvNodes, tenant11ID, tenantNode, tenant11bHTTPPort, tenant11bSQLPort)
 	tenant11b.start(ctx, t, c, predecessorBinary)
 	defer tenant11b.stop(ctx, t, c)
 
@@ -159,7 +158,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 			withResults([][]string{{"1", "bar"}}))
 
 	t.Status("starting tenant 12 server with older binary")
-	tenant12 := createTenantNode(ctx, t, c, kvNodes, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort, tenantStartOpt)
+	tenant12 := createTenantNode(ctx, t, c, kvNodes, tenant12ID, tenantNode, tenant12HTTPPort, tenant12SQLPort)
 	tenant12.start(ctx, t, c, predecessorBinary)
 	defer tenant12.stop(ctx, t, c)
 
@@ -181,7 +180,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1::INT)`, tenant13ID)
 
 	t.Status("starting tenant 13 server with new binary")
-	tenant13 := createTenantNode(ctx, t, c, kvNodes, tenant13ID, tenantNode, tenant13HTTPPort, tenant13SQLPort, tenantStartOpt)
+	tenant13 := createTenantNode(ctx, t, c, kvNodes, tenant13ID, tenantNode, tenant13HTTPPort, tenant13SQLPort)
 	tenant13.start(ctx, t, c, currentBinary)
 	defer tenant13.stop(ctx, t, c)
 
@@ -332,7 +331,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1::INT)`, tenant14ID)
 
 	t.Status("verifying that the tenant 14 server works and has the proper version")
-	tenant14 := createTenantNode(ctx, t, c, kvNodes, tenant14ID, tenantNode, tenant14HTTPPort, tenant14SQLPort, tenantStartOpt)
+	tenant14 := createTenantNode(ctx, t, c, kvNodes, tenant14ID, tenantNode, tenant14HTTPPort, tenant14SQLPort)
 	tenant14.start(ctx, t, c, currentBinary)
 	defer tenant14.stop(ctx, t, c)
 	verifySQL(t, tenant14.pgURL,
