@@ -819,10 +819,29 @@ func (s *Server) ServeConn(
 
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
-	s.serveConn(
-		ctx, conn, sArgs,
-		&tenantReserved,
+	if log.V(2) {
+		log.Infof(ctx, "new connection with options: %+v", sArgs)
+	}
+
+	c := newConn(
+		conn,
+		sArgs,
+		&s.tenantMetrics,
 		connStart,
+		&s.execCfg.Settings.SV,
+		s.testingAuthLogEnabled.Get(),
+	)
+
+	var afterReadMsgTestingKnob func(context.Context) error
+	if s.execCfg.PGWireTestingKnobs != nil {
+		afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
+	}
+	// Do the reading of commands from the network.
+	c.serveImpl(
+		ctx,
+		s.IsDraining,
+		s.SQLServer,
+		&tenantReserved,
 		authOptions{
 			connType:        preServeStatus.ConnType,
 			connDetails:     connDetails,
@@ -831,6 +850,7 @@ func (s *Server) ServeConn(
 			identMap:        identMap,
 			testingAuthHook: testingAuthHook,
 		},
+		afterReadMsgTestingKnob,
 	)
 	return nil
 }
