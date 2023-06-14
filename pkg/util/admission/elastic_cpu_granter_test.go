@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/tokenbucket"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,7 +72,7 @@ func TestElasticCPUGranter(t *testing.T) {
 		elasticCPUGranterMetrics *elasticCPUGranterMetrics
 		elasticCPUGranter        *elasticCPUGranter
 		mt                       *timeutil.ManualTime
-		tokenBucket              *quotapool.TokenBucket
+		tokenBucket              *tokenbucket.TokenBucket
 	)
 
 	printTokenBucket := func() string {
@@ -128,8 +128,8 @@ func TestElasticCPUGranter(t *testing.T) {
 				elasticCPURequester = &testElasticCPURequester{}
 				elasticCPUGranterMetrics = makeElasticCPUGranterMetrics()
 				mt = timeutil.NewManualTime(t0)
-				tokenBucket = &quotapool.TokenBucket{}
-				tokenBucket.Init(0, 0, mt)
+				tokenBucket = &tokenbucket.TokenBucket{}
+				tokenBucket.InitWithNowFn(0, 0, mt.Now)
 				elasticCPUGranter = newElasticCPUGranterWithTokenBucket(
 					log.MakeTestingAmbientCtxWithNewTracer(),
 					cluster.MakeTestingClusterSettings(),
