@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -526,6 +527,11 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	l.PrintfCtx(ctx, "runTests destroying all clusters")
 	cr.destroyAllClusters(context.Background(), l)
 
+	// Dump all stacks to the build log.
+	// N.B. we expect no user-defined goroutines to be running at this point.
+	// In the future, we can enforce a leak check, analogous to leaktest.AfterTest
+	fmt.Fprintf(os.Stderr, "all stacks:\n\n%s\n", allstacks.Get())
+
 	if teamCity {
 		// Collect the runner logs.
 		fmt.Printf("##teamcity[publishArtifacts '%s']\n", filepath.Join(cfg.literalArtifactsDir, runnerLogsDir))
@@ -578,9 +584,11 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 		select {
 		case <-sig:
 			shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting. Cluster might be left behind.")
+			fmt.Fprintf(os.Stderr, "all stacks:\n\n%s\n", allstacks.Get())
 			os.Exit(2)
 		case <-destroyCh:
 			shout(ctx, l, os.Stderr, "Done destroying all clusters.")
+			fmt.Fprintf(os.Stderr, "all stacks:\n\n%s\n", allstacks.Get())
 			os.Exit(2)
 		}
 	}()
