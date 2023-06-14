@@ -929,14 +929,11 @@ func PgURL(
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
-		if err := c.Parallel(ctx, l, len(nodes), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-			node := nodes[i]
-			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(node)
-			ips[i] = res.Stdout
-			return res, nil
-		}); err != nil {
-			return nil, err
+		for i := 0; i < len(nodes); i++ {
+			ip, err := c.GetInternalIP(nodes[i])
+			if err == nil {
+				ips[i] = ip
+			}
 		}
 	}
 
@@ -1062,9 +1059,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	nodes := c.TargetNodes()
-	err = c.Parallel(ctx, l, len(nodes), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-		node := nodes[i]
+	err = c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
 		port := c.NodeUIPort(node)
@@ -1592,12 +1587,15 @@ func SnapshotVolume(
 	if err := LoadClusters(); err != nil {
 		return err
 	}
+
 	c, err := newCluster(l, clusterName)
 	if err != nil {
 		return err
 	}
+
 	nodes := c.TargetNodes()
 	nodesStatus, err := c.Status(ctx, l)
+
 	if err != nil {
 		return err
 	}
@@ -1726,9 +1724,8 @@ func sendCaptureCommand(
 ) error {
 	nodes := c.TargetNodes()
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
-	_, err := c.ParallelE(ctx, l, len(nodes),
-		func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-			node := nodes[i]
+	_, _, err := c.ParallelE(ctx, l, nodes,
+		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
 			port := c.NodeUIPort(node)
