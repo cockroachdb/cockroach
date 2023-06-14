@@ -13,12 +13,14 @@ package status
 import (
 	"context"
 	"os"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -234,6 +236,13 @@ var (
 		Help:        "Packets sent on all network interfaces since this process started",
 	}
 )
+
+// diskMetricsIgnoredDevices is a regex that matches any block devices that must be
+// ignored for disk metrics (eg. sys.host.disk.write.bytes), as those devices
+// have likely been counted elsewhere. This prevents us from double-counting,
+// for instance, RAID volumes under both the logical volume and under the
+// physical volume(s).
+var diskMetricsIgnoredDevices = envutil.EnvOrDefaultString("COCKROACH_DISK_METRICS_IGNORED_DEVICES", getDefaultIgnoredDevices())
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
 // We will not necessarily have implementations for all builds, so check for nil first.
@@ -635,7 +644,7 @@ func getSummedDiskCounters(ctx context.Context) (DiskStats, error) {
 		return DiskStats{}, err
 	}
 
-	return sumDiskCounters(diskCounters), nil
+	return sumAndFilterDiskCounters(diskCounters)
 }
 
 func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
@@ -647,11 +656,26 @@ func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
 	return sumNetworkCounters(netCounters), nil
 }
 
-// sumDiskCounters returns a new disk.IOCountersStat whose values are the sum of the
-// values in the slice of disk.IOCountersStats passed in.
-func sumDiskCounters(disksStats []DiskStats) DiskStats {
+// sumAndFilterDiskCounters returns a new disk.IOCountersStat whose values are
+// the sum of the values in the slice of disk.IOCountersStats passed in. It
+// filters out any disk counters that are likely reflecting values already
+// counted elsewhere, eg. md* logical volumes that are created out of RAIDing
+// underlying drives. The filtering regex defaults to a platform-dependent one.
+func sumAndFilterDiskCounters(disksStats []DiskStats) (DiskStats, error) {
 	output := DiskStats{}
+	var ignored *regexp.Regexp
+	if diskMetricsIgnoredDevices != "" {
+		var err error
+		ignored, err = regexp.Compile(diskMetricsIgnoredDevices)
+		if err != nil {
+			return output, err
+		}
+	}
+
 	for _, stats := range disksStats {
+		if ignored != nil && ignored.MatchString(stats.Name) {
+			continue
+		}
 		output.ReadBytes += stats.ReadBytes
 		output.readCount += stats.readCount
 		output.readTime += stats.readTime
@@ -665,7 +689,7 @@ func sumDiskCounters(disksStats []DiskStats) DiskStats {
 
 		output.iopsInProgress += stats.iopsInProgress
 	}
-	return output
+	return output, nil
 }
 
 // subtractDiskCounters subtracts the counters in `sub` from the counters in `from`,
