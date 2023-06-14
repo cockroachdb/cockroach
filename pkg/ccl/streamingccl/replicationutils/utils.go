@@ -242,7 +242,7 @@ func fingerprintClustersByTable(
 	)
 	g.Go(func() error {
 		var err error
-		srcFingerprints, err = fingerprintutils.FingerprintCluster(ctx, srcConn, true,
+		srcFingerprints, err = fingerprintutils.FingerprintAllDatabases(ctx, srcConn, true,
 			optFuncs...)
 		if err != nil {
 			return fmt.Errorf("failed getting src fingerprint: %w", err)
@@ -251,7 +251,7 @@ func fingerprintClustersByTable(
 	})
 	g.Go(func() error {
 		var err error
-		dstFingerprints, err = fingerprintutils.FingerprintCluster(ctx, dstConn, true,
+		dstFingerprints, err = fingerprintutils.FingerprintAllDatabases(ctx, dstConn, true,
 			optFuncs...)
 		if err != nil {
 			return fmt.Errorf("failed getting dst fingerprint: %w", err)
@@ -261,7 +261,7 @@ func fingerprintClustersByTable(
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	return fingerprintutils.CompareClusterFingerprints(srcFingerprints,
+	return fingerprintutils.CompareMultipleDatabaseFingerprints(srcFingerprints,
 		dstFingerprints)
 }
 

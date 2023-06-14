@@ -88,7 +88,7 @@ func FingerprintTable(
 	var fingerprint int64
 	row := db.QueryRowContext(ctx, cmd)
 	if err := row.Scan(&fingerprint); err != nil {
-		return 0, fmt.Errorf("fingerprint command failed on table id %d: %w", tableID, err)
+		return 0, errors.Wrapf(err, "fingerprint command failed on table id %d", tableID)
 	}
 	return fingerprint, nil
 }
@@ -138,18 +138,19 @@ func FingerprintDatabase(
 		var name string
 		var id uint32
 		if err := rows.Scan(&id, &name); err != nil {
-			return nil, fmt.Errorf("error scanning table_name for db %s: %w", dbName, err)
+			return nil, errors.Wrapf(err, "error scanning for table names for database %q", dbName)
 		}
 		tableIDs = append(tableIDs, id)
 		idToName[id] = name
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating over table_name rows for database %s: %w", dbName, err)
+		return nil, errors.Wrapf(err, "error iterating over table_name rows for database %q",
+			dbName)
 	}
 	nameToFingerprint := make(map[string]int64, len(tableIDs))
 	fingerprints, err := FingerprintTables(ctx, db, tableIDs, optFuncs...)
 	if err != nil {
-		return nil, fmt.Errorf("failed fingerprint tables in database %s:%w", dbName, err)
+		return nil, errors.Wrapf(err, "failed fingerprint tables in database %q", dbName)
 	}
 	for i, fingerprint := range fingerprints {
 		id := tableIDs[i]
@@ -159,26 +160,26 @@ func FingerprintDatabase(
 	return nameToFingerprint, err
 }
 
-// FingerprintCluster fingerprints
-func FingerprintCluster(
+// FingerprintAllDatabases fingerprints all databases in the cluster.
+func FingerprintAllDatabases(
 	ctx context.Context, db *gosql.DB, includeSystemDB bool, optFuncs ...func(*FingerprintOption),
 ) (map[string]map[string]int64, error) {
 
 	dbNames := make([]string, 0)
 	rows, err := db.QueryContext(ctx, `SELECT database_name FROM [SHOW DATABASES]`)
 	if err != nil {
-		return nil, errors.New("could not get database names")
+		return nil, errors.Wrap(err, "could not get database names")
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("error scanning for db names: %w", err)
+			return nil, errors.Wrap(err, "error scanning for db names")
 		}
 		dbNames = append(dbNames, name)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating over database names: %w", err)
+		return nil, errors.Wrapf(err, "error iterating over database names")
 	}
 	dbFingerprints := make(map[string]map[string]int64)
 	for _, dbName := range dbNames {
@@ -194,37 +195,42 @@ func FingerprintCluster(
 	return dbFingerprints, nil
 }
 
+// CompareDatabaseFingerprints returns an error if the databases have a fingerprint mismatch.
+// The input for each database is map[tableName]fingerprintValue.
 func CompareDatabaseFingerprints(db1, db2 map[string]int64) error {
 	for tableName, tableFingerprint := range db1 {
 		table2Fingerprint, ok := db2[tableName]
 		if !ok {
-			return errors.Newf("%s table not in second database", tableName)
+			return errors.Newf("%q table not in second database", tableName)
 		}
 		if tableFingerprint != table2Fingerprint {
-			return errors.Newf("fingerprint mismatch on %s table: %d != %d", tableName,
+			return errors.Newf("fingerprint mismatch on %q table: %d != %d", tableName,
 				tableFingerprint, table2Fingerprint)
 		}
 		delete(db2, tableName)
 	}
 	if len(db2) > 0 {
-		return errors.Newf("second database has more tables %s", db2)
+		return errors.Newf("second database has more tables: %s", db2)
 	}
 	return nil
 }
 
-func CompareClusterFingerprints(c1, c2 map[string]map[string]int64) error {
+// CompareMultipleDatabaseFingerprints returns an error if the two sets of
+// databases have a fingerprint mismatch. The input for each collection of
+// databases is map[databaseName]map[tableName]fingerprintValue.
+func CompareMultipleDatabaseFingerprints(c1, c2 map[string]map[string]int64) error {
 	for dbName, dbFingerprints := range c1 {
 		db2Fingerprints, ok := c2[dbName]
 		if !ok {
-			return errors.Newf("%s table not in second database", dbName)
+			return errors.Newf("%q table not in second database", dbName)
 		}
 		if err := CompareDatabaseFingerprints(dbFingerprints, db2Fingerprints); err != nil {
-			return fmt.Errorf("failed comparing fingerprints for database %s: %w", dbName, err)
+			return errors.Wrapf(err, "failed comparing fingerprints for database %q", dbName)
 		}
 		delete(c2, dbName)
 	}
 	if len(c2) > 0 {
-		return errors.Newf("second cluster has more databases %s", c2)
+		return errors.Newf("second collection has more databases: %s", c2)
 	}
 	return nil
 }
