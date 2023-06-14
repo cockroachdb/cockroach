@@ -985,7 +985,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		allStores = append(allStores, sds...)
 	}
 
-	keyScanner := keysutils.MakePrettyScannerForNamedTables(tableToID, idxToID)
+	keyScanner := keysutils.MakePrettyScannerForNamedTables(roachpb.SystemTenantID, tableToID, idxToID)
 	ranges, err := processSplits(keyScanner, tc.splits, allStores)
 	if err != nil {
 		return compiledTestCase{}, err
