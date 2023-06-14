@@ -236,6 +236,30 @@ type ProposalData struct {
 	//
 	// Never set unless useReproposalsV2 is active.
 	v2SeenDuringApplication bool
+
+	// v2Reproposed is set under useReproposalsV2 whenever a proposal was already
+	// reproposed, i.e. put into the raft log again with a new LeaseAppliedIndex
+	// (following the insight that the previously assigned LeaseAppliedIndex was
+	// invalid). A key feature of useReproposalsV2 is that we make a *new*
+	// proposal to repropose (and shift the waiting caller over to that new
+	// proposal) rather than re-using the existing proposal. Whereas in v1 we were
+	// relying on comparing the in-memory LeaseAppliedIndex to the entry's
+	// LeaseAppliedIndex to determine if another reproposal could safely be
+	// triggered, in V2 we "just" mark the "old" proposal as no longer being
+	// eligible for doing so in the future, once we have reproposed it once (as a
+	// new, nominally unrelated, proposal). The new proposal gets a fresh start,
+	// and the cycle might repeat itself (leading to yet another new proposal,
+	// etc) but each individual proposal's lifecycle is simple.
+	//
+	// NB: this field is very close to the v2SeenDuringApplication field. Whenever
+	// we set v2Reproposed, we know that v2SeenDuringApplication was *just* set.
+	// This is because to get to the place where v2Reproposed is set, we must have
+	// a local proposal, which means it was just removed from the map and bound to
+	// our entry, which is the condition which sets v2SeenDuringApplication on the
+	// proposal.
+	//
+	// Never set unless useReproposalsV2 is active.
+	v2Reproposed bool
 }
 
 // useReplicationAdmissionControl indicates whether this raft command should
