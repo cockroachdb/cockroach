@@ -916,14 +916,11 @@ func PgURL(
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
 	} else {
-		if err := c.Parallel(ctx, l, len(nodes), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-			node := nodes[i]
-			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(node)
-			ips[i] = res.Stdout
-			return res, nil
-		}); err != nil {
-			return nil, err
+		for i := 0; i < len(nodes); i++ {
+			ip, err := c.GetInternalIP(nodes[i])
+			if err == nil {
+				ips[i] = ip
+			}
 		}
 	}
 
@@ -1912,7 +1909,7 @@ func sendCaptureCommand(
 ) error {
 	nodes := c.TargetNodes()
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
-	_, err := c.ParallelE(ctx, l, len(nodes),
+	_, _, err := c.ParallelE(ctx, l, len(nodes),
 		func(ctx context.Context, i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
