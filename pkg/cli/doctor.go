@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -203,6 +204,17 @@ func fromCluster(
 	ctx := context.Background()
 	if err := sqlConn.EnsureConn(ctx); err != nil {
 		return nil, nil, nil, err
+	}
+
+	if !buildutil.CrdbTestBuild {
+		if err := sqlConn.Exec(ctx, "BEGIN AS OF SYSTEM TIME '-0.1s';"); err != nil {
+			return nil, nil, nil, err
+		}
+		defer func() {
+			if err := sqlConn.Exec(ctx, "ROLLBACK;"); err != nil {
+				retErr = errors.WithSecondaryError(retErr, errors.Wrapf(err, "failed rolling back"))
+			}
+		}()
 	}
 
 	if timeout != 0 {

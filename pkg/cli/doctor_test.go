@@ -34,6 +34,7 @@ func TestDoctorCluster(t *testing.T) {
 		"INSERT INTO system.users VALUES ('node', NULL, true, 3)",
 		"GRANT node TO root",
 		"DELETE FROM system.namespace WHERE name = 'foo'",
+		"SELECT pg_catalog.pg_sleep(1)",
 	}, ";\n"),
 	})
 

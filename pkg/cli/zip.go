@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
@@ -389,15 +390,28 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
 		name := baseName + suffix + "." + zc.clusterPrinter.sqlOutputFilenameExtension
 		s.progress("writing output: %s", name)
-		sqlErr := func() error {
+		sqlErr := func() (err error) {
 			zc.z.Lock()
 			defer zc.z.Unlock()
+
+			// Use a time travel query intentionally to avoid contention.
+			if !buildutil.CrdbTestBuild {
+				if err := conn.Exec(ctx, "BEGIN AS OF SYSTEM TIME '-0.1s';"); err != nil {
+					return err
+				}
+				defer func() {
+					rollbackErr := conn.Exec(ctx, "ROLLBACK;")
+					if rollbackErr != nil {
+						err = errors.WithSecondaryError(err, errors.Wrapf(rollbackErr, "failed rolling back"))
+					}
+				}()
+			}
 
 			// TODO(knz): This can use context cancellation now that query
 			// cancellation is supported in v22.1 and later.
 			// SET must be run separately from the query so that the command tag output
 			// doesn't get added to the debug file.
-			err := conn.Exec(ctx, fmt.Sprintf(`SET statement_timeout = '%s'`, zc.timeout))
+			err = conn.Exec(ctx, fmt.Sprintf(`SET statement_timeout = '%s'`, zc.timeout))
 			if err != nil {
 				return err
 			}
