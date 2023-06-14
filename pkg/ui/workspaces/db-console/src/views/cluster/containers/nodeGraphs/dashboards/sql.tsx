@@ -54,12 +54,12 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Created SQL Connections"
+      title="SQL Connection Rate"
       isKvGraph={false}
       sources={nodeSources}
-      tooltip={`Counter of the number of SQL connections created ${tooltipSelection}`}
+      tooltip={`Rate of SQL connection attempts ${tooltipSelection}`}
     >
-      <Axis label="connections">
+      <Axis label="connections per second">
         {_.map(nodeIDs, node => (
           <Metric
             key={node}
