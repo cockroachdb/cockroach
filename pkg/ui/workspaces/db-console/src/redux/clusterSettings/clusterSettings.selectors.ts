@@ -84,3 +84,13 @@ export const selectIndexRecommendationsEnabled = createSelector(
     return util.greaterOrEqualThanVersion(value, [22, 2, 0]);
   },
 );
+
+export const selectClusterSettingVersion = createSelector(
+  selectClusterSettings,
+  (settings): string => {
+    if (!settings) {
+      return "";
+    }
+    return settings["version"].value;
+  },
+);
