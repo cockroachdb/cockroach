@@ -1843,6 +1843,12 @@ func (r *Registry) MarkIdle(job *Job, isIdle bool) {
 	}
 }
 
+func (r *Registry) TestingForgetJob(id jobspb.JobID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.mu.adoptedJobs, id)
+}
+
 func (r *Registry) cancelAllAdoptedJobs() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
