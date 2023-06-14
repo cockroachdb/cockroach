@@ -23,9 +23,12 @@ fi
 if [ -d "${HOME}/.cache/bazel/_bazel_${USER}" ]; then
   SUFFIX="$(pwd | md5sum | head -c6)"
   OUTPUT_ROOT="${HOME}/.cache/bazel/_bazel_${USER}"
-else
+elif [ -d "/private/var/tmp/_bazel_${USER}" ]; then
   SUFFIX="$(pwd | md5 | head -c6)"
   OUTPUT_ROOT="/private/var/tmp/_bazel_${USER}"
+else
+  # the known places for output_bases don't exist so just let bazel figure it out.
+  return
 fi
 
 # If we haven't enabled multi-bases, just run bazel normally.
