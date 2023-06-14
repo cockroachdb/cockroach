@@ -978,6 +978,12 @@ var (
 		Measurement: "Leader Transfers",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeRaftLeaderRemovals = metric.Metadata{
+		Name:        "range.raftleaderremovals",
+		Help:        "Number of times the current Raft leader was removed from a range",
+		Measurement: "Raft leader removals",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeLossOfQuorumRecoveries = metric.Metadata{
 		Name: "range.recoveries",
 		Help: `Count of offline loss of quorum recovery operations performed on ranges.
@@ -2105,6 +2111,7 @@ type StoreMetrics struct {
 	RangeAdds                   *metric.Counter
 	RangeRemoves                *metric.Counter
 	RangeRaftLeaderTransfers    *metric.Counter
+	RangeRaftLeaderRemovals     *metric.Counter
 	RangeLossOfQuorumRecoveries *metric.Counter
 
 	// Range snapshot metrics.
@@ -2713,6 +2720,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotSendTotalInProgress:             metric.NewGauge(metaRangeSnapshotSendTotalInProgress),
 		RangeSnapshotRecvTotalInProgress:             metric.NewGauge(metaRangeSnapshotRecvTotalInProgress),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
+		RangeRaftLeaderRemovals:                      metric.NewCounter(metaRangeRaftLeaderRemovals),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 		DelegateSnapshotSendBytes:                    metric.NewCounter(metaDelegateSnapshotSendBytes),
 		DelegateSnapshotSuccesses:                    metric.NewCounter(metaDelegateSnapshotSuccesses),
