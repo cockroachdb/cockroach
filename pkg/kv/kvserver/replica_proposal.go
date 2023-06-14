@@ -49,9 +49,9 @@ import (
 // A proposal (=ProposalData) is created during write request evaluation and then handed to the proposal buffer
 // (Replica.mu.proposalBuf) via propBuf.Insert. In the common case, the proposal
 // transfers from there into Replica.mu.proposals (and the raft log) via
-// propBuf.FlushLockedWithRaftGroup (called from handleRaftReady), but instead
-// an additional call to Insert (on behalf of some other proposal) may also do
-// this instead (in case the propBuf fills up). ProposalData itself has no mutex
+// propBuf.FlushLockedWithRaftGroup (called from handleRaftReady). But if the proposal
+// buffer is full, Insert may also flush the buffer to make room for a new proposal.
+// ProposalData itself has no mutex
 // and locking is provided by `Replica.mu` which must always be held when
 // accessing a ProposalData (except before the first insertion into the proposal
 // buffer). However, at the time of writing, this locking is possibly insufficient
