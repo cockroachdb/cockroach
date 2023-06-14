@@ -14,7 +14,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -283,8 +282,8 @@ type Server struct {
 	// testing{Conn,Auth}LogEnabled is used in unit tests in this
 	// package to force-enable conn/auth logging without dancing around
 	// the asynchronicity of cluster settings.
-	testingConnLogEnabled int32
-	testingAuthLogEnabled int32
+	testingConnLogEnabled syncutil.AtomicBool
+	testingAuthLogEnabled syncutil.AtomicBool
 }
 
 // tenantSpecificMetrics is the set of metrics for a pgwire server
@@ -707,17 +706,17 @@ func (s SocketType) asConnType() (hba.ConnType, error) {
 }
 
 func (s *Server) connLogEnabled() bool {
-	return atomic.LoadInt32(&s.testingConnLogEnabled) != 0 || logConnAuth.Get(&s.execCfg.Settings.SV)
+	return s.testingConnLogEnabled.Get() || logConnAuth.Get(&s.execCfg.Settings.SV)
 }
 
 // TestingEnableConnLogging is exported for use in tests.
 func (s *Server) TestingEnableConnLogging() {
-	atomic.StoreInt32(&s.testingConnLogEnabled, 1)
+	s.testingConnLogEnabled.Set(true)
 }
 
 // TestingEnableAuthLogging is exported for use in tests.
 func (s *Server) TestingEnableAuthLogging() {
-	atomic.StoreInt32(&s.testingAuthLogEnabled, 1)
+	s.testingAuthLogEnabled.Set(true)
 }
 
 // ServeConn serves a single connection, driving the handshake process and
