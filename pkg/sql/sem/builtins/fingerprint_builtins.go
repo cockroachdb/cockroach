@@ -31,6 +31,42 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func verboseFingerprint(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (tree.Datum, error) {
+	if len(args) != 3 {
+		return nil, errors.New("argument list must have three elements")
+	}
+	span, err := parseSpan(args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	var startTimestamp hlc.Timestamp
+	if parsedDecimal, ok := parseDecimal(args[1]); ok {
+		startTimestamp, err = hlc.DecimalToHLC(&parsedDecimal.Decimal)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		startTime := tree.MustBeDTimestampTZ(args[1]).Time
+		startTimestamp = hlc.Timestamp{WallTime: startTime.UnixNano()}
+	}
+
+	allRevisions := bool(tree.MustBeDBool(args[2]))
+	return fingerprint(ctx, evalCtx, span, startTimestamp, allRevisions /* stripped */, false)
+}
+
+// parseDecimal is a copy of tree.AsDDecimal() which is available on later versions
+// of cockroach.
+func parseDecimal(e tree.Expr) (*tree.DDecimal, bool) {
+	switch t := e.(type) {
+	case *tree.DDecimal:
+		return t, true
+	}
+	return nil, false
+}
+
 func fingerprint(
 	ctx context.Context,
 	evalCtx *eval.Context,

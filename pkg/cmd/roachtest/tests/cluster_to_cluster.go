@@ -577,17 +577,12 @@ func (rd *replicationDriver) compareTenantFingerprintsAtTimestamp(
 	rd.t.Status(fmt.Sprintf("comparing tenant fingerprints between start time %s and end time %s",
 		startTime.UTC(), endTime.UTC()))
 
-	// TODO(adityamaru,lidorcarmel): Once we agree on the format and precision we
-	// display all user facing timestamps with, we should revisit how we format
-	// the start time to ensure we are fingerprinting from the most accurate lower
-	// bound.
-	microSecondRFC3339Format := "2006-01-02 15:04:05.999999"
-	startTimeStr := startTime.Format(microSecondRFC3339Format)
+	startTimeDecimal := hlc.Timestamp{WallTime: startTime.UnixNano()}.AsOfSystemTime()
 	aost := hlc.Timestamp{WallTime: endTime.UnixNano()}.AsOfSystemTime()
 	fingerprintQuery := fmt.Sprintf(`
 SELECT *
-FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), '%s'::TIMESTAMPTZ, true)
-AS OF SYSTEM TIME '%s'`, startTimeStr, aost)
+FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), '%s'::DECIMAL, true)
+AS OF SYSTEM TIME '%s'`, startTimeDecimal, aost)
 
 	var srcFingerprint int64
 	fingerPrintMonitor := rd.newMonitor(ctx)
