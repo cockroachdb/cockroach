@@ -31,7 +31,7 @@ func TestFingerprintUtility(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
 	sql := sqlutils.MakeSQLRunner(db)
@@ -58,18 +58,18 @@ func TestFingerprintUtility(t *testing.T) {
 
 	require.NoError(t, fingerprintDatabases(fingerprintutils.Stripped()))
 	require.ErrorContains(t, fingerprintDatabases(fingerprintutils.StartTime(startTime)),
-		"fingerprint mismatch on t1 table")
+		`fingerprint mismatch on "t1" table`)
 
 	// Ensure cluster stripped fingerprint mismatch occurs after adding a single row
 	// Don't include system db, as it may naturally change over time.
-	clusterFingerprint, err := fingerprintutils.FingerprintCluster(ctx, db, false, fingerprintutils.Stripped())
+	clusterFingerprint, err := fingerprintutils.FingerprintAllDatabases(ctx, db, false, fingerprintutils.Stripped())
 	require.NoError(t, err)
 	sql.Exec(t, `INSERT INTO d1.t1 VALUES (3,'z')`)
 
-	clusterFingerprintAfterInsert, err := fingerprintutils.FingerprintCluster(ctx, db, false, fingerprintutils.Stripped())
+	clusterFingerprintAfterInsert, err := fingerprintutils.FingerprintAllDatabases(ctx, db, false, fingerprintutils.Stripped())
 	require.NoError(t, err)
-	require.ErrorContains(t, fingerprintutils.CompareClusterFingerprints(clusterFingerprint,
-		clusterFingerprintAfterInsert), "fingerprint mismatch on t1 table")
+	require.ErrorContains(t, fingerprintutils.CompareMultipleDatabaseFingerprints(clusterFingerprint,
+		clusterFingerprintAfterInsert), `fingerprint mismatch on "t1" table`)
 
 	// Ensure one cannot run nonsensical fingerprint cmds.
 	_, err = fingerprintutils.FingerprintDatabase(ctx, db, "d1", fingerprintutils.Stripped(), fingerprintutils.StartTime(startTime))
