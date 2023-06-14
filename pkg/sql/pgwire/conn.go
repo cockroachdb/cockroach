@@ -112,69 +112,6 @@ type conn struct {
 
 	// alwaysLogAuthActivity is used force-enables logging of authn events.
 	alwaysLogAuthActivity bool
-
-	// afterReadMsgTestingKnob is called after reading every message.
-	afterReadMsgTestingKnob func(context.Context) error
-}
-
-// serveConn creates a conn that will serve the netConn. It returns once the
-// network connection is closed.
-//
-// Internally, a connExecutor will be created to execute commands. Commands read
-// from the network are buffered in a stmtBuf which is consumed by the
-// connExecutor. The connExecutor produces results which are buffered and
-// sometimes synchronously flushed to the network.
-//
-// The reader goroutine (this one) outlives the connExecutor's goroutine (the
-// "processor goroutine").
-// However, they can both signal each other to stop. Here's how the different
-// cases work:
-// 1) The reader receives a ClientMsgTerminate protocol packet: the reader
-// closes the stmtBuf and also cancels the command processing context. These
-// actions will prompt the command processor to finish.
-// 2) The reader gets a read error from the network connection: like above, the
-// reader closes the command processor.
-// 3) The reader's context is canceled (happens when the server is draining but
-// the connection was busy and hasn't quit yet): the reader notices the canceled
-// context and, like above, closes the processor.
-// 4) The processor encounters an error. This error can come from various fatal
-// conditions encountered internally by the processor, or from a network
-// communication error encountered while flushing results to the network.
-// The processor will cancel the reader's context and terminate.
-// Note that query processing errors are different; they don't cause the
-// termination of the connection.
-//
-// Draining notes:
-//
-// The reader notices that the server is draining by polling the IsDraining
-// closure passed to serveImpl. At that point, the reader delegates the
-// responsibility of closing the connection to the statement processor: it will
-// push a DrainRequest to the stmtBuf which signals the processor to quit ASAP.
-// The processor will quit immediately upon seeing that command if it's not
-// currently in a transaction. If it is in a transaction, it will wait until the
-// first time a Sync command is processed outside of a transaction - the logic
-// being that we want to stop when we're both outside transactions and outside
-// batches.
-func (s *Server) serveConn(
-	ctx context.Context,
-	netConn net.Conn,
-	sArgs sql.SessionArgs,
-	reserved *mon.BoundAccount,
-	connStart time.Time,
-	authOpt authOptions,
-) {
-	if log.V(2) {
-		log.Infof(ctx, "new connection with options: %+v", sArgs)
-	}
-
-	c := newConn(netConn, sArgs, &s.tenantMetrics, connStart, &s.execCfg.Settings.SV)
-	c.alwaysLogAuthActivity = s.testingAuthLogEnabled.Get()
-	if s.execCfg.PGWireTestingKnobs != nil {
-		c.afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
-	}
-
-	// Do the reading of commands from the network.
-	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
 }
 
 func newConn(
@@ -183,15 +120,17 @@ func newConn(
 	metrics *tenantSpecificMetrics,
 	connStart time.Time,
 	sv *settings.Values,
+	alwaysLogAuthActivity bool,
 ) *conn {
 	c := &conn{
-		conn:        netConn,
-		sessionArgs: sArgs,
-		metrics:     metrics,
-		startTime:   connStart,
-		rd:          *bufio.NewReader(netConn),
-		sv:          sv,
-		readBuf:     pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
+		conn:                  netConn,
+		sessionArgs:           sArgs,
+		metrics:               metrics,
+		startTime:             connStart,
+		rd:                    *bufio.NewReader(netConn),
+		sv:                    sv,
+		readBuf:               pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
+		alwaysLogAuthActivity: alwaysLogAuthActivity,
 	}
 	c.stmtBuf.Init()
 	c.res.released = true
@@ -294,12 +233,49 @@ const maxRepeatedErrorCount = 1 << 15
 // sqlServer is used to create the command processor. As a special facility for
 // tests, sqlServer can be nil, in which case the command processor and the
 // write-side of the connection will not be created.
+//
+// Internally, a connExecutor will be created to execute commands. Commands read
+// from the network are buffered in a stmtBuf which is consumed by the
+// connExecutor. The connExecutor produces results which are buffered and
+// sometimes synchronously flushed to the network.
+//
+// The reader goroutine (this one) outlives the connExecutor's goroutine (the
+// "processor goroutine").
+// However, they can both signal each other to stop. Here's how the different
+// cases work:
+// 1) The reader receives a ClientMsgTerminate protocol packet: the reader
+// closes the stmtBuf and also cancels the command processing context. These
+// actions will prompt the command processor to finish.
+// 2) The reader gets a read error from the network connection: like above, the
+// reader closes the command processor.
+// 3) The reader's context is canceled (happens when the server is draining but
+// the connection was busy and hasn't quit yet): the reader notices the canceled
+// context and, like above, closes the processor.
+// 4) The processor encounters an error. This error can come from various fatal
+// conditions encountered internally by the processor, or from a network
+// communication error encountered while flushing results to the network.
+// The processor will cancel the reader's context and terminate.
+// Note that query processing errors are different; they don't cause the
+// termination of the connection.
+//
+// Draining notes:
+//
+// The reader notices that the server is draining by polling the IsDraining
+// closure passed to serveImpl. At that point, the reader delegates the
+// responsibility of closing the connection to the statement processor: it will
+// push a DrainRequest to the stmtBuf which signals the processor to quit ASAP.
+// The processor will quit immediately upon seeing that command if it's not
+// currently in a transaction. If it is in a transaction, it will wait until the
+// first time a Sync command is processed outside of a transaction - the logic
+// being that we want to stop when we're both outside transactions and outside
+// batches.
 func (c *conn) serveImpl(
 	ctx context.Context,
 	draining func() bool,
 	sqlServer *sql.Server,
 	reserved *mon.BoundAccount,
 	authOpt authOptions,
+	afterReadMsgTestingKnob func(context.Context) error,
 ) {
 	defer func() { _ = c.conn.Close() }()
 
@@ -429,8 +405,8 @@ func (c *conn) serveImpl(
 		breakLoop, isSimpleQuery, err := func() (bool, bool, error) {
 			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
 			c.metrics.BytesInCount.Inc(int64(n))
-			if err == nil && c.afterReadMsgTestingKnob != nil {
-				err = c.afterReadMsgTestingKnob(ctx)
+			if err == nil && afterReadMsgTestingKnob != nil {
+				err = afterReadMsgTestingKnob(ctx)
 			}
 			isSimpleQuery := typ == pgwirebase.ClientMsgSimpleQuery
 			if err != nil {

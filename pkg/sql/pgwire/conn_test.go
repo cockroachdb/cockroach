@@ -117,6 +117,7 @@ func TestConn(t *testing.T) {
 			nil,
 			&mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+			nil, /* afterReadMsgTestingKnob */
 		)
 		return nil
 	})
@@ -542,7 +543,14 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	metrics := makeTenantSpecificMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, timeutil.Now(), nil)
+	pgwireConn := newConn(
+		conn,
+		sql.SessionArgs{ConnResultsBufferSize: 16 << 10},
+		&metrics,
+		timeutil.Now(),
+		nil,   /* sv */
+		false, /* alwaysLogAuthActivity */
+	)
 	return pgwireConn, nil
 }
 
@@ -1092,7 +1100,8 @@ func TestMaliciousInputs(t *testing.T) {
 				sql.SessionArgs{ConnResultsBufferSize: 10},
 				&metrics,
 				timeutil.Now(),
-				nil,
+				nil,   /* sv */
+				false, /* alwaysLogAuthActivity */
 			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
@@ -1102,6 +1111,7 @@ func TestMaliciousInputs(t *testing.T) {
 				nil,                          /* sqlServer */
 				&mon.BoundAccount{},          /* reserved */
 				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+				nil, /* afterReadMsgTestingKnob */
 			)
 			if err := <-errChan; err != nil {
 				t.Fatal(err)
