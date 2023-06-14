@@ -1,22 +1,18 @@
 # Two stores at different nodes.
-
-store store-id=1 node-id=1 attrs=green locality-tiers=region=us-west
-----
-
-store store-id=2 node-id=2 attrs=green locality-tiers=region=us-east
+store
+store-id=1 node-id=1 attrs=green locality-tiers=region=us-west
+store-id=2 node-id=2 attrs=green locality-tiers=region=us-east
 ----
 
 # -1 is parentCapacity.
-store-load store-id=1 load=(10,100,1000) capacity=(-1,400,8000) secondary-load=80
+store-load
+store-id=1 load=(10,100,1000) capacity=(-1,400,8000) secondary-load=80
+store-id=2 load=(20,200,4000) capacity=(-1,500,4000) secondary-load=100
 ----
 
-store-load store-id=2 load=(20,200,4000) capacity=(-1,500,4000) secondary-load=100
-----
-
-node-load node-id=1 cpu-load=200 cpu-capacity=1000
-----
-
-node-load node-id=2 cpu-load=250 cpu-capacity=500
+node-load
+node-id=1 cpu-load=200 cpu-capacity=1000
+node-id=2 cpu-load=250 cpu-capacity=500
 ----
 
 get-means
@@ -49,10 +45,12 @@ get-store-summary store-id=2 load-seq-num=0
 called computeLoadSummary: returning seqnum 0
 
 # Add another store that is on the same node as store 1.
-store store-id=3 node-id=1 attrs=green locality-tiers=region=us-west
+store
+store-id=3 node-id=1 attrs=green locality-tiers=region=us-west
 ----
 
-store-load store-id=3 load=(100,200,400) capacity=(-1,800,1600) secondary-load=120
+store-load
+store-id=3 load=(100,200,400) capacity=(-1,800,1600) secondary-load=120
 ----
 
 # Mean is unchanged since cached.

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 type allocatorState struct {
@@ -27,9 +28,9 @@ type allocatorState struct {
 	changeRangeLimiter *storeChangeRateLimiter
 }
 
-func newAllocatorState() *allocatorState {
+func newAllocatorState(clock hlc.WallClock) *allocatorState {
 	interner := newStringInterner()
-	cs := newClusterState(interner)
+	cs := newClusterState(clock, interner)
 	return &allocatorState{
 		cs:                     cs,
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
