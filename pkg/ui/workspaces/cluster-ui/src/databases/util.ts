@@ -8,7 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { BreadcrumbItem } from "../breadcrumbs";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+type IndexUsageStatistic =
+  cockroach.server.serverpb.TableIndexStatsResponse.IExtendedCollectedIndexUsageStatistics;
 
 export function combineLoadingErrors(
   detailsErr: Error,
@@ -163,4 +165,24 @@ export function normalizePrivileges(raw: string[]): string[] {
   // Unique privileges, sorted by precedence.
   const rawUppers = raw.map(priv => priv.toUpperCase());
   return sortByPrecedence(rawUppers, privilegePrecedence, true);
+}
+
+export function buildIndexStatToRecommendationsMap(
+  stats: IndexUsageStatistic[],
+  recs: cockroach.sql.IIndexRecommendation[],
+): Record<number, cockroach.sql.IIndexRecommendation[]> {
+  const recommendationsMap: Record<
+    string,
+    cockroach.sql.IIndexRecommendation[]
+  > = {};
+  stats.forEach(stat => {
+    const recsForStat =
+      recs.filter(rec => rec.index_id === stat?.statistics.key.index_id) || [];
+    if (!recommendationsMap[stat?.statistics.key.index_id]) {
+      recommendationsMap[stat?.statistics.key.index_id] = recsForStat;
+    } else {
+      recommendationsMap[stat?.statistics.key.index_id].push(...recsForStat);
+    }
+  });
+  return recommendationsMap;
 }
