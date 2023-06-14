@@ -33,7 +33,8 @@ import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 import * as protos from "src/js/protos";
 import Long from "long";
 
-const { generateStmtDetailsToID, HexStringToInt64String } = util;
+const { generateStmtDetailsToID, HexStringToInt64String, generateTableID } =
+  util;
 
 const SessionsRequest = protos.cockroach.server.serverpb.ListSessionsRequest;
 
@@ -127,12 +128,6 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
 export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
 
 export const refreshHotRanges = hotRangesReducerObj.refresh;
-
-// NOTE: We encode the db and table name so we can combine them as a string.
-// TODO(maxlang): there's probably a nicer way to do this
-export function generateTableID(db: string, table: string) {
-  return `${encodeURIComponent(db)}/${encodeURIComponent(table)}`;
-}
 
 export const tableRequestToID = (
   req:

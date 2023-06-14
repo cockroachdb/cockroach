@@ -72,6 +72,10 @@ import {
   KeyedDatabaseDetailsState,
   reducer as databaseDetails,
 } from "./databaseDetails";
+import {
+  KeyedTableDetailsState,
+  reducer as tableDetails,
+} from "./databaseTableDetails/tableDetails.reducer";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -90,6 +94,7 @@ export type AdminUiState = {
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
   databaseDetails: KeyedDatabaseDetailsState;
+  tableDetails: KeyedTableDetailsState;
   stmtInsights: StmtInsightsState;
   txnInsightDetails: TxnInsightDetailsCachedState;
   txnInsights: TxnInsightsState;
@@ -122,6 +127,7 @@ export const reducers = combineReducers<AdminUiState>({
   clusterLocks,
   databasesList,
   databaseDetails,
+  tableDetails,
   schemaInsights,
   statementFingerprintInsights,
   clusterSettings,
