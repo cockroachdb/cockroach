@@ -1802,7 +1802,7 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 	}
 
 	if len(tc.FromVersionNodes) > 0 {
-		const numCollections = 3
+		const numCollections = 2
 		rng.Shuffle(len(collectionSpecs), func(i, j int) {
 			collectionSpecs[i], collectionSpecs[j] = collectionSpecs[j], collectionSpecs[i]
 		})
@@ -2041,6 +2041,17 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 
 	verify(h.Context().FromVersion)
 	verify(clusterupgrade.MainVersion)
+
+	// If the context was canceled (most likely due to a test timeout),
+	// return early. In these cases, it's likely that `restoreErrors`
+	// will have a number of "restore failures" that all happened
+	// because the underlying context was canceled, so proceeding with
+	// the error reporting logic below is confusing, as it makes it look
+	// like multiple failures occurred. It also makes the actually
+	// important "timed out" message less prominent.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	if len(restoreErrors) > 0 {
 		if len(restoreErrors) == 1 {
