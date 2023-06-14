@@ -298,10 +298,6 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 	return recv.commErr
 }
 
-func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
-	evalCtx.SessionID = sessionID
-}
-
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
 // internal SQL pool before the pool starts explicitly logging overall usage
 // growth in the log.
