@@ -1299,7 +1299,9 @@ const (
 // DistributeCerts will generate and distribute certificates to all of the
 // nodes.
 func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) error {
-	if c.checkForCertificates(ctx, l) {
+	if found, err := c.checkForCertificates(ctx, l); err != nil {
+		return err
+	} else if found {
 		return nil
 	}
 
@@ -1375,11 +1377,15 @@ tar cvf %[3]s certs
 func (c *SyncedCluster) DistributeTenantCerts(
 	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, tenantID int,
 ) error {
-	if hostCluster.checkForTenantCertificates(ctx, l) {
+	if found, err := hostCluster.checkForTenantCertificates(ctx, l); err != nil {
+		return err
+	} else if found {
 		return nil
 	}
 
-	if !hostCluster.checkForCertificates(ctx, l) {
+	if found, err := hostCluster.checkForCertificates(ctx, l); err != nil {
+		return err
+	} else if !found {
 		return errors.New("host cluster missing certificate bundle")
 	}
 
@@ -1489,7 +1495,7 @@ func (c *SyncedCluster) getFileFromFirstNode(
 
 // checkForCertificates checks if the cluster already has a certs bundle created
 // on the first node.
-func (c *SyncedCluster) checkForCertificates(ctx context.Context, l *logger.Logger) bool {
+func (c *SyncedCluster) checkForCertificates(ctx context.Context, l *logger.Logger) (bool, error) {
 	dir := ""
 	if c.IsLocal() {
 		dir = c.localVMDir(1)
@@ -1499,7 +1505,9 @@ func (c *SyncedCluster) checkForCertificates(ctx context.Context, l *logger.Logg
 
 // checkForTenantCertificates checks if the cluster already has a tenant-certs bundle created
 // on the first node.
-func (c *SyncedCluster) checkForTenantCertificates(ctx context.Context, l *logger.Logger) bool {
+func (c *SyncedCluster) checkForTenantCertificates(
+	ctx context.Context, l *logger.Logger,
+) (bool, error) {
 	dir := ""
 	if c.IsLocal() {
 		dir = c.localVMDir(1)
@@ -1509,24 +1517,10 @@ func (c *SyncedCluster) checkForTenantCertificates(ctx context.Context, l *logge
 
 func (c *SyncedCluster) fileExistsOnFirstNode(
 	ctx context.Context, l *logger.Logger, path string,
-) bool {
-	var existsErr error
-	display := fmt.Sprintf("%s: checking %s", c.Name, path)
-	if err := c.Parallel(ctx, l, 1, func(ctx context.Context, i int) (*RunResultDetails, error) {
-		node := c.Nodes[i]
-		sess := c.newSession(l, node, `test -e `+path)
-		defer sess.Close()
-
-		out, cmdErr := sess.CombinedOutput(ctx)
-		res := newRunResultDetails(node, cmdErr)
-		res.CombinedOut = out
-
-		existsErr = res.Err
-		return res, nil
-	}, WithDisplay(display)); err != nil {
-		return false
-	}
-	return existsErr == nil
+) (bool, error) {
+	l.Printf("%s: checking %s", c.Name, path)
+	result, err := c.runCmdOnSingleNode(ctx, l, c.Nodes[0], `$(test -e `+path+`); echo $?`, false, l.Stdout, l.Stderr)
+	return result.Stdout == "0", err
 }
 
 // createNodeCertArguments returns a list of strings appropriate for use as
