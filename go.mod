@@ -18,7 +18,7 @@ require (
 	github.com/google/uuid v1.3.0
 	golang.org/x/crypto v0.7.0
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
-	golang.org/x/exp/typeparams v0.0.0-20220713135740-79cabaa25d75 // indirect
+	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
 	golang.org/x/mod v0.8.0 // indirect
 	golang.org/x/net v0.8.0
 	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783
