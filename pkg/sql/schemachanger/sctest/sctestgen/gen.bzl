@@ -13,6 +13,7 @@ def _sctest_gen_impl(ctx):
             ["--suffix", ctx.attr.suffix],
             ["--new-cluster-func", ctx.attr.new_cluster_func],
             ["--out", ctx.outputs.out.path],
+            _flatten(*[["--skip", t] for t in ctx.attr.skip]),
             [f.path for f in ctx.files.test_data],
         ),
     )
@@ -24,6 +25,7 @@ sctest_gen = rule(
         "out": attr.output(mandatory = True),
         "tests": attr.string_list(allow_empty = False),
         "test_data": attr.label_list(allow_empty = False, allow_files = True),
+        "skip": attr.string_list(allow_empty = True),
         "ccl": attr.bool(),
         "suffix": attr.string(),
         "new_cluster_func": attr.string(),

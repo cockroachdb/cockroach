@@ -29,8 +29,21 @@ var (
 		Use:  "generate schemachanger data-driven tests",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, arguments []string) error {
+			// Filter out skipped tests.
+			skip := make(map[string]bool)
+			for _, s := range args.Skip {
+				skip[s] = true
+			}
+			files := make([]string, 0, len(arguments))
+			for _, arg := range arguments {
+				if skip[filepath.Base(arg)] {
+					continue
+				}
+				files = append(files, arg)
+			}
+			args.Files = files
+
 			var buf bytes.Buffer
-			args.Files = arguments
 			if err := templ.Execute(&buf, args); err != nil {
 				return err
 			}
@@ -54,6 +67,7 @@ var (
 		Suffix         string
 		NewClusterFunc string
 		Tests          []string
+		Skip           []string
 		Files          []string
 		CCL            bool
 		out            string
@@ -68,6 +82,7 @@ func init() {
 	)
 	flags.StringVar(&args.Package, "package", "", "name of the package")
 	flags.StringSliceVar(&args.Tests, "tests", nil, "tests to generate")
+	flags.StringSliceVar(&args.Skip, "skip", nil, "tests to skip")
 	flags.StringVar(&args.Suffix, "suffix", "", "tests to generate")
 	flags.BoolVar(&args.CCL, "ccl", false, "determines the header")
 	flags.StringVar(&args.out, "out", "", "output, stdout if empty")

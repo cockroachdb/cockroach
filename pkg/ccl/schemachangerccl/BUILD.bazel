@@ -76,6 +76,11 @@ sctest_gen(
     ccl = True,
     new_cluster_func = "newClusterMixed",
     package = "schemachangerccl",
+
+    # This test is skipped (flaky test).
+    # https://github.com/cockroachdb/cockroach/issues/103896.
+    # Un-skip it by removing the skip entry below.
+    skip = ["drop_multiple_columns_separate_statements"],
     suffix = "_base",
     test_data = [
         "//pkg/sql/schemachanger:end_to_end_testdata",

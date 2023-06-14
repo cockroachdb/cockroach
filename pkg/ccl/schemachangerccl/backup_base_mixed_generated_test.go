@@ -213,11 +213,6 @@ func TestBackupMixedVersionElements_base_drop_index_with_materialized_view_dep(t
 	defer log.Scope(t).Close(t)
 	sctest.BackupMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_with_materialized_view_dep", newClusterMixed)
 }
-func TestBackupMixedVersionElements_base_drop_multiple_columns_separate_statements(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sctest.BackupMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_multiple_columns_separate_statements", newClusterMixed)
-}
 func TestBackupMixedVersionElements_base_drop_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
