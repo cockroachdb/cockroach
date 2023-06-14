@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/tokenbucket"
 )
 
 // Limiter is used to rate-limit KV requests for a given tenant.
@@ -151,7 +152,7 @@ func (rl *limiter) RecordRead(ctx context.Context, respInfo tenantcostmodel.Resp
 			amount := tb.config.ReadBatchUnits
 			amount += float64(respInfo.ReadCount()) * tb.config.ReadRequestUnits
 			amount += float64(respInfo.ReadBytes()) * tb.config.ReadUnitsPerByte
-			tb.Adjust(quotapool.Tokens(-amount))
+			tb.Adjust(tokenbucket.Tokens(-amount))
 			// Do not notify the head of the queue. In the best case we did not disturb
 			// the time at which it can be fulfilled and in the worst case, we made it
 			// further in the future.
@@ -174,7 +175,7 @@ func (rl *limiter) updateConfig(config Config) {
 	rl.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
 		tb := res.(*tokenBucket)
 		tb.config = config
-		tb.UpdateConfig(quotapool.TokensPerSecond(config.Rate), quotapool.Tokens(config.Burst))
+		tb.UpdateConfig(tokenbucket.TokensPerSecond(config.Rate), tokenbucket.Tokens(config.Burst))
 		return true
 	})
 }
@@ -182,7 +183,7 @@ func (rl *limiter) updateConfig(config Config) {
 // tokenBucket represents the token bucket for KV Compute Units and its
 // associated configuration. It implements quotapool.Resource.
 type tokenBucket struct {
-	quotapool.TokenBucket
+	tokenbucket.TokenBucket
 
 	config Config
 }
@@ -190,8 +191,8 @@ type tokenBucket struct {
 var _ quotapool.Resource = (*tokenBucket)(nil)
 
 func (tb *tokenBucket) init(config Config, timeSource timeutil.TimeSource) {
-	tb.TokenBucket.Init(
-		quotapool.TokensPerSecond(config.Rate), quotapool.Tokens(config.Burst), timeSource,
+	tb.TokenBucket.InitWithNowFn(
+		tokenbucket.TokensPerSecond(config.Rate), tokenbucket.Tokens(config.Burst), timeSource.Now,
 	)
 	tb.config = config
 }
@@ -236,7 +237,7 @@ func (req *waitRequest) Acquire(
 		// value, in case the quota pool is in debt and the read should block.
 		needed = 0
 	}
-	return tb.TryToFulfill(quotapool.Tokens(needed))
+	return tb.TryToFulfill(tokenbucket.Tokens(needed))
 }
 
 // ShouldWait is part of quotapool.Request.
