@@ -2470,7 +2470,7 @@ func (c *SyncedCluster) ParallelE(
 		select {
 		case <-ticker.C:
 			if config.Quiet && l.File == nil {
-				fmt.Fprintf(out, ".")``
+				fmt.Fprintf(out, ".")
 			}
 		case r, ok := <-completed:
 			if ok {
