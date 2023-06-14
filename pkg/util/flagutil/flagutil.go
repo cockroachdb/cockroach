@@ -25,6 +25,7 @@ import (
 // as described in time.Parse.
 var TimeFormats = []string{
 	log.MessageTimeFormat,
+	log.MessageTimeFormatWithTZ,
 	log.FileTimeFormat,
 	time.RFC3339Nano,
 	time.RFC3339,
