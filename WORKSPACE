@@ -170,7 +170,7 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.19.10.darwin-amd64.tar.gz", "0b298b1c3e89357c86825f375928e6e9d41ad84c7d7b190a2a6730e0706165b3"),
+        "darwin_amd64": ("go1.19.10.darwin-amd64.tar.gz", "48361d76271f9a725942bdc17012ae9fef72359f7b0aa303deb1098e05ef818c"),
         "darwin_arm64": ("go1.19.10.darwin-arm64.tar.gz", "7cc8ab7e8e1225b57f44ec8fb26bce70ddea8e076dfdf118ed63fef0c9ff19fb"),
         "freebsd_amd64": ("go1.19.10.freebsd-amd64.tar.gz", "0d22265662eaa9b8136223f8ab68f5c06c58c6a6311748fb810e830ebd17cbe2"),
         "linux_amd64": ("go1.19.10.linux-amd64.tar.gz", "dfc8a696686d00065ba374209a3a7858926641e0fb55741dd89c357446d69a1e"),
