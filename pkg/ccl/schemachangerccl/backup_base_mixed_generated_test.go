@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -215,6 +216,7 @@ func TestBackupMixedVersionElements_base_drop_index_with_materialized_view_dep(t
 }
 func TestBackupMixedVersionElements_base_drop_multiple_columns_separate_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 103896, "flaky test")
 	defer log.Scope(t).Close(t)
 	sctest.BackupMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_multiple_columns_separate_statements", newClusterMixed)
 }
