@@ -30,3 +30,12 @@ export const selectIndexRecommendationsEnabled = (state: AppState): boolean => {
   const value = settings["version"]?.value || "";
   return greaterOrEqualThanVersion(value, [22, 2, 0]);
 };
+
+export const selectIndexUsageStatsEnabled = (state: AppState): boolean => {
+  const settings = state.adminUI?.clusterSettings.data?.key_values;
+  if (!settings) {
+    return false;
+  }
+  const value = settings["version"]?.value || "";
+  return greaterOrEqualThanVersion(value, [22, 1, 0]);
+};

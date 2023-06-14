@@ -29,6 +29,7 @@ export const sessionAttr = "session";
 export const tabAttr = "tab";
 export const schemaNameAttr = "schemaName";
 export const tableNameAttr = "table_name";
+export const tableNameCCAttr = "tableName";
 export const indexNameAttr = "index_name";
 export const txnFingerprintIdAttr = "txn_fingerprint_id";
 export const unset = "(unset)";

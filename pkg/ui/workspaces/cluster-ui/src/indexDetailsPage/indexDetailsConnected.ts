@@ -82,9 +82,7 @@ const mapStateToProps = (
   const indexName = getMatchParamByName(props.match, indexNameAttr);
 
   const stats =
-    state.adminUI?.indexStats.cachedData[
-      generateTableID(databaseName, tableName)
-    ];
+    state.adminUI?.indexStats[generateTableID(databaseName, tableName)];
   const details = stats?.data?.statistics.find(
     stat => stat.index_name === indexName, // index names must be unique for a table
   );
