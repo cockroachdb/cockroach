@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -169,7 +168,7 @@ func (s *Server) serveConn(
 	}
 
 	c := newConn(netConn, sArgs, &s.tenantMetrics, connStart, &s.execCfg.Settings.SV)
-	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
+	c.alwaysLogAuthActivity = atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
 	if s.execCfg.PGWireTestingKnobs != nil {
 		c.afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
 	}
@@ -177,13 +176,6 @@ func (s *Server) serveConn(
 	// Do the reading of commands from the network.
 	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
 }
-
-// alwaysLogAuthActivity makes it possible to unconditionally enable
-// authentication logging when cluster settings do not work reliably,
-// e.g. in multi-tenant setups in v20.2. This override mechanism
-// can be removed after all of CC is moved to use v21.1 or a version
-// which supports cluster settings.
-var alwaysLogAuthActivity = envutil.EnvOrDefaultBool("COCKROACH_ALWAYS_LOG_AUTHN_EVENTS", false)
 
 func newConn(
 	netConn net.Conn,
