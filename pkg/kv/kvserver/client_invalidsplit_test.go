@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,6 +45,27 @@ func TestSplitAtInvalidTenantPrefix(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	_, _, err = tc.SplitRange(badKey)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `checking for valid tenantID`)
+}
+
+func TestTenantCreationSplitsAreValid(t *testing.T) {
+	tenantID, err := roachpb.MakeTenantID(109)
+	require.NoError(t, err)
+	tenantPrefix := keys.MakeTenantPrefix(tenantID)
+	tenantPrefixEnd := tenantPrefix.PrefixEnd() // bad split key
+
+	_, _, err = keys.DecodeTenantPrefix(tenantPrefixEnd)
+	t.Log(err)
+	require.Error(t, err)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, _, err = tc.SplitRange(tenantPrefixEnd)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `checking for valid tenantID`)
 }
