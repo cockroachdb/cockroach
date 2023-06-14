@@ -89,6 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -1082,7 +1083,9 @@ SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
 		sqlDB.Exec(t, incBackupQuery, queryArgs...)
 	}
 	bankTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
-	backupTableFingerprint := sqlutils.FingerprintTable(t, sqlDB, bankTableID)
+	backupTableFingerprint, err := fingerprintutils.FingerprintTable(ctx, conn, bankTableID,
+		fingerprintutils.Stripped())
+	require.NoError(t, err)
 
 	sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
 
@@ -1103,18 +1106,22 @@ SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
 		restoreQuery = fmt.Sprintf("%s WITH kms = %s", restoreQuery, kmsURIFmtString)
 	}
 	queryArgs := append(restoreURIArgs, kmsURIArgs...)
-	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts, backupTableFingerprint)
+	verifyRestoreData(ctx, t, conn, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts,
+		backupTableFingerprint)
 }
 
 func verifyRestoreData(
+	ctx context.Context,
 	t *testing.T,
+	conn *gosql.DB,
 	sqlDB *sqlutils.SQLRunner,
 	storageSQLDB *sqlutils.SQLRunner,
 	restoreQuery string,
 	restoreURIArgs []interface{},
 	numAccounts int,
-	bankStrippedFingerprint int,
+	bankStrippedFingerprint int64,
 ) {
+
 	var unused string
 	var restored struct {
 		rows, idx, bytes int64
@@ -1165,7 +1172,10 @@ func verifyRestoreData(
 		}
 	}
 	restorebankID := sqlutils.QueryTableID(t, sqlDB.DB, "data", "public", "bank")
-	require.Equal(t, bankStrippedFingerprint, sqlutils.FingerprintTable(t, sqlDB, restorebankID))
+	fingerprint, err := fingerprintutils.FingerprintTable(ctx, conn, restorebankID,
+		fingerprintutils.Stripped())
+	require.NoError(t, err)
+	require.Equal(t, bankStrippedFingerprint, fingerprint)
 }
 
 func TestBackupRestoreSystemTables(t *testing.T) {

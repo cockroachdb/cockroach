@@ -10,6 +10,7 @@ package replicationutils
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"testing"
 
@@ -21,8 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -199,6 +202,67 @@ func LoadIngestionProgress(
 			progress.GetDetails(), jobID)
 	}
 	return sp.StreamIngest, nil
+}
+
+// InvestigateFingerprints checks that the src and dst cluster data match, table
+// by table. It first computes and compares their stripped fingerprints to check
+// that all the latest data matches; then it computes and compares their
+// revision history fingerprints.
+func InvestigateFingerprints(
+	ctx context.Context, srcConn, dstConn *gosql.DB, startTime,
+	cutoverTime hlc.Timestamp,
+) error {
+	strippedOpts := []func(*fingerprintutils.FingerprintOption){
+		fingerprintutils.Stripped(),
+		fingerprintutils.AOST(cutoverTime),
+	}
+	if err := fingerprintClustersByTable(ctx, srcConn, dstConn, strippedOpts...); err != nil {
+		return fmt.Errorf("failed stripped fingerprint: %w", err)
+	}
+
+	opts := []func(*fingerprintutils.FingerprintOption){
+		fingerprintutils.RevisionHistory(),
+		fingerprintutils.StartTime(startTime),
+		fingerprintutils.AOST(cutoverTime),
+	}
+	if err := fingerprintClustersByTable(ctx, srcConn, dstConn, opts...); err != nil {
+		return fmt.Errorf("failed revision history fingerprint: %w", err)
+	}
+	return nil
+}
+
+func fingerprintClustersByTable(
+	ctx context.Context,
+	srcConn, dstConn *gosql.DB,
+	optFuncs ...func(*fingerprintutils.FingerprintOption),
+) error {
+	g := ctxgroup.WithContext(ctx)
+	var (
+		srcFingerprints, dstFingerprints map[string]map[string]int64
+	)
+	g.Go(func() error {
+		var err error
+		srcFingerprints, err = fingerprintutils.FingerprintAllDatabases(ctx, srcConn, true,
+			optFuncs...)
+		if err != nil {
+			return fmt.Errorf("failed getting src fingerprint: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		var err error
+		dstFingerprints, err = fingerprintutils.FingerprintAllDatabases(ctx, dstConn, true,
+			optFuncs...)
+		if err != nil {
+			return fmt.Errorf("failed getting dst fingerprint: %w", err)
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	return fingerprintutils.CompareMultipleDatabaseFingerprints(srcFingerprints,
+		dstFingerprints)
 }
 
 func GetStreamIngestionStats(

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -98,13 +99,16 @@ database_name = 'rand' AND schema_name = 'public'`)
 	}
 
 	expectedCreateTableStmt := make(map[string]string)
-	expectedData := make(map[string]int)
+	expectedData := make(map[string]int64)
 	for _, tableName := range tableNames {
 		expectedCreateTableStmt[tableName] = sqlDB.QueryStr(t,
 			fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s]`, tree.NameString(tableName)))[0][0]
 		if runSchemaOnlyExtension == "" {
+			var err error
 			tableID := sqlutils.QueryTableID(t, sqlDB.DB, "rand", "public", tableName)
-			expectedData[tableName] = sqlutils.FingerprintTable(t, sqlDB, tableID)
+			expectedData[tableName], err = fingerprintutils.FingerprintTable(ctx, tc.Conns[0], tableID,
+				fingerprintutils.Stripped())
+			require.NoError(t, err)
 		}
 	}
 
@@ -138,7 +142,10 @@ database_name = 'rand' AND schema_name = 'public'`)
 				"SHOW CREATE %s not equal after RESTORE", tableName)
 			if runSchemaOnlyExtension == "" {
 				tableID := sqlutils.QueryTableID(t, sqlDB.DB, "restoredb", "public", tableName)
-				require.Equal(t, expectedData[tableName], sqlutils.FingerprintTable(t, sqlDB, tableID))
+				fingerpint, err := fingerprintutils.FingerprintTable(ctx, tc.Conns[0], tableID,
+					fingerprintutils.Stripped())
+				require.NoError(t, err)
+				require.Equal(t, expectedData[tableName], fingerpint)
 			} else {
 				sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT count(*) FROM %s`, restoreTable),
 					[][]string{{"0"}})

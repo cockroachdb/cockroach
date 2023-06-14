@@ -28,7 +28,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util",
         "//pkg/util/envutil",
-        "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/metric",
         "//pkg/util/mon",

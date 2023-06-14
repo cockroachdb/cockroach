@@ -82,7 +82,9 @@ func startDistIngestion(
 		client,
 		replicatedTime,
 		streamProgress.Checkpoint,
-		initialScanTimestamp)(ctx, dsp)
+		initialScanTimestamp,
+		dsp.GatewayID(),
+	)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -128,6 +130,7 @@ func makePlan(
 	previousReplicatedTime hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
 	initialScanTimestamp hlc.Timestamp,
+	gatewayID base.SQLInstanceID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		jobID := ingestionJob.ID()
@@ -185,14 +188,9 @@ func makePlan(
 			execinfrapb.Ordering{},
 		)
 
-		gatewayNodeID, err := execCtx.ExecCfg().NodeInfo.NodeID.OptionalNodeIDErr(48274)
-		if err != nil {
-			return nil, nil, err
-		}
-
 		// The ResultRouters from the previous stage will feed in to the
 		// StreamIngestionFrontier processor.
-		p.AddSingleGroupStage(ctx, base.SQLInstanceID(gatewayNodeID),
+		p.AddSingleGroupStage(ctx, gatewayID,
 			execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
 			execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
 
