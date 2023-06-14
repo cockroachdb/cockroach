@@ -1062,9 +1062,7 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	nodes := c.TargetNodes()
-	err = c.Parallel(ctx, l, len(nodes), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-		node := nodes[i]
+	err = c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
 		port := c.NodeUIPort(node)
@@ -1595,14 +1593,23 @@ func CreateSnapshot(
 	if err := LoadClusters(); err != nil {
 		return nil, err
 	}
+
 	c, err := newCluster(l, clusterName)
 	if err != nil {
 		return nil, err
 	}
+
 	nodes := c.TargetNodes()
 	nodesStatus, err := c.Status(ctx, l)
+
 	if err != nil {
 		return nil, err
+	}
+
+	// 1-indexed node IDs.
+	statusByNodeID := make(map[int]install.NodeStatus)
+	for _, status := range nodesStatus {
+		statusByNodeID[status.NodeID] = status
 	}
 
 	// TODO(irfansharif): Add validation that we're using some released version,
@@ -1613,12 +1620,11 @@ func CreateSnapshot(
 		syncutil.Mutex
 		snapshots []vm.VolumeSnapshot
 	}{}
-	if err := c.Parallel(ctx, l, len(nodes), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-		node := nodes[i]
+	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 
 		cVM := c.VMs[node-1]
-		crdbVersion := nodesStatus[i].Version
+		crdbVersion := statusByNodeID[int(node)].Version
 		if crdbVersion == "" {
 			crdbVersion = "unknown"
 		}
@@ -1733,11 +1739,11 @@ func ApplySnapshots(
 	}
 
 	// Detach and delete existing volumes. This is destructive.
-	if err := c.Parallel(ctx, l, len(c.TargetNodes()), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-		node := c.TargetNodes()[i]
+	if err := c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 
-		cVM := &c.VMs[i]
+		//TODO: this usage may not always be correct, if the target nodes are not sequential
+		cVM := &c.VMs[node-1]
 		if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
 			volumes, err := provider.ListVolumes(l, cVM)
 			if err != nil {
@@ -1758,8 +1764,7 @@ func ApplySnapshots(
 		return err
 	}
 
-	return c.Parallel(ctx, l, len(c.TargetNodes()), func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-		node := c.TargetNodes()[i]
+	return c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 
 		volumeOpts := opts // make a copy
@@ -1768,13 +1773,14 @@ func ApplySnapshots(
 			volumeOpts.Labels[k] = v
 		}
 
-		cVM := &c.VMs[i]
+		// TODO: same issue as above if the target nodes are not sequential starting from 1
+		cVM := &c.VMs[node-1]
 		if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
 			volumeOpts.Zone = cVM.Zone
 			// NB: The "-1" signifies that it's the first attached non-boot volume.
 			// This is typical naming convention in GCE clusters.
 			volumeOpts.Name = fmt.Sprintf("%s-%04d-1", clusterName, node)
-			volumeOpts.SourceSnapshotID = snapshots[i].ID
+			volumeOpts.SourceSnapshotID = snapshots[node-1].ID
 
 			volumes, err := provider.ListVolumes(l, cVM)
 			if err != nil {
@@ -1909,9 +1915,8 @@ func sendCaptureCommand(
 ) error {
 	nodes := c.TargetNodes()
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
-	_, _, err := c.ParallelE(ctx, l, len(nodes),
-		func(ctx context.Context, i int) (*install.RunResultDetails, error) {
-			node := nodes[i]
+	_, _, err := c.ParallelE(ctx, l, nodes,
+		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
 			port := c.NodeUIPort(node)
