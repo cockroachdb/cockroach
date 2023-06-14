@@ -100,7 +100,14 @@ func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct tim
 		log.Errorf(ctx, "operating on a closed handle")
 		return nil
 	}
-	connections := h.mu.connections
+	// NB: The connections slice is sorted under the mutex when new connections
+	// are added and spliced when existing connections removed. That is, we're
+	// writing values at indexes within the slice. Further below we want to
+	// iterate through the list of connections retrieved here and invoke the
+	// blocking kvflowcontrol.Controller.Admit(), doing so without holding
+	// the mutex. To avoid the data race, copy out the pointers first.
+	connections := make([]*connectedStream, len(h.mu.connections))
+	copy(connections, h.mu.connections)
 	h.mu.Unlock()
 
 	class := admissionpb.WorkClassFromPri(pri)
