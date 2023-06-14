@@ -15,11 +15,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
@@ -53,25 +57,20 @@ func TestBackfillJobsInfoTable(t *testing.T) {
 	r := tc.Server(0).JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	defer tc.Stopper().Stop(ctx)
-	jobspb.ForEachType(func(typ jobspb.Type) {
-		// The upgrade creates migration and schemachange jobs, so we do not
-		// need to create more. We should not override resumers for these job types,
-		// otherwise the upgrade will hang.
-		if typ != jobspb.TypeMigration && typ != jobspb.TypeSchemaChange {
-			r.TestingWrapResumerConstructor(typ, func(r jobs.Resumer) jobs.Resumer { return &fakeResumer{} })
-		}
-	}, false)
 
-	createJob := func(id jobspb.JobID, details jobspb.Details, progress jobspb.ProgressDetails) *jobs.Job {
+	createJob := func(id jobspb.JobID, details jobspb.Details, progress jobspb.ProgressDetails) {
 		defaultRecord := jobs.Record{
 			Details:  details,
 			Progress: progress,
 			Username: username.TestUserName(),
 		}
 
-		job, err := r.CreateJobWithTxn(ctx, defaultRecord, id, nil /* txn */)
+		var job *jobs.StartableJob
+		db := tc.Server(0).InternalDB().(*sql.InternalDB)
+		err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return r.CreateStartableJobWithTxn(ctx, &job, id, txn, defaultRecord)
+		})
 		require.NoError(t, err)
-		return job
 	}
 
 	// Create a few different types of jobs.
