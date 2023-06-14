@@ -44,6 +44,12 @@ const cockroachDB = "github.com/cockroachdb/cockroach"
 //go:embed gcassert_paths.txt
 var rawGcassertPaths string
 
+func init() {
+	if bazel.BuiltWithBazel() {
+		bazel.SetGoEnv()
+	}
+}
+
 func dirCmd(
 	dir string, name string, args ...string,
 ) (*exec.Cmd, *bytes.Buffer, stream.Filter, error) {

@@ -3,7 +3,6 @@
 set -xeuo pipefail
 
 # GCAssert requirements -- start
-export PATH="$(dirname $(bazel run @go_sdk//:bin/go --run_under=realpath)):$PATH"
 bazel run //pkg/gen:code
 bazel run //pkg/cmd/generate-cgo:generate-cgo --run_under="cd $(bazel info workspace) && "
 # GCAssert requirements -- end
