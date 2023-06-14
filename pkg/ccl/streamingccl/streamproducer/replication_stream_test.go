@@ -322,6 +322,7 @@ func encodeSpec(
 func TestStreamPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.IgnoreLint(t, "skipping in 22.2, streaming is developed in 23.1")
 	h, cleanup := streamingtest.NewReplicationHelper(t,
 		base.TestServerArgs{
 			// Test fails within a test tenant. More investigation is required.
@@ -468,6 +469,7 @@ CREATE TABLE t3(
 func TestStreamAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.IgnoreLint(t, "skipping in 22.2, streaming is developed in 23.1")
 	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
 		// Test hangs when run within the default test tenant. Tracked with
 		// #76378.
@@ -636,6 +638,7 @@ func sortDelRanges(receivedDelRanges []roachpb.RangeFeedDeleteRange) {
 func TestStreamDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.IgnoreLint(t, "skipping in 22.2, streaming is developed in 23.1")
 	skip.UnderStressRace(t, "disabled under stress and race")
 
 	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
