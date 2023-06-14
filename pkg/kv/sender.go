@@ -273,16 +273,23 @@ type TxnSender interface {
 	// GetLeafTxnInitialState() instead when creating leaf transactions.
 	TestingCloneTxn() *roachpb.Transaction
 
-	// Step creates a sequencing point in the current transaction. A
-	// sequencing point establishes a snapshot baseline for subsequent
-	// read-only operations: until the next sequencing point, read-only
-	// operations observe the data at the time the snapshot was
-	// established and ignore writes performed since.
+	// Step creates an internal sequencing point in the current transaction. An
+	// internal sequencing point establishes a snapshot baseline for subsequent
+	// read-only operations of the transaction's own writes: until the next
+	// sequencing point, read-only operations observe the transaction's writes at
+	// the time the snapshot was established and ignore writes performed by the
+	// transaction since.
+	//
+	// Additionally, for Read Committed transactions, Step also advances the
+	// transaction's external read snapshot (i.e. ReadTimestamp) to a timestamp
+	// captured from the local HLC clock. This ensures that subsequent read-only
+	// operations observe the writes of other transactions that were committed
+	// before the time the new snapshot was established. For more detail on the
+	// interaction between transaction isolation levels and Step, see
+	// (isolation.Level).PerStatementReadSnapshot.
 	//
 	// Step() can only be called after stepping mode has been enabled
 	// using ConfigureStepping(SteppingEnabled).
-	//
-	// The method is idempotent.
 	Step(context.Context) error
 
 	// GetReadSeqNum gets the read sequence point for the current transaction.
@@ -293,10 +300,10 @@ type TxnSender interface {
 
 	// ConfigureStepping sets the sequencing point behavior.
 	//
-	// Note that a Sender is initially in the non-stepping mode,
-	// i.e. uses reads-own-writes by default. This makes the step
-	// behavior opt-in and backward-compatible with existing code which
-	// does not need it.
+	// Note that a Sender is initially in the non-stepping mode, i.e. by default,
+	// it uses reads-own-writes and, under Read Committed, establishes a new read
+	// snapshot per batch. This makes the step behavior opt-in and
+	// backward-compatible with existing code which does not need it.
 	//
 	// Calling ConfigureStepping(SteppingEnabled) when the stepping mode
 	// is currently disabled implies calling Step(), for convenience.

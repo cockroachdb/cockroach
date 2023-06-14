@@ -134,15 +134,13 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 // reads and the value that it writes. In other words, the increment is atomic,
 // regardless of isolation level.
 //
-// The transaction history looks as follows:
+// The transaction history looks as follows for Snapshot and Serializable:
 //
-//	R1(A) W2(A,+1) W1(A,+1) [write-write restart] R1(A) W1(A,+1) C1
+//	R1(A) W2(A,+1) C2 W1(A,+1) [write-write restart] R1(A) W1(A,+1) C1
 //
-// TODO(nvanbenschoten): once we address #100133, update this test to advance
-// the read snapshot for ReadCommitted transactions between the read and the
-// increment. Demonstrate that doing so allows for increment to applied to a
-// newer value than that returned by the get, but that the increment is still
-// atomic.
+// The transaction history looks as follows for Read Committed:
+//
+//	R1(A) W2(A,+1) C2 W1(A,+1) C1
 func TestTxnLostIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -190,14 +188,19 @@ func TestTxnLostIncrement(t *testing.T) {
 			ir := b.Results[0].Rows[0]
 
 			// During the first attempt, this should encounter a write-write conflict
-			// and force a transaction retry.
-			if epoch == 0 {
+			// and force a transaction retry for Snapshot and Serializable isolation
+			// transactions. For ReadCommitted transactions which allow each batch to
+			// operate using a different read snapshot, the increment will be applied
+			// to a newer version of the key than that returned by the get, but the
+			// increment itself will still be atomic.
+			if epoch == 0 && isoLevel != isolation.ReadCommitted {
 				require.Error(t, err)
 				require.Regexp(t, "TransactionRetryWithProtoRefreshError: .*WriteTooOldError", err)
 				return err
 			}
 
-			// During the second attempt, this should succeed.
+			// During the second attempt (or first for Read Committed), this should
+			// succeed.
 			require.NoError(t, err)
 			require.Equal(t, int64(2), ir.ValueInt())
 			return nil
@@ -215,15 +218,17 @@ func TestTxnLostIncrement(t *testing.T) {
 }
 
 // TestTxnLostUpdate verifies that transactions are not susceptible to the
-// lost update anomaly, regardless of isolation level.
+// lost update anomaly if they run at Snapshot isolation or stronger, but
+// are susceptible to the lost update anomaly if they run at Read Committed
+// isolation.
 //
-// The transaction history looks as follows:
+// The transaction history looks as follows for Snapshot and Serializable:
 //
-//	R1(A) W2(A,"hi") W1(A,"oops!") C1 [write-write restart] R1(A) W1(A,"correct") C1
+//	R1(A) W2(A,"hi") C2 W1(A,"oops!") [write-write restart] R1(A) W1(A,"correct") C1
 //
-// TODO(nvanbenschoten): once we address #100133, update this test to advance
-// the read snapshot for ReadCommitted transactions between the read and the
-// write. Demonstrate that doing so allows for a lost update.
+// The transaction history looks as follows for Read Committed:
+//
+//	R1(A) W2(A,"hi") C2 W1(A,"oops!") C1
 func TestTxnLostUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -274,24 +279,33 @@ func TestTxnLostUpdate(t *testing.T) {
 			}
 
 			// During the first attempt, this should encounter a write-write conflict
-			// and force a transaction retry.
-			if epoch == 0 {
+			// and force a transaction retry for Snapshot and Serializable isolation
+			// transactions. For ReadCommitted transactions which allow each batch to
+			// operate using a different read snapshot, the write will succeed.
+			if epoch == 0 && isoLevel != isolation.ReadCommitted {
 				require.Error(t, err)
 				require.Regexp(t, "TransactionRetryWithProtoRefreshError: .*WriteTooOldError", err)
 				return err
 			}
 
-			// During the second attempt, this should succeed.
+			// During the second attempt (or first for Read Committed), this should
+			// succeed.
 			require.NoError(t, err)
 			return nil
 		})
 		require.NoError(t, err)
 
 		// Verify final value.
+		var expVal string
+		if isoLevel != isolation.ReadCommitted {
+			expVal = "correct"
+		} else {
+			expVal = "oops!"
+		}
 		gr, err := s.DB.Get(ctx, key)
 		require.NoError(t, err)
 		require.True(t, gr.Exists())
-		require.Equal(t, []byte("correct"), gr.ValueBytes())
+		require.Equal(t, []byte(expVal), gr.ValueBytes())
 	}
 
 	for _, isoLevel := range isolation.Levels() {
@@ -351,7 +365,7 @@ func TestTxnWeakIsolationLevelsTolerateWriteSkew(t *testing.T) {
 		// Finally, try to commit. This should succeed for isolation levels that
 		// allow for write skew. It should fail for isolation levels that do not.
 		err := txn1.Commit(ctx)
-		if isoLevel.ToleratesWriteSkew() {
+		if isoLevel != isolation.Serializable {
 			require.NoError(t, err)
 		} else {
 			require.Error(t, err)
@@ -361,6 +375,94 @@ func TestTxnWeakIsolationLevelsTolerateWriteSkew(t *testing.T) {
 
 	for _, isoLevel := range isolation.Levels() {
 		t.Run(isoLevel.String(), func(t *testing.T) { run(isoLevel) })
+	}
+}
+
+// TestTxnReadCommittedPerStatementReadSnapshot verifies that transactions run
+// under the read committed isolation level observe a new read snapshot on each
+// statement (or kv batch), while transactions run under stronger isolation
+// levels (snapshot and serializable) observe a single read snapshot for their
+// entire duration.
+func TestTxnReadCommittedPerStatementReadSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	run := func(isoLevel isolation.Level, mode kv.SteppingMode, step bool, expObserveExternalWrites bool) {
+		s := createTestDB(t)
+		defer s.Stop()
+		ctx := context.Background()
+		key := roachpb.Key("a")
+
+		incrementKey := func() {
+			_, err := s.DB.Inc(ctx, key, 1)
+			require.NoError(t, err)
+		}
+		incrementKey()
+
+		// Begin the test's transaction.
+		txn1 := s.DB.NewTxn(ctx, "txn1")
+		require.NoError(t, txn1.SetIsoLevel(isoLevel))
+		txn1.ConfigureStepping(ctx, mode)
+
+		// In a loop, increment the key outside the transaction, then read it in the
+		// transaction. If stepping is enabled, step the transaction before each read.
+		var readVals []int64
+		for i := 0; i < 3; i++ {
+			incrementKey()
+
+			if step {
+				require.NoError(t, txn1.Step(ctx))
+			}
+
+			// Read the key twice in the same batch, to demonstrate that regardless of
+			// isolation level or stepping mode, a single batch observes a single read
+			// snapshot.
+			b := txn1.NewBatch()
+			b.Get(key)
+			b.Scan(key, key.Next())
+			require.NoError(t, txn1.Run(ctx, b))
+			require.Equal(t, 2, len(b.Results))
+			require.Equal(t, 1, len(b.Results[0].Rows))
+			require.Equal(t, 1, len(b.Results[1].Rows))
+			require.Equal(t, b.Results[0].Rows[0], b.Results[1].Rows[0])
+			readVals = append(readVals, b.Results[0].Rows[0].ValueInt())
+		}
+
+		// Commit the transaction.
+		require.NoError(t, txn1.Commit(ctx))
+
+		// Verify that the transaction read the correct values.
+		var expVals []int64
+		if expObserveExternalWrites {
+			expVals = []int64{2, 3, 4}
+		} else {
+			expVals = []int64{1, 1, 1}
+		}
+		require.Equal(t, expVals, readVals)
+	}
+
+	for _, isoLevel := range isolation.Levels() {
+		t.Run(isoLevel.String(), func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "steppingMode", func(t *testing.T, modeBool bool) {
+				mode := kv.SteppingMode(modeBool)
+				if mode == kv.SteppingEnabled {
+					// If stepping is enabled, run a variant of the test where the
+					// transaction is stepped between reads and a variant of the test
+					// where it is not.
+					testutils.RunTrueAndFalse(t, "step", func(t *testing.T, step bool) {
+						// Expect a new read snapshot on each kv operation if the
+						// transaction is read committed and is manually stepped.
+						expObserveExternalWrites := isoLevel == isolation.ReadCommitted && step
+						run(isoLevel, mode, step, expObserveExternalWrites)
+					})
+				} else {
+					// Expect a new read snapshot on each kv operation if the
+					// transaction is read committed.
+					expObserveExternalWrites := isoLevel == isolation.ReadCommitted
+					run(isoLevel, mode, false, expObserveExternalWrites)
+				}
+			})
+		})
 	}
 }
 
