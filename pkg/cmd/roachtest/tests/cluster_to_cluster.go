@@ -606,9 +606,19 @@ AS OF SYSTEM TIME '%s'`, startTimeDecimal, aost)
 		rd.t.L().Printf("fingerprinting the destination tenant took %s", fingerprintingDuration)
 		return nil
 	})
-
 	// If the goroutine gets cancelled or fataled, return before comparing fingerprints.
 	require.NoError(rd.t, fingerPrintMonitor.WaitE())
+	if srcFingerprint != destFingerprint {
+		startHlc := hlc.Timestamp{WallTime: startTime.UnixNano()}
+		endHlc := hlc.Timestamp{WallTime: endTime.UnixNano()}
+		rd.t.L().Printf("fingerpint mismatch: conducting table level fingerprints")
+		srcTenantConn := rd.c.Conn(ctx, rd.t.L(), 1, option.TenantName(rd.setup.src.name))
+		dstTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.rs.srcNodes+1, option.TenantName(rd.setup.dst.name))
+		require.NoError(rd.t, replicationutils.InvestigateFingerprints(ctx, srcTenantConn, dstTenantConn,
+			startHlc,
+			endHlc))
+		rd.t.L().Printf("fingerprints by table seem to match")
+	}
 	require.Equal(rd.t, srcFingerprint, destFingerprint)
 }
 

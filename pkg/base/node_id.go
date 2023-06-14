@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -231,15 +230,6 @@ func (c *SQLIDContainer) OptionalNodeID() (roachpb.NodeID, bool) {
 		return 0, false
 	}
 	return (*NodeIDContainer)(c).Get(), true
-}
-
-// OptionalNodeIDErr is like OptionalNodeID, but returns an error (referring to
-// the optionally supplied GitHub issues) if the ID is not present.
-func (c *SQLIDContainer) OptionalNodeIDErr(issue int) (roachpb.NodeID, error) {
-	if (*NodeIDContainer)(c).standaloneSQLInstance {
-		return 0, errorutil.UnsupportedWithMultiTenancy(issue)
-	}
-	return (*NodeIDContainer)(c).Get(), nil
 }
 
 // SQLInstanceID returns the wrapped SQLInstanceID.
