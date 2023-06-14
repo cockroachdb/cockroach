@@ -626,6 +626,10 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.latencyFunc = ds.rpcContext.RemoteClocks.Latency
 	}
 
+	if cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch != nil {
+		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
+	}
+
 	if cfg.TestingKnobs.BatchRequestInterceptor != nil {
 		ds.BatchRequestInterceptor = cfg.TestingKnobs.BatchRequestInterceptor
 	}
