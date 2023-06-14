@@ -698,7 +698,7 @@ func (r *testRunner) runWorker(
 		t := &testImpl{
 			spec:                   &testToRun.spec,
 			cockroach:              cockroach[arch],
-			cockroachShort:         cockroachShort[arch],
+			cockroachShort:         cockroachEA[arch],
 			deprecatedWorkload:     workload[arch],
 			buildVersion:           binaryVersion,
 			artifactsDir:           artifactsDir,
