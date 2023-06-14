@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -121,7 +123,8 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		// early as the delete will not work.
 		modificationTime := desc.GetModificationTime().GoTime()
 		if modificationTime.After(aost) {
-			return errors.Newf(
+			return pgerror.Newf(
+				pgcode.ObjectNotInPrerequisiteState,
 				"found a recent schema change on the table at %s, aborting",
 				modificationTime.Format(time.RFC3339),
 			)
@@ -134,7 +137,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		rowLevelTTL = *desc.GetRowLevelTTL()
 
 		if rowLevelTTL.Pause {
-			return errors.Newf("ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
+			return pgerror.Newf(pgcode.OperatorIntervention, "ttl jobs on table %s are currently paused", tree.Name(desc.GetName()))
 		}
 
 		tn, err := descs.GetObjectName(ctx, txn, descsCol, desc)
