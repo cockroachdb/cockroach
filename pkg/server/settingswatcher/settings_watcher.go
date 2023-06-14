@@ -330,15 +330,26 @@ func (s *SettingsWatcher) setLocked(
 	// tenant, or because the new version <= old version).
 	if key == versionSettingKey && !s.codec.ForSystemTenant() {
 		var newVersion clusterversion.ClusterVersion
-		oldVersion := s.settings.Version.ActiveVersion(ctx)
+		oldVersion := s.settings.Version.ActiveVersionOrEmpty(ctx)
 		if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
 			log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
 		} else if newVersion.LessEq(oldVersion.Version) {
 			// Nothing to do.
-		} else if err := s.settings.Version.SetActiveVersion(ctx, newVersion); err != nil {
-			log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
-		} else if newVersion != oldVersion {
-			log.Infof(ctx, "set cluster version from %v to: %v", oldVersion, newVersion)
+		} else {
+			// Check if cluster version setting is initialized. If it is empty then it is not
+			// initialized.
+			if oldVersion.Version.Equal(roachpb.Version{}) {
+				// Cluster version setting not initialized.
+				if err := clusterversion.Initialize(ctx, newVersion.Version, &s.settings.SV); err != nil {
+					log.Fatalf(ctx, "failed to initialize cluster version setting: %s", err.Error())
+					return
+				}
+			}
+			if err := s.settings.Version.SetActiveVersion(ctx, newVersion); err != nil {
+				log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
+			} else {
+				log.Infof(ctx, "set cluster version from %v to: %v", oldVersion, newVersion)
+			}
 		}
 		return
 	}

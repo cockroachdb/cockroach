@@ -1054,18 +1054,6 @@ func (ts *TestServer) StartTenant(
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
 	}
-	// Verify that the settings object that was passed in has
-	// initialized the version setting. This is pretty much necessary
-	// for secondary tenants. See the comments at the beginning of
-	// `runStartSQL()` in cli/mt_start_sql.go and
-	// `makeSharedProcessTenantServerConfig()` in
-	// server_controller_new_server.go.
-	//
-	// The version is initialized in MakeTestingClusterSettings(). This
-	// assertion is there to prevent inadvertent changes to
-	// MakeTestingClusterSettings() and as a guardrail for tests that
-	// pass a custom params.Settings.
-	clusterversion.AssertInitialized(ctx, &st.SV)
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
