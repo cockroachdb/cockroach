@@ -1266,7 +1266,7 @@ func (r *testRunner) collectClusterArtifacts(
 	if err := c.FetchTimeseriesData(ctx, l); err != nil {
 		l.Printf("failed to fetch timeseries data: %s", err)
 	}
-	if err := c.FetchDebugZip(ctx, l); err != nil {
+	if err := c.FetchDebugZip(ctx, l, "debug.zip"); err != nil {
 		l.Printf("failed to collect zip: %s", err)
 	}
 }
