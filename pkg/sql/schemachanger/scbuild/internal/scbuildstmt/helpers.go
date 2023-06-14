@@ -338,10 +338,10 @@ func getNonDropColumns(b BuildCtx, tableID catid.DescID) (ret []*scpb.Column) {
 // getColumnIDFromColumnName looks up a column's ID by its name.
 // If no column with this name exists, 0 will be returned.
 func getColumnIDFromColumnName(
-	b BuilderState, tableID catid.DescID, columnName tree.Name,
+	b BuilderState, tableID catid.DescID, columnName tree.Name, required bool,
 ) catid.ColumnID {
 	colElems := b.ResolveColumn(tableID, columnName, ResolveParams{
-		IsExistenceOptional: true,
+		IsExistenceOptional: !required,
 		RequiredPrivilege:   privilege.CREATE,
 	})
 
@@ -362,12 +362,15 @@ func getColumnIDFromColumnName(
 func mustGetColumnIDFromColumnName(
 	b BuildCtx, tableID catid.DescID, columnName tree.Name,
 ) catid.ColumnID {
-	colID := getColumnIDFromColumnName(b, tableID, columnName)
+	colID := getColumnIDFromColumnName(b, tableID, columnName, false)
 	if colID == 0 {
-		panic(errors.AssertionFailedf("cannot find column with name %v", columnName))
+		panic(errors.AssertionFailedf("programming erorr: cannot find column with name %v", columnName))
 	}
 	return colID
 }
+
+// Currently unused.
+var _ = mustGetColumnIDFromColumnName
 
 func mustGetTableIDFromTableName(b BuildCtx, tableName tree.TableName) catid.DescID {
 	tableElems := b.ResolveTable(tableName.ToUnresolvedObjectName(), ResolveParams{
@@ -830,7 +833,7 @@ func ExtractColumnIDsInExpr(
 			return true, expr, nil
 		}
 
-		colID := getColumnIDFromColumnName(b, tableID, c.ColumnName)
+		colID := getColumnIDFromColumnName(b, tableID, c.ColumnName, false /* required */)
 		colIDs.Add(colID)
 		return false, expr, nil
 	})

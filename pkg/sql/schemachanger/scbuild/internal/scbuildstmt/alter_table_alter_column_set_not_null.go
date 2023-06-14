@@ -22,7 +22,7 @@ func alterTableSetNotNull(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableSetNotNull,
 ) {
 	alterColumnPreChecks(b, tn, tbl, t.Column)
-	columnID := mustGetColumnIDFromColumnName(b, tbl.TableID, t.Column)
+	columnID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /*required */)
 	if isColNotNull(b, tbl.TableID, columnID) {
 		return
 	}
