@@ -1221,9 +1221,7 @@ const (
 
 // DistributeCerts will generate and distribute certificates to all the nodes.
 func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) error {
-	if found, err := c.checkForCertificates(ctx, l); err != nil {
-		return err
-	} else if found {
+	if c.checkForCertificates(ctx, l) {
 		return nil
 	}
 
@@ -1285,15 +1283,11 @@ tar cvf %[3]s certs
 func (c *SyncedCluster) DistributeTenantCerts(
 	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, tenantID int,
 ) error {
-	if found, err := hostCluster.checkForTenantCertificates(ctx, l); err != nil {
-		return err
-	} else if found {
+	if hostCluster.checkForTenantCertificates(ctx, l) {
 		return nil
 	}
 
-	if found, err := hostCluster.checkForCertificates(ctx, l); err != nil {
-		return err
-	} else if !found {
+	if !hostCluster.checkForCertificates(ctx, l) {
 		return errors.New("host cluster missing certificate bundle")
 	}
 
@@ -1392,7 +1386,7 @@ func (c *SyncedCluster) getFileFromFirstNode(
 
 // checkForCertificates checks if the cluster already has a certs bundle created
 // on the first node.
-func (c *SyncedCluster) checkForCertificates(ctx context.Context, l *logger.Logger) (bool, error) {
+func (c *SyncedCluster) checkForCertificates(ctx context.Context, l *logger.Logger) bool {
 	dir := ""
 	if c.IsLocal() {
 		dir = c.localVMDir(1)
@@ -1402,9 +1396,7 @@ func (c *SyncedCluster) checkForCertificates(ctx context.Context, l *logger.Logg
 
 // checkForTenantCertificates checks if the cluster already has a tenant-certs bundle created
 // on the first node.
-func (c *SyncedCluster) checkForTenantCertificates(
-	ctx context.Context, l *logger.Logger,
-) (bool, error) {
+func (c *SyncedCluster) checkForTenantCertificates(ctx context.Context, l *logger.Logger) bool {
 	dir := ""
 	if c.IsLocal() {
 		dir = c.localVMDir(1)
