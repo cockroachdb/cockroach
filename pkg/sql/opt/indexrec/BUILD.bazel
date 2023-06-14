@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -48,5 +47,3 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
-
-get_x_data(name = "get_x_data")

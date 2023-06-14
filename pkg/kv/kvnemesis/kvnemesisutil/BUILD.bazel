@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 # gazelle:exclude gen-crdb_test_off.go
@@ -37,5 +36,3 @@ genrule(
     outs = ["gen-crdb_test_off.go"],
     cmd = REMOVE_GO_BUILD_CONSTRAINTS,
 )
-
-get_x_data(name = "get_x_data")

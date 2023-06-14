@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 
@@ -32,5 +31,3 @@ eg_go_filegroup(
 
 # Define gen rules for individual eg.go files.
 gen_eg_go_rules(targets)
-
-get_x_data(name = "get_x_data")
