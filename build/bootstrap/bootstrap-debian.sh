@@ -46,9 +46,9 @@ sudo tar -C /usr --strip-components=1 -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
 
 # Install Go.
 trap 'rm -f /tmp/go.tgz' EXIT
-curl -fsSL https://dl.google.com/go/go1.19.6.linux-amd64.tar.gz > /tmp/go.tgz
+curl -fsSL https://dl.google.com/go/go1.19.10.linux-amd64.tar.gz > /tmp/go.tgz
 sha256sum -c - <<EOF
-e3410c676ced327aec928303fef11385702a5562fd19d9a1750d5a2979763c3d  /tmp/go.tgz
+8b045a483d3895c6edba2e90a9189262876190dbbd21756870cdd63821810677  /tmp/go.tgz
 EOF
 sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 

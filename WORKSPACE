@@ -170,15 +170,15 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.19.6.darwin-amd64.tar.gz", "1d4c893d34183143eb79e8be18f099014f9d91786eabf51bf124a84f6a6f7345"),
-        "darwin_arm64": ("go1.19.6.darwin-arm64.tar.gz", "dfbf3e4686dd7fee7a9c0223c52b124c1af5f02508baf07e1e59489cd9df2a90"),
-        "freebsd_amd64": ("go1.19.6.freebsd-amd64.tar.gz", "f4b432ebe462a6edd6131e94360b9f0fb3b8136bba39caeacb4aa22a89ba1dd8"),
-        "linux_amd64": ("go1.19.6.linux-amd64.tar.gz", "d78cb765b95fe10f559cc6a5d59841f23b9252911af4f2a322ba3f804e2bbcda"),
-        "linux_arm64": ("go1.19.6.linux-arm64.tar.gz", "2ae769c5367b21f82a4fb25a1cf5cb42625431b82a6d34e7aa120083d607b316"),
-        "windows_amd64": ("go1.19.6.windows-amd64.tar.gz", "1f8233566b6604d72b73665e0047c9647a226581892e64d4b460cec1cb39657e"),
+        "darwin_amd64": ("go1.19.10.darwin-amd64.tar.gz", "0b298b1c3e89357c86825f375928e6e9d41ad84c7d7b190a2a6730e0706165b3"),
+        "darwin_arm64": ("go1.19.10.darwin-arm64.tar.gz", "7cc8ab7e8e1225b57f44ec8fb26bce70ddea8e076dfdf118ed63fef0c9ff19fb"),
+        "freebsd_amd64": ("go1.19.10.freebsd-amd64.tar.gz", "0d22265662eaa9b8136223f8ab68f5c06c58c6a6311748fb810e830ebd17cbe2"),
+        "linux_amd64": ("go1.19.10.linux-amd64.tar.gz", "dfc8a696686d00065ba374209a3a7858926641e0fb55741dd89c357446d69a1e"),
+        "linux_arm64": ("go1.19.10.linux-arm64.tar.gz", "e36d6ebfce3f244e245a2969f83d26c8dff2bf8b72207822d9d66829cd93d067"),
+        "windows_amd64": ("go1.19.10.windows-amd64.tar.gz", "dab9df83e0768ff96eddd85a4def88db05ce5a8a0c439abcecd066888906c516"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230227-221815/{}"],
-    version = "1.19.6",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230614-165357/{}"],
+    version = "1.19.10",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -662,8 +662,8 @@ new_local_repository(
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.19.5fips.linux-amd64.tar.gz", "b143b3c384d70700f3ad171dcf9fa1a4b434efa0012c4b1d4ebfb6a0cb7a50b6"),
+        "linux_amd64": ("go1.19.10fips.linux-amd64.tar.gz", "c9348fc964fb2893471a6ba91feead205a6f83cd427bc3847949382417005496"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go-fips/20230207-040328/{}"],
-    version = "1.19.5fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230614-165357/{}"],
+    version = "1.19.10fips",
 )
