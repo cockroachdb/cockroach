@@ -12,6 +12,7 @@ package keys
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -166,8 +167,17 @@ func (e sqlEncoder) TenantPrefix() roachpb.Key {
 
 // TenantSpan returns a span representing the tenant's keyspace.
 func (e sqlEncoder) TenantSpan() roachpb.Span {
+	// TODO(arul): add comments
 	key := *e.buf
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
+	_, tenantID, err := DecodeTenantPrefix(key)
+	if err != nil {
+		panic(fmt.Sprintf("unexpected error decoding tenant prefix: %v", err))
+	}
+	if tenantID == roachpb.SystemTenantID {
+		return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
+	}
+	nextTenantPrefix := MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID.ToUint64() + 1))
+	return roachpb.Span{Key: key, EndKey: nextTenantPrefix}
 }
 
 // TablePrefix returns the key prefix used for the table's data.

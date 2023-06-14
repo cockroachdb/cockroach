@@ -485,10 +485,11 @@ func CreateTenantRecord(
 	// already have the split we need.
 	//
 	// [^1]: See ComputeSplitKey in spanconfig.StoreReader.
-	tenantPrefixEnd := tenantPrefix.PrefixEnd()
+	// TODO(arul): fix comment ^ if needed.
+	nextTenantPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID + 1))
 	endRecordTarget := spanconfig.MakeTargetFromSpan(roachpb.Span{
-		Key:    tenantPrefixEnd,
-		EndKey: tenantPrefixEnd.Next(),
+		Key:    nextTenantPrefix,
+		EndKey: nextTenantPrefix.Next(),
 	})
 
 	// Check if a record exists for the next tenant's startKey from when the next
