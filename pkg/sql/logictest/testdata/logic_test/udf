@@ -2464,16 +2464,15 @@ SELECT imp(), (1,2,'a')::imp = imp(), pg_typeof(imp())
 ----
 (1,2,a)  true  imp
 
-# TODO(#90080): Allow star expressions in UDFs.
-# statement ok
-# CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
-#   SELECT * FROM imp
-# $$
-#
-# query TBT
-# SELECT imp_star(), (1,2,'a')::imp = imp_star(), pg_typeof(imp_star())
-# ----
-# (1,2,a)  true  imp
+statement ok
+CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
+  SELECT * FROM imp
+$$
+
+query TBT
+SELECT imp_star(), (1,2,'a')::imp = imp_star(), pg_typeof(imp_star())
+----
+(1,2,a)  true  imp
 
 statement ok
 INSERT INTO imp VALUES (100, 200, 'z')
@@ -3087,10 +3086,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100272  f_93314         105  1546506610  14  false  false  false  v  0  100271  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100274  f_93314_alias   105  1546506610  14  false  false  false  v  0  100273  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100278  f_93314_comp    105  1546506610  14  false  false  false  v  0  100275  ·  {}  NULL  SELECT (1, 2);
-100279  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100277  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100273  f_93314         105  1546506610  14  false  false  false  v  0  100272  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100275  f_93314_alias   105  1546506610  14  false  false  false  v  0  100274  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100279  f_93314_comp    105  1546506610  14  false  false  false  v  0  100276  ·  {}  NULL  SELECT (1, 2);
+100280  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100278  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.
@@ -3459,6 +3458,8 @@ $func$;
 # Regression test for #100915. Do not error when attempting to inline a UDF when
 # it has a subquery argument that corresponds to a parameter that is referenced
 # multiple times in the UDF body.
+subtest regression_100915
+
 statement ok
 CREATE FUNCTION f100915(i INT) RETURNS BOOL STABLE LANGUAGE SQL AS $$
   SELECT i = 0 OR i = 10
@@ -3532,3 +3533,36 @@ SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%';
 
 statement error pgcode 0A000 unimplemented: cannot create UDFs under a temporary schema
 CREATE FUNCTION $temp_schema_102964.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+# Regression test for #104927. Correctly resolve table references in UDFs as
+# TupleStars.
+subtest regression_104927
+
+statement ok
+CREATE TABLE t104927 (
+  i INT,
+  s STRING
+);
+INSERT INTO t104927 VALUES (1, 'foo');
+
+query T
+SELECT json_agg(r) FROM (
+  SELECT i, s
+  FROM t104927
+) AS r
+----
+[{"i": 1, "s": "foo"}]
+
+statement ok
+CREATE FUNCTION f104927() RETURNS TEXT LANGUAGE SQL AS $$
+  SELECT json_agg(r) FROM (
+    SELECT i, s
+    FROM t104927
+  ) AS r
+$$
+
+# The output should match the output above where the query was run directly.
+query T
+SELECT f104927()
+----
+[{"i": 1, "s": "foo"}]
