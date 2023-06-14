@@ -14,14 +14,16 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMakeTestRegistry(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "preferSSD", func(t *testing.T, preferSSD bool) {
-		r, err := makeTestRegistry(spec.AWS, "foo", "zone123", preferSSD)
+		r, err := makeTestRegistry(spec.AWS, "foo", "zone123", preferSSD, false)
 		require.NoError(t, err)
+
 		require.Equal(t, preferSSD, r.preferSSD)
 		require.Equal(t, "zone123", r.zones)
 		require.Equal(t, "foo", r.instanceType)
@@ -40,6 +42,11 @@ func TestMakeTestRegistry(t *testing.T) {
 		require.Equal(t, "foo", s.InstanceType)
 		require.EqualValues(t, 4, s.CPUs)
 		require.True(t, s.TerminateOnMigration)
-	})
 
+		s = r.MakeClusterSpec(10, spec.CPU(16), spec.Arch(vm.ArchARM64))
+		require.EqualValues(t, 10, s.NodeCount)
+		require.Equal(t, "foo", s.InstanceType)
+		require.EqualValues(t, 16, s.CPUs)
+		require.EqualValues(t, vm.ArchARM64, s.Arch)
+	})
 }

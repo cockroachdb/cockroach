@@ -74,7 +74,9 @@ func TestShouldPost(t *testing.T) {
 		{false, 1, "token", "master", true},
 	}
 
-	reg, _ := makeTestRegistry(spec.GCE, "", "", false)
+	reg, err := makeTestRegistry(spec.GCE, "", "", false, false)
+	require.NoError(t, err)
+
 	for _, c := range testCases {
 		t.Setenv("GITHUB_API_TOKEN", c.envGithubAPIToken)
 		t.Setenv("TC_BUILD_BRANCH", c.envTcBuildBranch)
@@ -107,34 +109,40 @@ func TestCreatePostRequest(t *testing.T) {
 		clusterCreationFailed bool
 		loadTeamsFailed       bool
 		localSSD              bool
+		arch                  vm.CPUArch
 		category              issueCategory
 		expectedPost          bool
 		expectedParams        map[string]string
 	}{
-		{true, false, false, false, otherErr, true,
+		{true, false, false, false, "", otherErr, true,
+
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
 				"fs":        "ext4",
 				"ssd":       "0",
 				"cpu":       "4",
+				"arch":      "amd64",
 				"localSSD":  "false",
 			}),
 		},
-		{true, false, false, true, clusterCreationErr, true,
+		{true, false, false, true, vm.ArchARM64, clusterCreationErr, true,
+
 			prefixAll(map[string]string{
 				"cloud":     "gce",
 				"encrypted": "false",
 				"fs":        "ext4",
 				"ssd":       "0",
 				"cpu":       "4",
+				"arch":      "arm64",
 				"localSSD":  "true",
 			}),
 		},
 		// Assert that release-blocker label exists when !nonReleaseBlocker
 		// Also ensure that in the event of a failed cluster creation,
 		// nil `vmOptions` and `clusterImpl` are not dereferenced
-		{false, true, false, false, sshErr, true,
+		{false, true, false, false, "", sshErr, true,
+
 			prefixAll(map[string]string{
 				"cloud": "gce",
 				"ssd":   "0",
@@ -142,13 +150,14 @@ func TestCreatePostRequest(t *testing.T) {
 			}),
 		},
 		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, otherErr, false, nil},
+		{true, false, true, false, "", otherErr, false, nil},
 	}
 
-	reg, _ := makeTestRegistry(spec.GCE, "", "", false)
+	reg, err := makeTestRegistry(spec.GCE, "", "", false, false)
+	require.NoError(t, err)
 
 	for _, c := range testCases {
-		clusterSpec := reg.MakeClusterSpec(1)
+		clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
 
 		testSpec := &registry.TestSpec{
 			Name:              "github_test",
@@ -162,7 +171,7 @@ func TestCreatePostRequest(t *testing.T) {
 			l:    nilLogger(),
 		}
 
-		testClusterImpl := &clusterImpl{spec: clusterSpec}
+		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64}
 		vo := vm.DefaultCreateOpts()
 		vmOpts := &vo
 

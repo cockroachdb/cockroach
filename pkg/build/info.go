@@ -17,6 +17,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -35,11 +36,12 @@ var (
 	cgoTargetTriple string
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
-	Distribution  = "OSS"
-	typ           string // Type of this build: <empty>, "development", or "release"
-	channel       = "unknown"
-	envChannel    = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
-	binaryVersion = computeVersion(tag)
+	Distribution      = "OSS"
+	typ               string // Type of this build: <empty>, "development", or "release"
+	channel           = "unknown"
+	envChannel        = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+	enabledAssertions = buildutil.CrdbTestBuild
+	binaryVersion     = computeVersion(tag)
 )
 
 const (
@@ -113,7 +115,8 @@ func (b Info) Long() string {
 	fmt.Fprintf(tw, "Go Version:       %s\n", b.GoVersion)
 	fmt.Fprintf(tw, "C Compiler:       %s\n", b.CgoCompiler)
 	fmt.Fprintf(tw, "Build Commit ID:  %s\n", b.Revision)
-	fmt.Fprintf(tw, "Build Type:       %s", b.Type) // No final newline: cobra prints one for us.
+	fmt.Fprintf(tw, "Build Type:       %s\n", b.Type)
+	fmt.Fprintf(tw, "Enabled Assertions: %t", b.EnabledAssertions) // No final newline: cobra prints one for us.
 	_ = tw.Flush()
 	return buf.String()
 }
@@ -139,17 +142,18 @@ func (b Info) Timestamp() (int64, error) {
 // GetInfo returns an Info struct populated with the build information.
 func GetInfo() Info {
 	return Info{
-		GoVersion:       runtime.Version(),
-		Tag:             tag,
-		Time:            utcTime,
-		Revision:        rev,
-		CgoCompiler:     cgoCompiler,
-		CgoTargetTriple: cgoTargetTriple,
-		Platform:        platform,
-		Distribution:    Distribution,
-		Type:            typ,
-		Channel:         channel,
-		EnvChannel:      envChannel,
+		GoVersion:         runtime.Version(),
+		Tag:               tag,
+		Time:              utcTime,
+		Revision:          rev,
+		CgoCompiler:       cgoCompiler,
+		CgoTargetTriple:   cgoTargetTriple,
+		Platform:          platform,
+		Distribution:      Distribution,
+		Type:              typ,
+		Channel:           channel,
+		EnvChannel:        envChannel,
+		EnabledAssertions: enabledAssertions,
 	}
 }
 

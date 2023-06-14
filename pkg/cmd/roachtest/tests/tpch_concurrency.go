@@ -198,9 +198,11 @@ func registerTPCHConcurrency(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "tpch_concurrency",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Name:      "tpch_concurrency",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(numNodes),
+
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* lowerRefreshSpansBytes */, false /* disableStreamer */)
 		},
@@ -230,9 +232,11 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 	// TODO(yuzefovich): remove this once the streamer is stabilized.
 	r.Add(registry.TestSpec{
-		Name:    "tpch_concurrency/no_streamer",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Name:      "tpch_concurrency/no_streamer",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(numNodes),
+
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* lowerRefreshSpansBytes */, true /* disableStreamer */)
 		},

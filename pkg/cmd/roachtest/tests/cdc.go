@@ -25,7 +25,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -313,9 +313,6 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 }
 
 func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping cdc/bank under ARM64.")
-	}
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
 	c.Run(ctx, c.All(), `mkdir -p logs`)
@@ -683,9 +680,11 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:            "cdc/tpcc-1000",
-		Owner:           registry.OwnerCDC,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:      "cdc/tpcc-1000",
+		Owner:     registry.OwnerCDC,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -698,9 +697,11 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/tpcc-1000/sink=null",
-		Owner:           registry.OwnerCDC,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:      "cdc/tpcc-1000/sink=null",
+		Owner:     registry.OwnerCDC,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -715,9 +716,11 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/initial-scan",
-		Owner:           registry.OwnerCDC,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:      "cdc/initial-scan",
+		Owner:     registry.OwnerCDC,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -731,9 +734,11 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/sink-chaos",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:      "cdc/sink-chaos",
+		Owner:     `cdc`,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -747,9 +752,11 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/crdb-chaos",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:      "cdc/crdb-chaos",
+		Owner:     `cdc`,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -770,7 +777,9 @@ func registerCDC(r registry.Registry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -789,9 +798,11 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:      "cdc/cloud-sink-gcs/rangefeed=true",
+		Owner:     `cdc`,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -810,9 +821,11 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/pubsub-sink",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:      "cdc/pubsub-sink",
+		Owner:     `cdc`,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -836,9 +849,11 @@ func registerCDC(r registry.Registry) {
 	// TODO(rui): Change to a shorter test as it just needs to validate
 	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:            "cdc/pubsub-sink/assume-role",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:      "cdc/pubsub-sink/assume-role",
+		Owner:     `cdc`,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -863,9 +878,11 @@ func registerCDC(r registry.Registry) {
 	// TODO(rui): Change to a shorter test as it just needs to validate
 	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:            "cdc/cloud-sink-gcs/assume-role",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		Name:      "cdc/cloud-sink-gcs/assume-role",
+		Owner:     `cdc`,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -903,18 +920,21 @@ func registerCDC(r registry.Registry) {
 		})
 	*/
 	r.Add(registry.TestSpec{
-		Name:            "cdc/kafka-auth",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(1),
+		Name:      "cdc/kafka-auth",
+		Owner:     `cdc`,
+		Benchmark: true,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(1, spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/bank",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(4),
+		Name:  "cdc/bank",
+		Owner: `cdc`,
+		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Timeout:         30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

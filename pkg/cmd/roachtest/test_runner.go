@@ -58,6 +58,8 @@ var (
 
 	// reference error used when cluster creation fails for a test
 	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
+
+	prng, _ = randutil.NewLockedPseudoRand()
 )
 
 // testRunner runs tests.
@@ -351,11 +353,12 @@ func defaultClusterAllocator(
 	allocateCluster := func(
 		ctx context.Context,
 		t registry.TestSpec,
+		arch vm.CPUArch,
 		alloc *quotapool.IntAlloc,
 		artifactsDir string,
 		wStatus *workerStatus,
 	) (*clusterImpl, *vm.CreateOpts, error) {
-		wStatus.SetStatus("creating cluster")
+		wStatus.SetStatus(fmt.Sprintf("creating cluster (arch=%q)", arch))
 		defer wStatus.SetStatus("")
 
 		existingClusterName := clustersOpt.clusterName
@@ -372,6 +375,9 @@ func defaultClusterAllocator(
 				skipStop:       r.config.skipClusterStopOnAttach,
 				skipWipe:       r.config.skipClusterWipeOnAttach,
 			}
+			// TODO(srosenberg): we need to think about validation here. Attaching to an incompatible cluster, e.g.,
+			// using arm64 AMI with amd64 binary, would result in obscure errors. The test runner ensures compatibility
+			// during cluster reuse, whereas attachment via CLI (e.g., via roachprod) does not.
 			lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
 			c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
 			if err == nil {
@@ -382,11 +388,11 @@ func defaultClusterAllocator(
 			}
 			// Fall through to create new cluster with name override.
 			lopt.l.PrintfCtx(
-				ctx, "Creating new cluster with custom name %q for test %s: %s",
-				clustersOpt.clusterName, t.Name, t.Cluster,
+				ctx, "Creating new cluster with custom name %q for test %s: %s (arch=%q)",
+				clustersOpt.clusterName, t.Name, t.Cluster, arch,
 			)
 		} else {
-			lopt.l.PrintfCtx(ctx, "Creating new cluster for test %s: %s", t.Name, t.Cluster)
+			lopt.l.PrintfCtx(ctx, "Creating new cluster for test %s: %s (arch=%q)", t.Name, t.Cluster, arch)
 		}
 
 		cfg := clusterConfig{
@@ -396,6 +402,7 @@ func defaultClusterAllocator(
 			username:     clustersOpt.user,
 			localCluster: clustersOpt.typ == localCluster,
 			alloc:        alloc,
+			arch:         arch,
 		}
 		return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
 	}
@@ -405,6 +412,7 @@ func defaultClusterAllocator(
 type clusterAllocatorFn func(
 	ctx context.Context,
 	t registry.TestSpec,
+	arch vm.CPUArch,
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
@@ -485,8 +493,6 @@ func (r *testRunner) runWorker(
 		}
 	}()
 
-	prng, _ := randutil.NewPseudoRand()
-
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -532,7 +538,7 @@ func (r *testRunner) runWorker(
 		// Attempt to reuse existing cluster.
 		if c != nil && testToRun.canReuseCluster {
 			err = func() error {
-				l.PrintfCtx(ctx, "Using existing cluster: %s. Wiping", c.name)
+				l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
 				if err := c.WipeE(ctx, l); err != nil {
 					return err
 				}
@@ -559,10 +565,48 @@ func (r *testRunner) runWorker(
 				// Let's attempt to create a fresh one.
 				testToRun.canReuseCluster = false
 			}
+			// sanity check
+			if c.spec.Cloud != spec.Local && c.spec.Arch != "" && c.arch != c.spec.Arch {
+				return errors.Newf("cluster arch %q does not match specified arch %q on cloud: %q", c.arch, c.spec.Arch, c.spec.Cloud)
+			}
+		}
+		arch := testToRun.spec.Cluster.Arch
+		// N.B. local cluster can mix different CPU architectures via emulation; e.g., mac silicon running x86.
+		if testToRun.canReuseCluster && c != nil && c.spec.Cloud != spec.Local {
+			// We're reusing a non-local cluster, so we must use the same arch.
+			arch = c.arch
+		}
+		if arch == "" {
+			// CPU architecture is unspecified, choose one according to the probability distribution.
+			arch = vm.ArchAMD64
+			if prng.Float64() < arm64Probability {
+				arch = vm.ArchARM64
+			} else if prng.Float64() < fipsProbability {
+				// N.B. branch is taken with probability (1 - arm64Probability) * fipsProbability which is P(fips | amd64).
+				// N.B. FIPS is only supported on 'amd64' at this time.
+				arch = vm.ArchFIPS
+			}
+			if testToRun.spec.Benchmark {
+				// TODO(srosenberg): enable after https://github.com/cockroachdb/cockroach/issues/104213
+				l.PrintfCtx(ctx, "Disabling randomly chosen arch=%q, %s", arch, testToRun.spec.Name)
+				arch = vm.ArchAMD64
+			}
+			l.PrintfCtx(ctx, "Using randomly chosen arch=%q, %s", arch, testToRun.spec.Name)
+		} else {
+			l.PrintfCtx(ctx, "Using specified arch=%q, %s", arch, testToRun.spec.Name)
+		}
+		// N.B. if canReuseCluster is false, then the previous cluster has been destroyed; new one will be created below.
+		if testToRun.canReuseCluster && c != nil && c.arch != arch {
+			// Non-local cluster that's being reused must have the same architecture as was ensured above.
+			if c.spec.Cloud != spec.Local {
+				return errors.New("infeasible path: non-local cluster arch mismatch")
+			}
+			// Local cluster is now reused to emulate a different CPU architecture.
+			c.arch = arch
 		}
 
 		// Verify that required native libraries are available.
-		if err = VerifyLibraries(testToRun.spec.NativeLibs); err != nil {
+		if err = VerifyLibraries(testToRun.spec.NativeLibs, arch); err != nil {
 			shout(ctx, l, stdout, "Library verification failed: %s", err)
 			return err
 		}
@@ -574,13 +618,14 @@ func (r *testRunner) runWorker(
 			// Create a new cluster if can't reuse or reuse attempt failed.
 			// N.B. non-reusable cluster would have been destroyed above.
 			wStatus.SetTest(nil /* test */, testToRun)
-			wStatus.SetStatus("creating cluster")
-			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
+			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, arch, testToRun.alloc, artifactsRootDir, wStatus)
 			if clusterCreateErr != nil {
 				clusterCreateErr = errors.Mark(clusterCreateErr, errClusterProvisioningFailed)
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
 					testToRun.spec.Name, clusterCreateErr)
+			} else {
+				l.PrintfCtx(ctx, "Created new cluster for test %s: %s (arch=%q)", testToRun.spec.Name, c.Name(), arch)
 			}
 		}
 		// Prepare the test's logger. Always set this up with real files, using a
@@ -606,9 +651,9 @@ func (r *testRunner) runWorker(
 		}
 		t := &testImpl{
 			spec:                   &testToRun.spec,
-			cockroach:              cockroach,
-			cockroachShort:         cockroachShort,
-			deprecatedWorkload:     workload,
+			cockroach:              cockroach[arch],
+			cockroachShort:         cockroachShort[arch],
+			deprecatedWorkload:     workload[arch],
 			buildVersion:           r.buildVersion,
 			artifactsDir:           artifactsDir,
 			artifactsSpec:          artifactsSpec,
@@ -633,6 +678,9 @@ func (r *testRunner) runWorker(
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		} else {
+			// Now run the test.
+			l.PrintfCtx(ctx, "Starting test: %s:%d on cluster=%s (arch=%q)", testToRun.spec.Name, testToRun.runNum, c.Name(), arch)
+
 			c.setTest(t)
 			err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
 
@@ -704,7 +752,9 @@ func (r *testRunner) runWorker(
 			}
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
-			getPerfArtifacts(ctx, l, c, t)
+			if t.spec.Benchmark {
+				getPerfArtifacts(ctx, l, c, t)
+			}
 		}
 	}
 }

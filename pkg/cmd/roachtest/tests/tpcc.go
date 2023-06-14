@@ -297,6 +297,7 @@ var tpccSupportedWarehouses = []struct {
 	// TODO(tbg): this number is copied from gce-n4cpu16. The real number should be a
 	// little higher, find out what it is.
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
+	{hardware: "aws-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 2100},
 	// Ditto.
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 }
@@ -504,6 +505,7 @@ func registerTPCC(r registry.Registry) {
 			runTPCCMixedHeadroom(ctx, t, c, cloud, 1)
 		},
 	})
+
 	r.Add(registry.TestSpec{
 		// run the same mixed-headroom test, but going back two versions
 		Name:              "tpcc/mixed-headroom/multiple-upgrades/" + mixedHeadroomSpec.String(),
@@ -1022,13 +1024,15 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    name,
-		Owner:   owner,
-		Cluster: nodes,
-		Tags:    b.Tags,
+		Name:      name,
+		Owner:     owner,
+		Benchmark: true,
+		Cluster:   nodes,
+		Tags:      b.Tags,
 		// NB: intentionally not enabling encryption-at-rest to produce
 		// consistent results.
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
+
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
@@ -1378,117 +1382,6 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		ttycolor.Stdout(ttycolor.Green)
 		t.L().Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
-	}
-}
-
-func registerTPCCBench(r registry.Registry) {
-	specs := []tpccBenchSpec{
-		{
-			Nodes: 3,
-			CPUs:  4,
-
-			LoadWarehouses: 1000,
-			EstimatedMax:   325,
-		},
-		{
-			Nodes: 3,
-			CPUs:  16,
-
-			LoadWarehouses: 2000,
-			EstimatedMax:   1300,
-		},
-		// objective 1, key result 1.
-		{
-			Nodes: 30,
-			CPUs:  16,
-
-			LoadWarehouses: 10000,
-			EstimatedMax:   5300,
-		},
-		// objective 1, key result 2.
-		{
-			Nodes:      18,
-			CPUs:       16,
-			LoadConfig: singlePartitionedLoadgen,
-
-			LoadWarehouses: 10000,
-			EstimatedMax:   8000,
-		},
-		// objective 2, key result 1.
-		{
-			Nodes: 7,
-			CPUs:  16,
-			Chaos: true,
-
-			LoadWarehouses: 5000,
-			EstimatedMax:   2000,
-		},
-		// objective 3, key result 1.
-		{
-			Nodes:        3,
-			CPUs:         16,
-			Distribution: multiZone,
-
-			LoadWarehouses: 2000,
-			EstimatedMax:   1000,
-		},
-		// objective 3, key result 2.
-		{
-			Nodes:        9,
-			CPUs:         16,
-			Distribution: multiRegion,
-			LoadConfig:   multiLoadgen,
-
-			LoadWarehouses: 12000,
-			EstimatedMax:   8000,
-		},
-		// objective 4, key result 2.
-		{
-			Nodes: 64,
-			CPUs:  16,
-
-			LoadWarehouses: 50000,
-			EstimatedMax:   40000,
-		},
-
-		// See https://github.com/cockroachdb/cockroach/issues/31409 for the next three specs.
-		{
-			Nodes: 6,
-			CPUs:  16,
-
-			LoadWarehouses: 5000,
-			EstimatedMax:   3000,
-			LoadConfig:     singlePartitionedLoadgen,
-		},
-		{
-			Nodes: 12,
-			CPUs:  16,
-
-			LoadWarehouses: 10000,
-			EstimatedMax:   6000,
-			LoadConfig:     singlePartitionedLoadgen,
-		},
-		{
-			Nodes: 24,
-			CPUs:  16,
-
-			LoadWarehouses: 20000,
-			EstimatedMax:   12000,
-			LoadConfig:     singlePartitionedLoadgen,
-		},
-
-		// Requested by @awoods87.
-		{
-			Nodes: 11,
-			CPUs:  32,
-
-			LoadWarehouses: 10000,
-			EstimatedMax:   8000,
-		},
-	}
-
-	for _, b := range specs {
-		registerTPCCBenchSpec(r, b)
 	}
 }
 
