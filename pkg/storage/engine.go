@@ -1554,6 +1554,13 @@ var ingestDelayTime = settings.RegisterDurationSetting(
 	time.Second*5,
 )
 
+var preIngestDelayEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"pebble.pre_ingest_delay.enabled",
+	"controls whether the pre-ingest delay mechanism is active",
+	false,
+)
+
 // PreIngestDelay may choose to block for some duration if L0 has an excessive
 // number of files in it or if PendingCompactionBytesEstimate is elevated. This
 // it is intended to be called before ingesting a new SST, since we'd rather
@@ -1565,6 +1572,9 @@ var ingestDelayTime = settings.RegisterDurationSetting(
 // compaction limit is exceeded, it waits for the maximum delay.
 func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings) {
 	if settings == nil {
+		return
+	}
+	if !preIngestDelayEnabled.Get(&settings.SV) {
 		return
 	}
 	metrics := eng.GetMetrics()

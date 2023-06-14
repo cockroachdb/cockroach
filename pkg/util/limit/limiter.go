@@ -25,6 +25,7 @@ import (
 type ConcurrentRequestLimiter struct {
 	spanName string
 	sem      *quotapool.IntPool
+	disabled bool
 }
 
 // Reservation is an allocation from a limiter which should be released once the
@@ -48,6 +49,9 @@ func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) (Reservation, erro
 	if err := ctx.Err(); err != nil {
 		return nil, errors.Wrap(err, "limiter begin")
 	}
+	if l.disabled {
+		return noopReservation{}, nil // nothing to do
+	}
 
 	res, err := l.sem.TryAcquire(ctx, 1)
 	if errors.Is(err, quotapool.ErrNotEnoughQuota) {
@@ -60,7 +64,16 @@ func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) (Reservation, erro
 	return res, err
 }
 
-// SetLimit adjusts the size of the pool.
+// SetLimit adjusts the size of the pool. If limit == 0, the concurrency limiter
+// is disabled.
 func (l *ConcurrentRequestLimiter) SetLimit(newLimit int) {
+	l.disabled = newLimit == 0
 	l.sem.UpdateCapacity(uint64(newLimit))
 }
+
+type noopReservation struct{}
+
+var _ Reservation = noopReservation{}
+
+// Release implements the Reservation interface.
+func (n noopReservation) Release() {}

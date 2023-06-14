@@ -158,16 +158,16 @@ var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
-	1<<40,
+	1<<40, // 1 TiB
 ).WithPublic()
 
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.concurrent_addsstable_requests",
-	"number of concurrent AddSSTable requests per store before queueing",
-	1,
-	settings.PositiveInt,
+	"number of concurrent AddSSTable requests per store before queueing (0 = disable)",
+	0,
+	settings.NonNegativeInt,
 )
 
 // addSSTableAsWritesRequestLimit limits concurrent AddSSTable requests with
@@ -178,9 +178,9 @@ var addSSTableRequestLimit = settings.RegisterIntSetting(
 var addSSTableAsWritesRequestLimit = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.concurrent_addsstable_as_writes_requests",
-	"number of concurrent AddSSTable requests ingested as writes per store before queueing",
-	10,
-	settings.PositiveInt,
+	"number of concurrent AddSSTable requests ingested as writes per store before queueing (0 = disable)",
+	0,
+	settings.NonNegativeInt,
 )
 
 // concurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
