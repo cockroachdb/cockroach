@@ -37,7 +37,7 @@ func (r *RecoveryKey) UnmarshalYAML(fn func(interface{}) error) error {
 	if err := fn(&pretty); err != nil {
 		return err
 	}
-	scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
+	scanner := keysutil.MakePrettyScanner(nil /* tableParser */, nil /* tenantParser */)
 	key, err := scanner.Scan(pretty)
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse key %s", pretty)
