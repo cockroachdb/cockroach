@@ -40,8 +40,9 @@ import (
 var disableSyncRaftLog = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.raft_log.disable_synchronization_unsafe",
-	"set to true to disable synchronization on Raft log writes to persistent storage. "+
-		"Setting to true risks data loss or data corruption on server crashes. "+
+	"disables synchronization of Raft log writes to persistent storage. "+
+		"Setting to true risks data loss or data corruption on process or OS crashes. "+
+		"This not only disables fsync, but also disables flushing writes to the OS buffer. "+
 		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
 	envutil.EnvOrDefaultBool("COCKROACH_DISABLE_RAFT_LOG_SYNCHRONIZATION_UNSAFE", false),
 )
