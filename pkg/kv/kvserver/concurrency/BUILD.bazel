@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
@@ -103,5 +102,3 @@ gen_interval_btree(
     package = "concurrency",
     type = "*lockState",
 )
-
-get_x_data(name = "get_x_data")
