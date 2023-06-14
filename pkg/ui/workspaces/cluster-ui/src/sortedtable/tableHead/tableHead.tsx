@@ -77,7 +77,7 @@ export const TableHead: React.FC<TableHeadProps> = ({
 
           return (
             <th
-              className={classNames(cellClasses)}
+              className={cx(cellClasses)}
               key={"headCell" + idx}
               onClick={cellAction}
               style={style}

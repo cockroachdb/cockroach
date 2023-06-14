@@ -56,7 +56,7 @@ func GetArtifactFromHTTPArchive(call *syntax.CallExpr) (DownloadableArtifact, er
 		return artifact, err
 	}
 	if artifact.URL == "" || artifact.Sha256 == "" {
-		err = fmt.Errorf("could not determine the url or sha256 for the given http_repository")
+		err = fmt.Errorf("could not determine the url or sha256 for the given http_archive")
 	}
 	return artifact, err
 }
@@ -119,7 +119,7 @@ func GetArtifactFromGoRepository(call *syntax.CallExpr) (DownloadableArtifact, e
 }
 
 // maybeGetDownloadableArtifact returns the DownloadableArtifact pointed to by the given
-// go_repository or http_repository expression, returning the name of the repo
+// go_repository or http_archive expression, returning the name of the repo
 // and the location of the mirror if one can be found, or the empty string/an
 // empty existingMirror if not. Returns an error iff an unrecoverable problem
 // occurred.
@@ -149,6 +149,12 @@ func maybeGetDownloadableArtifact(call *syntax.CallExpr) (string, DownloadableAr
 			}
 			if kwarg == "urls" {
 				url, err = ExpectSingletonStringList(bx.Y)
+				if err != nil {
+					return "", DownloadableArtifact{}, err
+				}
+			}
+			if kwarg == "url" {
+				url, err = ExpectLiteralString(bx.Y)
 				if err != nil {
 					return "", DownloadableArtifact{}, err
 				}
