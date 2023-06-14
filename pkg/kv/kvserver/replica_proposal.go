@@ -114,6 +114,12 @@ type ProposalData struct {
 	// sends, but not command application. In order to enable safely tracing events
 	// beneath, modifying this ctx field in *ProposalData requires holding the
 	// raftMu.
+	//
+	// TODO(tbg): under useReproposalsV2, the field can be modified safely as long
+	// as the ProposalData is still in `r.mu.proposals` and `r.mu` is held. If it's
+	// not in that map, we are log application and have exclusive access. Add a more
+	// general comment that explains what can be accessed where (I think I wrote one
+	// somewhere but it should live on ProposalData).
 	ctx context.Context
 
 	// An optional tracing span bound to the proposal. Will be cleaned
@@ -133,6 +139,9 @@ type ProposalData struct {
 
 	// command is serialized and proposed to raft. In the event of
 	// reproposals its MaxLeaseIndex field is mutated.
+	//
+	// TODO(tbg): when useReproposalsV2==true is baked in, the above comment
+	// is stale - MLI never gets mutated.
 	command *kvserverpb.RaftCommand
 
 	// encodedCommand is the encoded Raft command, with an optional prefix
