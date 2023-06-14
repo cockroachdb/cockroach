@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -364,7 +365,7 @@ func mustGetColumnIDFromColumnName(
 ) catid.ColumnID {
 	colID := getColumnIDFromColumnName(b, tableID, columnName)
 	if colID == 0 {
-		panic(errors.AssertionFailedf("cannot find column with name %v", columnName))
+		panic(colinfo.NewUndefinedColumnError(string(columnName)))
 	}
 	return colID
 }
