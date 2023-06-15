@@ -49,9 +49,12 @@ func (gcs GrantCoordinators) Close() {
 type StoreGrantCoordinators struct {
 	ambientCtx log.AmbientContext
 
-	settings                    *cluster.Settings
-	makeStoreRequesterFunc      makeStoreRequesterFunc
-	kvIOTokensExhaustedDuration *metric.Counter
+	settings                             *cluster.Settings
+	makeStoreRequesterFunc               makeStoreRequesterFunc
+	kvIOTokensExhaustedDuration          *metric.Counter
+	kvIOTokensAvailable                  *metric.Gauge
+	kvIONumIOTokensTookWithoutPermission *metric.Counter
+
 	// These metrics are shared by WorkQueues across stores.
 	workQueueMetrics *WorkQueueMetrics
 
@@ -161,6 +164,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		// initialization, which will also set these to unlimited.
 		startingIOTokens:                unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
+		availableTokensMetrics:          sgc.kvIOTokensAvailable,
+		tookWithoutPermissionMetric:     sgc.kvIONumIOTokensTookWithoutPermission,
 	}
 	kvg.coordMu.availableIOTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
@@ -440,12 +445,14 @@ func makeStoresGrantCoordinators(
 		makeStoreRequester = opts.makeStoreRequesterFunc
 	}
 	storeCoordinators := &StoreGrantCoordinators{
-		ambientCtx:                  ambientCtx,
-		settings:                    st,
-		makeStoreRequesterFunc:      makeStoreRequester,
-		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-		workQueueMetrics:            storeWorkQueueMetrics,
-		onLogEntryAdmitted:          onLogEntryAdmitted,
+		ambientCtx:                           ambientCtx,
+		settings:                             st,
+		makeStoreRequesterFunc:               makeStoreRequester,
+		kvIOTokensExhaustedDuration:          metrics.KVIOTokensExhaustedDuration,
+		kvIONumIOTokensTookWithoutPermission: metrics.KVIONumIOTokensTookWithoutPermission,
+		kvIOTokensAvailable:                  metrics.KVIOTokensAvailable,
+		workQueueMetrics:                     storeWorkQueueMetrics,
+		onLogEntryAdmitted:                   onLogEntryAdmitted,
 	}
 	return storeCoordinators
 }
@@ -973,16 +980,18 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 
 // GrantCoordinatorMetrics are metrics associated with a GrantCoordinator.
 type GrantCoordinatorMetrics struct {
-	KVTotalSlots                 *metric.Gauge
-	KVUsedSlots                  *metric.Gauge
-	KVSlotsExhaustedDuration     *metric.Counter
-	KVCPULoadShortPeriodDuration *metric.Counter
-	KVCPULoadLongPeriodDuration  *metric.Counter
-	KVSlotAdjusterIncrements     *metric.Counter
-	KVSlotAdjusterDecrements     *metric.Counter
-	KVIOTokensExhaustedDuration  *metric.Counter
-	SQLLeafStartUsedSlots        *metric.Gauge
-	SQLRootStartUsedSlots        *metric.Gauge
+	KVTotalSlots                         *metric.Gauge
+	KVUsedSlots                          *metric.Gauge
+	KVSlotsExhaustedDuration             *metric.Counter
+	KVCPULoadShortPeriodDuration         *metric.Counter
+	KVCPULoadLongPeriodDuration          *metric.Counter
+	KVSlotAdjusterIncrements             *metric.Counter
+	KVSlotAdjusterDecrements             *metric.Counter
+	KVIOTokensExhaustedDuration          *metric.Counter
+	KVIONumIOTokensTookWithoutPermission *metric.Counter
+	KVIOTokensAvailable                  *metric.Gauge
+	SQLLeafStartUsedSlots                *metric.Gauge
+	SQLRootStartUsedSlots                *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -990,16 +999,18 @@ func (GrantCoordinatorMetrics) MetricStruct() {}
 
 func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 	m := GrantCoordinatorMetrics{
-		KVTotalSlots:                 metric.NewGauge(totalSlots),
-		KVUsedSlots:                  metric.NewGauge(addName(workKindString(KVWork), usedSlots)),
-		KVSlotsExhaustedDuration:     metric.NewCounter(kvSlotsExhaustedDuration),
-		KVCPULoadShortPeriodDuration: metric.NewCounter(kvCPULoadShortPeriodDuration),
-		KVCPULoadLongPeriodDuration:  metric.NewCounter(kvCPULoadLongPeriodDuration),
-		KVSlotAdjusterIncrements:     metric.NewCounter(kvSlotAdjusterIncrements),
-		KVSlotAdjusterDecrements:     metric.NewCounter(kvSlotAdjusterDecrements),
-		KVIOTokensExhaustedDuration:  metric.NewCounter(kvIOTokensExhaustedDuration),
-		SQLLeafStartUsedSlots:        metric.NewGauge(addName(workKindString(SQLStatementLeafStartWork), usedSlots)),
-		SQLRootStartUsedSlots:        metric.NewGauge(addName(workKindString(SQLStatementRootStartWork), usedSlots)),
+		KVTotalSlots:                         metric.NewGauge(totalSlots),
+		KVUsedSlots:                          metric.NewGauge(addName(workKindString(KVWork), usedSlots)),
+		KVSlotsExhaustedDuration:             metric.NewCounter(kvSlotsExhaustedDuration),
+		KVCPULoadShortPeriodDuration:         metric.NewCounter(kvCPULoadShortPeriodDuration),
+		KVCPULoadLongPeriodDuration:          metric.NewCounter(kvCPULoadLongPeriodDuration),
+		KVSlotAdjusterIncrements:             metric.NewCounter(kvSlotAdjusterIncrements),
+		KVSlotAdjusterDecrements:             metric.NewCounter(kvSlotAdjusterDecrements),
+		KVIOTokensExhaustedDuration:          metric.NewCounter(kvIOTokensExhaustedDuration),
+		SQLLeafStartUsedSlots:                metric.NewGauge(addName(workKindString(SQLStatementLeafStartWork), usedSlots)),
+		SQLRootStartUsedSlots:                metric.NewGauge(addName(workKindString(SQLStatementRootStartWork), usedSlots)),
+		KVIONumIOTokensTookWithoutPermission: metric.NewCounter(kvIONumIOTokensTookWithoutPermission),
+		KVIOTokensAvailable:                  metric.NewGauge(kvIOTokensAvailable),
 	}
 	return m
 }
