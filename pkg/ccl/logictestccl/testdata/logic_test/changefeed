@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local local-mixed-22.2-23.1
 
 statement ok
 CREATE TABLE t ()
@@ -49,3 +49,19 @@ user testuser
 
 statement error user testuser requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed
 CREATE CHANGEFEED FOR t INTO 'null://sink' with initial_scan='only'
+
+
+user root
+
+let $job_id
+SELECT job_id FROM [SHOW CHANGEFEED JOBS] WHERE user_name = 'testuser'
+
+query TT
+SELECT user_name, description FROM [SHOW CHANGEFEED JOB $job_id]
+----
+testuser CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH initial_scan = 'only'
+
+query TT
+SELECT user_name, description FROM [SHOW CHANGEFEED JOBS]
+----
+testuser CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH initial_scan = 'only'
