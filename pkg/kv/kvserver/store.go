@@ -179,6 +179,12 @@ var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
 	6*60,
 )
 
+// defaultRangefeedSchedulerConcurency specifies how many workers rangefeed
+// scheduler will use to perform rangefeed work. This number will be divided
+// between stores of the node.
+var defaultRangefeedSchedulerConcurency = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_WORKERS", 64)
+
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
@@ -1013,6 +1019,7 @@ type Store struct {
 		syncutil.Mutex
 		m map[roachpb.RangeID]struct{}
 	}
+	rangefeedScheduler *rangefeed.Scheduler
 
 	// raftRecvQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
@@ -1222,6 +1229,10 @@ type StoreConfig struct {
 
 	// RangeLogWriter is used to write entries to the system.rangelog table.
 	RangeLogWriter RangeLogWriter
+
+	// RangeFeedSchedulerConcurrency specifies number of rangefeed scheduler
+	// workers for the store.
+	RangeFeedSchedulerConcurrency int
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -1294,6 +1305,14 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 	}
 	if raftDisableQuiescence {
 		sc.TestingKnobs.DisableQuiescence = true
+	}
+	if sc.RangeFeedSchedulerConcurrency == 0 {
+		sc.RangeFeedSchedulerConcurrency = defaultRangefeedSchedulerConcurency
+		if numStores > 1 && sc.RangeFeedSchedulerConcurrency > 1 {
+			sc.RangeFeedSchedulerConcurrency = min(
+				(sc.RangeFeedSchedulerConcurrency-1)/numStores+1, // ceil division
+				2)
+		}
 	}
 }
 
@@ -1952,6 +1971,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err := s.TODOEngine().SetStoreID(ctx, int32(s.StoreID())); err != nil {
 		return err
 	}
+
+	rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
+		Workers: s.cfg.RangeFeedSchedulerConcurrency,
+	})
+	if err = rfs.Start(ctx, s.stopper); err != nil {
+		return err
+	}
+	s.rangefeedScheduler = rfs
 
 	// Add the store ID to the scanner's AmbientContext before starting it, since
 	// the AmbientContext provided during construction did not include it.
@@ -3711,6 +3738,10 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+func (s *Store) getRangefeedScheduler() *rangefeed.Scheduler {
+	return s.rangefeedScheduler
 }
 
 // Implementation of the storeForTruncator interface.
