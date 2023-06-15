@@ -25,6 +25,7 @@ const withLoadingIndicator: DatabasesPageProps = {
   loaded: false,
   lastError: undefined,
   automaticStatsCollectionEnabled: true,
+  indexRecommendationsEnabled: false,
   databases: [],
   sortSetting: {
     ascending: false,
@@ -52,6 +53,7 @@ const withoutData: DatabasesPageProps = {
   loaded: true,
   lastError: null,
   automaticStatsCollectionEnabled: true,
+  indexRecommendationsEnabled: false,
   databases: [],
   sortSetting: {
     ascending: false,
@@ -80,6 +82,7 @@ const withData: DatabasesPageProps = {
   lastError: null,
   showNodeRegionsColumn: true,
   automaticStatsCollectionEnabled: true,
+  indexRecommendationsEnabled: true,
   sortSetting: {
     ascending: false,
     columnTitle: "name",
