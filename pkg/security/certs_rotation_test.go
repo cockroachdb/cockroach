@@ -73,7 +73,7 @@ func TestRotateCerts(t *testing.T) {
 
 	// Client test function.
 	clientTest := func(httpClient http.Client) error {
-		req, err := http.NewRequest("GET", s.AdminURL()+"/_status/metrics/local", nil)
+		req, err := http.NewRequest("GET", s.AdminURL().WithPath("/_status/metrics/local").String(), nil)
 		if err != nil {
 			return errors.Wrap(err, "could not create request")
 		}

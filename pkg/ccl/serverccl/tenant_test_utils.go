@@ -250,7 +250,7 @@ func (c tenantCluster) TenantHTTPClient(t *testing.T, idx serverIdx, isAdmin boo
 		client, err = c.Tenant(idx).GetTenant().GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	}
 	require.NoError(t, err)
-	return &httpClient{t: t, client: client, baseURL: c[idx].GetTenant().AdminURL()}
+	return &httpClient{t: t, client: client, baseURL: c[idx].GetTenant().AdminURL().String()}
 }
 
 func (c tenantCluster) TenantAdminHTTPClient(t *testing.T, idx serverIdx) *httpClient {

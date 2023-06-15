@@ -132,7 +132,7 @@ func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error
 
 // debugURL returns the root debug URL.
 func debugURL(s serverutils.TestServerInterface) string {
-	return s.AdminURL() + debug.Endpoint
+	return s.AdminURL().WithPath(debug.Endpoint).String()
 }
 
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
@@ -382,14 +382,14 @@ func TestAdminAPIStatementDiagnosticsBundle(t *testing.T) {
 
 	client, err := ts.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
-	resp, err := client.Get(ts.AdminURL() + "/_admin/v1/stmtbundle/" + diagnosticRow)
+	resp, err := client.Get(ts.AdminURL().WithPath("/_admin/v1/stmtbundle/" + diagnosticRow).String())
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, 500, resp.StatusCode)
 
 	adminClient, err := ts.GetAuthenticatedHTTPClient(true, serverutils.SingleTenantSession)
 	require.NoError(t, err)
-	adminResp, err := adminClient.Get(ts.AdminURL() + "/_admin/v1/stmtbundle/" + diagnosticRow)
+	adminResp, err := adminClient.Get(ts.AdminURL().WithPath("/_admin/v1/stmtbundle/" + diagnosticRow).String())
 	require.NoError(t, err)
 	defer adminResp.Body.Close()
 	require.Equal(t, 200, adminResp.StatusCode)
