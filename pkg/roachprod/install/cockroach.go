@@ -19,7 +19,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"text/template"
 
@@ -323,14 +322,8 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 func (c *SyncedCluster) ExecSQL(
 	ctx context.Context, l *logger.Logger, tenantName string, args []string,
 ) error {
-	type result struct {
-		node   Node
-		output string
-	}
-	resultChan := make(chan result, len(c.Nodes))
-
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	if err := c.Parallel(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	results, _, err := c.ParallelE(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		var cmd string
 		if c.IsLocal() {
 			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
@@ -339,31 +332,15 @@ func (c *SyncedCluster) ExecSQL(
 			c.NodeURL("localhost", c.NodePort(node), tenantName) + " " +
 			ssh.Escape(args)
 
-		sess := c.newSession(l, node, cmd, withDebugName("run-sql"))
-		defer sess.Close()
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
+	}, WithDisplay(display), WithWaitOnFail())
 
-		out, cmdErr := sess.CombinedOutput(ctx)
-		res := newRunResultDetails(node, cmdErr)
-		res.CombinedOut = out
-
-		if res.Err != nil {
-			res.Err = errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
-		}
-		resultChan <- result{node: node, output: string(res.CombinedOut)}
-		return res, nil
-	}, WithDisplay(display), WithWaitOnFail()); err != nil {
+	if err != nil {
 		return err
 	}
 
-	results := make([]result, 0, len(c.Nodes))
-	for range c.Nodes {
-		results = append(results, <-resultChan)
-	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].node < results[j].node
-	})
 	for _, r := range results {
-		l.Printf("node %d:\n%s", r.node, r.output)
+		l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
 	}
 
 	return nil
@@ -376,41 +353,39 @@ func (c *SyncedCluster) startNode(
 	if err != nil {
 		return "", err
 	}
-
-	if err := func() error {
-		var cmd string
-		if c.IsLocal() {
-			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
-		}
-		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
-
-		sess := c.newSession(l, node, cmd)
-		defer sess.Close()
-
-		sess.SetStdin(strings.NewReader(startCmd))
-		if out, err := sess.CombinedOutput(ctx); err != nil {
-			return errors.Wrapf(err, "failed to upload start script: %s", out)
-		}
-
-		return nil
-	}(); err != nil {
-		return "", err
-	}
-
-	var cmd string
+	var uploadCmd string
 	if c.IsLocal() {
-		cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+		uploadCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
-	cmd += "./cockroach.sh"
+	uploadCmd += `cat > cockroach.sh && chmod +x cockroach.sh`
 
-	sess := c.newSession(l, node, cmd)
-	defer sess.Close()
-
-	out, err := sess.CombinedOutput(ctx)
-	if err != nil {
-		return "", errors.Wrapf(err, "~ %s\n%s", cmd, out)
+	var res = &RunResultDetails{}
+	uploadOpts := defaultCmdOpts("upload-start-script")
+	uploadOpts.stdin = strings.NewReader(startCmd)
+	res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
+	if err != nil || res.Err != nil {
+		out := ""
+		if res != nil {
+			out = res.CombinedOut
+		}
+		return "", errors.Wrapf(err, "failed to upload start script: %s", out)
 	}
-	return strings.TrimSpace(string(out)), nil
+
+	var runScriptCmd string
+	if c.IsLocal() {
+		runScriptCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+	}
+	runScriptCmd += "./cockroach.sh"
+	res, err = c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
+	if err != nil || res.Err != nil {
+		out := ""
+		if res != nil {
+			out = res.CombinedOut
+		}
+		return "", errors.Wrapf(err, "~ %s\n%s", runScriptCmd, out)
+	}
+
+	return strings.TrimSpace(res.CombinedOut), nil
 }
 
 func (c *SyncedCluster) generateStartCmd(
@@ -646,15 +621,16 @@ func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger,
 	l.Printf("%s: initializing cluster\n", c.Name)
 	cmd := c.generateInitCmd(node)
 
-	sess := c.newSession(l, node, cmd, withDebugName("init-cluster"))
-	defer sess.Close()
-
-	out, err := sess.CombinedOutput(ctx)
-	if err != nil {
+	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("init-cluster"))
+	if err != nil || res.Err != nil {
+		out := ""
+		if res != nil {
+			out = res.CombinedOut
+		}
 		return errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
 
-	if out := strings.TrimSpace(string(out)); out != "" {
+	if out := strings.TrimSpace(res.CombinedOut); out != "" {
 		l.Printf(out)
 	}
 	return nil
@@ -664,14 +640,16 @@ func (c *SyncedCluster) setClusterSettings(ctx context.Context, l *logger.Logger
 	l.Printf("%s: setting cluster settings", c.Name)
 	cmd := c.generateClusterSettingCmd(l, node)
 
-	sess := c.newSession(l, node, cmd, withDebugName("set-cluster-settings"))
-	defer sess.Close()
-
-	out, err := sess.CombinedOutput(ctx)
-	if err != nil {
+	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("set-cluster-settings"))
+	if err != nil || res.Err != nil {
+		out := ""
+		if res != nil {
+			out = res.CombinedOut
+		}
 		return errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
-	if out := strings.TrimSpace(string(out)); out != "" {
+
+	if out := strings.TrimSpace(res.CombinedOut); out != "" {
 		l.Printf(out)
 	}
 	return nil
@@ -846,15 +824,17 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	// Instead of using `c.ExecSQL()`, use the more flexible c.newSession(), which allows us to
 	// 1) prefix the schedule backup cmd with COCKROACH_CONNECT_TIMEOUT.
 	// 2) run the command against the first node in the cluster target.
-	sess := c.newSession(l, node, fullCmd, withDebugName("init-backup-schedule"))
-	defer sess.Close()
-
-	out, err := sess.CombinedOutput(ctx)
-	if err != nil {
+	//sess := c.newSession(l, node, fullCmd, withDebugName("init-backup-schedule"))
+	res, err := c.runCmdOnSingleNode(ctx, l, node, fullCmd, defaultCmdOpts("init-backup-schedule"))
+	if err != nil || res.Err != nil {
+		out := ""
+		if res != nil {
+			out = res.CombinedOut
+		}
 		return errors.Wrapf(err, "~ %s\n%s", fullCmd, out)
 	}
 
-	if out := strings.TrimSpace(string(out)); out != "" {
+	if out := strings.TrimSpace(res.CombinedOut); out != "" {
 		l.Printf(out)
 	}
 	return nil
