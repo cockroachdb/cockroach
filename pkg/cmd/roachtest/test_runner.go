@@ -1147,7 +1147,12 @@ func (r *testRunner) teardownTest(
 		// If this occurs frequently enough, we can look at skipping post validations on a node
 		// failure (or even on any test failure).
 		if err := c.assertNoDeadNode(ctx, t); err != nil {
-			t.Error(err)
+			// Some tests expect dead nodes, so they may opt out of this check.
+			if t.spec.SkipPostValidations&registry.PostValidationNoDeadNodes == 0 {
+				t.Error(err)
+			} else {
+				t.L().Printf("dead node(s) detected but expected")
+			}
 		}
 
 		// We collect all the admin health endpoints in parallel,
