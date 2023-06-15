@@ -2300,6 +2300,23 @@ func (r *Replica) campaignLocked(ctx context.Context) {
 	r.store.enqueueRaftUpdateCheck(r.RangeID)
 }
 
+// forceCampaignLocked campaigns for raft leadership, but skips the
+// pre-candidate/pre-vote stage, calling an immediate election as candidate, and
+// bypasses the CheckQuorum recent leader condition for votes.
+//
+// This will disrupt an existing leader, and can cause prolonged unavailability
+// under partial/asymmetric network partitions. It should only be used when the
+// caller is certain that the current leader is actually dead, and we're not
+// simply partitioned away from it and/or liveness.
+func (r *Replica) forceCampaignLocked(ctx context.Context) {
+	log.VEventf(ctx, 3, "force campaigning")
+	msg := raftpb.Message{To: uint64(r.replicaID), Type: raftpb.MsgTimeoutNow}
+	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
+		log.VEventf(ctx, 1, "failed to campaign: %s", err)
+	}
+	r.store.enqueueRaftUpdateCheck(r.RangeID)
+}
+
 // a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
 // last communication received from followers, which in turn informs the quota
 // pool and log truncations.
