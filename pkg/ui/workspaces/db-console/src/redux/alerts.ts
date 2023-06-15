@@ -589,7 +589,7 @@ export const upgradeNotFinalizedWarningSelector = createSelector(
     clusterVersion,
     upgradeNotFinalizedDismissed,
   ): Alert => {
-    if (upgradeNotFinalizedDismissed) {
+    if (upgradeNotFinalizedDismissed || !settings) {
       return undefined;
     }
     // Don't show this warning if nodes are on different versions, since there is
@@ -618,7 +618,9 @@ export const upgradeNotFinalizedWarningSelector = createSelector(
     return {
       level: AlertLevel.WARNING,
       title: "Upgrade not finalized.",
-      text: `All nodes are running on version ${nodesVersion}, but the cluster is on version ${clusterVersion}.`,
+      text: `All nodes are running on version ${nodesVersion}, but the cluster is on version ${clusterVersion}. 
+      Features might not be available in this state.`,
+      link: docsURL.upgradeTroubleshooting,
       dismiss: (dispatch: AppDispatch) => {
         dispatch(upgradeNotFinalizedDismissedSetting.set(true));
         return Promise.resolve();
