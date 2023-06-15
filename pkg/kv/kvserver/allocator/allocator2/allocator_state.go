@@ -27,6 +27,9 @@ type allocatorState struct {
 
 	meansMemo            *meansMemo
 	diversityScoringMemo *diversityScoringMemo
+
+	// TODO(kvoli,sumeer): initialize and use.
+	changeRangeLimiter *storeChangeRateLimiter
 }
 
 func newAllocatorState() *allocatorState {
@@ -345,6 +348,7 @@ func (erl *existingReplicaLocalities) getScoreSum(replica localityTiers) float64
 var _ = newAllocatorState
 var _ = (&allocatorState{}).computeChanges
 var _ = (&allocatorState{}).computeCandidatesForRange
+var _ = allocatorState{}.changeRangeLimiter
 var _ = (&existingReplicaLocalities{}).clear
 var _ = replicasLocalityTiers{}.hash
 var _ = replicasLocalityTiers{}.isEqual
