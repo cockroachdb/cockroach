@@ -1,4 +1,4 @@
-// Copyright 2023 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -21,244 +22,201 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
-type LegacyProcessor struct {
+type schedulerEvent int
+
+const (
+	// queueData is scheduled when event is put into rangefeed queue for
+	// processing.
+	queueData schedulerEvent = 1 << 2
+	// reqEvent is scheduled when request function id put into rangefeed request
+	// queue.
+	reqEvent schedulerEvent = 1 << 3
+)
+
+var eventNames = map[schedulerEvent]string{
+	schedulerEvent(sched.Queued):  "Queued",
+	schedulerEvent(sched.Stopped): "Stopped",
+	queueData:                     "Data",
+	reqEvent:                      "Request",
+}
+
+func (e schedulerEvent) String() string {
+	var evts []string
+	for m := schedulerEvent(sched.Queued); m <= reqEvent; m = m << 1 {
+		if m&e != 0 {
+			evts = append(evts, eventNames[m])
+		}
+	}
+	return strings.Join(evts, " | ")
+}
+
+// request is any action on processor which is not a data path. e.g. request
+// active filter, length, add registration etc.
+// If returned value is true, processor will request scheduler to perform a
+// stop for this callback by returning sched.Stopped.
+type request func(context.Context) (stop bool)
+
+// ScheduledProcessor is an implementation of processor that uses external
+// scheduler to use processing.
+type ScheduledProcessor struct {
 	Config
 	reg registry
 	rts resolvedTimestamp
 
-	regC       chan registration
-	unregC     chan *registration
-	lenReqC    chan struct{}
-	lenResC    chan int
-	filterReqC chan struct{}
-	filterResC chan *Filter
-	eventC     chan *event
-	spanErrC   chan spanErr
-	stopC      chan *kvpb.Error
-	stoppedC   chan struct{}
+	requestQueue chan request
+	eventC       chan *event
+	// If true, processor is not processing data anymore and waiting for registrations
+	// to be complete.
+	stopping bool
+	stoppedC chan struct{}
+
+	// Processor startup runs background tasks to scan intents. If processor is
+	// stopped early, this task needs to be terminated to avoid resource waste.
+	startupCancel func()
 }
 
-func NewLegacyProcessor(cfg Config) *LegacyProcessor {
-	p := &LegacyProcessor{
+// NewScheduledProcessor creates a new scheduler based rangefeed Processor.
+// Processor needs to be explicitly started after creation.
+func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
+	cfg.SetDefaults()
+	cfg.AmbientContext.AddLogTag("rangefeed", nil)
+	p := &ScheduledProcessor{
 		Config: cfg,
 		reg:    makeRegistry(cfg.Metrics),
 		rts:    makeResolvedTimestamp(),
 
-		regC:       make(chan registration),
-		unregC:     make(chan *registration),
-		lenReqC:    make(chan struct{}),
-		lenResC:    make(chan int),
-		filterReqC: make(chan struct{}),
-		filterResC: make(chan *Filter),
-		eventC:     make(chan *event, cfg.EventChanCap),
-		spanErrC:   make(chan spanErr),
-		stopC:      make(chan *kvpb.Error, 1),
-		stoppedC:   make(chan struct{}),
+		requestQueue: make(chan request, 20),
+		eventC:       make(chan *event, cfg.EventChanCap),
+		// Closed when scheduler removed callback.
+		stoppedC: make(chan struct{}),
 	}
 	return p
 }
 
-// Start launches a goroutine to process rangefeed events and send them to
-// registrations.
-//
+// Start performs processor one-time initialization e.g registers with
+// scheduler and fires up background tasks to populate processor state.
 // The provided iterator is used to initialize the rangefeed's resolved
 // timestamp. It must obey the contract of an iterator used for an
 // initResolvedTSScan. The Processor promises to clean up the iterator by
 // calling its Close method when it is finished. If the iterator is nil then
 // no initialization scan will be performed and the resolved timestamp will
 // immediately be considered initialized.
-func (p *LegacyProcessor) Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor) error {
-	ctx := p.AnnotateCtx(context.Background())
-	if err := stopper.RunAsyncTask(ctx, "rangefeed.LegacyProcessor", func(ctx context.Context) {
-		p.run(ctx, p.RangeID, rtsIterFunc, stopper)
-	}); err != nil {
-		p.reg.DisconnectWithErr(all, kvpb.NewError(err))
+func (p *ScheduledProcessor) Start(
+	stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor,
+) error {
+	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
+	ctx, p.startupCancel = context.WithCancel(ctx)
+
+	// Launch an async task to scan over the resolved timestamp iterator and
+	// initialize the unresolvedIntentQueue.
+	if rtsIterFunc != nil {
+		rtsIter := rtsIterFunc()
+		initScan := newInitResolvedTSScan(p, rtsIter)
+		if err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run); err != nil {
+			initScan.Cancel()
+			// We don't need to perform disconnect yet as we don't add registrations
+			// prior to starting processor.
+			close(p.stoppedC)
+			p.MemBudget.Close(context.Background())
+			return err
+		}
+	} else {
+		p.initResolvedTS(ctx)
+	}
+	if err := p.Scheduler.Register(p.process); err != nil {
+		// If registering fails we are stopping so do minimal cleanup.
+		p.startupCancel()
 		close(p.stoppedC)
+		p.MemBudget.Close(context.Background())
 		return err
 	}
 	return nil
 }
 
-// run is called from Start and runs the rangefeed.
-func (p *LegacyProcessor) run(
-	ctx context.Context,
-	_forStacks roachpb.RangeID,
-	rtsIterFunc IntentScannerConstructor,
-	stopper *stop.Stopper,
-) {
-	// Close the memory budget last, or there will be a period of time during
-	// which requests are still ongoing but will run into the closed budget,
-	// causing shutdown noise and busy retries.
-	// Closing the budget after stoppedC ensures that all other goroutines are
-	// (very close to being) shut down by the time the budget goes away.
-	defer p.MemBudget.Close(ctx)
-	defer close(p.stoppedC)
-	ctx, cancelOutputLoops := context.WithCancel(ctx)
-	defer cancelOutputLoops()
+func (p *ScheduledProcessor) span() roachpb.RSpan {
+	return p.Span
+}
 
-	// Launch an async task to scan over the resolved timestamp iterator and
-	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
-	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
-		initScan := newInitResolvedTSScan(p, rtsIter)
-		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
-		if err != nil {
-			initScan.Cancel()
-		}
-	} else {
-		p.initResolvedTS(ctx)
-	}
+func (p *ScheduledProcessor) pusher() TxnPusher {
+	return p.TxnPusher
+}
 
-	// txnPushTicker periodically pushes the transaction record of all
-	// unresolved intents that are above a certain age, helping to ensure
-	// that the resolved timestamp continues to make progress.
-	var txnPushTicker *time.Ticker
-	var txnPushTickerC <-chan time.Time
-	var txnPushAttemptC chan struct{}
-	if p.PushTxnsInterval > 0 {
-		txnPushTicker = time.NewTicker(p.PushTxnsInterval)
-		txnPushTickerC = txnPushTicker.C
-		defer txnPushTicker.Stop()
-	}
-
-	for {
-		select {
-
-		// Handle new registrations.
-		case r := <-p.regC:
-			if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
-				log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
-			}
-
-			// Construct the catchUpIter before notifying the registration that it
-			// has been registered. Note that if the catchUpScan is never run, then
-			// the iterator constructed here will be closed in disconnect.
-			r.maybeConstructCatchUpIter()
-
-			// Add the new registration to the registry.
-			p.reg.Register(&r)
-
-			// Publish an updated filter that includes the new registration.
-			p.filterResC <- p.reg.NewFilter()
-
-			// Immediately publish a checkpoint event to the registry. This will be the first event
-			// published to this registration after its initial catch-up scan completes. The resolved
-			// timestamp might be empty but the checkpoint event is still useful to indicate that the
-			// catch-up scan has completed. This allows clients to rely on stronger ordering semantics
-			// once they observe the first checkpoint event.
-			r.publish(ctx, p.newCheckpointEvent(), nil)
-
-			// Run an output loop for the registry.
-			runOutputLoop := func(ctx context.Context) {
-				r.runOutputLoop(ctx, p.RangeID)
+// process is a scheduler callback that is processing scheduled events and
+// requests.
+func (p *ScheduledProcessor) process(e int) int {
+	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
+	se := schedulerEvent(e)
+	var nextEvent int
+	log.VEventf(ctx, 3, "rangefeed r%d processing event %s", p.RangeID, se)
+	if se&reqEvent != 0 {
+		func() {
+			for {
 				select {
-				case p.unregC <- &r:
-					if r.unreg != nil {
-						r.unreg()
+				case e := <-p.requestQueue:
+					if e(ctx) {
+						nextEvent |= sched.Stopped
 					}
-				case <-p.stoppedC:
+				default:
+					return
 				}
 			}
-			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(kvpb.NewError(err))
-				p.reg.Unregister(ctx, &r)
-			}
-
-		// Respond to unregistration requests; these come from registrations that
-		// encounter an error during their output loop.
-		case r := <-p.unregC:
-			p.reg.Unregister(ctx, r)
-
-		// Send errors to registrations overlapping the span and disconnect them.
-		// Requested via DisconnectSpanWithErr().
-		case e := <-p.spanErrC:
-			p.reg.DisconnectWithErr(e.span, e.pErr)
-
-		// Respond to answers about the processor goroutine state.
-		case <-p.lenReqC:
-			p.lenResC <- p.reg.Len()
-
-		// Respond to answers about which operations can be filtered before
-		// reaching the Processor.
-		case <-p.filterReqC:
-			p.filterResC <- p.reg.NewFilter()
-
-		// Transform and route events.
-		case e := <-p.eventC:
-			p.consumeEvent(ctx, e)
-			e.alloc.Release(ctx)
-			putPooledEvent(e)
-
-		// Check whether any unresolved intents need a push.
-		case <-txnPushTickerC:
-			// Don't perform transaction push attempts until the resolved
-			// timestamp has been initialized.
-			if !p.rts.IsInit() {
-				continue
-			}
-
-			now := p.Clock.Now()
-			before := now.Add(-p.PushTxnsAge.Nanoseconds(), 0)
-			oldTxns := p.rts.intentQ.Before(before)
-
-			if len(oldTxns) > 0 {
-				toPush := make([]enginepb.TxnMeta, len(oldTxns))
-				for i, txn := range oldTxns {
-					toPush[i] = txn.asTxnMeta()
-				}
-
-				// Set the ticker channel to nil so that it can't trigger a
-				// second concurrent push. Create a push attempt response
-				// channel that is closed when the push attempt completes.
-				txnPushTickerC = nil
-				txnPushAttemptC = make(chan struct{})
-
-				// Launch an async transaction push attempt that pushes the
-				// timestamp of all transactions beneath the push offset.
-				// Ignore error if quiescing.
-				pushTxns := newTxnPushAttempt(p, toPush, now, txnPushAttemptC)
-				err := stopper.RunAsyncTask(ctx, "rangefeed: pushing old txns", pushTxns.Run)
-				if err != nil {
-					pushTxns.Cancel()
-				}
-			}
-
-		// Update the resolved timestamp based on the push attempt.
-		case <-txnPushAttemptC:
-			// Reset the ticker channel so that it can trigger push attempts
-			// again. Set the push attempt channel back to nil.
-			txnPushTickerC = txnPushTicker.C
-			txnPushAttemptC = nil
-
-		// Close registrations and exit when signaled.
-		case pErr := <-p.stopC:
-			p.reg.DisconnectWithErr(all, pErr)
-			return
-
-		// Exit on stopper.
-		case <-stopper.ShouldQuiesce():
-			pErr := kvpb.NewError(&kvpb.NodeUnavailableError{})
-			p.reg.DisconnectWithErr(all, pErr)
-			return
-		}
+		}()
 	}
+	if se&queueData != 0 {
+		// Transform and route all events.
+		// TODO(oleg): maybe limit max count and allow returning some data for
+		// further processing on next iteration.
+		func() {
+			for {
+				select {
+				case e := <-p.eventC:
+					if !p.stopping {
+						// If we are stopping, there's no need to forward any remaining
+						// data since registrations already have errors set.
+						p.consumeEvent(ctx, e)
+					}
+					e.alloc.Release(ctx)
+					putPooledEvent(e)
+				default:
+					return
+				}
+			}
+		}()
+	}
+	if e&sched.Stopped != 0 {
+		p.cleanup()
+	}
+	return nextEvent
+}
+
+func (p *ScheduledProcessor) cleanup() {
+	// Disconnect all registrations unconditionally first. This is only
+	// permissible when shutting down because we don't wait for registrations to
+	// free up all the resources.
+	pErr := kvpb.NewError(&kvpb.NodeUnavailableError{})
+	p.reg.DisconnectWithErr(all, pErr)
+
+	p.startupCancel()
+	close(p.stoppedC)
+	p.MemBudget.Close(context.Background())
 }
 
 // Stop shuts down the processor and closes all registrations. Safe to call on
 // nil Processor. It is not valid to restart a processor after it has been
 // stopped.
-func (p *LegacyProcessor) Stop() {
+func (p *ScheduledProcessor) Stop() {
 	p.StopWithErr(nil)
 }
 
 // StopWithErr shuts down the processor and closes all registrations with the
 // specified error. Safe to call on nil Processor. It is not valid to restart a
 // processor after it has been stopped.
-func (p *LegacyProcessor) StopWithErr(pErr *kvpb.Error) {
+func (p *ScheduledProcessor) StopWithErr(pErr *kvpb.Error) {
 	if p == nil {
 		return
 	}
@@ -270,28 +228,27 @@ func (p *LegacyProcessor) StopWithErr(pErr *kvpb.Error) {
 
 // DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 // the given span with the given error.
-func (p *LegacyProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
+func (p *ScheduledProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
 	if p == nil {
 		return
 	}
-	select {
-	case p.spanErrC <- spanErr{span: span, pErr: pErr}:
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
-	}
+	_ = p.enqueueRequest(func(ctx context.Context) bool {
+		p.reg.DisconnectWithErr(span, pErr)
+		return false
+	})
 }
 
-func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
-	select {
-	case p.stopC <- pErr:
-		// stopC has non-zero capacity so this should not block unless
-		// multiple callers attempt to stop the Processor concurrently.
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
-	}
+func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
+	_ = p.enqueueRequest(func(ctx context.Context) bool {
+		p.reg.DisconnectWithErr(all, pErr)
+		// First set stopping flag to ensure that once all registrations are removed
+		// processor should stop.
+		p.stopping = true
+		return p.reg.Len() == 0
+	})
 }
 
-func (p *LegacyProcessor) UsingScheduler() bool {
+func (p *ScheduledProcessor) UsingScheduler() bool {
 	return false
 }
 
@@ -313,7 +270,7 @@ func (p *LegacyProcessor) UsingScheduler() bool {
 // NOT safe to call on nil Processor.
 //
 // NB: startTS is exclusive; the first possible event will be at startTS.Next().
-func (p *LegacyProcessor) Register(
+func (p *ScheduledProcessor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchUpIterConstructor CatchUpIteratorConstructor,
@@ -322,9 +279,6 @@ func (p *LegacyProcessor) Register(
 	disconnectFn func(),
 	done *future.ErrorFuture,
 ) (bool, *Filter) {
-	// Synchronize the event channel so that this registration doesn't see any
-	// events that were consumed before this registration was called. Instead,
-	// it should see these events during its catch up scan.
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
@@ -332,46 +286,63 @@ func (p *LegacyProcessor) Register(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
 		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
 	)
-	select {
-	case p.regC <- r:
-		// Wait for response.
-		return true, <-p.filterResC
-	case <-p.stoppedC:
-		return false, nil
+
+	filter := runRequest(p, func(ctx context.Context) (*Filter, bool) {
+		if p.stopping {
+			return nil, false
+		}
+		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
+			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+		}
+
+		// Construct the catchUpIter before notifying the registration that it
+		// has been registered. Note that if the catchUpScan is never run, then
+		// the iterator constructed here will be closed in disconnect.
+		r.maybeConstructCatchUpIter()
+
+		// Add the new registration to the registry.
+		p.reg.Register(&r)
+
+		// Publish an updated filter that includes the new registration.
+		f := p.reg.NewFilter()
+
+		// Immediately publish a checkpoint event to the registry. This will be the first event
+		// published to this registration after its initial catch-up scan completes. The resolved
+		// timestamp might be empty but the checkpoint event is still useful to indicate that the
+		// catch-up scan has completed. This allows clients to rely on stronger ordering semantics
+		// once they observe the first checkpoint event.
+		r.publish(ctx, p.newCheckpointEvent(), nil)
+
+		// Run an output loop for the registry.
+		runOutputLoop := func(ctx context.Context) {
+			r.runOutputLoop(ctx, p.RangeID)
+			// If we can't schedule internally, processor is already stopped which
+			// could only happen on shutdown.
+			if p.unregisterClient(&r) {
+				// unreg callback is set by replica to tear down processors that have
+				// zero registrations left and to update event filters.
+				if r.unreg != nil {
+					r.unreg()
+				}
+			}
+		}
+		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
+			r.disconnect(kvpb.NewError(err))
+			p.reg.Unregister(ctx, &r)
+		}
+		return f, false
+	})
+	if filter != nil {
+		return true, filter
 	}
+	return false, nil
 }
 
-// Len returns the number of registrations attached to the processor.
-func (p *LegacyProcessor) Len() int {
-	if p == nil {
-		return 0
-	}
-
-	// Ask the processor goroutine.
-	select {
-	case p.lenReqC <- struct{}{}:
-		// Wait for response.
-		return <-p.lenResC
-	case <-p.stoppedC:
-		return 0
-	}
-}
-
-// Filter returns a new operation filter based on the registrations attached to
-// the processor. Returns nil if the processor has been stopped already.
-func (p *LegacyProcessor) Filter() *Filter {
-	if p == nil {
-		return nil
-	}
-
-	// Ask the processor goroutine.
-	select {
-	case p.filterReqC <- struct{}{}:
-		// Wait for response.
-		return <-p.filterResC
-	case <-p.stoppedC:
-		return nil
-	}
+func (p *ScheduledProcessor) unregisterClient(r *registration) bool {
+	return runRequest(p, func(ctx context.Context) (bool, bool) {
+		p.reg.Unregister(ctx, r)
+		return true, p.stopping && p.reg.Len() == 0
+	})
 }
 
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
@@ -379,7 +350,7 @@ func (p *LegacyProcessor) Filter() *Filter {
 // specified by the EventChanTimeout configuration. If the method returns false,
 // the processor will have been stopped, so calling Stop is not necessary. Safe
 // to call on nil Processor.
-func (p *LegacyProcessor) ConsumeLogicalOps(
+func (p *ScheduledProcessor) ConsumeLogicalOps(
 	ctx context.Context, ops ...enginepb.MVCCLogicalOp,
 ) bool {
 	if p == nil {
@@ -396,7 +367,7 @@ func (p *LegacyProcessor) ConsumeLogicalOps(
 // specified by the EventChanTimeout configuration. If the method returns false,
 // the processor will have been stopped, so calling Stop is not necessary. Safe
 // to call on nil Processor.
-func (p *LegacyProcessor) ConsumeSSTable(
+func (p *ScheduledProcessor) ConsumeSSTable(
 	ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
 ) bool {
 	if p == nil {
@@ -411,7 +382,7 @@ func (p *LegacyProcessor) ConsumeSSTable(
 // EventChanTimeout configuration. If the method returns false, the processor
 // will have been stopped, so calling Stop is not necessary.  Safe to call on
 // nil Processor.
-func (p *LegacyProcessor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool {
+func (p *ScheduledProcessor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool {
 	if p == nil {
 		return true
 	}
@@ -424,7 +395,21 @@ func (p *LegacyProcessor) ForwardClosedTS(ctx context.Context, closedTS hlc.Time
 // sendEvent informs the Processor of a new event. If a timeout is specified,
 // the method will wait for no longer than that duration before giving up,
 // shutting down the Processor, and returning false. 0 for no timeout.
-func (p *LegacyProcessor) sendEvent(ctx context.Context, e event, timeout time.Duration) bool {
+func (p *ScheduledProcessor) sendEvent(ctx context.Context, e event, timeout time.Duration) bool {
+	if p.enqueueEventInternal(ctx, e, timeout) {
+		// We can ignore the event because we don't guarantee that we will drain
+		// all the events after processor was stopped. Memory budget will also be
+		// closed, releasing info about pending events that would be discarded with
+		// processor.
+		_ = p.scheduleEvent(queueData)
+		return true
+	}
+	return false
+}
+
+func (p *ScheduledProcessor) enqueueEventInternal(
+	ctx context.Context, e event, timeout time.Duration,
+) bool {
 	// The code is a bit unwieldy because we try to avoid any allocations on fast
 	// path where we have enough budget and outgoing channel is free. If not, we
 	// try to set up timeout for acquiring budget and then reuse this timeout when
@@ -519,36 +504,88 @@ func (p *LegacyProcessor) sendEvent(ctx context.Context, e event, timeout time.D
 
 // setResolvedTSInitialized informs the Processor that its resolved timestamp has
 // all the information it needs to be considered initialized.
-func (p *LegacyProcessor) setResolvedTSInitialized(ctx context.Context) {
+func (p *ScheduledProcessor) setResolvedTSInitialized(ctx context.Context) {
 	p.sendEvent(ctx, event{initRTS: true}, 0)
 }
 
 // syncEventC synchronizes access to the Processor goroutine, allowing the
 // caller to establish causality with actions taken by the Processor goroutine.
 // It does so by flushing the event pipeline.
-func (p *LegacyProcessor) syncEventC() {
+func (p *ScheduledProcessor) syncEventC() {
 	p.syncSendAndWait(&syncEvent{c: make(chan struct{})})
 }
 
 // syncSendAndWait allows sync event to be sent and waited on its channel.
-// Exposed to allow special test syncEvents that contain span to be sent.
-func (p *LegacyProcessor) syncSendAndWait(se *syncEvent) {
+// Exposed to allow special test syneEvents that contain span to be sent.
+func (p *ScheduledProcessor) syncSendAndWait(se *syncEvent) {
 	ev := getPooledEvent(event{sync: se})
 	select {
 	case p.eventC <- ev:
-		select {
-		case <-se.c:
-		// Synchronized.
-		case <-p.stoppedC:
-			// Already stopped. Do nothing.
+		// This shouldn't happen as there should be no sync events after disconnect,
+		// but if there's a bug don't wait it can hang waiting for sync chan.
+		if p.scheduleEvent(queueData) == nil {
+			select {
+			case <-se.c:
+			// Synchronized.
+			case <-p.stoppedC:
+				// Already stopped. Do nothing.
+			}
 		}
 	case <-p.stoppedC:
-		// Already stopped. Return event back to the pool.
+		// Already stopped. Do nothing.
 		putPooledEvent(ev)
 	}
 }
 
-func (p *LegacyProcessor) consumeEvent(ctx context.Context, e *event) {
+// Len returns the number of registrations attached to the processor.
+func (p *ScheduledProcessor) Len() int {
+	return runRequest(p, func(context.Context) (int, bool) {
+		return p.reg.Len(), false
+	})
+}
+
+// Filter returns a new operation filter based on the registrations attached to
+// the processor. Returns nil if the processor has been stopped already.
+func (p *ScheduledProcessor) Filter() *Filter {
+	return runRequest(p, func(context.Context) (*Filter, bool) {
+		return newFilterFromRegistry(&p.reg), false
+	})
+}
+
+// runRequest will enqueue request to processor and wait for it to be complete.
+// request function f returns results as well as bool indicating if stopped
+// event must be enqueued after processing request.
+// If request can't be queued or processor stopped is closed then default
+// value is returned.
+func runRequest[T interface{}](p *ScheduledProcessor, f func(ctx context.Context) (T, bool)) T {
+	await := future.MakeAwaitableFuture(future.Make[T]())
+	if err := p.enqueueRequest(func(ctx context.Context) bool {
+		val, done := f(ctx)
+		await.Set(val)
+		return done
+	}); err != nil {
+		var empty T
+		return empty
+	}
+	select {
+	case <-await.Done():
+		return await.Get()
+	case <-p.stoppedC:
+		var empty T
+		return empty
+	}
+}
+
+func (p *ScheduledProcessor) enqueueRequest(req request) error {
+	select {
+	case p.requestQueue <- req:
+		return p.scheduleEvent(reqEvent)
+	case <-p.stoppedC:
+		return errors.New("processor already stopped")
+	}
+}
+
+func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case e.ops != nil:
 		p.consumeLogicalOps(ctx, e.ops, e.alloc)
@@ -574,7 +611,7 @@ func (p *LegacyProcessor) consumeEvent(ctx context.Context, e *event) {
 	}
 }
 
-func (p *LegacyProcessor) consumeLogicalOps(
+func (p *ScheduledProcessor) consumeLogicalOps(
 	ctx context.Context, ops []enginepb.MVCCLogicalOp, alloc *SharedBudgetAllocation,
 ) {
 	for _, op := range ops {
@@ -616,7 +653,7 @@ func (p *LegacyProcessor) consumeLogicalOps(
 	}
 }
 
-func (p *LegacyProcessor) consumeSSTable(
+func (p *ScheduledProcessor) consumeSSTable(
 	ctx context.Context,
 	sst []byte,
 	sstSpan roachpb.Span,
@@ -626,19 +663,19 @@ func (p *LegacyProcessor) consumeSSTable(
 	p.publishSSTable(ctx, sst, sstSpan, sstWTS, alloc)
 }
 
-func (p *LegacyProcessor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
+func (p *ScheduledProcessor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
 	if p.rts.ForwardClosedTS(newClosedTS) {
 		p.publishCheckpoint(ctx)
 	}
 }
 
-func (p *LegacyProcessor) initResolvedTS(ctx context.Context) {
+func (p *ScheduledProcessor) initResolvedTS(ctx context.Context) {
 	if p.rts.Init() {
 		p.publishCheckpoint(ctx)
 	}
 }
 
-func (p *LegacyProcessor) publishValue(
+func (p *ScheduledProcessor) publishValue(
 	ctx context.Context,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -665,7 +702,7 @@ func (p *LegacyProcessor) publishValue(
 	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, alloc)
 }
 
-func (p *LegacyProcessor) publishDeleteRange(
+func (p *ScheduledProcessor) publishDeleteRange(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -684,7 +721,7 @@ func (p *LegacyProcessor) publishDeleteRange(
 	p.reg.PublishToOverlapping(ctx, span, &event, alloc)
 }
 
-func (p *LegacyProcessor) publishSSTable(
+func (p *ScheduledProcessor) publishSSTable(
 	ctx context.Context,
 	sst []byte,
 	sstSpan roachpb.Span,
@@ -706,7 +743,7 @@ func (p *LegacyProcessor) publishSSTable(
 	}, alloc)
 }
 
-func (p *LegacyProcessor) publishCheckpoint(ctx context.Context) {
+func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context) {
 	// TODO(nvanbenschoten): persist resolvedTimestamp. Give Processor a client.DB.
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
@@ -714,7 +751,7 @@ func (p *LegacyProcessor) publishCheckpoint(ctx context.Context) {
 	p.reg.PublishToOverlapping(ctx, all, event, nil)
 }
 
-func (p *LegacyProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
+func (p *ScheduledProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 	// Create a RangeFeedCheckpoint over the Processor's entire span. Each
 	// individual registration will trim this down to just the key span that
 	// it is listening on in registration.maybeStripEvent before publishing.
@@ -726,12 +763,7 @@ func (p *LegacyProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
 	return &event
 }
 
-// span implements ProcessorTaskHelper
-func (p *LegacyProcessor) span() roachpb.RSpan {
-	return p.Span
-}
-
-// pusher implements ProcessorTaskHelper
-func (p *LegacyProcessor) pusher() TxnPusher {
-	return p.TxnPusher
+func (p *ScheduledProcessor) scheduleEvent(e schedulerEvent) error {
+	log.VEventf(context.Background(), 3, "scheduling event %s", e)
+	return p.Scheduler.Schedule(int(e))
 }

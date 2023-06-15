@@ -29,7 +29,7 @@ import (
 type runnable interface {
 	// Run executes the runnable. Cannot be called multiple times.
 	Run(context.Context)
-	// Must be called if runnable is not Run.
+	// Cancel must be called if runnable is not Run.
 	Cancel()
 }
 

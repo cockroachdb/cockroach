@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -72,6 +73,14 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 		"capped at kv.rangefeed.closed_timestamp_refresh_interval",
 	1*time.Millisecond,
 	settings.NonNegativeDuration,
+)
+
+var RangeFeedUseScheduler = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.scheduler_processor.enabled",
+	"type of rangefeed processor used by replicas. false - gorotine per replica, "+
+		"false - processors share fixed sized pool of goroutines",
+	false,
 )
 
 // defaultEventChanCap is the channel capacity of the rangefeed processor and
@@ -339,7 +348,7 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
-	startTS hlc.Timestamp, // exclusive
+	startTS hlc.Timestamp,
 	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
@@ -347,11 +356,23 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 ) rangefeed.Processor {
 	defer logSlowRangefeedRegistration(ctx)()
 
+	useScheduledProcessor := RangeFeedUseScheduler.Get(&r.ClusterSettings().SV)
+
 	// Attempt to register with an existing Rangefeed processor, if one exists.
 	// The locking here is a little tricky because we need to handle the case
 	// of concurrent processor shutdowns (see maybeDisconnectEmptyRangefeed).
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
+
+	// Check if existing processor matches currently configured one. If not,
+	// we need to stop it and restart a different one.
+	if p != nil && useScheduledProcessor != p.UsingScheduler() {
+		pErr := kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
+		p.StopWithErr(pErr)
+		r.unsetRangefeedProcessorLocked(p)
+		p = nil
+	}
+
 	if p != nil {
 		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 		if reg {
@@ -372,12 +393,18 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey)
 
+	var sched sched.ClientScheduler
+	if useScheduledProcessor {
+		sched = r.store.allocRangefeedScheduler()
+	}
+
 	// Create a new rangefeed.
 	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
 		Clock:            r.Clock(),
+		Stopper:          r.store.stopper,
 		RangeID:          r.RangeID,
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
@@ -387,6 +414,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		EventChanTimeout: defaultEventChanTimeout,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
 		MemBudget:        feedBudget,
+		Scheduler:        sched,
 	}
 	p = rangefeed.NewProcessor(cfg)
 

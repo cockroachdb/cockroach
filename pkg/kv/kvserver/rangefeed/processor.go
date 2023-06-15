@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -47,6 +48,7 @@ func newErrBufferCapacityExceeded() *kvpb.Error {
 type Config struct {
 	log.AmbientContext
 	Clock   *hlc.Clock
+	Stopper *stop.Stopper
 	RangeID roachpb.RangeID
 	Span    roachpb.RSpan
 
@@ -72,6 +74,10 @@ type Config struct {
 
 	// Optional Processor memory budget.
 	MemBudget *FeedBudget
+
+	// Scheduler for processing events. If set (allocated id > 0), then use
+	// scheduler based processor, otherwise legacy one.
+	Scheduler sched.ClientScheduler
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -108,6 +114,9 @@ type Processor interface {
 	Start(stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor) error
 	Stop()
 	StopWithErr(pErr *kvpb.Error)
+
+	// UsingScheduler returns true if processor is scheduler based.
+	UsingScheduler() bool
 
 	// Lifecycle of registrations.
 
@@ -194,28 +203,17 @@ type spanErr struct {
 	pErr *kvpb.Error
 }
 
-// NewProcessor creates a new rangefeed Processor. The corresponding goroutine
-// should be launched using the Start method.
+// NewProcessor creates a new rangefeed Processor. The corresponding processing
+// loop should be launched using the Start method.
 func NewProcessor(cfg Config) Processor {
 	cfg.SetDefaults()
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
-	p := &LegacyProcessor{
-		Config: cfg,
-		reg:    makeRegistry(cfg.Metrics),
-		rts:    makeResolvedTimestamp(),
-
-		regC:       make(chan registration),
-		unregC:     make(chan *registration),
-		lenReqC:    make(chan struct{}),
-		lenResC:    make(chan int),
-		filterReqC: make(chan struct{}),
-		filterResC: make(chan *Filter),
-		eventC:     make(chan *event, cfg.EventChanCap),
-		spanErrC:   make(chan spanErr),
-		stopC:      make(chan *kvpb.Error, 1),
-		stoppedC:   make(chan struct{}),
+	if cfg.Scheduler.ID() > 0 {
+		// TODO(oleg): remove logging
+		log.Infof(context.Background(), "creating new style processor for range feed on r%d", cfg.RangeID)
+		return NewScheduledProcessor(cfg)
 	}
-	return p
+	return NewLegacyProcessor(cfg)
 }
 
 // IntentScannerConstructor is used to construct an IntentScanner. It
