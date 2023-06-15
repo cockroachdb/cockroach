@@ -538,7 +538,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
 	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
 	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM)
-	if _, overloaded := io.ioThreshold.Score(); overloaded || io.aux.doLogFlush ||
+	if score, _ := io.ioThreshold.Score(); score >= 0.5 || io.aux.doLogFlush ||
 		io.elasticDiskBWTokens != unlimitedTokens {
 		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)
 	}
@@ -815,17 +815,42 @@ func (*ioLoadListener) adjustTokensInner(
 	var totalNumByteTokens int64
 	var smoothedCompactionByteTokens float64
 
-	_, overloaded := ioThreshold.Score()
-	if overloaded {
-		// Don't admit more byte work than we can remove via compactions. totalNumByteTokens
-		// tracks our goal for admission.
-		// Scale down since we want to get under the thresholds over time. This
-		// scaling could be adjusted based on how much above the threshold we are,
-		// but for now we just use a constant.
-		fTotalNumByteTokens := float64(smoothedIntL0CompactedBytes / 2.0)
+	score, _ := ioThreshold.Score()
+	// Multiplying by two is odd, but if we don't multiply by 2, then score will
+	// be in range [0, 1+]. We can check if score is < 0.5, rather than checking
+	// if it is less than 1, to determine that we're under the threshold, and if
+	// it is >= 1 to determine if we're over the threshold. [0.5. 1) will be the
+	// range where we perform linear interpolation. This produces vastly different
+	// and less smoothed behaviour than multiplying the score by 2, and checking
+	// if the score is < 1, or >= 2, and performing linear interpolation for the
+	// range [1, 2).
+	score *= 2
+	if score < 1 {
+		// Under the threshold. Maintain a smoothedCompactionByteTOkens based on
+		// what was removed, so that when we go over the threshold we have some
+		// history. This is also useful when we temporarily dip below the threshold
+		// -- we've seen extreme situations with alternating 15s intervals of above
+		// and below the threshold.
+		numTokens := intL0CompactedBytes
 		// Smooth it. This may seem peculiar since we are already using
-		// smoothedIntL0CompactedBytes, but the else clause below uses a different
-		// computation so we also want the history of smoothedTotalNumByteTokens.
+		// smoothedIntL0CompactedBytes, but the clauses below uses different
+		// computations so we also want the history of smoothedCompactionByteTokens.
+		smoothedCompactionByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedCompactionByteTokens
+		totalNumByteTokens = unlimitedTokens
+	} else {
+		var fTotalNumByteTokens float64
+		if score >= 2 {
+			// Don't admit more byte work than we can remove via compactions.
+			// totalNumByteTokens tracks our goal for admission. Scale down
+			// since we want to get under the thresholds over time. This
+			// scaling could be adjusted based on how much above the threshold we are,
+			// but for now we just use a constant.
+			fTotalNumByteTokens = float64(smoothedIntL0CompactedBytes / 2.0)
+		} else {
+			// score in [1, 2).
+			halfSmoothedBytes := float64(smoothedIntL0CompactedBytes / 2.0)
+			fTotalNumByteTokens = -score*halfSmoothedBytes + 3*halfSmoothedBytes
+		}
 		smoothedCompactionByteTokens = alpha*fTotalNumByteTokens + (1-alpha)*prev.smoothedCompactionByteTokens
 		if float64(math.MaxInt64) < smoothedCompactionByteTokens {
 			// Avoid overflow. This should not really happen.
@@ -833,16 +858,8 @@ func (*ioLoadListener) adjustTokensInner(
 		} else {
 			totalNumByteTokens = int64(smoothedCompactionByteTokens)
 		}
-	} else {
-		// Under the threshold. Maintain a smoothedTotalNumByteTokens based on what was
-		// removed, so that when we go over the threshold we have some history.
-		// This is also useful when we temporarily dip below the threshold --
-		// we've seen extreme situations with alternating 15s intervals of above
-		// and below the threshold.
-		numTokens := intL0CompactedBytes
-		smoothedCompactionByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedCompactionByteTokens
-		totalNumByteTokens = unlimitedTokens
 	}
+
 	// Use the minimum of the token count calculated using compactions and
 	// flushes.
 	tokenKind := compactionTokenKind
@@ -953,6 +970,7 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 			ib(res.aux.diskBW.intervalDiskLoadInfo.writeBandwidth),
 			ib(res.aux.diskBW.intervalDiskLoadInfo.provisionedBandwidth))
 	}
+	p.Printf("; write stalls %d", res.aux.intWriteStalls)
 }
 
 func (res adjustTokensResult) String() string {
