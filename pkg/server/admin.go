@@ -1368,8 +1368,9 @@ func (s *adminServer) statsForSpan(
 		return nil, err
 	}
 
-	// Get a list of node ids and range count for the specified span.
-	nodeIDs, rangeCount, err := nodeIDsAndRangeCountForSpan(
+	// Get a list of nodeIDs, range counts, and replica counts per node
+	// for the specified span.
+	nodeIDs, rangeCount, replCounts, err := getNodeIDsRangeCountReplCountForSpan(
 		ctx, s.distSender, rSpan,
 	)
 	if err != nil {
@@ -1439,6 +1440,15 @@ func (s *adminServer) statsForSpan(
 			return nil, err
 		}
 	}
+
+	// The semantics of tableStatResponse.ReplicaCount counts replicas
+	// found for this span returned by a cluster-wide fan-out.
+	// We can use descriptors to know what the final count _should_ be,
+	// if we assume every request succeeds (nodes and replicas are reachable).
+	for _, replCount := range replCounts {
+		tableStatResponse.ReplicaCount += replCount
+	}
+
 	for remainingResponses := len(nodeIDs); remainingResponses > 0; remainingResponses-- {
 		select {
 		case resp := <-responses:
@@ -1449,6 +1459,10 @@ func (s *adminServer) statsForSpan(
 					return nil, serverError(ctx, resp.err)
 				}
 
+				// If this node is unreachable,
+				// it's replicas can not be counted.
+				tableStatResponse.ReplicaCount -= replCounts[resp.nodeID]
+
 				tableStatResponse.MissingNodes = append(
 					tableStatResponse.MissingNodes,
 					serverpb.TableStatsResponse_MissingNode{
@@ -1458,7 +1472,6 @@ func (s *adminServer) statsForSpan(
 				)
 			} else {
 				tableStatResponse.Stats.Add(resp.resp.SpanToStats[span.String()].TotalStats)
-				tableStatResponse.ReplicaCount += int64(resp.resp.SpanToStats[span.String()].RangeCount)
 				tableStatResponse.ApproximateDiskBytes += resp.resp.SpanToStats[span.String()].ApproximateDiskBytes
 			}
 		case <-ctx.Done():
@@ -1470,16 +1483,19 @@ func (s *adminServer) statsForSpan(
 	return &tableStatResponse, nil
 }
 
-// Returns the list of node ids for the specified span.
-func nodeIDsAndRangeCountForSpan(
+// Returns the list of node ids, range count,
+// and replica count for the specified span.
+func getNodeIDsRangeCountReplCountForSpan(
 	ctx context.Context, ds *kvcoord.DistSender, rSpan roachpb.RSpan,
-) (nodeIDList []roachpb.NodeID, rangeCount int64, _ error) {
+) (nodeIDList []roachpb.NodeID, rangeCount int64, replCounts map[roachpb.NodeID]int64, _ error) {
 	nodeIDs := make(map[roachpb.NodeID]struct{})
+	replCountForNodeID := make(map[roachpb.NodeID]int64)
 	ri := kvcoord.MakeRangeIterator(ds)
 	ri.Seek(ctx, rSpan.Key, kvcoord.Ascending)
 	for ; ri.Valid(); ri.Next(ctx) {
 		rangeCount++
 		for _, repl := range ri.Desc().Replicas().Descriptors() {
+			replCountForNodeID[repl.NodeID]++
 			nodeIDs[repl.NodeID] = struct{}{}
 		}
 		if !ri.NeedAnother(rSpan) {
@@ -1487,7 +1503,7 @@ func nodeIDsAndRangeCountForSpan(
 		}
 	}
 	if err := ri.Error(); err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
 	nodeIDList = make([]roachpb.NodeID, 0, len(nodeIDs))
@@ -1497,7 +1513,7 @@ func nodeIDsAndRangeCountForSpan(
 	sort.Slice(nodeIDList, func(i, j int) bool {
 		return nodeIDList[i] < nodeIDList[j]
 	})
-	return nodeIDList, rangeCount, nil
+	return nodeIDList, rangeCount, replCountForNodeID, nil
 }
 
 // Users returns a list of users, stripped of any passwords.

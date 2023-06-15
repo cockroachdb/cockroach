@@ -72,6 +72,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestCCLLogic_changefeed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "changefeed")
+}
+
 func TestCCLLogic_new_schema_changer(
 	t *testing.T,
 ) {

@@ -427,6 +427,8 @@ func defaultClusterAllocator(
 			lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
 			c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
 			if err == nil {
+				// Pretend pre-existing's cluster architecture matches the desired one; see the above TODO wrt validation.
+				c.arch = arch
 				return c, nil, nil
 			}
 			if !errors.Is(err, errClusterNotFound) {
@@ -632,7 +634,7 @@ func (r *testRunner) runWorker(
 				// N.B. FIPS is only supported on 'amd64' at this time.
 				arch = vm.ArchFIPS
 			}
-			if testToRun.spec.Benchmark {
+			if testToRun.spec.Benchmark && testToRun.spec.Cluster.Cloud != spec.Local {
 				// TODO(srosenberg): enable after https://github.com/cockroachdb/cockroach/issues/104213
 				l.PrintfCtx(ctx, "Disabling randomly chosen arch=%q, %s", arch, testToRun.spec.Name)
 				arch = vm.ArchAMD64
@@ -645,7 +647,7 @@ func (r *testRunner) runWorker(
 		if testToRun.canReuseCluster && c != nil && c.arch != arch {
 			// Non-local cluster that's being reused must have the same architecture as was ensured above.
 			if c.spec.Cloud != spec.Local {
-				return errors.New("infeasible path: non-local cluster arch mismatch")
+				return errors.Newf("infeasible path: non-local cluster arch=%q differs from selected arch=%q", c.arch, arch)
 			}
 			// Local cluster is now reused to emulate a different CPU architecture.
 			c.arch = arch
