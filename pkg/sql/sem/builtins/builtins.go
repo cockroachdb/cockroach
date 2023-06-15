@@ -5428,19 +5428,8 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				if err != nil {
 					return nil, err
 				}
-				start := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(uint64(sTenID)))
-				end := start.PrefixEnd()
-
-				result := tree.NewDArray(types.Bytes)
-				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
-					return nil, err
-				}
-
-				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
-					return nil, err
-				}
-
-				return result, nil
+				codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(uint64(sTenID)))
+				return spanToDatum(codec.TenantSpan())
 			},
 			Info:       "This function returns the span that contains the keys for the given tenant.",
 			Volatility: volatility.Immutable,
@@ -5457,11 +5446,7 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				if err != nil {
 					return nil, err
 				}
-				start := keys.MakeTenantPrefix(tid)
-				return spanToDatum(roachpb.Span{
-					Key:    start,
-					EndKey: start.PrefixEnd(),
-				})
+				return spanToDatum(keys.MakeSQLCodec(tid).TenantSpan())
 			},
 			Info:       "This function returns the span that contains the keys for the given tenant.",
 			Volatility: volatility.Immutable,
