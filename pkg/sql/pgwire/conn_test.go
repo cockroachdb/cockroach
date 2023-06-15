@@ -101,8 +101,9 @@ func TestConn(t *testing.T) {
 		return client(ctx, serverAddr, &clientWG)
 	})
 
+	server := newTestServer()
 	// Wait for the client to connect and perform the handshake.
-	conn, err := waitForClientConn(ln)
+	conn, err := waitForClientConn(server, ln)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,14 +112,11 @@ func TestConn(t *testing.T) {
 	// buffer.
 	serveCtx, stopServe := context.WithCancel(ctx)
 	g.Go(func() error {
-		conn.serveImpl(
+		server.serveImpl(
 			serveCtx,
-			func() bool { return false }, /* draining */
-			// sqlServer - nil means don't create a command processor and a write side of the conn
-			nil,
+			conn,
 			&mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
-			nil, /* afterReadMsgTestingKnob */
 		)
 		return nil
 	})
@@ -548,12 +546,11 @@ func newTestServer() *Server {
 
 // waitForClientConn blocks until a client connects and performs the pgwire
 // handshake. This emulates what pgwire.Server does.
-func waitForClientConn(ln net.Listener) (*conn, error) {
+func waitForClientConn(s *Server, ln net.Listener) (*conn, error) {
 	conn, _, err := getSessionArgs(ln, false)
 	if err != nil {
 		return nil, err
 	}
-	s := newTestServer()
 	pgwireConn := s.newConn(
 		conn,
 		sql.SessionArgs{ConnResultsBufferSize: 16 << 10},
@@ -1108,13 +1105,11 @@ func TestMaliciousInputs(t *testing.T) {
 			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
-			conn.serveImpl(
+			s.serveImpl(
 				ctx,
-				func() bool { return false }, /* draining */
-				nil,                          /* sqlServer */
-				&mon.BoundAccount{},          /* reserved */
+				conn,
+				&mon.BoundAccount{}, /* reserved */
 				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
-				nil, /* afterReadMsgTestingKnob */
 			)
 			if err := <-errChan; err != nil {
 				t.Fatal(err)
