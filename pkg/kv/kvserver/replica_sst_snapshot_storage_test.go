@@ -277,6 +277,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 
 	msstw, err := newMultiSSTWriter(
 		ctx, cluster.MakeTestingClusterSettings(), scratch, keySpans, 0,
+		false, /* skipRangeDelForLastSpan */
 	)
 	require.NoError(t, err)
 	_, err = msstw.Finish(ctx)
