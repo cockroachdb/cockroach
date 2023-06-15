@@ -43,4 +43,8 @@ check_workspace_clean 'go_mod_tidy' "Run \`go mod tidy\` to automatically regene
 bazel run //pkg/cmd/generate-logictest -- -out-dir="$PWD"
 check_workspace_clean 'generate_logictest' "Run \`./dev gen testlogic\` to automatically regenerate these."
 
+# NB: If this step fails, then some checksum in the code is probably not
+# matching up to the "real" checksum for that artifact.
+bazel fetch @distdir//:archives
+
 end_check_generated_code_tests
