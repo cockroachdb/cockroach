@@ -52,3 +52,13 @@ export const selectAutomaticStatsCollectionEnabled = createSelector(
     return value === "true";
   },
 );
+
+export const selectClusterSettingVersion = createSelector(
+  selectClusterSettings,
+  (settings): string => {
+    if (!settings) {
+      return "";
+    }
+    return settings["version"].value;
+  },
+);
