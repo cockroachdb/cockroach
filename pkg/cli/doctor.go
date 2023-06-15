@@ -328,7 +328,7 @@ SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs
 `
 	checkSystemJobs := `SELECT count(*) FROM "".crdb_internal.system_jobs LIMIT 1`
 	_, err = sqlConn.QueryRow(ctx, checkSystemJobs)
-	// On versions before 23.1, we have a new table called crdb_internal.system_jobs,
+	// On versions after 23.1, we have a new table called crdb_internal.system_jobs;
 	// if its not available fall back to system.jobs
 	if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
 		if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedTable {
