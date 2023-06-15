@@ -297,7 +297,6 @@ npm_protos_repositories()
 npm_translate_lock(
     name = "npm_db_console",
     data = ["//pkg/ui/workspaces/db-console:package.json"],
-    no_optional = True,
     npmrc = "//pkg/ui:.npmrc.pnpm",
     pnpm_lock = "//pkg/ui/workspaces/db-console:pnpm-lock.yaml",
     update_pnpm_lock = True,
