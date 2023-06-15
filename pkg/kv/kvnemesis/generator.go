@@ -925,16 +925,32 @@ func makeClosureTxn(
 // fk stands for "from key", i.e. decode the uint64 the key represents.
 // Panics on error.
 func fk(k string) uint64 {
+	i, err := fkE(k)
+	if err != nil {
+		panic(err)
+	}
+	return i
+}
+
+// fkE is like fk, but returns an error instead of panicking.
+func fkE(k string) (uint64, error) {
+	l := len(GeneratorDataSpan().Key)
+	if len(k) < l {
+		return 0, errors.New("key too short")
+	}
 	k = k[len(GeneratorDataSpan().Key):]
 	_, s, err := encoding.DecodeUnsafeStringAscendingDeepCopy([]byte(k), nil)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 	sl, err := hex.DecodeString(s)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
-	return binary.BigEndian.Uint64(sl)
+	if len(sl) < 8 {
+		return 0, errors.New("slice too short")
+	}
+	return binary.BigEndian.Uint64(sl), nil
 }
 
 // tk stands for toKey, i.e. encode the uint64 into its key representation.
