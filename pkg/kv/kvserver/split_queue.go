@@ -151,7 +151,7 @@ func (sq *splitQueue) shouldQueue(
 		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
-		if splitKey := repl.loadBasedSplitter.MaybeSplitKey(timeutil.Now()); splitKey != nil {
+		if splitKey := repl.loadSplitKey(ctx, timeutil.Now()); splitKey != nil {
 			shouldQ, priority = true, 1.0 // default priority
 		}
 	}
@@ -209,6 +209,7 @@ func (sq *splitQueue) processAttempt(
 			desc,
 			false, /* delayable */
 			"span config",
+			false, /* findFirstSafeSplitKey */
 		); err != nil {
 			return false, errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
@@ -227,16 +228,17 @@ func (sq *splitQueue) processAttempt(
 			desc,
 			false, /* delayable */
 			fmt.Sprintf("%s above threshold size %s", humanizeutil.IBytes(size), humanizeutil.IBytes(maxBytes)),
+			false, /* findFirstSafeSplitKey */
 		)
 
 		return err == nil, err
 	}
 
 	now := timeutil.Now()
-	if splitByLoadKey := r.loadBasedSplitter.MaybeSplitKey(now); splitByLoadKey != nil {
+	if splitByLoadKey := r.loadSplitKey(ctx, now); splitByLoadKey != nil {
 		batchHandledQPS, _ := r.QueriesPerSecond()
 		raftAppliedQPS := r.WritesPerSecond()
-		splitQPS := r.loadBasedSplitter.LastQPS(now)
+		splitQPS := r.loadBasedSplitter.LastQPS(ctx, now)
 		reason := fmt.Sprintf(
 			"load at key %s (%.2f splitQPS, %.2f batches/sec, %.2f raft mutations/sec)",
 			splitByLoadKey,
@@ -256,6 +258,10 @@ func (sq *splitQueue) processAttempt(
 		if expDelay := kvserverbase.SplitByLoadMergeDelay.Get(&sq.store.cfg.Settings.SV); expDelay > 0 {
 			expTime = sq.store.Clock().Now().Add(expDelay.Nanoseconds(), 0)
 		}
+		// The splitByLoadKey has no guarantee of being a safe key to split at (not
+		// between SQL rows). To sanitize the split point, pass
+		// findFirstSafeSplitKey set to true, so that the first key after the
+		// suggested split point which is safe to split at is used.
 		if _, pErr := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
@@ -268,6 +274,7 @@ func (sq *splitQueue) processAttempt(
 			desc,
 			false, /* delayable */
 			reason,
+			true, /* findFirstSafeSplitKey */
 		); pErr != nil {
 			return false, errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
 		}

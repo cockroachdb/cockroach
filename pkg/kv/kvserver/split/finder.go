@@ -13,6 +13,7 @@ package split
 import (
 	"bytes"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -148,4 +149,54 @@ func (f *Finder) Key() roachpb.Key {
 		return nil
 	}
 	return f.samples[bestIdx].key
+}
+
+// NoSplitKeyCause iterates over all sampled candidate split keys and
+// determines the number of samples that don't pass each split key requirement
+// (e.g. insufficient counters, imbalance in left and right counters, too many
+// contained counters, or a combination of the last two).
+func (f *Finder) NoSplitKeyCause() (
+	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained int,
+) {
+	for _, s := range f.samples {
+		if s.left+s.right+s.contained < splitKeyMinCounter {
+			insufficientCounters++
+		} else {
+			balanceScore := math.Abs(float64(s.left-s.right)) / float64(s.left+s.right)
+			imbalanceBool := balanceScore >= splitKeyThreshold
+			containedScore := float64(s.contained) / float64(s.left+s.right+s.contained)
+			tooManyContainedBool := containedScore >= splitKeyContainedThreshold
+			if imbalanceBool && !tooManyContainedBool {
+				imbalance++
+			} else if !imbalanceBool && tooManyContainedBool {
+				tooManyContained++
+			} else if imbalanceBool && tooManyContainedBool {
+				imbalanceAndTooManyContained++
+			}
+		}
+	}
+	return
+}
+
+// PopularKeyFrequency returns the percentage that the most popular key appears
+// in f.samples.
+func (f *Finder) PopularKeyFrequency() float64 {
+	sort.Slice(f.samples[:], func(i, j int) bool {
+		return bytes.Compare(f.samples[i].key, f.samples[j].key) < 0
+	})
+
+	currentKeyCount := 1
+	popularKeyCount := 1
+	for i := 1; i < len(f.samples); i++ {
+		if bytes.Equal(f.samples[i].key, f.samples[i-1].key) {
+			currentKeyCount++
+		} else {
+			currentKeyCount = 1
+		}
+		if popularKeyCount < currentKeyCount {
+			popularKeyCount = currentKeyCount
+		}
+	}
+
+	return float64(popularKeyCount) / float64(splitKeySampleSize)
 }
