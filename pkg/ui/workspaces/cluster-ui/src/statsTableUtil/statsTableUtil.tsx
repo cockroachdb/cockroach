@@ -917,7 +917,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The highest latency value in the sampled {contentModifier}
+            The highest latency value for all {contentModifier}
             executions with this fingerprint.
           </p>
         }
@@ -943,8 +943,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The lowest latency value in the sampled {contentModifier} executions
-            with this fingerprint.
+            The lowest latency value for all {contentModifier} executions with
+            this fingerprint.
           </p>
         }
       >
@@ -969,8 +969,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The 50th latency percentile for {contentModifier} executions with
-            this fingerprint.
+            The 50th latency percentile for sampled {contentModifier} executions
+            with this fingerprint.
           </p>
         }
       >
@@ -995,8 +995,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The 90th latency percentile for {contentModifier} executions with
-            this fingerprint.
+            The 90th latency percentile for sampled {contentModifier} executions
+            with this fingerprint.
           </p>
         }
       >
@@ -1021,8 +1021,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         style="tableTitle"
         content={
           <p>
-            The 99th latency percentile for {contentModifier} executions with
-            this fingerprint.
+            The 99th latency percentile for sampled {contentModifier} executions
+            with this fingerprint.
           </p>
         }
       >
