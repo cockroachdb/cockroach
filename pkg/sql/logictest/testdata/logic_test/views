@@ -1869,3 +1869,34 @@ DROP VIEW cd_v1;
 
 statement ok
 DROP VIEW cd_v1 CASCADE;
+
+# Regression test for #104927. Correctly resolve table references in views as
+# TupleStars.
+subtest regression_104927
+
+statement ok
+CREATE TABLE t104927 (
+  i INT,
+  s STRING
+);
+INSERT INTO t104927 VALUES (1, 'foo');
+
+query T
+SELECT json_agg(r) FROM (
+  SELECT i, s
+  FROM t104927
+) AS r
+----
+[{"i": 1, "s": "foo"}]
+
+statement ok
+CREATE VIEW v104927 AS SELECT json_agg(r) FROM (
+  SELECT i, s
+  FROM t104927
+) AS r
+
+# The output should match the output above where the query was run directly.
+query T
+SELECT * FROM v104927
+----
+[{"i": 1, "s": "foo"}]
