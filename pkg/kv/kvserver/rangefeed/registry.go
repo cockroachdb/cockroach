@@ -290,9 +290,8 @@ func (r *registration) maybeStripEvent(event *kvpb.RangeFeedEvent) *kvpb.RangeFe
 }
 
 // disconnect cancels the output loop context for the registration and passes an
-// error to the output error stream for the registration. This also sets the
-// disconnected flag on the registration, preventing it from being disconnected
-// again.
+// error to the output error stream for the registration.
+// Safe to run multiple times, but subsequent errors would be discarded.
 func (r *registration) disconnect(pErr *kvpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
