@@ -2386,8 +2386,12 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 }
 
 // CampaignForTesting campaigns the replica, for use in tests.
-func (r *Replica) CampaignForTesting(ctx context.Context) {
+func (r *Replica) CampaignForTesting(ctx context.Context, force bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.campaignLocked(ctx)
+	if force {
+		r.forceCampaignLocked(ctx)
+	} else {
+		r.campaignLocked(ctx)
+	}
 }
