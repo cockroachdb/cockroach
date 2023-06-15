@@ -186,6 +186,7 @@ go_library(
         "//pkg/ts/tsutil",
         "//pkg/upgrade/upgrades",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/cgroups",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
