@@ -102,11 +102,20 @@ func TestConn(t *testing.T) {
 	})
 
 	server := newTestServer()
+	ctx, cancelConn := context.WithCancel(ctx)
+	defer cancelConn()
 	// Wait for the client to connect and perform the handshake.
-	conn, err := waitForClientConn(server, ln)
+	netConn, err := waitForClientConn(ln)
 	if err != nil {
 		t.Fatal(err)
 	}
+	conn := server.newConn(
+		ctx,
+		cancelConn,
+		netConn,
+		sql.SessionArgs{ConnResultsBufferSize: 16 << 10},
+		timeutil.Now(),
+	)
 
 	// Run the conn's loop in the background - it will push commands to the
 	// buffer.
@@ -546,17 +555,9 @@ func newTestServer() *Server {
 
 // waitForClientConn blocks until a client connects and performs the pgwire
 // handshake. This emulates what pgwire.Server does.
-func waitForClientConn(s *Server, ln net.Listener) (*conn, error) {
+func waitForClientConn(ln net.Listener) (net.Conn, error) {
 	conn, _, err := getSessionArgs(ln, false)
-	if err != nil {
-		return nil, err
-	}
-	pgwireConn := s.newConn(
-		conn,
-		sql.SessionArgs{ConnResultsBufferSize: 16 << 10},
-		timeutil.Now(),
-	)
-	return pgwireConn, nil
+	return conn, err
 }
 
 // getSessionArgs blocks until a client connects and returns the connection
@@ -1095,8 +1096,12 @@ func TestMaliciousInputs(t *testing.T) {
 				close(errChan)
 			}(tc)
 
+			ctx, cancelConn := context.WithCancel(ctx)
+			defer cancelConn()
 			s := newTestServer()
 			conn := s.newConn(
+				ctx,
+				cancelConn,
 				r,
 				// ConnResultsBufferSize - really small so that it overflows
 				// when we produce a few results.
@@ -1149,7 +1154,12 @@ func TestReadTimeoutConnExits(t *testing.T) {
 			}
 			defer c.Close()
 
-			readTimeoutConn := NewReadTimeoutConn(c, func() error { return ctx.Err() })
+			readTimeoutConn := &readTimeoutConn{
+				Conn: c,
+				checkExitConds: func() error {
+					return ctx.Err()
+				},
+			}
 			// Assert that reads are performed normally.
 			readBytes := make([]byte, len(expectedRead))
 			if _, err := readTimeoutConn.Read(readBytes); err != nil {
