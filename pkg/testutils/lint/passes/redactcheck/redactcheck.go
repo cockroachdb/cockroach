@@ -163,6 +163,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"IndexID":        {},
 						"PGAttributeNum": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/sem/tree": {
+						"IsolationLevel": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness": {
 						"SessionID": {},
 					},
