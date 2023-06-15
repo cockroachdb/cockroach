@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -32,6 +33,16 @@ type runnable interface {
 	Cancel()
 }
 
+// TODO: We currently use this to isolate existing helpers from processor that we want
+// to replace.
+type ProcessorTaskHelper interface {
+	ProcessorSpan() roachpb.RSpan
+	StopWithErr(pErr *kvpb.Error)
+	setResolvedTSInitialized(ctx context.Context)
+	sendEvent(ctx context.Context, e event, timeout time.Duration) bool
+	Pusher() TxnPusher
+}
+
 // initResolvedTSScan scans over all keys using the provided iterator and
 // informs the rangefeed Processor of any intents. This allows the Processor to
 // backfill its unresolvedIntentQueue with any intents that were written before
@@ -39,12 +50,12 @@ type runnable interface {
 // The Processor can initialize its resolvedTimestamp once the scan completes
 // because it knows it is now tracking all intents in its key range.
 type initResolvedTSScan struct {
-	p  *Processor
+	h  ProcessorTaskHelper
 	is IntentScanner
 }
 
-func newInitResolvedTSScan(p *Processor, c IntentScanner) runnable {
-	return &initResolvedTSScan{p: p, is: c}
+func newInitResolvedTSScan(s ProcessorTaskHelper, c IntentScanner) runnable {
+	return &initResolvedTSScan{h: s, is: c}
 }
 
 func (s *initResolvedTSScan) Run(ctx context.Context) {
@@ -52,20 +63,19 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 	if err := s.iterateAndConsume(ctx); err != nil {
 		err = errors.Wrap(err, "initial resolved timestamp scan failed")
 		log.Errorf(ctx, "%v", err)
-		s.p.StopWithErr(kvpb.NewError(err))
+		s.h.StopWithErr(kvpb.NewError(err))
 	} else {
 		// Inform the processor that its resolved timestamp can be initialized.
-		s.p.setResolvedTSInitialized(ctx)
+		s.h.setResolvedTSInitialized(ctx)
 	}
 }
 
 func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
-	startKey := s.p.Span.Key.AsRawKey()
-	endKey := s.p.Span.EndKey.AsRawKey()
-	return s.is.ConsumeIntents(ctx, startKey, endKey, func(op enginepb.MVCCWriteIntentOp) bool {
+	span := s.h.ProcessorSpan()
+	return s.is.ConsumeIntents(ctx, span.Key.AsRawKey(), span.EndKey.AsRawKey(), func(op enginepb.MVCCWriteIntentOp) bool {
 		var ops [1]enginepb.MVCCLogicalOp
 		ops[0].SetValue(&op)
-		return s.p.sendEvent(ctx, event{ops: ops[:]}, 0)
+		return s.h.sendEvent(ctx, event{ops: ops[:]}, 0)
 	})
 }
 
@@ -249,17 +259,17 @@ type TxnPusher interface {
 //     - ABORTED:   inform the Processor to stop caring about the transaction.
 //     It will never commit and its intents can be safely ignored.
 type txnPushAttempt struct {
-	p     *Processor
-	txns  []enginepb.TxnMeta
+	h    ProcessorTaskHelper
+	txns []enginepb.TxnMeta
 	ts    hlc.Timestamp
 	doneC chan struct{}
 }
 
 func newTxnPushAttempt(
-	p *Processor, txns []enginepb.TxnMeta, ts hlc.Timestamp, doneC chan struct{},
+	h ProcessorTaskHelper, txns []enginepb.TxnMeta, ts hlc.Timestamp, doneC chan struct{},
 ) runnable {
 	return &txnPushAttempt{
-		p:     p,
+		h:     h,
 		txns:  txns,
 		ts:    ts,
 		doneC: doneC,
@@ -278,7 +288,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// This may cause transaction restarts, but span refreshing should
 	// prevent a restart for any transaction that has not been written
 	// over at a larger timestamp.
-	pushedTxns, err := a.p.TxnPusher.PushTxns(ctx, a.txns, a.ts)
+	pushedTxns, err := a.h.Pusher().PushTxns(ctx, a.txns, a.ts)
 	if err != nil {
 		return err
 	}
@@ -319,7 +329,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// intents are resolved before the resolved timestamp can advance past the
 			// transaction's commit timestamp, so the best we can do is help speed up
 			// the resolution.
-			txnIntents := intentsInBound(txn, a.p.Span.AsRawSpanWithNoLocals())
+			txnIntents := intentsInBound(txn, a.h.ProcessorSpan().AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		case roachpb.ABORTED:
 			// The transaction is aborted, so it doesn't need to be tracked
@@ -346,16 +356,16 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// LockSpans populated. If, however, we ran into a transaction that its
 			// coordinator tried to rollback but didn't follow up with garbage
 			// collection, then LockSpans will be populated.
-			txnIntents := intentsInBound(txn, a.p.Span.AsRawSpanWithNoLocals())
+			txnIntents := intentsInBound(txn, a.h.ProcessorSpan().AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
 		}
 	}
 
 	// Inform the processor of all logical ops.
-	a.p.sendEvent(ctx, event{ops: ops}, 0)
+	a.h.sendEvent(ctx, event{ops: ops}, 0)
 
 	// Resolve intents, if necessary.
-	return a.p.TxnPusher.ResolveIntents(ctx, intentsToCleanup)
+	return a.h.Pusher().ResolveIntents(ctx, intentsToCleanup)
 }
 
 func (a *txnPushAttempt) Cancel() {
