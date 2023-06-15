@@ -115,6 +115,19 @@ type ProposalData struct {
 	// beneath, modifying this ctx field in *ProposalData requires holding the
 	// raftMu.
 	//
+	// This is either the caller's context (if they are waiting for the result)
+	// or a "background" context, perhaps with a span in it (for async consensus
+	// or in case the caller has given up).
+	//
+	// Note that there is also replicatedCmd.{ctx,sp} and so confusion may arise
+	// about which one to log to. Generally if p.ctx has a span, replicatedCmd.ctx
+	// has a span that follows from it. However, if p.ctx has no span or the
+	// replicatedCmd is not associated to a local ProposalData, replicatedCmd.ctx
+	// may still have a span, if the remote proposer requested tracing. It follows
+	// that during command application one should always use `replicatedCmd.ctx`
+	// for best coverage. `p.ctx` should be used when a `replicatedCmd` is not in
+	// scope, i.e. outside of raft command application.
+	//
 	// TODO(tbg): under useReproposalsV2, the field can be modified safely as long
 	// as the ProposalData is still in `r.mu.proposals` and `r.mu` is held. If it's
 	// not in that map, we are log application and have exclusive access. Add a more
@@ -122,8 +135,10 @@ type ProposalData struct {
 	// somewhere but it should live on ProposalData).
 	ctx context.Context
 
-	// An optional tracing span bound to the proposal. Will be cleaned
-	// up when the proposal finishes.
+	// An optional tracing span bound to the proposal in the case of async
+	// consensus (it will be referenced by p.ctx). We need to finish this span
+	// after applying this proposal, since we created it. It is not used for
+	// anything else (all tracing goes through `p.ctx`).
 	sp *tracing.Span
 
 	// idKey uniquely identifies this proposal.
