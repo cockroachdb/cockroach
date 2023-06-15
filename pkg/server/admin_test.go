@@ -132,7 +132,7 @@ func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error
 
 // debugURL returns the root debug URL.
 func debugURL(s serverutils.TestServerInterface) string {
-	return s.AdminURL() + debug.Endpoint
+	return s.AdminURL().WithPath(debug.Endpoint).String()
 }
 
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are

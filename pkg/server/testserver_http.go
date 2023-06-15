@@ -64,14 +64,14 @@ func (t tenantHeaderDecorator) RoundTrip(req *http.Request) (*http.Response, err
 var _ http.RoundTripper = &tenantHeaderDecorator{}
 
 // AdminURL implements TestServerInterface.
-func (ts *httpTestServer) AdminURL() string {
+func (ts *httpTestServer) AdminURL() *serverutils.TestURL {
 	u := ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL()
 	if ts.t.tenantName != "" {
 		q := u.Query()
 		q.Add(TenantNameParamInQueryURL, string(ts.t.tenantName))
 		u.RawQuery = q.Encode()
 	}
-	return u.String()
+	return &serverutils.TestURL{URL: u}
 }
 
 // GetUnauthenticatedHTTPClient implements TestServerInterface.

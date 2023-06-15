@@ -523,7 +523,7 @@ func GetJSONProtoWithAdminOption(
 	if err != nil {
 		return err
 	}
-	fullURL := ts.AdminURL() + path
+	fullURL := ts.AdminURL().WithPath(path).String()
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.GetJSON(httpClient, fullURL, response)
 }
@@ -544,7 +544,7 @@ func PostJSONProtoWithAdminOption(
 	if err != nil {
 		return err
 	}
-	fullURL := ts.AdminURL() + path
+	fullURL := ts.AdminURL().WithPath(path).String()
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.PostJSON(httpClient, fullURL, request, response)
 }
