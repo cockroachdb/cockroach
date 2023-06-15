@@ -2063,7 +2063,7 @@ func (ex *connExecutor) run(
 	ex.ctxHolder.connCtx = ctx
 	ex.onCancelSession = onCancel
 
-	sessionID := ex.generateID()
+	sessionID := ex.server.cfg.generateID()
 	ex.server.cfg.SessionRegistry.register(sessionID, ex.queryCancelKey, ex)
 	ex.planner.extendedEvalCtx.SessionID = sessionID
 
@@ -2701,7 +2701,7 @@ func (ex *connExecutor) execCopyOut(
 	var numOutputRows int
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
-	queryID := ex.generateID()
+	queryID := ex.server.cfg.generateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
@@ -2919,7 +2919,7 @@ func (ex *connExecutor) execCopyIn(
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
-	queryID := ex.generateID()
+	queryID := ex.server.cfg.generateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
@@ -3155,13 +3155,6 @@ func (ex *connExecutor) execCopyIn(
 // type should return NoData.
 func stmtHasNoData(stmt tree.Statement) bool {
 	return stmt == nil || stmt.StatementReturnType() != tree.Rows
-}
-
-// generateID generates a unique ID based on the SQL instance ID and its current
-// HLC timestamp. These IDs are either scoped at the query level or at the
-// session level.
-func (ex *connExecutor) generateID() clusterunique.ID {
-	return clusterunique.GenerateID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
 }
 
 // commitPrepStmtNamespace deallocates everything in
