@@ -1230,6 +1230,9 @@ func (v *validator) checkNonAmbError(
 func (v *validator) failIfError(
 	op Operation, r Result, exceptions ...func(err error) bool,
 ) (ambiguous, hasError bool) {
+	exceptions = append(exceptions[:len(exceptions):len(exceptions)], func(err error) bool {
+		return errors.Is(err, errInjected)
+	})
 	switch r.Type {
 	case ResultType_Unknown:
 		err := errors.AssertionFailedf(`unknown result %s`, op)
