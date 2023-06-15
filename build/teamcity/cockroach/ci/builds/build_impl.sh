@@ -36,7 +36,7 @@ fi
 bazel build //pkg/cmd/bazci --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 "$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci" -- build -c opt \
-		       --config "$CONFIG" --config ci --config with_ui $EXTRA_ARGS \
+		       --config "$CONFIG" --config ci $EXTRA_ARGS \
 		       //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
 		       //pkg/cmd/cockroach-sql \
 		       //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS

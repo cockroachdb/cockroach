@@ -17,8 +17,7 @@ Build with
 ./dev build obsservice
 ```
 
-which will include the DB Console UI served on the HTTP port. This adds the
-`"--config=with_ui"` bazel flag that embeds the UI.
+which will include the DB Console UI served on the HTTP port.
 
 You can also build without the UI using:
 
@@ -80,7 +79,7 @@ exporters:
 
 In the current fledgling state, the Obs Service does a couple of things:
 
-1. The Obs Service serves the DB Console, when built with `--config=with_ui`.
+1. The Obs Service serves the DB Console.
 
 2. The Obs Service reverse-proxies some HTTP routes to
    CRDB (`/_admin/`, `/_status/`, `/ts/`, `/api/v2/`).

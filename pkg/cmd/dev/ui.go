@@ -569,7 +569,6 @@ launching test in a real browser. Extra flags are passed directly to the
 			buildCockroachArgv := []string{
 				"build",
 				"//pkg/cmd/cockroach:cockroach",
-				"--config=with_ui",
 			}
 			logCommand("bazel", buildCockroachArgv...)
 			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", buildCockroachArgv...)

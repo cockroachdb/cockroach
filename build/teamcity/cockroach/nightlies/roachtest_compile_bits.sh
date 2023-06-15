@@ -26,7 +26,7 @@ for platform in "${cross_builds[@]}"; do
 
   echo "Building $platform, os=$os, arch=$arch..."
   # Build cockroach, workload and geos libs.
-  bazel build --config $platform --config ci --config with_ui -c opt --config force_build_cdeps \
+  bazel build --config $platform --config ci -c opt --config force_build_cdeps \
         //pkg/cmd/cockroach //pkg/cmd/workload \
         //c-deps:libgeos
   # N.B. roachtest is currently executed only on a TC agent running linux/amd64, so we build it once.
@@ -36,7 +36,7 @@ for platform in "${cross_builds[@]}"; do
   # Build cockroach-short with assertions enabled.
   bazel build --config $platform --config ci -c opt //pkg/cmd/cockroach-short --crdb_test
   # Copy the binaries.
-  BAZEL_BIN=$(bazel info bazel-bin --config $platform --config ci --config with_ui -c opt)
+  BAZEL_BIN=$(bazel info bazel-bin --config $platform --config ci -c opt)
   # N.B. currently, we support only one roachtest binary, so elide the suffix.
   if [[ $os == "linux" && $arch == "amd64" ]]; then
     cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin/roachtest
