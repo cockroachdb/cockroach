@@ -154,8 +154,11 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 				retryOnAbort.Next()
 			}
 			savedTxn = txn
+			// First error. Because we need to mark everything that
+			// we didn't "reach" due to a prior error with errOmitted,
+			// we *don't* return eagerly on this but save it to the end.
+			var err error
 			{
-				var err error
 				for i := range o.Ops {
 					op := &o.Ops[i]
 					op.Result().Reset() // in case we're a retry
@@ -164,6 +167,12 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 						// to do this because we want, as an invariant, to have marked all
 						// operations as either failed or succeeded.
 						*op.Result() = resultInit(ctx, errOmitted)
+						if op.Batch != nil {
+							for _, op := range op.Batch.Ops {
+								*op.Result() = resultInit(ctx, errOmitted)
+							}
+						}
+
 						continue
 					}
 
@@ -173,9 +182,20 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 						err = errors.DecodeError(ctx, *r.Err)
 					}
 				}
-				if err != nil {
-					return err
+			}
+			if err != nil {
+				if o.CommitInBatch != nil {
+					// We failed before committing, so set errOmitted everywhere
+					// and then return the original error.
+					o.CommitInBatch.Result = resultInit(ctx, errOmitted)
+					for _, op := range o.CommitInBatch.Ops {
+						// NB: the `op` is definitely not a batch since we can't nest
+						// batches within each other, so we don't need that second level of
+						// recursion here.
+						*op.Result() = resultInit(ctx, errOmitted)
+					}
 				}
+				return err
 			}
 			if o.CommitInBatch != nil {
 				b := txn.NewBatch()
