@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,5 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./databaseTablePage";
-export * from "./databaseTablePageConnected";
+// isSystemTenant checks whether the provided tenant name is the
+// system tenant.
+import { SYSTEM_TENANT_NAME } from "./cookies";
+
+export const isSystemTenant = (tenantName: string): boolean => {
+  return tenantName === SYSTEM_TENANT_NAME;
+};

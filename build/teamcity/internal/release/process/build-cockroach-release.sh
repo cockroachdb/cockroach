@@ -55,7 +55,7 @@ tc_end_block "Make and publish release artifacts"
 tc_start_block "Make and push multiarch docker images"
 docker_login_gcr "$gcr_staged_repository" "$gcr_credentials"
 
-declare -a gcr_amends
+declare -a gcr_arch_tags
 
 for platform_name in amd64 arm64; do
   cp --recursive "build/deploy" "build/deploy-${platform_name}"
@@ -72,7 +72,7 @@ for platform_name in amd64 arm64; do
   rmdir build/deploy-${platform_name}/lib
 
   gcr_arch_tag="${gcr_staged_repository}:${platform_name}-${version}"
-  gcr_amends+=("--amend" "$gcr_arch_tag")
+  gcr_arch_tags+=("$gcr_arch_tag")
 
   # Tag the arch specific images with only one tag per repository. The manifests will reference the tags.
   docker build \
@@ -86,7 +86,8 @@ for platform_name in amd64 arm64; do
 done
 
 gcr_tag="${gcr_staged_repository}:${version}"
-docker manifest create "${gcr_tag}" "${gcr_amends[@]}"
+docker manifest rm "${gcr_tag}" || :
+docker manifest create "${gcr_tag}" "${gcr_arch_tags[@]}"
 docker manifest push "${gcr_tag}"
 
 tc_end_block "Make and push multiarch docker images"

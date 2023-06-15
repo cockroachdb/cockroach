@@ -9,8 +9,10 @@ go_library(
         "health_check.go",
         "recorder.go",
         "runtime.go",
+        "runtime_generic.go",
         "runtime_jemalloc.go",
         "runtime_jemalloc_darwin.go",
+        "runtime_linux.go",
         "runtime_log.go",
     ],
     # keep
@@ -126,6 +128,7 @@ go_test(
         "jemalloc_test.go",
         "main_test.go",
         "recorder_test.go",
+        "runtime_linux_test.go",
         "runtime_stats_test.go",
         "runtime_test.go",
     ],

@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1393,6 +1394,7 @@ func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 //
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
 func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger) error {
+	l.Printf("fetching timeseries data\n")
 	return contextutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
 		node := 1
 		for ; node <= c.spec.NodeCount; node++ {
@@ -1464,8 +1466,8 @@ COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure
 }
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
-// The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error {
+// The logs will be placed at `dest`, relative to the test's artifacts dir.
+func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest string) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1477,7 +1479,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 	// Don't hang forever if we can't fetch the debug zip.
 	return contextutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
 		const zipName = "debug.zip"
-		path := filepath.Join(c.t.ArtifactsDir(), zipName)
+		path := filepath.Join(c.t.ArtifactsDir(), dest)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
@@ -1507,63 +1509,115 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 	})
 }
 
-// checkNoDeadNode reports an error (via `t.Error`) if nodes that have a populated
+// checkNoDeadNode returns an error if at least one of the nodes that have a populated
 // data dir are found to be not running. It prints both to t.L() and the test
 // output.
-func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) {
+func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
-		return
+		return nil
 	}
 
-	_, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
-	// If there's an error, it means either that the monitor command failed
-	// completely, or that it found a dead node worth complaining about.
+	t.L().Printf("checking for dead nodes")
+	ch, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
+
+	// An error here means there was a problem initialising a SyncedCluster.
 	if err != nil {
-		t.Errorf("dead node detection: %s", err)
+		return err
+	}
+
+	isDead := func(msg string) bool {
+		if msg == "" || msg == "skipped" {
+			return false
+		}
+		// A numeric message is a PID and implies that the node is running.
+		_, err := strconv.Atoi(msg)
+		return err != nil
+	}
+
+	deadNodes := 0
+	for n := range ch {
+		// If there's an error, it means either that the monitor command failed
+		// completely, or that it found a dead node worth complaining about.
+		if n.Err != nil || isDead(n.Msg) {
+			deadNodes++
+		}
+
+		t.L().Printf("n%d: err=%v,msg=%s", n.Node, n.Err, n.Msg)
+	}
+
+	if deadNodes > 0 {
+		return errors.Newf("%d dead node(s) detected", deadNodes)
+	}
+	return nil
+}
+
+type HealthStatusResult struct {
+	Node   int
+	Status int
+	Body   []byte
+	Err    error
+}
+
+func newHealthStatusResult(node int, status int, body []byte, err error) *HealthStatusResult {
+	return &HealthStatusResult{
+		Node:   node,
+		Status: status,
+		Body:   body,
+		Err:    err,
 	}
 }
 
-// ConnectToLiveNode returns a connection to a live node in the cluster. If no
-// live node is found, it returns nil and -1. If a live node is found it returns
-// a connection to it and the node's index.
-func (c *clusterImpl) ConnectToLiveNode(ctx context.Context, t *testImpl) (*gosql.DB, int) {
-	node := -1
-	if c.spec.NodeCount < 1 {
-		return nil, node // unit tests
+// HealthStatus returns the result of the /health?ready=1 endpoint for each node.
+func (c *clusterImpl) HealthStatus(
+	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+) ([]*HealthStatusResult, error) {
+	if len(node) < 1 {
+		return nil, nil // unit tests
 	}
-	// Find a live node to run against, if one exists.
-	var db *gosql.DB
-	for i := 1; i <= c.spec.NodeCount; i++ {
-		// Don't hang forever.
-		if err := contextutil.RunWithTimeout(
-			ctx, "find live node", 5*time.Second,
-			func(ctx context.Context) error {
-				db = c.Conn(ctx, t.L(), i)
-				_, err := db.ExecContext(ctx, `;`)
-				return err
-			},
-		); err != nil {
-			_ = db.Close()
-			db = nil
-			continue
+	adminAddrs, err := c.ExternalAdminUIAddr(ctx, l, node)
+	if err != nil {
+		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
+	}
+	getStatus := func(ctx context.Context, node int) *HealthStatusResult {
+		url := fmt.Sprintf(`http://%s/health?ready=1`, adminAddrs[node-1])
+		resp, err := httputil.Get(ctx, url)
+		if err != nil {
+			return newHealthStatusResult(node, 0, nil, err)
 		}
-		node = i
-		break
+
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+
+		return newHealthStatusResult(node, resp.StatusCode, body, err)
 	}
-	if db == nil {
-		return nil, node
-	}
-	return db, node
+
+	results := make([]*HealthStatusResult, c.spec.NodeCount)
+
+	_ = contextutil.RunWithTimeout(ctx, "health status", 15*time.Second, func(ctx context.Context) error {
+		var wg sync.WaitGroup
+		wg.Add(c.spec.NodeCount)
+		for i := 1; i <= c.spec.NodeCount; i++ {
+			go func(node int) {
+				defer wg.Done()
+				results[node-1] = getStatus(ctx, node)
+			}(i)
+		}
+		wg.Wait()
+		return nil
+	})
+
+	return results, nil
 }
 
 // FailOnInvalidDescriptors fails the test if there exists any descriptors in
 // the crdb_internal.invalid_objects virtual table.
 func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) {
+	t.L().Printf("checking for invalid descriptors")
 	if err := contextutil.RunWithTimeout(
-		ctx, "invalid descriptors check", 5*time.Minute,
+		ctx, "invalid descriptors check", 1*time.Minute,
 		func(ctx context.Context) error {
-			return roachtestutil.CheckInvalidDescriptors(db)
+			return roachtestutil.CheckInvalidDescriptors(ctx, db)
 		},
 	); err != nil {
 		t.Errorf("invalid descriptors check failed: %v", err)
@@ -1574,6 +1628,7 @@ func (c *clusterImpl) FailOnInvalidDescriptors(ctx context.Context, db *gosql.DB
 // crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
 // replicas are inconsistent with each other.
 func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, db *gosql.DB, t *testImpl) {
+	t.L().Printf("checking for replica divergence")
 	if err := contextutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
@@ -2456,7 +2511,7 @@ func (c *clusterImpl) InternalAdminUIAddr(
 	return addrs, nil
 }
 
-// ExternalAdminUIAddr returns the internal Admin UI address in the form host:port
+// ExternalAdminUIAddr returns the external Admin UI address in the form host:port
 // for the specified node.
 func (c *clusterImpl) ExternalAdminUIAddr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,

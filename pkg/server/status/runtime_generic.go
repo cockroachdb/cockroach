@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,5 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./databaseTablePage";
-export * from "./databaseTablePageConnected";
+//go:build !linux
+// +build !linux
+
+package status
+
+func getDefaultIgnoredDevices() string {
+	return ""
+}
