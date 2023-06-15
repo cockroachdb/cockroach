@@ -2296,12 +2296,12 @@ func (ds *DistSender) sendToReplicas(
 		if ds.BatchRequestInterceptor != nil {
 			ds.BatchRequestInterceptor(ba)
 		}
-		shouldIncCrossRegion, shouldIncCrossZone := ds.checkAndUpdateBatchRequestMetrics(ctx, ba)
+		comparisonResult := ds.checkAndUpdateCrossLocalityBatchMetrics(ctx, ba)
 		br, err = transport.SendNext(ctx, ba)
 		if ds.BatchResponseInterceptor != nil {
 			ds.BatchResponseInterceptor(br)
 		}
-		ds.checkAndUpdateBatchResponseMetrics(br, shouldIncCrossRegion, shouldIncCrossZone)
+		ds.updateCrossLocalityBatchMetrics(br, comparisonResult)
 		ds.maybeIncrementErrCounters(br, err)
 
 		if err != nil {
@@ -2557,71 +2557,69 @@ func (ds *DistSender) sendToReplicas(
 	}
 }
 
-// isCrossRegionCrossZoneBatch returns (bool, bool) - indicating if the given
-// batch request is cross-region and cross-zone respectively.
-func (ds *DistSender) isCrossRegionCrossZoneBatch(
+// getCrossLocalityComparison compares the localities of the current node and
+// the destination range node to determine if the given batch request is
+// cross-region and cross-zone.
+func (ds *DistSender) getCrossLocalityComparison(
 	ctx context.Context, ba *kvpb.BatchRequest,
-) (bool, bool) {
+) roachpb.LocalityComparisonType {
 	gatewayNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(ba.GatewayNodeID)
 	if err != nil {
 		log.VEventf(ctx, 2, "failed to perform look up for node descriptor %s", err)
-		return false, false
+		return roachpb.UNDEFINED
 	}
 	destinationNodeDesc, err := ds.nodeDescs.GetNodeDescriptor(ba.Replica.NodeID)
 	if err != nil {
 		log.VEventf(ctx, 2, "failed to perform look up for node descriptor %s", err)
-		return false, false
+		return roachpb.UNDEFINED
 	}
-	isCrossRegion, regionErr, isCrossZone, zoneErr := gatewayNodeDesc.Locality.IsCrossRegionCrossZone(destinationNodeDesc.Locality)
+
+	comparisonResult, regionErr, zoneErr := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
 	if regionErr != nil {
-		log.VEventf(ctx, 2, "%v", regionErr)
+		log.VEventf(ctx, 2, "unable to determine if batch is cross region %v", regionErr)
 	}
 	if zoneErr != nil {
-		log.VEventf(ctx, 2, "%v", zoneErr)
+		log.VEventf(ctx, 2, "unable to determine if batch is cross region %v", zoneErr)
 	}
-	return isCrossRegion, isCrossZone
+	return comparisonResult
 }
 
-// checkAndUpdateBatchRequestMetrics updates the batch requests metrics in a
-// more meaningful way. Cross-region metrics monitor activities across different
-// regions. Cross-zone metrics monitor cross-zone activities within the same
-// region or in cases where region tiers are not configured. The check result is
-// returned here to avoid redundant check for metrics updates after receiving
-// batch responses.
-func (ds *DistSender) checkAndUpdateBatchRequestMetrics(
+// checkAndUpdateCrossLocalityBatchMetrics updates the batch requests metrics in
+// a more meaningful way. Cross-region metrics monitor activities across
+// different regions. Cross-zone metrics monitor cross-zone activities within
+// the same region or in cases where region tiers are not configured. The
+// locality comparison result is returned here to avoid redundant check for
+// metrics updates after receiving batch responses.
+func (ds *DistSender) checkAndUpdateCrossLocalityBatchMetrics(
 	ctx context.Context, ba *kvpb.BatchRequest,
-) (shouldIncCrossRegion bool, shouldIncCrossZone bool) {
+) roachpb.LocalityComparisonType {
 	ds.metrics.ReplicaAddressedBatchRequestBytes.Inc(int64(ba.Size()))
-	isCrossRegion, isCrossZone := ds.isCrossRegionCrossZoneBatch(ctx, ba)
-	if isCrossRegion {
-		if !isCrossZone {
-			log.VEventf(ctx, 2, "unexpected: cross region but same zone")
-		} else {
-			ds.metrics.CrossRegionBatchRequestBytes.Inc(int64(ba.Size()))
-			shouldIncCrossRegion = true
-		}
-	} else {
-		if isCrossZone {
-			ds.metrics.CrossZoneBatchRequestBytes.Inc(int64(ba.Size()))
-			shouldIncCrossZone = true
-		}
+	comparisonResult := ds.getCrossLocalityComparison(ctx, ba)
+	switch comparisonResult {
+	case roachpb.CROSS_REGION_CROSS_ZONE:
+		ds.metrics.CrossRegionBatchRequestBytes.Inc(int64(ba.Size()))
+	case roachpb.SAME_REGION_CROSS_ZONE:
+		ds.metrics.CrossZoneBatchRequestBytes.Inc(int64(ba.Size()))
+	case roachpb.CROSS_REGION_SAME_ZONE:
+		log.VEventf(ctx, 2, "unexpected: cross region but same zone")
+	case roachpb.SAME_REGION_SAME_ZONE:
+		// No metrics or error reporting.
 	}
-	return shouldIncCrossRegion, shouldIncCrossZone
+	return comparisonResult
 }
 
-// checkAndUpdateBatchResponseMetrics updates the batch response metrics based
-// on the shouldIncCrossRegion and shouldIncCrossZone parameters. These
-// parameters are determined during the initial check for batch requests. The
-// underlying assumption is that if requests were cross-region or cross-zone,
-// the response should be as well.
-func (ds *DistSender) checkAndUpdateBatchResponseMetrics(
-	br *kvpb.BatchResponse, shouldIncCrossRegion bool, shouldIncCrossZone bool,
+// updateCrossLocalityBatchMetrics updates the batch response metrics based on
+// the comparisonResult parameter determined during the initial batch requests
+// check. The underlying assumption is that the response should match the
+// cross-region or cross-zone nature of the request.
+func (ds *DistSender) updateCrossLocalityBatchMetrics(
+	br *kvpb.BatchResponse, comparisonResult roachpb.LocalityComparisonType,
 ) {
 	ds.metrics.ReplicaAddressedBatchResponseBytes.Inc(int64(br.Size()))
-	if shouldIncCrossRegion {
+	switch comparisonResult {
+	case roachpb.CROSS_REGION_CROSS_ZONE:
 		ds.metrics.CrossRegionBatchResponseBytes.Inc(int64(br.Size()))
-	}
-	if shouldIncCrossZone {
+	case roachpb.SAME_REGION_CROSS_ZONE:
 		ds.metrics.CrossZoneBatchResponseBytes.Inc(int64(br.Size()))
 	}
 }
