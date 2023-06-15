@@ -1482,10 +1482,10 @@ func (cfg *ExecutorConfig) GetFeatureFlagMetrics() *featureflag.DenialMetrics {
 	return cfg.FeatureFlagMetrics
 }
 
-// generateID generates a unique ID based on the SQL instance ID and its current
+// GenerateID generates a unique ID based on the SQL instance ID and its current
 // HLC timestamp. These IDs are either scoped at the query level or at the
 // session level.
-func (cfg *ExecutorConfig) generateID() clusterunique.ID {
+func (cfg *ExecutorConfig) GenerateID() clusterunique.ID {
 	return clusterunique.GenerateID(cfg.Clock.Now(), cfg.NodeInfo.NodeID.SQLInstanceID())
 }
 

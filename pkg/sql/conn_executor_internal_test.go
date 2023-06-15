@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -368,7 +369,13 @@ func startConnExecutor(
 	// routine, we're going to push commands into the StmtBuf and, from time to
 	// time, collect and check their results.
 	go func() {
-		finished <- s.ServeConn(ctx, conn, &mon.BoundAccount{}, nil /* cancel */)
+		finished <- s.ServeConn(
+			ctx,
+			conn,
+			&mon.BoundAccount{},
+			nil, /* cancel */
+			clusterunique.ID{},
+		)
 	}()
 	return buf, syncResults, finished, stopper, resultChannel, nil
 }
@@ -412,7 +419,13 @@ CREATE TEMPORARY TABLE foo();
 
 	done := make(chan error)
 	go func() {
-		done <- srv.ServeConn(ctx, connHandler, &mon.BoundAccount{}, nil /* cancel */)
+		done <- srv.ServeConn(
+			ctx,
+			connHandler,
+			&mon.BoundAccount{},
+			nil, /* cancel */
+			clusterunique.ID{},
+		)
 	}()
 	results := <-flushed
 	require.Len(t, results, 6) // We expect results for 5 statements + sync.

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
@@ -746,10 +747,12 @@ func (s *Server) ServeConn(
 	ctx, rejectNewConnections, onCloseFn := s.registerConn(ctx)
 	defer onCloseFn()
 
+	sessionID := s.execCfg.GenerateID()
 	connDetails := eventpb.CommonConnectionDetails{
 		InstanceID:    int32(s.execCfg.NodeInfo.NodeID.SQLInstanceID()),
 		Network:       conn.RemoteAddr().Network(),
 		RemoteAddress: conn.RemoteAddr().String(),
+		SessionID:     sessionID.String(),
 	}
 
 	// Some bookkeeping, for security-minded administrators.
@@ -846,6 +849,7 @@ func (s *Server) ServeConn(
 			identMap:        identMap,
 			testingAuthHook: testingAuthHook,
 		},
+		sessionID,
 	)
 	return nil
 }
@@ -955,7 +959,11 @@ const maxRepeatedErrorCount = 1 << 15
 // being that we want to stop when we're both outside transactions and outside
 // batches.
 func (s *Server) serveImpl(
-	ctx context.Context, c *conn, reserved *mon.BoundAccount, authOpt authOptions,
+	ctx context.Context,
+	c *conn,
+	reserved *mon.BoundAccount,
+	authOpt authOptions,
+	sessionID clusterunique.ID,
 ) {
 	defer func() { _ = c.conn.Close() }()
 
@@ -1024,6 +1032,7 @@ func (s *Server) serveImpl(
 			sqlServer,
 			reserved,
 			onDefaultIntSizeChange,
+			sessionID,
 		)
 	} else {
 		// sqlServer == nil means we are in a local test. In this case

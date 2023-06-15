@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -126,6 +127,7 @@ func TestConn(t *testing.T) {
 			conn,
 			&mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+			clusterunique.ID{},
 		)
 		return nil
 	})
@@ -1115,6 +1117,7 @@ func TestMaliciousInputs(t *testing.T) {
 				conn,
 				&mon.BoundAccount{}, /* reserved */
 				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+				clusterunique.ID{},
 			)
 			if err := <-errChan; err != nil {
 				t.Fatal(err)

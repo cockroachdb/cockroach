@@ -136,6 +136,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"IndexDescriptorVersion":       {},
 						"MutationID":                   {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/clusterunique": {
+						"ID": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb": {
 						"ComponentID_Type": {},
 					},

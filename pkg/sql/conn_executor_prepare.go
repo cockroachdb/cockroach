@@ -72,7 +72,7 @@ func (ex *connExecutor) execPrepare(
 		ex.deletePreparedStmt(ctx, "")
 	}
 
-	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.generateID())
+	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.GenerateID())
 	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,

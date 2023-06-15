@@ -882,7 +882,11 @@ func (h ConnectionHandler) GetQueryCancelKey() pgwirecancel.BackendKeyData {
 // connExecutor takes ownership of this memory and will close the account before
 // exiting.
 func (s *Server) ServeConn(
-	ctx context.Context, h ConnectionHandler, reserved *mon.BoundAccount, cancel context.CancelFunc,
+	ctx context.Context,
+	h ConnectionHandler,
+	reserved *mon.BoundAccount,
+	cancel context.CancelFunc,
+	sessionID clusterunique.ID,
 ) error {
 	// Make sure to close the reserved account even if closeWrapper below
 	// panics: so we do it in a defer that is guaranteed to execute. We also
@@ -893,7 +897,7 @@ func (s *Server) ServeConn(
 		r := recover()
 		h.ex.closeWrapper(ctx, r)
 	}(ctx, h)
-	return h.ex.run(ctx, s.pool, reserved, cancel)
+	return h.ex.run(ctx, s.pool, reserved, cancel, sessionID)
 }
 
 // GetLocalIndexStatistics returns a idxusage.LocalIndexUsageStats.
@@ -2056,6 +2060,7 @@ func (ex *connExecutor) run(
 	parentMon *mon.BytesMonitor,
 	reserved *mon.BoundAccount,
 	onCancel context.CancelFunc,
+	sessionID clusterunique.ID,
 ) (err error) {
 	if !ex.activated {
 		ex.activate(ctx, parentMon, reserved)
@@ -2063,7 +2068,6 @@ func (ex *connExecutor) run(
 	ex.ctxHolder.connCtx = ctx
 	ex.onCancelSession = onCancel
 
-	sessionID := ex.server.cfg.generateID()
 	ex.server.cfg.SessionRegistry.register(sessionID, ex.queryCancelKey, ex)
 	ex.planner.extendedEvalCtx.SessionID = sessionID
 
@@ -2701,7 +2705,7 @@ func (ex *connExecutor) execCopyOut(
 	var numOutputRows int
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
-	queryID := ex.server.cfg.generateID()
+	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
@@ -2919,7 +2923,7 @@ func (ex *connExecutor) execCopyIn(
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
-	queryID := ex.server.cfg.generateID()
+	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
