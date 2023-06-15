@@ -483,7 +483,7 @@ exp:    %s
 				t.Errorf("%d: from string expected %s, got %s", i, exp, test.key.String())
 			}
 
-			scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
+			scanner := keysutil.MakePrettyScanner(nil /* tableParser */, nil /* tenantParser */)
 			parsed, err := scanner.Scan(keyInfo)
 			if err != nil {
 				if !errors.HasType(err, (*keys.ErrUglifyUnsupported)(nil)) {
