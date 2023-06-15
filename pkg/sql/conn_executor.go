@@ -3944,6 +3944,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Priority:              ex.state.priority.String(),
 			QualityOfService:      sessiondatapb.ToQoSLevelString(txn.AdmissionHeader().Priority),
 			LastAutoRetryReason:   autoRetryReasonStr,
+			IsolationLevel:        kvTxnIsolationLevelToTree(ex.state.isolationLevel).String(),
 		}
 	}
 
