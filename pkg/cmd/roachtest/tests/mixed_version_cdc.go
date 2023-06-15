@@ -135,6 +135,7 @@ func (cmvt *cdcMixedVersionTester) Cleanup() {
 	if cmvt.cleanup != nil {
 		cmvt.cleanup()
 	}
+	cmvt.monitor.Wait()
 }
 
 // installAndStartWorkload starts a bank workload asynchronously
