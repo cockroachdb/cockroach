@@ -973,58 +973,52 @@ func (s *Store) checkSnapshotOverlapLocked(
 	return nil
 }
 
-// shouldIncrementCrossLocalitySnapshotMetrics returns (bool, bool) - indicating
-// if the two given replicas are cross-region and cross-zone respectively.
-func (s *Store) shouldIncrementCrossLocalitySnapshotMetrics(
+// getCrossLocalityComparison compares the localities of the two given replicas.
+func (s *Store) getCrossLocalityComparison(
 	ctx context.Context, firstReplica roachpb.ReplicaDescriptor, secReplica roachpb.ReplicaDescriptor,
-) (bool, bool) {
-	isCrossRegion, regionErr, isCrossZone, zoneErr := s.cfg.StorePool.IsCrossRegionCrossZone(
-		firstReplica, secReplica)
+) roachpb.LocalityComparisonType {
+	firstLocality := s.cfg.StorePool.GetNodeLocality(firstReplica.NodeID)
+	secLocality := s.cfg.StorePool.GetNodeLocality(secReplica.NodeID)
+	comparisonResult, regionErr, zoneErr := firstLocality.CompareWithLocality(secLocality)
 	if regionErr != nil {
 		log.VEventf(ctx, 2, "unable to determine if snapshot is cross region %v", regionErr)
 	}
 	if zoneErr != nil {
 		log.VEventf(ctx, 2, "unable to determine if snapshot is cross zone %v", zoneErr)
 	}
-	return isCrossRegion, isCrossZone
+	return comparisonResult
 }
 
-// updateCrossLocalitySnapshotMetrics updates the snapshot metrics in a more
-// meaningful way. Cross-region metrics monitor activities across different
-// regions. Cross-zone metrics monitor any cross-zone activities within the same
-// region or if the region tiers are not configured.
-func (s *Store) updateCrossLocalitySnapshotMetrics(
+// checkAndUpdateCrossLocalitySnapshotMetrics updates the snapshot metrics in
+// a more meaningful way. Cross-region metrics monitor activities across
+// different regions. Cross-zone metrics monitor cross-zone activities within
+// the same region or in cases where region tiers are not configured.
+func (s *Store) checkAndUpdateCrossLocalitySnapshotMetrics(
 	ctx context.Context,
 	firstReplica roachpb.ReplicaDescriptor,
 	secReplica roachpb.ReplicaDescriptor,
 	inc int64,
 	isSent bool,
 ) {
-	isCrossRegion, isCrossZone := s.shouldIncrementCrossLocalitySnapshotMetrics(ctx, firstReplica, secReplica)
+	comparisonResult := s.getCrossLocalityComparison(ctx, firstReplica, secReplica)
 	if isSent {
-		if isCrossRegion {
-			if !isCrossZone {
-				log.VEventf(ctx, 2, "unexpected: cross region but same zone")
-			} else {
-				s.metrics.RangeSnapShotCrossRegionSentBytes.Inc(inc)
-			}
-		} else {
-			if isCrossZone {
-				s.metrics.RangeSnapShotCrossZoneSentBytes.Inc(inc)
-			}
+		switch comparisonResult {
+		case roachpb.LocalityComparisonType_CROSS_REGION:
+			s.metrics.RangeSnapShotCrossRegionSentBytes.Inc(inc)
+		case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+			s.metrics.RangeSnapShotCrossZoneSentBytes.Inc(inc)
+		case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
+			// No metrics or error reporting.
 		}
 	} else {
 		// isReceived
-		if isCrossRegion {
-			if !isCrossZone {
-				log.VEventf(ctx, 2, "unexpected: cross region but same zone")
-			} else {
-				s.metrics.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
-			}
-		} else {
-			if isCrossZone {
-				s.metrics.RangeSnapShotCrossZoneRcvdBytes.Inc(inc)
-			}
+		switch comparisonResult {
+		case roachpb.LocalityComparisonType_CROSS_REGION:
+			s.metrics.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
+		case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+			s.metrics.RangeSnapShotCrossZoneRcvdBytes.Inc(inc)
+		case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
+			// No metrics or error reporting.
 		}
 	}
 }
@@ -1145,7 +1139,7 @@ func (s *Store) receiveSnapshot(
 
 	recordBytesReceived := func(inc int64) {
 		s.metrics.RangeSnapshotRcvdBytes.Inc(inc)
-		s.updateCrossLocalitySnapshotMetrics(
+		s.checkAndUpdateCrossLocalitySnapshotMetrics(
 			ctx, header.RaftMessageRequest.FromReplica, header.RaftMessageRequest.ToReplica, inc, false /* isSent */)
 
 		switch header.Priority {
