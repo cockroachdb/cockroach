@@ -1344,20 +1344,9 @@ func (sp *StorePool) GetNodeLocalityString(nodeID roachpb.NodeID) string {
 	return sp.getNodeLocalityWithString(nodeID).str
 }
 
-// getNodeLocality returns the locality information for the given node.
-func (sp *StorePool) getNodeLocality(nodeID roachpb.NodeID) roachpb.Locality {
+// GetNodeLocality returns the locality information for the given node.
+func (sp *StorePool) GetNodeLocality(nodeID roachpb.NodeID) roachpb.Locality {
 	return sp.getNodeLocalityWithString(nodeID).locality
-}
-
-// IsCrossRegionCrossZone takes in two replicas and compares the locality of
-// them based on their replica node IDs. It returns (bool, error, bool, error)
-// where the boolean values indicate whether the two replicas' nodes are in
-// different regions, different zones, along with any lookup errors.
-func (sp *StorePool) IsCrossRegionCrossZone(
-	firstReplica roachpb.ReplicaDescriptor, secReplica roachpb.ReplicaDescriptor,
-) (bool, error, bool, error) {
-	return sp.getNodeLocality(firstReplica.NodeID).IsCrossRegionCrossZone(
-		sp.getNodeLocality(secReplica.NodeID))
 }
 
 // IsStoreReadyForRoutineReplicaTransfer returns true iff the store's node is
