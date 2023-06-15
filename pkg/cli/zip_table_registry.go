@@ -241,6 +241,9 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"num_stmts",
 			"num_retries",
 			"num_auto_retries",
+			"isolation_level",
+			"priority",
+			"quality_of_service",
 		},
 	},
 	"crdb_internal.cluster_txn_execution_insights": {
