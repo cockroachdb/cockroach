@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//pkg/sql/schemachanger/sctest/sctestgen:gen.bzl", "sctest_gen")
 
 filegroup(
@@ -101,6 +101,13 @@ sctest_gen(
         ":__pkg__",
         "//pkg/gen:__pkg__",
     ],
+)
+
+go_library(
+    name = "schemachanger",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger",
+    visibility = ["//visibility:public"],
 )
 
 get_x_data(name = "get_x_data")
