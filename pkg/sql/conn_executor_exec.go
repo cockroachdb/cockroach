@@ -367,11 +367,11 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if isPausablePortal() {
 		if !portal.pauseInfo.isQueryIDSet() {
-			portal.pauseInfo.execStmtInOpenState.queryID = ex.server.cfg.generateID()
+			portal.pauseInfo.execStmtInOpenState.queryID = ex.server.cfg.GenerateID()
 		}
 		queryID = portal.pauseInfo.execStmtInOpenState.queryID
 	} else {
-		queryID = ex.server.cfg.generateID()
+		queryID = ex.server.cfg.GenerateID()
 	}
 
 	// Update the deadline on the transaction based on the collections.
@@ -826,7 +826,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				NumPlaceholders: stmt.NumPlaceholders,
 				NumAnnotations:  stmt.NumAnnotations,
 			},
-			ex.server.cfg.generateID(),
+			ex.server.cfg.GenerateID(),
 		)
 		var rawTypeHints []oid.Oid
 		if _, err := ex.addPreparedStmt(

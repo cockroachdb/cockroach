@@ -172,7 +172,13 @@ func (ie *InternalExecutor) runWithEx(
 	}
 	wg.Add(1)
 	go func() {
-		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
+		if err := ex.run(
+			ctx,
+			ie.mon,
+			&mon.BoundAccount{}, /*reserved*/
+			nil,                 /* cancel */
+			ex.server.cfg.GenerateID(),
+		); err != nil {
 			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
 		}
