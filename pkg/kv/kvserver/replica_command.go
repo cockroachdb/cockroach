@@ -2914,13 +2914,13 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// NB: This is an overly strict check. If other delegates are added to this
 	// snapshot, we don't necessarily need to reject sending the snapshot, however
 	// if there are merges or splits, it is safer to reject.
-	if desc.Generation != req.DescriptorGeneration {
+	if desc.Generation < req.DescriptorGeneration {
 		log.VEventf(ctx, 2,
-			"%s: generation has changed since snapshot was generated %s != %s",
+			"%s: generation has changed since snapshot was generated %s < %s",
 			r, req.DescriptorGeneration, desc.Generation,
 		)
 		return errors.Errorf(
-			"%s: generation has changed since snapshot was generated %s != %s",
+			"%s: generation has changed since snapshot was generated %s < %s",
 			r, req.DescriptorGeneration, desc.Generation,
 		)
 	}
@@ -2965,7 +2965,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// and then the term changes before this request is processed. In that
 	// case this code path will not be checked and the snapshot will still be
 	// sent.
-	if replTerm != req.Term {
+	if replTerm < req.Term {
 		log.Infof(
 			ctx,
 			"sender: %v is not fit to send snapshot for %v; sender term: %v coordinator term: %v",
