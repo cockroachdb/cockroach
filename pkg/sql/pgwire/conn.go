@@ -59,6 +59,8 @@ type conn struct {
 
 	conn net.Conn
 
+	cancelConn context.CancelFunc
+
 	sessionArgs sql.SessionArgs
 	metrics     *tenantSpecificMetrics
 
@@ -206,7 +208,6 @@ func (c *conn) processCommandsAsync(
 	ac AuthConn,
 	sqlServer *sql.Server,
 	reserved *mon.BoundAccount,
-	cancelConn func(),
 	onDefaultIntSizeChange func(newSize int32),
 ) <-chan error {
 	// reservedOwned is true while we own reserved, false when we pass ownership
@@ -228,7 +229,7 @@ func (c *conn) processCommandsAsync(
 			// goroutine's finish, but it also might be us that we're triggering the
 			// connection's death. This context cancelation serves to interrupt a
 			// network read on the connection's goroutine.
-			cancelConn()
+			c.cancelConn()
 
 			pgwireKnobs := sqlServer.GetExecutorConfig().PGWireTestingKnobs
 			if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
@@ -304,7 +305,7 @@ func (c *conn) processCommandsAsync(
 
 		// Now actually process commands.
 		reservedOwned = false // We're about to pass ownership away.
-		retErr = sqlServer.ServeConn(ctx, connHandler, reserved, cancelConn)
+		retErr = sqlServer.ServeConn(ctx, connHandler, reserved, c.cancelConn)
 	}()
 	return retCh
 }
@@ -1506,14 +1507,6 @@ type readTimeoutConn struct {
 	// the Read() returns that error. Future calls to Read() are allowed, in which
 	// case checkExitConds() will be called again.
 	checkExitConds func() error
-}
-
-// NewReadTimeoutConn wraps the given connection with a readTimeoutConn.
-func NewReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
-	return &readTimeoutConn{
-		Conn:           c,
-		checkExitConds: checkExitConds,
-	}
 }
 
 func (c *readTimeoutConn) Read(b []byte) (int, error) {
