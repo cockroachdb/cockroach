@@ -194,7 +194,8 @@ export class JobDetails extends React.Component<JobDetailsProps> {
   };
 
   render(): React.ReactElement {
-    const isLoading = this.props.jobRequest.inFlight;
+    const isLoading =
+      this.props.jobRequest.inFlight && !this.props.jobRequest.data;
     const error = this.props.jobRequest.error;
     const job = this.props.jobRequest.data;
     const nextRun = TimestampToMoment(job?.next_run);
