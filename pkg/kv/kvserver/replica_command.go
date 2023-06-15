@@ -3152,7 +3152,7 @@ func (r *Replica) followerSendSnapshot(
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
-		r.store.updateCrossLocalitySnapshotMetrics(
+		r.store.checkAndUpdateCrossLocalitySnapshotMetrics(
 			ctx, req.CoordinatorReplica, req.RecipientReplica, inc, true /* isSent */)
 
 		switch header.Priority {

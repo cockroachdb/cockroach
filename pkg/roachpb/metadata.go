@@ -675,14 +675,11 @@ func (l Locality) getFirstRegionFirstZone() (
 	return firstRegionValue, hasRegion, firstZoneKey, firstZoneValue, hasZone
 }
 
-// IsCrossRegionCrossZone returns multiple values containing:
-// 1. A boolean value indicating if this and the provided locality are
-// cross-region.
-// 2. Error indicating if either locality does not have a "region" tier key.
-// 3. A boolean value indicating if this and the provided locality are
-// cross-zone.
-// 4. Error indicating if either locality does not have a "zone" tier key or if
-// the first "zone" tier keys used by two localities are different.
+// CompareWithLocality returns the comparison result between this and the
+// provided other locality along with any lookup errors. Possible errors include
+// 1. if either locality does not have a "region" tier key. 2. if either
+// locality does not have a "zone" tier key or if the first "zone" tier keys
+// used by two localities are different.
 //
 // Limitation:
 // - It is unfortunate that the tier key is hardcoded here. Ideally, we would
@@ -699,14 +696,14 @@ func (l Locality) getFirstRegionFirstZone() (
 // a single function to avoid overhead. If you are adding additional locality
 // tiers comparisons, it is recommended to handle them within one tier list
 // iteration.
-func (l Locality) IsCrossRegionCrossZone(
+func (l Locality) CompareWithLocality(
 	other Locality,
-) (isCrossRegion bool, regionErr error, isCrossZone bool, zoneErr error) {
+) (_ LocalityComparisonType, regionErr error, zoneErr error) {
 	firstRegionValue, hasRegion, firstZoneKey, firstZone, hasZone := l.getFirstRegionFirstZone()
 	firstRegionValueOther, hasRegionOther, firstZoneKeyOther, firstZoneOther, hasZoneOther := other.getFirstRegionFirstZone()
 
-	isCrossRegion = firstRegionValue != firstRegionValueOther
-	isCrossZone = firstZone != firstZoneOther
+	isCrossRegion := firstRegionValue != firstRegionValueOther
+	isCrossZone := firstZone != firstZoneOther
 
 	if !hasRegion || !hasRegionOther {
 		isCrossRegion = false
@@ -718,7 +715,19 @@ func (l Locality) IsCrossRegionCrossZone(
 		zoneErr = errors.Errorf("localities must have a valid zone tier key for cross-zone comparison")
 	}
 
-	return isCrossRegion, regionErr, isCrossZone, zoneErr
+	if isCrossRegion {
+		if isCrossZone {
+			return LocalityComparisonType_CROSS_REGION_CROSS_ZONE, regionErr, zoneErr
+		} else {
+			return LocalityComparisonType_CROSS_REGION_SAME_ZONE, regionErr, zoneErr
+		}
+	} else {
+		if isCrossZone {
+			return LocalityComparisonType_SAME_REGION_CROSS_ZONE, regionErr, zoneErr
+		} else {
+			return LocalityComparisonType_SAME_REGION_SAME_ZONE, regionErr, zoneErr
+		}
+	}
 }
 
 // SharedPrefix returns the number of this locality's tiers which match those of

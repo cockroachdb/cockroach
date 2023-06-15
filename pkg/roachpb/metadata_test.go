@@ -221,7 +221,7 @@ func TestLocalityMatches(t *testing.T) {
 	}
 }
 
-func TestLocalityIsCrossRegionCrossZone(t *testing.T) {
+func TestLocalityCompareWithLocality(t *testing.T) {
 	regionErrStr := "localities must have a valid region tier key for cross-region comparison"
 	zoneErrStr := "localities must have a valid zone tier key for cross-zone comparison"
 
@@ -251,82 +251,81 @@ func TestLocalityIsCrossRegionCrossZone(t *testing.T) {
 	for _, tc := range []struct {
 		l              string
 		other          string
-		isCrossRegion  bool
-		isCrossZone    bool
+		localityType   LocalityComparisonType
 		crossRegionErr string
 		crossZoneErr   string
 	}{
 		// -------- Part 1: check for different zone tier alternatives  --------
 		// Valid tier keys, same regions and same zones.
 		{l: "region=us-west,zone=us-west-1", other: "region=us-west,zone=us-west-1",
-			isCrossRegion: false, isCrossZone: false, crossRegionErr: "", crossZoneErr: ""},
+			localityType: LocalityComparisonType_SAME_REGION_SAME_ZONE, crossRegionErr: "", crossZoneErr: ""},
 		// Valid tier keys, different regions and different zones.
 		{l: "region=us-west,zone=us-west-1", other: "region=us-east,zone=us-west-2",
-			isCrossRegion: true, isCrossZone: true, crossRegionErr: "", crossZoneErr: ""},
+			localityType: LocalityComparisonType_CROSS_REGION_CROSS_ZONE, crossRegionErr: "", crossZoneErr: ""},
 		// Valid tier keys, different regions and different zones.
 		{l: "region=us-west,availability-zone=us-west-1", other: "region=us-east,availability-zone=us-east-1",
-			isCrossRegion: true, isCrossZone: true, crossRegionErr: "", crossZoneErr: ""},
+			localityType: LocalityComparisonType_CROSS_REGION_CROSS_ZONE, crossRegionErr: "", crossZoneErr: ""},
 		// Valid tier keys, same regions and different zones.
 		{l: "region=us-west,az=us-west-1", other: "region=us-west,other-keys=us,az=us-east-1",
-			isCrossRegion: false, isCrossZone: true, crossRegionErr: "", crossZoneErr: ""},
+			localityType: LocalityComparisonType_SAME_REGION_CROSS_ZONE, crossRegionErr: "", crossZoneErr: ""},
 		// Invalid zone tier key and different regions.
 		{l: "region=us-west,availability-zone=us-west-1", other: "region=us-east,zone=us-east-1",
-			isCrossRegion: true, isCrossZone: false, crossRegionErr: "", crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_CROSS_REGION_SAME_ZONE, crossRegionErr: "", crossZoneErr: zoneErrStr},
 		// Valid zone tier key (edge case), different zones and regions.
 		{l: "region=us-west,zone=us-west-1", other: "region=us-east,zone=us-west-2,az=us-west-1",
-			isCrossRegion: true, isCrossZone: true, crossRegionErr: "", crossZoneErr: ""},
+			localityType: LocalityComparisonType_CROSS_REGION_CROSS_ZONE, crossRegionErr: "", crossZoneErr: ""},
 		// Missing zone tier key and different regions.
 		{l: "region=us-west,zone=us-west-1", other: "region=us-east",
-			isCrossRegion: true, isCrossZone: false, crossRegionErr: "", crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_CROSS_REGION_SAME_ZONE, crossRegionErr: "", crossZoneErr: zoneErrStr},
 		// Different region and different zones with non-unique & invalid zone tier key.
 		{l: "region=us-west,zone=us-west-1,az=us-west-2", other: "az=us-west-1,region=us-west,zone=us-west-1",
-			isCrossRegion: false, isCrossZone: false, crossRegionErr: "", crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_SAME_REGION_SAME_ZONE, crossRegionErr: "", crossZoneErr: zoneErrStr},
 		// Different regions and different zones with non-unique & valid zone tier key.
 		{l: "region=us-west,az=us-west-2,zone=us-west-1", other: "region=us-west,az=us-west-1",
-			isCrossRegion: false, isCrossZone: true, crossRegionErr: "", crossZoneErr: ""},
+			localityType: LocalityComparisonType_SAME_REGION_CROSS_ZONE, crossRegionErr: "", crossZoneErr: ""},
 		// Invalid region tier key and different zones.
 		{l: "country=us,zone=us-west-1", other: "country=us,zone=us-west-2",
-			isCrossRegion: false, isCrossZone: true, crossRegionErr: regionErrStr, crossZoneErr: ""},
+			localityType: LocalityComparisonType_SAME_REGION_CROSS_ZONE, crossRegionErr: regionErrStr, crossZoneErr: ""},
 		// Missing region tier key and different zones.
 		{l: "az=us-west-1", other: "region=us-east,az=us-west-2",
-			isCrossRegion: false, isCrossZone: true, crossRegionErr: regionErrStr, crossZoneErr: ""},
+			localityType: LocalityComparisonType_SAME_REGION_CROSS_ZONE, crossRegionErr: regionErrStr, crossZoneErr: ""},
 		// Invalid region and zone tier key.
 		{l: "invalid-key=us-west,zone=us-west-1", other: "region=us-east,invalid-key=us-west-1",
-			isCrossRegion: false, isCrossZone: false, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_SAME_REGION_SAME_ZONE, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
 		// Invalid region and zone tier key.
 		{l: "country=us,dc=us-west-2", other: "country=us,dc=us-west-2",
-			isCrossRegion: false, isCrossZone: false, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_SAME_REGION_SAME_ZONE, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
 		// -------- Part 2: single region, single zone  --------
 		// One: (both) Two: (region)
 		{l: makeLocalityStr(firstRegionStr, firstZoneStr), other: makeLocalityStr(secRegionStr, ""),
-			isCrossRegion: true, isCrossZone: false, crossRegionErr: "", crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_CROSS_REGION_SAME_ZONE, crossRegionErr: "", crossZoneErr: zoneErrStr},
 		// One: (both) Two: (zone)
 		{l: makeLocalityStr(firstRegionStr, firstZoneStr), other: makeLocalityStr("", secZoneStr),
-			isCrossRegion: false, isCrossZone: true, crossRegionErr: regionErrStr, crossZoneErr: ""},
+			localityType: LocalityComparisonType_SAME_REGION_CROSS_ZONE, crossRegionErr: regionErrStr, crossZoneErr: ""},
 		// One: (region) Two: (region)
 		{l: makeLocalityStr(firstRegionStr, ""), other: makeLocalityStr(secRegionStr, ""),
-			isCrossRegion: true, isCrossZone: false, crossRegionErr: "", crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_CROSS_REGION_SAME_ZONE, crossRegionErr: "", crossZoneErr: zoneErrStr},
 		// One: (zone) Two: (zone)
 		{l: makeLocalityStr("", firstZoneStr), other: makeLocalityStr("", secZoneStr),
-			isCrossRegion: false, isCrossZone: true, crossRegionErr: regionErrStr, crossZoneErr: ""},
+			localityType: LocalityComparisonType_SAME_REGION_CROSS_ZONE, crossRegionErr: regionErrStr, crossZoneErr: ""},
 		// One: (region) Two: (zone)
 		{l: makeLocalityStr(firstRegionStr, ""), other: makeLocalityStr("", secZoneStr),
-			isCrossRegion: false, isCrossZone: false, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_SAME_REGION_SAME_ZONE, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
 		// One: (both) Two: (both)
 		{l: makeLocalityStr(firstRegionStr, firstZoneStr), other: makeLocalityStr(secRegionStr, secZoneStr),
-			isCrossRegion: true, isCrossZone: true, crossRegionErr: "", crossZoneErr: ""},
+			localityType: LocalityComparisonType_CROSS_REGION_CROSS_ZONE, crossRegionErr: "", crossZoneErr: ""},
 		// One: (none) Two: (none)
 		{l: makeLocalityStr("", ""), other: makeLocalityStr("", ""),
-			isCrossRegion: false, isCrossZone: false, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_SAME_REGION_SAME_ZONE, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
 		// One: (region) Two: (none)
 		{l: makeLocalityStr(firstRegionStr, ""), other: makeLocalityStr("", ""),
-			isCrossRegion: false, isCrossZone: false, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_SAME_REGION_SAME_ZONE, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
 		// One: (zone) Two: (none)
 		{l: makeLocalityStr("", firstZoneStr), other: makeLocalityStr("", ""),
-			isCrossRegion: false, isCrossZone: false, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_SAME_REGION_SAME_ZONE, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
 		// One: (both) Two: (none)
 		{l: makeLocalityStr(firstRegionStr, firstZoneStr), other: makeLocalityStr("", ""),
-			isCrossRegion: false, isCrossZone: false, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
+			localityType: LocalityComparisonType_SAME_REGION_SAME_ZONE, crossRegionErr: regionErrStr, crossZoneErr: zoneErrStr},
 	} {
 		t.Run(fmt.Sprintf("%s-crosslocality-%s", tc.l, tc.other), func(t *testing.T) {
 			var l Locality
@@ -334,24 +333,21 @@ func TestLocalityIsCrossRegionCrossZone(t *testing.T) {
 			require.NoError(t, l.Set(tc.l))
 			require.NoError(t, other.Set(tc.other))
 			type localities struct {
-				isCrossRegion  bool
-				isCrossZone    bool
+				localityType   LocalityComparisonType
 				crossRegionErr string
 				crossZoneErr   string
 			}
-			isCrossRegion, crossRegionErr, isCrossZone, crossZoneErr := l.IsCrossRegionCrossZone(other)
-			crossRegionErrStr := ""
-			if crossRegionErr != nil {
-				crossRegionErrStr = crossRegionErr.Error()
+			localityType, regionErr, zoneErr := l.CompareWithLocality(other)
+			regionErrStr := ""
+			if regionErr != nil {
+				regionErrStr = regionErr.Error()
 			}
-			crossZoneErrStr := ""
-			if crossZoneErr != nil {
-				crossZoneErrStr = crossZoneErr.Error()
+			zoneErrStr := ""
+			if zoneErr != nil {
+				zoneErrStr = zoneErr.Error()
 			}
-			actual := localities{isCrossRegion, isCrossZone,
-				crossRegionErrStr, crossZoneErrStr}
-			expected := localities{tc.isCrossRegion, tc.isCrossZone,
-				tc.crossRegionErr, tc.crossZoneErr}
+			actual := localities{localityType, regionErrStr, zoneErrStr}
+			expected := localities{tc.localityType, tc.crossRegionErr, tc.crossZoneErr}
 			require.Equal(t, expected, actual)
 		})
 	}
