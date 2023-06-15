@@ -482,6 +482,8 @@ func contextWithoutClientTenant(ctx context.Context) context.Context {
 
 func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {
 	// TODO(nvanbenschoten): consider caching this span.
+	// TODO(multitenant): Requests which use codec.TenantSpan() might run into
+	// this check. See https://github.com/cockroachdb/cockroach/issues/104928.
 	prefix := roachpb.RKey(keys.MakeTenantPrefix(tenID))
 	return roachpb.RSpan{
 		Key:    prefix,
