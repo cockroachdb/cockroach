@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -976,6 +977,7 @@ type Store struct {
 		syncutil.Mutex
 		m map[roachpb.RangeID]struct{}
 	}
+	rangefeedScheduler sched.Scheduler
 
 	// raftRecvQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
@@ -1915,6 +1917,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err := s.TODOEngine().SetStoreID(ctx, int32(s.StoreID())); err != nil {
 		return err
 	}
+
+	rfs := sched.NewScheduler(sched.SchedConfig{
+		Name: fmt.Sprintf("s%d-rangefeed-scheduler", s.StoreID()), Workers: 16,
+	})
+	if err = rfs.Start(s.stopper); err != nil {
+		return err
+	}
+	s.rangefeedScheduler = rfs
 
 	// Add the store ID to the scanner's AmbientContext before starting it, since
 	// the AmbientContext provided during construction did not include it.
