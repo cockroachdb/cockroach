@@ -304,9 +304,10 @@ func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
 
 // IterateReplicaKeySpans iterates over each of a range's key spans, and calls
 // the given visitor with an iterator over its data. Specifically, it iterates
-// over the spans returned by either makeAllKeySpans or MakeReplicatedKeySpans,
-// and for each one provides first a point key iterator and then a range key
-// iterator. This is the expected order for Raft snapshots.
+// over the spans returned by a Select() over all spans or replicated only spans
+// (with replicatedSpansFilter applied on replicated spans), and for each one
+// provides first a point key iterator and then a range key iterator. This is the
+// expected order for Raft snapshots.
 //
 // The iterator will be pre-seeked to the span, and is provided along with the
 // key span and key type (point or range). Iterators that have no data are
@@ -328,9 +329,11 @@ func IterateReplicaKeySpans(
 	var spans []roachpb.Span
 	if replicatedOnly {
 		spans = Select(desc.RangeID, SelectOpts{
-			ReplicatedSpansFilter: replicatedSpansFilter,
 			ReplicatedBySpan:      desc.RSpan(),
-			ReplicatedByRangeID:   true,
+			ReplicatedSpansFilter: replicatedSpansFilter,
+			// NB: We exclude ReplicatedByRangeID if replicatedSpansFilter is
+			// ReplicatedSpansUserOnly.
+			ReplicatedByRangeID: replicatedSpansFilter != ReplicatedSpansUserOnly,
 		})
 	} else {
 		spans = Select(desc.RangeID, SelectOpts{
