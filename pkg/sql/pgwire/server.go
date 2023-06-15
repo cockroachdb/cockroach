@@ -241,7 +241,7 @@ type Server struct {
 	SQLServer  *sql.Server
 	execCfg    *sql.ExecutorConfig
 
-	tenantMetrics tenantSpecificMetrics
+	tenantMetrics *tenantSpecificMetrics
 
 	mu struct {
 		syncutil.Mutex
@@ -299,10 +299,10 @@ type tenantSpecificMetrics struct {
 	SQLMemMetrics               sql.MemoryMetrics
 }
 
-func makeTenantSpecificMetrics(
+func newTenantSpecificMetrics(
 	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
-) tenantSpecificMetrics {
-	return tenantSpecificMetrics{
+) *tenantSpecificMetrics {
+	return &tenantSpecificMetrics{
 		BytesInCount:       metric.NewCounter(MetaBytesIn),
 		BytesOutCount:      metric.NewCounter(MetaBytesOut),
 		Conns:              metric.NewGauge(MetaConns),
@@ -351,7 +351,7 @@ func MakeServer(
 		cfg:        cfg,
 		execCfg:    executorConfig,
 
-		tenantMetrics: makeTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
+		tenantMetrics: newTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
@@ -423,7 +423,7 @@ func (s *Server) IsDraining() bool {
 // Metrics returns the set of metrics structs.
 func (s *Server) Metrics() []interface{} {
 	return []interface{}{
-		&s.tenantMetrics,
+		s.tenantMetrics,
 		&s.SQLServer.Metrics.StartedStatementCounters,
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
 		&s.SQLServer.Metrics.EngineMetrics,
@@ -822,7 +822,7 @@ func (s *Server) ServeConn(
 	c := newConn(
 		conn,
 		sArgs,
-		&s.tenantMetrics,
+		s.tenantMetrics,
 		connStart,
 		&s.execCfg.Settings.SV,
 		s.testingAuthLogEnabled.Get(),
