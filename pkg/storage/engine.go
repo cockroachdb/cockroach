@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -593,6 +594,17 @@ type Reader interface {
 	// with the iterator to free resources. The caller can change IterOptions
 	// after this function returns.
 	NewEngineIterator(opts IterOptions) EngineIterator
+	// ScanInternal allows a caller to inspect the underlying engine's
+	// InternalKeys using a visitor pattern, while also allowing for keys in
+	// shared files to be skipped if a visitor is provided for visitSharedFiles.
+	// Useful for fast-replicating state from one Reader to another.
+	ScanInternal(
+		ctx context.Context, lower, upper roachpb.Key,
+		visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue) error,
+		visitRangeDel func(start, end []byte, seqNum uint64) error,
+		visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
+		visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+	) error
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the same
 	// underlying Engine state. This is not true about Batch writes: new iterators
@@ -673,6 +685,11 @@ type Writer interface {
 	// from the storage engine. It is safe to modify the contents of the arguments
 	// after it returns.
 	ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error
+	// ClearRawEncodedRange is similar to ClearRawRange, except it takes pre-encoded
+	// start, end keys and bypasses the EngineKey encoding step. It also only
+	// operates on point keys; for range keys, use ClearEngineRangeKey or
+	// PutInternalRangeKey.
+	ClearRawEncodedRange(start, end []byte) error
 	// ClearMVCCRange removes MVCC point and/or range keys (including intents)
 	// from start (inclusive) to end (exclusive) using Pebble range tombstones.
 	//
@@ -739,6 +756,17 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error
+
+	// PutInternalRangeKey adds an InternalRangeKey to this batch. This is a very
+	// low-level method that should be used sparingly.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	PutInternalRangeKey(start, end []byte, key rangekey.Key) error
+	// PutInternalKey adds an InternalKey to this batch. This is a very
+	// low-level method that should be used sparingly.
+	//
+	// It is safe to modify the contents of the arguments after it returns.
+	PutInternalKey(key *pebble.InternalKey, value []byte) error
 
 	// ClearEngineRangeKey clears the given range key. This is a general-purpose
 	// and low-level method that should be used sparingly, only when the other
@@ -942,6 +970,11 @@ type Engine interface {
 	// additionally returns ingestion stats.
 	IngestExternalFilesWithStats(
 		ctx context.Context, paths []string) (pebble.IngestOperationStats, error)
+	// IngestAndExciseExternalFiles is a variant of IngestExternalFilesWithStats
+	// that excises an ExciseSpan, and ingests either local or shared sstables or
+	// both.
+	IngestAndExciseExternalFiles(
+		ctx context.Context, paths []string, shared []pebble.SharedSSTMeta, exciseSpan roachpb.Span) (pebble.IngestOperationStats, error)
 	// PreIngestDelay offers an engine the chance to backpressure ingestions.
 	// When called, it may choose to block if the engine determines that it is in
 	// or approaching a state where further ingestions may risk its health.

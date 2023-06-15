@@ -11,10 +11,14 @@
 package rditer
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/rangekey"
 )
 
 // ReplicaDataIteratorOptions defines ReplicaMVCCDataIterator creation options.
@@ -298,6 +302,21 @@ func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
 	return ri.it.HasPointAndRange()
 }
 
+// IterateTableKeys is for use with IterateReplicaKeySpans. It specifies whether
+// table keys (aka replicated user keys) are iterated on alongside other spans
+// in the range (tableKeysInclude), exclusively iterated on (tableKeysOnly),
+// or skipped (tableKeysSkip).
+type IterateTableKeys int
+
+const (
+	// TableKeysInclude includes table keys in iteration.
+	TableKeysInclude IterateTableKeys = iota
+	// TableKeysSkip skips table keys in iteration.
+	TableKeysSkip
+	// TableKeysOnly exclusively iterates on table keys.
+	TableKeysOnly
+)
+
 // IterateReplicaKeySpans iterates over each of a range's key spans, and calls
 // the given visitor with an iterator over its data. Specifically, it iterates
 // over the spans returned by either makeAllKeySpans or MakeReplicatedKeySpans,
@@ -315,6 +334,7 @@ func IterateReplicaKeySpans(
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
 	replicatedOnly bool,
+	includeTableKeys IterateTableKeys,
 	visitor func(storage.EngineIterator, roachpb.Span, storage.IterKeyType) error,
 ) error {
 	if !reader.ConsistentIterators() {
@@ -325,6 +345,17 @@ func IterateReplicaKeySpans(
 		spans = MakeReplicatedKeySpans(desc)
 	} else {
 		spans = makeAllKeySpans(desc)
+	}
+	switch includeTableKeys {
+	case TableKeysInclude:
+		// Do nothing.
+	case TableKeysOnly:
+		// Only iterate on table keys, which should be the last span in spans.
+		spans = spans[len(spans)-1:]
+	case TableKeysSkip:
+		// We expect the last span to be the span of replicated table keys. Skip it
+		// if requested as such.
+		spans = spans[:len(spans)-1]
 	}
 	keyTypes := []storage.IterKeyType{storage.IterKeyTypePointsOnly, storage.IterKeyTypeRangesOnly}
 	for _, span := range spans {
@@ -348,6 +379,31 @@ func IterateReplicaKeySpans(
 		}
 	}
 	return nil
+}
+
+// IterateReplicaKeySpansShared iterates over the range's user key span,
+// skipping any keys present in shared files. It calls the appropriate visitor
+// function for the type of key visited, namely, point keys, range deletes and
+// range keys. Shared files that are skipped during this iteration are also
+// surfaced through a dedicated visitor. Note that this method only iterates
+// over a range's user key span; IterateReplicaKeySpans must be called to
+// iterate over the other key spans.
+//
+// Must use a reader with consistent iterators.
+func IterateReplicaKeySpansShared(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	visitPoint func(key *pebble.InternalKey, val pebble.LazyValue) error,
+	visitRangeDel func(start, end []byte, seqNum uint64) error,
+	visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+) error {
+	if !reader.ConsistentIterators() {
+		panic("reader must provide consistent iterators")
+	}
+	span := desc.KeySpan().AsRawSpanWithNoLocals()
+	return reader.ScanInternal(ctx, span.Key, span.EndKey, visitPoint, visitRangeDel, visitRangeKey, visitSharedFile)
 }
 
 // IterateOptions instructs how points and ranges should be presented to visitor

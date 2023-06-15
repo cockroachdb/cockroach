@@ -3122,6 +3122,8 @@ func (r *Replica) followerSendSnapshot(
 	// explicitly for snapshots going out to followers.
 	snap.State.DeprecatedUsingAppliedStateKey = true
 
+	fastReplicate := r.store.cfg.SharedStorageEnabled && snap.State.Desc.StartKey.AsRawKey().Compare(keys.TableDataMin) >= 0
+
 	// Create new snapshot request header using the delegate snapshot request.
 	header := kvserverpb.SnapshotRequest_Header{
 		State:                                snap.State,
@@ -3144,6 +3146,7 @@ func (r *Replica) followerSendSnapshot(
 		SenderQueuePriority: req.SenderQueuePriority,
 		Strategy:            kvserverpb.SnapshotRequest_KV_BATCH,
 		Type:                req.Type,
+		FastReplicate:       fastReplicate,
 	}
 	newBatchFn := func() storage.WriteBatch {
 		return r.store.TODOEngine().NewWriteBatch()
