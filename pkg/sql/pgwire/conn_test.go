@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -534,6 +535,17 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	return conn.Close(ctx)
 }
 
+func newTestServer() *Server {
+	sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
+	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval)
+	return &Server{
+		tenantMetrics: metrics,
+		execCfg: &sql.ExecutorConfig{
+			Settings: cluster.MakeTestingClusterSettings(),
+		},
+	}
+}
+
 // waitForClientConn blocks until a client connects and performs the pgwire
 // handshake. This emulates what pgwire.Server does.
 func waitForClientConn(ln net.Listener) (*conn, error) {
@@ -541,15 +553,11 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	metrics := newTenantSpecificMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(
+	s := newTestServer()
+	pgwireConn := s.newConn(
 		conn,
 		sql.SessionArgs{ConnResultsBufferSize: 16 << 10},
-		metrics,
 		timeutil.Now(),
-		nil,   /* sv */
-		false, /* alwaysLogAuthActivity */
 	)
 	return pgwireConn, nil
 }
@@ -1090,18 +1098,13 @@ func TestMaliciousInputs(t *testing.T) {
 				close(errChan)
 			}(tc)
 
-			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
-			metrics := newTenantSpecificMetrics(sqlMetrics, time.Second /* histogramWindow */)
-
-			conn := newConn(
+			s := newTestServer()
+			conn := s.newConn(
 				r,
 				// ConnResultsBufferSize - really small so that it overflows
 				// when we produce a few results.
 				sql.SessionArgs{ConnResultsBufferSize: 10},
-				metrics,
 				timeutil.Now(),
-				nil,   /* sv */
-				false, /* alwaysLogAuthActivity */
 			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.

@@ -114,34 +114,6 @@ type conn struct {
 	alwaysLogAuthActivity bool
 }
 
-func newConn(
-	netConn net.Conn,
-	sArgs sql.SessionArgs,
-	metrics *tenantSpecificMetrics,
-	connStart time.Time,
-	sv *settings.Values,
-	alwaysLogAuthActivity bool,
-) *conn {
-	c := &conn{
-		conn:                  netConn,
-		sessionArgs:           sArgs,
-		metrics:               metrics,
-		startTime:             connStart,
-		rd:                    *bufio.NewReader(netConn),
-		sv:                    sv,
-		readBuf:               pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
-		alwaysLogAuthActivity: alwaysLogAuthActivity,
-	}
-	c.stmtBuf.Init()
-	c.res.released = true
-	c.writerState.fi.buf = &c.writerState.buf
-	c.writerState.fi.lastFlushed = -1
-	c.msgBuilder.init(metrics.BytesOutCount)
-	c.errWriter.sv = sv
-	c.errWriter.msgBuilder = &c.msgBuilder
-	return c
-}
-
 func (c *conn) setErr(err error) {
 	c.err.Store(err)
 }
