@@ -159,7 +159,9 @@ export class JobDetails extends React.Component<JobDetailsProps> {
   };
 
   render(): React.ReactElement {
-    const isLoading = !this.props.job || this.props.jobLoading;
+    const isLoading =
+      (this.props.job === undefined && this.props.jobLoading) ||
+      (this.props.jobLoading === undefined && this.props.job === undefined);
     const error = this.props.jobError;
     return (
       <div className={jobCx("job-details")}>
