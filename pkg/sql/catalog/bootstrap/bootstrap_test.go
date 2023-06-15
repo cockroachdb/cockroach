@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -35,6 +36,9 @@ import (
 // These can be obtained from the test output file for the data-driven
 // TestInitialValuesToString test in the corresponding release branch.
 func TestSupportedReleases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	expected := make(map[roachpb.Version]struct{})
 	earliest := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
 	latest := clusterversion.ByKey(clusterversion.BinaryVersionKey)
@@ -72,6 +76,8 @@ func TestSupportedReleases(t *testing.T) {
 
 func TestInitialValuesToString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			codec := keys.SystemSQLCodec
@@ -109,6 +115,9 @@ schema has changed. Assuming that this is expected:
 }
 
 func TestRoundTripInitialValuesStringRepresentation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	t.Run("system", func(t *testing.T) {
 		roundTripInitialValuesStringRepresentation(t, 0 /* tenantID */)
 	})

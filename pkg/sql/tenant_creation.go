@@ -462,33 +462,35 @@ func CreateTenantRecord(
 	}
 	toUpsert := []spanconfig.Record{startRecord}
 
-	// We want to ensure we have a split at the non-inclusive end of the tenant's
-	// keyspace, which also happens to be the inclusive start of the next
-	// tenant's (with ID=ours+1). If we didn't do anything here, and we were the
-	// tenant with the highest ID thus far, our last range would extend to /Max.
-	// If a tenant with a higher ID was created, when installing its initial span
-	// config record, it would carve itself off (and our last range would only
-	// extend to that next tenant's boundary), but this is a bit awkward for code
-	// that wants to rely on the invariant that ranges for a tenant only extend
-	// to the tenant's well-defined end key.
+	// We want to ensure we have a split at the start of the next tenant's
+	// (with ID=ours+1) keyspace. This ensures our ranges do not straddle tenant
+	// boundaries, into the next one.
+	// We want to ensure our ranges do not straddle tenant boundaries, either into
+	// the next one or the previous one. Tenant's creation installs a span
+	// configuration at the start of a tenant's keyspace, above, so that handles
+	// the latter. The former only needs handling if the tenant we're creating
+	// here has the highest ID thus far. Such a tenant's range would extend until
+	// /Max. We've deemed this edge case undesirable, so we need to do something
+	// here. In particular, we choose to install a split point at the end of the
+	// tenant's keyspace. We do so by installing a span config record, the start
+	// key of which will serve as a split point.
 	//
-	// So how do we ensure this split at this tenant's non-inclusive end key?
-	// Hard splits are controlled by the start keys on span config records[^1],
-	// so we'll try insert one accordingly. But we cannot do this blindly. We
-	// cannot assume that tenants are created in ID order, so it's possible that
-	// the tenant with the next ID is already present + running. If so, it may
-	// already have span config records that start at the key at which we want
-	// to write a span config record for. Over-writing it blindly would be a
-	// mistake -- there's no telling what config that next tenant has associated
-	// for that span. So we'll do something simple -- we'll check transactionally
-	// whether there's anything written already, and if so, do nothing. We
-	// already have the split we need.
+	// Note that we need to be careful about which key to put in the record's
+	// start key here. The key needs to be such that it is safe to split at;
+	// otherwise. Notably, this makes tenantPrefix.PrefixEnd() an unsuitable
+	// candidate -- see https://github.com/cockroachdb/cockroach/issues/104928 for
+	// more context about why.
 	//
-	// [^1]: See ComputeSplitKey in spanconfig.StoreReader.
-	tenantPrefixEnd := tenantPrefix.PrefixEnd()
+	// Note that we're creating a span config record that controls the next
+	// tenant's keyspace here. If such a tenant exists, writing a span config
+	// record here blindly wouldn't be safe -- we could be clobbering something
+	// that tenant has already reconciled. We instead need to transactionally
+	// check if a record exists or not before writing one. If something already
+	// exists, we do nothing; otherwise, we write the record.
+	nextTenantPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID + 1))
 	endRecordTarget := spanconfig.MakeTargetFromSpan(roachpb.Span{
-		Key:    tenantPrefixEnd,
-		EndKey: tenantPrefixEnd.Next(),
+		Key:    nextTenantPrefix,
+		EndKey: nextTenantPrefix.Next(),
 	})
 
 	// Check if a record exists for the next tenant's startKey from when the next
