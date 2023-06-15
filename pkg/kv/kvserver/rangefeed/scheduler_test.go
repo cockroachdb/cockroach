@@ -91,7 +91,7 @@ func (c *schedulerConsumer) process(ev processorEventType) processorEventType {
 		return r
 	default:
 	}
-	if ev&stopped != 0 {
+	if ev&Stopped != 0 {
 		c.sched.Unregister(c.id)
 	}
 	return 0
@@ -192,9 +192,9 @@ func (c *schedulerConsumer) requireStopped(t *testing.T, timeout time.Duration) 
 			return false
 		}
 		lastEvent = c.flat[len(c.flat)-1]
-		return lastEvent&stopped != 0
+		return lastEvent&Stopped != 0
 	}) {
-		t.Fatalf("failed to find stopped event at the end of history after %s, lastEvent=%08b", timeout,
+		t.Fatalf("failed to find Stopped event at the end of history after %s, lastEvent=%08b", timeout,
 			lastEvent)
 	}
 }
@@ -417,8 +417,8 @@ func TestSchedulerShutdown(t *testing.T) {
 	s.StopProcessor(c2.id)
 	s.Stop()
 	// Ensure that we are not stopped twice.
-	c1.requireHistory(t, time.Second*30, []processorEventType{stopped})
-	c2.requireHistory(t, time.Second*30, []processorEventType{stopped})
+	c1.requireHistory(t, time.Second*30, []processorEventType{Stopped})
+	c2.requireHistory(t, time.Second*30, []processorEventType{Stopped})
 }
 
 func TestQueueReadWrite1By1(t *testing.T) {
