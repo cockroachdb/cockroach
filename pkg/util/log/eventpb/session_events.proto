@@ -44,6 +44,8 @@ message CommonConnectionDetails {
   // proxy or other intermediate server, this field will contain the
   // address of the intermediate server.
   string remote_address = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The connection's hex encoded session id.
+  string session_id = 4 [(gogoproto.customname) = "SessionID", (gogoproto.jsontag) = ",omitempty"];
 }
 
 // CommonConnectionDetails are payload fields common to all

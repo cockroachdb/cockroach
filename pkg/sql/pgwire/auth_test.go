@@ -410,6 +410,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								// Erase non-deterministic fields.
 								info["Timestamp"] = "XXX"
 								info["RemoteAddress"] = "XXX"
+								info["SessionID"] = "XXX"
 								if _, ok := info["Duration"]; ok {
 									info["Duration"] = "NNN"
 								}

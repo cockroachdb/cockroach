@@ -1571,6 +1571,18 @@ func (m *CommonConnectionDetails) AppendJSONFields(printComma bool, b redact.Red
 		b = append(b, '"')
 	}
 
+	if m.SessionID != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SessionID\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.SessionID)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 
