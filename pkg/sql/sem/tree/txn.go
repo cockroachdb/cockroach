@@ -16,10 +16,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/redact"
 )
 
 // IsolationLevel holds the isolation level for a transaction.
 type IsolationLevel int
+
+var _ redact.SafeValue = IsolationLevel(0)
+
+// SafeValue makes Kind a redact.SafeValue.
+func (k IsolationLevel) SafeValue() {}
 
 // IsolationLevel values
 const (
