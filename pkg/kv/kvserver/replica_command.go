@@ -3158,8 +3158,9 @@ func (r *Replica) followerSendSnapshot(
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
-		r.store.updateCrossLocalitySnapshotMetrics(
-			ctx, req.CoordinatorReplica, req.RecipientReplica, inc, true /* isSent */)
+		comparisonResult := r.store.getLocalityComparison(ctx, req.CoordinatorReplica.NodeID,
+			req.RecipientReplica.NodeID)
+		r.store.metrics.updateCrossLocalityMetricsOnSnapshotSent(comparisonResult, inc)
 
 		switch header.Priority {
 		case kvserverpb.SnapshotRequest_RECOVERY:
