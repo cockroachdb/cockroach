@@ -544,7 +544,7 @@ func (m *Manager) Migrate(
 		if mustPersistFenceVersion {
 			var err error
 			for {
-				err = updateSystemVersionSetting(ctx, cv, validate)
+				err = updateSystemVersionSetting(ctx, fenceVersion, validate)
 				if errors.Is(err, upgradecluster.InconsistentSQLServersError) {
 					if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
 						return err
