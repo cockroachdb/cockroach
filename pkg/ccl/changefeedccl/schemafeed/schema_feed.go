@@ -245,8 +245,6 @@ func (tf *schemaFeed) init() error {
 		return errors.AssertionFailedf("SchemaFeed started more than once")
 	}
 	tf.mu.started = true
-	tf.mu.allTableVersions1 = make(map[descpb.ID]descpb.DescriptorVersion)
-	tf.mu.allTableVersions2 = make(map[descpb.ID]descpb.DescriptorVersion)
 	return nil
 }
 
@@ -480,6 +478,11 @@ func (tf *schemaFeed) pauseOrResumePolling(
 	if atOrBefore.LessEq(tf.mu.highWater) {
 		// `atOrBefore` warrants a fast path already, with polling paused or not.
 		return atOrBefore, nil
+	}
+
+	if tf.mu.allTableVersions1 == nil {
+		tf.mu.allTableVersions1 = make(map[descpb.ID]descpb.DescriptorVersion)
+		tf.mu.allTableVersions2 = make(map[descpb.ID]descpb.DescriptorVersion)
 	}
 
 	// Always start with a stance to resume polling until we've proved otherwise.
