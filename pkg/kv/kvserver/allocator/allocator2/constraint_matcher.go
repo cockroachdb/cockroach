@@ -120,7 +120,10 @@ func (cm *constraintMatcher) storeMatchesConstraint(
 	store roachpb.StoreDescriptor, c internedConstraint,
 ) bool {
 	matches := false
-	if c.key == emptyStringCode {
+	// All stores match the empty constraint.
+	if c.key == emptyStringCode && c.value == emptyStringCode {
+		return true
+	} else if c.key == emptyStringCode {
 		for _, attrs := range []roachpb.Attributes{store.Attrs, store.Node.Attrs} {
 			for _, attr := range attrs.Attrs {
 				if cm.interner.toCode(attr) == c.value {
@@ -169,6 +172,13 @@ func (cm *constraintMatcher) getMatchedSetForConstraint(c internedConstraint) *m
 func (cm *constraintMatcher) constrainStoresForConjunction(
 	constraints []internedConstraint, storeSet *storeIDPostingList,
 ) {
+	// The empty constraint list matches every store.
+	if len(constraints) == 0 {
+		for storeID := range cm.stores {
+			storeSet.insert(storeID)
+		}
+		return
+	}
 	*storeSet = (*storeSet)[:0]
 	for i := range constraints {
 		matchedSet := cm.getMatchedSetForConstraint(constraints[i])
@@ -214,6 +224,14 @@ func (cm *constraintMatcher) storeMatches(
 func (cm *constraintMatcher) constrainStoresForExpr(
 	expr constraintsDisj, storeSet *storeIDPostingList,
 ) {
+	// Handle the empty constraint disjunction, which matches every store.
+	if len(expr) == 0 {
+		for storeID := range cm.stores {
+			storeSet.insert(storeID)
+		}
+		return
+	}
+
 	// Optimize for a single conjunction, by using storeSet directly in the call
 	// to constrainStoresForConjunction.
 	var scratch storeIDPostingList

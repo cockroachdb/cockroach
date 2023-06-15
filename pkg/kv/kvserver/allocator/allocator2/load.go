@@ -11,10 +11,14 @@
 package allocator2
 
 import (
+	"context"
+	"fmt"
 	"math"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Misc helper classes for working with range, store and node load.
@@ -41,6 +45,30 @@ type loadValue int64
 // loadVector represents a vector of loads, with one element for each resource
 // dimension.
 type loadVector [numLoadDimensions]loadValue
+
+func (lv loadVector) sub(other loadVector) {
+	for i := 0; i < int(numLoadDimensions); i++ {
+		lv[i] -= other[i]
+	}
+}
+
+func (lv loadVector) add(other loadVector) {
+	for i := 0; i < int(numLoadDimensions); i++ {
+		lv[i] += other[i]
+	}
+}
+
+func loadUtilization(used, capacity loadVector) [numLoadDimensions]float64 {
+	var util [numLoadDimensions]float64
+	for i := range used {
+		if capacity[i] != parentCapacity {
+			util[i] = float64(used[i]) / float64(capacity[i])
+		} else {
+			util[i] = 0
+		}
+	}
+	return util
+}
 
 // A resource can have a capacity, which is also expressed using loadValue.
 // There are some special case capacity values, enumerated here.
@@ -77,6 +105,7 @@ const (
 type secondaryLoadVector [numSecondaryLoadDimensions]loadValue
 
 type rangeLoad struct {
+	roachpb.RangeID
 	load loadVector
 	// Nanos per second. raftCPU <= load[cpu]. Handling this as a special case,
 	// rather than trying to (over) generalize, since currently this is the only
@@ -125,10 +154,18 @@ type storeLoad struct {
 	// decision on what ranges to shed for an overloaded node -- it simply tries
 	// to find new homes for the ranges in this top-k. We decentralize this
 	// decision to reduce the time complexity of rebalancing.
-	topKRanges map[roachpb.RangeID]rangeLoad
+	topKRanges []rangeLoad
 	// Mean load for the non-top-k ranges. This is used to estimate the load
 	// change for transferring them.
 	meanNonTopKRangeLoad rangeLoad
+}
+
+func newStoreLoad(storeID roachpb.StoreID, nodeID roachpb.NodeID) storeLoad {
+	return storeLoad{
+		StoreID:    storeID,
+		NodeID:     nodeID,
+		topKRanges: []rangeLoad{},
+	}
 }
 
 // nodeLoad is the load information for a node. Roughly, this is the
@@ -163,6 +200,11 @@ type storeLoadSummary struct {
 	loadSeqNum uint64
 }
 
+func (sls storeLoadSummary) String() string {
+	return fmt.Sprintf("store-load=%v node-load=%v failure-detection=%v seq=%d",
+		sls.sls, sls.nls, sls.fd, sls.loadSeqNum)
+}
+
 // The allocator often needs mean load information for a set of stores. This
 // set is implied by a constraintsDisj. We also want to know the set of stores
 // that satisfy that contraintsDisj. meansForStoreSet encapsulates all of this
@@ -181,6 +223,46 @@ type meansForStoreSet struct {
 	nodeLoad  meanNodeLoad
 
 	storeSummaries map[roachpb.StoreID]storeLoadSummary
+}
+
+func printPostingList(b *strings.Builder, pl storeIDPostingList) {
+	for i := range pl {
+		prefix := ""
+		if i > 0 {
+			prefix = ", "
+		}
+		fmt.Fprintf(b, "%s%d", prefix, pl[i])
+	}
+}
+
+func (mss *meansForStoreSet) String() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "stores=[")
+	printPostingList(&b, mss.stores)
+	fmt.Fprintf(&b, "] store-means (load,cap,util): ")
+	for i := range mss.storeLoad.load {
+		switch loadDimension(i) {
+		case cpu:
+			fmt.Fprintf(&b, "cpu=")
+		case writeBandwidth:
+			fmt.Fprintf(&b, " write-bw=")
+		case byteSize:
+			fmt.Fprintf(&b, " bytes=")
+		}
+		capacity := mss.storeLoad.capacity[i]
+		var capStr string
+		if capacity == parentCapacity {
+			capStr = "parent"
+		} else {
+			capStr = fmt.Sprintf("%d", capacity)
+		}
+		fmt.Fprintf(&b, "(%d, %s, %.2f)", mss.storeLoad.load[i],
+			capStr, mss.storeLoad.util[i])
+	}
+	fmt.Fprintf(&b, " secondary-load: %d", mss.storeLoad.secondaryLoad)
+	fmt.Fprintf(&b, " node-mean cpu (load,cap,util): (%d, %d, %.2f)", mss.nodeLoad.loadCPU,
+		mss.nodeLoad.capacityCPU, mss.nodeLoad.utilCPU)
+	return b.String()
 }
 
 var _ mapEntry = &meansForStoreSet{}
@@ -293,6 +375,10 @@ func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
 	for k := range mm.scratchNodes {
 		delete(mm.scratchNodes, k)
 	}
+	if n < 1 {
+		// There are no stores in the meansMemo.
+		return nil
+	}
 	for _, storeID := range means.stores {
 		sload := mm.loadInfoProvider.getStoreReportedLoad(storeID)
 		for j := range sload.reportedLoad {
@@ -360,6 +446,18 @@ func (mm *meansMemo) getStoreLoadSummary(
 // decide how to order the stores we will try to rebalance to. So we simply
 // use an enum.
 type loadSummary uint8
+
+func (ls loadSummary) String() string {
+	return loadSummaryMap[ls]
+}
+
+var loadSummaryMap map[loadSummary]string = map[loadSummary]string{
+	overloadUrgent: "overload-urgent",
+	overloadSlow:   "overload-slow",
+	loadNoChange:   "no-change",
+	loadNormal:     "normal",
+	loadLow:        "low",
+}
 
 const (
 	// The two overload states represent the degree of overload.

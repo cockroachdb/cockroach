@@ -10,7 +10,11 @@
 
 package allocator2
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // Incoming messages for updating cluster state.
 //
@@ -27,12 +31,9 @@ type storeLoadMsg struct {
 	// adjustments for pending changes. This is *all* the ranges at the store.
 	storeRanges []storeRange
 
-	capacity      loadVector
-	secondaryLoad secondaryLoadVector
-	topKRanges    []struct {
-		roachpb.RangeID
-		rangeLoad
-	}
+	capacity             loadVector
+	secondaryLoad        secondaryLoadVector
+	topKRanges           []rangeLoad
 	meanNonTopKRangeLoad rangeLoad
 }
 
@@ -78,6 +79,15 @@ type rangeMsg struct {
 func (rm *rangeMsg) isDeletedRange() bool {
 	return len(rm.replicas) == 0
 }
+
+const (
+	// fullUpdateLoadSeqNum is a load sequence number when nodeLoadResponse is
+	// not a diff.
+	fullUpdateLoadSeqNum int64 = -1
+
+	// TODO(kvoli,sumeerbhola): Handle sequence numbers.
+	todoLoadSeqNum = math.MaxUint64
+)
 
 // nodeLoadResponse is sent periodically in response to polling by the
 // allocator. It is the top-level message containing all the previous structs
