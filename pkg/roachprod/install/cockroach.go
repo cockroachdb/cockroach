@@ -19,7 +19,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"text/template"
 
@@ -322,14 +321,8 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 func (c *SyncedCluster) ExecSQL(
 	ctx context.Context, l *logger.Logger, tenantName string, args []string,
 ) error {
-	type result struct {
-		node   Node
-		output string
-	}
-	resultChan := make(chan result, len(c.Nodes))
-
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	if err := c.Parallel(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	results, _, err := c.ParallelE(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		var cmd string
 		if c.IsLocal() {
 			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
@@ -338,31 +331,16 @@ func (c *SyncedCluster) ExecSQL(
 			c.NodeURL("localhost", c.NodePort(node), tenantName) + " " +
 			ssh.Escape(args)
 
-		sess := c.newSession(l, node, cmd, withDebugName("run-sql"))
-		defer sess.Close()
+		//sess := c.newSession(l, node, cmd, withDebugName("run-sql"))
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
+	}, WithDisplay(display), WithWaitOnFail())
 
-		out, cmdErr := sess.CombinedOutput(ctx)
-		res := newRunResultDetails(node, cmdErr)
-		res.CombinedOut = out
-
-		if res.Err != nil {
-			res.Err = errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
-		}
-		resultChan <- result{node: node, output: string(res.CombinedOut)}
-		return res, nil
-	}, WithDisplay(display), WithWaitOnFail()); err != nil {
+	if err != nil {
 		return err
 	}
 
-	results := make([]result, 0, len(c.Nodes))
-	for range c.Nodes {
-		results = append(results, <-resultChan)
-	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].node < results[j].node
-	})
 	for _, r := range results {
-		l.Printf("node %d:\n%s", r.node, r.output)
+		l.Printf("node %d:\n%s", r.Node, r.CombinedOut)
 	}
 
 	return nil

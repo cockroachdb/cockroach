@@ -475,7 +475,7 @@ fi`,
 			waitCmd,                   // [5]
 		)
 
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
 	}, WithDisplay(display), WithRetryOpts(nil)) // Disable SSH Retries
 }
 
@@ -507,7 +507,7 @@ sudo rm -fr logs &&
 				cmd += "sudo rm -fr tenant-certs* ;\n"
 			}
 		}
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
 	}, WithDisplay(display))
 }
 
@@ -539,7 +539,7 @@ else
   echo ${out}
 fi
 `
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
 	}, WithDisplay(display))
 
 	if err != nil {
@@ -548,15 +548,16 @@ fi
 
 	statuses := make([]NodeStatus, len(c.Nodes))
 	for i, res := range res {
-		msg := strings.TrimSpace(string(res.CombinedOut))
-		info := strings.Split(msg, " ")
+		msg := strings.TrimSpace(res.CombinedOut)
 		if msg == "" || strings.HasPrefix(msg, "not-running") {
 			statuses[i] = NodeStatus{NodeID: int(res.Node), Running: false}
 			if msg != "" {
+				info := strings.Split(msg, " ")
 				statuses[i].Version = info[1]
 			}
 			continue
 		}
+		info := strings.Split(msg, " ")
 		statuses[i] = NodeStatus{NodeID: int(res.Node), Running: true, Version: info[0], Pid: info[1]}
 	}
 	return statuses, nil
@@ -748,9 +749,9 @@ done
 // RunResultDetails holds details of the result of commands executed by Run().
 type RunResultDetails struct {
 	Node             Node
-	Stdout           []byte
-	Stderr           []byte
-	CombinedOut      []byte
+	Stdout           string
+	Stderr           string
+	CombinedOut      string
 	Err              error
 	RemoteExitStatus int
 	Attempt          int
@@ -768,12 +769,16 @@ func newRunResultDetails(node Node, err error) *RunResultDetails {
 	return &res
 }
 
+// runCmdOnSingleNode runs a command on a single node
+// `combined` controls whether the stdout and stderr are combined into `RunResultDetails.CombinedOut`.
+// `withEnvVars` controls whether the command is run with the ROACHPROD env variable, and
+// should be true for all user commands.
 func (c *SyncedCluster) runCmdOnSingleNode(
 	ctx context.Context,
 	l *logger.Logger,
 	node Node,
 	cmd string,
-	combined bool,
+	combined, withEnvVars bool,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
 ) (*RunResultDetails, error) {
@@ -786,6 +791,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		return newRunResultDetails(node, err), err
 	}
 
+	nodeCmd := expandedCmd
 	// Be careful about changing these command strings. In particular, we need
 	// to support running commands in the background on both local and remote
 	// nodes. For example:
@@ -794,15 +800,16 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	//
 	// That command should return immediately. And a "roachprod status" should
 	// reveal that the sleep command is running on the cluster.
-	envVars := append([]string{
-		fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)), "GOTRACEBACK=crash",
-	}, config.DefaultEnvVars()...)
-	nodeCmd := fmt.Sprintf(`export %s && bash -c %s`,
-		strings.Join(envVars, " "), ssh.Escape1(expandedCmd))
-	if c.IsLocal() {
-		nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
+	if withEnvVars {
+		envVars := append([]string{
+			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)), "GOTRACEBACK=crash",
+		}, config.DefaultEnvVars()...)
+		nodeCmd = fmt.Sprintf(`export %s && bash -c %s`,
+			strings.Join(envVars, " "), ssh.Escape1(expandedCmd))
+		if c.IsLocal() {
+			nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
+		}
 	}
-
 	sess := c.newSession(l, node, nodeCmd, withDebugName(GenFilenameFromArgs(20, expandedCmd)))
 	defer sess.Close()
 
@@ -820,7 +827,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	if combined {
 		out, cmdErr := sess.CombinedOutput(ctx)
 		res = newRunResultDetails(node, cmdErr)
-		res.CombinedOut = out
+		res.CombinedOut = string(out)
 	} else {
 		// We stream the output if running on a single node.
 		var stdoutBuffer, stderrBuffer bytes.Buffer
@@ -831,8 +838,8 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		sess.SetStderr(multStderr)
 
 		res = newRunResultDetails(node, sess.Run(ctx))
-		res.Stderr = stderrBuffer.Bytes()
-		res.Stdout = stdoutBuffer.Bytes()
+		res.Stderr = stderrBuffer.String()
+		res.Stdout = stdoutBuffer.String()
 	}
 
 	if res.Err != nil {
@@ -869,7 +876,7 @@ func (c *SyncedCluster) Run(
 	}
 
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, !stream, nil, stdout, stderr)
+		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, !stream, true, nil, stdout, stderr)
 		return result, err
 	}, append(opts, WithDisplay(display))...)
 
@@ -893,7 +900,7 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 		// Emit the cached output of each result. When stream == true, the output is emitted
 		// as it is generated in `runCmdOnSingleNode`.
 		if !stream {
-			fmt.Fprintf(stdout, "  %2d: %s\n%v\n", i+1, strings.TrimSpace(string(r.CombinedOut)), r.Err)
+			fmt.Fprintf(stdout, "  %2d: %s\n%v\n", i+1, strings.TrimSpace(r.CombinedOut), r.Err)
 		}
 
 		if r.Err != nil {
@@ -923,7 +930,7 @@ func (c *SyncedCluster) RunWithDetails(
 
 	// Failing slow here allows us to capture the output of all nodes even if one fails with a command error.
 	resultPtrs, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, false, nil, l.Stdout, l.Stderr)
+		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, false, true, nil, l.Stdout, l.Stderr)
 		return result, err
 	}, WithDisplay(display), WithWaitOnFail())
 
@@ -978,7 +985,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		var err error
 		cmd := "test -e /mnt/data1/.roachprod-initialized"
 		for j := 0; j < 600; j++ {
-			res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, true, nil, nil, nil)
+			res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -1042,7 +1049,7 @@ test -f .ssh/id_rsa || \
 tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 `
 
-		return c.runCmdOnSingleNode(ctx, l, n, cmd, false, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, n, cmd, false, false, nil, nil, nil)
 		//sess := c.newSession(l, 1, cmd, withDebugName("ssh-gen-key"))
 	}, WithDisplay("generating ssh key"))
 
@@ -1050,11 +1057,11 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		return err
 	}
 
-	sshTar := results[0].Stdout
+	sshTar := []byte(results[0].Stdout)
 	// Skip the first node which is where we generated the key.
 	nodes := c.Nodes[1:]
 	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		return c.runCmdOnSingleNode(ctx, l, node, `tar xf -`, true, bytes.NewReader(sshTar), nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, `tar xf -`, true, false, bytes.NewReader(sshTar), nil, nil)
 		//sess := c.newSession(l, node, cmd, withDebugName("ssh-dist-key"))
 	}, WithDisplay("distributing ssh key")); err != nil {
 		return err
@@ -1120,7 +1127,7 @@ for i in {1..20}; do
 done
 exit 1
 `
-		res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, false, nil, nil, nil)
+		res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, false, false, nil, nil, nil)
 		//sess := c.newSession(l, node, cmd, withDebugName("ssh-scan-hosts"))
 		if err != nil {
 			return nil, err
@@ -1130,7 +1137,7 @@ exit 1
 			return res, nil
 		}
 		mu.Lock()
-		providerKnownHostData[nodeProvider] = res.Stdout
+		providerKnownHostData[nodeProvider] = []byte(res.Stdout)
 		mu.Unlock()
 		return res, nil
 	}, WithDisplay("scanning hosts")); err != nil {
@@ -1168,7 +1175,7 @@ fi
 `
 
 		//sess := c.newSession(l, node, cmd, withDebugName("ssh-dist-known-hosts"))
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, bytes.NewReader(providerKnownHostData[provider]), nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, bytes.NewReader(providerKnownHostData[provider]), nil, nil)
 	}, WithDisplay("distributing known_hosts")); err != nil {
 		return err
 	}
@@ -1204,7 +1211,7 @@ fi
 `
 
 			//sess := c.newSession(l, node, cmd, withDebugName("ssh-add-extra-keys"))
-			return c.runCmdOnSingleNode(ctx, l, node, cmd, true, bytes.NewReader(c.AuthorizedKeys), nil, nil)
+			return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, bytes.NewReader(c.AuthorizedKeys), nil, nil)
 		}, WithDisplay("adding additional authorized keys")); err != nil {
 			return err
 		}
@@ -1260,7 +1267,7 @@ tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 
 		//sess := c.newSession(l, 1, cmd, withDebugName("init-certs"))
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
 	}, WithDisplay(display)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		exit.WithCode(exit.UnspecifiedError())
@@ -1349,7 +1356,7 @@ fi
 		)
 
 		//sess := c.newSession(l, node, cmd, withDebugName("create-tenant-cert-bundle"))
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
 	}, WithDisplay(display))
 }
 
@@ -1407,7 +1414,7 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	ctx context.Context, l *logger.Logger, path string,
 ) bool {
 	l.Printf("%s: checking %s", c.Name, path)
-	_, err := c.runCmdOnSingleNode(ctx, l, 1, `test -e `+path, true, nil, nil, nil)
+	_, err := c.runCmdOnSingleNode(ctx, l, 1, `test -e `+path, true, true, nil, nil, nil)
 	return err == nil
 }
 
@@ -1463,7 +1470,7 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 		}
 
 		//sess := c.newSession(l, node, cmd, withDebugName("dist-local-certs"))
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, bytes.NewReader(certsTar), nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, bytes.NewReader(certsTar), nil, nil)
 	}, WithDisplay(display))
 }
 
@@ -2259,7 +2266,7 @@ func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	}
 
 	res := newRunResultDetails(-1, err)
-	res.CombinedOut = out
+	res.CombinedOut = string(out)
 	return res, nil
 }
 
@@ -2327,12 +2334,12 @@ func (c *SyncedCluster) Parallel(
 			// Since this function is potentially returning a single error despite
 			// having run on multiple nodes, we combine all the errors into a single
 			// error.
-			if r.Err != nil {
+			if r != nil && r.Err != nil {
 				err = errors.CombineErrors(err, r.Err)
 				l.Errorf("%d: %+v: %s", r.Node, r.Err, r.CombinedOut)
 			}
 		}
-		return errors.Wrap(err, "one or more parallel execution failure")
+		return errors.Wrap(err, "one or more parallel execution failure(s)")
 	}
 	return nil
 }
@@ -2344,23 +2351,18 @@ type ParallelResult struct {
 	*RunResultDetails
 }
 
-// ParallelE runs the given function in parallel across the given
-// nodes.
+// ParallelE runs the given function in parallel on the specified nodes.
 //
 // By default, this will fail fast if a command error occurs on any node, and return
 // a slice containing all results up to that point, along with a boolean indicating
-// that at least one error occurred.
-//
-// If `WithWaitOnFail()` is passed in, then the function will wait for all
-// invocations to complete before returning.
+// that at least one error occurred. If `WithWaitOnFail()` is passed in, then the function
+// will wait for all invocations to complete before returning.
 //
 // ParallelE only returns an error for roachprod itself, not any command errors run
 // on the cluster.
 //
-// ParallelE runs the user-defined functions on the first `count`
-// nodes in the cluster. It runs at most `concurrency` (or
-// `config.MaxConcurrency` if it is lower) in parallel. If `concurrency` is
-// 0, then it defaults to `count`.
+// ParallelE  runs at most `concurrency` (or  `config.MaxConcurrency` if it is lower) in parallel.
+// If `concurrency` is 0, then it defaults to `len(nodes)`.
 //
 // The function returns pointers to *RunResultDetails as we may enrich
 // the result with retry information (attempt number, wrapper error).
@@ -2392,6 +2394,7 @@ func (c *SyncedCluster) ParallelE(
 
 	completed := make(chan ParallelResult, count)
 	errorChannel := make(chan error)
+
 	var wg sync.WaitGroup
 	wg.Add(count)
 
@@ -2412,6 +2415,7 @@ func (c *SyncedCluster) ParallelE(
 				errorChannel <- err
 				return
 			}
+			// The index is captured here so that we can maintain the order of results.
 			completed <- ParallelResult{Index: i, RunResultDetails: res}
 		}(index)
 		index++
@@ -2422,9 +2426,9 @@ func (c *SyncedCluster) ParallelE(
 	}
 
 	go func() {
+		defer close(completed)
+		defer close(errorChannel)
 		wg.Wait()
-		close(completed)
-		close(errorChannel)
 	}()
 
 	var writer ui.Writer
