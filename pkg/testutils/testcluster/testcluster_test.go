@@ -202,7 +202,7 @@ func TestStopServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	url := server1.AdminURL() + "/_status/metrics/local"
+	url := server1.AdminURL().WithPath("/_status/metrics/local").String()
 	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func TestStopServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	url = tc.Server(0).AdminURL() + "/_status/metrics/local"
+	url = tc.Server(0).AdminURL().WithPath("/_status/metrics/local").String()
 	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}

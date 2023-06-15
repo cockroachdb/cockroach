@@ -283,7 +283,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	httpClient, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 	getMetrics := func() string {
-		resp, err := httpClient.Get(s.AdminURL() + "/_status/vars")
+		resp, err := httpClient.Get(s.AdminURL().WithPath("/_status/vars").String())
 		require.NoError(t, err)
 		read, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)

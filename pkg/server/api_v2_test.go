@@ -59,7 +59,7 @@ func TestListSessionsV2(t *testing.T) {
 	}()
 
 	doSessionsRequest := func(client http.Client, limit int, start string) listSessionsResponse {
-		req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"sessions/", nil)
+		req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiV2Path+"sessions/").String(), nil)
 		require.NoError(t, err)
 		query := req.URL.Query()
 		query.Add("exclude_closed_sessions", "true")
@@ -120,7 +120,7 @@ func TestListSessionsV2(t *testing.T) {
 	// A non-admin user cannot see sessions at all.
 	nonAdminClient, err := ts1.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
-	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"sessions/", nil)
+	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiV2Path+"sessions/").String(), nil)
 	require.NoError(t, err)
 	resp, err := nonAdminClient.Do(req)
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestHealthV2(t *testing.T) {
 	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"health/", nil)
+	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiV2Path+"health/").String(), nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestRulesV2(t *testing.T) {
 	client, err := ts.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"rules/", nil)
+	req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiV2Path+"rules/").String(), nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestAuthV2(t *testing.T) {
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"sessions/", nil)
+				req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiV2Path+"sessions/").String(), nil)
 				require.NoError(t, err)
 				if tc.header != "" {
 					req.Header.Set(apiV2AuthHeader, tc.header)
