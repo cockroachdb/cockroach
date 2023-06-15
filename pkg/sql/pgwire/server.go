@@ -823,7 +823,11 @@ func (s *Server) ServeConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
+	ctx, cancelConn := context.WithCancel(ctx)
+	defer cancelConn()
 	c := s.newConn(
+		ctx,
+		cancelConn,
 		conn,
 		sArgs,
 		connStart,
@@ -846,14 +850,25 @@ func (s *Server) ServeConn(
 	return nil
 }
 
-func (s *Server) newConn(netConn net.Conn, sArgs sql.SessionArgs, connStart time.Time) *conn {
+func (s *Server) newConn(
+	ctx context.Context,
+	cancelConn context.CancelFunc,
+	netConn net.Conn,
+	sArgs sql.SessionArgs,
+	connStart time.Time,
+) *conn {
+	// The net.Conn is switched to a conn that exits if the ctx is canceled.
+	rtc := &readTimeoutConn{
+		Conn: netConn,
+	}
 	sv := &s.execCfg.Settings.SV
 	c := &conn{
-		conn:                  netConn,
+		conn:                  rtc,
+		cancelConn:            cancelConn,
 		sessionArgs:           sArgs,
 		metrics:               s.tenantMetrics,
 		startTime:             connStart,
-		rd:                    *bufio.NewReader(netConn),
+		rd:                    *bufio.NewReader(rtc),
 		sv:                    sv,
 		readBuf:               pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
 		alwaysLogAuthActivity: s.testingAuthLogEnabled.Get(),
@@ -865,6 +880,23 @@ func (s *Server) newConn(netConn net.Conn, sArgs sql.SessionArgs, connStart time
 	c.msgBuilder.init(s.tenantMetrics.BytesOutCount)
 	c.errWriter.sv = sv
 	c.errWriter.msgBuilder = &c.msgBuilder
+
+	var sentDrainSignal bool
+	rtc.checkExitConds = func() error {
+		// If the context was canceled, it's time to stop reading. Either a
+		// higher-level server or the command processor have canceled us.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// If the server is draining, we'll let the processor know by pushing a
+		// DrainRequest. This will make the processor quit whenever it finds a good
+		// time.
+		if !sentDrainSignal && s.IsDraining() {
+			_ /* err */ = c.stmtBuf.Push(ctx, sql.DrainRequest{})
+			sentDrainSignal = true
+		}
+		return nil
+	}
 	return c
 }
 
@@ -955,28 +987,6 @@ func (s *Server) serveImpl(
 	// for the handshake. After that, all writes are done async, in the
 	// startWriter() goroutine.
 
-	ctx, cancelConn := context.WithCancel(ctx)
-	defer cancelConn() // This calms the linter that wants these callbacks to always be called.
-
-	var sentDrainSignal bool
-	// The net.Conn is switched to a conn that exits if the ctx is canceled.
-	c.conn = NewReadTimeoutConn(c.conn, func() error {
-		// If the context was canceled, it's time to stop reading. Either a
-		// higher-level server or the command processor have canceled us.
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		// If the server is draining, we'll let the processor know by pushing a
-		// DrainRequest. This will make the processor quit whenever it finds a good
-		// time.
-		if !sentDrainSignal && s.IsDraining() {
-			_ /* err */ = c.stmtBuf.Push(ctx, sql.DrainRequest{})
-			sentDrainSignal = true
-		}
-		return nil
-	})
-	c.rd = *bufio.NewReader(c.conn)
-
 	// the authPipe below logs authentication messages iff its auth
 	// logger is non-nil. We define this here.
 	logAuthn := !inTestWithoutSQL && c.authLogEnabled()
@@ -1013,7 +1023,6 @@ func (s *Server) serveImpl(
 			ac,
 			sqlServer,
 			reserved,
-			cancelConn,
 			onDefaultIntSizeChange,
 		)
 	} else {
@@ -1242,7 +1251,7 @@ func (s *Server) serveImpl(
 	// be a no-op.
 	c.stmtBuf.Close()
 	// Cancel the processor's context.
-	cancelConn()
+	c.cancelConn()
 	// In case the authenticator is blocked on waiting for data from the client,
 	// tell it that there's no more data coming. This is a no-op if authentication
 	// was completed already.
