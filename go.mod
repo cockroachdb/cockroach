@@ -147,7 +147,7 @@ require (
 	github.com/spf13/afero v1.6.0
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.4
 	github.com/twpayne/go-geom v1.4.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg-go/pbkdf2 v1.0.0
@@ -384,8 +384,9 @@ replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.
 // While this is necessary, make sure that the require block above does not diverge.
 replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560
 
-// Use the CRDB fork of etcd/raft, at crdb-release-22.2 branch.
-replace go.etcd.io/etcd/raft/v3 => github.com/cockroachdb/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8
+// Use the CRDB fork of etcd/raft, at crdb-release-22.2 branch which includes
+// cherry-picked fixes for this release.
+replace go.etcd.io/etcd/raft/v3 => github.com/cockroachdb/etcd/raft/v3 v3.0.0-20230615105354-88bbb1d5f3a3
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
