@@ -31,7 +31,7 @@ $$;
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE FUNCTION
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #110
   -
   +function:
@@ -78,7 +78,6 @@ upsert descriptor #110
   +      family: IntFamily
   +      oid: 20
   +      width: 64
-  +  state: ADD
   +  version: "1"
   +  volatility: VOLATILE
 upsert descriptor #101

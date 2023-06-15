@@ -16,7 +16,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
@@ -101,7 +101,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
@@ -181,7 +181,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │   └── • Column:{DescID: 106, ColumnID: 2}
 │       │       │ DELETE_ONLY → WRITE_ONLY
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
 │       │             rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
 │       │
 │       └── • 3 Mutation operations
@@ -207,7 +207,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
         │   └── • Column:{DescID: 106, ColumnID: 2}
         │       │ WRITE_ONLY → PUBLIC
         │       │
-        │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+        │       ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
         │       │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
         │       │
         │       ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}

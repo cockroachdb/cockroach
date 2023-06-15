@@ -15,7 +15,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER COLUMN j SET NOT NULL;
 │       │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │       │ ABSENT → WRITE_ONLY
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+│       │       └── • PreviousTransactionPrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │
 │       └── • 1 Mutation operation
@@ -45,7 +45,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER COLUMN j SET NOT NULL;
 │       │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │       │ ABSENT → WRITE_ONLY
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+│       │       └── • PreviousTransactionPrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
 │       │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │
 │       └── • 3 Mutation operations
@@ -80,7 +80,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER COLUMN j SET NOT NULL;
     │   │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
     │   │       │ WRITE_ONLY → VALIDATED
     │   │       │
-    │   │       └── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
     │   │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │
     │   └── • 1 Validation operation
@@ -96,7 +96,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER COLUMN j SET NOT NULL;
         │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
         │       │ VALIDATED → PUBLIC
         │       │
-        │       └── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+        │       └── • PreviousTransactionPrecedence dependency from VALIDATED ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
         │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │
         └── • 3 Mutation operations
