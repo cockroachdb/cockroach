@@ -10,6 +10,7 @@ go_library(
         "processor.go",
         "registry.go",
         "resolved_timestamp.go",
+        "scheduled_processor.go",
         "scheduler.go",
         "task.go",
     ],

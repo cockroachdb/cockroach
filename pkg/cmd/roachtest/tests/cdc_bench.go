@@ -73,7 +73,7 @@ const (
 var (
 	cdcBenchScanTypes = []cdcBenchScanType{
 		cdcBenchInitialScan, cdcBenchCatchupScan, cdcBenchColdCatchupScan}
-	cdcBenchServers   = []cdcBenchServer{cdcBenchProcessorServer} // TODO(erikgrinaker): scheduler
+	cdcBenchServers   = []cdcBenchServer{cdcBenchProcessorServer, cdcBenchSchedulerServer}
 	cdcBenchProtocols = []cdcBenchProtocol{cdcBenchRangefeedProtocol, cdcBenchMuxProtocol}
 )
 
@@ -375,6 +375,16 @@ func runCDCBenchWorkload(
 	case cdcBenchNoProtocol:
 	default:
 		t.Fatalf("unknown protocol %q", protocol)
+	}
+
+	switch server {
+	case cdcBenchProcessorServer:
+		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "false"
+	case cdcBenchSchedulerServer:
+		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "true"
+	case cdcBenchNoServer:
+	default:
+		t.Fatalf("unknown server type %q", server)
 	}
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")

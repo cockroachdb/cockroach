@@ -24,13 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 type benchmarkRangefeedOpts struct {
+	procType         procType
 	opType           opType
 	numRegistrations int
 	budget           int64
@@ -47,16 +46,19 @@ const (
 // BenchmarkRangefeed benchmarks the processor and registrations, by submitting
 // a set of events and waiting until they are all emitted.
 func BenchmarkRangefeed(b *testing.B) {
-	for _, opType := range []opType{writeOpType, commitOpType, closedTSOpType} {
-		for _, numRegistrations := range []int{1, 10, 100} {
-			name := fmt.Sprintf("opType=%s/numRegs=%d", opType, numRegistrations)
-			b.Run(name, func(b *testing.B) {
-				runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
-					opType:           opType,
-					numRegistrations: numRegistrations,
-					budget:           math.MaxInt64,
+	for _, procType := range testTypes {
+		for _, opType := range []opType{writeOpType, commitOpType, closedTSOpType} {
+			for _, numRegistrations := range []int{1, 10, 100} {
+				name := fmt.Sprintf("opType=%s/numRegs=%d/procType=%s", opType, numRegistrations, procType)
+				b.Run(name, func(b *testing.B) {
+					runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
+						procType:         procType,
+						opType:           opType,
+						numRegistrations: numRegistrations,
+						budget:           math.MaxInt64,
+					})
 				})
-			})
+			}
 		}
 	}
 }
@@ -85,8 +87,6 @@ func BenchmarkRangefeedBudget(b *testing.B) {
 func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
 
 	var budget *FeedBudget
 	if opts.budget > 0 {
@@ -94,17 +94,9 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	}
 	span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 
-	// Set up processor.
-	p := NewProcessor(Config{
-		AmbientContext:   log.MakeTestingAmbientContext(nil),
-		Clock:            hlc.NewClockForTesting(nil),
-		Metrics:          NewMetrics(),
-		Span:             span,
-		MemBudget:        budget,
-		EventChanCap:     b.N,
-		EventChanTimeout: time.Hour,
-	})
-	require.NoError(b, p.Start(stopper, nil))
+	p, h, stopper := newTestProcessor(b, withSpan(span), withBudget(budget), withChanCap(b.N),
+		withEventTimeout(time.Hour), withProcType(legacyProcessor))
+	defer stopper.Stop(ctx)
 
 	// Add registrations.
 	streams := make([]*noopStream, opts.numRegistrations)
@@ -166,7 +158,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	}
 
 	// Wait for catchup scans and flush checkpoint events.
-	syncEventAndRegistrations(p)
+	h.syncEventAndRegistrations()
 
 	// Run the benchmark. We accounted for b.N when constructing events.
 	b.ResetTimer()
@@ -181,7 +173,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 			b.Fatal("failed to forward closed timestamp")
 		}
 	}
-	syncEventAndRegistrations(p)
+	h.syncEventAndRegistrations()
 
 	// Check that all registrations ended successfully, and emitted the expected
 	// number of events.
