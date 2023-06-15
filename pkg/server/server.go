@@ -852,6 +852,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
 		KVMemoryMonitor:              kvMemoryMonitor,
 		RangefeedBudgetFactory:       rangeReedBudgetFactory,
+		SharedStorageEnabled:         cfg.SharedStorage != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
 		SpanConfigsDisabled:          cfg.SpanConfigsDisabled,

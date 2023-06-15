@@ -1179,6 +1179,9 @@ type StoreConfig struct {
 	// data structure useful for retrieving span configs. Only available if
 	// SpanConfigsDisabled is unset.
 	SpanConfigSubscriber spanconfig.KVSubscriber
+	// SharedStorageEnabled stores whether this store is configured with a
+	// shared.Storage instance and can accept shared snapshots.
+	SharedStorageEnabled bool
 
 	// KVAdmissionController is used for admission control.
 	KVAdmissionController kvadmission.Controller
