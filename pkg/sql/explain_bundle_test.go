@@ -59,7 +59,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("no-table", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 123")
 		checkBundle(
-			t, fmt.Sprint(rows), "", nil,
+			t, fmt.Sprint(rows), "", nil, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -67,7 +67,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("basic", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.abc", nil,
+			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -76,7 +76,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("subqueries", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT EXISTS (SELECT * FROM abc WHERE c=1)")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.abc", nil,
+			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql-2-main-query.html distsql-1-subquery.html vec-1-subquery-v.txt vec-1-subquery.txt vec-2-main-query-v.txt vec-2-main-query.txt",
 		)
 	})
@@ -84,7 +84,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 	t.Run("user-defined schema", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM s.a WHERE a=1")
 		checkBundle(
-			t, fmt.Sprint(rows), "s.a", nil,
+			t, fmt.Sprint(rows), "s.a", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.s.a.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -98,7 +98,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		// The bundle url is inside the error detail.
 		var pqErr *pq.Error
 		_ = errors.As(err, &pqErr)
-		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, base, plans, "distsql.html errors.txt")
+		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", nil, false /* expectErrors */, base, plans, "distsql.html errors.txt")
 	})
 
 	// #92920 Make sure schema and opt files are created.
@@ -111,7 +111,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 				}
 			}
 			return nil
-		}, base, plans, "distsql.html vec.txt vec-v.txt")
+		}, false /* expectErrors */, base, plans, "distsql.html vec.txt vec-v.txt")
 	})
 
 	// This is a regression test for the situation where wrapped into the
@@ -128,7 +128,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 `)
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO users (promo_id) VALUES (642606224929619969);")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.users", nil, base, plans,
+			t, fmt.Sprint(rows), "public.users", nil, false /* expectErrors */, base, plans,
 			"stats-defaultdb.public.users.sql", "stats-defaultdb.public.promos.sql",
 			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
 		)
@@ -140,7 +140,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
-			t, fmt.Sprint(rows), "public.abc", nil,
+			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -198,7 +198,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 							}
 						}
 						return nil
-					},
+					}, false, /* expectErrors */
 					base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 				)
 			})
@@ -250,7 +250,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 					}
 				}
 				return nil
-			},
+			}, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child.sql",
 			"distsql.html vec.txt vec-v.txt",
 		)
@@ -275,7 +275,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 					}
 				}
 				return nil
-			},
+			}, false, /* expectErrors */
 			plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt",
 		)
 	})
@@ -285,11 +285,13 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		r.Exec(t, "CREATE TYPE test_type2 AS ENUM ('goodbye','earth');")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 1;")
 		checkBundle(
-			t, fmt.Sprint(rows), "test_type1", nil, base, plans,
-			"distsql.html vec.txt vec-v.txt")
+			t, fmt.Sprint(rows), "test_type1", nil, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
 		checkBundle(
-			t, fmt.Sprint(rows), "test_type2", nil, base, plans,
-			"distsql.html vec.txt vec-v.txt")
+			t, fmt.Sprint(rows), "test_type2", nil, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
 	})
 
 	t.Run("udfs", func(t *testing.T) {
@@ -309,8 +311,31 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 					}
 				}
 				return nil
-			}, base, plans,
+			}, false /* expectErrors */, base, plans,
 			"distsql-1-subquery.html distsql-2-main-query.html vec-1-subquery-v.txt vec-1-subquery.txt vec-2-main-query-v.txt vec-2-main-query.txt")
+	})
+
+	t.Run("permission error", func(t *testing.T) {
+		r.Exec(t, "CREATE USER test")
+		r.Exec(t, "SET ROLE test")
+		defer r.Exec(t, "SET ROLE root")
+		r.Exec(t, "CREATE TABLE permissions (k PRIMARY KEY) AS SELECT 1")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM permissions")
+		// Check that we see two errors about missing privileges as warnings
+		// (one for the cluster settings and another for the table statistics).
+		var numErrors int
+		for _, row := range rows {
+			if strings.HasPrefix(row[0], "-- error") {
+				numErrors++
+			}
+		}
+		if numErrors != 2 {
+			t.Fatalf("didn't see 2 errors in %v", rows)
+		}
+		checkBundle(
+			t, fmt.Sprint(rows), "permission" /* tableName */, nil /* contentCheck */, true, /* expectErrors */
+			base, plans, "distsql.html errors.txt stats-defaultdb.public.permissions.sql vec.txt vec-v.txt",
+		)
 	})
 }
 
@@ -318,10 +343,13 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 // bundle contains the expected files. The expected files are passed as an
 // arbitrary number of strings; each string contains one or more filenames
 // separated by a space.
+// - expectErrors, if set, indicates that non-critical errors might have
+// occurred during the bundle collection and shouldn't fail the test.
 func checkBundle(
 	t *testing.T,
 	text, tableName string,
-	contentCheck func(name, contents string) error,
+	contentCheck func(name string, contents string) error,
+	expectErrors bool,
 	expectedFiles ...string,
 ) {
 	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
@@ -368,7 +396,7 @@ func checkBundle(
 		}
 		contents := string(bytes)
 
-		if strings.Contains(contents, "-- error") {
+		if !expectErrors && strings.Contains(contents, "-- error") {
 			t.Errorf(
 				"expected no errors in %s, file contents:\n%s",
 				f.Name, contents,
