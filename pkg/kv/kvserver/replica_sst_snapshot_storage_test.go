@@ -277,8 +277,73 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 
 	msstw, err := newMultiSSTWriter(
 		ctx, cluster.MakeTestingClusterSettings(), scratch, keySpans, 0,
+		false, /* skipRangeDelForLastSpan */
 	)
 	require.NoError(t, err)
+	_, err = msstw.Finish(ctx)
+	require.NoError(t, err)
+
+	var actualSSTs [][]byte
+	fileNames := msstw.scratch.SSTs()
+	for _, file := range fileNames {
+		sst, err := fs.ReadFile(eng, file)
+		require.NoError(t, err)
+		actualSSTs = append(actualSSTs, sst)
+	}
+
+	// Construct an SST file for each of the key ranges and write a rangedel
+	// tombstone that spans from Start to End.
+	var expectedSSTs [][]byte
+	for _, s := range keySpans {
+		func() {
+			sstFile := &storage.MemObject{}
+			sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
+			defer sst.Close()
+			err := sst.ClearRawRange(s.Key, s.EndKey, true, true)
+			require.NoError(t, err)
+			err = sst.Finish()
+			require.NoError(t, err)
+			expectedSSTs = append(expectedSSTs, sstFile.Data())
+		}()
+	}
+
+	require.Equal(t, len(actualSSTs), len(expectedSSTs))
+	for i := range fileNames {
+		require.Equal(t, actualSSTs[i], expectedSSTs[i])
+	}
+}
+
+// TestMultiSSTWriterAddLastSpan tests that multiSSTWriter initializes each of
+// the SST files associated with the replicated key ranges by writing a range
+// deletion tombstone that spans the entire range of each respectively, except
+// for the last span which only gets a rangedel when explicitly added.
+func TestMultiSSTWriterAddLastSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testRangeID := roachpb.RangeID(1)
+	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
+	testLimiter := rate.NewLimiter(rate.Inf, 0)
+
+	cleanup, eng := newOnDiskEngine(ctx, t)
+	defer cleanup()
+	defer eng.Close()
+
+	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey("d"),
+		EndKey:   roachpb.RKeyMax,
+	}
+	keySpans := rditer.MakeReplicatedKeySpans(&desc)
+
+	msstw, err := newMultiSSTWriter(
+		ctx, cluster.MakeTestingClusterSettings(), scratch, keySpans, 0,
+		true, /* skipRangeDelForLastSpan */
+	)
+	require.NoError(t, err)
+	require.NoError(t, msstw.addRangeDelForLastSpan())
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
 

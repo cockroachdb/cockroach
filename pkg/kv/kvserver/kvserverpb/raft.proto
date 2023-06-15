@@ -249,7 +249,55 @@ message SnapshotRequest {
     // from a particular sending source.
     double sender_queue_priority = 11;
 
+    // If true, the snapshot could contain shared files present in a pre-configured
+    // or explicitly specified shared.Storage instance. Such files will have their
+    // metadata present in the snapshot, but not file contents.
+    bool shared_replicate = 12;
+
     reserved 1, 4;
+  }
+
+  // SharedTable represents one shared SSTable present in shared storage.
+  // Intended to be the protobuf version of pebble.SharedSSTMeta.
+  message SharedTable {
+    // Internal key represents a Pebble-internal key. See pebble.InternalKey
+    // for details on how these keys are used.
+    message InternalKey {
+      // User key portion of the internal key.
+      bytes user_key = 1;
+      // Trailer portion of the internal key, as defined by Pebble.
+      uint64 trailer = 2;
+    }
+
+    // Used by the Pebble objstorage package to resolve a reference to a shared object.
+    bytes backing = 1;
+
+    // Used by the Pebble objstorage package to generate new blob storage drivers.
+    // Reserved for future use.
+    bytes locator = 2;
+
+    // Smallest internal key in the sstable.
+    InternalKey smallest = 3;
+    // Largest internal key in the sstable.
+    InternalKey largest = 4;
+    // Smallest range key in the sstable. Zero value if no range keys are
+    // present.
+    InternalKey smallest_range_key = 5;
+    // Largest range key in the sstable. Zero value if no range keys are
+    // present.
+    InternalKey largest_range_key = 6;
+    // Smallest point key in the sstable. Zero value if no point keys are
+    // present.
+    InternalKey smallest_point_key = 7;
+    // Largest point key in the sstable. Zero value if no point keys are
+    // present.
+    InternalKey largest_point_key = 8;
+
+    // LSM level of the original sstable. This sstable will go into the same
+    // level in the destination LSM.
+    int32 level = 9;
+    // Physical size of the sstable in bytes.
+    uint64 size = 10;
   }
 
   Header header = 1;
@@ -258,6 +306,16 @@ message SnapshotRequest {
   bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
 
   bool final = 4;
+
+  repeated SharedTable shared_tables = 5 [(gogoproto.nullable) = false];
+
+  // If true, signals the receiver that the sender can no longer replicate
+  // using shared files, even though the Header initially contained
+  // shared_replicate = true. All contents of this range will be streamed as
+  // usual beyond this point. This bool must be set to true in a request before
+  // the end of the snapshot (i.e. before the final = true request), and this
+  // flag must be set to true before any user keys are streamed.
+  bool transition_from_shared_to_regular_replicate = 6;
 
   reserved 3;
 }
