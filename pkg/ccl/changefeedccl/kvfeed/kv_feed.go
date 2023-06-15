@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -40,7 +39,6 @@ type Config struct {
 	DB                      *kv.DB
 	Codec                   keys.SQLCodec
 	Clock                   *hlc.Clock
-	Gossip                  gossip.OptionalGossip
 	Spans                   []roachpb.Span
 	CheckpointSpans         []roachpb.Span
 	CheckpointTimestamp     hlc.Timestamp
@@ -89,7 +87,6 @@ func Run(ctx context.Context, cfg Config) error {
 	{
 		sc = &scanRequestScanner{
 			settings:                cfg.Settings,
-			gossip:                  cfg.Gossip,
 			db:                      cfg.DB,
 			onBackfillRangeCallback: cfg.OnBackfillRangeCallback,
 		}

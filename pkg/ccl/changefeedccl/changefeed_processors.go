@@ -423,7 +423,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		DB:                      cfg.DB.KV(),
 		Codec:                   cfg.Codec,
 		Clock:                   cfg.DB.KV().Clock(),
-		Gossip:                  cfg.Gossip,
 		Spans:                   spans,
 		CheckpointSpans:         ca.spec.Checkpoint.Spans,
 		CheckpointTimestamp:     ca.spec.Checkpoint.Timestamp,

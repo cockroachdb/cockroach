@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -53,7 +52,6 @@ type kvScanner interface {
 
 type scanRequestScanner struct {
 	settings                *cluster.Settings
-	gossip                  gossip.OptionalGossip
 	db                      *kv.DB
 	onBackfillRangeCallback func(int64) (func(), func())
 }
