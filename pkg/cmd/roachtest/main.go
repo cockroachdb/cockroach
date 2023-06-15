@@ -167,11 +167,11 @@ func main() {
 		"Username to use as a cluster name prefix. "+
 			"If blank, the current OS user is detected and specified.")
 	rootCmd.PersistentFlags().StringVar(
-		&cockroachPath, "cockroach", "", "path to cockroach binary to use")
+		&cockroachPath, "cockroach", "", "absolute path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
-		&cockroachShortPath, "cockroach-short", "", "path to cockroach-short binary (compiled with crdb_test build tag) to use")
+		&cockroachEAPath, "cockroach-ea", "", "absolute path to cockroach binary with enabled (runtime) assertions (i.e, compiled with crdb_test)")
 	rootCmd.PersistentFlags().StringVar(
-		&workloadPath, "workload", "", "path to workload binary to use")
+		&workloadPath, "workload", "", "absolute path to workload binary to use")
 	rootCmd.PersistentFlags().Float64Var(
 		&encryptionProbability, "metamorphic-encryption-probability", defaultEncryptionProbability,
 		"probability that clusters will be created with encryption-at-rest enabled "+
