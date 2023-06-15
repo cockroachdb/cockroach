@@ -434,6 +434,27 @@ message Tier {
   optional string value = 2 [(gogoproto.nullable) = false];
 }
 
+// LocalityComparisonType represents different types of comparison results that
+// indicate the relationship between two localities.
+enum LocalityComparisonType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  // CROSS_REGION_CROSS_ZONE indicates that the two localities have different
+  // region and different zone tiers.
+  CROSS_REGION_CROSS_ZONE = 0;
+  // SAME_REGION_CROSS_ZONE indicates that the two localities have same region
+  // and different zone tiers.
+  SAME_REGION_CROSS_ZONE = 1;
+  // CROSS_REGION_SAME_ZONE indicates that the two localities have different
+  // region and same zone tiers.
+  CROSS_REGION_SAME_ZONE = 2;
+  // SAME_REGION_SAME_ZONE indicates that the two localities have same region
+  // and same zone tiers.
+  SAME_REGION_SAME_ZONE = 3;
+  // UNDEFINED represents an undefined comparison result, indicating error
+  // behavior.
+  UNDEFINED = 4;
+}
+
 message Version {
   option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
