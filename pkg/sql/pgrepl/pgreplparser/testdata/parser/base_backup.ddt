@@ -1,0 +1,25 @@
+parse error
+base_BACKUP
+----
+at or near "base_backup": syntax error
+DETAIL: source SQL:
+base_BACKUP
+^
+
+parse
+BASE_BACKUP
+----
+BASE_BACKUP
+BASE_BACKUP -- literals removed
+
+parse
+BASE_BACKUP ( single_option )
+----
+BASE_BACKUP (single_option) -- normalized!
+BASE_BACKUP (single_option) -- literals removed
+
+parse
+BASE_BACKUP ( BASE_BACKUP "a", someword 'b', someint 123, word )
+----
+BASE_BACKUP (base_backup 'a', someword 'b', someint 123, word) -- normalized!
+BASE_BACKUP (base_backup '_', someword '_', someint _, word) -- literals removed
