@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-22.2-23.1
+# LogicTest: !local-mixed-22.2-23.2
 
 # SELECT FOR UPDATE is prohibited under weaker isolation levels until we improve
 # locking. See #57031, #75457, #100144.

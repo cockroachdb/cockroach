@@ -445,10 +445,20 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		Name:                        "local-mixed-22.2-23.1",
+		// This config is used to test "version skioping" -- we should be able to
+		// run 23.2 binaries that are bootstrapped from a 22.2 system schema.
+		Name:                        "local-mixed-22.2-23.2",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
 		BootstrapVersion:            clusterversion.V22_2,
+		DisableUpgrade:              true,
+		DeclarativeCorpusCollection: true,
+	},
+	{
+		Name:                        "local-mixed-23.1-23.2",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		BootstrapVersion:            clusterversion.V23_1,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
@@ -524,7 +534,8 @@ var (
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"local-mixed-22.2-23.1",
+		"local-mixed-22.2-23.2",
+		"local-mixed-23.1-23.2",
 	}
 	// FiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	FiveNodeDefaultConfigName = "5node-default-configs"

@@ -1127,7 +1127,7 @@ table_constraints
 table_columns
 
 # Check that the metadata is reported properly.
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 query TTTTTI colnames
 SELECT * FROM system.information_schema.tables
 ----
@@ -1544,7 +1544,7 @@ SET DATABASE = test
 ## information_schema.check_constraints
 ## information_schema.constraint_column_usage
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 query TTTTTTTTT colnames
 SELECT *
 FROM system.information_schema.table_constraints
@@ -1860,7 +1860,7 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -2103,7 +2103,7 @@ system              public             check_crdb_internal_aggregated_ts_app_nam
 system              public             check_sampling_probability                                                                                      ((sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8))
 system              public             check_singleton                                                                                                 ((singleton))
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -2317,7 +2317,7 @@ select data_type, column_default from information_schema.columns where table_nam
 data_type  column_default
 smallint   0
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM system.information_schema.columns
@@ -3114,7 +3114,7 @@ root      other_db       public              ALL             YES
 
 ## information_schema.table_privileges and information_schema.role_table_grants
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 # root can see everything
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, table_name, table_schema, grantee, privilege_type
@@ -3774,7 +3774,7 @@ NULL     root     system         public              zones                      
 NULL     root     system         public              zones                                   SELECT          YES           YES
 NULL     root     system         public              zones                                   UPDATE          YES           NO
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 query TTTTTTTT colnames
 SELECT * FROM system.information_schema.role_table_grants
 ----

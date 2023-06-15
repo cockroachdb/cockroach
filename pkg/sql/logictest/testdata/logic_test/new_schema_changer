@@ -781,7 +781,7 @@ DROP DATABASE db1 CASCADE
 statement ok
 DROP SCHEMA sc2 CASCADE
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 # No comments should be left after.
 query T
 SELECT comment FROM system.comments ORDER BY comment ASC
@@ -967,7 +967,7 @@ CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 user testuser
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 statement error  must be owner of table privs or have CREATE privilege on table privs
 CREATE INDEX foo ON privs (b)
 
@@ -1406,11 +1406,11 @@ SET use_declarative_schema_changer = 'unsafe'
 statement error pgcode 2BP01 cannot drop index "idx" because view "child" depends on it
 DROP INDEX parent@idx
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 statement ok
 EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
 
-onlyif config local-mixed-22.2-23.1
+onlyif config local-mixed-22.2-23.2
 statement error cannot explain a statement which is not supported by the declarative schema change
 EXPLAIN (DDL) DROP INDEX parent@idx CASCADE;
 
@@ -1470,11 +1470,11 @@ subtest create-schema
 statement ok
 BEGIN
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 statement ok
 CREATE SCHEMA sc
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 query TT
 SHOW SCHEMAS
 ----
@@ -1485,11 +1485,11 @@ pg_extension        NULL
 public              admin
 sc                  root
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 statement ok
 DROP SCHEMA sc
 
-skipif config local-mixed-22.2-23.1
+skipif config local-mixed-22.2-23.2
 query TT
 SHOW SCHEMAS
 ----

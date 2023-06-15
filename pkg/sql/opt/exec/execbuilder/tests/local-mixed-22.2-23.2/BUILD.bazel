@@ -2,7 +2,7 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "local-mixed-22_2-23_1_test",
+    name = "local-mixed-22_2-23_2_test",
     size = "enormous",
     srcs = ["generated_test.go"],
     args = select({
@@ -11,19 +11,18 @@ go_test(
     }),
     data = [
         "//c-deps:libgeos",  # keep
-        "//pkg/ccl/logictestccl:testdata",  # keep
+        "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
-    shard_count = 6,
+    shard_count = 1,
     tags = [
-        "ccl_test",
         "cpu:1",
     ],
     deps = [
         "//pkg/build/bazel",
-        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/logictest",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
