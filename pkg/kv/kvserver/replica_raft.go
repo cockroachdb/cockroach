@@ -2274,6 +2274,24 @@ func shouldCampaignOnLeaseRequestRedirect(
 	return !livenessEntry.Liveness.IsLive(now)
 }
 
+// campaignLocked campaigns for raft leadership, using PreVote and, if
+// CheckQuorum is enabled, the recent leader condition. That is, followers will
+// not grant prevotes if we're behind on the log and, with CheckQuorum, if
+// they've heard from a leader in the past election timeout interval.
+//
+// The CheckQuorum condition can delay elections, particularly with quiesced
+// ranges that don't tick. However, it is necessary to avoid spurious elections
+// and stolen leaderships during partial/asymmetric network partitions, which
+// can lead to permanent unavailability if the leaseholder can no longer reach
+// the leader.
+//
+// Only followers enforce the CheckQuorum recent leader condition though, so if
+// a quorum of followers consider the leader dead and choose to become
+// pre-candidates and campaign then they will grant prevotes and can hold an
+// election without waiting out the election timeout, but this can result in
+// election ties if a quorum does so simultaneously. Followers and
+// pre-candidates will also grant any number of pre-votes, both for themselves
+// and anyone else that's eligible.
 func (r *Replica) campaignLocked(ctx context.Context) {
 	log.VEventf(ctx, 3, "campaigning")
 	if err := r.mu.internalRaftGroup.Campaign(); err != nil {

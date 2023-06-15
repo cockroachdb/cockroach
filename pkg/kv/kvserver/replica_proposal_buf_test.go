@@ -236,6 +236,12 @@ func (t *testProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
 	return t.leaderNotLive
 }
 
+func (t *testProposer) campaignLocked(ctx context.Context) {
+	if err := t.raftGroup.Campaign(); err != nil {
+		panic(err)
+	}
+}
+
 func (t *testProposer) rejectProposalWithRedirectLocked(
 	_ context.Context, _ *ProposalData, redirectTo roachpb.ReplicaID,
 ) {
