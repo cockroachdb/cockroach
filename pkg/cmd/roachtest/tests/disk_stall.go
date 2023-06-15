@@ -136,6 +136,7 @@ func runDiskStalledDetection(
 			`{pgurl:1-3}`)
 		return nil
 	})
+	defer m.Wait()
 
 	// Wait between [3m,6m) before stalling the disk.
 	pauseDur := 3*time.Minute + time.Duration(rand.Intn(3))*time.Minute
