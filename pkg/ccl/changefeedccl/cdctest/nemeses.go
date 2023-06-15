@@ -154,7 +154,11 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 		}
 	}
 
-	foo, err := f.Feed(`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff`)
+	withFormatParquet := ""
+	if rand.Intn(2) < 2 {
+		withFormatParquet = ", format=parquet"
+	}
+	foo, err := f.Feed(fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff %s`, withFormatParquet))
 	if err != nil {
 		return nil, err
 	}
