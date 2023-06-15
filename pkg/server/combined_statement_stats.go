@@ -371,7 +371,8 @@ func isSortOptionOnActivityTable(sort serverpb.StatsSortOptions) bool {
 		serverpb.StatsSortOptions_CPU_TIME,
 		serverpb.StatsSortOptions_EXECUTION_COUNT,
 		serverpb.StatsSortOptions_P99_STMTS_ONLY,
-		serverpb.StatsSortOptions_CONTENTION_TIME:
+		serverpb.StatsSortOptions_CONTENTION_TIME,
+		serverpb.StatsSortOptions_PCT_RUNTIME:
 		return true
 	}
 	return false
