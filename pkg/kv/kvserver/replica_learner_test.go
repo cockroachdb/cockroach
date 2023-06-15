@@ -2249,7 +2249,7 @@ func getExpectedSnapshotSizeBytes(
 	b := originStore.TODOEngine().NewWriteBatch()
 	defer b.Close()
 
-	err = rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true, /* replicatedOnly */
+	err = rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true /* replicatedOnly */, rditer.TableKeysInclude,
 		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
