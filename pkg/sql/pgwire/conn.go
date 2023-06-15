@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -209,6 +210,7 @@ func (c *conn) processCommandsAsync(
 	sqlServer *sql.Server,
 	reserved *mon.BoundAccount,
 	onDefaultIntSizeChange func(newSize int32),
+	sessionID clusterunique.ID,
 ) <-chan error {
 	// reservedOwned is true while we own reserved, false when we pass ownership
 	// away.
@@ -305,7 +307,13 @@ func (c *conn) processCommandsAsync(
 
 		// Now actually process commands.
 		reservedOwned = false // We're about to pass ownership away.
-		retErr = sqlServer.ServeConn(ctx, connHandler, reserved, c.cancelConn)
+		retErr = sqlServer.ServeConn(
+			ctx,
+			connHandler,
+			reserved,
+			c.cancelConn,
+			sessionID,
+		)
 	}()
 	return retCh
 }
