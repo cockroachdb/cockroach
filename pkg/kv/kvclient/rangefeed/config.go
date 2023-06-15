@@ -20,6 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
+type UseMuxRangefeed bool
+
+const (
+	MuxRangefeedDisabled UseMuxRangefeed = false
+	MuxRangefeedEnabled                  = true
+)
+
 // Option configures a RangeFeed.
 type Option interface {
 	set(*config)
@@ -28,6 +35,7 @@ type Option interface {
 type config struct {
 	scanConfig
 	retryOptions       retry.Options
+	useMuxRangefeed    UseMuxRangefeed
 	onInitialScanDone  OnInitialScanDone
 	withInitialScan    bool
 	onInitialScanError OnInitialScanError
@@ -301,5 +309,11 @@ func WithPProfLabel(key, value string) Option {
 func WithSystemTablePriority() Option {
 	return optionFunc(func(c *config) {
 		c.overSystemTable = true
+	})
+}
+
+func WithMuxRangefeed(option UseMuxRangefeed) Option {
+	return optionFunc(func(c *config) {
+		c.useMuxRangefeed = option
 	})
 }

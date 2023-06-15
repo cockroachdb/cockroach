@@ -179,6 +179,11 @@ var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
 	6*60,
 )
 
+// rangefeedSchedulerWorkers specifies how many workers rangefeed scheduler will
+// use to perform rangefeed work.
+var rangefeedSchedulerWorkers = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_WORKERS", min(8*runtime.GOMAXPROCS(0), 16))
+
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
@@ -1017,6 +1022,8 @@ type Store struct {
 		syncutil.Mutex
 		m map[roachpb.RangeID]struct{}
 	}
+	rangefeedScheduler *rangefeed.Scheduler
+	schedulerIDSeq     int64
 
 	// raftRecvQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
@@ -1957,6 +1964,15 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err := s.TODOEngine().SetStoreID(ctx, int32(s.StoreID())); err != nil {
 		return err
 	}
+
+	rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
+		Name:    fmt.Sprintf("s%d-rangefeed-scheduler", s.StoreID()),
+		Workers: rangefeedSchedulerWorkers,
+	})
+	if err = rfs.Start(s.stopper); err != nil {
+		return err
+	}
+	s.rangefeedScheduler = rfs
 
 	// Add the store ID to the scanner's AmbientContext before starting it, since
 	// the AmbientContext provided during construction did not include it.
@@ -3705,6 +3721,11 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+func (s *Store) allocRangefeedScheduler() rangefeed.ClientScheduler {
+	id := atomic.AddInt64(&s.schedulerIDSeq, 1)
+	return rangefeed.NewClientScheduler(id, s.rangefeedScheduler)
 }
 
 // Implementation of the storeForTruncator interface.

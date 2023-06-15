@@ -49,6 +49,7 @@ func newErrBufferCapacityExceeded() *kvpb.Error {
 type Config struct {
 	log.AmbientContext
 	Clock   *hlc.Clock
+	Stopper *stop.Stopper
 	RangeID roachpb.RangeID
 	Span    roachpb.RSpan
 
@@ -74,6 +75,10 @@ type Config struct {
 
 	// Optional Processor memory budget.
 	MemBudget *FeedBudget
+
+	// Scheduler for processing events. If set (allocated id > 0), then use
+	// scheduler based processor, otherwise legacy one.
+	Scheduler ClientScheduler
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -124,6 +129,9 @@ type Processor interface {
 	// StopWithErr terminates all registrations with an error and then winds down
 	// any internal resources.
 	StopWithErr(pErr *kvpb.Error)
+
+	// UsingScheduler returns true if processor is scheduler based.
+	UsingScheduler() bool
 
 	// Lifecycle of registrations.
 
@@ -181,6 +189,19 @@ type Processor interface {
 	// EventChanTimeout configuration. If the method returns false, the processor
 	// will have been stopped, so calling Stop is not necessary.
 	ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool
+}
+
+// NewProcessor creates a new rangefeed Processor. The corresponding processing
+// loop should be launched using the Start method.
+func NewProcessor(cfg Config) Processor {
+	cfg.SetDefaults()
+	cfg.AmbientContext.AddLogTag("rangefeed", nil)
+	if cfg.Scheduler.ID() > 0 {
+		// TODO(oleg): remove logging
+		log.Infof(context.Background(), "creating new style processor for range feed on r%d", cfg.RangeID)
+		return NewScheduledProcessor(cfg)
+	}
+	return NewLegacyProcessor(cfg)
 }
 
 type LegacyProcessor struct {
@@ -261,11 +282,7 @@ type spanErr struct {
 	pErr *kvpb.Error
 }
 
-// NewProcessor creates a new rangefeed Processor. The corresponding goroutine
-// should be launched using the Start method.
-func NewProcessor(cfg Config) Processor {
-	cfg.SetDefaults()
-	cfg.AmbientContext.AddLogTag("rangefeed", nil)
+func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 	p := &LegacyProcessor{
 		Config: cfg,
 		reg:    makeRegistry(cfg.Metrics),
@@ -523,6 +540,10 @@ func (p *LegacyProcessor) sendStop(pErr *kvpb.Error) {
 	}
 }
 
+func (p *LegacyProcessor) UsingScheduler() bool {
+	return false
+}
+
 // Register registers the stream over the specified span of keys.
 //
 // The registration will not observe any events that were consumed before this
@@ -741,18 +762,24 @@ func (p *LegacyProcessor) setResolvedTSInitialized(ctx context.Context) {
 // caller to establish causality with actions taken by the Processor goroutine.
 // It does so by flushing the event pipeline.
 func (p *LegacyProcessor) syncEventC() {
-	syncC := make(chan struct{})
-	ev := getPooledEvent(event{sync: &syncEvent{c: syncC}})
+	p.syncSendAndWait(&syncEvent{c: make(chan struct{})})
+}
+
+// syncSendAndWait allows sync event to be sent and waited on its channel.
+// Exposed to allow special test syncEvents that contain span to be sent.
+func (p *LegacyProcessor) syncSendAndWait(se *syncEvent) {
+	ev := getPooledEvent(event{sync: se})
 	select {
 	case p.eventC <- ev:
 		select {
-		case <-syncC:
+		case <-se.c:
 		// Synchronized.
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		}
 	case <-p.stoppedC:
-		// Already stopped. Do nothing.
+		// Already stopped. Return event back to the pool.
+		putPooledEvent(ev)
 	}
 }
 

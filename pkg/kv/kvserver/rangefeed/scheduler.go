@@ -36,18 +36,26 @@ import (
 type processorEventType int
 
 const (
-	queued  processorEventType = 1 << 0
-	stopped processorEventType = 1 << 1
+	Queued  processorEventType = 1 << 0
+	Stopped processorEventType = 1 << 1
+	// QueueData is scheduled when event is put into rangefeed queue for
+	// processing.
+	QueueData processorEventType = 1 << 2
+	// ReqEvent is scheduled when request function id put into rangefeed request
+	// queue.
+	ReqEvent processorEventType = 1 << 3
 )
 
 var eventNames = map[processorEventType]string{
-	queued:  "Queued",
-	stopped: "Stopped",
+	Queued:    "Queued",
+	Stopped:   "Stopped",
+	QueueData: "Data",
+	ReqEvent:  "Request",
 }
 
 func (e processorEventType) String() string {
 	var evts []string
-	for m := queued; m <= stopped; m = m << 1 {
+	for m := Queued; m <= ReqEvent; m = m << 1 {
 		if m&e != 0 {
 			evts = append(evts, eventNames[m])
 		}
@@ -192,14 +200,14 @@ func (s *Scheduler) Enqueue(id int64, evt processorEventType) error {
 
 func (s *Scheduler) enqueueInternalLocked(id int64, evt processorEventType) (bool, error) {
 	pending := s.mu.status[id]
-	if pending&stopped != 0 {
+	if pending&Stopped != 0 {
 		return false, errors.Errorf("attempt to enqueue data for already stopped processor %d", id)
 	}
 	if pending == 0 {
 		// Enqueue if processor was idle.
 		s.mu.queue.pushBack(id)
 	}
-	update := pending | evt | queued
+	update := pending | evt | Queued
 	if update != pending {
 		// Only update if event actually changed.
 		s.mu.status[id] = update
@@ -251,14 +259,14 @@ func (s *Scheduler) EnqueueAll(ids []int64, evt processorEventType) {
 	}
 }
 
-// Stop instructs processor to stop gracefully by sending it stopped event.
+// Stop instructs processor to stop gracefully by sending it Stopped event.
 // Once stop is called all subsequent Schedule calls will return error.
 func (s *Scheduler) Stop(id int64) {
-	_ = s.Enqueue(id, stopped)
+	_ = s.Enqueue(id, Stopped)
 }
 
 // processEvents is a main worker method of a scheduler pool. each one should
-// be launched in separate goroutine and will loop until scheduler is stopped.
+// be launched in separate goroutine and will loop until scheduler is Stopped.
 func (s *Scheduler) processEvents() {
 	for {
 		var id int64
@@ -277,18 +285,18 @@ func (s *Scheduler) processEvents() {
 
 		cb := s.mu.fs[id]
 		e := s.mu.status[id]
-		// Keep queued status and preserve stopped to block any more events.
-		s.mu.status[id] = queued | (e & stopped)
+		// Keep Queued status and preserve Stopped to block any more events.
+		s.mu.status[id] = Queued | (e & Stopped)
 		s.mu.Unlock()
 
-		remaining := cb(queued ^ e)
+		remaining := cb(Queued ^ e)
 
-		if e&stopped != 0 {
+		if e&Stopped != 0 {
 			if remaining != 0 {
 				log.VWarningf(context.Background(), 5,
 					"worker %s, processor %d didn't process all events on close", s.Name, id)
 			}
-			// We don't remove queued and stopped status from processor to prevent
+			// We don't remove queued and Stopped status from processor to prevent
 			// any further events from being enqueued.
 			continue
 		}
@@ -300,7 +308,7 @@ func (s *Scheduler) processEvents() {
 			continue
 		}
 		newStatus := pendingStatus | remaining
-		if newStatus == queued {
+		if newStatus == Queued {
 			// If no events arrived, get rid of id.
 			delete(s.mu.status, id)
 		} else {
@@ -319,8 +327,8 @@ func (s *Scheduler) processEvents() {
 // Unregister a processor. This function is removing processor callback and
 // status from scheduler. If processor is currently processing event it will
 // finish processing.
-// Processor won't receive stopped event if it wasn't explicitly sent.
-// To make sure processor performs cleanup, it is easier to send it stopped
+// Processor won't receive Stopped event if it wasn't explicitly sent.
+// To make sure processor performs cleanup, it is easier to send it Stopped
 // event first and let it remove itself from registration during event handling.
 // Any attempts to enqueue events for processor after this call will return an
 // error.
@@ -353,7 +361,7 @@ func (s *Scheduler) Close() {
 			close(s.drained)
 		} else {
 			for id := range s.mu.fs {
-				_, _ = s.enqueueInternalLocked(id, stopped)
+				_, _ = s.enqueueInternalLocked(id, Stopped)
 			}
 		}
 	}
@@ -420,7 +428,7 @@ func (cs *ClientScheduler) Schedule(event processorEventType) error {
 	return cs.s.Enqueue(cs.id, event)
 }
 
-// Stop instructs processor to stop gracefully by sending it stopped event.
+// Stop instructs processor to stop gracefully by sending it Stopped event.
 // Once stop is called all subsequent Schedule calls will return error.
 func (cs *ClientScheduler) Stop() {
 	cs.s.Stop(cs.id)
