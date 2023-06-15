@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
@@ -279,9 +280,10 @@ type OutgoingSnapshot struct {
 	// The Pebble snapshot that will be streamed from.
 	EngineSnap storage.Reader
 	// The replica state within the snapshot.
-	State    kvserverpb.ReplicaState
-	snapType kvserverpb.SnapshotRequest_Type
-	onClose  func()
+	State          kvserverpb.ReplicaState
+	snapType       kvserverpb.SnapshotRequest_Type
+	sharedBackings []objstorage.RemoteObjectBackingHandle
+	onClose        func()
 }
 
 func (s OutgoingSnapshot) String() string {
@@ -297,6 +299,9 @@ func (s OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
 	s.EngineSnap.Close()
+	for i := range s.sharedBackings {
+		s.sharedBackings[i].Close()
+	}
 	if s.onClose != nil {
 		s.onClose()
 	}
@@ -311,10 +316,13 @@ type IncomingSnapshot struct {
 	// The descriptor in the snapshot, never nil.
 	Desc             *roachpb.RangeDescriptor
 	DataSize         int64
+	SharedSize       int64
 	snapType         kvserverpb.SnapshotRequest_Type
 	placeholder      *ReplicaPlaceholder
 	raftAppliedIndex kvpb.RaftIndex      // logging only
 	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
+	sharedSSTs       []pebble.SharedSSTMeta
+	doExcise         bool
 }
 
 func (s IncomingSnapshot) String() string {
@@ -510,6 +518,12 @@ func (r *Replica) applySnapshot(
 			logDetails.Printf(" subsumedReplicas=%d@%0.0fms",
 				len(subsumedRepls), stats.subsumedReplicas.Sub(start).Seconds()*1000)
 		}
+		if len(inSnap.sharedSSTs) > 0 {
+			logDetails.Printf(" shared=%d sharedSize=%s", len(inSnap.sharedSSTs), humanizeutil.IBytes(inSnap.SharedSize))
+		}
+		if inSnap.doExcise {
+			logDetails.Printf(" excise=true")
+		}
 		logDetails.Printf(" ingestion=%d@%0.0fms", len(inSnap.SSTStorageScratch.SSTs()),
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000)
 		log.Infof(ctx, "applied %s (%s)", inSnap, logDetails)
@@ -574,12 +588,20 @@ func (r *Replica) applySnapshot(
 		}
 	}
 	var ingestStats pebble.IngestOperationStats
-	if ingestStats, err =
-		// TODO: separate ingestions for log and statemachine engine. See:
-		//
-		// https://github.com/cockroachdb/cockroach/issues/93251
-		r.store.TODOEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
-		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
+	// TODO: separate ingestions for log and statemachine engine. See:
+	//
+	// https://github.com/cockroachdb/cockroach/issues/93251
+	if inSnap.doExcise {
+		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
+		if ingestStats, err =
+			r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, exciseSpan); err != nil {
+			return errors.Wrapf(err, "while ingesting %s and excising %s-%s", inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
+		}
+	} else {
+		if ingestStats, err =
+			r.store.TODOEngine().IngestLocalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+			return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
+		}
 	}
 	if r.store.cfg.KVAdmissionController != nil {
 		r.store.cfg.KVAdmissionController.SnapshotIngested(r.store.StoreID(), ingestStats)
