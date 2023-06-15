@@ -11,6 +11,7 @@
 package pgwire
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"net"
@@ -819,13 +820,10 @@ func (s *Server) ServeConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(
+	c := s.newConn(
 		conn,
 		sArgs,
-		s.tenantMetrics,
 		connStart,
-		&s.execCfg.Settings.SV,
-		s.testingAuthLogEnabled.Get(),
 	)
 
 	var afterReadMsgTestingKnob func(context.Context) error
@@ -849,6 +847,28 @@ func (s *Server) ServeConn(
 		afterReadMsgTestingKnob,
 	)
 	return nil
+}
+
+func (s *Server) newConn(netConn net.Conn, sArgs sql.SessionArgs, connStart time.Time) *conn {
+	sv := &s.execCfg.Settings.SV
+	c := &conn{
+		conn:                  netConn,
+		sessionArgs:           sArgs,
+		metrics:               s.tenantMetrics,
+		startTime:             connStart,
+		rd:                    *bufio.NewReader(netConn),
+		sv:                    sv,
+		readBuf:               pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
+		alwaysLogAuthActivity: s.testingAuthLogEnabled.Get(),
+	}
+	c.stmtBuf.Init()
+	c.res.released = true
+	c.writerState.fi.buf = &c.writerState.buf
+	c.writerState.fi.lastFlushed = -1
+	c.msgBuilder.init(s.tenantMetrics.BytesOutCount)
+	c.errWriter.sv = sv
+	c.errWriter.msgBuilder = &c.msgBuilder
+	return c
 }
 
 // readCancelKeyAndCloseConn retrieves the "backend data" key that identifies
