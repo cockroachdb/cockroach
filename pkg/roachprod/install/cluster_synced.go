@@ -891,7 +891,7 @@ func (c *SyncedCluster) Run(
 
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		opts := RunCmdOptions{
-			combinedOut:             stream,
+			combinedOut:             !stream,
 			includeRoachprodEnvVars: true,
 			stdout:                  stdout,
 			stderr:                  stderr,
@@ -951,7 +951,6 @@ func (c *SyncedCluster) RunWithDetails(
 	// Failing slow here allows us to capture the output of all nodes even if one fails with a command error.
 	resultPtrs, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		opts := RunCmdOptions{
-			combinedOut:             true,
 			includeRoachprodEnvVars: true,
 			stdout:                  l.Stdout,
 			stderr:                  l.Stderr,
