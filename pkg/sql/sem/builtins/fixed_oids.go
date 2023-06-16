@@ -2384,6 +2384,7 @@ var builtinOidsArray = []string{
 	2411: `to_char(date: date, format: string) -> string`,
 	2412: `crdb_internal.unsafe_lock_replica(range_id: int, lock: bool) -> bool`,
 	2413: `crdb_internal.fingerprint(span: bytes[], start_time: decimal, all_revisions: bool) -> int`,
+	2414: `crdb_internal.sstable_metrics(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> tuple{int as node_id, int as store_id, int AS level, int AS file_num, jsonb AS metrics}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
