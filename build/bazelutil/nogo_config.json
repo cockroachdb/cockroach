@@ -8,9 +8,6 @@
         }
     },
     "composites": {
-        "exclude_files": {
-            "cockroach/pkg/.*_test.go$": "many existing failures"
-        },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"
         }
