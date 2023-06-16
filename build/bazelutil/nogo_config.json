@@ -1696,7 +1696,7 @@
             "cockroach/pkg/sql/schemachanger/scplan/internal/rules/.*/.*.go$":  "schema changer rules"
         },
         "only_files": {
-            "cockroachdb_cockroach/pkg/.*$": "first-party code",
+            "cockroach/pkg/.*$": "first-party code",
             "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
         }
     },
