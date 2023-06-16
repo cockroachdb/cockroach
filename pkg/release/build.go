@@ -131,7 +131,7 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 }
 
 // MakeWorkload makes the bin/workload binary. It is only ever built in the
-// crosslinux configuration.
+// crosslinux and crosslinuxarm configurations.
 func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
 	if opts.Release {
 		return errors.Newf("cannot build workload in Release mode")
@@ -151,7 +151,7 @@ func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
 	if err != nil {
 		return err
 	}
-	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), false)
+	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), platform == PlatformLinuxArm)
 }
 
 // MakeRelease makes the release binary and associated files.
