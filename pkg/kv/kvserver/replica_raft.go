@@ -647,8 +647,8 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	// include MsgVotes), so don't campaign if we wake up our raft
 	// group.
 	return r.withRaftGroup(false, func(raftGroup *raft.RawNode) (bool, error) {
-		// If we're not the leader, and we receive a message from a non-leader
-		// replica while quiesced, we wake up the leader too. This prevents spurious
+		// If we're a follower, and we receive a message from a non-leader replica
+		// while quiesced, we wake up the leader too. This prevents spurious
 		// elections.
 		//
 		// This typically happens in the case of a partial network partition where
@@ -665,7 +665,12 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 		// Note that such partial partitions will typically result in persistent
 		// mass unquiescence due to the continuous prevotes.
 		if r.mu.quiescent {
-			if !r.isRaftLeaderRLocked() && req.FromReplica.ReplicaID != r.mu.leaderID {
+			st := r.raftBasicStatusRLocked()
+			hasLeader := st.RaftState == raft.StateFollower && st.Lead != 0
+			fromLeader := uint64(req.FromReplica.ReplicaID) == st.Lead
+			if hasLeader && !fromLeader {
+				// TODO(erikgrinaker): This is likely to result in election ties, find
+				// some way to avoid that.
 				r.maybeUnquiesceAndWakeLeaderLocked()
 			} else {
 				r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
