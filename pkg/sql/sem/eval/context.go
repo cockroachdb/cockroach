@@ -224,6 +224,9 @@ type Context struct {
 	// CompactEngineSpan is used to force compaction of a span in a store.
 	CompactEngineSpan CompactEngineSpanFunc
 
+	// GetTableMetrics is used in crdb_internal.sstable_metrics.
+	GetTableMetrics GetTableMetricsFunc
+
 	// SetCompactionConcurrency is used to change the compaction concurrency of
 	// a store.
 	SetCompactionConcurrency SetCompactionConcurrencyFunc
