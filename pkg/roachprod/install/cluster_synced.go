@@ -167,7 +167,7 @@ func runWithMaybeRetry(
 			return nil, err
 		}
 		res.Attempt = 1
-		return res, err
+		return res, nil
 	}
 
 	var res = &RunResultDetails{}
@@ -787,10 +787,13 @@ func defaultCmdOpts(debugName string) RunCmdOptions {
 	}
 }
 
-// runCmdOnSingleNode runs a command on a single node
-// `combined` controls whether the stdout and stderr are combined into `RunResultDetails.CombinedOut`.
-// `withEnvVars` controls whether the command is run with the ROACHPROD env variable, and
-// should be true for all user commands.
+// runCmdOnSingleNode runs a command on a single node. It serves as a common entry point for
+// all commands that run on a single node, including user commands and roachprod commands.
+// opts is used to configure the behavior of the command, including
+// - whether stdout and stderr or combined output is desired
+// - specifying the stdin, stdout, and stderr streams
+// - specifying the remote session options
+// - whether the command should be run with the ROACHPROD env variable (true for all user commands)
 func (c *SyncedCluster) runCmdOnSingleNode(
 	ctx context.Context, l *logger.Logger, node Node, cmd string, opts RunCmdOptions,
 ) (*RunResultDetails, error) {
@@ -838,11 +841,19 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		opts.stderr = io.Discard
 	}
 
+	fmtOut := func(s string) string {
+		if strings.TrimSpace(s) == "" {
+			return "<empty>"
+		}
+		return fmt.Sprintf("\n```\n%s\n```", s)
+	}
 	var res *RunResultDetails
+	output := ""
 	if opts.combinedOut {
 		out, cmdErr := sess.CombinedOutput(ctx)
 		res = newRunResultDetails(node, cmdErr)
 		res.CombinedOut = string(out)
+		output = fmtOut(res.CombinedOut)
 	} else {
 		// We stream the output if running on a single node.
 		var stdoutBuffer, stderrBuffer bytes.Buffer
@@ -855,10 +866,12 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		res = newRunResultDetails(node, sess.Run(ctx))
 		res.Stderr = stderrBuffer.String()
 		res.Stdout = stdoutBuffer.String()
+
+		output = fmt.Sprintf("stdout: %s\nstderr: %s", fmtOut(res.Stdout), fmtOut(res.Stderr))
 	}
 
 	if res.Err != nil {
-		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", node, cmd)
+		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\nOutput:\n%s\n", node, cmd, output)
 		res.Err = errors.WithDetail(res.Err, detailMsg)
 	}
 	return res, nil
@@ -1446,8 +1459,9 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	l.Printf("%s: checking %s", c.Name, path)
 	runOpts := defaultCmdOpts("check-file-exists")
 	runOpts.includeRoachprodEnvVars = true
-	_, err := c.runCmdOnSingleNode(ctx, l, 1, `test -e `+path, runOpts)
-	return err == nil
+	res, _ := c.runCmdOnSingleNode(ctx, l, 1, `test -e `+path, runOpts)
+	// We only return true if the command succeeded.
+	return res != nil && res.RemoteExitStatus == 0
 }
 
 // createNodeCertArguments returns a list of strings appropriate for use as
@@ -2541,12 +2555,12 @@ func (c *SyncedCluster) ParallelE(
 // to maintain parity with auto-init behavior of `roachprod start` (when
 // --skip-init) is not specified.
 func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) error {
-	if err := c.initializeCluster(ctx, l, node); err != nil {
-		return errors.WithDetail(err, "install.Init() failed: unable to initialize cluster.")
+	if res, err := c.initializeCluster(ctx, l, node); err != nil || (res != nil && res.Err != nil) {
+		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to initialize cluster.")
 	}
 
-	if err := c.setClusterSettings(ctx, l, node); err != nil {
-		return errors.WithDetail(err, "install.Init() failed: unable to set cluster settings.")
+	if res, err := c.setClusterSettings(ctx, l, node); err != nil || (res != nil && res.Err != nil) {
+		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to set cluster settings.")
 	}
 
 	return nil

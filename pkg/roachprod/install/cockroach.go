@@ -185,49 +185,34 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 
 	// SSH retries are disabled by passing nil RunRetryOpts
 	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		res := &RunResultDetails{Node: node}
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
-		if _, err := c.startNode(ctx, l, node, startOpts); err != nil {
-			res.Err = err
+		res, err := c.startNode(ctx, l, node, startOpts)
+		if err != nil || res.Err != nil {
+			// If err is non-nil, then this will not be retried, but if res.Err is non-nil, it will be.
 			return res, err
 		}
 
 		// Code that follows applies only for regular nodes.
-		if startOpts.Target != StartDefault {
-			return res, nil
-		}
-
 		// We reserve a few special operations (bootstrapping, and setting
 		// cluster settings) to the InitTarget.
-		if startOpts.GetInitTarget() != node {
+		if startOpts.Target != StartDefault || startOpts.GetInitTarget() != node || startOpts.SkipInit {
 			return res, nil
 		}
 
 		// NB: The code blocks below are not parallelized, so it's safe for us
 		// to use fmt.Printf style logging.
 
-		// 1. We don't init invoked using `--skip-init`.
-		// 2. We don't init when invoking with `start-single-node`.
-
-		if startOpts.SkipInit {
-			return res, nil
-		}
-
 		// For single node clusters, this can be skipped because during the c.StartNode call above,
 		// the `--start-single-node` flag will handle all of this for us.
 		shouldInit := !c.useStartSingleNode()
 		if shouldInit {
-			if err := c.initializeCluster(ctx, l, node); err != nil {
-				res.Err = err
-				return res, errors.Wrap(err, "failed to initialize cluster")
+			if res, err := c.initializeCluster(ctx, l, node); err != nil || res.Err != nil {
+				// If err is non-nil, then this will not be retried, but if res.Err is non-nil, it will be.
+				return res, err
 			}
 		}
-		if err := c.setClusterSettings(ctx, l, node); err != nil {
-			res.Err = err
-			return res, errors.Wrap(err, "failed to set cluster settings")
-		}
-		return res, nil
+		return c.setClusterSettings(ctx, l, node)
 	}, WithConcurrency(parallelism)); err != nil {
 		return err
 	}
@@ -348,10 +333,10 @@ func (c *SyncedCluster) ExecSQL(
 
 func (c *SyncedCluster) startNode(
 	ctx context.Context, l *logger.Logger, node Node, startOpts StartOpts,
-) (string, error) {
+) (*RunResultDetails, error) {
 	startCmd, err := c.generateStartCmd(ctx, l, node, startOpts)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var uploadCmd string
 	if c.IsLocal() {
@@ -364,11 +349,7 @@ func (c *SyncedCluster) startNode(
 	uploadOpts.stdin = strings.NewReader(startCmd)
 	res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
 	if err != nil || res.Err != nil {
-		out := ""
-		if res != nil {
-			out = res.CombinedOut
-		}
-		return "", errors.Wrapf(err, "failed to upload start script: %s", out)
+		return res, err
 	}
 
 	var runScriptCmd string
@@ -376,16 +357,7 @@ func (c *SyncedCluster) startNode(
 		runScriptCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 	runScriptCmd += "./cockroach.sh"
-	res, err = c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
-	if err != nil || res.Err != nil {
-		out := ""
-		if res != nil {
-			out = res.CombinedOut
-		}
-		return "", errors.Wrapf(err, "~ %s\n%s", runScriptCmd, out)
-	}
-
-	return strings.TrimSpace(res.CombinedOut), nil
+	return c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
 }
 
 func (c *SyncedCluster) generateStartCmd(
@@ -617,42 +589,36 @@ func (c *SyncedCluster) maybeScaleMem(val int) int {
 	return val
 }
 
-func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger, node Node) error {
+func (c *SyncedCluster) initializeCluster(
+	ctx context.Context, l *logger.Logger, node Node,
+) (*RunResultDetails, error) {
 	l.Printf("%s: initializing cluster\n", c.Name)
 	cmd := c.generateInitCmd(node)
 
 	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("init-cluster"))
-	if err != nil || res.Err != nil {
-		out := ""
-		if res != nil {
-			out = res.CombinedOut
+	if res != nil {
+		out := strings.TrimSpace(res.CombinedOut)
+		if out != "" {
+			l.Printf(out)
 		}
-		return errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
-
-	if out := strings.TrimSpace(res.CombinedOut); out != "" {
-		l.Printf(out)
-	}
-	return nil
+	return res, err
 }
 
-func (c *SyncedCluster) setClusterSettings(ctx context.Context, l *logger.Logger, node Node) error {
+func (c *SyncedCluster) setClusterSettings(
+	ctx context.Context, l *logger.Logger, node Node,
+) (*RunResultDetails, error) {
 	l.Printf("%s: setting cluster settings", c.Name)
 	cmd := c.generateClusterSettingCmd(l, node)
 
 	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("set-cluster-settings"))
-	if err != nil || res.Err != nil {
-		out := ""
-		if res != nil {
-			out = res.CombinedOut
+	if res != nil {
+		out := strings.TrimSpace(res.CombinedOut)
+		if out != "" {
+			l.Printf(out)
 		}
-		return errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
-
-	if out := strings.TrimSpace(res.CombinedOut); out != "" {
-		l.Printf(out)
-	}
-	return nil
+	return res, err
 }
 
 func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) string {
