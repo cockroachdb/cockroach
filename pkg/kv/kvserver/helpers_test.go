@@ -495,15 +495,7 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 }
 
 func (r *Replica) MaybeUnquiesce() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.maybeUnquiesceWithOptionsLocked(false /* wakeLeader */, false /* mayCampaign */)
-}
-
-func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.maybeUnquiesceWithOptionsLocked(true /* wakeLeader */, true /* mayCampaign */)
+	return r.maybeUnquiesce(true /* wakeLeader */, true /* mayCampaign */)
 }
 
 func (r *Replica) ReadCachedProtectedTS() (readAt, earliestProtectionTimestamp hlc.Timestamp) {

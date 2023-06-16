@@ -709,7 +709,7 @@ func mergeCheckingTimestampCaches(
 			// Make sure the LHS range in uniquiesced so that it elects a new
 			// Raft leader after the partition is established.
 			for _, r := range lhsRepls {
-				r.MaybeUnquiesceAndWakeLeader()
+				r.MaybeUnquiesce()
 			}
 
 			// Issue an increment on the range. The leaseholder should evaluate

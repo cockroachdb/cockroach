@@ -1975,7 +1975,7 @@ ORDER BY name ASC;
 
 	h.comment(`-- (Unquiesce the range.)`)
 	testutils.SucceedsSoon(t, func() error {
-		tc.GetRaftLeader(t, roachpb.RKey(k)).MaybeUnquiesceAndWakeLeader()
+		tc.GetRaftLeader(t, roachpb.RKey(k)).MaybeUnquiesce()
 		return h.checkAllTokensReturned(ctx, 3)
 	})
 

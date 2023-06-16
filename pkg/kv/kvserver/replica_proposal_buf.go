@@ -1253,7 +1253,7 @@ func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error
 	return (*Replica)(rp).withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		// We're proposing a command here so there is no need to wake the leader
 		// if we were quiesced. However, we should make sure we are unquiesced.
-		(*Replica)(rp).maybeUnquiesceLocked()
+		(*Replica)(rp).maybeUnquiesceLocked(false /* wakeLeader */, true /* mayCampaign */)
 		return false /* maybeUnquiesceLocked */, fn(raftGroup)
 	})
 }
