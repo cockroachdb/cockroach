@@ -359,6 +359,14 @@ func List(l *logger.Logger, listMine bool, clusterNamePattern string) (cloud.Clo
 	return filteredCloud, nil
 }
 
+// TruncateString truncates a string to maxLength and adds "..." to the end.
+func TruncateString(s string, maxLength int) string {
+	if len(s) > maxLength {
+		return s[:maxLength-3] + "..."
+	}
+	return s
+}
+
 // Run runs a command on the nodes in a cluster.
 func Run(
 	ctx context.Context,
@@ -384,11 +392,7 @@ func Run(
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	title := cmd
-	if len(title) > 30 {
-		title = title[:27] + "..."
-	}
-	return c.Run(ctx, l, stdout, stderr, c.Nodes, title, cmd, opts...)
+	return c.Run(ctx, l, stdout, stderr, c.Nodes, TruncateString(cmd, 30), cmd, opts...)
 }
 
 // RunWithDetails runs a command on the nodes in a cluster.
@@ -414,11 +418,7 @@ func RunWithDetails(
 	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	title := cmd
-	if len(title) > 30 {
-		title = title[:27] + "..."
-	}
-	return c.RunWithDetails(ctx, l, c.Nodes, title, cmd)
+	return c.RunWithDetails(ctx, l, c.Nodes, TruncateString(cmd, 30), cmd)
 }
 
 // SQL runs `cockroach sql` on a remote cluster. If a single node is passed,
