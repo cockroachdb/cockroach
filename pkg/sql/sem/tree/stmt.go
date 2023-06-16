@@ -63,6 +63,8 @@ const (
 	CopyIn
 	// CopyOut indicates a COPY TO statement.
 	CopyOut
+	// Replication indicates a replication protocol statement.
+	Replication
 	// Unknown indicates that the statement does not have a known
 	// return style at the time of parsing. This is not first in the
 	// enumeration because it is more convenient to have Ack as a zero

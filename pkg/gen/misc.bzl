@@ -14,6 +14,7 @@ MISC_SRCS = [
     "//pkg/roachprod/vm/aws:terraform/main.tf",
     "//pkg/spanconfig/spanconfigstore:entry_interval_btree.go",
     "//pkg/spanconfig/spanconfigstore:entry_interval_btree_test.go",
+    "//pkg/sql/pgrepl/pgreplparser:pgrepl.go",
     "//pkg/sql/plpgsql/parser/lexbase:keywords.go",
     "//pkg/sql/plpgsql/parser/lexbase:tokens.go",
     "//pkg/sql/plpgsql/parser:plpgsql.go",
