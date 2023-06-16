@@ -15,6 +15,15 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
+message SSTableMetricsInfo {
+  // level the lsm tree level the sstable is found in
+  int32 level = 1;
+  // table_id is the sstable's file number
+  uint64 table_id = 2 [(gogoproto.customname) = "TableID"];
+  // table_info_json contains sstable properties, encoded as JSON
+  bytes table_info_json = 3 [(gogoproto.customname) = "TableInfoJSON"];
+}
+
 // SSTUserProperties contains the user-added properties of a single sstable.
 message SSTUserProperties {
     string path = 1;

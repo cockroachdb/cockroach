@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -1984,6 +1985,36 @@ func (p *Pebble) IngestExternalFilesWithStats(
 // PreIngestDelay implements the Engine interface.
 func (p *Pebble) PreIngestDelay(ctx context.Context) {
 	preIngestDelay(ctx, p, p.settings)
+}
+
+// GetTableMetrics implements the Engine interface.
+func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error) {
+	tableInfo, err := p.db.SSTables(pebble.WithKeyRangeFilter(start, end))
+
+	if err != nil {
+		return []enginepb.SSTableMetricsInfo{}, err
+	}
+
+	var totalTables int
+	for _, info := range tableInfo {
+		totalTables += len(info)
+	}
+
+	var metricsInfo []enginepb.SSTableMetricsInfo
+
+	for level, sstableInfos := range tableInfo {
+		for _, sstableInfo := range sstableInfos {
+			marshalTableInfo, err := json.Marshal(sstableInfo)
+
+			if err != nil {
+				return []enginepb.SSTableMetricsInfo{}, err
+			}
+
+			tableID := sstableInfo.TableInfo.FileNum
+			metricsInfo = append(metricsInfo, enginepb.SSTableMetricsInfo{TableID: uint64(tableID), Level: int32(level), TableInfoJSON: marshalTableInfo})
+		}
+	}
+	return metricsInfo, nil
 }
 
 // ApproximateDiskBytes implements the Engine interface.

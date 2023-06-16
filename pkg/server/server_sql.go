@@ -992,6 +992,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TestingKnobs:              sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:     storageEngineClient.CompactEngineSpan,
 		CompactionConcurrencyFunc: storageEngineClient.SetCompactionConcurrency,
+		GetTableMetricsFunc:       storageEngineClient.GetTableMetrics,
 		TraceCollector:            traceCollector,
 		TenantUsageServer:         cfg.tenantUsageServer,
 		KVStoresIterator:          cfg.kvStoresIterator,

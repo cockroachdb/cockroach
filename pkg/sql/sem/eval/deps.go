@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -437,6 +438,12 @@ type InternalRows interface {
 type CompactEngineSpanFunc func(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) error
+
+// GetTableMetrics is used to retrieve sstable metrics on a key span
+// (end-exclusive) at the given (nodeID, storeID).
+type GetTableMetricsFunc func(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) ([]enginepb.SSTableMetricsInfo, error)
 
 // SetCompactionConcurrencyFunc is used to change the compaction concurrency of a
 // store.
