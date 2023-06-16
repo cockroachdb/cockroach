@@ -52,18 +52,17 @@ func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) 
 	}
 }
 
-func (r *Replica) maybeUnquiesce() bool {
+// maybeUnquiesce unquiesces the replica if it is quiesced and can be
+// unquiesced, returning true in that case. See maybeUnquiesceLocked() for
+// details.
+func (r *Replica) maybeUnquiesce(wakeLeader, mayCampaign bool) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.maybeUnquiesceLocked()
+	return r.maybeUnquiesceLocked(wakeLeader, mayCampaign)
 }
 
-func (r *Replica) maybeUnquiesceLocked() bool {
-	return r.maybeUnquiesceWithOptionsLocked(false /* wakeLeader */, true /* mayCampaign */)
-}
-
-// maybeUnquiesceWithOptionsLocked unquiesces the replica if it is quiesced and
-// can be unquiesced, returning true in that case.
+// maybeUnquiesceLocked unquiesces the replica if it is quiesced and can be
+// unquiesced, returning true in that case.
 //
 // If wakeLeader is true, wake the leader by proposing an empty command. Should
 // typically be true, unless e.g. the caller is either about to propose a
@@ -73,7 +72,7 @@ func (r *Replica) maybeUnquiesceLocked() bool {
 // If mayCampaign is true, the replica may campaign if appropriate. This will
 // respect PreVote and CheckQuorum, and thus won't disrupt a current leader.
 // Should typically be true, unless the caller wants to avoid election ties.
-func (r *Replica) maybeUnquiesceWithOptionsLocked(wakeLeader, mayCampaign bool) bool {
+func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	if !r.canUnquiesceRLocked() {
 		return false
 	}
@@ -465,13 +464,12 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 		if roachpb.ReplicaID(id) == r.replicaID {
 			continue
 		}
-		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
-			roachpb.ReplicaID(id), lastFromReplica)
+		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(id), lastFromReplica)
 		if toErr != nil {
 			if log.V(4) {
 				log.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)
 			}
-			r.maybeUnquiesceLocked()
+			r.maybeUnquiesceLocked(false /* wakeLeader */, true /* mayCampaign */)
 			return false
 		}
 

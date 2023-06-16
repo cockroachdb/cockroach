@@ -1177,7 +1177,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		// Make sure this replica has not inadvertently quiesced. We need the
 		// replica ticking so that it campaigns.
 		if otherRepl.IsQuiescent() {
-			otherRepl.MaybeUnquiesceAndWakeLeader()
+			otherRepl.MaybeUnquiesce()
 		}
 		lead := otherRepl.RaftStatus().Lead
 		if lead == raft.None {
@@ -3841,7 +3841,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 		} else if replica != nil {
 			// Make sure the replica is unquiesced so that it will tick and
 			// contact the leader to discover it's no longer part of the range.
-			replica.MaybeUnquiesceAndWakeLeader()
+			replica.MaybeUnquiesce()
 		}
 		return errors.Errorf("found %s, waiting for it to be GC'd", replica)
 	})
@@ -6415,11 +6415,9 @@ func TestRaftCheckQuorum(t *testing.T) {
 			require.Equal(t, raft.StateLeader, initialStatus.RaftState)
 			logStatus(initialStatus)
 
-			// Unquiesce the leader if necessary. We have to use AndWakeLeader to
-			// submit a proposal, otherwise it will immediately quiesce again without
-			// ticking.
+			// Unquiesce the leader if necessary.
 			if quiesce {
-				require.True(t, repl1.MaybeUnquiesceAndWakeLeader())
+				require.True(t, repl1.MaybeUnquiesce())
 				t.Logf("n1 unquiesced")
 			} else {
 				require.False(t, repl1.IsQuiescent())

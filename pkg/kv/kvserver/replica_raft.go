@@ -675,7 +675,7 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 				// some way to avoid that.
 				wakeLeader, mayCampaign = true, true
 			}
-			r.maybeUnquiesceWithOptionsLocked(wakeLeader, mayCampaign)
+			r.maybeUnquiesceLocked(wakeLeader, mayCampaign)
 		}
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		if req.Message.Type == raftpb.MsgSnap {
@@ -2118,7 +2118,7 @@ func (r *Replica) withRaftGroupLocked(
 		unquiesce = true
 	}
 	if unquiesce {
-		r.maybeUnquiesceWithOptionsLocked(true /* wakeLeader */, true /* mayCampaign */)
+		r.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
 	}
 	return err
 }
