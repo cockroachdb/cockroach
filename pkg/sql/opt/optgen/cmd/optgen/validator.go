@@ -28,8 +28,13 @@ func (v *validator) validate(compiled *lang.CompiledExpr) []error {
 	md := newMetadata(compiled, "")
 
 	for _, rule := range compiled.Rules {
-		if !rule.Tags.Contains("Normalize") && !rule.Tags.Contains("Explore") {
-			v.addErrorf(rule.Source(), "%s rule is missing \"Normalize\" or \"Explore\" tag", rule.Name)
+		if !rule.Tags.Contains("Normalize") && !rule.Tags.Contains("Explore") &&
+			!rule.Tags.Contains("FastPath") {
+			v.addErrorf(
+				rule.Source(),
+				"%s rule is missing \"Normalize\", \"Explore\", or \"FastPath\" tag",
+				rule.Name,
+			)
 		}
 	}
 

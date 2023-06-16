@@ -4,6 +4,7 @@ OPTGEN_SRCS = [
     "//pkg/sql/opt/exec/explain:explain_factory.og.go",
     "//pkg/sql/opt/exec/explain:plan_gist_factory.og.go",
     "//pkg/sql/opt/exec:factory.og.go",
+    "//pkg/sql/opt/fastpath:fast_path.og.go",
     "//pkg/sql/opt/memo:expr.og.go",
     "//pkg/sql/opt/norm:factory.og.go",
     "//pkg/sql/opt/optgen/lang:expr.og.go",

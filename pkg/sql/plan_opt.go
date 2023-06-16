@@ -452,24 +452,20 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 		return opc.optimizer.DetachMemo(ctx), nil
 	}
 
-	if f.Memo().HasPlaceholders() {
-		// Try the placeholder fast path.
-		_, ok, err := opc.optimizer.TryPlaceholderFastPath()
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			opc.log(ctx, "placeholder fast path")
-		}
-	} else {
+	// Try the fast path rules.
+	fastPath, err := opc.optimizer.TryFastPath()
+	if err != nil {
+		return nil, err
+	}
+	if fastPath {
+		opc.log(ctx, "fast path")
+	} else if !f.Memo().HasPlaceholders() && !f.FoldingControl().PreventedStableFold() {
 		// If the memo doesn't have placeholders and did not encounter any stable
 		// operators that can be constant folded, then fully optimize it now - it
 		// can be reused without further changes to build the execution tree.
-		if !f.FoldingControl().PreventedStableFold() {
-			opc.log(ctx, "optimizing (no placeholders)")
-			if _, err := opc.optimizer.Optimize(); err != nil {
-				return nil, err
-			}
+		opc.log(ctx, "optimizing (no placeholders)")
+		if _, err := opc.optimizer.Optimize(); err != nil {
+			return nil, err
 		}
 	}
 
@@ -491,8 +487,7 @@ func (opc *optPlanningCtx) reuseMemo(
 ) (*memo.Memo, error) {
 	if cachedMemo.IsOptimized() {
 		// The query could have been already fully optimized if there were no
-		// placeholders or the placeholder fast path succeeded (see
-		// buildReusableMemo).
+		// placeholders or a fast path succeeded (see buildReusableMemo).
 		return cachedMemo, nil
 	}
 	f := opc.optimizer.Factory()
