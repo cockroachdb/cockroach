@@ -880,6 +880,9 @@ message TxnInfo {
   // Time elapsed since this transaction started execution.
   google.protobuf.Duration elapsed_time = 16
   [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+
+  // The isolation level of the transaction.
+  string isolation_level = 17;
 }
 
 // ActiveQuery represents a query in flight on some Session.

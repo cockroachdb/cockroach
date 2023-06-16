@@ -882,7 +882,11 @@ func (h ConnectionHandler) GetQueryCancelKey() pgwirecancel.BackendKeyData {
 // connExecutor takes ownership of this memory and will close the account before
 // exiting.
 func (s *Server) ServeConn(
-	ctx context.Context, h ConnectionHandler, reserved *mon.BoundAccount, cancel context.CancelFunc,
+	ctx context.Context,
+	h ConnectionHandler,
+	reserved *mon.BoundAccount,
+	cancel context.CancelFunc,
+	sessionID clusterunique.ID,
 ) error {
 	// Make sure to close the reserved account even if closeWrapper below
 	// panics: so we do it in a defer that is guaranteed to execute. We also
@@ -893,7 +897,7 @@ func (s *Server) ServeConn(
 		r := recover()
 		h.ex.closeWrapper(ctx, r)
 	}(ctx, h)
-	return h.ex.run(ctx, s.pool, reserved, cancel)
+	return h.ex.run(ctx, s.pool, reserved, cancel, sessionID)
 }
 
 // GetLocalIndexStatistics returns a idxusage.LocalIndexUsageStats.
@@ -1198,7 +1202,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx,
 			ex.server.cfg.InternalDB,
 			ex.server.cfg.Codec,
-			ex.sessionID,
+			ex.planner.extendedEvalCtx.SessionID,
 		)
 		if err != nil {
 			log.Errorf(
@@ -1587,8 +1591,6 @@ type connExecutor struct {
 	// queryCancelKey is a 64-bit identifier for the session used by the
 	// pgwire cancellation protocol.
 	queryCancelKey pgwirecancel.BackendKeyData
-
-	sessionID clusterunique.ID
 
 	// activated determines whether activate() was called already.
 	// When this is set, close() must be called to release resources.
@@ -2058,6 +2060,7 @@ func (ex *connExecutor) run(
 	parentMon *mon.BytesMonitor,
 	reserved *mon.BoundAccount,
 	onCancel context.CancelFunc,
+	sessionID clusterunique.ID,
 ) (err error) {
 	if !ex.activated {
 		ex.activate(ctx, parentMon, reserved)
@@ -2065,13 +2068,12 @@ func (ex *connExecutor) run(
 	ex.ctxHolder.connCtx = ctx
 	ex.onCancelSession = onCancel
 
-	ex.sessionID = ex.generateID()
-	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex.queryCancelKey, ex)
-	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
+	ex.server.cfg.SessionRegistry.register(sessionID, ex.queryCancelKey, ex)
+	ex.planner.extendedEvalCtx.SessionID = sessionID
 
 	defer func() {
-		ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
-		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, ex.sessionID, ex.serialize())
+		ex.server.cfg.SessionRegistry.deregister(sessionID, ex.queryCancelKey)
+		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, sessionID, ex.serialize())
 		if addErr != nil {
 			err = errors.CombineErrors(err, addErr)
 		}
@@ -2703,7 +2705,7 @@ func (ex *connExecutor) execCopyOut(
 	var numOutputRows int
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
-	queryID := ex.generateID()
+	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
@@ -2921,7 +2923,7 @@ func (ex *connExecutor) execCopyIn(
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = ctxlog.WithCancel(ctx)
-	queryID := ex.generateID()
+	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
@@ -3157,13 +3159,6 @@ func (ex *connExecutor) execCopyIn(
 // type should return NoData.
 func stmtHasNoData(stmt tree.Statement) bool {
 	return stmt == nil || stmt.StatementReturnType() != tree.Rows
-}
-
-// generateID generates a unique ID based on the SQL instance ID and its current
-// HLC timestamp. These IDs are either scoped at the query level or at the
-// session level.
-func (ex *connExecutor) generateID() clusterunique.ID {
-	return clusterunique.GenerateID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
 }
 
 // commitPrepStmtNamespace deallocates everything in
@@ -3944,6 +3939,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Priority:              ex.state.priority.String(),
 			QualityOfService:      sessiondatapb.ToQoSLevelString(txn.AdmissionHeader().Priority),
 			LastAutoRetryReason:   autoRetryReasonStr,
+			IsolationLevel:        kvTxnIsolationLevelToTree(ex.state.isolationLevel).String(),
 		}
 	}
 
@@ -4047,7 +4043,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		NumTxnsExecuted:            int32(ex.extraTxnState.txnCounter),
 		TxnFingerprintIDs:          txnFingerprintIDs,
 		LastActiveQuery:            lastActiveQuery,
-		ID:                         ex.sessionID.GetBytes(),
+		ID:                         ex.planner.extendedEvalCtx.SessionID.GetBytes(),
 		AllocBytes:                 ex.mon.AllocBytes(),
 		MaxAllocBytes:              ex.mon.MaximumBytes(),
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,

@@ -367,11 +367,11 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if isPausablePortal() {
 		if !portal.pauseInfo.isQueryIDSet() {
-			portal.pauseInfo.execStmtInOpenState.queryID = ex.generateID()
+			portal.pauseInfo.execStmtInOpenState.queryID = ex.server.cfg.GenerateID()
 		}
 		queryID = portal.pauseInfo.execStmtInOpenState.queryID
 	} else {
-		queryID = ex.generateID()
+		queryID = ex.server.cfg.GenerateID()
 	}
 
 	// Update the deadline on the transaction based on the collections.
@@ -826,7 +826,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				NumPlaceholders: stmt.NumPlaceholders,
 				NumAnnotations:  stmt.NumAnnotations,
 			},
-			ex.generateID(),
+			ex.server.cfg.GenerateID(),
 		)
 		var rawTypeHints []oid.Oid
 		if _, err := ex.addPreparedStmt(
@@ -1870,7 +1870,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 	}
 	commonTxnRowsLimitDetails := eventpb.CommonTxnRowsLimitDetails{
 		TxnID:     ex.state.mu.txn.ID().String(),
-		SessionID: ex.sessionID.String(),
+		SessionID: ex.planner.extendedEvalCtx.SessionID.String(),
 		NumRows:   numRows,
 	}
 	if shouldErr && ex.executorType == executorTypeInternal {
@@ -2904,7 +2904,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
 	recordedTxnStats := sqlstats.RecordedTxnStats{
-		SessionID:               ex.sessionID,
+		SessionID:               ex.planner.extendedEvalCtx.SessionID,
 		TransactionID:           ev.txnID,
 		TransactionTimeSec:      txnTime.Seconds(),
 		StartTime:               txnStart,

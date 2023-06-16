@@ -2162,7 +2162,10 @@ CREATE TABLE crdb_internal.%s (
   num_stmts INT,                   -- the number of statements executed so far
   num_retries INT,                 -- the number of times the transaction was restarted
   num_auto_retries INT,            -- the number of times the transaction was automatically restarted
-  last_auto_retry_reason STRING    -- the error causing the last automatic retry for this txn
+  last_auto_retry_reason STRING,   -- the error causing the last automatic retry for this txn
+  isolation_level STRING,          -- the isolation level of the transaction
+  priority STRING,                 -- the priority of the transaction
+  quality_of_service STRING        -- the quality of service of the transaction
 )`
 
 var crdbInternalLocalTxnsTable = virtualSchemaTable{
@@ -2232,6 +2235,9 @@ func populateTransactionsTable(
 				tree.NewDInt(tree.DInt(txn.NumRetries)),
 				tree.NewDInt(tree.DInt(txn.NumAutoRetries)),
 				tree.NewDString(txn.LastAutoRetryReason),
+				tree.NewDString(txn.IsolationLevel),
+				tree.NewDString(txn.Priority),
+				tree.NewDString(txn.QualityOfService),
 			); err != nil {
 				return err
 			}
@@ -2253,6 +2259,9 @@ func populateTransactionsTable(
 				tree.DNull,                             // NumRetries
 				tree.DNull,                             // NumAutoRetries
 				tree.DNull,                             // LastAutoRetryReason
+				tree.DNull,                             // IsolationLevel
+				tree.DNull,                             // Priority
+				tree.DNull,                             // QualityOfService
 			); err != nil {
 				return err
 			}
