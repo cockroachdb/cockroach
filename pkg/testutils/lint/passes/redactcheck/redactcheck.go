@@ -136,6 +136,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"IndexDescriptorVersion":       {},
 						"MutationID":                   {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/clusterunique": {
+						"ID": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb": {
 						"ComponentID_Type": {},
 					},
@@ -162,6 +165,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"FamilyID":       {},
 						"IndexID":        {},
 						"PGAttributeNum": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/sql/sem/tree": {
+						"IsolationLevel": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness": {
 						"SessionID": {},

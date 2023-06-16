@@ -28,8 +28,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -100,23 +102,32 @@ func TestConn(t *testing.T) {
 		return client(ctx, serverAddr, &clientWG)
 	})
 
+	server := newTestServer()
+	ctx, cancelConn := context.WithCancel(ctx)
+	defer cancelConn()
 	// Wait for the client to connect and perform the handshake.
-	conn, err := waitForClientConn(ln)
+	netConn, err := waitForClientConn(ln)
 	if err != nil {
 		t.Fatal(err)
 	}
+	conn := server.newConn(
+		ctx,
+		cancelConn,
+		netConn,
+		sql.SessionArgs{ConnResultsBufferSize: 16 << 10},
+		timeutil.Now(),
+	)
 
 	// Run the conn's loop in the background - it will push commands to the
 	// buffer.
 	serveCtx, stopServe := context.WithCancel(ctx)
 	g.Go(func() error {
-		conn.serveImpl(
+		server.serveImpl(
 			serveCtx,
-			func() bool { return false }, /* draining */
-			// sqlServer - nil means don't create a command processor and a write side of the conn
-			nil,
+			conn,
 			&mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+			clusterunique.ID{},
 		)
 		return nil
 	})
@@ -533,17 +544,22 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	return conn.Close(ctx)
 }
 
+func newTestServer() *Server {
+	sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
+	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval)
+	return &Server{
+		tenantMetrics: metrics,
+		execCfg: &sql.ExecutorConfig{
+			Settings: cluster.MakeTestingClusterSettings(),
+		},
+	}
+}
+
 // waitForClientConn blocks until a client connects and performs the pgwire
 // handshake. This emulates what pgwire.Server does.
-func waitForClientConn(ln net.Listener) (*conn, error) {
+func waitForClientConn(ln net.Listener) (net.Conn, error) {
 	conn, _, err := getSessionArgs(ln, false)
-	if err != nil {
-		return nil, err
-	}
-
-	metrics := makeTenantSpecificMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, timeutil.Now(), nil)
-	return pgwireConn, nil
+	return conn, err
 }
 
 // getSessionArgs blocks until a client connects and returns the connection
@@ -1082,26 +1098,26 @@ func TestMaliciousInputs(t *testing.T) {
 				close(errChan)
 			}(tc)
 
-			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
-			metrics := makeTenantSpecificMetrics(sqlMetrics, time.Second /* histogramWindow */)
-
-			conn := newConn(
+			ctx, cancelConn := context.WithCancel(ctx)
+			defer cancelConn()
+			s := newTestServer()
+			conn := s.newConn(
+				ctx,
+				cancelConn,
 				r,
 				// ConnResultsBufferSize - really small so that it overflows
 				// when we produce a few results.
 				sql.SessionArgs{ConnResultsBufferSize: 10},
-				&metrics,
 				timeutil.Now(),
-				nil,
 			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
-			conn.serveImpl(
+			s.serveImpl(
 				ctx,
-				func() bool { return false }, /* draining */
-				nil,                          /* sqlServer */
-				&mon.BoundAccount{},          /* reserved */
+				conn,
+				&mon.BoundAccount{}, /* reserved */
 				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
+				clusterunique.ID{},
 			)
 			if err := <-errChan; err != nil {
 				t.Fatal(err)
@@ -1141,7 +1157,12 @@ func TestReadTimeoutConnExits(t *testing.T) {
 			}
 			defer c.Close()
 
-			readTimeoutConn := NewReadTimeoutConn(c, func() error { return ctx.Err() })
+			readTimeoutConn := &readTimeoutConn{
+				Conn: c,
+				checkExitConds: func() error {
+					return ctx.Err()
+				},
+			}
 			// Assert that reads are performed normally.
 			readBytes := make([]byte, len(expectedRead))
 			if _, err := readTimeoutConn.Read(readBytes); err != nil {

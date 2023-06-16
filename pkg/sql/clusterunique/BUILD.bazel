@@ -11,6 +11,7 @@ go_library(
         "//pkg/util/uint128",
         "@com_github_biogo_store//llrb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
