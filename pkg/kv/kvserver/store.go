@@ -585,18 +585,18 @@ A Replica should be thought of primarily as a State Machine applying commands
 from a replicated log (the log being replicated across the members of the
 Range). The Store's RaftTransport receives Raft messages from Replicas residing
 on other Stores and routes them to the appropriate Replicas via
-Store.HandleRaftRequest (which is part of the RaftMessageHandler interface),
-ultimately resulting in a call to Replica.handleRaftReadyRaftMuLocked, which
-houses the integration with the etcd/raft library (raft.RawNode). This may
-generate Raft messages to be sent to other Stores; these are handed to
-Replica.sendRaftMessages which ultimately hands them to the Store's
-RaftTransport.SendAsync method. Raft uses message passing (not
-request-response), and outgoing messages will use a gRPC stream that differs
-from that used for incoming messages (which makes asymmetric partitions more
-likely in case of stream-specific problems). The steady state is relatively
-straightforward but when Ranges are being reconfigured, an understanding the
-Replica Lifecycle becomes important and upholding the Store's invariants becomes
-more complex.
+Store.HandleRaftRequest (which is part of the IncomingRaftMessageHandler
+interface), ultimately resulting in a call to
+Replica.handleRaftReadyRaftMuLocked, which houses the integration with the
+etcd/raft library (raft.RawNode). This may generate Raft messages to be sent to
+other Stores; these are handed to Replica.sendRaftMessages which ultimately
+hands them to the Store's RaftTransport.SendAsync method. Raft uses message
+passing (not request-response), and outgoing messages will use a gRPC stream
+that differs from that used for incoming messages (which makes asymmetric
+partitions more likely in case of stream-specific problems). The steady state is
+relatively straightforward but when Ranges are being reconfigured, an
+understanding the Replica Lifecycle becomes important and upholding the Store's
+invariants becomes more complex.
 
 A first phenomenon to understand is that of uninitialized Replicas, which is the
 State Machine at applied index zero, i.e. has an empty state. In CockroachDB, an

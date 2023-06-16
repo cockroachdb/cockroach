@@ -2968,7 +2968,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		}
 		tc.Servers[2].RaftTransport().Listen(store2.StoreID(), &unreliableRaftHandler{
 			rangeID:                    repl0.GetRangeID(),
-			RaftMessageHandler:         store2,
+			IncomingRaftMessageHandler: store2,
 			unreliableRaftHandlerFuncs: funcs,
 		})
 
@@ -3103,7 +3103,7 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		}
 		tc.Servers[2].RaftTransport().Listen(store2.StoreID(), &unreliableRaftHandler{
 			rangeID:                    repl0.GetRangeID(),
-			RaftMessageHandler:         store2,
+			IncomingRaftMessageHandler: store2,
 			unreliableRaftHandlerFuncs: funcs,
 		})
 
@@ -3402,7 +3402,7 @@ func TestReplicaTombstone(t *testing.T) {
 		}
 		tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
 			rangeID:                    desc.RangeID,
-			RaftMessageHandler:         store,
+			IncomingRaftMessageHandler: store,
 			unreliableRaftHandlerFuncs: funcs,
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(1))
@@ -3458,7 +3458,7 @@ func TestReplicaTombstone(t *testing.T) {
 		}
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
 			rangeID:                    desc.RangeID,
-			RaftMessageHandler:         store,
+			IncomingRaftMessageHandler: store,
 			unreliableRaftHandlerFuncs: raftFuncs,
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
@@ -3501,8 +3501,8 @@ func TestReplicaTombstone(t *testing.T) {
 		// with a manual replica GC.
 		store, _ := getFirstStoreReplica(t, tc.Server(2), key)
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
-			rangeID:            desc.RangeID,
-			RaftMessageHandler: store,
+			rangeID:                    desc.RangeID,
+			IncomingRaftMessageHandler: store,
 		})
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		repl, err := store.GetReplica(desc.RangeID)
@@ -3540,8 +3540,8 @@ func TestReplicaTombstone(t *testing.T) {
 		// Partition node 2 from all raft communication.
 		store, _ := getFirstStoreReplica(t, tc.Server(2), keyA)
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
-			rangeID:            desc.RangeID,
-			RaftMessageHandler: store,
+			rangeID:                    desc.RangeID,
+			IncomingRaftMessageHandler: store,
 		})
 
 		// We'll move the range from server 2 to 3 and merge key and keyA.
@@ -3621,8 +3621,8 @@ func TestReplicaTombstone(t *testing.T) {
 		}
 		setMinHeartbeat(repl.ReplicaID() + 1)
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
-			rangeID:            desc.RangeID,
-			RaftMessageHandler: store,
+			rangeID:                    desc.RangeID,
+			IncomingRaftMessageHandler: store,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 				dropResp: func(*kvserverpb.RaftMessageResponse) bool {
 					return true
@@ -3730,9 +3730,9 @@ func TestReplicaTombstone(t *testing.T) {
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
 			rangeID:                    lhsDesc.RangeID,
 			unreliableRaftHandlerFuncs: raftFuncs,
-			RaftMessageHandler: &unreliableRaftHandler{
+			IncomingRaftMessageHandler: &unreliableRaftHandler{
 				rangeID:                    rhsDesc.RangeID,
-				RaftMessageHandler:         store,
+				IncomingRaftMessageHandler: store,
 				unreliableRaftHandlerFuncs: raftFuncs,
 			},
 		})

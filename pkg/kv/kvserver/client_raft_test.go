@@ -919,8 +919,8 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	log.Infof(ctx, "test: installing unreliable Raft transports")
 	for _, s := range []int{0, 1, 2} {
 		h := &unreliableRaftHandler{
-			rangeID:            partRepl.RangeID,
-			RaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
+			rangeID:                    partRepl.RangeID,
+			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 		}
 		if s != partStore {
 			// Only filter messages from the partitioned store on the other
@@ -1029,8 +1029,8 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	log.Infof(ctx, "test: removing the partition")
 	for _, s := range []int{0, 1, 2} {
 		tc.Servers[s].RaftTransport().Listen(tc.Target(s).StoreID, &unreliableRaftHandler{
-			rangeID:            partRepl.RangeID,
-			RaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
+			rangeID:                    partRepl.RangeID,
+			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
@@ -1149,9 +1149,9 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	for _, i := range []int{0, 1, 2} {
 		store := tc.GetFirstStoreFromServer(t, i)
 		h := &unreliableRaftHandler{
-			name:               fmt.Sprintf("store %d", i),
-			rangeID:            rngDesc.RangeID,
-			RaftMessageHandler: store,
+			name:                       fmt.Sprintf("store %d", i),
+			rangeID:                    rngDesc.RangeID,
+			IncomingRaftMessageHandler: store,
 		}
 		if i != partitionNodeIdx {
 			// Only filter messages from the partitioned store on the other two
@@ -1262,9 +1262,9 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	// believing that it is the leader, and lease acquisition requests block.
 	log.Infof(ctx, "test: removing partition")
 	slowSnapHandler := &slowSnapRaftHandler{
-		rangeID:            rngDesc.RangeID,
-		waitCh:             make(chan struct{}),
-		RaftMessageHandler: partitionStore,
+		rangeID:                    rngDesc.RangeID,
+		waitCh:                     make(chan struct{}),
+		IncomingRaftMessageHandler: partitionStore,
 	}
 	defer slowSnapHandler.unblock()
 	partitionStore.Transport().Listen(partitionStore.Ident.StoreID, slowSnapHandler)
@@ -3038,7 +3038,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 
 type noConfChangeTestHandler struct {
 	rangeID roachpb.RangeID
-	kvserver.RaftMessageHandler
+	kvserver.IncomingRaftMessageHandler
 }
 
 func (ncc *noConfChangeTestHandler) HandleRaftRequest(
@@ -3069,7 +3069,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 			}
 		}
 	}
-	return ncc.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+	return ncc.IncomingRaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }
 
 func (ncc *noConfChangeTestHandler) HandleRaftResponse(
@@ -3083,7 +3083,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftResponse(
 			return nil
 		}
 	}
-	return ncc.RaftMessageHandler.HandleRaftResponse(ctx, resp)
+	return ncc.IncomingRaftMessageHandler.HandleRaftResponse(ctx, resp)
 }
 
 func TestReplicaGCRace(t *testing.T) {
@@ -3108,8 +3108,8 @@ func TestReplicaGCRace(t *testing.T) {
 	// Prevent the victim replica from processing configuration changes.
 	tc.Servers[2].RaftTransport().Stop(toStore.Ident.StoreID)
 	tc.Servers[2].RaftTransport().Listen(toStore.Ident.StoreID, &noConfChangeTestHandler{
-		rangeID:            desc.RangeID,
-		RaftMessageHandler: toStore,
+		rangeID:                    desc.RangeID,
+		IncomingRaftMessageHandler: toStore,
 	})
 
 	repl, err := leaderStore.GetReplica(desc.RangeID)
@@ -4242,7 +4242,7 @@ func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 	require.NoError(t, err)
 	tc.Servers[1].RaftTransport().Listen(s2.StoreID(), &unreliableRaftHandler{
 		rangeID:                    desc.RangeID,
-		RaftMessageHandler:         s2,
+		IncomingRaftMessageHandler: s2,
 		unreliableRaftHandlerFuncs: handlerFuncs,
 	})
 
@@ -4732,8 +4732,8 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		tc.Servers[i].RaftTransport().Listen(tc.Target(i).StoreID, &unreliableRaftHandler{
-			rangeID:            ri.Desc.RangeID,
-			RaftMessageHandler: tc.GetFirstStoreFromServer(t, i),
+			rangeID:                    ri.Desc.RangeID,
+			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, i),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					return rand.Intn(2) == 0
