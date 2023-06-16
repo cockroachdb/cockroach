@@ -475,7 +475,7 @@ fi`,
 			waitCmd,                   // [5]
 		)
 
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, runOptsWithDebugName(false, "kill"))
 	}, WithDisplay(display), WithRetryOpts(nil)) // Disable SSH Retries
 }
 
@@ -507,7 +507,7 @@ sudo rm -fr logs &&
 				cmd += "sudo rm -fr tenant-certs* ;\n"
 			}
 		}
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, runOptsWithDebugName(false, "wipe"))
 	}, WithDisplay(display))
 }
 
@@ -539,7 +539,7 @@ else
   echo ${out}
 fi
 `
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, runOptsWithDebugName(false, "status"))
 	}, WithDisplay(display))
 
 	if err != nil {
@@ -687,6 +687,7 @@ done
 				return
 			}
 
+			// This is the exception to funneling all SSH traffic through `c.runCmdOnSingleNode`
 			sess := c.newSession(l, node, buf.String(), withDebugDisabled())
 			defer sess.Close()
 
@@ -769,18 +770,28 @@ func newRunResultDetails(node Node, err error) *RunResultDetails {
 	return &res
 }
 
+// RunCmdOptions is used to configure the behavior of `runCmdOnSingleNode`
+type RunCmdOptions struct {
+	separateErrOutput       bool
+	includeRoachprodEnvVars bool
+	stdin                   io.Reader
+	stdout, stderr          io.Writer
+	remoteOptions           []remoteSessionOption
+}
+
+func runOptsWithDebugName(separateErrOutput bool, debugName string) RunCmdOptions {
+	return RunCmdOptions{
+		separateErrOutput: separateErrOutput,
+		remoteOptions:     []remoteSessionOption{withDebugName(debugName)},
+	}
+}
+
 // runCmdOnSingleNode runs a command on a single node
 // `combined` controls whether the stdout and stderr are combined into `RunResultDetails.CombinedOut`.
 // `withEnvVars` controls whether the command is run with the ROACHPROD env variable, and
 // should be true for all user commands.
 func (c *SyncedCluster) runCmdOnSingleNode(
-	ctx context.Context,
-	l *logger.Logger,
-	node Node,
-	cmd string,
-	combined, withEnvVars bool,
-	stdin io.Reader,
-	stdout, stderr io.Writer,
+	ctx context.Context, l *logger.Logger, node Node, cmd string, opts RunCmdOptions,
 ) (*RunResultDetails, error) {
 	// Argument template expansion is node specific (e.g. for {store-dir}).
 	e := expander{
@@ -788,7 +799,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	}
 	expandedCmd, err := e.expand(ctx, l, c, cmd)
 	if err != nil {
-		return newRunResultDetails(node, err), err
+		return nil, errors.WithDetailf(err, "error expanding command: %s", cmd)
 	}
 
 	nodeCmd := expandedCmd
@@ -800,7 +811,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	//
 	// That command should return immediately. And a "roachprod status" should
 	// reveal that the sleep command is running on the cluster.
-	if withEnvVars {
+	if opts.includeRoachprodEnvVars {
 		envVars := append([]string{
 			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)), "GOTRACEBACK=crash",
 		}, config.DefaultEnvVars()...)
@@ -810,36 +821,39 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 			nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
 		}
 	}
-	sess := c.newSession(l, node, nodeCmd, withDebugName(GenFilenameFromArgs(20, expandedCmd)))
+
+	// This default can be overridden by the caller, and is hence specified first
+	sessionOpts := []remoteSessionOption{withDebugName(GenFilenameFromArgs(20, expandedCmd))}
+	sess := c.newSession(l, node, nodeCmd, append(sessionOpts, opts.remoteOptions...)...)
 	defer sess.Close()
 
-	if stdin != nil {
-		sess.SetStdin(stdin)
+	if opts.stdin != nil {
+		sess.SetStdin(opts.stdin)
 	}
-	if stdout == nil {
-		stdout = io.Discard
+	if opts.stdout == nil {
+		opts.stdout = io.Discard
 	}
-	if stderr == nil {
-		stderr = io.Discard
+	if opts.stderr == nil {
+		opts.stderr = io.Discard
 	}
 
 	var res *RunResultDetails
-	if combined {
-		out, cmdErr := sess.CombinedOutput(ctx)
-		res = newRunResultDetails(node, cmdErr)
-		res.CombinedOut = string(out)
-	} else {
+	if opts.separateErrOutput {
 		// We stream the output if running on a single node.
 		var stdoutBuffer, stderrBuffer bytes.Buffer
 
-		multStdout := io.MultiWriter(&stdoutBuffer, stdout)
-		multStderr := io.MultiWriter(&stderrBuffer, stderr)
+		multStdout := io.MultiWriter(&stdoutBuffer, opts.stdout)
+		multStderr := io.MultiWriter(&stderrBuffer, opts.stderr)
 		sess.SetStdout(multStdout)
 		sess.SetStderr(multStderr)
 
 		res = newRunResultDetails(node, sess.Run(ctx))
 		res.Stderr = stderrBuffer.String()
 		res.Stdout = stdoutBuffer.String()
+	} else {
+		out, cmdErr := sess.CombinedOutput(ctx)
+		res = newRunResultDetails(node, cmdErr)
+		res.CombinedOut = string(out)
 	}
 
 	if res.Err != nil {
@@ -876,7 +890,13 @@ func (c *SyncedCluster) Run(
 	}
 
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, !stream, true, nil, stdout, stderr)
+		opts := RunCmdOptions{
+			separateErrOutput:       stream,
+			includeRoachprodEnvVars: true,
+			stdout:                  stdout,
+			stderr:                  stderr,
+		}
+		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
 	}, append(opts, WithDisplay(display))...)
 
@@ -930,7 +950,13 @@ func (c *SyncedCluster) RunWithDetails(
 
 	// Failing slow here allows us to capture the output of all nodes even if one fails with a command error.
 	resultPtrs, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, false, true, nil, l.Stdout, l.Stderr)
+		opts := RunCmdOptions{
+			separateErrOutput:       true,
+			includeRoachprodEnvVars: true,
+			stdout:                  l.Stdout,
+			stderr:                  l.Stderr,
+		}
+		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
 	}, WithDisplay(display), WithWaitOnFail())
 
@@ -984,8 +1010,9 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		res := &RunResultDetails{Node: node}
 		var err error
 		cmd := "test -e /mnt/data1/.roachprod-initialized"
+		opts := runOptsWithDebugName(false, "wait-init")
 		for j := 0; j < 600; j++ {
-			res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
+			res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 			if err != nil {
 				return nil, err
 			}
@@ -1049,7 +1076,7 @@ test -f .ssh/id_rsa || \
 tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 `
 
-		return c.runCmdOnSingleNode(ctx, l, n, cmd, false, false, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, n, cmd, runOptsWithDebugName(true, "ssh-gen-key"))
 		//sess := c.newSession(l, 1, cmd, withDebugName("ssh-gen-key"))
 	}, WithDisplay("generating ssh key"))
 
@@ -1061,7 +1088,9 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	// Skip the first node which is where we generated the key.
 	nodes := c.Nodes[1:]
 	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		return c.runCmdOnSingleNode(ctx, l, node, `tar xf -`, true, false, bytes.NewReader(sshTar), nil, nil)
+		runOpts := runOptsWithDebugName(false, "ssh-dist-key")
+		runOpts.stdin = bytes.NewReader(sshTar)
+		return c.runCmdOnSingleNode(ctx, l, node, `tar xf -`, runOpts)
 		//sess := c.newSession(l, node, cmd, withDebugName("ssh-dist-key"))
 	}, WithDisplay("distributing ssh key")); err != nil {
 		return err
@@ -1127,8 +1156,7 @@ for i in {1..20}; do
 done
 exit 1
 `
-		res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, false, false, nil, nil, nil)
-		//sess := c.newSession(l, node, cmd, withDebugName("ssh-scan-hosts"))
+		res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, runOptsWithDebugName(true, "ssh-scan-hosts"))
 		if err != nil {
 			return nil, err
 		}
@@ -1173,9 +1201,9 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
         '"'"'{}'"'"' ~` + config.SharedUser + `/.ssh' \;
 fi
 `
-
-		//sess := c.newSession(l, node, cmd, withDebugName("ssh-dist-known-hosts"))
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, bytes.NewReader(providerKnownHostData[provider]), nil, nil)
+		runOpts := runOptsWithDebugName(false, "ssh-dist-known-hosts")
+		runOpts.stdin = bytes.NewReader(providerKnownHostData[provider])
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, runOpts)
 	}, WithDisplay("distributing known_hosts")); err != nil {
 		return err
 	}
@@ -1210,8 +1238,9 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
 fi
 `
 
-			//sess := c.newSession(l, node, cmd, withDebugName("ssh-add-extra-keys"))
-			return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, bytes.NewReader(c.AuthorizedKeys), nil, nil)
+			runOpts := runOptsWithDebugName(false, "ssh-add-extra-keys")
+			runOpts.stdin = bytes.NewReader(c.AuthorizedKeys)
+			return c.runCmdOnSingleNode(ctx, l, node, cmd, runOpts)
 		}, WithDisplay("adding additional authorized keys")); err != nil {
 			return err
 		}
@@ -1266,8 +1295,7 @@ fi
 tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 
-		//sess := c.newSession(l, 1, cmd, withDebugName("init-certs"))
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, runOptsWithDebugName(false, "init-certs"))
 	}, WithDisplay(display)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		exit.WithCode(exit.UnspecifiedError())
@@ -1355,8 +1383,7 @@ fi
 			bundleName,
 		)
 
-		//sess := c.newSession(l, node, cmd, withDebugName("create-tenant-cert-bundle"))
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, nil, nil, nil)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, runOptsWithDebugName(false, "create-tenant-cert-bundle"))
 	}, WithDisplay(display))
 }
 
@@ -1414,7 +1441,9 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	ctx context.Context, l *logger.Logger, path string,
 ) bool {
 	l.Printf("%s: checking %s", c.Name, path)
-	_, err := c.runCmdOnSingleNode(ctx, l, 1, `test -e `+path, true, true, nil, nil, nil)
+	runOpts := runOptsWithDebugName(false, "check-file-exists")
+	runOpts.includeRoachprodEnvVars = true
+	_, err := c.runCmdOnSingleNode(ctx, l, 1, `test -e `+path, runOpts)
 	return err == nil
 }
 
@@ -1469,8 +1498,9 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 			cmd += "tar xf -"
 		}
 
-		//sess := c.newSession(l, node, cmd, withDebugName("dist-local-certs"))
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, true, false, bytes.NewReader(certsTar), nil, nil)
+		runOpts := runOptsWithDebugName(false, "dist-local-certs")
+		runOpts.stdin = bytes.NewReader(certsTar)
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, runOpts)
 	}, WithDisplay(display))
 }
 
