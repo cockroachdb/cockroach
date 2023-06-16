@@ -90,6 +90,12 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 		r.maybeCampaignOnWakeLocked(ctx)
 	}
 
+	st := r.raftSparseStatusRLocked()
+	if st.RaftState == raft.StateLeader {
+		r.mu.lastUpdateTimes.updateOnUnquiesce(
+			r.mu.state.Desc.Replicas().Descriptors(), st.Progress, timeutil.Now())
+	}
+
 	if wakeLeader {
 		// Propose an empty command which will wake the leader.
 		if log.V(3) {
@@ -98,15 +104,8 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 		data := raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, makeIDKey(), nil)
 		_ = r.mu.internalRaftGroup.Propose(data)
 		r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
-	} else {
-		// NB: we omit this when wakeLeader == true for now, to keep the exact same
-		// behavior as maybeUnquiesceAndWakeLeaderLocked().
-		//
-		// NB: we know there's a non-nil RaftStatus because internalRaftGroup isn't nil.
-		r.mu.lastUpdateTimes.updateOnUnquiesce(
-			r.mu.state.Desc.Replicas().Descriptors(), r.raftSparseStatusRLocked().Progress, timeutil.Now(),
-		)
 	}
+
 	return true
 }
 
