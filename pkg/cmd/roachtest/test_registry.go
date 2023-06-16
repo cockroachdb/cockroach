@@ -195,3 +195,7 @@ func (r testRegistryImpl) List(filters []string) []registry.TestSpec {
 	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
 	return tests
 }
+
+func (r testRegistryImpl) Cloud() string {
+	return r.cloud
+}
