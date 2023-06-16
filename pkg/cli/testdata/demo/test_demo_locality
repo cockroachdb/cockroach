@@ -1,0 +1,36 @@
+exec
+demo
+--nodes=3
+--execute=select node_id, locality from crdb_internal.gossip_nodes order by node_id
+----
+node_id	locality
+1	region=us-east1,az=b
+2	region=us-east1,az=c
+3	region=us-east1,az=d
+
+exec
+demo
+--nodes=9
+--execute=select node_id, locality from crdb_internal.gossip_nodes order by node_id
+----
+node_id	locality
+1	region=us-east1,az=b
+2	region=us-east1,az=c
+3	region=us-east1,az=d
+4	region=us-west1,az=a
+5	region=us-west1,az=b
+6	region=us-west1,az=c
+7	region=europe-west1,az=b
+8	region=europe-west1,az=c
+9	region=europe-west1,az=d
+
+exec
+demo
+--nodes=3
+--demo-locality=region=us-east1:region=us-east2:region=us-east3
+--execute=select node_id, locality from crdb_internal.gossip_nodes order by node_id
+----
+node_id	locality
+1	region=us-east1
+2	region=us-east2
+3	region=us-east3
