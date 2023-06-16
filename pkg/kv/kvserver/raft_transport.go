@@ -105,9 +105,9 @@ type SnapshotResponseStream interface {
 	Recv() (*kvserverpb.SnapshotRequest, error)
 }
 
-// RaftMessageHandler is the interface that must be implemented by
-// arguments to RaftTransport.Listen.
-type RaftMessageHandler interface {
+// IncomingRaftMessageHandler is the interface that must be implemented by
+// arguments to RaftTransport.ListenIncomingRaftMessages.
+type IncomingRaftMessageHandler interface {
 	// HandleRaftRequest is called for each incoming Raft message. The request is
 	// always processed asynchronously and the response is sent over respStream.
 	// If an error is encountered during asynchronous processing, it will be
@@ -161,8 +161,8 @@ type RaftTransport struct {
 	// is done while holding kvflowControl.mu.
 	queues [rpc.NumConnectionClasses]syncutil.IntMap
 
-	dialer   *nodedialer.Dialer
-	handlers syncutil.IntMap // map[roachpb.StoreID]*RaftMessageHandler
+	dialer                  *nodedialer.Dialer
+	incomingMessageHandlers syncutil.IntMap // map[roachpb.StoreID]*IncomingRaftMessageHandler
 
 	kvflowControl struct {
 		// Everything nested under this struct is used to return flow tokens
@@ -372,9 +372,11 @@ func (t *RaftTransport) queueByteSize() int64 {
 	return size
 }
 
-func (t *RaftTransport) getHandler(storeID roachpb.StoreID) (RaftMessageHandler, bool) {
-	if value, ok := t.handlers.Load(int64(storeID)); ok {
-		return *(*RaftMessageHandler)(value), true
+func (t *RaftTransport) getIncomingRaftMessageHandler(
+	storeID roachpb.StoreID,
+) (IncomingRaftMessageHandler, bool) {
+	if value, ok := t.incomingMessageHandlers.Load(int64(storeID)); ok {
+		return *(*IncomingRaftMessageHandler)(value), true
 	}
 	return nil, false
 }
@@ -410,14 +412,14 @@ func (t *RaftTransport) handleRaftRequest(
 		return nil
 	}
 
-	handler, ok := t.getHandler(req.ToReplica.StoreID)
+	incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(req.ToReplica.StoreID)
 	if !ok {
 		log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
 			req.FromReplica, req.ToReplica)
 		return kvpb.NewError(kvpb.NewStoreNotFoundError(req.ToReplica.StoreID))
 	}
 
-	return handler.HandleRaftRequest(ctx, req, respStream)
+	return incomingMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }
 
 // newRaftMessageResponse constructs a RaftMessageResponse from the
@@ -537,7 +539,7 @@ func (t *RaftTransport) InternalDelegateRaftSnapshot(
 		}
 	}
 	// Get the handler of the sender store.
-	handler, ok := t.getHandler(req.DelegatedSender.StoreID)
+	incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(req.DelegatedSender.StoreID)
 	if !ok {
 		log.Warningf(
 			ctx,
@@ -554,7 +556,7 @@ func (t *RaftTransport) InternalDelegateRaftSnapshot(
 	}
 
 	// Pass off the snapshot request to the sender store.
-	return handler.HandleDelegatedSnapshot(ctx, req)
+	return incomingMessageHandler.HandleDelegatedSnapshot(ctx, req)
 }
 
 // RaftSnapshot handles incoming streaming snapshot requests.
@@ -570,23 +572,25 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 		return stream.Send(snapRespErr(err))
 	}
 	rmr := req.Header.RaftMessageRequest
-	handler, ok := t.getHandler(rmr.ToReplica.StoreID)
+	incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(rmr.ToReplica.StoreID)
 	if !ok {
 		log.Warningf(ctx, "unable to accept Raft message from %+v: no handler registered for %+v",
 			rmr.FromReplica, rmr.ToReplica)
 		return kvpb.NewStoreNotFoundError(rmr.ToReplica.StoreID)
 	}
-	return handler.HandleSnapshot(ctx, req.Header, stream)
+	return incomingMessageHandler.HandleSnapshot(ctx, req.Header, stream)
 }
 
-// Listen registers a raftMessageHandler to receive proxied messages.
-func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler RaftMessageHandler) {
-	t.handlers.Store(int64(storeID), unsafe.Pointer(&handler))
+// ListenIncomingRaftMessages registers a IncomingRaftMessageHandler to receive proxied messages.
+func (t *RaftTransport) ListenIncomingRaftMessages(
+	storeID roachpb.StoreID, handler IncomingRaftMessageHandler,
+) {
+	t.incomingMessageHandlers.Store(int64(storeID), unsafe.Pointer(&handler))
 }
 
-// Stop unregisters a raftMessageHandler.
-func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
-	t.handlers.Delete(int64(storeID))
+// StopIncomingRaftMessages unregisters a IncomingRaftMessageHandler.
+func (t *RaftTransport) StopIncomingRaftMessages(storeID roachpb.StoreID) {
+	t.incomingMessageHandlers.Delete(int64(storeID))
 }
 
 // processQueue opens a Raft client stream and sends messages from the
@@ -611,13 +615,13 @@ func (t *RaftTransport) processQueue(
 						return err
 					}
 					t.metrics.ReverseRcvd.Inc(1)
-					handler, ok := t.getHandler(resp.ToReplica.StoreID)
+					incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(resp.ToReplica.StoreID)
 					if !ok {
 						log.Warningf(ctx, "no handler found for store %s in response %s",
 							resp.ToReplica.StoreID, resp)
 						continue
 					}
-					if err := handler.HandleRaftResponse(ctx, resp); err != nil {
+					if err := incomingMessageHandler.HandleRaftResponse(ctx, resp); err != nil {
 						return err
 					}
 				}
