@@ -10,7 +10,7 @@
 
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { stdDevLong, longToInt } from "src/util";
-import { Duration, Bytes, Percentage } from "src/util/format";
+import { Duration, Bytes, PercentageCustom } from "src/util/format";
 import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
 import { bar, approximify } from "./utils";
@@ -156,6 +156,6 @@ export function workloadPctBarChart(
           : 0,
       ),
     ],
-    v => Percentage(v, 1, 1),
+    v => PercentageCustom(v, 1, 1),
   )(statements, defaultBarChartOptions);
 }

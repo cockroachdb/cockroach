@@ -15,6 +15,7 @@ import {
   HexStringToInt64String,
   FixFingerprintHexValue,
   EncodeUriName,
+  PercentageCustom,
 } from "./format";
 
 describe("Format utils", () => {
@@ -72,6 +73,21 @@ describe("Format utils", () => {
 
     it("decode string with %", () => {
       expect(EncodeUriName("12%abc")).toBe("12%252525abc");
+    });
+  });
+
+  describe("PercentageCustom", () => {
+    it("percentages bigger than 1", () => {
+      assert.equal(PercentageCustom(1, 1, 1), "100.0 %");
+      assert.equal(PercentageCustom(0.1234, 1, 1), "12.3 %");
+      assert.equal(PercentageCustom(0.23432, 1, 1), "23.4 %");
+      assert.equal(PercentageCustom(0.23432, 1, 2), "23.43 %");
+    });
+    it("percentages between 0 and 1", () => {
+      assert.equal(PercentageCustom(0, 1, 1), "0.0 %");
+      assert.equal(PercentageCustom(0.00023, 1, 1), "0.02 %");
+      assert.equal(PercentageCustom(0.0000023, 1, 1), "0.0002 %");
+      assert.equal(PercentageCustom(0.00000000000000004, 1, 1), "~0.0 %");
     });
   });
 });
