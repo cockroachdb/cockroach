@@ -42,7 +42,8 @@ func (env *InteractionEnv) handleRaftState() error {
 		} else {
 			voterStatus = "(Non-Voter)"
 		}
-		fmt.Fprintf(env.Output, "%d: %s %s\n", st.ID, st.RaftState, voterStatus)
+		fmt.Fprintf(env.Output, "%d: %s %s Term:%d Lead:%d\n",
+			st.ID, st.RaftState, voterStatus, st.Term, st.Lead)
 	}
 	return nil
 }
