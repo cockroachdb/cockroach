@@ -1373,6 +1373,10 @@ type ExecutorConfig struct {
 	// compaction concurrency.
 	CompactionConcurrencyFunc eval.SetCompactionConcurrencyFunc
 
+	// GetTableMetricsFunc is used to gather information about sstables that
+	// overlap with a key range for a specified node and store.
+	GetTableMetricsFunc eval.GetTableMetricsFunc
+
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
 	TraceCollector *collector.TraceCollector
