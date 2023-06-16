@@ -94,9 +94,8 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	if st.RaftState == raft.StateLeader {
 		r.mu.lastUpdateTimes.updateOnUnquiesce(
 			r.mu.state.Desc.Replicas().Descriptors(), st.Progress, timeutil.Now())
-	}
 
-	if wakeLeader {
+	} else if st.RaftState == raft.StateFollower && wakeLeader {
 		// Propose an empty command which will wake the leader.
 		if log.V(3) {
 			log.Infof(ctx, "waking %d leader", r.RangeID)
