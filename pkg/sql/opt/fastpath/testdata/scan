@@ -23,20 +23,23 @@ CREATE TABLE xyz (
 )
 ----
 
-placeholder-fast-path
+# --------------------------------------------------
+# PlaceholderSelectFastPath, PlaceholderProjectSelectFastPath
+# --------------------------------------------------
+
+fast-path
 SELECT * FROM kv WHERE k = $1
 ----
 placeholder-scan kv
  ├── columns: k:1!null v:2
  ├── cardinality: [0 - 1]
  ├── has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
  └── span
       └── $1
 
-placeholder-fast-path
+fast-path
 SELECT * FROM kv WHERE k = $1 FOR UPDATE
 ----
 placeholder-scan kv
@@ -44,59 +47,55 @@ placeholder-scan kv
  ├── locking: for-update
  ├── cardinality: [0 - 1]
  ├── volatile, has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
  └── span
       └── $1
 
-placeholder-fast-path
+fast-path
 SELECT k FROM kv WHERE k = $1
 ----
 placeholder-scan kv
  ├── columns: k:1!null
  ├── cardinality: [0 - 1]
  ├── has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1)
  └── span
       └── $1
 
-placeholder-fast-path
+fast-path
 SELECT k FROM kv WHERE k IN ($1)
 ----
 placeholder-scan kv
  ├── columns: k:1!null
  ├── cardinality: [0 - 1]
  ├── has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1)
  └── span
       └── $1
 
-placeholder-fast-path
+fast-path
 SELECT v FROM kv WHERE k = $1
 ----
 placeholder-scan kv
  ├── columns: v:2
  ├── cardinality: [0 - 1]
  ├── has-placeholder
- ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(2)
  └── span
       └── $1
 
 # Fast path not available when we're projecting a new expression.
-placeholder-fast-path
+fast-path
 SELECT v+1 FROM kv WHERE k = $1
 ----
 no fast path
 
 # The fast path should not kick in because the estimated row count is too high.
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=$1 AND b=$2
 ----
 no fast path
@@ -114,123 +113,116 @@ ALTER TABLE abcd INJECT STATISTICS '[
 ----
 
 # The fast path should now kick in.
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=$1 AND b=$2
 ----
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=1.1, distinct(1)=1.1, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── $1
       └── $2
 
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE b=$1 AND a=$2
 ----
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=1.1, distinct(1)=1.1, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── $2
       └── $1
 
 # One constant value, one placeholder.
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=0 AND b=$1
 ----
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, distinct(2)=0.666, null(2)=0, distinct(1,2)=0.666, null(1,2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── 0
       └── $1
 
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=$1 AND b=0
 ----
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=3.3, distinct(1)=3.3, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── $1
       └── 0
 
 # Constant folding is allowed (for immutable operators).
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=1+2 AND b=$1
 ----
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, distinct(2)=0.666, null(2)=0, distinct(1,2)=0.666, null(1,2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── 3
       └── $1
 
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=fnv32a('foo') AND b=$1
 ----
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, distinct(2)=0.666, null(2)=0, distinct(1,2)=0.666, null(1,2)=0]
  ├── fd: ()-->(1,2)
  └── span
       ├── 2851307223
       └── $1
 
 # Fast path not available when value is not constant-foldable.
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=now()::string::int AND b=$1
 ----
 no fast path
 
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=0 AND b=$1+1
 ----
 no fast path
 
 # Fast path not available when we have an ordering requirement.
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=$1 AND b=$2 ORDER BY c
 ----
 no fast path
 
 # Fast path not available when we have a limit.
-placeholder-fast-path
+fast-path
 SELECT a, b, c FROM abcd WHERE a=$1 AND b=$2 LIMIT 1
 ----
 no fast path
 
 # Fast path not available when index is not covering.
-placeholder-fast-path
+fast-path
 SELECT a, b, c, d FROM abcd WHERE a=$1 AND b=$2
 ----
 no fast path
 
 # Fast path not available when two indexes are possible.
-placeholder-fast-path
+fast-path
 SELECT d FROM abcd WHERE d=$1 AND c=$2
 ----
 no fast path
 
 # Now we have only one covering index.
-placeholder-fast-path
+fast-path
 SELECT a, d FROM abcd WHERE d=$1 AND c=$2
 ----
 placeholder-scan abcd@abcd_d_c_a_idx
  ├── columns: a:1 d:4!null
  ├── has-placeholder
- ├── stats: [rows=1.0989]
  ├── fd: ()-->(4)
  └── span
       ├── $1
@@ -245,7 +237,7 @@ CREATE TABLE kj (
 ----
 
 # Verify that we don't incorrectly use an inverted index.
-placeholder-fast-path
+fast-path
 SELECT j FROM kj WHERE j = '{"foo": "bar"}'::JSON
 ----
 no fast path
@@ -277,26 +269,25 @@ ALTER TABLE partial1 INJECT STATISTICS '[
 
 # Make sure the fast path doesn't choose the cab index, getting in the way of
 # using partial_ab (which might be the better index when the placeholder is 0).
-placeholder-fast-path
+fast-path
 SELECT a, b FROM partial1 WHERE c = $1
 ----
 no fast path
 
 # Ok to ignore the partial index when the filters don't involve predicate
 # columns; and, ok to use a pseudo-partial index.
-placeholder-fast-path
+fast-path
 SELECT a, b FROM partial1 WHERE a = $1
 ----
 placeholder-scan partial1@pseudo_ab,partial
  ├── columns: a:2!null b:3
  ├── has-placeholder
- ├── stats: [rows=3.3, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(2)
  └── span
       └── $1
 
 # Regression test for #64765 - we cannot constrain both columns.
-placeholder-fast-path
+fast-path
 SELECT * FROM xyz WHERE x = $1 AND y = $2
 ----
 no fast path
@@ -309,19 +300,18 @@ CREATE TABLE t_dec (a DECIMAL NOT NULL PRIMARY KEY, b INT);
 
 # TODO(rytaft): We may be able to use the placeholder fast path for
 # this case if we add logic similar to UnifyComparisonTypes.
-placeholder-fast-path
+fast-path
 SELECT * FROM t_dec WHERE a = $1::INT8;
 ----
 no fast path
 
-placeholder-fast-path
+fast-path
 SELECT * FROM t_dec WHERE a = $1;
 ----
 placeholder-scan t_dec
  ├── columns: a:1!null b:2
  ├── cardinality: [0 - 1]
  ├── immutable, has-placeholder
- ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1,2)
  └── span

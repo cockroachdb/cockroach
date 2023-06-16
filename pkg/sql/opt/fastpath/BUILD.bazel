@@ -1,0 +1,64 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "fastpath",
+    srcs = [
+        "fast_path.go",
+        "fast_path_funcs.go",
+        ":gen-fastpath",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/fastpath",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/props/physical",  # keep
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/types",
+        "//pkg/util/errorutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "fastpath_test",
+    srcs = ["fast_path_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/testutils/opttester",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)
+
+# Define a file group for all the fast-path rules.
+rules = filegroup(
+    name = "rules",
+    srcs = glob(["rules/*.opt"]),
+    visibility = ["//visibility:public"],
+)
+
+# Define a generator for fast-path rules.
+genrule(
+    name = "gen-fastpath",
+    srcs = [
+        "//pkg/sql/opt:ops",
+        ":rules",
+    ],
+    outs = ["fast_path.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ fastpath $(locations //pkg/sql/opt:ops) $(locations :rules)
+    """,
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)

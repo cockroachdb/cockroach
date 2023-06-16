@@ -7,7 +7,7 @@ define True {}
 [Name]
 (True) => (True)
 ----
-test.opt:3:1: Name rule is missing "Normalize" or "Explore" tag
+test.opt:3:1: Name rule is missing "Normalize", "Explore", or "FastPath" tag
 
 #
 # Ensure that there is only one private field in define, and it is after the
