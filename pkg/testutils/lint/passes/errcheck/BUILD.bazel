@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -20,5 +19,3 @@ genrule(
     outs = ["errcheck_excludes.txt"],
     cmd = "cp $< $@",
 )
-
-get_x_data(name = "get_x_data")

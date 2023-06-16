@@ -1,1 +1,0 @@
-# gazelle:go_visibility //build/bazelutil/unused_checker:__pkg__
