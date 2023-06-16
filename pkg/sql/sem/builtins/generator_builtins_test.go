@@ -12,13 +12,18 @@ package builtins
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,4 +57,50 @@ func TestConcurrentProcessorsReadEpoch(t *testing.T) {
 		require.Equal(t, exp, got)
 		exp++
 	}
+}
+
+func TestGetSSTableMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ts, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
+
+	nodeIDArg := 1
+	storeIDArg := int(ts.GetFirstStoreID())
+
+	r := sqlutils.MakeSQLRunner(hostDB)
+	r.Exec(t, `CREATE TABLE t(k INT PRIMARY KEY, v INT)`)
+	r.Exec(t, `INSERT INTO t SELECT i, i*10 FROM generate_series(1, 10000) AS g(i)`)
+
+	r.Exec(t, fmt.Sprintf(`
+	 SELECT crdb_internal.compact_engine_span(
+		 %d, %d,
+		 (SELECT raw_start_key FROM [SHOW RANGES FROM TABLE t WITH KEYS] LIMIT 1),
+		 (SELECT raw_end_key FROM [SHOW RANGES FROM TABLE t WITH KEYS] LIMIT 1))`,
+		nodeIDArg, storeIDArg))
+
+	rows := r.Query(t, fmt.Sprintf(`
+	 SELECT * FROM crdb_internal.sstable_metrics(
+		 %d, %d,
+		 (SELECT raw_start_key FROM [SHOW RANGES FROM TABLE t WITH KEYS] LIMIT 1),
+		 (SELECT raw_end_key FROM [SHOW RANGES FROM TABLE t WITH KEYS] LIMIT 1))`,
+		nodeIDArg, storeIDArg))
+
+	count := 0
+	for rows.Next() {
+		var nodeID int
+		var storeID int
+		var level int
+		var fileNum int
+		var metrics []byte
+
+		require.NoError(t, rows.Scan(&nodeID, &storeID, &level, &fileNum, &metrics))
+		require.NoError(t, json.Unmarshal(metrics, &enginepb.SSTableMetricsInfo{}))
+		require.Equal(t, nodeID, nodeIDArg)
+		require.Equal(t, storeID, storeIDArg)
+		count++
+	}
+	require.Equal(t, 1, count)
 }
