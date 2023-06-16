@@ -146,6 +146,9 @@ func buildAndPublishWorkload(providers []release.ObjectPutGetter, o opts, execFn
 		log.Fatal(err)
 	}
 	o.AbsolutePath = filepath.Join(o.PkgDir, "bin", "workload")
+	if o.Platform == release.PlatformLinuxArm {
+		o.AbsolutePath += release.SuffixFromPlatform(o.Platform)
+	}
 	for _, provider := range providers {
 		release.PutNonRelease(
 			provider,
