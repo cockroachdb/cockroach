@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load(
     "//pkg/util/log/eventpb:PROTOS.bzl",
     _EVENTPB_PROTOS = "EVENTPB_PROTOS",
@@ -122,5 +121,3 @@ genrule(
         "//pkg/gen:__pkg__",
     ],
 )
-
-get_x_data(name = "get_x_data")

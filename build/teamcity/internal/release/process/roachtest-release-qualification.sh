@@ -26,7 +26,7 @@ mkdir -p "$artifacts"
 
 if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
   tarball_platform="linux-amd64-fips"
-  fips_flag="--fips"
+  fips_flag="--metamorphic-fips-probability 1"
 else
   tarball_platform="linux-amd64"
   fips_flag=""
