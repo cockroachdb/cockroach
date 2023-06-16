@@ -282,6 +282,20 @@ func (r *Replica) LastAssignedLeaseIndex() kvpb.LeaseAppliedIndex {
 	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
 }
 
+// Campaign campaigns the replica.
+func (r *Replica) Campaign(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.campaignLocked(ctx)
+}
+
+// ForceCampaign force-campaigns the replica.
+func (r *Replica) ForceCampaign(ctx context.Context) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.forceCampaignLocked(ctx)
+}
+
 // LastAssignedLeaseIndexRLocked is like LastAssignedLeaseIndex, but requires
 // b.mu to be held in read mode.
 func (b *propBuf) LastAssignedLeaseIndexRLocked() kvpb.LeaseAppliedIndex {

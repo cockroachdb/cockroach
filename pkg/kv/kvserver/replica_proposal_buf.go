@@ -162,6 +162,7 @@ type proposer interface {
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
 	registerProposalLocked(*ProposalData)
+	campaignLocked(ctx context.Context)
 	// rejectProposalWithRedirectLocked rejects a proposal and redirects the
 	// proposer to try it on another node. This is used to sometimes reject lease
 	// acquisitions when another replica is the leader; the intended consequence
@@ -670,9 +671,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 			b.p.rejectProposalWithRedirectLocked(ctx, p, li.leader)
 			if b.p.shouldCampaignOnRedirect(raftGroup) {
 				log.VEventf(ctx, 2, "campaigning because Raft leader not live in node liveness map")
-				if err := raftGroup.Campaign(); err != nil {
-					log.VEventf(ctx, 1, "failed to campaign: %s", err)
-				}
+				b.p.campaignLocked(ctx)
 			}
 			return true
 		}
@@ -1338,6 +1337,10 @@ func (rp *replicaProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool
 		r.shouldUseExpirationLeaseRLocked(),
 		r.store.Clock().Now(),
 	)
+}
+
+func (rp *replicaProposer) campaignLocked(ctx context.Context) {
+	(*Replica)(rp).campaignLocked(ctx)
 }
 
 func (rp *replicaProposer) flowControlHandle(ctx context.Context) kvflowcontrol.Handle {

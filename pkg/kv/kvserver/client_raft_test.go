@@ -5933,6 +5933,161 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 	}
 }
 
+// TestRaftCampaignPreVoteCheckQuorum tests that campaignLocked() respects
+// PreVote+CheckQuorum, by not granting prevotes if there is an active leader.
+func TestRaftCampaignPreVoteCheckQuorum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	skip.UnderDeadlock(t)
+	skip.UnderStressRace(t)
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				RaftEnableCheckQuorum: true,
+				RaftTickInterval:      100 * time.Millisecond, // speed up test
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	logStatus := func(s *raft.Status) {
+		t.Helper()
+		require.NotNil(t, s)
+		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
+	}
+
+	sender := tc.GetFirstStoreFromServer(t, 0).TestSender()
+
+	// Create a range, upreplicate it, and replicate a write.
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	_, pErr := kv.SendWrapped(ctx, sender, incrementArgs(key, 1))
+	require.NoError(t, pErr.GoError())
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+
+	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl2, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repls := []*kvserver.Replica{repl1, repl2, repl3}
+
+	// Make sure n1 is leader.
+	initialStatus := repl1.RaftStatus()
+	require.Equal(t, raft.StateLeader, initialStatus.RaftState)
+	logStatus(initialStatus)
+	t.Logf("n1 is leader")
+
+	// Campaign n3. It shouldn't win prevotes, reverting to follower
+	// in the current term.
+	repl3.Campaign(ctx)
+	t.Logf("n3 campaigning")
+
+	require.Eventually(t, func() bool {
+		status := repl3.RaftStatus()
+		logStatus(status)
+		return status.RaftState == raft.StateFollower
+	}, 10*time.Second, 500*time.Millisecond)
+	t.Logf("n3 reverted to follower")
+
+	// n1 should still be the leader in the same term, with n2 and n3 followers.
+	for _, repl := range repls {
+		st := repl.RaftStatus()
+		logStatus(st)
+		if st.ID == 1 {
+			require.Equal(t, raft.StateLeader, st.RaftState)
+		} else {
+			require.Equal(t, raft.StateFollower, st.RaftState)
+		}
+		require.Equal(t, initialStatus.Term, st.Term)
+	}
+}
+
+// TestRaftForceCampaignPreVoteCheckQuorum tests that forceCampaignLocked()
+// ignores PreVote+CheckQuorum, transitioning directly to candidate and bumping
+// the term. It may not actually win or hold onto leadership, but bumping the
+// term is proof enough that it called an election.
+func TestRaftForceCampaignPreVoteCheckQuorum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	skip.UnderDeadlock(t)
+	skip.UnderStressRace(t)
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				RaftEnableCheckQuorum:      true,
+				RaftTickInterval:           200 * time.Millisecond, // speed up test
+				RaftHeartbeatIntervalTicks: 10,                     // allow n3 to win the election
+				RaftElectionTimeoutTicks:   20,
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	logStatus := func(s *raft.Status) {
+		t.Helper()
+		require.NotNil(t, s)
+		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
+	}
+
+	sender := tc.GetFirstStoreFromServer(t, 0).TestSender()
+
+	// Create a range, upreplicate it, and replicate a write.
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	_, pErr := kv.SendWrapped(ctx, sender, incrementArgs(key, 1))
+	require.NoError(t, pErr.GoError())
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+
+	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl2, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repls := []*kvserver.Replica{repl1, repl2, repl3}
+
+	// Make sure n1 is leader.
+	initialStatus := repl1.RaftStatus()
+	require.Equal(t, raft.StateLeader, initialStatus.RaftState)
+	logStatus(initialStatus)
+	t.Logf("n1 is leader in term %d", initialStatus.Term)
+
+	// Force-campaign n3. It may not win or hold onto leadership, but it's enough
+	// to know that it bumped the term.
+	repl3.ForceCampaign(ctx)
+	t.Logf("n3 campaigning")
+
+	var leaderStatus *raft.Status
+	require.Eventually(t, func() bool {
+		for _, repl := range repls {
+			st := repl.RaftStatus()
+			logStatus(st)
+			if st.Term <= initialStatus.Term {
+				return false
+			}
+			if st.RaftState == raft.StateLeader {
+				leaderStatus = st
+			}
+		}
+		return leaderStatus != nil
+	}, 10*time.Second, 500*time.Millisecond)
+	t.Logf("n%d is leader, with bumped term %d", leaderStatus.ID, leaderStatus.Term)
+}
+
 // TestRaftPreVote tests that Raft PreVote works properly, including the recent
 // leader check only enabled via CheckQuorum. Specifically, a replica that's
 // partitioned away from the leader (or restarted) should not be able to call an
@@ -6323,4 +6478,107 @@ func TestRaftCheckQuorum(t *testing.T) {
 			require.Equal(t, leaderStatus.Term, finalStatus.Term)
 		})
 	})
+}
+
+// TestRaftLeaderRemovesItself tests that when a raft leader removes itself via
+// a conf change the leaseholder campaigns for leadership, ignoring
+// PreVote+CheckQuorum and transitioning directly to candidate.
+//
+// We set up three replicas:
+//
+// n1: Raft leader
+// n2: follower
+// n3: follower + leaseholder
+//
+// We disable leader following the leaseholder (which would otherwise transfer
+// leadership if we happened to tick during the conf change), and then remove n1
+// from the range. n3 should acquire leadership.
+//
+// We disable election timeouts, such that the only way n3 can become leader is
+// by campaigning explicitly. Furthermore, it must skip pre-votes, since with
+// PreVote+CheckQuorum n2 wouldn't vote for it (it would think n1 was still the
+// leader).
+func TestRaftLeaderRemovesItself(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	skip.UnderDeadlock(t)
+	skip.UnderStressRace(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				RaftEnableCheckQuorum: true,
+				RaftTickInterval:      100 * time.Millisecond, // speed up test
+				// Set a large election timeout. We don't want replicas to call
+				// elections due to timeouts, we want them to campaign and obtain
+				// votes despite PreVote+CheckQuorum.
+				RaftElectionTimeoutTicks: 200,
+			},
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					DisableLeaderFollowsLeaseholder: true, // the leader should stay put
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	logStatus := func(s *raft.Status) {
+		t.Helper()
+		require.NotNil(t, s)
+		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
+	}
+
+	send1 := tc.GetFirstStoreFromServer(t, 0).TestSender()
+	send3 := tc.GetFirstStoreFromServer(t, 2).TestSender()
+
+	// Create a range, upreplicate it, and replicate a write.
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	_, pErr := kv.SendWrapped(ctx, send1, incrementArgs(key, 1))
+	require.NoError(t, pErr.GoError())
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+
+	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl2, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+
+	// Move the lease to n3, and make sure everyone has applied it.
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+	require.Eventually(t, func() bool {
+		lease, _ := repl3.GetLease()
+		return lease.Replica.ReplicaID == repl3.ReplicaID()
+	}, 10*time.Second, 500*time.Millisecond)
+	_, pErr = kv.SendWrapped(ctx, send3, incrementArgs(key, 1))
+	require.NoError(t, pErr.GoError())
+	tc.WaitForValues(t, key, []int64{2, 2, 2})
+	t.Logf("n3 has lease")
+
+	// Make sure n1 is still leader.
+	st := repl1.RaftStatus()
+	require.Equal(t, raft.StateLeader, st.RaftState)
+	logStatus(st)
+
+	// Remove n1 and wait for n3 to become leader.
+	tc.RemoveVotersOrFatal(t, key, tc.Target(0))
+	t.Logf("n1 removed from range")
+
+	require.Eventually(t, func() bool {
+		logStatus(repl2.RaftStatus())
+		logStatus(repl3.RaftStatus())
+		if repl3.RaftStatus().RaftState == raft.StateLeader {
+			t.Logf("n3 is leader")
+			return true
+		}
+		return false
+	}, 10*time.Second, 500*time.Millisecond)
 }
