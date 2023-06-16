@@ -12,13 +12,16 @@ package builtins
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,5 +54,45 @@ func TestConcurrentProcessorsReadEpoch(t *testing.T) {
 		require.NoError(t, rows.Scan(&got))
 		require.Equal(t, exp, got)
 		exp++
+	}
+}
+
+func TestGetSSTableMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ts, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(ctx)
+
+	r := sqlutils.MakeSQLRunner(hostDB)
+	r.Exec(t, `CREATE TABLE t(k INT PRIMARY KEY, v INT)`)
+	r.Exec(t, `INSERT INTO t SELECT i, i*10 FROM generate_series(1, 10000) AS g(i)`)
+
+	nodeId := 1
+	storeId := ts.GetFirstStoreID()
+	startKey := "e'\"xfe'"
+	endKey := "e'\"xff'"
+
+	r.Exec(t, fmt.Sprintf("SELECT crdb_internal.compact_engine_span(%d, %d, %s, %s)", nodeId, storeId, startKey, endKey))
+	rows := r.Query(t, fmt.Sprintf("SELECT * FROM crdb_internal.sstable_metrics(%d, %d, %v, %v)", nodeId, storeId, startKey, endKey))
+
+	//payload := &jobspb.Payload{}
+	//if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+	//	t.Fatal("cannot unmarshal job payload from system.jobs")
+	//}
+
+	n := 0
+	for rows.Next() {
+		n += 1
+		var nodeID int
+		var storeID int
+		var level int
+		var fileNum int
+		var metrics []byte
+
+		if err := rows.Scan(&nodeID, &storeID, &level, &fileNum, &metrics); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
