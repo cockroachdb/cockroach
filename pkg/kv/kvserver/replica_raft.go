@@ -668,13 +668,14 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 			st := r.raftBasicStatusRLocked()
 			hasLeader := st.RaftState == raft.StateFollower && st.Lead != 0
 			fromLeader := uint64(req.FromReplica.ReplicaID) == st.Lead
+
+			var wakeLeader, mayCampaign bool
 			if hasLeader && !fromLeader {
 				// TODO(erikgrinaker): This is likely to result in election ties, find
 				// some way to avoid that.
-				r.maybeUnquiesceAndWakeLeaderLocked()
-			} else {
-				r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
+				wakeLeader, mayCampaign = true, true
 			}
+			r.maybeUnquiesceWithOptionsLocked(wakeLeader, mayCampaign)
 		}
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
 		if req.Message.Type == raftpb.MsgSnap {
@@ -2117,7 +2118,7 @@ func (r *Replica) withRaftGroupLocked(
 		unquiesce = true
 	}
 	if unquiesce {
-		r.maybeUnquiesceAndWakeLeaderLocked()
+		r.maybeUnquiesceWithOptionsLocked(true /* wakeLeader */, true /* mayCampaign */)
 	}
 	return err
 }
