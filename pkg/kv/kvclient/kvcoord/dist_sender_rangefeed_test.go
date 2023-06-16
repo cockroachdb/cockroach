@@ -192,6 +192,7 @@ func rangeFeed(
 	startFrom hlc.Timestamp,
 	onValue func(event kvcoord.RangeFeedMessage),
 	useMuxRangeFeed bool,
+	opts ...kvcoord.RangeFeedOption,
 ) func() {
 	ds := dsI.(*kvcoord.DistSender)
 	events := make(chan kvcoord.RangeFeedMessage)
@@ -199,7 +200,6 @@ func rangeFeed(
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) (err error) {
-		var opts []kvcoord.RangeFeedOption
 		if useMuxRangeFeed {
 			opts = append(opts, kvcoord.WithMuxRangeFeed())
 			ctx = context.WithValue(ctx, useMuxRangeFeedCtxKey{}, struct{}{})
@@ -584,4 +584,52 @@ func TestRestartsStuckRangeFeedsSecondImplementation(t *testing.T) {
 	// on a particularly slow CI machine some unrelated rangefeed could also catch the occasional
 	// retry.
 	require.NotZero(t, ds.Metrics().RangefeedRestartStuck.Count())
+}
+
+func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	startTime := ts.Clock().Now()
+
+	// Initial setup: only single catchup scan allowed.
+	sqlDB.ExecMultiple(t,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		`SET CLUSTER SETTING kv.rangefeed.catchup_scan_concurrency = 1`,
+		`ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1`,
+		`CREATE TABLE foo (key INT PRIMARY KEY)`,
+		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`,
+	)
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+	// This error causes rangefeed to restart after re-resolving spans, and causes
+	// catchup scan quota acquisition.
+	transientErrEvent := kvpb.RangeFeedEvent{
+		Error: &kvpb.RangeFeedError{
+			Error: *kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT)),
+		}}
+	noValuesExpected := func(event kvcoord.RangeFeedMessage) {
+		panic("received value when none expected")
+	}
+	const numErrsToReturn = 100
+	var numErrors atomic.Int32
+	enoughErrors := make(chan struct{})
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, noValuesExpected, true,
+		kvcoord.TestingWithOnMuxEvent(func(event *kvpb.MuxRangeFeedEvent) {
+			event.RangeFeedEvent = transientErrEvent
+			if numErrors.Add(1) == numErrsToReturn {
+				close(enoughErrors)
+			}
+		}))
+	channelWaitWithTimeout(t, enoughErrors)
+	closeFeed()
 }
