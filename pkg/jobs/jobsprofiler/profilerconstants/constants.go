@@ -39,6 +39,18 @@ func MakeNodeProcessorProgressInfoKey(
 	return fmt.Sprintf("%s%s,%s,%d", NodeProcessorProgressInfoKeyPrefix, flowID, instanceID, processorID), nil
 }
 
+const ProfilerBundleChunkKeyPrefix = "~profiler-bundle-chunk-"
+
+func MakeProfilerBundleChunkKey(bundleID string, chunkID int) string {
+	return fmt.Sprintf("%s%s-%d", ProfilerBundleChunkKeyPrefix, bundleID, chunkID)
+}
+
+const ProfilerBundleMetadataKeyPrefix = "~profiler-bundle-metadata-"
+
+func MakeProfilerBundleMetadataKey(bundleID string) string {
+	return fmt.Sprintf("%s%s", ProfilerBundleMetadataKeyPrefix, bundleID)
+}
+
 // GetNodeProcessorProgressInfoKeyParts deconstructs the passed in info key and
 // returns the referenced flowID, instanceID and processorID.
 func GetNodeProcessorProgressInfoKeyParts(infoKey string) (uuid.UUID, int, int, error) {
