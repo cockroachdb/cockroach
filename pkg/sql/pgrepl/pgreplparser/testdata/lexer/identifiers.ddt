@@ -1,0 +1,25 @@
+lex
+aSDFG_h
+----
+IDENT str:asdfg_h
+
+lex
+a000120_SDFA
+----
+IDENT str:a000120_sdfa
+
+lex
+Éa000120_SDFAÉ
+----
+IDENT str:éa000120_sdfaé
+
+lex
+1Éa000120_SDFAÉ
+----
+UCONST str:1 num:1
+IDENT str:éa000120_sdfaé
+
+lex
+"BASE_BACKUP"
+----
+IDENT str:BASE_BACKUP
