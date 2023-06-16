@@ -935,19 +935,24 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 }
 
+func skipLocalUnderArm64(cloud string) string {
+	if cloud == spec.Local && runtime.GOARCH == "arm64" {
+		// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
+		return "Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888"
+	}
+	return ""
+}
+
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:      "cdc/initial-scan-only",
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -971,14 +976,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1001,15 +1003,12 @@ func registerCDC(r registry.Registry) {
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		Tags:            registry.Tags("manual"),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1032,14 +1031,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1058,14 +1054,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1089,14 +1082,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1125,14 +1115,11 @@ func registerCDC(r registry.Registry) {
 		// of this test. Look into it.
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1163,14 +1150,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1196,14 +1180,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1238,14 +1219,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1277,14 +1255,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1307,14 +1282,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1356,14 +1328,11 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1396,15 +1365,12 @@ func registerCDC(r registry.Registry) {
 		Name:  "cdc/bank",
 		Owner: `cdc`,
 		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
+		Skip:            skipLocalUnderArm64(r.Cloud()),
 		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
 		Leases:          registry.MetamorphicLeases,
 		RequiresLicense: true,
 		Timeout:         30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/103888")
-			}
 			runCDCBank(ctx, t, c)
 		},
 	})
