@@ -189,6 +189,10 @@ func (r testRegistryImpl) List(filters []string) []registry.TestSpec {
 	return tests
 }
 
+func (r testRegistryImpl) Cloud() string {
+	return r.cloud
+}
+
 func (r *testRegistryImpl) setBuildVersion(buildTag string) error {
 	v, err := version.Parse(buildTag)
 	if err != nil {

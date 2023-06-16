@@ -17,4 +17,5 @@ import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 type Registry interface {
 	MakeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec
 	Add(TestSpec)
+	Cloud() string
 }
