@@ -1552,7 +1552,8 @@
             "cockroach/pkg/sql/schemachanger/scplan/internal/rules/.*/.*.go$":  "schema changer rules"
         },
         "only_files": {
-            "cockroach/pkg/.*$": "first-party code"
+            "cockroach/pkg/.*$": "first-party code",
+            "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
         }
     },
     "ST1003": {
