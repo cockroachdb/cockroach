@@ -165,6 +165,9 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 	}
 	targetTriple := TargetTripleFromPlatform(platform)
 	var stampCommand string
+	if platform == PlatformWindows {
+		buildArgs = append(buildArgs, "--enable_runfiles")
+	}
 	if opts.Release {
 		if opts.BuildTag == "" {
 			stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release", targetTriple, opts.Channel)
