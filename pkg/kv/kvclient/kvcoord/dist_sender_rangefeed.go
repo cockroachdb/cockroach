@@ -92,6 +92,10 @@ type rangeFeedConfig struct {
 	useMuxRangeFeed bool
 	overSystemTable bool
 	withDiff        bool
+
+	knobs struct {
+		onMuxRangefeedEvent func(event *kvpb.MuxRangeFeedEvent)
+	}
 }
 
 // RangeFeedOption configures a RangeFeed.
