@@ -133,6 +133,41 @@ export function Percentage(
 }
 
 /**
+ * PercentageCustom creates a string representation of a fraction as a percentage.
+ * Accepts a precision parameter as optional indicating how many digits
+ * after the decimal point are desired. (e.g. precision 2 returns 8.37 %)
+ * If the number is zero or grater than 1, it works the same way as the Percentage
+ * function above, if is between 0 and 1, it looks for the first non-zero
+ * decimal number, up to 10 decimal points, otherwise shows ~0.0%
+ */
+export function PercentageCustom(
+  numerator: number,
+  denominator: number,
+  precision?: number,
+): string {
+  if (denominator === 0) {
+    return "--%";
+  }
+  const pct = (numerator / denominator) * 100;
+  if (pct <= 0 || pct >= 1) {
+    return Percentage(numerator, denominator, precision);
+  }
+  const pctString = pct.toFixed(10);
+  let finalPct = "0.";
+  let found = false;
+  for (let index = 2; index < pctString.length && !found; index++) {
+    finalPct = `${finalPct}${pctString[index]}`;
+    if (pctString[index] != "0") {
+      found = true;
+    }
+  }
+  if (found) {
+    return finalPct + " %";
+  }
+  return "~0.0 %";
+}
+
+/**
  * ComputeDurationScale calculates an appropriate scale factor and unit to use
  * to display a given duration value, without actually converting the value.
  */
