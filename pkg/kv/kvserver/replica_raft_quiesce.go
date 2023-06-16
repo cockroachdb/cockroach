@@ -467,7 +467,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 			if log.V(4) {
 				log.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)
 			}
-			r.maybeUnquiesceLocked(false /* wakeLeader */, true /* mayCampaign */)
+			r.maybeUnquiesceLocked(false /* wakeLeader */, false /* mayCampaign */) // already leader
 			return false
 		}
 
