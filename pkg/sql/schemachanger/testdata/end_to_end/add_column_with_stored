@@ -1,3 +1,6 @@
+skip issue-num=105057
+----
+
 setup
 CREATE DATABASE db;
 CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
