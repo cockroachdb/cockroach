@@ -2412,8 +2412,8 @@ func WithDisplay(display string) ParallelOption {
 }
 
 // Parallel runs a user-defined function across the nodes in the
-// cluster. If any of the commands fail, Parallel will log an error
-// and exit the program.
+// cluster. If any of the commands fail, Parallel will log each failure
+// and return an error.
 //
 // A user may also pass in a RunRetryOpts to control how the function is retried
 // in the case of a failure.
