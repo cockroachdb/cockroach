@@ -224,6 +224,8 @@ type Overload struct {
 	// Version is the descriptor version of the descriptor used to construct
 	// this version of the function overload. Only used for UDFs.
 	Version uint64
+	// Language indicates the language the UDF was defined with.
+	Language FunctionLanguage
 }
 
 // params implements the overloadImpl interface.

@@ -112,11 +112,8 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 
-	for _, option := range n.cf.Options {
-		err := setFuncOption(params, udfDesc, option)
-		if err != nil {
-			return err
-		}
+	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
+		return err
 	}
 
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
@@ -189,11 +186,8 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	if err := validateVolatilityInOptions(n.cf.Options, udfDesc); err != nil {
 		return err
 	}
-	for _, option := range n.cf.Options {
-		err := setFuncOption(params, udfDesc, option)
-		if err != nil {
-			return err
-		}
+	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
+		return err
 	}
 
 	// Removing all existing references before adding new references.
@@ -399,43 +393,59 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 	return nil
 }
 
-func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.FunctionOption) error {
-	switch t := option.(type) {
-	case tree.FunctionVolatility:
-		v, err := funcinfo.VolatilityToProto(t)
-		if err != nil {
-			return err
+func setFuncOptions(
+	params runParams, udfDesc *funcdesc.Mutable, options []tree.FunctionOption,
+) error {
+	var vol tree.FunctionVolatility
+	var leakProof bool
+	var calledOnNull tree.FunctionNullInputBehavior
+	var language tree.FunctionLanguage
+	var body string
+
+	for _, option := range options {
+		switch t := option.(type) {
+		case tree.FunctionVolatility:
+			vol = t
+		case tree.FunctionLeakproof:
+			leakProof = bool(t)
+		case tree.FunctionNullInputBehavior:
+			calledOnNull = t
+		case tree.FunctionLanguage:
+			language = t
+		case tree.FunctionBodyStr:
+			body = string(t)
+		default:
+			return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
 		}
-		udfDesc.SetVolatility(v)
-	case tree.FunctionLeakproof:
-		udfDesc.SetLeakProof(bool(t))
-	case tree.FunctionNullInputBehavior:
-		v, err := funcinfo.NullInputBehaviorToProto(t)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetNullInputBehavior(v)
-	case tree.FunctionLanguage:
-		v, err := funcinfo.FunctionLangToProto(t)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetLang(v)
-	case tree.FunctionBodyStr:
-		// Replace any sequence names in the function body with IDs.
-		seqReplacedFuncBody, err := replaceSeqNamesWithIDs(params.ctx, params.p, string(t), true)
-		if err != nil {
-			return err
-		}
-		typeReplacedFuncBody, err := serializeUserDefinedTypes(params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetFuncBody(typeReplacedFuncBody)
-	default:
-		return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
 	}
 
+	descVol, err := funcinfo.VolatilityToProto(vol)
+	if err != nil {
+		return err
+	}
+	descCalledOnNullInput, err := funcinfo.NullInputBehaviorToProto(calledOnNull)
+	if err != nil {
+		return err
+	}
+	descLanguage, err := funcinfo.FunctionLangToProto(language)
+	if err != nil {
+		return err
+	}
+	if language == tree.FunctionLangSQL {
+		body, err = replaceSeqNamesWithIDs(params.ctx, params.p, body, true)
+		if err != nil {
+			return err
+		}
+		body, err = serializeUserDefinedTypes(params.ctx, params.p.SemaCtx(), body, true /* multiStmt */)
+		if err != nil {
+			return err
+		}
+	}
+	udfDesc.SetVolatility(descVol)
+	udfDesc.SetLeakProof(leakProof)
+	udfDesc.SetNullInputBehavior(descCalledOnNullInput)
+	udfDesc.SetLang(descLanguage)
+	udfDesc.SetFuncBody(body)
 	return nil
 }
 

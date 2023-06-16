@@ -228,10 +228,6 @@ func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
 func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	md := f.Memo.Metadata()
 	required := e.RequiredPhysical()
-	if r, ok := e.(RelRequiredPropsExpr); ok {
-		e = r.RelExpr
-		required = r.PhysProps
-	}
 	relational := e.Relational()
 	if required == nil {
 		// required can be nil before optimization has taken place.
@@ -918,22 +914,25 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 func (f *ExprFmtCtx) formatScalarWithLabel(
 	label string, scalar opt.ScalarExpr, tp treeprinter.Node,
 ) {
-	formatUDFInputAndBody := func(udf *UDFExpr, tp treeprinter.Node) {
+	formatUDFInputAndBody := func(udf *UDFCallExpr, tp treeprinter.Node) {
 		var n treeprinter.Node
 		if !udf.CalledOnNullInput {
 			tp.Child("strict")
 		}
-		if len(udf.Params) > 0 {
-			f.formatColList(tp, "params:", udf.Params, opt.ColSet{} /* notNullCols */)
+		if len(udf.Def.Params) > 0 {
+			f.formatColList(tp, "params:", udf.Def.Params, opt.ColSet{} /* notNullCols */)
 			n = tp.Child("args")
 			for i := range udf.Args {
 				f.formatExpr(udf.Args[i], n)
 			}
 		}
 		n = tp.Child("body")
-		for i := range udf.Body {
-			f.formatExpr(udf.Body[i], n)
+		oldFlags := f.Flags
+		f.Flags |= ExprFmtHideScalars
+		for i := range udf.Def.Body {
+			f.formatExpr(udf.Def.Body[i], n)
 		}
+		f.Flags = oldFlags
 	}
 
 	f.Buffer.Reset()
@@ -990,8 +989,8 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		}
 		return
 
-	case opt.UDFOp:
-		udf := scalar.(*UDFExpr)
+	case opt.UDFCallOp:
+		udf := scalar.(*UDFCallExpr)
 		fmt.Fprintf(f.Buffer, "udf: %s", udf.Name)
 		f.FormatScalarProps(scalar)
 		tp = tp.Child(f.Buffer.String())
@@ -1047,7 +1046,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	}
 
 	var intercepted bool
-	if udf, ok := scalar.(*UDFExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
+	if udf, ok := scalar.(*UDFCallExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
 		// A UDF function body will be printed after the scalar props, so
 		// pre-emptively set intercepted=true to avoid the default
 		// formatScalarPrivate formatting below.
@@ -1071,7 +1070,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 	}
 	tp = tp.Child(f.Buffer.String())
 
-	if udf, ok := scalar.(*UDFExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
+	if udf, ok := scalar.(*UDFCallExpr); ok && !f.HasFlags(ExprFmtHideScalars) {
 		formatUDFInputAndBody(udf, tp)
 	}
 

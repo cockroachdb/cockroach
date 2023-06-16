@@ -4,6 +4,7 @@ PARSER_SRCS = [
     "//pkg/sql/lexbase:keywords.go",
     "//pkg/sql/lexbase:reserved_keywords.go",
     "//pkg/sql/lexbase:tokens.go",
+    "//pkg/sql/parser/plsql:plsql.go",
     "//pkg/sql/parser:help_messages.go",
     "//pkg/sql/parser:helpmap_test.go",
     "//pkg/sql/parser:sql.go",

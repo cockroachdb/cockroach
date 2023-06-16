@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -403,140 +402,140 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 	return result
 }
 
-// IsInlinableUDF returns true if the given UDF can be inlined as a subquery,
-// which requires all the following to be true:
+//// IsInlinableUDF returns true if the given UDF can be inlined as a subquery,
+//// which requires all the following to be true:
+////
+////  1. It must be labeled as non-volatile, i.e., immutable, stable, or
+////     leak-proof.
+////  2. It has a single statement.
+////  3. It is not a set-returning function.
+////  4. Its arguments are only Variable or Const expressions.
+////  5. It is not a record-returning function.
+////
+//// UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
+//// we do not need an explicit check for this because immutable UDFs cannot
+//// contain mutations.
+////
+//// TODO(mgartner): We may be able to loosen (1). Subqueries are always
+//// evaluated just once, so by converting a UDF to a subquery we effectively make
+//// it and it's arguments non-volatile. So, if UDFs can be inlined in some other
+//// way, or the subquery can be eliminated with normalization rules, we may be
+//// able to inline volatile UDFs.
+////
+//// TODO(mgarnter): We may be able to loosen (3), but we need a way to inline a
+//// strict UDF that is not called when an argument is NULL. This presents a
+//// challenge because we cannot wrap a set-returning function in a CASE
+//// expression, like we do for strict, non-set-returning functions.
+////
+//// TODO(mgartner): We may be able to loosen (4), but there are several
+//// difficulties to overcome. We must take care not to inline UDFs with volatile
+//// arguments used more than once in the function body. We should also be sure
+//// not to inline when the arguments are computationally expensive and are
+//// referenced in the UDF body more than once. Any argument that contains a
+//// subquery and is referenced multiple times cannot be inlined, unless new
+//// columns IDs for the entire subquery are generated (see #100915).
+////
+//// TODO(harding): We could potentially loosen (5), since only record-returning
+//// UDFs used as data sources return multiple columns. Other UDFs returning a
+//// single column can be inlined since subqueries can only return a single
+//// column.
+//func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
+//	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning || udfp.MultiColDataSource {
+//		return false
+//	}
+//	if !args.IsConstantsAndPlaceholdersAndVariables() {
+//		return false
+//	}
+//	return true
+//}
 //
-//  1. It must be labeled as non-volatile, i.e., immutable, stable, or
-//     leak-proof.
-//  2. It has a single statement.
-//  3. It is not a set-returning function.
-//  4. Its arguments are only Variable or Const expressions.
-//  5. It is not a record-returning function.
+//// ConvertUDFToSubquery returns a subquery expression that is equivalent to the
+//// given UDF and UDF arguments.
+//func (c *CustomFuncs) ConvertUDFToSubquery(
+//	args memo.ScalarListExpr, udfp *memo.UDFPrivate,
+//) opt.ScalarExpr {
+//	// argForParam returns the argument that can be substituted for the given
+//	// column, if the column is a parameter of the UDF. It returns ok=false if
+//	// the column is not a UDF parameter.
+//	argForParam := func(col opt.ColumnID) (e opt.Expr, ok bool) {
+//		for i := range udfp.Params {
+//			if udfp.Params[i] == col {
+//				return args[i], true
+//			}
+//		}
+//		return nil, false
+//	}
 //
-// UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
-// we do not need an explicit check for this because immutable UDFs cannot
-// contain mutations.
+//	// replace substitutes variables that are UDF parameters with the
+//	// corresponding argument from the invocation of the UDF.
+//	var replace ReplaceFunc
+//	replace = func(nd opt.Expr) opt.Expr {
+//		if t, ok := nd.(*memo.VariableExpr); ok {
+//			if arg, ok := argForParam(t.Col); ok {
+//				return arg
+//			}
+//		}
+//		return c.f.Replace(nd, replace)
+//	}
 //
-// TODO(mgartner): We may be able to loosen (1). Subqueries are always
-// evaluated just once, so by converting a UDF to a subquery we effectively make
-// it and it's arguments non-volatile. So, if UDFs can be inlined in some other
-// way, or the subquery can be eliminated with normalization rules, we may be
-// able to inline volatile UDFs.
+//	// The presentation and ordering in the physical properties of the UDF
+//	// statement must be preserved in the subquery to produce correct results.
+//	// The presentation, which always contains a single column, is preserved
+//	// with a Project expression. The ordering is preserved in the LIMIT 1
+//	// expression that optbuilder wraps around the last statement in a UDF. The
+//	// presence of the LIMIT 1 makes a Max1Row expression unnecessary for the
+//	// subquery.
+//	//
+//	// TODO(mgartner): The ordering may need to be preserved in the
+//	// SubqueryPrivate for SETOF UDFs.
+//	stmt := udfp.Body[0]
+//	returnColID := stmt.PhysProps.Presentation[0].ID
+//	res := c.f.ConstructSubquery(
+//		c.f.ConstructProject(
+//			replace(stmt.RelExpr).(memo.RelExpr),
+//			nil, /* projections */
+//			opt.MakeColSet(returnColID),
+//		),
+//		&memo.SubqueryPrivate{},
+//	)
 //
-// TODO(mgarnter): We may be able to loosen (3), but we need a way to inline a
-// strict UDF that is not called when an argument is NULL. This presents a
-// challenge because we cannot wrap a set-returning function in a CASE
-// expression, like we do for strict, non-set-returning functions.
+//	// If the UDF is strict, it should not be invoked when any of the arguments
+//	// are NULL. To achieve this, we wrap the UDF in a CASE expression like:
+//	//
+//	//   CASE
+//	//     WHEN arg1 IS NULL OR arg2 IS NULL OR ... THEN NULL
+//	//     ELSE <subquery>
+//	//   END
+//	//
+//	if !udfp.CalledOnNullInput && len(args) > 0 {
+//		var anyArgIsNull opt.ScalarExpr
+//		for i := range args {
+//			// Note: We do NOT use a TupleIsNullExpr here if the argument is a
+//			// tuple because a strict UDF will be called if an argument, T, is a
+//			// tuple with all NULL elements, even though T IS NULL evaluates to
+//			// true. For example:
+//			//
+//			//   SELECT strict_fn(1, (NULL, NULL)) -- the UDF will be called
+//			//   SELECT (NULL, NULL) IS NULL       -- returns true
+//			//
+//			argIsNull := c.f.ConstructIs(args[i], memo.NullSingleton)
+//			if anyArgIsNull == nil {
+//				anyArgIsNull = argIsNull
+//				continue
+//			}
+//			anyArgIsNull = c.f.ConstructOr(argIsNull, anyArgIsNull)
+//		}
+//		res = c.f.ConstructCase(
+//			memo.TrueSingleton,
+//			memo.ScalarListExpr{
+//				c.f.ConstructWhen(
+//					anyArgIsNull,
+//					c.f.ConstructNull(udfp.Typ),
+//				),
+//			},
+//			res,
+//		)
+//	}
 //
-// TODO(mgartner): We may be able to loosen (4), but there are several
-// difficulties to overcome. We must take care not to inline UDFs with volatile
-// arguments used more than once in the function body. We should also be sure
-// not to inline when the arguments are computationally expensive and are
-// referenced in the UDF body more than once. Any argument that contains a
-// subquery and is referenced multiple times cannot be inlined, unless new
-// columns IDs for the entire subquery are generated (see #100915).
-//
-// TODO(harding): We could potentially loosen (5), since only record-returning
-// UDFs used as data sources return multiple columns. Other UDFs returning a
-// single column can be inlined since subqueries can only return a single
-// column.
-func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
-	if udfp.Volatility == volatility.Volatile || len(udfp.Body) != 1 || udfp.SetReturning || udfp.MultiColDataSource {
-		return false
-	}
-	if !args.IsConstantsAndPlaceholdersAndVariables() {
-		return false
-	}
-	return true
-}
-
-// ConvertUDFToSubquery returns a subquery expression that is equivalent to the
-// given UDF and UDF arguments.
-func (c *CustomFuncs) ConvertUDFToSubquery(
-	args memo.ScalarListExpr, udfp *memo.UDFPrivate,
-) opt.ScalarExpr {
-	// argForParam returns the argument that can be substituted for the given
-	// column, if the column is a parameter of the UDF. It returns ok=false if
-	// the column is not a UDF parameter.
-	argForParam := func(col opt.ColumnID) (e opt.Expr, ok bool) {
-		for i := range udfp.Params {
-			if udfp.Params[i] == col {
-				return args[i], true
-			}
-		}
-		return nil, false
-	}
-
-	// replace substitutes variables that are UDF parameters with the
-	// corresponding argument from the invocation of the UDF.
-	var replace ReplaceFunc
-	replace = func(nd opt.Expr) opt.Expr {
-		if t, ok := nd.(*memo.VariableExpr); ok {
-			if arg, ok := argForParam(t.Col); ok {
-				return arg
-			}
-		}
-		return c.f.Replace(nd, replace)
-	}
-
-	// The presentation and ordering in the physical properties of the UDF
-	// statement must be preserved in the subquery to produce correct results.
-	// The presentation, which always contains a single column, is preserved
-	// with a Project expression. The ordering is preserved in the LIMIT 1
-	// expression that optbuilder wraps around the last statement in a UDF. The
-	// presence of the LIMIT 1 makes a Max1Row expression unnecessary for the
-	// subquery.
-	//
-	// TODO(mgartner): The ordering may need to be preserved in the
-	// SubqueryPrivate for SETOF UDFs.
-	stmt := udfp.Body[0]
-	returnColID := stmt.PhysProps.Presentation[0].ID
-	res := c.f.ConstructSubquery(
-		c.f.ConstructProject(
-			replace(stmt.RelExpr).(memo.RelExpr),
-			nil, /* projections */
-			opt.MakeColSet(returnColID),
-		),
-		&memo.SubqueryPrivate{},
-	)
-
-	// If the UDF is strict, it should not be invoked when any of the arguments
-	// are NULL. To achieve this, we wrap the UDF in a CASE expression like:
-	//
-	//   CASE
-	//     WHEN arg1 IS NULL OR arg2 IS NULL OR ... THEN NULL
-	//     ELSE <subquery>
-	//   END
-	//
-	if !udfp.CalledOnNullInput && len(args) > 0 {
-		var anyArgIsNull opt.ScalarExpr
-		for i := range args {
-			// Note: We do NOT use a TupleIsNullExpr here if the argument is a
-			// tuple because a strict UDF will be called if an argument, T, is a
-			// tuple with all NULL elements, even though T IS NULL evaluates to
-			// true. For example:
-			//
-			//   SELECT strict_fn(1, (NULL, NULL)) -- the UDF will be called
-			//   SELECT (NULL, NULL) IS NULL       -- returns true
-			//
-			argIsNull := c.f.ConstructIs(args[i], memo.NullSingleton)
-			if anyArgIsNull == nil {
-				anyArgIsNull = argIsNull
-				continue
-			}
-			anyArgIsNull = c.f.ConstructOr(argIsNull, anyArgIsNull)
-		}
-		res = c.f.ConstructCase(
-			memo.TrueSingleton,
-			memo.ScalarListExpr{
-				c.f.ConstructWhen(
-					anyArgIsNull,
-					c.f.ConstructNull(udfp.Typ),
-				),
-			},
-			res,
-		)
-	}
-
-	return res
-}
+//	return res
+//}

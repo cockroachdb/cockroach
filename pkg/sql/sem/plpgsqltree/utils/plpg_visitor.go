@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -108,9 +107,11 @@ func ParseAndCollectTelemetryForPLpgSQLFunc(stmt *tree.CreateFunction) error {
 			funcBodyStr = string(opt)
 		}
 	}
+	_ = funcBodyStr
 
-	if _, err := CountPLpgSQLStmt(funcBodyStr); err != nil {
-		return errors.Wrap(err, "plpgsql not supported in user-defined functions")
-	}
-	return unimp.New("plpgsql", "plpgsql not supported in user-defined functions")
+	return nil
+	//if _, err := CountPLpgSQLStmt(funcBodyStr); err != nil {
+	//	return errors.Wrap(err, "plpgsql not supported in user-defined functions")
+	//}
+	//return unimp.New("plpgsql", "plpgsql not supported in user-defined functions")
 }

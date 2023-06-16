@@ -1356,6 +1356,13 @@ func (b *builderState) WrapFunctionBody(
 	lang catpb.Function_Language,
 	refProvider scbuildstmt.ReferenceProvider,
 ) *scpb.FunctionBody {
+	if lang == catpb.Function_PLPGSQL {
+		return &scpb.FunctionBody{
+			FunctionID: fnID,
+			Body:       bodyStr,
+			Lang:       catpb.FunctionLanguage{Lang: lang},
+		}
+	}
 	bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
 	bodyStr = b.serializeUserDefinedTypes(bodyStr)
 	fnBody := &scpb.FunctionBody{

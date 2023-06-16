@@ -1,0 +1,52 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "plsql",
+    srcs = [
+        "lexer.go",
+        ":plsql-goyacc",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/parser/plsql",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "plsql_test",
+    srcs = ["parser_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":plsql"],
+)
+
+# Define the target to auto-generate plsql.go from the grammar file.
+genrule(
+    name = "plsql-goyacc",
+    srcs = [
+        "plsql.y",
+    ],
+    outs = ["plsql.go"],
+    cmd = """
+      $(location @org_golang_x_tools//cmd/goyacc) -l -p plsql -o $@ $(location plsql.y); \
+      $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@;
+    """,
+    exec_tools = [
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+        "@org_golang_x_tools//cmd/goyacc",
+    ],
+    tags = ["no-remote"],  # keep
+    visibility = ["//visibility:public"],
+)
+
+exports_files(
+    [
+        "plsql.y",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")
