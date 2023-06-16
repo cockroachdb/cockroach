@@ -134,7 +134,7 @@ var DefaultSSHRetryOpts = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDe
 var noScpRetrySubstrings = []string{"no such file or directory", "permission denied", "connection timed out"}
 var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
 	func(res *RunResultDetails) bool {
-		out := strings.ToLower(res.Stderr)
+		out := strings.ToLower(res.Output(false))
 		for _, s := range noScpRetrySubstrings {
 			if strings.Contains(out, s) {
 				return false
@@ -147,10 +147,13 @@ var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
 // runWithMaybeRetry will run the specified function `f` at least once, or only
 // once if `runRetryOpts` is nil
 //
-// Any RunResultDetails with a non nil err from `f` is passed to `runRetryOpts.shouldRetryFn` which,
+// Any RunResultDetails containing a non nil err from `f` is passed to `runRetryOpts.shouldRetryFn` which,
 // if it returns true, will result in `f` being retried using the `retryOpts`
 // If the `shouldRetryFn` is not specified (nil), then retries will be performed
-// regardless of the previous result / error
+// regardless of the previous result / error.
+//
+// If a non-nil error (as opposed to the result containing a non-nil error) is returned,
+// the function will *not* be retried.
 //
 // We operate on a pointer to RunResultDetails as it has already been
 // captured in a *RunResultDetails[] in Run, but here we may enrich with attempt
@@ -167,7 +170,7 @@ func runWithMaybeRetry(
 			return nil, err
 		}
 		res.Attempt = 1
-		return res, err
+		return res, nil
 	}
 
 	var res = &RunResultDetails{}
@@ -771,6 +774,48 @@ func newRunResultDetails(node Node, err error) *RunResultDetails {
 	return &res
 }
 
+// Output prints either the combined, or separated stdout and stderr command output
+func (r *RunResultDetails) Output(decorate bool) string {
+	var builder strings.Builder
+	outputExists := false
+	writeVal := func(label string, value string) {
+		s := strings.TrimSpace(value)
+		if builder.Len() > 0 {
+			builder.WriteByte('\n')
+		}
+
+		if s == "" {
+			if decorate {
+				builder.WriteString(label)
+				builder.WriteString(": <empty>")
+			}
+			return
+		}
+
+		if label != "" && decorate {
+			builder.WriteString(label)
+			builder.WriteString(":")
+		}
+		builder.WriteString(s)
+		builder.WriteString("\n")
+		outputExists = true
+	}
+
+	writeVal("stdout", r.Stdout)
+	writeVal("stderr", r.Stderr)
+
+	// Only if stderr and stdout are empty do we check the combined output.
+	if !outputExists {
+		builder.Reset()
+		writeVal("", r.CombinedOut)
+	}
+
+	if !outputExists {
+		return ""
+	}
+	return builder.String()
+}
+
 // RunCmdOptions is used to configure the behavior of `runCmdOnSingleNode`
 type RunCmdOptions struct {
 	combinedOut             bool
@@ -787,17 +832,18 @@ func defaultCmdOpts(debugName string) RunCmdOptions {
 	}
 }
 
-// runCmdOnSingleNode runs a command on a single node
-// `combined` controls whether the stdout and stderr are combined into `RunResultDetails.CombinedOut`.
-// `withEnvVars` controls whether the command is run with the ROACHPROD env variable, and
-// should be true for all user commands.
+// runCmdOnSingleNode is a common entry point for all commands that run on a single node,
+// including user commands from roachtests and roachprod commands.
+// The `opts` struct is used to configure the behavior of the command, including
+// - whether stdout and stderr or combined output is desired
+// - specifying the stdin, stdout, and stderr streams
+// - specifying the remote session options
+// - whether the command should be run with the ROACHPROD env variable (true for all user commands)
 func (c *SyncedCluster) runCmdOnSingleNode(
 	ctx context.Context, l *logger.Logger, node Node, cmd string, opts RunCmdOptions,
 ) (*RunResultDetails, error) {
 	// Argument template expansion is node specific (e.g. for {store-dir}).
-	e := expander{
-		node: node,
-	}
+	e := expander{node: node}
 	expandedCmd, err := e.expand(ctx, l, c, cmd)
 	if err != nil {
 		return nil, errors.WithDetailf(err, "error expanding command: %s", cmd)
@@ -858,7 +904,18 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	}
 
 	if res.Err != nil {
-		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", node, cmd)
+		output := res.Output(true)
+		// Somewhat arbitrary limit to give us a chance to see some of the output
+		// in the failure_*.log, since the full output is in the run_*.log.
+		oLen := len(output)
+		if oLen > 1024 {
+			output = "<truncated> ... " + output[oLen-1024:oLen-1]
+		}
+
+		if output == "" {
+			output = "<no output>"
+		}
+		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n%s", node, cmd, output)
 		res.Err = errors.WithDetail(res.Err, detailMsg)
 	}
 	return res, nil
@@ -887,7 +944,7 @@ func (c *SyncedCluster) Run(
 	stream := len(nodes) == 1
 	var display string
 	if !stream {
-		display = fmt.Sprintf("%s: %s", c.Name, title)
+		display = fmt.Sprintf("%s:%v: %s", c.Name, nodes, title)
 	}
 
 	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -910,6 +967,21 @@ func (c *SyncedCluster) Run(
 
 // processResults returns the error from the RunResultDetails with the highest RemoteExitStatus
 func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) error {
+
+	// Easier to read output when we indent each line of the output. If an error is
+	// present, we also include the error message at the top.
+	format := func(s string, e error) string {
+		s = strings.ReplaceAll(s, "\n", "\n\t")
+		if e != nil {
+			return fmt.Sprintf("\t<err> %v\n\t%s", e, s)
+		}
+
+		if s == "" {
+			return "\t<ok>"
+		}
+		return fmt.Sprintf("\t<ok>\n\t%s", s)
+	}
+
 	var resultWithError *RunResultDetails
 	for i, r := range results {
 		// We no longer wait for all nodes to complete before returning in the case of an error (#100403)
@@ -921,7 +993,7 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 		// Emit the cached output of each result. When stream == true, the output is emitted
 		// as it is generated in `runCmdOnSingleNode`.
 		if !stream {
-			fmt.Fprintf(stdout, "  %2d: %s\n%v\n", i+1, strings.TrimSpace(r.CombinedOut), r.Err)
+			fmt.Fprintf(stdout, "  %2d: %s\n", i+1, format(r.Output(true), r.Err))
 		}
 
 		if r.Err != nil {
@@ -947,7 +1019,7 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 func (c *SyncedCluster) RunWithDetails(
 	ctx context.Context, l *logger.Logger, nodes Nodes, title, cmd string,
 ) ([]RunResultDetails, error) {
-	display := fmt.Sprintf("%s: %s", c.Name, title)
+	display := fmt.Sprintf("%s:%v: %s", c.Name, nodes, title)
 
 	// Failing slow here allows us to capture the output of all nodes even if one fails with a command error.
 	resultPtrs, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
@@ -1078,7 +1150,6 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		runOpts := defaultCmdOpts("ssh-gen-key")
 		runOpts.combinedOut = false
 		return c.runCmdOnSingleNode(ctx, l, n, cmd, runOpts)
-		//sess := c.newSession(l, 1, cmd, withDebugName("ssh-gen-key"))
 	}, WithDisplay("generating ssh key"))
 
 	if err != nil {
@@ -1092,7 +1163,6 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		runOpts := defaultCmdOpts("ssh-dist-key")
 		runOpts.stdin = bytes.NewReader(sshTar)
 		return c.runCmdOnSingleNode(ctx, l, node, `tar xf -`, runOpts)
-		//sess := c.newSession(l, node, cmd, withDebugName("ssh-dist-key"))
 	}, WithDisplay("distributing ssh key")); err != nil {
 		return err
 	}
@@ -1446,8 +1516,9 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	l.Printf("%s: checking %s", c.Name, path)
 	runOpts := defaultCmdOpts("check-file-exists")
 	runOpts.includeRoachprodEnvVars = true
-	_, err := c.runCmdOnSingleNode(ctx, l, 1, `test -e `+path, runOpts)
-	return err == nil
+	res, _ := c.runCmdOnSingleNode(ctx, l, 1, `test -e `+path, runOpts)
+	// We only return true if the command succeeded.
+	return res != nil && res.RemoteExitStatus == 0
 }
 
 // createNodeCertArguments returns a list of strings appropriate for use as
@@ -2154,7 +2225,6 @@ func (c *SyncedCluster) Get(
 	}
 
 	if config.Quiet && l.File != nil {
-		l.Printf("\n")
 		linesMu.Lock()
 		for i := range lines {
 			l.Printf("  %2d: %s", nodes[i], lines[i])
@@ -2395,7 +2465,7 @@ type ParallelResult struct {
 // ParallelE only returns an error for roachprod itself, not any command errors run
 // on the cluster.
 //
-// ParallelE  runs at most `concurrency` (or  `config.MaxConcurrency` if it is lower) in parallel.
+// ParallelE runs at most `concurrency` (or  `config.MaxConcurrency` if it is lower) in parallel.
 // If `concurrency` is 0, then it defaults to `len(nodes)`.
 //
 // The function returns pointers to *RunResultDetails as we may enrich
@@ -2541,12 +2611,12 @@ func (c *SyncedCluster) ParallelE(
 // to maintain parity with auto-init behavior of `roachprod start` (when
 // --skip-init) is not specified.
 func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) error {
-	if err := c.initializeCluster(ctx, l, node); err != nil {
-		return errors.WithDetail(err, "install.Init() failed: unable to initialize cluster.")
+	if res, err := c.initializeCluster(ctx, l, node); err != nil || (res != nil && res.Err != nil) {
+		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to initialize cluster.")
 	}
 
-	if err := c.setClusterSettings(ctx, l, node); err != nil {
-		return errors.WithDetail(err, "install.Init() failed: unable to set cluster settings.")
+	if res, err := c.setClusterSettings(ctx, l, node); err != nil || (res != nil && res.Err != nil) {
+		return errors.WithDetail(errors.CombineErrors(err, res.Err), "install.Init() failed: unable to set cluster settings.")
 	}
 
 	return nil
