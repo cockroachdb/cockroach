@@ -566,6 +566,10 @@ func cumulativeTest(
 		require.Zero(t, numTestStmts, "only one test command per-test, "+
 			"and it must be the last one.")
 		switch d.Cmd {
+		case "skip":
+			var issue int
+			d.ScanArgs(t, "issue-num", &issue)
+			skip.WithIssue(t, issue)
 		case "setup":
 			// Store setup stmts into `setup` slice (without executing them).
 			stmts, err := parser.Parse(d.Input)

@@ -183,6 +183,11 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 			}
 		}
 		switch d.Cmd {
+		case "skip":
+			var issue int
+			d.ScanArgs(t, "issue-num", &issue)
+			skip.WithIssue(t, issue)
+			return ""
 		case "setup":
 			stmts, execStmts := parseStmts()
 			a := prettyNamespaceDump(t, tdb)
