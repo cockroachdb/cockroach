@@ -6415,9 +6415,10 @@ func TestRaftCheckQuorum(t *testing.T) {
 			require.Equal(t, raft.StateLeader, initialStatus.RaftState)
 			logStatus(initialStatus)
 
-			// Unquiesce the leader if necessary.
+			// Unquiesce the leader if necessary. We have to do so by submitting an
+			// empty proposal, otherwise the leader will immediately quiesce again.
 			if quiesce {
-				require.True(t, repl1.MaybeUnquiesce())
+				require.NoError(t, repl1.MaybeUnquiesceAndPropose())
 				t.Logf("n1 unquiesced")
 			} else {
 				require.False(t, repl1.IsQuiescent())
@@ -6579,4 +6580,110 @@ func TestRaftLeaderRemovesItself(t *testing.T) {
 		}
 		return false
 	}, 10*time.Second, 500*time.Millisecond)
+}
+
+// TestRaftUnquiesceLeaderNoProposal tests that unquiescing a Raft leader does
+// not result in a proposal, since this is unnecessary and expensive.
+func TestRaftUnquiesceLeaderNoProposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Timing-sensitive, so skip under deadlock detector and stressrace.
+	skip.UnderDeadlock(t)
+	skip.UnderStressRace(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Disable lease extensions and expiration-based lease transfers,
+	// since these cause range writes and prevent quiescence.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, &st.SV, false)
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
+
+	// Block writes to the range, to prevent spurious proposals (typically due to
+	// txn record GC).
+	var blockRange atomic.Int64
+	reqFilter := func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+		if rangeID := roachpb.RangeID(blockRange.Load()); rangeID > 0 && rangeID == ba.RangeID {
+			t.Logf("r%d write rejected: %s", rangeID, ba)
+			return kvpb.NewError(errors.New("rejected"))
+		}
+		return nil
+	}
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			RaftConfig: base.RaftConfig{
+				RaftTickInterval: 100 * time.Millisecond, // speed up test
+			},
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: reqFilter,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	logStatus := func(s *raft.Status) {
+		t.Helper()
+		require.NotNil(t, s)
+		t.Logf("n%d %s at term=%d commit=%d", s.ID, s.RaftState, s.Term, s.Commit)
+	}
+
+	sender := tc.GetFirstStoreFromServer(t, 0).TestSender()
+
+	// Create a range, upreplicate it, and replicate a write.
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	_, pErr := kv.SendWrapped(ctx, sender, incrementArgs(key, 1))
+	require.NoError(t, pErr.GoError())
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+
+	repl1, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl2, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	repls := []*kvserver.Replica{repl1, repl2, repl3}
+
+	// Block writes.
+	blockRange.Store(int64(desc.RangeID))
+	defer blockRange.Store(0)
+
+	// Wait for the range to quiesce.
+	require.Eventually(t, func() bool {
+		for _, repl := range repls {
+			if !repl.IsQuiescent() {
+				return false
+			}
+		}
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+	t.Logf("range quiesced")
+
+	// Make sure n1 is still leader.
+	initialStatus := repl1.RaftStatus()
+	require.Equal(t, raft.StateLeader, initialStatus.RaftState)
+	logStatus(initialStatus)
+	t.Logf("n1 leader")
+
+	// Unquiesce n1. This may result in it immediately quiescing again, which is
+	// fine, but it shouldn't submit a proposal to wake up the followers.
+	require.True(t, repl1.MaybeUnquiesce())
+	t.Logf("n1 unquiesced")
+
+	require.Eventually(t, repl1.IsQuiescent, 10*time.Second, 100*time.Millisecond)
+	t.Logf("n1 quiesced")
+
+	status := repl1.RaftStatus()
+	logStatus(status)
+	require.Equal(t, raft.StateLeader, status.RaftState)
+	require.Equal(t, initialStatus.Term, status.Term)
+	require.Equal(t, initialStatus.Progress[1].Match, status.Progress[1].Match)
+	t.Logf("n1 still leader with no new proposals at log index %d", status.Progress[1].Match)
 }
