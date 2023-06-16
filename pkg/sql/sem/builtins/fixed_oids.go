@@ -2418,6 +2418,7 @@ var builtinOidsArray = []string{
 	2445: `lead(val: pg_lsn, n: int, default: pg_lsn) -> pg_lsn`,
 	2446: `last_value(val: pg_lsn) -> pg_lsn`,
 	2447: `pg_lsnsend(pg_lsn: pg_lsn) -> bytes`,
+	2448: `crdb_internal.sstable_metrics(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> tuple{int AS node_id,, int AS store_id, int AS level, int AS file_num, jsonb AS metrics}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
