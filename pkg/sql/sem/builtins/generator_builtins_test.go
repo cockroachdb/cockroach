@@ -53,3 +53,13 @@ func TestConcurrentProcessorsReadEpoch(t *testing.T) {
 		exp++
 	}
 }
+
+func TestGetSSTableMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	_, err := db.Query(` select * from crdb_internal.sstable_metrics('1', '1', 'a', 'd')`)
+	require.NoError(t, err)
+}
