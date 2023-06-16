@@ -142,6 +142,13 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		//
 		// transfer-leadership from=1 to=4
 		err = env.handleTransferLeadership(t, d)
+	case "forget-leader":
+		// Forgets the current leader of the given node.
+		//
+		// Example:
+		//
+		// forget-leader 1
+		err = env.handleForgetLeader(t, d)
 	case "propose":
 		// Propose an entry.
 		//
