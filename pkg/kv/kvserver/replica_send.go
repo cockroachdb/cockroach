@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -463,6 +464,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// to ensure that the request has full isolation during evaluation. This
 		// returns a request guard that must be eventually released.
 		var resp []kvpb.ResponseUnion
+		tBegin := timeutil.Now()
 		g, resp, pErr = r.concMgr.SequenceReq(ctx, g, concurrency.Request{
 			Txn:             ba.Txn,
 			Timestamp:       ba.Timestamp,
@@ -492,7 +494,9 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 				)))
 			}
 			return nil, nil, pErr
-		} else if resp != nil {
+		}
+		r.store.metrics.ReplicaBatchSequenceLatency.RecordValue(int64(timeutil.Since(tBegin)))
+		if resp != nil {
 			br = new(kvpb.BatchResponse)
 			br.Responses = resp
 			return br, nil, nil

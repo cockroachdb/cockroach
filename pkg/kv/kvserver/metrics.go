@@ -1993,6 +1993,20 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	// Replica batch sequencing latency.
+	metaReplicaBatchSequenceLatency = metric.Metadata{
+		Name: "kv.replica_batch_sequence.latency",
+		Help: `Duration for sequencing a BatchRequest (i.e. acquiring latches for it).
+
+A measurement is recorded for each call to SequenceReq that does not result in
+an error. Multiple latch acquisitions may be necessary to service a single
+request, in which case each instance is recorded separately.
+
+Note that the measurement does not include the duration for evaluating or
+replicating the command.`,
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaPopularKeyCount = metric.Metadata{
 		Name:        "kv.loadsplitter.popularkey",
 		Help:        "Load-based splitter could not find a split key and the most popular sampled split key occurs in >= 25% of the samples.",
@@ -2385,6 +2399,8 @@ type StoreMetrics struct {
 	// Replica batch evaluation metrics.
 	ReplicaReadBatchEvaluationLatency  metric.IHistogram
 	ReplicaWriteBatchEvaluationLatency metric.IHistogram
+	// Replica sequencing (latching) duration metric.
+	ReplicaBatchSequenceLatency metric.IHistogram
 
 	ReplicaReadBatchDroppedLatchesBeforeEval *metric.Counter
 	ReplicaReadBatchWithoutInterleavingIter  *metric.Counter
@@ -3053,6 +3069,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaWriteBatchEvaluationLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaReplicaWriteBatchEvaluationLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+		}),
+		ReplicaBatchSequenceLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePrometheus,
+			Metadata: metaReplicaBatchSequenceLatency,
 			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
