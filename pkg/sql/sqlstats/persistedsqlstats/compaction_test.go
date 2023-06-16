@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -69,7 +68,6 @@ func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
 func TestSQLStatsCompactor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 102750)
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -118,42 +116,45 @@ func TestSQLStatsCompactor(t *testing.T) {
 		},
 	}
 
-	kvInterceptor := kvScanInterceptor{}
-	cleanupInterceptor := cleanupInterceptor{}
-
-	server, conn, _ := serverutils.StartServer(
-		t, base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause: "AS OF SYSTEM TIME '-1us'",
-					StubTimeNow: func() time.Time {
-						return timeutil.Now().Add(-2 * time.Hour)
-					},
-				},
-				Store: &kvserver.StoreTestingKnobs{
-					TestingRequestFilter: kvInterceptor.intercept,
-				},
-			},
-		},
-	)
-
-	defer server.Stopper().Stop(ctx)
-
-	sqlConn := sqlutils.MakeSQLRunner(conn)
-	internalExecutor := server.InternalExecutor().(isql.Executor)
-
-	// Disable automatic flush since the test will handle the flush manually.
-	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
-	// Change the automatic compaction job to avoid it running during the test.
-	// Test creates a new compactor and calls it directly.
-	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '@yearly';")
-
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("stmtCount=%d/maxPersistedRowLimit=%d/rowsDeletePerTxn=%d",
 			tc.stmtCount,
 			tc.maxPersistedRowLimit,
 			tc.rowsToDeletePerTxn,
 		), func(t *testing.T) {
+
+			kvInterceptor := kvScanInterceptor{}
+			cleanupInterceptor := cleanupInterceptor{}
+
+			server, conn, _ := serverutils.StartServer(
+				t, base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						SQLStatsKnobs: &sqlstats.TestingKnobs{
+							AOSTClause: "AS OF SYSTEM TIME '-1us'",
+							StubTimeNow: func() time.Time {
+								return timeutil.Now().Add(-2 * time.Hour)
+							},
+						},
+						Store: &kvserver.StoreTestingKnobs{
+							TestingRequestFilter: kvInterceptor.intercept,
+						},
+					},
+				},
+			)
+
+			defer server.Stopper().Stop(ctx)
+
+			sqlConn := sqlutils.MakeSQLRunner(conn)
+			internalExecutor := server.InternalExecutor().(isql.Executor)
+
+			// Disable automatic flush since the test will handle the flush manually.
+			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.flush.interval = '24h'")
+			// Disable activity update flush which also does a scan on the stats table
+			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.activity.flush.enabled = false")
+			// Change the automatic compaction job to avoid it running during the test.
+			// Test creates a new compactor and calls it directly.
+			sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = '@yearly';")
+
 			_, err := internalExecutor.ExecEx(
 				ctx,
 				"truncate-stmt-stats",
@@ -222,9 +223,9 @@ func TestSQLStatsCompactor(t *testing.T) {
 
 			err = statsCompactor.DeleteOldestEntries(ctx)
 			kvInterceptor.disable()
+			expectedNumberOfWideScans := cleanupInterceptor.getExpectedNumberOfWideScans()
 			require.NoError(t, err)
 
-			expectedNumberOfWideScans := cleanupInterceptor.getExpectedNumberOfWideScans()
 			actualNumberOfWideScans := kvInterceptor.getTotalWideScans()
 
 			require.Equal(t,
