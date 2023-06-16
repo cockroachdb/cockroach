@@ -184,14 +184,6 @@ func (r *Replica) canUnquiesceRLocked() bool {
 // are behind, whether or not they are live. If any entry in the livenessMap is
 // nil, then the missing node ID is treated as live and will prevent the range
 // from quiescing.
-//
-// TODO(peter): There remains a scenario in which a follower is left unquiesced
-// while the leader is quiesced: the follower's receive queue is full and the
-// "quiesce" message is dropped. This seems very very unlikely because if the
-// follower isn't keeping up with raft messages it is unlikely that the leader
-// would quiesce. The fallout from this situation are undesirable raft
-// elections which will cause throughput hiccups to the range, but not
-// correctness issues.
 func (r *Replica) maybeQuiesceRaftMuLockedReplicaMuLocked(
 	ctx context.Context, leaseStatus kvserverpb.LeaseStatus, livenessMap livenesspb.IsLiveMap,
 ) bool {
