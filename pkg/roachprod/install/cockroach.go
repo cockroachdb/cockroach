@@ -596,7 +596,10 @@ func (c *SyncedCluster) initializeCluster(
 
 	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("init-cluster"))
 	if res != nil {
-		l.Printf(strings.TrimSpace(res.CombinedOut))
+		out := strings.TrimSpace(res.CombinedOut)
+		if out != "" {
+			l.Printf(out)
+		}
 	}
 	return res, err
 }
@@ -609,7 +612,10 @@ func (c *SyncedCluster) setClusterSettings(
 
 	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("set-cluster-settings"))
 	if res != nil {
-		l.Printf(strings.TrimSpace(res.CombinedOut))
+		out := strings.TrimSpace(res.CombinedOut)
+		if out != "" {
+			l.Printf(out)
+		}
 	}
 	return res, err
 }
