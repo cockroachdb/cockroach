@@ -189,6 +189,32 @@ type Node interface {
 	// TransferLeadership attempts to transfer leadership to the given transferee.
 	TransferLeadership(ctx context.Context, lead, transferee uint64)
 
+	// ForgetLeader forgets a follower's current leader, changing it to None. It
+	// remains a leaderless follower in the current term, without campaigning.
+	//
+	// This is useful with PreVote+CheckQuorum, where followers will normally not
+	// grant pre-votes if they've heard from the leader in the past election
+	// timeout interval. Leaderless followers can grant pre-votes immediately, so
+	// if a quorum of followers have strong reason to believe the leader is dead
+	// (for example via a side-channel or external failure detector) and forget it
+	// then they can elect a new leader immediately, without waiting out the
+	// election timeout. They will also revert to normal followers if they hear
+	// from the leader again, or transition to candidates on an election timeout.
+	//
+	// For example, consider a three-node cluster where 1 is the leader and 2+3
+	// have just received a heartbeat from it. If 2 and 3 believe the leader has
+	// now died (maybe they know that an orchestration system shut down 1's VM),
+	// we can instruct 2 to forget the leader and 3 to campaign. 2 will then be
+	// able to grant 3's pre-vote and elect 3 as leader immediately (normally 2
+	// would reject the vote until an election timeout passes because it has heard
+	// from the leader recently). However, 3 can not campaign unilaterally, a
+	// quorum have to agree that the leader is dead, which avoids disrupting the
+	// leader if individual nodes are wrong about it being dead.
+	//
+	// This does nothing with ReadOnlyLeaseBased, since it would allow a new
+	// leader to be elected without the old leader knowing.
+	ForgetLeader(ctx context.Context) error
+
 	// ReadIndex request a read state. The read state will be set in the ready.
 	// Read state has a read index. Once the application advances further than the read
 	// index, any linearizable read requests issued before the read request can be
@@ -573,6 +599,10 @@ func (n *node) TransferLeadership(ctx context.Context, lead, transferee uint64) 
 	case <-n.done:
 	case <-ctx.Done():
 	}
+}
+
+func (n *node) ForgetLeader(ctx context.Context) error {
+	return n.step(ctx, pb.Message{Type: pb.MsgForgetLeader})
 }
 
 func (n *node) ReadIndex(ctx context.Context, rctx []byte) error {

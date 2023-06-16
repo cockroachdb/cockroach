@@ -1284,6 +1284,8 @@ func stepLeader(r *raft, m pb.Message) error {
 		sendMsgReadIndexResponse(r, m)
 
 		return nil
+	case pb.MsgForgetLeader:
+		return nil // noop on leader
 	}
 
 	// All other message types require a progress for m.From (pr).
@@ -1661,6 +1663,15 @@ func stepFollower(r *raft, m pb.Message) error {
 		}
 		m.To = r.lead
 		r.send(m)
+	case pb.MsgForgetLeader:
+		if r.readOnly.option == ReadOnlyLeaseBased {
+			r.logger.Error("ignoring MsgForgetLeader due to ReadOnlyLeaseBased")
+			return nil
+		}
+		if r.lead != None {
+			r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
+			r.lead = None
+		}
 	case pb.MsgTimeoutNow:
 		r.logger.Infof("%x [term %d] received MsgTimeoutNow from %x and starts an election to get leadership.", r.id, r.Term, m.From)
 		// Leadership transfers never use pre-vote even if r.preVote is true; we

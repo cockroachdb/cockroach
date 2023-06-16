@@ -62,6 +62,7 @@ enum MessageType {
 	MsgStorageAppendResp = 20;
 	MsgStorageApply      = 21;
 	MsgStorageApplyResp  = 22;
+	MsgForgetLeader      = 23;
 	// NOTE: when adding new message types, remember to update the isLocalMsg and
 	// isResponseMsg arrays in raft/util.go and update the corresponding tests in
 	// raft/util_test.go.
