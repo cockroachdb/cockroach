@@ -29,9 +29,9 @@ ok
 
 raft-state
 ----
-1: StateLeader (Voter)
-2: StateFollower (Voter)
-3: StateFollower (Voter)
+1: StateLeader (Voter) Term:1 Lead:1
+2: StateFollower (Voter) Term:1 Lead:1
+3: StateFollower (Voter) Term:1 Lead:1
 
 log-level info
 ----
@@ -168,10 +168,10 @@ INFO 1 sends MsgTimeoutNow to 4 immediately as 4 already has up-to-date log
 # Leadership transfer wasn't processed yet.
 raft-state
 ----
-1: StateLeader (Voter)
-2: StateFollower (Voter)
-3: StateFollower (Voter)
-4: StateFollower (Voter)
+1: StateLeader (Voter) Term:1 Lead:1
+2: StateFollower (Voter) Term:1 Lead:1
+3: StateFollower (Voter) Term:1 Lead:1
+4: StateFollower (Voter) Term:1 Lead:1
 
 # Leadership transfer is happening here.
 stabilize
@@ -328,10 +328,10 @@ stabilize
 # Leadership transfer succeeded.
 raft-state
 ----
-1: StateFollower (Voter)
-2: StateFollower (Voter)
-3: StateFollower (Voter)
-4: StateLeader (Voter)
+1: StateFollower (Voter) Term:2 Lead:4
+2: StateFollower (Voter) Term:2 Lead:4
+3: StateFollower (Voter) Term:2 Lead:4
+4: StateLeader (Voter) Term:2 Lead:4
 
 # n4 will propose a transition out of the joint config.
 propose-conf-change 4
@@ -426,10 +426,10 @@ stabilize
 # n1 is out of the configuration.
 raft-state
 ----
-1: StateFollower (Non-Voter)
-2: StateFollower (Voter)
-3: StateFollower (Voter)
-4: StateLeader (Voter)
+1: StateFollower (Non-Voter) Term:2 Lead:4
+2: StateFollower (Voter) Term:2 Lead:4
+3: StateFollower (Voter) Term:2 Lead:4
+4: StateLeader (Voter) Term:2 Lead:4
 
 # Make sure n1 cannot campaign to become leader.
 campaign 1
