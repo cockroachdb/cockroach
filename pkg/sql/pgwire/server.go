@@ -928,8 +928,6 @@ func (s *Server) serveImpl(
 	authOpt authOptions,
 	sessionID clusterunique.ID,
 ) {
-	defer func() { _ = c.conn.Close() }()
-
 	if c.sessionArgs.User.IsRootUser() || c.sessionArgs.User.IsNodeUser() {
 		ctx = logtags.AddTag(ctx, "user", redact.Safe(c.sessionArgs.User))
 	} else {
@@ -1253,18 +1251,13 @@ func (s *Server) serveImpl(
 	}
 }
 
-// readCancelKeyAndCloseConn retrieves the "backend data" key that identifies
+// readCancelKey retrieves the "backend data" key that identifies
 // a cancellable query, then closes the connection.
-func readCancelKeyAndCloseConn(
-	ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer,
+func readCancelKey(
+	ctx context.Context, buf *pgwirebase.ReadBuffer,
 ) (ok bool, cancelKey pgwirecancel.BackendKeyData) {
 	telemetry.Inc(sqltelemetry.CancelRequestCounter)
 	backendKeyDataBits, err := buf.GetUint64()
-	// The connection that issued the cancel is not a SQL session -- it's an
-	// entirely new connection that's created just to send the cancel. We close
-	// the connection as soon as possible after reading the data, since there
-	// is nothing to send back to the client.
-	_ = conn.Close()
 	// The client is also unwilling to read an error payload, so we just log it locally.
 	if err != nil {
 		log.Sessions.Warningf(ctx, "%v", errors.Wrap(err, "reading cancel key from client"))
@@ -1378,7 +1371,6 @@ func (s *Server) sendErr(
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
 	_ /* err */ = w.writeErr(ctx, err, conn)
-	_ = conn.Close()
 	return err
 }
 
