@@ -573,13 +573,11 @@ func execCmdEx(
 			err = errors.CombineErrors(ctx.Err(), err)
 		}
 
-		if err != nil {
-			err = &cluster.WithCommandDetails{
-				Wrapped: err,
-				Cmd:     strings.Join(args, " "),
-				Stderr:  stderrString,
-				Stdout:  stdoutString,
-			}
+		err = &cluster.WithCommandDetails{
+			Wrapped: err,
+			Cmd:     strings.Join(args, " "),
+			Stderr:  stderrString,
+			Stdout:  stdoutString,
 		}
 	}
 
@@ -2292,6 +2290,9 @@ func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args
 	if err != nil {
 		return err
 	}
+
+	// Make it easier to find the log file for a command from test.log
+	c.t.L().Printf("command ```%s``` output in %s.log", strings.Join(args, " "), logFile)
 
 	if err := errors.Wrap(ctx.Err(), "cluster.RunE"); err != nil {
 		return err
