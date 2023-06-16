@@ -256,7 +256,8 @@ var (
 	// partition from stealing away leadership from an established leader
 	// (assuming they have an up-to-date log, which they do with a read-only
 	// workload). With asymmetric or partial network partitions, this can allow an
-	// unreachable node to steal away leadership, leading to range unavailability.
+	// unreachable node to steal leadership away from the leaseholder, leading to
+	// range unavailability if the leaseholder can no longer reach the leader.
 	//
 	// The asymmetric partition concerns have largely been addressed by RPC
 	// dialback (see rpc.dialback.enabled), but the partial partition concerns
