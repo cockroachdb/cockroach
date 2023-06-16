@@ -331,7 +331,7 @@ func (c *SyncedCluster) ExecSQL(
 			c.NodeURL("localhost", c.NodePort(node), tenantName) + " " +
 			ssh.Escape(args)
 
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, runOptsWithDebugName(false, "run-sql"))
+		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
 	}, WithDisplay(display), WithWaitOnFail())
 
 	if err != nil {
@@ -359,7 +359,7 @@ func (c *SyncedCluster) startNode(
 	uploadCmd += `cat > cockroach.sh && chmod +x cockroach.sh`
 
 	var res = &RunResultDetails{}
-	uploadOpts := runOptsWithDebugName(false, "upload-start-script")
+	uploadOpts := defaultCmdOpts("upload-start-script")
 	uploadOpts.stdin = strings.NewReader(startCmd)
 	res, err = c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
 	if err != nil || res.Err != nil {
@@ -375,7 +375,7 @@ func (c *SyncedCluster) startNode(
 		runScriptCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 	runScriptCmd += "./cockroach.sh"
-	res, err = c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, runOptsWithDebugName(false, "run-start-script"))
+	res, err = c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-start-script"))
 	if err != nil || res.Err != nil {
 		out := ""
 		if res != nil {
@@ -620,7 +620,7 @@ func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger,
 	l.Printf("%s: initializing cluster\n", c.Name)
 	cmd := c.generateInitCmd(node)
 
-	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, runOptsWithDebugName(false, "init-cluster"))
+	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("init-cluster"))
 	if err != nil || res.Err != nil {
 		out := ""
 		if res != nil {
@@ -639,7 +639,7 @@ func (c *SyncedCluster) setClusterSettings(ctx context.Context, l *logger.Logger
 	l.Printf("%s: setting cluster settings", c.Name)
 	cmd := c.generateClusterSettingCmd(l, node)
 
-	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, runOptsWithDebugName(false, "set-cluster-settings"))
+	res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("set-cluster-settings"))
 	if err != nil || res.Err != nil {
 		out := ""
 		if res != nil {
@@ -821,7 +821,7 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	// 1) prefix the schedule backup cmd with COCKROACH_CONNECT_TIMEOUT.
 	// 2) run the command against the first node in the cluster target.
 	//sess := c.newSession(l, node, fullCmd, withDebugName("init-backup-schedule"))
-	res, err := c.runCmdOnSingleNode(ctx, l, node, fullCmd, runOptsWithDebugName(false, "init-backup-schedule"))
+	res, err := c.runCmdOnSingleNode(ctx, l, node, fullCmd, defaultCmdOpts("init-backup-schedule"))
 	if err != nil || res.Err != nil {
 		out := ""
 		if res != nil {
