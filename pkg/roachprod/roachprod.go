@@ -1757,7 +1757,6 @@ func ApplySnapshots(
 	if err := c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 
-		//TODO: this usage may not always be correct, if the target nodes are not sequential
 		cVM := &c.VMs[node-1]
 		if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
 			volumes, err := provider.ListVolumes(l, cVM)
