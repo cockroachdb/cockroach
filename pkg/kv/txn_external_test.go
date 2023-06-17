@@ -757,10 +757,10 @@ func TestUpdateStateOnRemoteRetryableErr(t *testing.T) {
 		require.Equal(t, retErr, err)
 		if tc.epochBumped {
 			require.Greater(t, txn.Epoch(), epochBefore)
-			require.Equal(t, retErr.TxnID, txnIDBefore) // transaction IDs should not have changed on us
+			require.Equal(t, retErr.PrevTxnID, txnIDBefore) // transaction IDs should not have changed on us
 		}
 		if tc.newTxn {
-			require.NotEqual(t, retErr.Transaction.ID, txnIDBefore)
+			require.NotEqual(t, retErr.NextTransaction.ID, txnIDBefore)
 			require.Equal(t, txn.Sender().TxnStatus(), roachpb.ABORTED)
 		}
 		// Lastly, ensure the TxnCoordSender was not swapped out, even if the

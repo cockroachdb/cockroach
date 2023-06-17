@@ -338,9 +338,9 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 	// can read the error.
 	pErr := tc.GetRetryableErr(ctx)
 	require.NotNil(t, pErr)
-	require.Equal(t, txn.ID(), pErr.TxnID)
+	require.Equal(t, txn.ID(), pErr.PrevTxnID)
 	// The transaction was aborted, therefore we should have a new transaction ID.
-	require.NotEqual(t, pErr.TxnID, pErr.Transaction.ID)
+	require.NotEqual(t, pErr.PrevTxnID, pErr.NextTransaction.ID)
 }
 
 // getTxn fetches the requested key and returns the transaction info.

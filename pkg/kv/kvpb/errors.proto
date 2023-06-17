@@ -477,16 +477,16 @@ message TransactionRetryWithProtoRefreshError {
   // The ID of the transaction being restarted. The client is supposed to check
   // this against the ID of its transaction and make sure the retryable error
   // is meant for its level and didn't escape from some inner transaction.
-  optional bytes txn_id = 2 [
+  optional bytes prev_txn_id = 2 [
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
-    (gogoproto.customname) = "TxnID",
+    (gogoproto.customname) = "PrevTxnID",
     (gogoproto.nullable) = false];
 
   // The Transaction that should be used by next attempts. Depending on the
   // original cause of this method, this can either be the same Transaction as
   // before, but with an incremented epoch and timestamp, or a completely new
   // Transaction.
-  optional roachpb.Transaction transaction = 3 [(gogoproto.nullable) = false];
+  optional roachpb.Transaction next_transaction = 3 [(gogoproto.nullable) = false];
 
   // A user-readable message containing redaction markers.
   optional string msg_redactable = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
