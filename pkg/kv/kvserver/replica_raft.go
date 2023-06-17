@@ -2221,10 +2221,12 @@ func shouldCampaignOnLeaseRequestRedirect(
 // Only followers enforce the CheckQuorum recent leader condition though, so if
 // a quorum of followers consider the leader dead and choose to become
 // pre-candidates and campaign then they will grant prevotes and can hold an
-// election without waiting out the election timeout, but this can result in
-// election ties if a quorum does so simultaneously. Followers and
-// pre-candidates will also grant any number of pre-votes, both for themselves
-// and anyone else that's eligible.
+// election without waiting out the election timeout. This can result in
+// election ties, so it's often better for followers to choose to forget their
+// current leader via forgetLeaderLocked(), allowing them to immediately grant
+// (pre)votes without campaigning themselves. Followers and pre-candidates will
+// also grant any number of pre-votes, both for themselves and anyone else
+// that's eligible.
 func (r *Replica) campaignLocked(ctx context.Context) {
 	log.VEventf(ctx, 3, "campaigning")
 	if err := r.mu.internalRaftGroup.Campaign(); err != nil {
@@ -2248,6 +2250,43 @@ func (r *Replica) forceCampaignLocked(ctx context.Context) {
 		log.VEventf(ctx, 1, "failed to campaign: %s", err)
 	}
 	r.store.enqueueRaftUpdateCheck(r.RangeID)
+}
+
+// forgetLeaderLocked forgets a follower's current raft leader, remaining a
+// leaderless follower in the current term. The replica will not campaign unless
+// the election timeout elapses. However, this allows it to grant (pre)votes if
+// a different candidate is campaigning, or revert to a follower if it receives
+// a message from the leader. It still won't grant prevotes to a lagging
+// follower. This is a noop on non-followers.
+//
+// This is useful with PreVote+CheckQuorum, where a follower will not grant
+// (pre)votes if it has a current leader. Forgetting the leader allows the
+// replica to vote without waiting out the election timeout if it has good
+// reason to believe the current leader is dead. If a quorum of followers
+// independently consider the leader dead, a campaigner can win despite them
+// having heard from a leader recently (in ticks).
+//
+// The motivating case is a quiesced range that unquiesces to a long-dead
+// leader: the first replica will campaign and solicit pre-votes, but normally
+// the other replicas won't grant the prevote because they heard from the leader
+// in the past election timeout (in ticks), requiring waiting for an election
+// timeout. However, if they independently see the leader dead in liveness when
+// unquiescing, they can forget the leader and grant the prevote. If a quorum of
+// replicas independently consider the leader dead, the candidate wins the
+// election.  If the leader isn't dead after all, the replica will revert to a
+// follower upon hearing from it.
+//
+// In particular, since a quorum must agree that the leader is dead and forget
+// it for a candidate to win a pre-campaign, this avoids disruptions during
+// partial/asymmetric partitions where individual replicas can mistakenly
+// believe the leader is dead and steal leadership away, which can otherwise
+// lead to persistent unavailability.
+func (r *Replica) forgetLeaderLocked(ctx context.Context) {
+	log.VEventf(ctx, 3, "forgetting leader")
+	msg := raftpb.Message{To: uint64(r.replicaID), Type: raftpb.MsgForgetLeader}
+	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
+		log.VEventf(ctx, 1, "failed to forget leader: %s", err)
+	}
 }
 
 // a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
