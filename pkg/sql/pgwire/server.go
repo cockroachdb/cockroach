@@ -1011,7 +1011,7 @@ func (s *Server) serveImpl(
 		}
 		var ac AuthConn = authPipe
 		// Simulate auth succeeding.
-		ac.AuthOK(ctx)
+		ac.AuthOK()
 		dummyCh := make(chan error)
 		close(dummyCh)
 		procCh = dummyCh
