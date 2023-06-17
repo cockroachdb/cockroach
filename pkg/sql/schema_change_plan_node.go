@@ -51,7 +51,10 @@ func (p *planner) FormatAstAsRedactableString(
 
 // SchemaChange provides the planNode for the new schema changer.
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, error) {
-	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
+	err := checkSchemaChangeEnabled(ctx, p.ExecCfg(), p.stmt.AST.StatementTag())
+	if err != nil {
+		return nil, err
+	}
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
 	// When new schema changer is on we will not support it for explicit
 	// transaction, since we don't know if subsequent statements don't
