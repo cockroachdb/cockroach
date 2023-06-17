@@ -48,6 +48,9 @@ func (r *externalStorageReader) ReadAt(ctx context.Context, p []byte, offset int
 	for n := 0; n < len(p); {
 		nn, err := reader.Read(ctx, p[n:])
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
 			return err
 		}
 		n += nn
