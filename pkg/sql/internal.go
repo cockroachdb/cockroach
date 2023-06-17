@@ -1088,53 +1088,46 @@ func (ie *InternalExecutor) execInternal(
 		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
 	}
 	if len(qargs) == 0 {
-		if err := stmtBuf.Push(
-			ctx,
-			ExecStmt{
-				Statement:    parsed,
-				TimeReceived: timeReceived,
-				ParseStart:   parseStart,
-				ParseEnd:     parseEnd,
-				// This is the only and last statement in the batch, so that this
-				// transaction can be autocommited as a single statement transaction.
-				LastInBatch: true,
-			}); err != nil {
+		if err := stmtBuf.Push(ExecStmt{
+			Statement:    parsed,
+			TimeReceived: timeReceived,
+			ParseStart:   parseStart,
+			ParseEnd:     parseEnd,
+			// This is the only and last statement in the batch, so that this
+			// transaction can be autocommited as a single statement transaction.
+			LastInBatch: true,
+		}); err != nil {
 			return nil, err
 		}
-		if err := stmtBuf.Push(ctx, Sync{
+		if err := stmtBuf.Push(Sync{
 			// This is a Sync in the simple protocol, so it isn't marked as explicit.
 			ExplicitFromClient: false,
 		}); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := stmtBuf.Push(
-			ctx,
-			PrepareStmt{
-				Statement:  parsed,
-				ParseStart: parseStart,
-				ParseEnd:   parseEnd,
-				TypeHints:  typeHints,
-			},
-		); err != nil {
+		if err := stmtBuf.Push(PrepareStmt{
+			Statement:  parsed,
+			ParseStart: parseStart,
+			ParseEnd:   parseEnd,
+			TypeHints:  typeHints,
+		}); err != nil {
 			return nil, err
 		}
 
-		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums}); err != nil {
+		if err := stmtBuf.Push(BindStmt{internalArgs: datums}); err != nil {
 			return nil, err
 		}
 
-		if err := stmtBuf.Push(ctx,
-			ExecPortal{
-				TimeReceived: timeReceived,
-				// Next command will be a sync, so this can be considered as another single
-				// statement transaction.
-				FollowedBySync: true,
-			},
-		); err != nil {
+		if err := stmtBuf.Push(ExecPortal{
+			TimeReceived: timeReceived,
+			// Next command will be a sync, so this can be considered as another single
+			// statement transaction.
+			FollowedBySync: true,
+		}); err != nil {
 			return nil, err
 		}
-		if err := stmtBuf.Push(ctx, Sync{
+		if err := stmtBuf.Push(Sync{
 			// This is a Sync in the extended protocol, so it's marked as explicit.
 			ExplicitFromClient: true,
 		}); err != nil {

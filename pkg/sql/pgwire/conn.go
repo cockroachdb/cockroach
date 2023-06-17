@@ -358,25 +358,24 @@ func (c *conn) handleSimpleQuery(
 ) error {
 	query, err := buf.GetString()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
 
 	startParse := timeutil.Now()
 	stmts, err := c.parser.ParseWithInt(query, unqualifiedIntSize)
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse simple query: %s", query)
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
 	endParse := timeutil.Now()
 
 	if len(stmts) == 0 {
-		return c.stmtBuf.Push(
-			ctx, sql.ExecStmt{
-				Statement:    statements.Statement[tree.Statement]{},
-				TimeReceived: timeReceived,
-				ParseStart:   startParse,
-				ParseEnd:     endParse,
-			})
+		return c.stmtBuf.Push(sql.ExecStmt{
+			Statement:    statements.Statement[tree.Statement]{},
+			TimeReceived: timeReceived,
+			ParseStart:   startParse,
+			ParseEnd:     endParse,
+		})
 	}
 
 	for i := range stmts {
@@ -389,27 +388,22 @@ func (c *conn) handleSimpleQuery(
 				// together with other statements in the "simple" protocol, but I'd
 				// rather not worry about it since execution of COPY is special - it
 				// takes control over the connection.
-				return c.stmtBuf.Push(
-					ctx,
-					sql.SendError{
-						Err: pgwirebase.NewProtocolViolationErrorf(
-							"COPY together with other statements in a query string is not supported"),
-					})
+				return c.stmtBuf.Push(sql.SendError{
+					Err: pgwirebase.NewProtocolViolationErrorf(
+						"COPY together with other statements in a query string is not supported"),
+				})
 			}
 			copyDone := sync.WaitGroup{}
 			copyDone.Add(1)
-			if err := c.stmtBuf.Push(
-				ctx,
-				sql.CopyIn{
-					Conn:         c,
-					ParsedStmt:   stmts[i],
-					Stmt:         cp,
-					CopyDone:     &copyDone,
-					TimeReceived: timeReceived,
-					ParseStart:   startParse,
-					ParseEnd:     endParse,
-				},
-			); err != nil {
+			if err := c.stmtBuf.Push(sql.CopyIn{
+				Conn:         c,
+				ParsedStmt:   stmts[i],
+				Stmt:         cp,
+				CopyDone:     &copyDone,
+				TimeReceived: timeReceived,
+				ParseStart:   startParse,
+				ParseEnd:     endParse,
+			}); err != nil {
 				return err
 			}
 			copyDone.Wait()
@@ -421,23 +415,18 @@ func (c *conn) handleSimpleQuery(
 				// together with other statements in the "simple" protocol, but I'd
 				// rather not worry about it since execution of COPY is special - it
 				// takes control over the connection.
-				return c.stmtBuf.Push(
-					ctx,
-					sql.SendError{
-						Err: pgwirebase.NewProtocolViolationErrorf(
-							"COPY together with other statements in a query string is not supported"),
-					})
+				return c.stmtBuf.Push(sql.SendError{
+					Err: pgwirebase.NewProtocolViolationErrorf(
+						"COPY together with other statements in a query string is not supported"),
+				})
 			}
-			if err := c.stmtBuf.Push(
-				ctx,
-				sql.CopyOut{
-					ParsedStmt:   stmts[i],
-					Stmt:         cp,
-					TimeReceived: timeReceived,
-					ParseStart:   startParse,
-					ParseEnd:     endParse,
-				},
-			); err != nil {
+			if err := c.stmtBuf.Push(sql.CopyOut{
+				ParsedStmt:   stmts[i],
+				Stmt:         cp,
+				TimeReceived: timeReceived,
+				ParseStart:   startParse,
+				ParseEnd:     endParse,
+			}); err != nil {
 				return err
 			}
 			return nil
@@ -455,16 +444,14 @@ func (c *conn) handleSimpleQuery(
 			return n > 1 && i == n-2 && isShowCommitTimestamp(stmts[n-1])
 		}
 
-		if err := c.stmtBuf.Push(
-			ctx,
-			sql.ExecStmt{
-				Statement:                            stmts[i],
-				TimeReceived:                         timeReceived,
-				ParseStart:                           startParse,
-				ParseEnd:                             endParse,
-				LastInBatch:                          i == len(stmts)-1,
-				LastInBatchBeforeShowCommitTimestamp: lastBeforeShowCommitTimestamp(),
-			}); err != nil {
+		if err := c.stmtBuf.Push(sql.ExecStmt{
+			Statement:                            stmts[i],
+			TimeReceived:                         timeReceived,
+			ParseStart:                           startParse,
+			ParseEnd:                             endParse,
+			LastInBatch:                          i == len(stmts)-1,
+			LastInBatchBeforeShowCommitTimestamp: lastBeforeShowCommitTimestamp(),
+		}); err != nil {
 			return err
 		}
 	}
@@ -473,28 +460,26 @@ func (c *conn) handleSimpleQuery(
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleParse(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *types.T,
-) error {
+func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 	telemetry.Inc(sqltelemetry.ParseRequestCounter)
-	name, err := buf.GetString()
+	name, err := c.readBuf.GetString()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
-	query, err := buf.GetString()
+	query, err := c.readBuf.GetString()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
 	// The client may provide type information for (some of) the placeholders.
-	numQArgTypes, err := buf.GetUint16()
+	numQArgTypes, err := c.readBuf.GetUint16()
 	if err != nil {
 		return err
 	}
 	inTypeHints := make([]oid.Oid, numQArgTypes)
 	for i := range inTypeHints {
-		typ, err := buf.GetUint32()
+		typ, err := c.readBuf.GetUint32()
 		if err != nil {
-			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+			return c.stmtBuf.Push(sql.SendError{Err: err})
 		}
 		inTypeHints[i] = oid.Oid(typ)
 	}
@@ -503,11 +488,11 @@ func (c *conn) handleParse(
 	stmts, err := c.parser.ParseWithInt(query, nakedIntSize)
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse: %s", query)
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
 	if len(stmts) > 1 {
 		err := pgerror.WrongNumberOfPreparedStatements(len(stmts))
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
 	var stmt statements.Statement[tree.Statement]
 	if len(stmts) == 1 {
@@ -551,7 +536,7 @@ func (c *conn) handleParse(
 			v, ok := types.OidToType[t]
 			if !ok {
 				err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)
-				return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+				return c.stmtBuf.Push(sql.SendError{Err: err})
 			}
 			sqlTypeHints[i] = v
 		}
@@ -569,59 +554,53 @@ func (c *conn) handleParse(
 		// Also note that COPY FROM in extended mode seems to be quite broken in
 		// Postgres too:
 		// https://www.postgresql.org/message-id/flat/CAMsr%2BYGvp2wRx9pPSxaKFdaObxX8DzWse%2BOkWk2xpXSvT0rq-g%40mail.gmail.com#CAMsr+YGvp2wRx9pPSxaKFdaObxX8DzWse+OkWk2xpXSvT0rq-g@mail.gmail.com
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: fmt.Errorf("CopyFrom not supported in extended protocol mode")})
+		return c.stmtBuf.Push(sql.SendError{Err: fmt.Errorf("CopyFrom not supported in extended protocol mode")})
 	}
 
-	return c.stmtBuf.Push(
-		ctx,
-		sql.PrepareStmt{
-			Name:         name,
-			Statement:    stmt,
-			TypeHints:    sqlTypeHints,
-			RawTypeHints: inTypeHints,
-			ParseStart:   startParse,
-			ParseEnd:     endParse,
-		})
+	return c.stmtBuf.Push(sql.PrepareStmt{
+		Name:         name,
+		Statement:    stmt,
+		TypeHints:    sqlTypeHints,
+		RawTypeHints: inTypeHints,
+		ParseStart:   startParse,
+		ParseEnd:     endParse,
+	})
 }
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+func (c *conn) handleDescribe() error {
 	telemetry.Inc(sqltelemetry.DescribeRequestCounter)
-	typ, err := buf.GetPrepareType()
+	typ, err := c.readBuf.GetPrepareType()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
-	name, err := buf.GetString()
+	name, err := c.readBuf.GetString()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
-	return c.stmtBuf.Push(
-		ctx,
-		sql.DescribeStmt{
-			Name: tree.Name(name),
-			Type: typ,
-		})
+	return c.stmtBuf.Push(sql.DescribeStmt{
+		Name: tree.Name(name),
+		Type: typ,
+	})
 }
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleClose(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+func (c *conn) handleClose() error {
 	telemetry.Inc(sqltelemetry.CloseRequestCounter)
-	typ, err := buf.GetPrepareType()
+	typ, err := c.readBuf.GetPrepareType()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
-	name, err := buf.GetString()
+	name, err := c.readBuf.GetString()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
-	return c.stmtBuf.Push(
-		ctx,
-		sql.DeletePreparedStmt{
-			Name: name,
-			Type: typ,
-		})
+	return c.stmtBuf.Push(sql.DeletePreparedStmt{
+		Name: name,
+		Type: typ,
+	})
 }
 
 // If no format codes are provided then all arguments/result-columns use
@@ -632,15 +611,15 @@ var formatCodesAllText = []pgwirebase.FormatCode{pgwirebase.FormatText}
 // statement.
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+func (c *conn) handleBind() error {
 	telemetry.Inc(sqltelemetry.BindRequestCounter)
-	portalName, err := buf.GetString()
+	portalName, err := c.readBuf.GetString()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
-	statementName, err := buf.GetString()
+	statementName, err := c.readBuf.GetString()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
 
 	// From the docs on number of argument format codes to bind:
@@ -649,9 +628,9 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	// specified format code is applied to all arguments; or it can equal the
 	// actual number of arguments.
 	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
-	numQArgFormatCodes, err := buf.GetUint16()
+	numQArgFormatCodes, err := c.readBuf.GetUint16()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
 	var qArgFormatCodes []pgwirebase.FormatCode
 	switch numQArgFormatCodes {
@@ -660,9 +639,9 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 		qArgFormatCodes = formatCodesAllText
 	case 1:
 		// `1` means read one code and apply it to every argument.
-		ch, err := buf.GetUint16()
+		ch, err := c.readBuf.GetUint16()
 		if err != nil {
-			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+			return c.stmtBuf.Push(sql.SendError{Err: err})
 		}
 		code := pgwirebase.FormatCode(ch)
 		if code == pgwirebase.FormatText {
@@ -674,32 +653,32 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 		qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgFormatCodes)
 		// Read one format code for each argument and apply it to that argument.
 		for i := range qArgFormatCodes {
-			ch, err := buf.GetUint16()
+			ch, err := c.readBuf.GetUint16()
 			if err != nil {
-				return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+				return c.stmtBuf.Push(sql.SendError{Err: err})
 			}
 			qArgFormatCodes[i] = pgwirebase.FormatCode(ch)
 		}
 	}
 
-	numValues, err := buf.GetUint16()
+	numValues, err := c.readBuf.GetUint16()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
 	qargs := make([][]byte, numValues)
 	for i := 0; i < int(numValues); i++ {
-		plen, err := buf.GetUint32()
+		plen, err := c.readBuf.GetUint32()
 		if err != nil {
-			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+			return c.stmtBuf.Push(sql.SendError{Err: err})
 		}
 		if int32(plen) == -1 {
 			// The argument is a NULL value.
 			qargs[i] = nil
 			continue
 		}
-		b, err := buf.GetBytes(int(plen))
+		b, err := c.readBuf.GetBytes(int(plen))
 		if err != nil {
-			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+			return c.stmtBuf.Push(sql.SendError{Err: err})
 		}
 		qargs[i] = b
 	}
@@ -711,9 +690,9 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	// (if any); or it can equal the actual number of result columns of the
 	// query.
 	// http://www.postgresql.org/docs/current/static/protocol-message-formats.html
-	numColumnFormatCodes, err := buf.GetUint16()
+	numColumnFormatCodes, err := c.readBuf.GetUint16()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
 	var columnFormatCodes []pgwirebase.FormatCode
 	switch numColumnFormatCodes {
@@ -722,9 +701,9 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 		columnFormatCodes = formatCodesAllText
 	case 1:
 		// All columns will use the one specified format.
-		ch, err := buf.GetUint16()
+		ch, err := c.readBuf.GetUint16()
 		if err != nil {
-			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+			return c.stmtBuf.Push(sql.SendError{Err: err})
 		}
 		code := pgwirebase.FormatCode(ch)
 		if code == pgwirebase.FormatText {
@@ -736,39 +715,35 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 		columnFormatCodes = make([]pgwirebase.FormatCode, numColumnFormatCodes)
 		// Read one format code for each column and apply it to that column.
 		for i := range columnFormatCodes {
-			ch, err := buf.GetUint16()
+			ch, err := c.readBuf.GetUint16()
 			if err != nil {
-				return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+				return c.stmtBuf.Push(sql.SendError{Err: err})
 			}
 			columnFormatCodes[i] = pgwirebase.FormatCode(ch)
 		}
 	}
-	return c.stmtBuf.Push(
-		ctx,
-		sql.BindStmt{
-			PreparedStatementName: statementName,
-			PortalName:            portalName,
-			Args:                  qargs,
-			ArgFormatCodes:        qArgFormatCodes,
-			OutFormats:            columnFormatCodes,
-		})
+	return c.stmtBuf.Push(sql.BindStmt{
+		PreparedStatementName: statementName,
+		PortalName:            portalName,
+		Args:                  qargs,
+		ArgFormatCodes:        qArgFormatCodes,
+		OutFormats:            columnFormatCodes,
+	})
 }
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleExecute(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time, followedBySync bool,
-) error {
+func (c *conn) handleExecute(timeReceived time.Time, followedBySync bool) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
-	portalName, err := buf.GetString()
+	portalName, err := c.readBuf.GetString()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
-	limit, err := buf.GetUint32()
+	limit, err := c.readBuf.GetUint32()
 	if err != nil {
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		return c.stmtBuf.Push(sql.SendError{Err: err})
 	}
-	return c.stmtBuf.Push(ctx, sql.ExecPortal{
+	return c.stmtBuf.Push(sql.ExecPortal{
 		Name:           portalName,
 		TimeReceived:   timeReceived,
 		Limit:          int(limit),
@@ -776,9 +751,9 @@ func (c *conn) handleExecute(
 	})
 }
 
-func (c *conn) handleFlush(ctx context.Context) error {
+func (c *conn) handleFlush() error {
 	telemetry.Inc(sqltelemetry.FlushRequestCounter)
-	return c.stmtBuf.Push(ctx, sql.Flush{})
+	return c.stmtBuf.Push(sql.Flush{})
 }
 
 // BeginCopyIn is part of the pgwirebase.Conn interface.

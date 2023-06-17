@@ -43,9 +43,9 @@ func assertPrepareStmt(t *testing.T, cmd Command, expName string) {
 	}
 }
 
-func mustPush(ctx context.Context, t *testing.T, buf *StmtBuf, cmd Command) {
+func mustPush(t *testing.T, buf *StmtBuf, cmd Command) {
 	t.Helper()
-	if err := buf.Push(ctx, cmd); err != nil {
+	if err := buf.Push(cmd); err != nil {
 		t.Fatalf("%s", err)
 	}
 }
@@ -72,10 +72,10 @@ func TestStmtBuf(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := NewStmtBuf()
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s2})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s3})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s4})
+	mustPush(t, buf, ExecStmt{Statement: s1})
+	mustPush(t, buf, ExecStmt{Statement: s2})
+	mustPush(t, buf, ExecStmt{Statement: s3})
+	mustPush(t, buf, ExecStmt{Statement: s4})
 
 	// Check that, while we don't manually advance the cursor, we keep getting the
 	// same statement.
@@ -143,14 +143,13 @@ func TestStmtBufSignal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	buf := NewStmtBuf()
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	go func() {
-		_ = buf.Push(ctx, ExecStmt{Statement: s1})
+		_ = buf.Push(ExecStmt{Statement: s1})
 	}()
 
 	expPos := CmdPos(0)
@@ -176,7 +175,7 @@ func TestStmtBufLtrim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		mustPush(ctx, t, buf, ExecStmt{Statement: stmt})
+		mustPush(t, buf, ExecStmt{Statement: stmt})
 	}
 	// Advance the cursor so that we can trim.
 	buf.AdvanceOne()
@@ -197,13 +196,12 @@ func TestStmtBufClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	buf := NewStmtBuf()
 	stmt, err := parser.ParseOne("SELECT 1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	mustPush(ctx, t, buf, ExecStmt{Statement: stmt})
+	mustPush(t, buf, ExecStmt{Statement: stmt})
 	buf.Close()
 
 	_, _, err = buf.CurCmd()
@@ -242,9 +240,9 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-	mustPush(ctx, t, buf, PrepareStmt{Name: "p1"})
-	mustPush(ctx, t, buf, PrepareStmt{Name: "p2"})
+	mustPush(t, buf, ExecStmt{Statement: s1})
+	mustPush(t, buf, PrepareStmt{Name: "p1"})
+	mustPush(t, buf, PrepareStmt{Name: "p2"})
 
 	cmd, _, err := buf.CurCmd()
 	if err != nil {
@@ -280,7 +278,6 @@ func TestStmtBufBatching(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	buf := NewStmtBuf()
-	ctx := context.Background()
 
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {
@@ -288,22 +285,22 @@ func TestStmtBufBatching(t *testing.T) {
 	}
 
 	// Start a new batch.
-	mustPush(ctx, t, buf, Sync{})
+	mustPush(t, buf, Sync{})
 
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-
-	// Start a new batch.
-	mustPush(ctx, t, buf, Sync{})
-
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
+	mustPush(t, buf, ExecStmt{Statement: s1})
+	mustPush(t, buf, ExecStmt{Statement: s1})
 
 	// Start a new batch.
-	mustPush(ctx, t, buf, Sync{})
+	mustPush(t, buf, Sync{})
 
-	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
+	mustPush(t, buf, ExecStmt{Statement: s1})
+	mustPush(t, buf, ExecStmt{Statement: s1})
+	mustPush(t, buf, ExecStmt{Statement: s1})
+
+	// Start a new batch.
+	mustPush(t, buf, Sync{})
+
+	mustPush(t, buf, ExecStmt{Statement: s1})
 
 	// Go to 2nd batch.
 	if err := buf.seekToNextBatch(false /* requireClientSync */); err != nil {
@@ -331,8 +328,8 @@ func TestStmtBufBatching(t *testing.T) {
 
 	// Async start a 4th batch; that will unblock the seek below.
 	go func() {
-		mustPush(ctx, t, buf, Sync{})
-		_ = buf.Push(ctx, ExecStmt{Statement: s1})
+		mustPush(t, buf, Sync{})
+		_ = buf.Push(ExecStmt{Statement: s1})
 	}()
 
 	// Go to 4th batch.

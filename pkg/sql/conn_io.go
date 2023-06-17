@@ -493,7 +493,7 @@ func (buf *StmtBuf) Close() {
 // waiting for this command to arrive, it will be woken up.
 //
 // An error is returned if the buffer has been closed.
-func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
+func (buf *StmtBuf) Push(cmd Command) error {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	if buf.mu.closed {

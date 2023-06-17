@@ -859,7 +859,7 @@ func (s *Server) newConn(
 		// DrainRequest. This will make the processor quit whenever it finds a good
 		// time.
 		if !sentDrainSignal && s.IsDraining() {
-			_ /* err */ = c.stmtBuf.Push(ctx, sql.DrainRequest{})
+			_ /* err */ = c.stmtBuf.Push(sql.DrainRequest{})
 			sentDrainSignal = true
 		}
 		return nil
@@ -1056,14 +1056,14 @@ func (s *Server) serveImpl(
 				}
 
 				// Write out the error over pgwire.
-				if err := c.stmtBuf.Push(ctx, sql.SendError{Err: err}); err != nil {
+				if err := c.stmtBuf.Push(sql.SendError{Err: err}); err != nil {
 					return false, isSimpleQuery, errors.New("pgwire: error writing too big error message to the client")
 				}
 
 				// If this is a simple query, we have to send the sync message back as
 				// well.
 				if isSimpleQuery {
-					if err := c.stmtBuf.Push(ctx, sql.Sync{
+					if err := c.stmtBuf.Push(sql.Sync{
 						// CRDB is implicitly generating this Sync during the simple
 						// protocol.
 						ExplicitFromClient: false,
@@ -1124,7 +1124,7 @@ func (s *Server) serveImpl(
 				); err != nil {
 					return false, isSimpleQuery, err
 				}
-				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{
+				return false, isSimpleQuery, c.stmtBuf.Push(sql.Sync{
 					// CRDB is implicitly generating this Sync during the simple
 					// protocol.
 					ExplicitFromClient: false,
@@ -1142,19 +1142,19 @@ func (s *Server) serveImpl(
 					pgwirebase.ClientMessageType(nextMsgType[0]) == pgwirebase.ClientMsgSync {
 					followedBySync = true
 				}
-				return false, isSimpleQuery, c.handleExecute(ctx, &c.readBuf, timeReceived, followedBySync)
+				return false, isSimpleQuery, c.handleExecute(timeReceived, followedBySync)
 
 			case pgwirebase.ClientMsgParse:
-				return false, isSimpleQuery, c.handleParse(ctx, &c.readBuf, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
+				return false, isSimpleQuery, c.handleParse(ctx, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
 
 			case pgwirebase.ClientMsgDescribe:
-				return false, isSimpleQuery, c.handleDescribe(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleDescribe()
 
 			case pgwirebase.ClientMsgBind:
-				return false, isSimpleQuery, c.handleBind(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleBind()
 
 			case pgwirebase.ClientMsgClose:
-				return false, isSimpleQuery, c.handleClose(ctx, &c.readBuf)
+				return false, isSimpleQuery, c.handleClose()
 
 			case pgwirebase.ClientMsgTerminate:
 				terminateSeen = true
@@ -1165,14 +1165,14 @@ func (s *Server) serveImpl(
 				// protocol and encounters an error, everything until the next sync
 				// message has to be skipped. See:
 				// https://www.postgresql.org/docs/current/10/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
-				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{
+				return false, isSimpleQuery, c.stmtBuf.Push(sql.Sync{
 					// The client explicitly sent this Sync as part of the extended
 					// protocol.
 					ExplicitFromClient: true,
 				})
 
 			case pgwirebase.ClientMsgFlush:
-				return false, isSimpleQuery, c.handleFlush(ctx)
+				return false, isSimpleQuery, c.handleFlush()
 
 			case pgwirebase.ClientMsgCopyData, pgwirebase.ClientMsgCopyDone, pgwirebase.ClientMsgCopyFail:
 				// We're supposed to ignore these messages, per the protocol spec. This
@@ -1182,9 +1182,7 @@ func (s *Server) serveImpl(
 				// https://github.com/postgres/postgres/blob/6e1dd2773eb60a6ab87b27b8d9391b756e904ac3/src/backend/tcop/postgres.c#L4295
 				return false, isSimpleQuery, nil
 			default:
-				return false, isSimpleQuery, c.stmtBuf.Push(
-					ctx,
-					sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)})
+				return false, isSimpleQuery, c.stmtBuf.Push(sql.SendError{Err: pgwirebase.NewUnrecognizedMsgTypeErr(typ)})
 			}
 		}()
 		if err != nil {
