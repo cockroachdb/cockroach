@@ -69,6 +69,8 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER TENANT foo GRANT ??`, `ALTER TENANT CAPABILITY`},
 		{`ALTER TENANT foo REVOKE ??`, `ALTER TENANT CAPABILITY`},
 
+		{`ALTER TENANT ??`, `ALTER TENANT`},
+
 		{`ALTER TYPE ??`, `ALTER TYPE`},
 		{`ALTER TYPE t ??`, `ALTER TYPE`},
 		{`ALTER TYPE t ADD VALUE ??`, `ALTER TYPE`},
