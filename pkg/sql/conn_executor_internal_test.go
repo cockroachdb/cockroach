@@ -72,12 +72,12 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	// succeed and the 2nd one to fail (since the portal is destroyed after the
 	// Execute).
 	cmdPos := 0
-	if err = buf.Push(ctx, PrepareStmt{Name: "ps_nontxn", Statement: mustParseOne("SELECT 1")}); err != nil {
+	if err = buf.Push(PrepareStmt{Name: "ps_nontxn", Statement: mustParseOne("SELECT 1")}); err != nil {
 		t.Fatal(err)
 	}
 
 	cmdPos++
-	if err = buf.Push(ctx, BindStmt{
+	if err = buf.Push(BindStmt{
 		PreparedStatementName: "ps_nontxn",
 		PortalName:            "portal1",
 	}); err != nil {
@@ -86,7 +86,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 
 	cmdPos++
 	successfulDescribePos := cmdPos
-	if err = buf.Push(ctx, DescribeStmt{
+	if err = buf.Push(DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
 	}); err != nil {
@@ -95,7 +95,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 
 	cmdPos++
 	successfulDescribePos = cmdPos
-	if err = buf.Push(ctx, ExecPortal{
+	if err = buf.Push(ExecPortal{
 		Name: "portal1",
 	}); err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 
 	cmdPos++
 	secondSuccessfulDescribePos := cmdPos
-	if err = buf.Push(ctx, DescribeStmt{
+	if err = buf.Push(DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
 	}); err != nil {
@@ -114,7 +114,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 
 	cmdPos++
-	if err = buf.Push(ctx, Sync{ExplicitFromClient: true}); err != nil {
+	if err = buf.Push(Sync{ExplicitFromClient: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -133,14 +133,14 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	// cmdPos gets reset after the Sync.
 	cmdPos = 0
 	failedDescribePos := cmdPos
-	if err = buf.Push(ctx, DescribeStmt{
+	if err = buf.Push(DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	cmdPos++
-	if err = buf.Push(ctx, Sync{ExplicitFromClient: true}); err != nil {
+	if err = buf.Push(Sync{ExplicitFromClient: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -159,7 +159,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	// after the COMMIT). The point of the SELECT is to show that the portal
 	// survives execution of a statement.
 	cmdPos++
-	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("BEGIN")}); err != nil {
+	if err = buf.Push(ExecStmt{Statement: mustParseOne("BEGIN")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -167,12 +167,12 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	require.NoError(t, err)
 
 	cmdPos++
-	if err = buf.Push(ctx, PrepareStmt{Name: "ps1", Statement: mustParseOne("SELECT 1")}); err != nil {
+	if err = buf.Push(PrepareStmt{Name: "ps1", Statement: mustParseOne("SELECT 1")}); err != nil {
 		t.Fatal(err)
 	}
 
 	cmdPos++
-	if err = buf.Push(ctx, BindStmt{
+	if err = buf.Push(BindStmt{
 		PreparedStatementName: "ps1",
 		PortalName:            "portal1",
 	}); err != nil {
@@ -180,7 +180,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 
 	cmdPos++
-	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("SELECT 2")}); err != nil {
+	if err = buf.Push(ExecStmt{Statement: mustParseOne("SELECT 2")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -189,7 +189,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 
 	cmdPos++
 	successfulDescribePos = cmdPos
-	if err = buf.Push(ctx, DescribeStmt{
+	if err = buf.Push(DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
 	}); err != nil {
@@ -197,7 +197,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 
 	cmdPos++
-	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("COMMIT")}); err != nil {
+	if err = buf.Push(ExecStmt{Statement: mustParseOne("COMMIT")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -206,7 +206,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 
 	cmdPos++
 	secondSuccessfulDescribePos = cmdPos
-	if err = buf.Push(ctx, DescribeStmt{
+	if err = buf.Push(DescribeStmt{
 		Name: "portal1",
 		Type: pgwirebase.PreparePortal,
 	}); err != nil {
@@ -214,7 +214,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 
 	cmdPos++
-	if err = buf.Push(ctx, Sync{ExplicitFromClient: true}); err != nil {
+	if err = buf.Push(Sync{ExplicitFromClient: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -428,9 +428,9 @@ CREATE TEMPORARY TABLE foo();
 `)
 	require.NoError(t, err)
 	for _, stmt := range stmts {
-		require.NoError(t, stmtBuf.Push(ctx, ExecStmt{Statement: stmt}))
+		require.NoError(t, stmtBuf.Push(ExecStmt{Statement: stmt}))
 	}
-	require.NoError(t, stmtBuf.Push(ctx, Sync{ExplicitFromClient: false}))
+	require.NoError(t, stmtBuf.Push(Sync{ExplicitFromClient: false}))
 
 	done := make(chan error)
 	go func() {
