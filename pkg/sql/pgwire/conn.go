@@ -241,7 +241,7 @@ func (c *conn) processCommandsAsync(
 			return
 		}
 		// Signal the connection was established to the authenticator.
-		ac.AuthOK(ctx)
+		ac.AuthOK()
 		ac.LogAuthOK(ctx)
 
 		// We count the connection establish latency until we are ready to
