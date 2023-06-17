@@ -284,9 +284,13 @@ message SampledQuery {
   // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
   int64 mvcc_range_key_skipped_points = 74 [(gogoproto.jsontag) = ",omitempty"];
 
+  // SchemaChangerMode is the mode that was used to execute the schema change,
+  // if any.
+  string schema_changer_mode = 76 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
   reserved 12;
 
-  // Next available ID: 76.
+  // Next available ID: 77.
 }
 
 
