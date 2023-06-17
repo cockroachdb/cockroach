@@ -14,6 +14,7 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -56,6 +58,9 @@ func buildOpaque(
 		plan, err = p.SchemaChange(ctx, stmt)
 		if err != nil {
 			return nil, err
+		} else if plan != nil {
+			telemetry.Inc(sqltelemetry.DeclarativeSchemaChangerCounter)
+			p.curPlan.instrumentation.schemaChangerMode = schemaChangerModeDeclarative
 		}
 	}
 	if plan == nil {

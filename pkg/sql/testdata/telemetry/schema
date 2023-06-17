@@ -46,6 +46,7 @@ CREATE TABLE y (a SERIAL2)
 sql.schema.create_table
 sql.schema.new_column.qualification.default_expr
 sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.legacy
 sql.schema.serial.rowid.int2
 
 feature-usage
@@ -57,6 +58,7 @@ sql.schema.alter_table.add_column.references
 sql.schema.alter_table.add_constraint
 sql.schema.get_virtual_table.pg_catalog.pg_attribute
 sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.declarative
 
 schema
 ----
@@ -78,27 +80,19 @@ table:_
       ├── _:int default: _
       └── _:int
 
-feature-allowlist
-sql.schema.create_unlogged_table
-----
-
 feature-usage
 CREATE UNLOGGED TABLE unlogged_tbl(col int PRIMARY KEY)
 ----
+sql.schema.create_table
 sql.schema.create_unlogged_table
-
-feature-allowlist
-sql.schema.create_or_replace_view
-----
+sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.legacy
 
 feature-usage
 CREATE OR REPLACE VIEW cor_view AS SELECT 1
 ----
 sql.schema.create_or_replace_view
-
-feature-allowlist
-sql.schema.*
-----
+sql.schema.schema_changer_mode.legacy
 
 feature-usage
 CREATE TABLE on_update_t (a INT PRIMARY KEY, b INT8 DEFAULT 1 ON UPDATE 2)
@@ -107,6 +101,7 @@ sql.schema.create_table
 sql.schema.new_column.qualification.default_expr
 sql.schema.new_column.qualification.on_update
 sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.legacy
 
 feature-usage
 ALTER TABLE on_update_t ADD COLUMN c INT DEFAULT 1 ON UPDATE 2;
@@ -117,9 +112,11 @@ sql.schema.get_virtual_table.pg_catalog.pg_attribute
 sql.schema.new_column.qualification.default_expr
 sql.schema.new_column.qualification.on_update
 sql.schema.new_column_type.int8
+sql.schema.schema_changer_mode.declarative
 
 feature-usage
 ALTER TABLE on_update_t ALTER COLUMN b SET ON UPDATE 3
 ----
 sql.schema.alter_table
 sql.schema.alter_table.set_on_update
+sql.schema.schema_changer_mode.legacy
