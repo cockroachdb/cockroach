@@ -47,7 +47,10 @@ func (r *externalStorageReader) ReadAt(ctx context.Context, p []byte, offset int
 	defer reader.Close(ctx)
 	for n := 0; n < len(p); {
 		nn, err := reader.Read(ctx, p[n:])
-		if err != nil {
+		// The io.Reader interface allows for io.EOF to be returned even if we just
+		// successfully filled the buffer p and hit the end of file at the same
+		// time. Treat that case as a successful read.
+		if err != nil && !(errors.Is(err, io.EOF) && len(p) == nn+n) {
 			return err
 		}
 		n += nn
