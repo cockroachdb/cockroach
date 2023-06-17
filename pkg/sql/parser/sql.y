@@ -6612,6 +6612,8 @@ alter_tenant_capability_stmt:
       IsRevoke: true,
     }
   }
+| ALTER TENANT tenant_spec GRANT error // SHOW HELP: ALTER TENANT CAPABILITY
+| ALTER TENANT tenant_spec REVOKE error // SHOW HELP: ALTER TENANT CAPABILITY
 
 tenant_capability:
   var_name
