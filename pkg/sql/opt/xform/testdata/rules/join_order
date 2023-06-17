@@ -1964,27 +1964,63 @@ full-join (hash)
  └── filters
       └── y = z
 
+exec-ddl
+CREATE TABLE abc2 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT
+)
+----
+
+exec-ddl
+CREATE TABLE abc3 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT
+)
+----
+
+exec-ddl
+CREATE TABLE abc4 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT
+)
+----
+
+exec-ddl
+CREATE TABLE abc5 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT
+)
+----
+
 # Iteratively reorder subtrees of up to size 2.
 reorderjoins set=reorder_joins_limit=2 format=hide-all
 SELECT * FROM abc AS a1
-INNER JOIN abc AS a2 ON a1.a = a2.a
-LEFT JOIN abc AS a3 ON a2.b = a3.b
-INNER JOIN abc AS a4 ON a3.a = a4.a
-WHERE EXISTS (SELECT * FROM abc AS a5 WHERE a2.c = a5.c)
+INNER JOIN abc2 AS a2 ON a1.a = a2.a
+LEFT JOIN abc3 AS a3 ON a2.b = a3.b
+INNER JOIN abc4 AS a4 ON a3.a = a4.a
+WHERE EXISTS (SELECT * FROM abc5 AS a5 WHERE a2.c = a5.c)
 ----
 --------------------------------------------------------------------------------
 Join Tree #1
 --------------------------------------------------------------------------------
   semi-join (hash)
-   ├── scan abc [as=a2]
-   ├── scan abc [as=a5]
+   ├── scan abc2 [as=a2]
+   ├── scan abc5 [as=a5]
    └── filters
         └── a2.c = a5.c
 Vertexes
   A:
-    scan abc [as=a2]
+    scan abc2 [as=a2]
   B:
-    scan abc [as=a5]
+    scan abc5 [as=a5]
 Edges
   a2.c = a5.c [semi, ses=AB, tes=AB, rules=()]
 Joining AB
@@ -1994,17 +2030,17 @@ Joins Considered: 1
 Join Tree #2
 --------------------------------------------------------------------------------
   inner-join (hash)
-   ├── scan abc [as=a2]
+   ├── scan abc2 [as=a2]
    ├── distinct-on
-   │    └── scan abc [as=a5]
+   │    └── scan abc5 [as=a5]
    └── filters
         └── a2.c = a5.c
 Vertexes
   A:
-    scan abc [as=a2]
+    scan abc2 [as=a2]
   C:
     distinct-on
-     └── scan abc [as=a5]
+     └── scan abc5 [as=a5]
 Edges
   a2.c = a5.c [inner, ses=AC, tes=AC, rules=()]
 Joining AC
@@ -2017,8 +2053,8 @@ Join Tree #3
   inner-join (hash)
    ├── scan abc [as=a1]
    ├── semi-join (hash)
-   │    ├── scan abc [as=a2]
-   │    ├── scan abc [as=a5]
+   │    ├── scan abc2 [as=a2]
+   │    ├── scan abc5 [as=a5]
    │    └── filters
    │         └── a2.c = a5.c
    └── filters
@@ -2027,9 +2063,9 @@ Vertexes
   D:
     scan abc [as=a1]
   A:
-    scan abc [as=a2]
+    scan abc2 [as=a2]
   B:
-    scan abc [as=a5]
+    scan abc5 [as=a5]
 Edges
   a2.c = a5.c [semi, ses=AB, tes=AB, rules=()]
   a1.a = a2.a [inner, ses=DA, tes=DA, rules=()]
@@ -2050,13 +2086,13 @@ Join Tree #4
    ├── inner-join (hash)
    │    ├── scan abc [as=a1]
    │    ├── semi-join (hash)
-   │    │    ├── scan abc [as=a2]
-   │    │    ├── scan abc [as=a5]
+   │    │    ├── scan abc2 [as=a2]
+   │    │    ├── scan abc5 [as=a5]
    │    │    └── filters
    │    │         └── a2.c = a5.c
    │    └── filters
    │         └── a1.a = a2.a
-   ├── scan abc [as=a3]
+   ├── scan abc3 [as=a3]
    └── filters
         └── a2.b = a3.b
 Vertexes
@@ -2064,12 +2100,12 @@ Vertexes
     scan abc [as=a1]
   E:
     semi-join (hash)
-     ├── scan abc [as=a2]
-     ├── scan abc [as=a5]
+     ├── scan abc2 [as=a2]
+     ├── scan abc5 [as=a5]
      └── filters
           └── a2.c = a5.c
   F:
-    scan abc [as=a3]
+    scan abc3 [as=a3]
 Edges
   a1.a = a2.a [inner, ses=DE, tes=DE, rules=()]
   a2.b = a3.b [inner, ses=EF, tes=EF, rules=()]
@@ -2093,16 +2129,16 @@ Join Tree #5
    │    ├── inner-join (hash)
    │    │    ├── scan abc [as=a1]
    │    │    ├── semi-join (hash)
-   │    │    │    ├── scan abc [as=a2]
-   │    │    │    ├── scan abc [as=a5]
+   │    │    │    ├── scan abc2 [as=a2]
+   │    │    │    ├── scan abc5 [as=a5]
    │    │    │    └── filters
    │    │    │         └── a2.c = a5.c
    │    │    └── filters
    │    │         └── a1.a = a2.a
-   │    ├── scan abc [as=a3]
+   │    ├── scan abc3 [as=a3]
    │    └── filters
    │         └── a2.b = a3.b
-   ├── scan abc [as=a4]
+   ├── scan abc4 [as=a4]
    └── filters
         └── a3.a = a4.a
 Vertexes
@@ -2110,16 +2146,16 @@ Vertexes
     inner-join (hash)
      ├── scan abc [as=a1]
      ├── semi-join (hash)
-     │    ├── scan abc [as=a2]
-     │    ├── scan abc [as=a5]
+     │    ├── scan abc2 [as=a2]
+     │    ├── scan abc5 [as=a5]
      │    └── filters
      │         └── a2.c = a5.c
      └── filters
           └── a1.a = a2.a
   F:
-    scan abc [as=a3]
+    scan abc3 [as=a3]
   H:
-    scan abc [as=a4]
+    scan abc4 [as=a4]
 Edges
   a2.b = a3.b [inner, ses=GF, tes=GF, rules=()]
   a3.a = a4.a [inner, ses=FH, tes=FH, rules=()]
@@ -2143,15 +2179,15 @@ inner-join (hash)
  │    └── inner-join (hash)
  │         ├── inner-join (merge)
  │         │    ├── scan abc [as=a1]
- │         │    ├── scan abc [as=a2]
+ │         │    ├── scan abc2 [as=a2]
  │         │    └── filters (true)
  │         ├── distinct-on
- │         │    └── scan abc [as=a5]
+ │         │    └── scan abc5 [as=a5]
  │         └── filters
  │              └── a2.c = a5.c
  ├── inner-join (merge)
- │    ├── scan abc [as=a3]
- │    ├── scan abc [as=a4]
+ │    ├── scan abc3 [as=a3]
+ │    ├── scan abc4 [as=a4]
  │    └── filters (true)
  └── filters
       └── a2.b = a3.b
@@ -2923,7 +2959,7 @@ inner-join (lookup t88659)
  │    ├── lookup columns are key
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19), (8)==(2,7,19), (19)-->(20,21), (19)==(2,7,8), (2)==(7,8,19), (3)==(9), (9)==(3)
+ │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19,20), (8)==(2,7,19,20), (19)-->(21), (19)==(2,7,8,20), (20)==(2,7,8,19), (9)==(3,21), (21)==(3,9), (2)==(7,8,19,20), (3)==(9,21)
  │    ├── inner-join (lookup t88659)
  │    │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null
  │    │    ├── key columns: [1] = [1]

@@ -2983,7 +2983,7 @@ CREATE TABLE table87806 (
 );
 ----
 
-opt format=hide-all
+opt format=hide-all disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
 SELECT tab_171969.col1_3
 FROM table87806 AS tab_171967
 JOIN table87806 AS tab_171968
@@ -3010,7 +3010,8 @@ project
       │    │    │    └── filters
       │    │    │         └── tab_171969.col1_3 = tab_171969.tableoid
       │    │    └── filters
-      │    │         └── tab_171968.col1_3 = tab_171969.col1_3
+      │    │         ├── tab_171968.col1_3 = tab_171969.col1_3
+      │    │         └── tab_171968.tableoid = tab_171969.col1_3
       │    └── projections
       │         └── true
       └── filters (true)
