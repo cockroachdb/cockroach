@@ -181,14 +181,15 @@ type TxnSender interface {
 	// timestamp and priority.
 	// An uninitialized timestamp can be passed to leave the timestamp
 	// alone.
+	// Returns a TransactionRetryWithProtoRefreshError with a payload
+	// initialized from this txn, which must be cleared by a call to
+	// ClearTxnRetryableErr before continuing to use the TxnSender.
 	//
 	// Used by the SQL layer which sometimes knows that a transaction
 	// will not be able to commit and prefers to restart early.
-	// It is also used after synchronizing concurrent actors using a txn
-	// when a retryable error is seen.
-	// TODO(andrei): this second use should go away once we move to a
-	// TxnAttempt model.
-	ManualRestart(context.Context, roachpb.UserPriority, hlc.Timestamp)
+	ManualRestart(
+		ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
+	) error
 
 	// UpdateStateOnRemoteRetryableErr updates the txn in response to an
 	// error encountered when running a request through the txn.
@@ -262,11 +263,6 @@ type TxnSender interface {
 
 	// IsLocking returns whether the transaction has begun acquiring locks.
 	IsLocking() bool
-
-	// PrepareRetryableError generates a
-	// TransactionRetryWithProtoRefreshError with a payload initialized
-	// from this txn.
-	PrepareRetryableError(ctx context.Context, msg redact.RedactableString) error
 
 	// TestingCloneTxn returns a clone of the transaction's current
 	// proto. This is for use by tests only. Use
