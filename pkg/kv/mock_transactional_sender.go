@@ -145,9 +145,10 @@ func (m *MockTransactionalSender) RequiredFrontier() hlc.Timestamp {
 
 // ManualRestart is part of the TxnSender interface.
 func (m *MockTransactionalSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
-) {
+	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
+) error {
 	m.txn.Restart(pri, 0 /* upgradePriority */, ts)
+	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, m.txn)
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the TxnSender interface.
@@ -195,13 +196,6 @@ func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 
 // DisablePipelining is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
-
-// PrepareRetryableError is part of the kv.TxnSender interface.
-func (m *MockTransactionalSender) PrepareRetryableError(
-	ctx context.Context, msg redact.RedactableString,
-) error {
-	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, *m.txn.Clone())
-}
 
 // Step is part of the TxnSender interface.
 func (m *MockTransactionalSender) Step(_ context.Context) error {
