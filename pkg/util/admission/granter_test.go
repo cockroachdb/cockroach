@@ -137,9 +137,11 @@ func TestGranterBasic(t *testing.T) {
 					requesters[numWorkKinds] = req.requesters[admissionpb.ElasticWorkClass]
 					return req
 				},
-				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-				workQueueMetrics:            workQueueMetrics,
-				disableTickerForTesting:     true,
+				kvIOTokensExhaustedDuration:     metrics.KVIOTokensExhaustedDuration,
+				kvIOTokensAvailable:             metrics.KVIOTokensAvailable,
+				kvIOTokensTookWithoutPermission: metrics.KVIOTokensTookWithoutPermission,
+				workQueueMetrics:                workQueueMetrics,
+				disableTickerForTesting:         true,
 			}
 			var metricsProvider testMetricsProvider
 			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
