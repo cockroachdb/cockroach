@@ -584,7 +584,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 				} else {
 					t.Logf("retrying unexpected txn error: %v", err)
 					// Sanity check the retry error is meant for our transaction.
-					require.Equal(t, retryErr.TxnID, txn.ID())
+					require.Equal(t, retryErr.PrevTxnID, txn.ID())
 				}
 			}
 

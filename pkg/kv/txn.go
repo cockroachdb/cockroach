@@ -971,7 +971,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 				}
 			} else if t := (*kvpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
-				if txn.ID() != t.TxnID {
+				if txn.ID() != t.PrevTxnID {
 					// Make sure the retryable error is meant for this level by checking
 					// the transaction the error was generated for. If it's not, we
 					// terminate the "retryable" character of the error. We might get a
@@ -1022,7 +1022,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) {
 		txn.debugNameLocked(), retryErr)
 	txn.resetDeadlineLocked()
 
-	if txn.mu.ID != retryErr.TxnID {
+	if txn.mu.ID != retryErr.PrevTxnID {
 		// Sanity check that the retry error we're dealing with is for the current
 		// incarnation of the transaction. Aborted transactions may be retried
 		// transparently in certain cases and such incarnations come with new
@@ -1032,7 +1032,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) {
 		log.Fatalf(
 			ctx,
 			"unexpected retryable error for old incarnation of the transaction %s; current incarnation %s",
-			retryErr.TxnID,
+			retryErr.PrevTxnID,
 			txn.mu.ID,
 		)
 	}
@@ -1098,12 +1098,12 @@ func (txn *Txn) Send(
 	}
 
 	if retryErr, ok := pErr.GetDetail().(*kvpb.TransactionRetryWithProtoRefreshError); ok {
-		if requestTxnID != retryErr.TxnID {
+		if requestTxnID != retryErr.PrevTxnID {
 			// KV should not return errors for transactions other than the one that sent
 			// the request.
 			log.Fatalf(ctx, "retryable error for the wrong txn. "+
-				"requestTxnID: %s, retryErr.TxnID: %s. retryErr: %s",
-				requestTxnID, retryErr.TxnID, retryErr)
+				"requestTxnID: %s, retryErr.PrevTxnID: %s. retryErr: %s",
+				requestTxnID, retryErr.PrevTxnID, retryErr)
 		}
 	}
 	return br, pErr
@@ -1362,7 +1362,7 @@ func (txn *Txn) handleTransactionAbortedErrorLocked(
 
 	// The transaction we had been using thus far has been aborted. The proto
 	// inside the error has been prepared for use by the next transaction attempt.
-	newTxn := &retryErr.Transaction
+	newTxn := &retryErr.NextTransaction
 	txn.mu.ID = newTxn.ID
 	// Create a new txn sender. We need to preserve the stepping mode, if any.
 	prevSteppingMode := txn.mu.sender.GetSteppingMode(ctx)

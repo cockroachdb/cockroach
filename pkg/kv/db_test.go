@@ -747,7 +747,7 @@ func TestGenerateForcedRetryableError(t *testing.T) {
 	err := txn.GenerateForcedRetryableErr(ctx, "testing TestGenerateForcedRetryableError")
 	var retryErr *kvpb.TransactionRetryWithProtoRefreshError
 	require.True(t, errors.As(err, &retryErr))
-	require.Equal(t, 1, int(retryErr.Transaction.Epoch))
+	require.Equal(t, 1, int(retryErr.NextTransaction.Epoch))
 }
 
 // Get a retryable error within a db.Txn transaction and verify the retry
@@ -866,16 +866,16 @@ func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
 		require.IsType(t, &kvpb.TransactionRetryWithProtoRefreshError{}, err)
 		pErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
 		require.ErrorAs(t, err, &pErr)
-		require.Equal(t, txn.ID(), pErr.TxnID)
+		require.Equal(t, txn.ID(), pErr.PrevTxnID)
 
 		// The transaction was aborted, therefore we should have a new transaction ID.
-		require.NotEqual(t, pErr.TxnID, pErr.Transaction.ID)
+		require.NotEqual(t, pErr.PrevTxnID, pErr.NextTransaction.ID)
 
 		// Reset the handle in order to get a new sender.
 		txn.PrepareForRetry(ctx)
 
 		// Make sure we have a new txn ID.
-		require.NotEqual(t, pErr.TxnID, txn.ID())
+		require.NotEqual(t, pErr.PrevTxnID, txn.ID())
 
 		// Using ConfigureStepping() to read the current state.
 		require.Equal(t, expectedStepping, txn.ConfigureStepping(ctx, expectedStepping))

@@ -724,13 +724,13 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 // to improve this: wrap `pErr.GoError()` with a barrier and then with the
 // TransactionRetryWithProtoRefreshError.
 func NewTransactionRetryWithProtoRefreshError(
-	msg redact.RedactableString, txnID uuid.UUID, txn roachpb.Transaction,
+	msg redact.RedactableString, prevTxnID uuid.UUID, nextTxn roachpb.Transaction,
 ) *TransactionRetryWithProtoRefreshError {
 	return &TransactionRetryWithProtoRefreshError{
-		Msg:           msg.StripMarkers(),
-		MsgRedactable: msg,
-		TxnID:         txnID,
-		Transaction:   txn,
+		Msg:             msg.StripMarkers(),
+		MsgRedactable:   msg,
+		PrevTxnID:       prevTxnID,
+		NextTransaction: nextTxn,
 	}
 }
 
@@ -748,7 +748,7 @@ func (e *TransactionRetryWithProtoRefreshError) SafeFormatError(p errors.Printer
 // transaction, as opposed to continuing with the existing one at a bumped
 // epoch.
 func (e *TransactionRetryWithProtoRefreshError) PrevTxnAborted() bool {
-	return !e.TxnID.Equal(e.Transaction.ID)
+	return !e.PrevTxnID.Equal(e.NextTransaction.ID)
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
