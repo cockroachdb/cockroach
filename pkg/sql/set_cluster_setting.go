@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -146,7 +148,7 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 	return nil
 }
 
-// SetClusterSetting sets session variables.
+// SetClusterSetting sets cluster settings.
 // Privileges: super user.
 func (p *planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
@@ -250,7 +252,6 @@ func (p *planner) getAndValidateTypedClusterSetting(
 }
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
-
 	if strings.HasPrefix(n.name, "sql.defaults") {
 		params.p.BufferClientNotice(
 			params.ctx,
@@ -299,6 +300,17 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	// Report tracked cluster settings via telemetry.
 	// TODO(justin): implement a more general mechanism for tracking these.
 	switch n.name {
+	case multitenant.DefaultTenantSelectSettingName:
+		if multitenant.VerifyTenantService.Get(&n.st.SV) && expectedEncodedValue != "" {
+			tr, err := GetTenantRecordByName(params.ctx, n.st, params.p.InternalSQLTxn(), roachpb.TenantName(expectedEncodedValue))
+			if err != nil {
+				return errors.Wrapf(err, "failed to lookup tenant %q", expectedEncodedValue)
+			}
+			if tr.ServiceMode != mtinfopb.ServiceModeShared {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"shared service not enabled for tenant %q", expectedEncodedValue)
+			}
+		}
 	case catpb.AutoStatsEnabledSettingName:
 		switch expectedEncodedValue {
 		case "true":
