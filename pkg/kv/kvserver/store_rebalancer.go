@@ -221,6 +221,10 @@ type RebalanceContext struct {
 	hottestRanges, rebalanceCandidates []CandidateReplica
 }
 
+type rebalanceSummary struct {
+  initialCapacity roachpb.StoreCapacity
+}
+
 // RebalanceMode returns the mode of the store rebalancer. See
 // LoadBasedRebalancingMode.
 func (sr *StoreRebalancer) RebalanceMode() LBRebalancingMode {

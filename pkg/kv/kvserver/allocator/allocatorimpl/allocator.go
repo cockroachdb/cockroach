@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/tracker"
 )
@@ -225,6 +226,9 @@ func (a AllocatorAction) String() string {
 	return allocatorActionNames[a]
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (a AllocatorAction) SafeValue()
+
 // Priority defines the priorities for various repair operations.
 //
 // NB: These priorities only influence the replicateQueue's understanding of
@@ -336,6 +340,9 @@ func (t TargetReplicaType) String() string {
 	}
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (TargetReplicaType) SafeValue()
+
 func (s ReplicaStatus) String() string {
 	switch s {
 	case Alive:
@@ -348,6 +355,9 @@ func (s ReplicaStatus) String() string {
 		panic(fmt.Sprintf("unknown replicaStatus %d", s))
 	}
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (ReplicaStatus) SafeValue()
 
 type transferDecision int
 

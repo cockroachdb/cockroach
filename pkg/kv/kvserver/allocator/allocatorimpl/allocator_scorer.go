@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -605,7 +606,7 @@ func (o LoadScorerOptions) shouldRebalanceBasedOnThresholds(
 		}
 		log.KvDistribution.VEventf(
 			ctx, 4,
-			"should rebalance replica with %s load from s%d load=%s to s%d load=%s",
+			"should rebalance replica with %v load from s%d load=%v to s%d load=%v",
 			o.RebalanceImpact, eqClass.existing.StoreID,
 			eqClass.existing.Capacity.Load(),
 			bestStore, bestStoreLoad,
@@ -727,22 +728,25 @@ type candidate struct {
 	balanceScore    balanceStatus
 	hasNonVoter     bool
 	rangeCount      int
-	details         string
+	details         redact.SafeString
 }
 
 func (c candidate) String() string {
-	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, ioOverloaded: %t, ioOverload: %.2f, converges:%d, "+
-		"balance:%d, hasNonVoter:%t, rangeCount:%d, queriesPerSecond:%.2f",
+	return redact.StringWithoutMarkers(c)
+}
+
+func (c candidate) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, ioOverloaded: %t, ioOverload: %.2f, converges:%d, "+
+		"balance:%d, hasNonVoter:%t, rangeCount:%d, load:%v",
 		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.ioOverloaded, c.ioOverloadScore, c.convergesScore,
-		c.balanceScore, c.hasNonVoter, c.rangeCount, c.store.Capacity.QueriesPerSecond)
+		c.balanceScore, c.hasNonVoter, c.rangeCount, c.store.Capacity.Load())
 	if c.details != "" {
-		return fmt.Sprintf("%s, details:(%s)", str, c.details)
+		w.Printf(", details:(%v)", c.details)
 	}
-	return str
 }
 
 func (c candidate) compactString() string {
-	var buf bytes.Buffer
+  var buf bytes.Buffer
 	fmt.Fprintf(&buf, "s%d", c.store.StoreID)
 	if !c.valid {
 		fmt.Fprintf(&buf, ", valid:%t", c.valid)
@@ -765,7 +769,7 @@ func (c candidate) compactString() string {
 	fmt.Fprintf(&buf, ", converges:%d, balance:%d, rangeCount:%d",
 		c.convergesScore, c.balanceScore, c.rangeCount)
 	if c.details != "" {
-		fmt.Fprintf(&buf, ", details:(%s)", c.details)
+		fmt.Fprintf(&buf, ", details:(%v)", c.details)
 	}
 	return buf.String()
 }
@@ -851,18 +855,20 @@ func (c candidate) compare(o candidate) float64 {
 
 type candidateList []candidate
 
-func (cl candidateList) String() string {
-	if len(cl) == 0 {
-		return "[]"
-	}
-	var buffer bytes.Buffer
-	buffer.WriteRune('[')
+// SafeFormat implements the redact.SafeFormatter interface.
+func (cl candidateList) SafeFormat(w redact.SafePrinter, _ rune) {
+	var buf redact.StringBuilder
+	buf.Print("[")
 	for _, c := range cl {
-		buffer.WriteRune('\n')
-		buffer.WriteString(c.String())
+		buf.WriteRune('\n')
+		fmt.Fprintf(&buf, "%v", c)
 	}
-	buffer.WriteRune(']')
-	return buffer.String()
+	buf.Print("]")
+	w.Print(buf)
+}
+
+func (cl candidateList) String() string {
+	return redact.StringWithoutMarkers(cl)
 }
 
 // byScore implements sort.Interface to sort by scores.
@@ -1463,9 +1469,9 @@ func bestStoreToMinimizeLoadDelta(
 		panic(
 			fmt.Sprintf(
 				"programming error: projected load delta %f higher than current delta %f;"+
-					" existing: %s, coldest candidate: %s, replica/lease: %s, dimension %s",
+					" existing: %v, coldest candidate: %v, replica/lease: %v, dimension %v",
 				newLoadDelta, currentLoadDelta, existingLoad, bestCandLoad, replLoadValue,
-				dimension.String(),
+				dimension,
 			),
 		)
 	}
@@ -1771,7 +1777,7 @@ func rankedCandidateListForRebalancing(
 			existing:   existing,
 			candidates: improvementCandidates,
 		})
-		log.KvDistribution.VEventf(ctx, 5, "rebalance candidates #%d: %s\nexisting replicas: %s",
+		log.KvDistribution.VEventf(ctx, 5, "rebalance candidates #%d: %s\nexisting replicas: %v",
 			len(results), results[len(results)-1].candidates, results[len(results)-1].existing)
 	}
 
@@ -2367,7 +2373,7 @@ func ioOverloadCheck(
 	score, avg, absThreshold, meanThreshold float64,
 	enforcement IOOverloadEnforcementLevel,
 	disallowed ...IOOverloadEnforcementLevel,
-) (ok bool, reason string) {
+) (ok bool, reason redact.SafeString) {
 	absCheck := score < absThreshold
 	meanCheck := score < avg*meanThreshold
 
