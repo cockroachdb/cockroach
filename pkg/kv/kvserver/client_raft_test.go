@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -6688,4 +6689,114 @@ func TestRaftUnquiesceLeaderNoProposal(t *testing.T) {
 	require.Equal(t, initialStatus.Term, status.Term)
 	require.Equal(t, initialStatus.Progress[1].Match, status.Progress[1].Match)
 	t.Logf("n1 still leader with no new proposals at log index %d", status.Progress[1].Match)
+}
+
+// getMapsDiff returns the difference between the values of corresponding
+// metrics in two maps. Assumption: beforeMap and afterMap contain the same set
+// of keys.
+func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[string]int64 {
+	diffMap := make(map[string]int64)
+	for metricName, beforeValue := range beforeMap {
+		if v, ok := afterMap[metricName]; ok {
+			diffMap[metricName] = v - beforeValue
+		}
+	}
+	return diffMap
+}
+
+// TestStoreMetricsOnIncomingOutgoingMsg verifies that HandleRaftRequest() and
+// HandleRaftRequestSent() correctly update metrics for incoming and outgoing
+// raft messages.
+func TestStoreMetricsOnIncomingOutgoingMsg(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
+	cfg := kvserver.TestStoreConfig(clock)
+	var stopper *stop.Stopper
+	stopper, _, _, cfg.StorePool, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
+		func() int { return 1 }, /* nodeCount */
+		livenesspb.NodeLivenessStatus_DEAD)
+	defer stopper.Stop(ctx)
+
+	// Create a noop store and request.
+	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
+	eng := storage.NewDefaultInMemForTesting()
+	stopper.AddCloser(eng)
+	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
+	store := kvserver.NewStore(ctx, cfg, eng, &node)
+	store.Ident = &roachpb.StoreIdent{
+		ClusterID: uuid.Nil,
+		StoreID:   1,
+		NodeID:    1,
+	}
+	request := &kvserverpb.RaftMessageRequest{
+		RangeID:     1,
+		FromReplica: roachpb.ReplicaDescriptor{},
+		ToReplica:   roachpb.ReplicaDescriptor{},
+		Message: raftpb.Message{
+			From: 1,
+			To:   2,
+			Type: raftpb.MsgTimeoutNow,
+			Term: 1,
+		},
+	}
+
+	metricsNames := []string{
+		"raft.rcvd.bytes",
+		"raft.rcvd.cross_region.bytes",
+		"raft.rcvd.cross_zone.bytes",
+		"raft.sent.bytes",
+		"raft.sent.cross_region.bytes",
+		"raft.sent.cross_zone.bytes"}
+	stream := noopRaftMessageResponseStream{}
+	expectedSize := int64(request.Size())
+
+	t.Run("received raft message", func(t *testing.T) {
+		before, metricsErr := store.Metrics().GetStoreMetrics(metricsNames)
+		if metricsErr != nil {
+			t.Error(metricsErr)
+		}
+		if err := store.HandleRaftRequest(context.Background(), request, stream); err != nil {
+			t.Fatalf("HandleRaftRequest returned err %s", err)
+		}
+		after, metricsErr := store.Metrics().GetStoreMetrics(metricsNames)
+		if metricsErr != nil {
+			t.Error(metricsErr)
+		}
+		actual := getMapsDiff(before, after)
+		expected := map[string]int64{
+			"raft.rcvd.bytes":              expectedSize,
+			"raft.rcvd.cross_region.bytes": 0,
+			"raft.rcvd.cross_zone.bytes":   0,
+			"raft.sent.bytes":              0,
+			"raft.sent.cross_region.bytes": 0,
+			"raft.sent.cross_zone.bytes":   0,
+		}
+		require.Equal(t, expected, actual)
+	})
+
+	t.Run("sent raft message", func(t *testing.T) {
+		before, metricsErr := store.Metrics().GetStoreMetrics(metricsNames)
+		if metricsErr != nil {
+			t.Error(metricsErr)
+		}
+		store.HandleRaftRequestSent(context.Background(),
+			request.FromReplica.NodeID, request.ToReplica.NodeID, int64(request.Size()))
+		after, metricsErr := store.Metrics().GetStoreMetrics(metricsNames)
+		if metricsErr != nil {
+			t.Error(metricsErr)
+		}
+		actual := getMapsDiff(before, after)
+		expected := map[string]int64{
+			"raft.rcvd.bytes":              0,
+			"raft.rcvd.cross_region.bytes": 0,
+			"raft.rcvd.cross_zone.bytes":   0,
+			"raft.sent.bytes":              expectedSize,
+			"raft.sent.cross_region.bytes": 0,
+			"raft.sent.cross_zone.bytes":   0,
+		}
+		require.Equal(t, expected, actual)
+	})
 }
