@@ -1028,6 +1028,8 @@ type Store struct {
 }
 
 var _ kv.Sender = &Store{}
+var _ IncomingRaftMessageHandler = &Store{}
+var _ OutgoingRaftMessageHandler = &Store{}
 
 // A StoreConfig encompasses the auxiliary objects and configuration
 // required to create a store.
@@ -2066,6 +2068,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Start Raft processing goroutines.
 	s.cfg.Transport.ListenIncomingRaftMessages(s.StoreID(), s)
+	s.cfg.Transport.ListenOutgoingMessage(s.StoreID(), s)
 	s.processRaft(ctx)
 
 	// Register a callback to unquiesce any ranges with replicas on a
