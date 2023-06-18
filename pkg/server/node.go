@@ -1362,12 +1362,16 @@ func (n *Node) getCrossLocalityComparison(
 // locality comparison result is returned here to avoid redundant check for
 // metrics updates after receiving batch responses.
 func (n *Node) checkAndUpdateCrossLocalityBatchMetrics(
-	ctx context.Context, ba *kvpb.BatchRequest, shouldIncrement bool,
+	ctx context.Context, ba *kvpb.BatchRequest,
 ) roachpb.LocalityComparisonType {
-	if !shouldIncrement {
-		// shouldIncrement is set to false using testing knob in specific tests to
-		// filter out metrics changes caused by irrelevant batch requests.
-		return roachpb.LocalityComparisonType_UNDEFINED
+	if filter := n.storeCfg.TestingKnobs.TestingBatchMetricsFilter; filter != nil {
+		if pErr := filter(context.Background(), ba, nil); pErr != nil {
+			// TestingBatchMetricsFilter intercepts Node.Batch() before updating
+			// metrics for each request / response. The filter is designed to identify
+			// and filter out changes in node metrics that are irrelevant to the
+			// tests.
+			return roachpb.LocalityComparisonType_UNDEFINED
+		}
 	}
 	n.metrics.BatchRequestsBytes.Inc(int64(ba.Size()))
 	comparisonResult := n.getCrossLocalityComparison(ctx, ba)
@@ -1389,12 +1393,16 @@ func (n *Node) checkAndUpdateCrossLocalityBatchMetrics(
 // check. The underlying assumption is that the response should match the
 // cross-region or cross-zone nature of the request.
 func (n *Node) updateCrossLocalityBatchMetrics(
-	br *kvpb.BatchResponse, comparisonResult roachpb.LocalityComparisonType, shouldIncrement bool,
+	br *kvpb.BatchResponse, comparisonResult roachpb.LocalityComparisonType,
 ) {
-	if !shouldIncrement {
-		// shouldIncrement is set to false using testing knob in specific tests to
-		// filter out metrics changes caused by irrelevant batch requests.
-		return
+	if filter := n.storeCfg.TestingKnobs.TestingBatchMetricsFilter; filter != nil {
+		// TestingBatchMetricsFilter intercepts Node.Batch() before updating
+		// metrics for each request / response. The filter is designed to identify
+		// and filter out changes in node metrics that are irrelevant to the
+		// tests.
+		if pErr := filter(context.Background(), nil, br); pErr != nil {
+			return
+		}
 	}
 	n.metrics.BatchResponsesBytes.Inc(int64(br.Size()))
 	switch comparisonResult {
@@ -1418,15 +1426,7 @@ func (n *Node) incrementBatchCounters(ba *kvpb.BatchRequest) {
 // Batch implements the kvpb.InternalServer interface.
 func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	n.incrementBatchCounters(args)
-
-	shouldIncrement := true
-	if fn := n.storeCfg.TestingKnobs.TestingBatchRequestFilter; fn != nil {
-		// ShouldIncrement is always set to true in the production environment. The
-		// testing knob is used here to filter out metrics changes caused by batch
-		// requests that are irrelevant to our tests.
-		shouldIncrement = fn(args)
-	}
-	comparisonResult := n.checkAndUpdateCrossLocalityBatchMetrics(ctx, args, shouldIncrement)
+	comparisonResult := n.checkAndUpdateCrossLocalityBatchMetrics(ctx, args)
 
 	// NB: Node.Batch is called directly for "local" calls. We don't want to
 	// carry the associated log tags forward as doing so makes adding additional
@@ -1477,14 +1477,7 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		br.Error = kvpb.NewError(err)
 	}
 
-	shouldIncrement = true
-	if fn := n.storeCfg.TestingKnobs.TestingBatchResponseFilter; fn != nil {
-		// ShouldIncrement is always set to true in the production environment. The
-		// testing knob is used here to filter out metrics changes caused by batch
-		// requests that are irrelevant to our tests.
-		shouldIncrement = fn(br)
-	}
-	n.updateCrossLocalityBatchMetrics(br, comparisonResult, shouldIncrement)
+	n.updateCrossLocalityBatchMetrics(br, comparisonResult)
 	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}
