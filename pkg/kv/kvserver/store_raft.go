@@ -269,6 +269,8 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *kvpb.Error {
+	comparisonResult := s.getLocalityComparison(ctx, req.FromReplica.NodeID, req.ToReplica.NodeID)
+	s.metrics.updateCrossLocalityMetricsOnIncomingRaftMsg(comparisonResult, int64(req.Size()))
 	// NB: unlike the other two IncomingRaftMessageHandler methods implemented by
 	// Store, this one doesn't need to directly run through a Stopper task because
 	// it delegates all work through a raftScheduler, whose workers' lifetimes are
@@ -318,6 +320,18 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		return false
 	}
 	return enqueue
+}
+
+// HandleRaftRequestSent is called to capture outgoing Raft messages just prior
+// to their transmission to the raftSendQueue. Note that the message might not
+// be successfully queued if it gets dropped by SendAsync due to a full outgoing
+// queue. Currently, this is only used for metrics update which is why it only
+// takes specific properties of the request as arguments.
+func (s *Store) HandleRaftRequestSent(
+	ctx context.Context, fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID, msgSize int64,
+) {
+	comparisonResult := s.getLocalityComparison(ctx, fromNodeID, toNodeID)
+	s.metrics.updateCrossLocalityMetricsOnOutgoingRaftMsg(comparisonResult, msgSize)
 }
 
 // withReplicaForRequest calls the supplied function with the (lazily
@@ -721,6 +735,7 @@ func (s *Store) processRaft(ctx context.Context) {
 	_ = s.stopper.RunAsyncTask(ctx, "coalesced-hb-loop", s.coalescedHeartbeatsLoop)
 	s.stopper.AddCloser(stop.CloserFn(func() {
 		s.cfg.Transport.StopIncomingRaftMessages(s.StoreID())
+		s.cfg.Transport.StopOutgoingMessage(s.StoreID())
 	}))
 
 	s.syncWaiter.Start(ctx, s.stopper)
