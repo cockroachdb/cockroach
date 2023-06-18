@@ -172,6 +172,50 @@ func (h *unreliableRaftHandler) HandleDelegatedSnapshot(
 	return h.IncomingRaftMessageHandler.HandleDelegatedSnapshot(ctx, req)
 }
 
+type filterRaftHandlerFuncs struct {
+	// If set to nil, all incoming messages are dropped. If non-nil, returning
+	// true can prevent the message from being dropped.
+	filterReq func(*kvserverpb.RaftMessageRequest) bool
+	// If set to nil, no additional processing is applied to outgoing messages
+	// from the sender's end. If non-nil, returning true can allow the additional
+	// processing.
+	filterReqSent func(*kvserverpb.RaftMessageRequest) bool
+}
+
+// filterRaftHandler applies the filter functions within filterRaftHandlerFuncs
+// to the incoming and outgoing messages. It ensures that only messages with
+// filters that evaluate to true are forwarded to the underlying store
+// interface.
+type filterRaftHandler struct {
+	kvserver.IncomingRaftMessageHandler
+	kvserver.OutgoingRaftMessageHandler
+	filterRaftHandlerFuncs
+}
+
+var _ kvserver.IncomingRaftMessageHandler = &filterRaftHandler{}
+var _ kvserver.OutgoingRaftMessageHandler = &filterRaftHandler{}
+
+func (f *filterRaftHandler) HandleRaftRequest(
+	ctx context.Context,
+	req *kvserverpb.RaftMessageRequest,
+	respStream kvserver.RaftMessageResponseStream,
+) *kvpb.Error {
+	if f.filterReq == nil || !f.filterReq(req) {
+		return nil
+	}
+
+	return f.IncomingRaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+}
+
+func (f *filterRaftHandler) HandleRaftRequestSent(
+	ctx context.Context, req *kvserverpb.RaftMessageRequest,
+) {
+	if f.filterReqSent == nil || !f.filterReqSent(req) {
+		return
+	}
+	f.OutgoingRaftMessageHandler.HandleRaftRequestSent(ctx, req)
+}
+
 // testClusterStoreRaftMessageHandler exists to allows a store to be stopped and
 // restarted while maintaining a partition using an unreliableRaftHandler.
 type testClusterStoreRaftMessageHandler struct {

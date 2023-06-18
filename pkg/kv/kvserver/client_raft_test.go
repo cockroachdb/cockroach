@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -6322,5 +6323,533 @@ func TestRaftCheckQuorum(t *testing.T) {
 			require.Equal(t, leaderStatus.ID, finalStatus.ID)
 			require.Equal(t, leaderStatus.Term, finalStatus.Term)
 		})
+	})
+}
+
+// getFirstStoreMetrics retrieves the count of each store metric specified in
+// the metricsName parameter for the first store of the target server and
+// returns the result as a map. The keys in the map correspond to the strings
+// provided in metricsName. The corresponding values indicate the count of each
+// metric.
+func getFirstStoreMetrics(
+	t *testing.T, tc *testcluster.TestCluster, serverIdx int, metricsNames []string,
+) map[string]int64 {
+	metrics := make(map[string]int64)
+	for _, metricName := range metricsNames {
+		metrics[metricName] = getFirstStoreMetric(t, tc.Server(serverIdx), metricName)
+	}
+	return metrics
+}
+
+// getMapsDiff returns the difference between the values of corresponding
+// metrics in two maps. Assumption: beforeMap and afterMap contain the same set
+// of keys.
+func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[string]int64 {
+	diffMap := make(map[string]int64)
+	for metricName, beforeValue := range beforeMap {
+		if v, ok := afterMap[metricName]; ok {
+			diffMap[metricName] = v - beforeValue
+		}
+	}
+	return diffMap
+}
+
+// TestFilterRaftHandler verifies that FilterRaftHandler correctly discards all
+// incoming and outgoing messages when filterRaftHandlerFuncs is set to nil.
+func TestFilterRaftHandler(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	serverLocality := [2]roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}, {Key: "az", Value: "us-west-1"}}},
+	}
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < 2; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: serverLocality[i],
+		}
+	}
+
+	var clusterArgs = base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: serverArgs,
+	}
+	tc := testcluster.StartTestCluster(t, 2, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	firstStore, err := tc.Servers[0].Stores().GetStore(tc.Servers[0].GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	secStore, err := tc.Servers[1].Stores().GetStore(tc.Servers[1].GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filterRaftHandler1 := &filterRaftHandler{
+		IncomingRaftMessageHandler: firstStore,
+		OutgoingRaftMessageHandler: firstStore,
+	}
+	filterRaftHandler2 := &filterRaftHandler{
+		IncomingRaftMessageHandler: secStore,
+		OutgoingRaftMessageHandler: secStore,
+	}
+
+	tc.Servers[0].RaftTransport().Listen(firstStore.StoreID(), filterRaftHandler1)
+	tc.Servers[0].RaftTransport().ListenOutgoingMessage(firstStore.StoreID(), filterRaftHandler1)
+	tc.Servers[1].RaftTransport().Listen(secStore.StoreID(), filterRaftHandler2)
+	tc.Servers[1].RaftTransport().ListenOutgoingMessage(secStore.StoreID(), filterRaftHandler2)
+
+	key := tc.ScratchRange(t)
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+	tc.AddVotersOrFatal(t, key, tc.Target(1))
+	require.NoError(t, tc.WaitForVoters(key))
+
+	firstStore, fromReplica := getFirstStoreReplica(t, tc.Server(0), key)
+	secStore, toReplica := getFirstStoreReplica(t, tc.Server(1), key)
+
+	fromReplicaDesc := roachpb.ReplicaDescriptor{
+		ReplicaID: fromReplica.ReplicaID(),
+		NodeID:    tc.Server(0).NodeID(),
+		StoreID:   firstStore.StoreID(),
+	}
+	toReplicaDesc := roachpb.ReplicaDescriptor{
+		ReplicaID: toReplica.ReplicaID(),
+		NodeID:    tc.Server(1).NodeID(),
+		StoreID:   secStore.StoreID(),
+	}
+
+	request := &kvserverpb.RaftMessageRequest{
+		FromReplica: fromReplicaDesc,
+		ToReplica:   toReplicaDesc,
+		Heartbeats: []kvserverpb.RaftHeartbeat{
+			{
+				RangeID:       1,
+				FromReplicaID: fromReplicaDesc.ReplicaID,
+				ToReplicaID:   toReplicaDesc.ReplicaID,
+			},
+		},
+	}
+
+	metricsNames := []string{
+		"raft.rcvd.bytes",
+		"raft.rcvd.cross_region.bytes",
+		"raft.rcvd.cross_zone.bytes",
+		"raft.sent.bytes",
+		"raft.sent.cross_region.bytes",
+		"raft.sent.cross_zone.bytes"}
+	storeMetrics0Before := getFirstStoreMetrics(t, tc, 0, metricsNames)
+	storeMetrics1Before := getFirstStoreMetrics(t, tc, 1, metricsNames)
+
+	// Although messages should have been sent as part of the setup, we are
+	// sending additional one to ensure that the test success is not coincidental.
+	if sent := tc.Servers[0].RaftTransport().SendAsync(request, rpc.DefaultClass); !sent {
+		t.Fatalf("unable to send message from server 0 to server 1")
+	}
+	time.Sleep(5 * time.Second)
+	storeMetrics0After := getFirstStoreMetrics(t, tc, 0, metricsNames)
+	storeMetrics1After := getFirstStoreMetrics(t, tc, 1, metricsNames)
+
+	zeroMetrics := map[string]int64{
+		"raft.rcvd.bytes":              0,
+		"raft.rcvd.cross_region.bytes": 0,
+		"raft.rcvd.cross_zone.bytes":   0,
+		"raft.sent.bytes":              0,
+		"raft.sent.cross_region.bytes": 0,
+		"raft.sent.cross_zone.bytes":   0,
+	}
+	// Since all incoming and outgoing messages are dropped, stores should always
+	// have zero metrics.
+	require.Equal(t, zeroMetrics, storeMetrics0Before)
+	require.Equal(t, zeroMetrics, storeMetrics1Before)
+	require.Equal(t, zeroMetrics, storeMetrics0After)
+	require.Equal(t, zeroMetrics, storeMetrics1After)
+}
+
+// TestRaftCrossRegionMetricsNew verifies that raft messages receiving and
+// sending correctly updates the cross-region byte count metrics.
+func TestRaftCrossRegionMetricsNew(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// The initial setup ensures the correct setup for two nodes (with different
+	// regions).
+	serverLocality := [2]roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}, {Key: "az", Value: "us-west-1"}}},
+	}
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < 2; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: serverLocality[i],
+		}
+	}
+
+	var clusterArgs = base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: serverArgs,
+	}
+	tc := testcluster.StartTestCluster(t, 2, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	firstStore, err := tc.Servers[0].Stores().GetStore(tc.Servers[0].GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	secStore, err := tc.Servers[1].Stores().GetStore(tc.Servers[1].GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type InterceptedInfo struct {
+		syncutil.Mutex
+		ReqSent      int64
+		ReqReceived  int64
+		RespSent     int64
+		RespReceived int64
+	}
+	info := InterceptedInfo{}
+
+	// Use a unique range ID to identify incoming and outgoing messages that are
+	// relevant to our test case.
+	const unusedRangeID = 1234
+
+	// filterRaftHandlerFuncs only allows requests with rangeID 1234 or requests
+	// with heartbeats or responses of rangeID 1234 to pass through the filter.
+	hasHeartbeatRange := func(hbs []kvserverpb.RaftHeartbeat, rangeID roachpb.RangeID) bool {
+		for _, hb := range hbs {
+			if hb.RangeID == rangeID {
+				return true
+			}
+		}
+		return false
+	}
+
+	filterReq := func(req *kvserverpb.RaftMessageRequest) bool {
+		info.Lock()
+		defer info.Unlock()
+		beats := req.Heartbeats
+		resps := req.HeartbeatResps
+		if len(beats)+len(resps) > 0 {
+			if hasHeartbeatRange(beats, unusedRangeID) {
+				info.ReqReceived = int64(req.Size())
+				return true
+			} else if hasHeartbeatRange(resps, unusedRangeID) {
+				info.RespReceived = int64(req.Size())
+				return true
+			}
+		}
+		return false
+	}
+
+	filterReqSent := func(req *kvserverpb.RaftMessageRequest) bool {
+		info.Lock()
+		defer info.Unlock()
+		beats := req.Heartbeats
+		resps := req.HeartbeatResps
+		if len(beats)+len(resps) > 0 {
+			if hasHeartbeatRange(beats, unusedRangeID) {
+				info.ReqSent = int64(req.Size())
+				return true
+			} else if hasHeartbeatRange(resps, unusedRangeID) {
+				info.RespSent = int64(req.Size())
+				return true
+			}
+		}
+		return false
+	}
+
+	filterFn := filterRaftHandlerFuncs{
+		filterReq: filterReq, filterReqSent: filterReqSent,
+	}
+	filterRaftHandler1 := &filterRaftHandler{firstStore, firstStore, filterFn}
+	filterRaftHandler2 := &filterRaftHandler{secStore, secStore, filterFn}
+
+	tc.Servers[0].RaftTransport().Listen(firstStore.StoreID(), filterRaftHandler1)
+	tc.Servers[0].RaftTransport().ListenOutgoingMessage(firstStore.StoreID(), filterRaftHandler1)
+	tc.Servers[1].RaftTransport().Listen(secStore.StoreID(), filterRaftHandler2)
+	tc.Servers[1].RaftTransport().ListenOutgoingMessage(secStore.StoreID(), filterRaftHandler2)
+
+	key := tc.ScratchRange(t)
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+	tc.AddVotersOrFatal(t, key, tc.Target(1))
+	require.NoError(t, tc.WaitForVoters(key))
+
+	firstStore, fromReplica := getFirstStoreReplica(t, tc.Server(0), key)
+	secStore, toReplica := getFirstStoreReplica(t, tc.Server(1), key)
+
+	fromReplicaDesc := roachpb.ReplicaDescriptor{
+		ReplicaID: fromReplica.ReplicaID(),
+		NodeID:    tc.Server(0).NodeID(),
+		StoreID:   firstStore.StoreID(),
+	}
+	toReplicaDesc := roachpb.ReplicaDescriptor{
+		ReplicaID: toReplica.ReplicaID(),
+		NodeID:    tc.Server(1).NodeID(),
+		StoreID:   secStore.StoreID(),
+	}
+
+	request := &kvserverpb.RaftMessageRequest{
+		FromReplica: fromReplicaDesc,
+		ToReplica:   toReplicaDesc,
+		Heartbeats: []kvserverpb.RaftHeartbeat{
+			{
+				RangeID:       unusedRangeID,
+				FromReplicaID: fromReplicaDesc.ReplicaID,
+				ToReplicaID:   toReplicaDesc.ReplicaID,
+			},
+		},
+	}
+
+	metricsNames := []string{
+		"raft.rcvd.bytes",
+		"raft.rcvd.cross_region.bytes",
+		"raft.rcvd.cross_zone.bytes",
+		"raft.sent.bytes",
+		"raft.sent.cross_region.bytes",
+		"raft.sent.cross_zone.bytes"}
+	storeMetrics0Before := getFirstStoreMetrics(t, tc, 0, metricsNames)
+	storeMetrics1Before := getFirstStoreMetrics(t, tc, 1, metricsNames)
+
+	// Request is sent from server0 to server1, enforcing cross-region raft
+	// message transmission. This causes changes in sender’s sent metrics and
+	// receiver’s received metrics. Upon receiving the message, server1 sends a
+	// response back to the sender, resulting in changes in the receiver’s sent
+	// metrics and the sender’s received metrics.
+	if sent := tc.Servers[0].RaftTransport().SendAsync(request, rpc.DefaultClass); !sent {
+		t.Fatalf("unable to send message from server 0 to server 1")
+	}
+	testutils.SucceedsSoon(t, func() error {
+		info.Lock()
+		defer info.Unlock()
+		err := errors.Newf("requests have not been processed properly")
+		if (int64(0) == info.ReqSent) || (int64(0) == info.ReqReceived) || (int64(0) == info.RespSent) || (int64(0) == info.RespReceived) {
+			return err
+		}
+		return nil
+	})
+	// Wait for one sec to ensure the update completes.
+	time.Sleep(1 * time.Second)
+	info.Lock()
+	reqSent := info.ReqSent
+	reqReceived := info.ReqReceived
+	respSent := info.RespSent
+	respReceived := info.RespReceived
+	info.Unlock()
+
+	// Verify the correctness of message interception by ensuring the expected
+	// byte counts non-zero.
+	require.NotEqual(t, int64(0), reqSent)
+	require.NotEqual(t, int64(0), reqReceived)
+	require.NotEqual(t, int64(0), respSent)
+	require.NotEqual(t, int64(0), respReceived)
+
+	t.Run("server0", func(t *testing.T) {
+		storeMetrics0After := getFirstStoreMetrics(t, tc, 0, metricsNames)
+		server0Delta := getMapsDiff(storeMetrics0Before, storeMetrics0After)
+		server0Expected := map[string]int64{
+			"raft.rcvd.bytes":              respReceived,
+			"raft.rcvd.cross_region.bytes": respReceived,
+			"raft.rcvd.cross_zone.bytes":   0,
+			"raft.sent.bytes":              reqSent,
+			"raft.sent.cross_region.bytes": reqSent,
+			"raft.sent.cross_zone.bytes":   0,
+		}
+		require.Equal(t, server0Expected, server0Delta)
+	})
+	t.Run("server1", func(t *testing.T) {
+		storeMetrics1After := getFirstStoreMetrics(t, tc, 1, metricsNames)
+		server1Delta := getMapsDiff(storeMetrics1Before, storeMetrics1After)
+		server1Expected := map[string]int64{
+			"raft.rcvd.bytes":              reqReceived,
+			"raft.rcvd.cross_region.bytes": reqReceived,
+			"raft.rcvd.cross_zone.bytes":   0,
+			"raft.sent.bytes":              respSent,
+			"raft.sent.cross_region.bytes": respSent,
+			"raft.sent.cross_zone.bytes":   0,
+		}
+		require.Equal(t, server1Expected, server1Delta)
+	})
+}
+
+// TestRaftCrossZoneMetrics verifies that raft messages receiving and sending
+// correctly updates the cross-zone byte count metrics.
+func TestRaftCrossZoneMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// The initial setup ensures the correct setup for two nodes (with different
+	// zones).
+	serverLocality := [2]roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-2"}}},
+	}
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < 2; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: serverLocality[i],
+		}
+	}
+
+	var clusterArgs = base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: serverArgs,
+	}
+	tc := testcluster.StartTestCluster(t, 2, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	firstStore, err := tc.Servers[0].Stores().GetStore(tc.Servers[0].GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secStore, err := tc.Servers[1].Stores().GetStore(tc.Servers[1].GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type InterceptedInfo struct {
+		syncutil.Mutex
+		ReqSent     int64
+		ReqReceived int64
+	}
+	info := InterceptedInfo{}
+
+	// Use a unique range ID to identify incoming and outgoing messages that are
+	// relevant to our test case.
+	const unusedRangeID = 1234
+
+	// filterRaftHandlerFuncs only allows requests with rangeID 1234 to pass
+	// through the filter.
+	filterVoteReq := func(req *kvserverpb.RaftMessageRequest) bool {
+		info.Lock()
+		defer info.Unlock()
+		if req.RangeID == unusedRangeID {
+			info.ReqReceived = int64(req.Size())
+			return true
+		}
+		return false
+	}
+
+	filterVoteReqSent := func(req *kvserverpb.RaftMessageRequest) bool {
+		info.Lock()
+		defer info.Unlock()
+		if req.RangeID == unusedRangeID {
+			info.ReqSent = int64(req.Size())
+			return true
+		}
+		return false
+	}
+
+	filterFn := filterRaftHandlerFuncs{
+		filterReq: filterVoteReq, filterReqSent: filterVoteReqSent,
+	}
+
+	filterRaftHandler1 := &filterRaftHandler{firstStore, firstStore, filterFn}
+	filterRaftHandler2 := &filterRaftHandler{secStore, secStore, filterFn}
+
+	tc.Servers[0].RaftTransport().Listen(firstStore.StoreID(), filterRaftHandler1)
+	tc.Servers[0].RaftTransport().ListenOutgoingMessage(firstStore.StoreID(), filterRaftHandler1)
+	tc.Servers[1].RaftTransport().Listen(secStore.StoreID(), filterRaftHandler2)
+	tc.Servers[1].RaftTransport().ListenOutgoingMessage(secStore.StoreID(), filterRaftHandler2)
+
+	key := tc.ScratchRange(t)
+	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+	tc.AddVotersOrFatal(t, key, tc.Target(1))
+	require.NoError(t, tc.WaitForVoters(key))
+
+	firstStore, fromReplica := getFirstStoreReplica(t, tc.Server(0), key)
+	secStore, toReplica := getFirstStoreReplica(t, tc.Server(1), key)
+
+	fromReplicaDesc := roachpb.ReplicaDescriptor{
+		ReplicaID: fromReplica.ReplicaID(),
+		NodeID:    tc.Server(0).NodeID(),
+		StoreID:   firstStore.StoreID(),
+	}
+	toReplicaDesc := roachpb.ReplicaDescriptor{
+		ReplicaID: toReplica.ReplicaID(),
+		NodeID:    tc.Server(1).NodeID(),
+		StoreID:   secStore.StoreID(),
+	}
+
+	request := &kvserverpb.RaftMessageRequest{
+		RangeID:     unusedRangeID,
+		FromReplica: fromReplicaDesc,
+		ToReplica:   toReplicaDesc,
+		Message: raftpb.Message{
+			From: uint64(fromReplicaDesc.ReplicaID),
+			To:   uint64(toReplicaDesc.ReplicaID),
+			Type: raftpb.MsgTimeoutNow,
+			Term: 1,
+		},
+	}
+
+	metricsNames := []string{
+		"raft.rcvd.bytes",
+		"raft.rcvd.cross_region.bytes",
+		"raft.rcvd.cross_zone.bytes",
+		"raft.sent.bytes",
+		"raft.sent.cross_region.bytes",
+		"raft.sent.cross_zone.bytes"}
+	storeMetrics0Before := getFirstStoreMetrics(t, tc, 0, metricsNames)
+	storeMetrics1Before := getFirstStoreMetrics(t, tc, 1, metricsNames)
+
+	// Request is sent from server0 to server1, enforcing cross-zone raft message
+	// transmission. This causes changes in sender’s sent metrics and receiver’s
+	// received metrics.
+	if sent := tc.Servers[0].RaftTransport().SendAsync(request, rpc.DefaultClass); !sent {
+		t.Fatalf("unable to send message from server 0 to server 1")
+	}
+	testutils.SucceedsSoon(t, func() error {
+		info.Lock()
+		defer info.Unlock()
+		err := errors.Newf("requests have not been processed properly")
+		if (int64(0) == info.ReqSent) || (int64(0) == info.ReqReceived) {
+			return err
+		}
+		return nil
+	})
+	// Wait for one sec to ensure the update completes.
+	time.Sleep(1 * time.Second)
+
+	info.Lock()
+	reqSent := info.ReqSent
+	reqReceived := info.ReqReceived
+	info.Unlock()
+
+	// Verify the correctness of message interception by ensuring the expected
+	// byte counts non-zero.
+	require.NotEqual(t, int64(0), reqSent)
+	require.NotEqual(t, int64(0), reqReceived)
+
+	t.Run("server0", func(t *testing.T) {
+		storeMetrics0After := getFirstStoreMetrics(t, tc, 0, metricsNames)
+		server0Delta := getMapsDiff(storeMetrics0Before, storeMetrics0After)
+		server0Expected := map[string]int64{
+			"raft.rcvd.bytes":              0,
+			"raft.rcvd.cross_region.bytes": 0,
+			"raft.rcvd.cross_zone.bytes":   0,
+			"raft.sent.bytes":              reqSent,
+			"raft.sent.cross_region.bytes": 0,
+			"raft.sent.cross_zone.bytes":   reqSent,
+		}
+		require.Equal(t, server0Expected, server0Delta)
+	})
+	t.Run("server1", func(t *testing.T) {
+		storeMetrics1After := getFirstStoreMetrics(t, tc, 1, metricsNames)
+		server1Delta := getMapsDiff(storeMetrics1Before, storeMetrics1After)
+		server1Expected := map[string]int64{
+			"raft.rcvd.bytes":              reqReceived,
+			"raft.rcvd.cross_region.bytes": 0,
+			"raft.rcvd.cross_zone.bytes":   reqReceived,
+			"raft.sent.bytes":              0,
+			"raft.sent.cross_region.bytes": 0,
+			"raft.sent.cross_zone.bytes":   0,
+		}
+		require.Equal(t, server1Expected, server1Delta)
 	})
 }
