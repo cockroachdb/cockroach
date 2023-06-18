@@ -56,6 +56,12 @@ type StoreTestingKnobs struct {
 	// returns an error, the command will not be evaluated.
 	TestingRequestFilter kvserverbase.ReplicaRequestFilter
 
+	// TestingBatchMetricsFilter intercepts Node.Batch() before updating metrics
+	// for each request / response. The filter is designed to identify and filter
+	// out changes in node metrics that are irrelevant to the tests. Return nil to
+	// continue updating the metrics or non-nil to skip the update.
+	TestingBatchMetricsFilter kvserverbase.ReplicaResponseFilter
+
 	// TestingConcurrencyRetryFilter is called before a concurrency retry error is
 	// handled and the batch is retried.
 	TestingConcurrencyRetryFilter kvserverbase.ReplicaConcurrencyRetryFilter
@@ -99,16 +105,6 @@ type StoreTestingKnobs struct {
 	// with a forced error. That is, the "command" will apply as a
 	// no-op write, and the ForcedError field will be set.
 	TestingPostApplyFilter kvserverbase.ReplicaApplyFilter
-
-	// TestingBatchRequestFilter intercepts Node.Batch() to pass the actual batch
-	// request byte count to the test. A boolean value is returned here to filter
-	// out changes in node metrics that are irrelevant to the test.
-	TestingBatchRequestFilter func(*kvpb.BatchRequest) bool
-
-	// TestingBatchResponseFilter intercepts Node.Batch() to pass the actual batch
-	// request byte count to the test. A boolean value is returned here to filter
-	// out changes in node metrics that are irrelevant to the test.
-	TestingBatchResponseFilter func(*kvpb.BatchResponse) bool
 
 	// TestingResponseErrorEvent is called when an error is returned applying
 	// a command.

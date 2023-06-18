@@ -465,14 +465,6 @@ type DistSender struct {
 
 	onRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
 
-	// BatchRequestInterceptor intercepts DistSender.Send() to pass the actual
-	// batch request byte count to the test.
-	BatchRequestInterceptor func(ba *kvpb.BatchRequest)
-
-	// BatchRequestInterceptor intercepts DistSender.Send() to pass the actual
-	// batch response byte count to the test.
-	BatchResponseInterceptor func(br *kvpb.BatchResponse)
-
 	// locality is the description of the topography of the server on which the
 	// DistSender is running. It is used to estimate the latency to other nodes
 	// in the absence of a latency function.
@@ -490,6 +482,10 @@ type DistSender struct {
 
 	// Currently executing range feeds.
 	activeRangeFeeds sync.Map // // map[*rangeFeedRegistry]nil
+
+	// TestingBatchInterceptor is designed to intercept DistSender function calls
+	// to validate BatchRequest and BatchResponse properties in testing.
+	TestingBatchInterceptor func(*kvpb.BatchRequest, *kvpb.BatchResponse)
 }
 
 var _ kv.Sender = &DistSender{}
@@ -630,12 +626,8 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
 	}
 
-	if cfg.TestingKnobs.BatchRequestInterceptor != nil {
-		ds.BatchRequestInterceptor = cfg.TestingKnobs.BatchRequestInterceptor
-	}
-
-	if cfg.TestingKnobs.BatchResponseInterceptor != nil {
-		ds.BatchResponseInterceptor = cfg.TestingKnobs.BatchResponseInterceptor
+	if cfg.TestingKnobs.TestingBatchInterceptor != nil {
+		ds.TestingBatchInterceptor = cfg.TestingKnobs.TestingBatchInterceptor
 	}
 
 	return ds
@@ -2293,14 +2285,8 @@ func (ds *DistSender) sendToReplicas(
 				(desc.Generation == 0 && routing.LeaseSeq() == 0),
 		}
 
-		if ds.BatchRequestInterceptor != nil {
-			ds.BatchRequestInterceptor(ba)
-		}
 		comparisonResult := ds.checkAndUpdateCrossLocalityBatchMetrics(ctx, ba)
 		br, err = transport.SendNext(ctx, ba)
-		if ds.BatchResponseInterceptor != nil {
-			ds.BatchResponseInterceptor(br)
-		}
 		ds.updateCrossLocalityBatchMetrics(br, comparisonResult)
 		ds.maybeIncrementErrCounters(br, err)
 
@@ -2593,6 +2579,13 @@ func (ds *DistSender) getCrossLocalityComparison(
 func (ds *DistSender) checkAndUpdateCrossLocalityBatchMetrics(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) roachpb.LocalityComparisonType {
+	if ds.TestingBatchInterceptor != nil {
+		// TestingBatchInterceptor intercepts DistSender.Send() with the purpose of
+		// passing the actual byte count of batch size to tests to verify the
+		// accuracy of updates made to DistSender metrics.
+		ds.TestingBatchInterceptor(ba, nil)
+	}
+
 	ds.metrics.ReplicaAddressedBatchRequestBytes.Inc(int64(ba.Size()))
 	comparisonResult := ds.getCrossLocalityComparison(ctx, ba)
 	switch comparisonResult {
@@ -2615,6 +2608,13 @@ func (ds *DistSender) checkAndUpdateCrossLocalityBatchMetrics(
 func (ds *DistSender) updateCrossLocalityBatchMetrics(
 	br *kvpb.BatchResponse, comparisonResult roachpb.LocalityComparisonType,
 ) {
+
+	if ds.TestingBatchInterceptor != nil {
+		// TestingBatchInterceptor intercepts DistSender.Send() with the purpose of
+		// passing the actual byte count of batch size to tests to verify the
+		// accuracy of updates made to DistSender metrics.
+		ds.TestingBatchInterceptor(nil, br)
+	}
 	ds.metrics.ReplicaAddressedBatchResponseBytes.Inc(int64(br.Size()))
 	switch comparisonResult {
 	case roachpb.LocalityComparisonType_CROSS_REGION_CROSS_ZONE:

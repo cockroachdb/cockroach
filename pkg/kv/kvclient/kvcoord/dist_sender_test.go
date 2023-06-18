@@ -5712,11 +5712,12 @@ func TestDistSenderBatchMetrics(t *testing.T) {
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(rangeDesc),
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: adaptSimpleTransport(transportFn),
-			BatchRequestInterceptor: func(ba *kvpb.BatchRequest) {
-				interceptedBatchRequestBytes = int64(ba.Size())
-			},
-			BatchResponseInterceptor: func(br *kvpb.BatchResponse) {
-				interceptedBatchResponseBytes = int64(br.Size())
+			TestingBatchInterceptor: func(ba *kvpb.BatchRequest, br *kvpb.BatchResponse) {
+				if br == nil {
+					interceptedBatchRequestBytes = int64(ba.Size())
+				} else {
+					interceptedBatchResponseBytes = int64(br.Size())
+				}
 			},
 		},
 		Settings: cluster.MakeTestingClusterSettings(),
@@ -5779,9 +5780,8 @@ func TestDistSenderBatchMetrics(t *testing.T) {
 
 			ba := &kvpb.BatchRequest{}
 			if tc.toReplica == 0 {
-				// Send a different request type for the first request to avoid having
-				// the same byte count for three requests and coincidental correct
-				// results.
+				// Send requests of different types to avoid having the same byte count
+				// for three requests and coincidental correct results.
 				get := &kvpb.GetRequest{}
 				get.Key = rangeDesc.StartKey.AsRawKey()
 				ba.Add(get)

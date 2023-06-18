@@ -805,36 +805,32 @@ func TestNodeBatchMetrics(t *testing.T) {
 	}
 
 	info := InterceptedInfo{}
-	requestFn := func(ba *kvpb.BatchRequest) bool {
-		// A boolean is returned here to filter out changes in node metrics caused
-		// by batch requests that are irrelevant to our test case. Most of these
-		// batch requests are part of the system config and are difficult to
-		// disable.
-		info.Lock()
-		defer info.Unlock()
-		if ba != nil && ba.Txn != nil {
-			if baTxnName := ba.Txn.Name; baTxnName == "cross-locality-test" {
-				info.BatchRequestSize = int64(ba.Size())
-				return true
-			}
-		}
-		return false
-	}
 
-	responseFn := func(br *kvpb.BatchResponse) bool {
-		// A boolean is returned here to filter out changes in node metrics caused
-		// by batch requests that are irrelevant to our test case. Most of these
-		// batch requests are part of the system config and are difficult to
-		// disable.
+	// An error is returned here to filter out node metrics changes caused by
+	// batches that are irrelevant to our specific test case. Most of these
+	// batches are part of the system config and hard to disable. To uniquely
+	// identify the relevant batches, we assign our batch of interest a unique
+	// transaction name “cross-locality-test”.
+	filterFn := func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
 		info.Lock()
 		defer info.Unlock()
-		if br != nil && br.Txn != nil {
-			if brTxnName := br.Txn.Name; brTxnName == "cross-locality-test" {
-				info.BatchResponseSize = int64(br.Size())
-				return true
+		if br == nil {
+			if ba != nil && ba.Txn != nil {
+				if baTxnName := ba.Txn.Name; baTxnName == "cross-locality-test" {
+					info.BatchRequestSize = int64(ba.Size())
+					return nil
+				}
 			}
+			return kvpb.NewError(errors.New("rejected"))
+		} else {
+			if br != nil && br.Txn != nil {
+				if brTxnName := br.Txn.Name; brTxnName == "cross-locality-test" {
+					info.BatchResponseSize = int64(br.Size())
+					return nil
+				}
+			}
+			return kvpb.NewError(errors.New("rejected"))
 		}
-		return false
 	}
 
 	serverLocality := [numNodes]roachpb.Locality{
@@ -852,8 +848,7 @@ func TestNodeBatchMetrics(t *testing.T) {
 					DefaultZoneConfigOverride: &zcfg,
 				},
 				Store: &kvserver.StoreTestingKnobs{
-					TestingBatchRequestFilter:  requestFn,
-					TestingBatchResponseFilter: responseFn,
+					TestingBatchMetricsFilter: filterFn,
 				},
 			},
 		}
