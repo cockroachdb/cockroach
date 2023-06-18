@@ -163,12 +163,13 @@ func (c *conn) processCommandsAsync(
 	reserved *mon.BoundAccount,
 	onDefaultIntSizeChange func(newSize int32),
 	sessionID clusterunique.ID,
-) <-chan error {
+) (processCommandsComplete func()) {
 	// reservedOwned is true while we own reserved, false when we pass ownership
 	// away.
+	retCh := make(chan struct{})
 	reservedOwned := true
-	retCh := make(chan error, 1)
 	go func() {
+		defer close(retCh)
 		var retErr error
 		var connHandler sql.ConnectionHandler
 		var authOK bool
@@ -212,8 +213,6 @@ func (c *conn) processCommandsAsync(
 			if connCloseAuthHandler != nil {
 				connCloseAuthHandler()
 			}
-			// Inform the connection goroutine of success or failure.
-			retCh <- retErr
 		}()
 
 		// Authenticate the connection.
@@ -300,7 +299,9 @@ func (c *conn) processCommandsAsync(
 			c.cancelConn,
 		)
 	}()
-	return retCh
+	return func() {
+		<-retCh
+	}
 }
 
 func (c *conn) bufferParamStatus(param, value string) error {
