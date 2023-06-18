@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -224,6 +225,51 @@ func (s *Store) ReservationCount() int {
 // RaftSchedulerPriorityID returns the Raft scheduler's prioritized ranges.
 func (s *Store) RaftSchedulerPriorityIDs() []roachpb.RangeID {
 	return s.scheduler.PriorityIDs()
+}
+
+// GetStoreMetric retrieves the count of the store metric whose metadata name
+// matches with the given name parameter. If the specified metric cannot be
+// found, the function will return an error.
+func (sm *StoreMetrics) GetStoreMetric(name string) (int64, error) {
+	var c int64
+	var found bool
+	sm.registry.Each(func(n string, v interface{}) {
+		if name == n {
+			switch t := v.(type) {
+			case *metric.Counter:
+				c = t.Count()
+				found = true
+			case *metric.Gauge:
+				c = t.Value()
+				found = true
+			}
+		}
+	})
+	if !found {
+		return -1, errors.Errorf("cannot find metric for %s", name)
+	}
+	return c, nil
+}
+
+// GetStoreMetrics fetches the count of each specified Store metric from the
+// `metricNames` parameter and returns the result as a map. The keys in the map
+// represent the metric metadata names, while the corresponding values indicate
+// the count of each metric. If any of the specified metric cannot be found or
+// is not a counter, the function will return an error.
+//
+// Assumption: 1. The metricNames parameter should consist of string literals
+// that match the metadata names used for metric counters. 2. Each metric name
+// provided in `metricNames` must exist, unique and be a counter type.
+func (sm *StoreMetrics) GetStoreMetrics(metricsNames []string) (map[string]int64, error) {
+	metrics := make(map[string]int64)
+	for _, metricName := range metricsNames {
+		count, err := sm.GetStoreMetric(metricName)
+		if err != nil {
+			return map[string]int64{}, errors.Errorf("cannot find metric for %s", metricName)
+		}
+		metrics[metricName] = count
+	}
+	return metrics, nil
 }
 
 func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
@@ -598,4 +644,17 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 			}
 		}
 	}
+}
+
+// getMapsDiff returns the difference between the values of corresponding
+// metrics in two maps. Assumption: beforeMap and afterMap contain the same set
+// of keys.
+func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[string]int64 {
+	diffMap := make(map[string]int64)
+	for metricName, beforeValue := range beforeMap {
+		if v, ok := afterMap[metricName]; ok {
+			diffMap[metricName] = v - beforeValue
+		}
+	}
+	return diffMap
 }
