@@ -269,6 +269,7 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *kvpb.Error {
+	s.checkAndUpdateCrossLocalityRaftMetrics(ctx, req.FromReplica, req.ToReplica, int64(req.Size()), false)
 	// NB: unlike the other two IncomingRaftMessageHandler methods implemented by
 	// Store, this one doesn't need to directly run through a Stopper task because
 	// it delegates all work through a raftScheduler, whose workers' lifetimes are
@@ -318,6 +319,54 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		return false
 	}
 	return enqueue
+}
+
+// checkAndUpdateCrossLocalityRaftMetrics updates store metrics associated with
+// cross-locality raft messages. Cross-region metrics monitor activities across
+// different regions. Cross-zone metrics monitor cross-zone activities within
+// the same region or in cases where region tiers are not configured.
+func (s *Store) checkAndUpdateCrossLocalityRaftMetrics(
+	ctx context.Context,
+	fromReplica roachpb.ReplicaDescriptor,
+	toReplica roachpb.ReplicaDescriptor,
+	inc int64,
+	isSent bool,
+) {
+	comparisonResult := s.getCrossLocalityComparison(ctx, fromReplica, toReplica)
+	if isSent {
+		s.metrics.RaftSentBytes.Inc(inc)
+		switch comparisonResult {
+		case roachpb.LocalityComparisonType_CROSS_REGION_CROSS_ZONE:
+			s.metrics.RaftSentCrossRegionBytes.Inc(inc)
+		case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+			s.metrics.RaftSentCrossZoneBytes.Inc(inc)
+		case roachpb.LocalityComparisonType_CROSS_REGION_SAME_ZONE:
+			log.VEventf(ctx, 2, "unexpected: cross region but same zone")
+		case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
+			// No metrics or error reporting.
+		}
+	} else {
+		s.metrics.RaftRcvdBytes.Inc(inc)
+		switch comparisonResult {
+		case roachpb.LocalityComparisonType_CROSS_REGION_CROSS_ZONE:
+			s.metrics.RaftRcvdCrossRegionBytes.Inc(inc)
+		case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+			s.metrics.RaftRcvdCrossZoneBytes.Inc(inc)
+		case roachpb.LocalityComparisonType_CROSS_REGION_SAME_ZONE:
+			log.VEventf(ctx, 2, "unexpected: cross region but same zone")
+		case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
+			// No metrics or error reporting.
+		}
+	}
+}
+
+// HandleRaftRequestSent is called to capture outgoing Raft messages just prior
+// to their transmission to the raftSendQueue. Note that the message might not
+// be successfully queued if it gets dropped by SendAsync due to a full outgoing
+// queue.
+func (s *Store) HandleRaftRequestSent(ctx context.Context, req *kvserverpb.RaftMessageRequest) {
+	s.checkAndUpdateCrossLocalityRaftMetrics(ctx, req.FromReplica, req.ToReplica,
+		int64(req.Size()), true /* isSent */)
 }
 
 // withReplicaForRequest calls the supplied function with the (lazily
@@ -721,6 +770,7 @@ func (s *Store) processRaft(ctx context.Context) {
 	_ = s.stopper.RunAsyncTask(ctx, "coalesced-hb-loop", s.coalescedHeartbeatsLoop)
 	s.stopper.AddCloser(stop.CloserFn(func() {
 		s.cfg.Transport.Stop(s.StoreID())
+		s.cfg.Transport.StopOutgoingMessage(s.StoreID())
 	}))
 
 	s.syncWaiter.Start(ctx, s.stopper)

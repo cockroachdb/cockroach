@@ -1367,6 +1367,57 @@ handling consumes writes.
 		Unit:        metric.Unit_BYTES,
 	}
 
+	metaRaftRcvdBytes = metric.Metadata{
+		Name:        "raft.rcvd.bytes",
+		Help:        "Number of bytes in Raft messages received by this store",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftRcvdCrossRegionBytes = metric.Metadata{
+		Name: "raft.rcvd.cross_region.bytes",
+		Help: `Number of bytes received by this store for cross region Raft messages 
+		(when region tiers are configured)`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftRcvdCrossZoneBytes = metric.Metadata{
+		Name: "raft.rcvd.cross_zone.bytes",
+		Help: `Number of bytes received by this store for cross zone, same region
+		Raft messages (when region and zone tiers are configured). If region tiers
+		are not configured, this count may include data sent between different
+		regions. To ensure accurate monitoring of transmitted data, it is important
+		to establish a consistent locality configuration across nodes and avoid any
+		configurations that could potentially enable cross-region but same-zone
+		activities.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftSentBytes = metric.Metadata{
+		Name:        "raft.sent.bytes",
+		Help:        "Number of bytes in Raft messages sent by this store",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftSentCrossRegionBytes = metric.Metadata{
+		Name: "raft.sent.cross_region.bytes",
+		Help: `Number of bytes sent by this store for cross region Raft messages 
+		(when region tiers are configured)`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftSentCrossZoneBytes = metric.Metadata{
+		Name: "raft.sent.cross_zone.bytes",
+		Help: `Number of bytes sent by this store for cross zone, same region Raft
+		messages (when region and zone tiers are configured). If region tiers are
+		not configured, this count may include data sent between different regions.
+		To ensure accurate monitoring of transmitted data, it is important to
+		establish a consistent locality configuration across nodes and avoid any
+		configurations that could potentially enable cross-region but same-zone
+		activities.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+
 	metaRaftCoalescedHeartbeatsPending = metric.Metadata{
 		Name:        "raft.heartbeats.pending",
 		Help:        "Number of pending heartbeats and responses waiting to be coalesced",
@@ -2261,11 +2312,17 @@ type StoreMetrics struct {
 	// Raft message metrics.
 	//
 	// An array for conveniently finding the appropriate metric.
-	RaftRcvdMessages     [maxRaftMsgType + 1]*metric.Counter
-	RaftRcvdDropped      *metric.Counter
-	RaftRcvdDroppedBytes *metric.Counter
-	RaftRcvdQueuedBytes  *metric.Gauge
-	RaftRcvdSteppedBytes *metric.Counter
+	RaftRcvdMessages         [maxRaftMsgType + 1]*metric.Counter
+	RaftRcvdDropped          *metric.Counter
+	RaftRcvdDroppedBytes     *metric.Counter
+	RaftRcvdQueuedBytes      *metric.Gauge
+	RaftRcvdSteppedBytes     *metric.Counter
+	RaftRcvdBytes            *metric.Counter
+	RaftRcvdCrossRegionBytes *metric.Counter
+	RaftRcvdCrossZoneBytes   *metric.Counter
+	RaftSentBytes            *metric.Counter
+	RaftSentCrossRegionBytes *metric.Counter
+	RaftSentCrossZoneBytes   *metric.Counter
 
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
@@ -2929,10 +2986,16 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			raftpb.MsgTransferLeader: metric.NewCounter(metaRaftRcvdTransferLeader),
 			raftpb.MsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
 		},
-		RaftRcvdDropped:      metric.NewCounter(metaRaftRcvdDropped),
-		RaftRcvdDroppedBytes: metric.NewCounter(metaRaftRcvdDroppedBytes),
-		RaftRcvdQueuedBytes:  metric.NewGauge(metaRaftRcvdQueuedBytes),
-		RaftRcvdSteppedBytes: metric.NewCounter(metaRaftRcvdSteppedBytes),
+		RaftRcvdDropped:          metric.NewCounter(metaRaftRcvdDropped),
+		RaftRcvdDroppedBytes:     metric.NewCounter(metaRaftRcvdDroppedBytes),
+		RaftRcvdQueuedBytes:      metric.NewGauge(metaRaftRcvdQueuedBytes),
+		RaftRcvdSteppedBytes:     metric.NewCounter(metaRaftRcvdSteppedBytes),
+		RaftRcvdBytes:            metric.NewCounter(metaRaftRcvdBytes),
+		RaftRcvdCrossRegionBytes: metric.NewCounter(metaRaftRcvdCrossRegionBytes),
+		RaftRcvdCrossZoneBytes:   metric.NewCounter(metaRaftRcvdCrossZoneBytes),
+		RaftSentBytes:            metric.NewCounter(metaRaftSentBytes),
+		RaftSentCrossRegionBytes: metric.NewCounter(metaRaftSentCrossRegionBytes),
+		RaftSentCrossZoneBytes:   metric.NewCounter(metaRaftSentCrossZoneBytes),
 
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
