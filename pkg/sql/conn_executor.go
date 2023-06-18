@@ -946,7 +946,6 @@ func (s *Server) ServeConn(
 	// panics: so we do it in a defer that is guaranteed to execute. We also
 	// cannot close it before closeWrapper since we need to close the internal
 	// monitors of the connExecutor first.
-	defer reserved.Close(ctx)
 	defer func(ctx context.Context, h ConnectionHandler) {
 		r := recover()
 		h.ex.closeWrapper(ctx, r)

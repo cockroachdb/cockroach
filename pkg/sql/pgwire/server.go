@@ -763,6 +763,7 @@ func (s *Server) ServeConn(
 		preServeStatus.Reserved.Close(ctx)
 		return s.sendErr(ctx, st, conn, err)
 	}
+	defer tenantReserved.Close(ctx)
 
 	// Populate the client address field in the context tags and the
 	// shared struct for structured logging.
@@ -995,7 +996,6 @@ func (s *Server) serveImpl(
 	} else {
 		// sqlServer == nil means we are in a local test. In this case
 		// we only need the minimum to make pgx happy.
-		defer reserved.Close(ctx)
 		var err error
 		for param, value := range testingStatusReportParams {
 			err = c.bufferParamStatus(param, value)
