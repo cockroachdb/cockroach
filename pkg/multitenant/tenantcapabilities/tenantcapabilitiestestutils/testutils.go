@@ -108,11 +108,10 @@ func GetTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	return tID
 }
 
-// AlteredCapabilitiesString prints all altered capability values that no
-// longer match DefaultCapabilities. This is different from
-// Capabilities.String which only prints non-zero value fields.
+// AlteredCapabilitiesString pretty-prints all altered capability
+// values that no longer match an empty protobuf.
 func AlteredCapabilitiesString(capabilities *tenantcapabilitiespb.TenantCapabilities) string {
-	defaultCapabilities := tenantcapabilities.DefaultCapabilities()
+	defaultCapabilities := &tenantcapabilitiespb.TenantCapabilities{}
 	var builder strings.Builder
 	builder.WriteByte('{')
 	space := ""

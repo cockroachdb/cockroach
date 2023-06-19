@@ -17,10 +17,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func someCaps() *tenantcapabilitiespb.TenantCapabilities {
+	return &tenantcapabilitiespb.TenantCapabilities{}
+}
+
 // TestIDs ensures that iterating IDs always works for the ID lookup functions.
 func TestIDs(t *testing.T) {
 	for _, id := range IDs {
-		_, err := GetValueByID(DefaultCapabilities(), id)
+		_, err := GetValueByID(someCaps(), id)
 		require.NoError(t, err, id)
 		_, ok := FromID(id)
 		require.True(t, ok, id)
@@ -32,9 +36,9 @@ func TestGetSet(t *testing.T) {
 	for _, id := range IDs {
 		switch c, _ := FromID(id); c := c.(type) {
 		case BoolCapability:
-			c.Value(&v).Set(c.Value(DefaultCapabilities()).Get())
+			c.Value(&v).Set(c.Value(someCaps()).Get())
 		case SpanConfigBoundsCapability:
-			c.Value(&v).Set(c.Value(DefaultCapabilities()).Get())
+			c.Value(&v).Set(c.Value(someCaps()).Get())
 		}
 	}
 }
@@ -43,7 +47,7 @@ func TestGetSet(t *testing.T) {
 // been previously modified using a Set returns the correct value.
 func TestSpanConfigBoundsSetGet(t *testing.T) {
 	capability := spanConfigBoundsCapability(TenantSpanConfigBounds)
-	val := capability.Value(DefaultCapabilities())
+	val := capability.Value(someCaps())
 
 	// Construct some span config bounds that apply to GC TTLs.
 	var v tenantcapabilitiespb.TenantCapabilities
