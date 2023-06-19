@@ -2175,7 +2175,6 @@ GO_TARGETS = [
     "//pkg/ui:ui",
     "//pkg/ui:ui_test",
     "//pkg/upgrade/migrationstable:migrationstable",
-    "//pkg/upgrade/nodelivenesstest:nodelivenesstest",
     "//pkg/upgrade/upgradebase:upgradebase",
     "//pkg/upgrade/upgradecluster:upgradecluster",
     "//pkg/upgrade/upgradecluster:upgradecluster_test",
