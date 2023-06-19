@@ -216,6 +216,26 @@ span_config_bounds         {}
 
 subtest end
 
+subtest regression_98749
+
+query TT colnames,rowsort
+SELECT capability_name, capability_value FROM [SHOW TENANT system WITH CAPABILITIES]
+----
+capability_name            capability_value
+can_admin_relocate_range   true
+can_admin_scatter          true
+can_admin_split            true
+can_admin_unsplit          true
+can_check_consistency      true
+can_use_nodelocal_storage  true
+can_view_node_info         true
+can_view_tsdb_metrics      true
+exempt_from_rate_limiting  true
+span_config_bounds         {}
+
+
+subtest end
+
 
 subtest span_config_bounds
 
