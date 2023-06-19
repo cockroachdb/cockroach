@@ -310,6 +310,7 @@ type kvStoreTokenGranter struct {
 	ioTokensExhaustedDurationMetric *metric.Counter
 	availableTokensMetrics          *metric.Gauge
 	tookWithoutPermissionMetric     *metric.Counter
+	totalTokensTaken                *metric.Counter
 	exhaustedStart                  time.Time
 
 	// Estimation models.
@@ -392,6 +393,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		if sg.coordMu.availableIOTokens > 0 {
 			sg.subtractTokensLocked(count, false)
 			sg.coordMu.diskBWTokensUsed[wc] += count
+			sg.totalTokensTaken.Inc(count)
 			return grantSuccess
 		}
 	case admissionpb.ElasticWorkClass:
@@ -399,6 +401,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 			sg.coordMu.elasticDiskBWTokensAvailable -= count
 			sg.subtractTokensLocked(count, false)
 			sg.coordMu.diskBWTokensUsed[wc] += count
+			sg.totalTokensTaken.Inc(count)
 			return grantSuccess
 		}
 	}
@@ -430,6 +433,7 @@ func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64, demuxHan
 	wc := admissionpb.WorkClass(demuxHandle)
 	sg.subtractTokensLocked(count, false)
 	sg.tookWithoutPermissionMetric.Inc(count)
+	sg.totalTokensTaken.Inc(count)
 	if wc == admissionpb.ElasticWorkClass {
 		sg.coordMu.elasticDiskBWTokensAvailable -= count
 	}
@@ -681,6 +685,12 @@ var (
 	kvIONumIOTokensTookWithoutPermission = metric.Metadata{
 		Name:        "admission.granter.io_tokens_took_without_permission.kv",
 		Help:        "Total number of tokens taken without permission",
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvIOTotalTokensTaken = metric.Metadata{
+		Name:        "admission.granter.io_tokens_taken.kv",
+		Help:        "Total number of tokens taken",
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
