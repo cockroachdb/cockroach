@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -129,7 +128,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 		// Sysbench occasionally segfaults. When that happens, don't fail the
 		// test.
-		if strings.Contains(result.Stderr, "Segmentation fault") {
+		if result.RemoteExitStatus == 139 {
 			t.L().Printf("sysbench segfaulted; passing test anyway")
 			return nil
 		}
