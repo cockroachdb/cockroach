@@ -349,49 +349,43 @@ SELECT * FROM [
 │
 └── • render
     │
-    └── • distinct
-        │ distinct on: arbiter_uniq_idx_distinct
-        │ nulls are distinct
+    └── • lookup join (anti)
+        │ table: regional_by_row_table@uniq_idx (partial index)
+        │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column4 = a)
+        │ pred: column5 > 0
         │
-        └── • render
+        └── • lookup join (anti)
+            │ table: regional_by_row_table@uniq_idx (partial index)
+            │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column4 = a)
+            │ pred: column5 > 0
             │
             └── • lookup join (anti)
-                │ table: regional_by_row_table@uniq_idx (partial index)
-                │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column4 = a)
-                │ pred: column5 > 0
+                │ table: regional_by_row_table@regional_by_row_table_b_key
+                │ equality cols are key
+                │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column5 = b)
                 │
                 └── • lookup join (anti)
-                    │ table: regional_by_row_table@uniq_idx (partial index)
-                    │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column4 = a)
-                    │ pred: column5 > 0
+                    │ table: regional_by_row_table@regional_by_row_table_b_key
+                    │ equality cols are key
+                    │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column5 = b)
                     │
-                    └── • lookup join (anti)
-                        │ table: regional_by_row_table@regional_by_row_table_b_key
-                        │ equality cols are key
-                        │ lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column5 = b)
+                    └── • cross join (anti)
                         │
-                        └── • lookup join (anti)
-                            │ table: regional_by_row_table@regional_by_row_table_b_key
-                            │ equality cols are key
-                            │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column5 = b)
+                        ├── • values
+                        │     size: 6 columns, 1 row
+                        │
+                        └── • union all
+                            │ limit: 1
                             │
-                            └── • cross join (anti)
-                                │
-                                ├── • values
-                                │     size: 6 columns, 1 row
-                                │
-                                └── • union all
-                                    │ limit: 1
-                                    │
-                                    ├── • scan
-                                    │     missing stats
-                                    │     table: regional_by_row_table@regional_by_row_table_pkey
-                                    │     spans: [/'ap-southeast-2'/7 - /'ap-southeast-2'/7]
-                                    │
-                                    └── • scan
-                                          missing stats
-                                          table: regional_by_row_table@regional_by_row_table_pkey
-                                          spans: [/'ca-central-1'/7 - /'ca-central-1'/7] [/'us-east-1'/7 - /'us-east-1'/7]
+                            ├── • scan
+                            │     missing stats
+                            │     table: regional_by_row_table@regional_by_row_table_pkey
+                            │     spans: [/'ap-southeast-2'/7 - /'ap-southeast-2'/7]
+                            │
+                            └── • scan
+                                  missing stats
+                                  table: regional_by_row_table@regional_by_row_table_pkey
+                                  spans: [/'ca-central-1'/7 - /'ca-central-1'/7] [/'us-east-1'/7 - /'us-east-1'/7]
 
 # Tests for locality optimized search.
 
