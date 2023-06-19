@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -114,6 +115,14 @@ func getTenantInfoFromRow(row tree.Datums) (*mtinfopb.TenantInfo, error) {
 	infoBytes := []byte(tree.MustBeDBytes(row[1]))
 	if err := protoutil.Unmarshal(infoBytes, &info.ProtoInfo); err != nil {
 		return nil, err
+	}
+
+	// If we are loading the entry for the system tenant, inject all the
+	// capabilities that the system tenant should have. This will allow
+	// us to reduce our dependency on a tenant ID check to retain the
+	// system tenant's access to all services.
+	if roachpb.IsSystemTenantID(info.ID) {
+		tenantcapabilities.EnableAll(&info.ProtoInfo.Capabilities)
 	}
 
 	// Load the name if defined.
