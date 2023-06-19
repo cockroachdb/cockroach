@@ -44,6 +44,7 @@ type tenantNode struct {
 	httpPort, sqlPort int
 	kvAddrs           []string
 	pgURL             string
+	envVars           []string
 	// Same as pgURL but with relative ssl parameters.
 	relativeSecureURL string
 
@@ -55,11 +56,18 @@ type tenantNode struct {
 type createTenantOptions struct {
 	// Set this to expand the scope of the nodes added to the tenant certs.
 	certNodes option.NodeListOption
+
+	// Set this to add additional environment variables to the tenant.
+	envVars []string
 }
 type createTenantOpt func(*createTenantOptions)
 
 func createTenantCertNodes(nodes option.NodeListOption) createTenantOpt {
 	return func(c *createTenantOptions) { c.certNodes = nodes }
+}
+
+func createTenantEnvVar(envVar string) createTenantOpt {
+	return func(c *createTenantOptions) { c.envVars = append(c.envVars, envVar) }
 }
 
 func createTenantNodeInternal(
@@ -88,6 +96,7 @@ func createTenantNodeInternal(
 		kvAddrs:    kvAddrs,
 		node:       node,
 		sqlPort:    sqlPort,
+		envVars:    append(config.DefaultEnvVars(), createOptions.envVars...),
 	}
 	if certs {
 		tn.createTenantCert(ctx, t, c, createOptions.certNodes)
@@ -181,7 +190,7 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	require.NoError(t, err)
 	tn.errCh = startTenantServer(
 		ctx, c, c.Node(tn.node), internalIPs[0], binary, tn.kvAddrs, tn.tenantID,
-		tn.httpPort, tn.sqlPort,
+		tn.httpPort, tn.sqlPort, tn.envVars,
 		extraArgs...,
 	)
 
@@ -244,6 +253,7 @@ func startTenantServer(
 	tenantID int,
 	httpPort int,
 	sqlPort int,
+	envVars []string,
 	extraFlags ...string,
 ) chan error {
 	args := []string{
@@ -259,7 +269,7 @@ func startTenantServer(
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- c.RunE(tenantCtx, node,
-			append(append(append([]string{}, config.DefaultEnvVars()...), binary, "mt", "start-sql"), args...)...,
+			append(append(append([]string{}, envVars...), binary, "mt", "start-sql"), args...)...,
 		)
 		close(errCh)
 	}()
@@ -278,6 +288,7 @@ func newTenantInstance(
 		node:       node,
 		httpPort:   http,
 		sqlPort:    sql,
+		envVars:    tn.envVars,
 	}
 	tenantCertsDir, err := os.MkdirTemp("", "tenant-certs")
 	if err != nil {

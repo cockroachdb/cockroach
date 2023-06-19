@@ -37,7 +37,6 @@ func registerMultiTenantDistSQL(r registry.Registry) {
 			b := bundle
 			to := timeout
 			r.Add(registry.TestSpec{
-				Skip:    "the test is skipped until #100260 is resolved",
 				Name:    fmt.Sprintf("multitenant/distsql/instances=%d/bundle=%s/timeout=%d", numInstances, b, to),
 				Owner:   registry.OwnerSQLQueries,
 				Cluster: r.MakeClusterSpec(4),
@@ -64,6 +63,7 @@ func runMultiTenantDistSQL(
 	// 1 byte to bypass the guardrails.
 	settings := install.MakeClusterSettings(install.SecureOption(true))
 	settings.Env = append(settings.Env, "COCKROACH_MIN_RANGE_MAX_BYTES=1")
+	tenantEnvOpt := createTenantEnvVar(settings.Env[len(settings.Env)-1])
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(1))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(2))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(3))
@@ -72,17 +72,20 @@ func runMultiTenantDistSQL(
 		tenantID           = 11
 		tenantBaseHTTPPort = 8081
 		tenantBaseSQLPort  = 26259
+		// localPortOffset is used to avoid port conflicts with nodes on a local
+		// cluster.
+		localPortOffset = 1000
 	)
 
 	tenantHTTPPort := func(offset int) int {
 		if c.IsLocal() || numInstances > c.Spec().NodeCount {
-			return tenantBaseHTTPPort + offset
+			return tenantBaseHTTPPort + localPortOffset + offset
 		}
 		return tenantBaseHTTPPort
 	}
 	tenantSQLPort := func(offset int) int {
 		if c.IsLocal() || numInstances > c.Spec().NodeCount {
-			return tenantBaseSQLPort + offset
+			return tenantBaseSQLPort + localPortOffset + offset
 		}
 		return tenantBaseSQLPort
 	}
@@ -93,7 +96,7 @@ func runMultiTenantDistSQL(
 
 	instances := make([]*tenantNode, 0, numInstances)
 	instance1 := createTenantNode(ctx, t, c, c.Node(1), tenantID, 2 /* node */, tenantHTTPPort(0), tenantSQLPort(0),
-		createTenantCertNodes(c.All()))
+		createTenantCertNodes(c.All()), tenantEnvOpt)
 	instances = append(instances, instance1)
 	defer instance1.stop(ctx, t, c)
 	instance1.start(ctx, t, c, "./cockroach")
