@@ -102,6 +102,19 @@ var DiscoveredLocksThresholdToConsultTxnStatusCache = settings.RegisterIntSettin
 	settings.NonNegativeInt,
 )
 
+// BatchPushedLockResolution controls whether the lock table should allow
+// non-locking readers to defer and batch the resolution of conflicting locks
+// whose holder is known to be pending and have been pushed above the reader's
+// timestamp.
+var BatchPushedLockResolution = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.batch_pushed_lock_resolution.enabled",
+	"whether the lock table should allow non-locking readers to defer and batch the resolution of "+
+		"conflicting locks whose holder is known to be pending and have been pushed above the reader's "+
+		"timestamp",
+	true,
+)
+
 // managerImpl implements the Manager interface.
 type managerImpl struct {
 	st *cluster.Settings

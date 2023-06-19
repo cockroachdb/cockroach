@@ -1662,7 +1662,7 @@ func (l *lockState) tryActiveWait(
 		// lockTableWaiter but difficult to coordinate through the txnStatusCache.
 		// This limitation is acceptable because the most important case here is
 		// optimizing the Export requests issued by backup.
-		if !g.hasUncertaintyInterval() {
+		if !g.hasUncertaintyInterval() && g.lt.batchPushedLockResolution() {
 			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
 			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
 				up := roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: l.key})
@@ -2730,7 +2730,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		// holder is known to have been pushed above the reader's timestamp. See the
 		// comment in tryActiveWait for more details, including why we include the
 		// hasUncertaintyInterval condition.
-		if sa == spanset.SpanReadOnly && !g.hasUncertaintyInterval() {
+		if sa == spanset.SpanReadOnly && !g.hasUncertaintyInterval() && t.batchPushedLockResolution() {
 			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(intent.Txn.ID)
 			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
 				g.toResolve = append(
@@ -3016,6 +3016,13 @@ func stepToNextSpan(g *lockTableGuardImpl) *spanset.Span {
 		g.sa = spanset.NumSpanAccess - 1
 	}
 	return nil
+}
+
+// batchPushedLockResolution returns whether non-locking readers can defer and
+// batch resolution of conflicting locks whose holder is known to be pending and
+// have been pushed above the reader's timestamp.
+func (t *lockTableImpl) batchPushedLockResolution() bool {
+	return BatchPushedLockResolution.Get(&t.settings.SV)
 }
 
 // PushedTransactionUpdated implements the lockTable interface.
