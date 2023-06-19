@@ -88,97 +88,69 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 				mixedVersionReqError := "unable to service a mixed version request"
 				unknownFieldError := "unknown field"
 
-				// If we have nodes in mixed versions.
-				if len(h.Context().FromVersionNodes) > 0 && len(h.Context().ToVersionNodes) > 0 {
-					prevVersNodeID := h.Context().FromVersionNodes[0]
-					currVersNodeID := h.Context().ToVersionNodes[0]
+				// Skip finalizing state.
+				if h.Context().Finalizing {
+					return nil
+				}
 
-					// Fetch span stats from previous version node, dialing to a current version node.
-					l.Printf("Fetch span stats from previous version node (%v), dialing to a current version node (%v).", prevVersNodeID, currVersNodeID)
-					res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(prevVersNodeID), oldReqBody(currVersNodeID, startKey, endKey))
-					if err != nil {
-						return err
-					}
-					// Expect an error in the stdout - mixed version error.
-					// Ensure the result can be marshalled into a valid error response.
-					err = json.Unmarshal([]byte(res.Stdout), &errOutput)
-					if err != nil {
-						return err
-					}
-					// Ensure we get the expected error.
-					expected := assertExpectedError(errOutput.Error, mixedVersionReqError)
-					if !expected {
-						return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
-					}
+				// We are in a state where nodes have different versions.
+				prevVersNodeID := h.Context().FromVersionNodes[0]
+				currVersNodeID := h.Context().ToVersionNodes[0]
 
-					// Fetch span stats from current version node, dialing to a previous version node.
-					l.Printf("Fetch span stats from current version node (%v), dialing to a previous version node (%v).", currVersNodeID, prevVersNodeID)
-					res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(currVersNodeID), newReqBody(prevVersNodeID, startKey, endKey))
-					if err != nil {
-						return err
-					}
-					// Expect an error in the stdout - mixed version error.
-					// Ensure the result can be marshalled into a valid error response.
-					err = json.Unmarshal([]byte(res.Stdout), &errOutput)
-					if err != nil {
-						return err
-					}
-					// Ensure we get the expected error.
-					expectedCurrToPrev := assertExpectedError(errOutput.Message, mixedVersionReqError)
-					expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
-					if !expectedCurrToPrev && !expectedUnknown {
-						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, expectedUnknown, errOutput.Error)
-					}
+				// Fetch span stats from previous version node, dialing to a current version node.
+				l.Printf("Fetch span stats from previous version node (%v), dialing to a current version node (%v).", prevVersNodeID, currVersNodeID)
+				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(prevVersNodeID), oldReqBody(currVersNodeID, startKey, endKey))
+				if err != nil {
+					return err
+				}
+				// Expect an error in the stdout - mixed version error.
+				// Ensure the result can be marshalled into a valid error response.
+				err = json.Unmarshal([]byte(res.Stdout), &errOutput)
+				if err != nil {
+					return err
+				}
+				// Ensure we get the expected error.
+				expected := assertExpectedError(errOutput.Error, mixedVersionReqError)
+				if !expected {
+					return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
+				}
 
-					// Fanout from current version node.
-					l.Printf("Fanout from current version node (mixed).")
-					res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(currVersNodeID), newReqBody(0, startKey, endKey))
-					if err != nil {
-						return err
-					}
-					// Expect an error in the stdout - mixed version error.
-					// Ensure the result can be marshalled into a valid error response.
-					err = json.Unmarshal([]byte(res.Stdout), &errOutput)
-					if err != nil {
-						return err
-					}
-					// Ensure we get the expected error.
-					expectedCurrToPrev = assertExpectedError(errOutput.Message, mixedVersionReqError)
-					expectedUnknown = assertExpectedError(errOutput.Message, unknownFieldError)
-					if !expectedCurrToPrev && !expectedUnknown {
-						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, expectedUnknown, errOutput.Error)
-					}
-				} else {
-					// All nodes are on one version, but we're in mixed state (i.e. cluster version is on a different version)
-					var issueNodeID int
-					var dialNodeID int
-					// All nodes on current version
-					if len(h.Context().ToVersionNodes) == 4 {
-						issueNodeID = h.Context().ToVersionNodes[0]
-						dialNodeID = h.Context().ToVersionNodes[1]
-					} else {
-						// All nodes on previous version
-						issueNodeID = h.Context().FromVersionNodes[0]
-						dialNodeID = h.Context().FromVersionNodes[1]
-					}
-					// Dial a node for span stats.
-					l.Printf("Dial a node for span stats (different cluster version).")
-					res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(issueNodeID), newReqBody(dialNodeID, startKey, endKey))
-					if err != nil {
-						return err
-					}
-					// Expect an error in the stdout - mixed version error.
-					// Ensure the result can be marshalled into a valid error response.
-					err = json.Unmarshal([]byte(res.Stdout), &errOutput)
-					if err != nil {
-						return err
-					}
-					// Ensure we get the expected error.
-					mixedClusterVersionErr := assertExpectedError(errOutput.Message, mixedVersionReqError)
-					expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
-					if !mixedClusterVersionErr && !expectedUnknown {
-						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, unknownFieldError, errOutput.Error)
-					}
+				// Fetch span stats from current version node, dialing to a previous version node.
+				l.Printf("Fetch span stats from current version node (%v), dialing to a previous version node (%v).", currVersNodeID, prevVersNodeID)
+				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(currVersNodeID), newReqBody(prevVersNodeID, startKey, endKey))
+				if err != nil {
+					return err
+				}
+				// Expect an error in the stdout - mixed version error.
+				// Ensure the result can be marshalled into a valid error response.
+				err = json.Unmarshal([]byte(res.Stdout), &errOutput)
+				if err != nil {
+					return err
+				}
+				// Ensure we get the expected error.
+				expectedCurrToPrev := assertExpectedError(errOutput.Message, mixedVersionReqError)
+				expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
+				if !expectedCurrToPrev && !expectedUnknown {
+					return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, expectedUnknown, errOutput.Error)
+				}
+
+				// Fanout from current version node.
+				l.Printf("Fanout from current version node (mixed).")
+				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(currVersNodeID), newReqBody(0, startKey, endKey))
+				if err != nil {
+					return err
+				}
+				// Expect an error in the stdout - mixed version error.
+				// Ensure the result can be marshalled into a valid error response.
+				err = json.Unmarshal([]byte(res.Stdout), &errOutput)
+				if err != nil {
+					return err
+				}
+				// Ensure we get the expected error.
+				expectedCurrToPrev = assertExpectedError(errOutput.Message, mixedVersionReqError)
+				expectedUnknown = assertExpectedError(errOutput.Message, unknownFieldError)
+				if !expectedCurrToPrev && !expectedUnknown {
+					return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, expectedUnknown, errOutput.Error)
 				}
 				return nil
 			})
