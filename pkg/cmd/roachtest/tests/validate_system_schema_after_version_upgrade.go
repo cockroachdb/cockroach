@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -35,7 +35,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predecessorVersion, err := version.PredecessorVersion(*t.BuildVersion())
+			predecessorVersion, err := release.LatestPredecessor(t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}

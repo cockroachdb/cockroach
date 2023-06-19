@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -240,7 +241,7 @@ type (
 
 		// test-only field, allowing us to avoid passing a test.Test
 		// implementation in the tests
-		_buildVersion version.Version
+		_buildVersion *version.Version
 	}
 
 	shouldStop chan struct{}
@@ -426,7 +427,7 @@ func (t *Test) run(plan *TestPlan) error {
 }
 
 func (t *Test) plan() (*TestPlan, error) {
-	previousRelease, err := version.PredecessorVersion(t.buildVersion())
+	previousRelease, err := release.LatestPredecessor(t.buildVersion())
 	if err != nil {
 		return nil, err
 	}
@@ -443,12 +444,12 @@ func (t *Test) plan() (*TestPlan, error) {
 	return planner.Plan(), nil
 }
 
-func (t *Test) buildVersion() version.Version {
-	if t._buildVersion != (version.Version{}) {
+func (t *Test) buildVersion() *version.Version {
+	if t._buildVersion != nil {
 		return t._buildVersion // test-only
 	}
 
-	return *t.rt.BuildVersion()
+	return t.rt.BuildVersion()
 }
 
 func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) userFunc {
