@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 )
 
 func registerDatabaseDrop(r registry.Registry) {
@@ -62,7 +62,7 @@ func registerDatabaseDrop(r registry.Registry) {
 				t.L().Printf("no existing snapshots found for %s (%s), doing pre-work",
 					t.Name(), t.SnapshotPrefix())
 
-				pred, err := version.PredecessorVersion(*t.BuildVersion())
+				pred, err := release.LatestPredecessor(t.BuildVersion())
 				if err != nil {
 					t.Fatal(err)
 				}
