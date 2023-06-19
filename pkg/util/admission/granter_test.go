@@ -140,6 +140,7 @@ func TestGranterBasic(t *testing.T) {
 				kvIOTokensExhaustedDuration:     metrics.KVIOTokensExhaustedDuration,
 				kvIOTokensAvailable:             metrics.KVIOTokensAvailable,
 				kvIOTokensTookWithoutPermission: metrics.KVIOTokensTookWithoutPermission,
+				kvIOTotalTokensTaken:            metrics.KVIOTotalTokensTaken,
 				workQueueMetrics:                workQueueMetrics,
 				disableTickerForTesting:         true,
 			}
