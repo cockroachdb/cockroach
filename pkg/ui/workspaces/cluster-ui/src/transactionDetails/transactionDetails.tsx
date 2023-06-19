@@ -14,6 +14,7 @@ import classNames from "classnames/bind";
 import _ from "lodash";
 import { RouteComponentProps } from "react-router-dom";
 import { Helmet } from "react-helmet";
+import moment from "moment-timezone";
 
 import statementsStyles from "../statementsPage/statementsPage.module.scss";
 import {
@@ -79,7 +80,6 @@ import {
   timeScaleRangeToObj,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
-import moment from "moment-timezone";
 
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import insightTableStyles from "../insightsTable/insightsTable.module.scss";
@@ -209,6 +209,9 @@ export class TransactionDetails extends React.Component<
   };
 
   changeTimeScale = (ts: TimeScale): void => {
+    if (ts.key !== "Custom") {
+      ts.fixedWindowEnd = moment();
+    }
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
