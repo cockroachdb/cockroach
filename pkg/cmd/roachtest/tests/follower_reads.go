@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -106,7 +107,7 @@ func registerFollowerReads(r registry.Registry) {
 			spec.CPU(2),
 		),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, *t.BuildVersion())
+			runFollowerReadsMixedVersionSingleRegionTest(ctx, t, c, t.BuildVersion())
 		},
 	})
 }
@@ -883,9 +884,9 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 // sufficient for this purpose; we're not testing non-voting replicas here
 // (which are used in multi-region tests).
 func runFollowerReadsMixedVersionSingleRegionTest(
-	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
+	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion *version.Version,
 ) {
-	predecessorVersion, err := version.PredecessorVersion(buildVersion)
+	predecessorVersion, err := release.LatestPredecessor(buildVersion)
 	require.NoError(t, err)
 
 	// Start the cluster at the old version.
