@@ -752,31 +752,23 @@ vectorized: true
 │ auto commit
 │ arbiter indexes: t1_pkey, idx_v_unique_invisible
 │
-└── • distinct
-    │ distinct on: v
-    │ nulls are distinct
+└── • lookup join (anti)
+    │ table: t1@t1_pkey
+    │ equality: (k) = (k)
+    │ equality cols are key
     │
-    └── • distinct
-        │ distinct on: k
-        │ nulls are distinct
+    └── • lookup join (anti)
+        │ table: t1@idx_v_unique_invisible
+        │ equality: (v) = (v)
+        │ equality cols are key
         │
-        └── • lookup join (anti)
-            │ table: t1@t1_pkey
-            │ equality: (k) = (k)
-            │ equality cols are key
+        └── • filter
+            │ filter: v IN (1, 2)
             │
-            └── • lookup join (anti)
-                │ table: t1@idx_v_unique_invisible
-                │ equality: (v) = (v)
-                │ equality cols are key
-                │
-                └── • filter
-                    │ filter: v IN (1, 2)
-                    │
-                    └── • scan
-                          missing stats
-                          table: t1@t1_pkey
-                          spans: FULL SCAN
+            └── • scan
+                  missing stats
+                  table: t1@t1_pkey
+                  spans: FULL SCAN
 
 # UPSERT uses primary index to check uniqueness, so idx_v_unique_invisible is
 # not useful.

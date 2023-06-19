@@ -531,6 +531,14 @@ func (c *CustomFuncs) ColsAreStrictKey(cols opt.ColSet, input memo.RelExpr) bool
 	return input.Relational().FuncDeps.ColsAreStrictKey(cols)
 }
 
+// ColsAreLaxKey returns true if the given columns form a lax key for the given
+// input expression. A lax key considers NULL values as distinct from one
+// another, so it is allowed for two rows to have the same set of values if some
+// of the values are NULL.
+func (c *CustomFuncs) ColsAreLaxKey(cols opt.ColSet, input memo.RelExpr) bool {
+	return input.Relational().FuncDeps.ColsAreLaxKey(cols)
+}
+
 // PrimaryKeyCols returns the key columns of the primary key of the table.
 func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 	tabMeta := c.mem.Metadata().TableMeta(table)
