@@ -799,6 +799,7 @@ func (s *Server) ServeConn(
 		sArgs,
 		connStart,
 	)
+	defer c.stmtBuf.Close()
 
 	// Do the reading of commands from the network.
 	s.serveImpl(
@@ -1203,15 +1204,6 @@ func (s *Server) serveImpl(
 		}
 	}
 
-	// We're done reading data from the client, so make the communication
-	// goroutine stop. Depending on what that goroutine is currently doing (or
-	// blocked on), we cancel and close all the possible channels to make sure we
-	// tickle it in the right way.
-
-	// Signal command processing to stop. It might be the case that the processor
-	// canceled our context and that's how we got here; in that case, this will
-	// be a no-op.
-	c.stmtBuf.Close()
 	// In case the authenticator is blocked on waiting for data from the client,
 	// tell it that there's no more data coming. This is a no-op if authentication
 	// was completed already.
