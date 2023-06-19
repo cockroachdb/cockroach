@@ -119,7 +119,7 @@ export function* setCombinedStatementsTimeScaleSaga(
   action: PayloadAction<TimeScale>,
 ) {
   const ts = action.payload;
-
+  
   yield put(setTimeScale(ts));
 }
 

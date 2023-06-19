@@ -31,6 +31,8 @@ import { actions as localStorageActions } from "../../store/localStorage";
 import { Dispatch } from "redux";
 import { SortSetting } from "../../sortedtable";
 import { actions as analyticsActions } from "../../store/analytics";
+import { actions as jobProfilerBundleActions } from "src/store/jobProfilerBundles";
+import { InsertJobProfilerBundleRequest } from "src/api/jobProfilerBundleApi";
 
 const mapStateToProps = (
   state: AppState,

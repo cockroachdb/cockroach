@@ -41,6 +41,7 @@ import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "../jobs.module.scss";
 import classNames from "classnames/bind";
 import { Timestamp } from "../../timestamp";
+import { InsertJobProfilerBundleRequest } from "src/api/jobProfilerBundleApi";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -138,7 +139,7 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
       !this.props.jobsResponse?.valid && !this.props.jobsResponse?.error
         ? now
         : this.props.jobsResponse.lastUpdated?.clone().add(10, "seconds") ??
-          now;
+        now;
     const msToNextRefresh = Math.max(0, nextRefresh.diff(now, "millisecond"));
     this.refreshDataInterval = setTimeout(() => {
       const req = reqFromProps(this.props);
@@ -164,7 +165,7 @@ export class JobsPage extends React.Component<JobsPageProps, PageState> {
 
     if (
       prevProps.jobsResponse.lastUpdated !==
-        this.props.jobsResponse.lastUpdated ||
+      this.props.jobsResponse.lastUpdated ||
       prevProps.show !== this.props.show ||
       prevProps.status !== this.props.status ||
       prevProps.type !== this.props.type
