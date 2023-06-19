@@ -1797,6 +1797,9 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			rr := NewReplicaRankings()
 
 			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)
+			sr.getRaftStatusFn = func(r CandidateReplica) raft.Status {
+				return TestingRaftStatusFn(r)
+			}
 			lbRebalanceDimension := sr.RebalanceObjective().ToDimension()
 
 			// Load in a range with replicas on an overfull node, a slightly underfull

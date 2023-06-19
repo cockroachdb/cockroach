@@ -1058,7 +1058,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnLoad(
 			ctx,
 			sr.storePool,
 			rbCtx.conf,
-			rbCtx.candidateReplica.RaftStatus(),
+			sr.getRaftStatusFn(rbCtx.candidateReplica),
 			finalVoterTargets,
 			finalNonVoterTargets,
 			rbCtx.candidateReplica.RangeUsageInfo(),
