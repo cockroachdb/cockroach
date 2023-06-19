@@ -41,6 +41,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":upgradecluster"],
     deps = [
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/securityassets",
@@ -50,7 +51,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
-        "//pkg/upgrade/nodelivenesstest",
         "//pkg/util/leaktest",
         "//pkg/util/syncutil",
         "@org_golang_google_grpc//:go_default_library",
