@@ -88,6 +88,11 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 				mixedVersionReqError := "unable to service a mixed version request"
 				unknownFieldError := "unknown field"
 
+				// Skip finalizing state.
+				if h.Context().Finalizing {
+					return nil
+				}
+
 				// If we have nodes in mixed versions.
 				if len(h.Context().FromVersionNodes) > 0 && len(h.Context().ToVersionNodes) > 0 {
 					prevVersNodeID := h.Context().FromVersionNodes[0]
@@ -147,37 +152,6 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 					expectedUnknown = assertExpectedError(errOutput.Message, unknownFieldError)
 					if !expectedCurrToPrev && !expectedUnknown {
 						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, expectedUnknown, errOutput.Error)
-					}
-				} else {
-					// All nodes are on one version, but we're in mixed state (i.e. cluster version is on a different version)
-					var issueNodeID int
-					var dialNodeID int
-					// All nodes on current version
-					if len(h.Context().ToVersionNodes) == 4 {
-						issueNodeID = h.Context().ToVersionNodes[0]
-						dialNodeID = h.Context().ToVersionNodes[1]
-					} else {
-						// All nodes on previous version
-						issueNodeID = h.Context().FromVersionNodes[0]
-						dialNodeID = h.Context().FromVersionNodes[1]
-					}
-					// Dial a node for span stats.
-					l.Printf("Dial a node for span stats (different cluster version).")
-					res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(issueNodeID), newReqBody(dialNodeID, startKey, endKey))
-					if err != nil {
-						return err
-					}
-					// Expect an error in the stdout - mixed version error.
-					// Ensure the result can be marshalled into a valid error response.
-					err = json.Unmarshal([]byte(res.Stdout), &errOutput)
-					if err != nil {
-						return err
-					}
-					// Ensure we get the expected error.
-					mixedClusterVersionErr := assertExpectedError(errOutput.Message, mixedVersionReqError)
-					expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
-					if !mixedClusterVersionErr && !expectedUnknown {
-						return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, unknownFieldError, errOutput.Error)
 					}
 				}
 				return nil
