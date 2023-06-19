@@ -1,0 +1,47 @@
+lex
+0/0
+----
+LSN str:0/0 lsn:0/0
+
+lex
+0f/A0
+----
+LSN str:0f/A0 lsn:F/A0
+
+lex
+A0/f
+----
+LSN str:A0/f lsn:A0/F
+
+lex
+0A0FF0/ea0F
+----
+LSN str:0A0FF0/ea0F lsn:A0FF0/EA0F
+
+lex
+bA1010/f
+----
+LSN str:bA1010/f lsn:BA1010/F
+
+# invalid character
+lex
+00g/a1
+----
+UCONST str:00 num:00
+IDENT str:g
+id:47 str:/
+IDENT str:a1
+
+# ends with a /
+lex
+00ff/
+----
+UCONST str:00 num:00
+IDENT str:ff
+id:47 str:/
+
+# too big
+lex
+bA101001010101010/f
+----
+ERROR: at or near "bA101001010101010/f": syntax error: error decoding LSN: strconv.ParseUint: parsing "bA101001010101010": value out of range
