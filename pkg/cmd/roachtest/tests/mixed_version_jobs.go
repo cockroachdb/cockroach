@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 )
 
 type backgroundFn func(ctx context.Context, u *versionUpgradeTest) error
@@ -332,7 +332,7 @@ func registerJobsMixedVersions(r registry.Registry) {
 		// vice versa in order to detect regressions in the work done for 20.1.
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predV, err := version.PredecessorVersion(*t.BuildVersion())
+			predV, err := release.LatestPredecessor(t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}
