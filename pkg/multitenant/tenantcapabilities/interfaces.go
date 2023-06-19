@@ -94,8 +94,3 @@ func (u Update) String() string {
 func (u Entry) String() string {
 	return fmt.Sprintf("ten=%v cap=%v", u.TenantID, u.TenantCapabilities)
 }
-
-// DefaultCapabilities returns the default state of capabilities.
-func DefaultCapabilities() *tenantcapabilitiespb.TenantCapabilities {
-	return &tenantcapabilitiespb.TenantCapabilities{}
-}
