@@ -174,13 +174,6 @@ func (c *conn) processCommandsAsync(
 		var authOK bool
 		var connCloseAuthHandler func()
 		defer func() {
-			// Notify the connection's goroutine that we're terminating. The
-			// connection might know already, as it might have triggered this
-			// goroutine's finish, but it also might be us that we're triggering the
-			// connection's death. This context cancelation serves to interrupt a
-			// network read on the connection's goroutine.
-			c.cancelConn()
-
 			pgwireKnobs := sqlServer.GetExecutorConfig().PGWireTestingKnobs
 			if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
 				if r := recover(); r != nil {
