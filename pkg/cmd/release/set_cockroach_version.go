@@ -33,7 +33,7 @@ var setCockroachVersionCmd = &cobra.Command{
 
 func init() {
 	setCockroachVersionCmd.Flags().StringVar(&setCockroachVersionFlags.versionStr, versionFlag, "", "cockroachdb version")
-	_ = roachtestPredecessorsCmd.MarkFlagRequired(versionFlag)
+	_ = setCockroachVersionCmd.MarkFlagRequired(versionFlag)
 }
 
 func setCockroachVersion(_ *cobra.Command, _ []string) error {

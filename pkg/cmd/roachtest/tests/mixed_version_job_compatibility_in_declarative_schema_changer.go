@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/stretchr/testify/require"
 )
 
@@ -132,7 +132,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			predV, err := version.PredecessorVersion(*t.BuildVersion())
+			predV, err := release.LatestPredecessor(t.BuildVersion())
 			require.NoError(t, err)
 
 			allNodes := c.All()
