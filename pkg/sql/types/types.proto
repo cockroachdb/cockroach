@@ -390,6 +390,12 @@ enum Family {
     //   Oid      : T_tsvector
     TSVectorFamily = 29;
 
+    // PGLSNFamily is a type family for the pg_lsn type, which is the type
+    // representing PG LSN objects.
+    //   Canonical: types.PGLSN
+    //   Oid      : T_pg_lsn
+    PGLSNFamily = 30;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an

@@ -1,0 +1,17 @@
+query T
+SELECT 'A01F0/1AAA'::pg_lsn
+----
+A01F0/1AAA
+
+statement ok
+CREATE TABLE pg_lsn_table(id pg_lsn PRIMARY KEY, val pg_lsn)
+
+statement ok
+INSERT INTO pg_lsn_table VALUES ('10/10', 'A01/A100'), ('100/100', 'A01/A100'), ('FFFFF100/100', 'A01/A100')
+
+query TT
+SELECT * FROM pg_lsn_table ORDER BY id
+----
+10/10         A01/A100
+100/100       A01/A100
+FFFFF100/100  A01/A100

@@ -558,7 +558,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b MACADDR8)`, 45813, `macaddr8`, ``},
 		{`CREATE TABLE a(b MONEY)`, 41578, `money`, ``},
 		{`CREATE TABLE a(b PATH)`, 21286, `path`, ``},
-		{`CREATE TABLE a(b PG_LSN)`, 0, `pg_lsn`, ``},
 		{`CREATE TABLE a(b POINT)`, 21286, `point`, ``},
 		{`CREATE TABLE a(b POLYGON)`, 21286, `polygon`, ``},
 		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`, ``},
