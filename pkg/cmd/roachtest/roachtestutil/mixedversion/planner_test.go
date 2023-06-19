@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
@@ -45,15 +46,9 @@ var (
 
 	// Hardcode build and previous versions so that the test won't fail
 	// when new versions are released.
-	buildVersion = func() version.Version {
-		bv, err := version.Parse("v23.1.0")
-		if err != nil {
-			panic(err)
-		}
-		return *bv
-	}()
+	buildVersion    = version.MustParse("v23.1.0")
 	previousVersion = func() string {
-		pv, err := version.PredecessorVersion(buildVersion)
+		pv, err := release.LatestPredecessor(buildVersion)
 		if err != nil {
 			panic(err)
 		}
