@@ -37,6 +37,10 @@ const (
 // code of 255. This could be indicative of an SSH flake.
 var ErrSSH255 = errors.New("SSH error occurred with exit code 255")
 
+const (
+	SegmentationFaultExitCode = 139
+)
+
 // Cmd wraps errors that result from a command run against the cluster.
 type Cmd struct {
 	Err error
