@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,6 +32,9 @@ func TestIDs(t *testing.T) {
 	}
 }
 
+// TestGetSet ensures that Get and Set are implemented for all
+// capability types, and all default Get results are valid input for
+// Set.
 func TestGetSet(t *testing.T) {
 	var v tenantcapabilitiespb.TenantCapabilities
 	for _, id := range IDs {
@@ -39,6 +43,8 @@ func TestGetSet(t *testing.T) {
 			c.Value(&v).Set(c.Value(someCaps()).Get())
 		case SpanConfigBoundsCapability:
 			c.Value(&v).Set(c.Value(someCaps()).Get())
+		default:
+			panic(errors.AssertionFailedf("unknown capability type %T", c))
 		}
 	}
 }
