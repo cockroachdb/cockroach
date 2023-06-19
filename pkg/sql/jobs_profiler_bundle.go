@@ -8,19 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package jobsprofiler
+package sql
 
 import (
 	"bytes"
 	"context"
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -52,35 +52,36 @@ type profilerBundle struct {
 	st *cluster.Settings
 	db isql.DB
 
-	// Stores any error in the collection, building, or insertion of the bundle.
-	collectionErr error
-
 	jobID jobspb.JobID
+}
+
+// GenerateBundle implements the JobProfiler interface.
+func (p *planner) GenerateBundle(ctx context.Context, jobID jobspb.JobID) error {
+	execCfg := p.ExecCfg()
+	bundle, err := buildProfilerBundle(ctx, execCfg.InternalDB, execCfg.Settings, jobID)
+	if err != nil {
+		return err
+	}
+	return bundle.insert(ctx)
 }
 
 // buildProfilerBundle collects metadata related to the execution of the job. It
 // generates a bundle for storage in system.job_info.
 func buildProfilerBundle(
-	ctx context.Context,
-	db isql.DB,
-	ie *sql.InternalExecutor,
-	st *cluster.Settings,
-	jobID jobspb.JobID,
-) profilerBundle {
-	b := makeProfilerBundleBuilder(db, ie, jobID)
+	ctx context.Context, db isql.DB, st *cluster.Settings, jobID jobspb.JobID,
+) (profilerBundle, error) {
+	b := makeProfilerBundleBuilder(db, jobID)
 
 	b.addDistSQLDiagram(ctx)
 
 	buf, err := b.finalize()
 	if err != nil {
-		return profilerBundle{collectionErr: err}
+		return profilerBundle{}, err
 	}
-	return profilerBundle{zip: buf.Bytes(), st: st, db: db, jobID: jobID}
+	return profilerBundle{zip: buf.Bytes(), st: st, db: db, jobID: jobID}, nil
 }
 
-func (b *profilerBundle) insert(
-	ctx context.Context,
-) error {
+func (b *profilerBundle) insert(ctx context.Context) error {
 	// Generate a unique ID for the profiler bundle.
 	id := uuid.MakeV4()
 	return b.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -95,7 +96,8 @@ func (b *profilerBundle) insert(
 			}
 			b.zip = b.zip[len(chunk):]
 
-			err := jobInfo.Write(ctx, profilerconstants.MakeProfilerBundleChunkKey(id.String(), chunkID), chunk)
+			err := jobInfo.Write(ctx, profilerconstants.MakeProfilerBundleChunkKey(
+				id.String(), chunkID), chunk)
 			if err != nil {
 				return errors.Wrapf(err, "failed to write profiler bundle chunk %d", chunkID)
 			}
@@ -122,20 +124,15 @@ func (b *profilerBundle) insert(
 
 type profilerBundleBuilder struct {
 	db isql.DB
-	ie *sql.InternalExecutor
 
 	jobID jobspb.JobID
 
 	z memzipper.Zipper
 }
 
-func makeProfilerBundleBuilder(
-	db isql.DB,
-	ie *sql.InternalExecutor,
-	jobID jobspb.JobID,
-) profilerBundleBuilder {
+func makeProfilerBundleBuilder(db isql.DB, jobID jobspb.JobID) profilerBundleBuilder {
 	b := profilerBundleBuilder{
-		db: db, ie: ie, jobID: jobID,
+		db: db, jobID: jobID,
 	}
 	b.z.Init()
 	return b
@@ -143,7 +140,7 @@ func makeProfilerBundleBuilder(
 
 func (b *profilerBundleBuilder) addDistSQLDiagram(ctx context.Context) {
 	query := `SELECT plan_diagram FROM [SHOW JOB $1 WITH EXECUTION DETAILS]`
-	row, err := b.ie.QueryRowEx(ctx, "profiler-bundler-add-diagram", nil, /* txn */
+	row, err := b.db.Executor().QueryRowEx(ctx, "profiler-bundler-add-diagram", nil, /* txn */
 		sessiondata.NoSessionDataOverride, query, b.jobID)
 	if err != nil {
 		b.z.AddFile("distsql.error", err.Error())

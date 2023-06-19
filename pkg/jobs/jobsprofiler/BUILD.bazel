@@ -2,30 +2,19 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "jobsprofiler",
-    srcs = [
-        "profiler.go",
-        "profiler_bundle.go",
-    ],
+    srcs = ["profiler.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprofiler/profilerconstants",
-        "//pkg/jobs/jobsprofiler/profilerpb",
-        "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
-        "//pkg/sql/sem/tree",
-        "//pkg/sql/sessiondata",
         "//pkg/util/log",
-        "//pkg/util/memzipper",
-        "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
