@@ -236,6 +236,88 @@ Intents to resolve:
  key="d" txn=00000000 status=COMMITTED
  key="e" txn=00000000 status=COMMITTED
 
+release txn=txn2 span=a
+----
+num=5
+ lock: "a"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+
+release txn=txn2 span=b
+----
+num=5
+ lock: "a"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+
+release txn=txn3 span=d
+----
+num=5
+ lock: "a"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+
+release txn=txn3 span=e
+----
+num=5
+ lock: "a"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "d"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+ lock: "e"
+   queued writers:
+    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+
 print
 ----
 num=5
@@ -344,6 +426,27 @@ new: state=doneWaiting
 Intents to resolve:
  key="a" txn=00000000 status=ABORTED
  key="c" txn=00000000 status=ABORTED
+
+release txn=txn2 span=a
+----
+num=2
+ lock: "a"
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+
+release txn=txn2 span=c
+----
+num=2
+ lock: "a"
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "c"
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
 print
 ----
@@ -468,6 +571,18 @@ new: state=doneWaiting
 Intents to resolve:
  key="b" txn=00000000 status=ABORTED
 
+release txn=txn2 span=b
+----
+num=2
+ lock: "a"
+   queued writers:
+    active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 6, txn: 00000000-0000-0000-0000-000000000003
+   distinguished req: 6
+ lock: "b"
+   queued writers:
+    active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
+
 print
 ----
 num=2
@@ -565,6 +680,27 @@ new: state=doneWaiting
 Intents to resolve:
  key="a" txn=00000000 status=ABORTED
  key="b" txn=00000000 status=ABORTED
+
+release txn=txn2 span=a
+----
+num=2
+ lock: "a"
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
+
+release txn=txn2 span=b
+----
+num=2
+ lock: "a"
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
+   queued writers:
+    active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req7
 ----
@@ -681,6 +817,30 @@ Intents to resolve:
  key="a" txn=00000000 status=ABORTED
  key="b" txn=00000000 status=ABORTED
 
+release txn=txn3 span=a
+----
+num=3
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 9, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 9
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+
+release txn=txn3 span=b
+----
+num=2
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+   waiting readers:
+    req: 9, txn: 00000000-0000-0000-0000-000000000001
+   distinguished req: 9
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+
 txn-finalized txn=txn4 status=aborted
 ----
 
@@ -695,6 +855,10 @@ guard-state r=req9
 new: state=doneWaiting
 Intents to resolve:
  key="d" txn=00000000 status=ABORTED
+
+release txn=txn4 span=d
+----
+num=0
 
 print
 ----
@@ -731,13 +895,20 @@ start-waiting: true
 
 print
 ----
-num=0
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 12.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+   queued writers:
+    active: false req: 11, txn: none
 
 guard-state r=req11
 ----
 new: state=doneWaiting
 Intents to resolve:
  key="a" txn=00000000 status=ABORTED
+
+ release txn=txn2 span=a
+ ----
 
 dequeue r=req11
 ----
@@ -772,15 +943,14 @@ scan r=req12
 ----
 start-waiting: true
 
-print
-----
-num=0
-
 guard-state r=req12
 ----
 new: state=doneWaiting
 Intents to resolve:
  key="a" txn=00000000 status=ABORTED
+
+ release txn=txn2 span=a
+ ----
 
 dequeue r=req12
 ----
