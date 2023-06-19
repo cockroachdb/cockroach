@@ -1338,8 +1338,12 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
-			// Reduce the election timeout some to speed up the test.
-			RaftConfig: base.RaftConfig{RaftElectionTimeoutTicks: 10},
+			RaftConfig: base.RaftConfig{
+				// Reduce the election timeout some to speed up the test.
+				RaftElectionTimeoutTicks: 10,
+				// This should work with PreVote+CheckQuorum too.
+				RaftEnableCheckQuorum: true,
+			},
 			Knobs: base.TestingKnobs{
 				NodeLiveness: kvserver.NodeLivenessTestingKnobs{
 					// This test waits for an epoch-based lease to expire, so we're
