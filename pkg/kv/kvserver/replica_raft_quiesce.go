@@ -71,11 +71,12 @@ func (r *Replica) maybeUnquiesce(wakeLeader, mayCampaign bool) bool {
 //
 // If mayCampaign is true, the replica may campaign if it thinks the leader has
 // died in the meanwhile. This will respect PreVote and CheckQuorum, and thus
-// won't disrupt a current leader. Otherwise, if the leader is dead it will
-// forget about it and become a leaderless follower. Thus, if a quorum of
-// replicas independently consider the leader to be dead when unquiescing, they
-// can hold an election immediately despite PreVote+CheckQuorum. Should
-// typically be true, unless the caller wants to avoid election ties.
+// won't disrupt a current leader. Followers that also consider the leader dead
+// will forget about it and become a leaderless follower when receiving the
+// (pre)votes. Thus, if a quorum of replicas independently consider the leader
+// to be dead when unquiescing, they can hold an election immediately despite
+// PreVote+CheckQuorum. Should typically be true, unless the caller wants to
+// avoid election ties.
 func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	if !r.canUnquiesceRLocked() {
 		return false
@@ -92,8 +93,6 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 
 	if mayCampaign {
 		r.maybeCampaignOnWakeLocked(ctx)
-	} else {
-		r.maybeForgetLeaderOnWakeLocked(ctx)
 	}
 
 	st := r.raftSparseStatusRLocked()
