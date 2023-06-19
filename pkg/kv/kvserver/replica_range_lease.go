@@ -511,7 +511,14 @@ func (p *pendingLeaseRequest) requestLease(
 				// so we don't log it as an error.
 				//
 				// https://github.com/cockroachdb/cockroach/issues/35986
-				if !errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
+				if errors.Is(err, liveness.ErrEpochAlreadyIncremented) {
+					// ignore
+				} else if errors.HasType(err, &liveness.ErrEpochCondFailed{}) {
+					// ErrEpochCondFailed indicates that someone else changed the liveness
+					// record while we were incrementing it. The node could still be
+					// alive, or someone else updated it. Don't log this as an error.
+					log.Infof(ctx, "failed to increment leaseholder's epoch: %s", err)
+				} else {
 					log.Errorf(ctx, "failed to increment leaseholder's epoch: %s", err)
 				}
 			}
