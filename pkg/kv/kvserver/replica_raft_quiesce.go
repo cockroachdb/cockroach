@@ -86,10 +86,6 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 	r.store.unquiescedReplicas.Unlock()
 
-	if mayCampaign {
-		r.maybeCampaignOnWakeLocked(ctx)
-	}
-
 	st := r.raftSparseStatusRLocked()
 	if st.RaftState == raft.StateLeader {
 		r.mu.lastUpdateTimes.updateOnUnquiesce(
@@ -103,6 +99,13 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 		data := raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, makeIDKey(), nil)
 		_ = r.mu.internalRaftGroup.Propose(data)
 		r.mu.lastProposalAtTicks = r.mu.ticks // delay imminent quiescence
+	}
+
+	// NB: campaign after attempting to wake leader, since we won't send the
+	// proposal in candidate state. This gives it a chance to assert leadership if
+	// we're wrong about it being dead.
+	if mayCampaign {
+		r.maybeCampaignOnWakeLocked(ctx)
 	}
 
 	return true
