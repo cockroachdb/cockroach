@@ -88,6 +88,7 @@ func muxRangeFeed(
 		catchupSem: catchupSem,
 		eventCh:    eventCh,
 	}
+
 	divideAllSpansOnRangeBoundaries(spans, m.startSingleRangeFeed, ds, &m.g)
 	return errors.CombineErrors(m.g.Wait(), ctx.Err())
 }
@@ -209,18 +210,11 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 	// Bound the partial rangefeed to the partial span.
 	span := rs.AsRawSpanWithNoLocals()
 
-	// Before starting single rangefeed, acquire catchup scan quota.
-	catchupRes, err := acquireCatchupScanQuota(ctx, m.ds, m.catchupSem)
-	if err != nil {
-		return err
-	}
-
 	// Register active mux range feed.
 	stream := &activeMuxRangeFeed{
 		activeRangeFeed: newActiveRangeFeed(span, startAfter, m.registry, m.ds.metrics.RangefeedRanges),
 		rSpan:           rs,
 		startAfter:      startAfter,
-		catchupRes:      catchupRes,
 		token:           token,
 	}
 
@@ -245,6 +239,15 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 // gets transferred to the node event loop goroutine (receiveEventsFromNode).
 func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error {
 	streamID := atomic.AddInt64(&m.seqID, 1)
+
+	{
+		// Before starting single rangefeed, acquire catchup scan quota.
+		catchupRes, err := acquireCatchupScanQuota(ctx, m.ds, m.catchupSem)
+		if err != nil {
+			return err
+		}
+		s.catchupRes = catchupRes
+	}
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, m.ds.rpcRetryOptions); r.Next(); {
@@ -445,6 +448,10 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 			continue
 		}
 
+		if m.cfg.knobs.onMuxRangefeedEvent != nil {
+			m.cfg.knobs.onMuxRangefeedEvent(event)
+		}
+
 		switch t := event.GetValue().(type) {
 		case *kvpb.RangeFeedCheckpoint:
 			if t.Span.Contains(active.Span) {
@@ -529,6 +536,13 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 			timeutil.Since(active.Resolved.GoTime()), reason)
 	}
 	active.setLastError(reason)
+
+	// Release catchup scan reservation if any -- we will acquire another
+	// one when we restart.
+	if active.catchupRes != nil {
+		active.catchupRes.Release()
+		active.catchupRes = nil
+	}
 
 	doRelease := true
 	defer func() {
@@ -624,3 +638,13 @@ func (c *muxStream) close() []*activeMuxRangeFeed {
 
 	return toRestart
 }
+
+// a test only option to modify mux rangefeed event.
+func withOnMuxEvent(fn func(event *kvpb.MuxRangeFeedEvent)) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.knobs.onMuxRangefeedEvent = fn
+	})
+}
+
+// TestingWithOnMuxEvent allow external tests access to the withOnMuxEvent option.
+var TestingWithOnMuxEvent = withOnMuxEvent
