@@ -1012,6 +1012,7 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) {
 
 	retryErr := txn.mu.sender.GetRetryableErr(ctx)
 	if retryErr == nil {
+		// TODO: Return error here?
 		return
 	}
 	if txn.typ != RootTxn {
@@ -1021,20 +1022,21 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) {
 	log.VEventf(ctx, 2, "retrying transaction: %s because of a retryable error: %s",
 		txn.debugNameLocked(), retryErr)
 	txn.resetDeadlineLocked()
+	txn.checkRetryErrorTxnIDLocked(ctx, retryErr)
 
-	if txn.mu.ID != retryErr.PrevTxnID {
-		// Sanity check that the retry error we're dealing with is for the current
-		// incarnation of the transaction. Aborted transactions may be retried
-		// transparently in certain cases and such incarnations come with new
-		// txn IDs. However, at no point can both the old and new incarnation of a
-		// transaction be active at the same time -- this would constitute a
-		// programming error.
-		log.Fatalf(
-			ctx,
-			"unexpected retryable error for old incarnation of the transaction %s; current incarnation %s",
-			retryErr.PrevTxnID,
-			txn.mu.ID,
-		)
+	if !retryErr.TxnMustRestartFromBeginning() {
+		// If the retry error does not require the transaction to restart from
+		// beginning, it will have also not caused the transaction to advance its
+		// epoch. The caller has decided that it does want to restart from the
+		// beginning, se we "promote" the partial retry error to a full retry by
+		// manually restarting the transaction.
+		manualErr := txn.mu.sender.GenerateForcedRetryableErr(
+			ctx, retryErr.NextTransaction.WriteTimestamp, true, /* mustRestart */
+			"promoting partial retryable error to full transaction retry")
+		// Now replace retryErr with the error returned by ManualRestart.
+		if !errors.As(manualErr, &retryErr) {
+			log.Fatalf(ctx, "unexpected non-retry error during manual restart: %s", manualErr)
+		}
 	}
 
 	if !retryErr.PrevTxnAborted() {
@@ -1046,6 +1048,61 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) {
 	}
 
 	txn.handleTransactionAbortedErrorLocked(ctx, retryErr)
+}
+
+// PrepareForPartialRetry is like PrepareForRetry, except that it expects the
+// retryable error to not require the transaction to restart from the beginning
+// (see TransactionRetryWithProtoRefreshError.TxnMustRestartFromBeginning). It
+// is called once a partial retryable error has been handled and the caller is
+// ready to continue using the transaction.
+//
+// TODO(nvanbenschoten): we could also push this into
+// TxnCoordSender.RollbackToSavepoint. Work with Rafi to decide what makes
+// sense.
+func (txn *Txn) PrepareForPartialRetry(ctx context.Context) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
+	retryErr := txn.mu.sender.GetRetryableErr(ctx)
+	if retryErr == nil {
+		// TODO: Return error here?
+		return nil
+	}
+	if txn.typ != RootTxn {
+		panic(errors.WithContextTags(errors.NewAssertionErrorWithWrappedErrf(
+			retryErr, "PrepareForRetry() called on leaf txn"), ctx))
+	}
+	txn.checkRetryErrorTxnIDLocked(ctx, retryErr)
+
+	if retryErr.TxnMustRestartFromBeginning() {
+		log.Fatalf(
+			ctx,
+			"unexpected retryable error that must restart from beginning",
+		)
+	}
+
+	txn.mu.sender.ClearRetryableErr(ctx)
+	return nil
+}
+
+func (txn *Txn) checkRetryErrorTxnIDLocked(
+	ctx context.Context, retryErr *kvpb.TransactionRetryWithProtoRefreshError,
+) {
+	if txn.mu.ID == retryErr.PrevTxnID {
+		return
+	}
+	// Sanity check that the retry error we're dealing with is for the current
+	// incarnation of the transaction. Aborted transactions may be retried
+	// transparently in certain cases and such incarnations come with new
+	// txn IDs. However, at no point can both the old and new incarnation of a
+	// transaction be active at the same time -- this would constitute a
+	// programming error.
+	log.Fatalf(
+		ctx,
+		"unexpected retryable error for old incarnation of the transaction %s; current incarnation %s",
+		retryErr.PrevTxnID,
+		txn.mu.ID,
+	)
 }
 
 // Send runs the specified calls synchronously in a single batch and
@@ -1408,7 +1465,7 @@ func (txn *Txn) GenerateForcedRetryableErr(ctx context.Context, msg redact.Redac
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	now := txn.db.clock.NowAsClockTimestamp()
-	return txn.mu.sender.GenerateForcedRetryableErr(ctx, now.ToTimestamp(), msg)
+	return txn.mu.sender.GenerateForcedRetryableErr(ctx, now.ToTimestamp(), false /* mustRestart */, msg)
 }
 
 // IsSerializablePushAndRefreshNotPossible returns true if the transaction is

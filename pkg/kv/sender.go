@@ -190,8 +190,10 @@ type TxnSender interface {
 	//
 	// Used by the SQL layer which sometimes knows that a transaction will not
 	// be able to commit and prefers to restart early.
+	//
+	// TODO: update comment.
 	GenerateForcedRetryableErr(
-		ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
+		ctx context.Context, ts hlc.Timestamp, mustRestart bool, msg redact.RedactableString,
 	) error
 
 	// UpdateStateOnRemoteRetryableErr updates the txn in response to an

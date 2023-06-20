@@ -148,10 +148,17 @@ func (m *MockTransactionalSender) RequiredFrontier() hlc.Timestamp {
 
 // GenerateForcedRetryableErr is part of the TxnSender interface.
 func (m *MockTransactionalSender) GenerateForcedRetryableErr(
-	ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
+	ctx context.Context, ts hlc.Timestamp, mustRestart bool, msg redact.RedactableString,
 ) error {
-	m.txn.Restart(m.pri, 0 /* upgradePriority */, ts)
-	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, m.txn)
+	prevTxn := m.txn.Clone()
+	nextTxn := &m.txn
+	nextTxn.WriteTimestamp.Forward(ts)
+	if !nextTxn.IsoLevel.PerStatementReadSnapshot() || mustRestart {
+		nextTxn.Restart(m.pri, 0 /* upgradePriority */, nextTxn.WriteTimestamp)
+	} else {
+		nextTxn.BumpReadTimestamp(nextTxn.WriteTimestamp)
+	}
+	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, prevTxn.ID, prevTxn.Epoch, *nextTxn)
 }
 
 // UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
