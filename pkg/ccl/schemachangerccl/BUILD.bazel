@@ -7,8 +7,9 @@ go_test(
     srcs = [
         "main_test.go",
         "schemachanger_ccl_test.go",
-        ":test_gen_backup_mixed_non_ccl",  # keep
-        ":test_gen_backup_non_ccl",  # keep
+        ":test_gen_backup_base",  # keep
+        ":test_gen_backup_mixed_base",  # keep
+        ":test_gen_backup_mixed_ccl",  # keep
         ":test_gen_ccl",  # keep
     ],
     args = select({
@@ -53,10 +54,10 @@ go_library(
 )
 
 sctest_gen(
-    name = "test_gen_backup_non_ccl",
+    name = "test_gen_backup_base",
     out = "backup_base_generated_test.go",
     ccl = True,
-    new_cluster_func = "newCluster",
+    new_cluster_func = "sctest.SingleNodeCluster",
     package = "schemachangerccl",
     suffix = "_base",
     test_data = [
@@ -70,10 +71,10 @@ sctest_gen(
 )
 
 sctest_gen(
-    name = "test_gen_backup_mixed_non_ccl",
+    name = "test_gen_backup_mixed_base",
     out = "backup_base_mixed_generated_test.go",
     ccl = True,
-    new_cluster_func = "newClusterMixed",
+    new_cluster_func = "sctest.SingleNodeMixedCluster",
     package = "schemachangerccl",
     suffix = "_base",
     test_data = [
@@ -90,7 +91,7 @@ sctest_gen(
     name = "test_gen_ccl",
     out = "ccl_generated_test.go",
     ccl = True,
-    new_cluster_func = "newCluster",
+    new_cluster_func = "newMultiRegionCluster",
     package = "schemachangerccl",
     suffix = "_ccl",
     test_data = glob(["testdata/end_to_end/**"]),
@@ -101,6 +102,21 @@ sctest_gen(
         "Pause",
         "Rollback",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+sctest_gen(
+    name = "test_gen_backup_mixed_ccl",
+    out = "backup_ccl_mixed_generated_test.go",
+    ccl = True,
+    new_cluster_func = "newMultiRegionMixedCluster",
+    package = "schemachangerccl",
+    suffix = "_ccl",
+    test_data = glob(["testdata/end_to_end/**"]),
+    tests = ["BackupMixedVersionElements"],
     visibility = [
         ":__pkg__",
         "//pkg/gen:__pkg__",
