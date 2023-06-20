@@ -1431,6 +1431,7 @@ GO_TARGETS = [
     "//pkg/obsservice/obslib/ingest:ingest",
     "//pkg/obsservice/obslib/ingest:ingest_test",
     "//pkg/obsservice/obslib/migrations:migrations",
+    "//pkg/obsservice/obslib:obslib",
     "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
     "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",
     "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
