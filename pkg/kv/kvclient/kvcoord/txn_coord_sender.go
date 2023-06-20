@@ -830,18 +830,36 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kv
 	default:
 		tc.metrics.RestartsUnknown.Inc()
 	}
-	errTxnID := pErr.GetTxn().ID
-	newTxn, assertErr := kvpb.PrepareTransactionForRetry(pErr, tc.mu.userPriority, tc.clock)
+
+	// Construct the next txn proto using the provided error.
+	prevTxn := pErr.GetTxn()
+	nextTxn, assertErr := kvpb.PrepareTransactionForRetry(pErr, tc.mu.userPriority, tc.clock)
 	if assertErr != nil {
 		return assertErr
 	}
 
-	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
+	// Construct the TransactionRetryWithProtoRefreshError using the next txn proto.
 	retErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		redact.Sprint(pErr),
-		errTxnID, // the id of the transaction that encountered the error
-		newTxn)
+		redact.Sprint(pErr), /* msg */
+		prevTxn.ID,          /* prevTxnID */
+		prevTxn.Epoch,       /* prevTxnEpoch */
+		nextTxn,             /* nextTxn */
+	)
 
+	// Update the TxnCoordSender's state.
+	tc.handleTransactionRetryWithProtoRefreshErrorErrLocked(ctx, retErr)
+
+	// Finally, pass a TransactionRetryWithProtoRefreshError up to the next layer.
+	return retErr
+}
+
+// handleTransactionRetryWithProtoRefreshErrorErrLocked takes a
+// TransactionRetryWithProtoRefreshError containing the transaction that needs
+// to be used by the next attempt and handles various aspects of updating the
+// TxnCoordSender's state.
+func (tc *TxnCoordSender) handleTransactionRetryWithProtoRefreshErrorErrLocked(
+	ctx context.Context, retErr *kvpb.TransactionRetryWithProtoRefreshError,
+) {
 	// Move to a retryable error state, where all Send() calls fail until the
 	// state is cleared.
 	tc.mu.txnState = txnRetryableError
@@ -851,26 +869,27 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(ctx context.Context, pErr *kv
 	// old one is toast. This TxnCoordSender cannot be used any more - future
 	// Send() calls will be rejected; the client is supposed to create a new
 	// one.
-	if errTxnID != newTxn.ID {
+	if retErr.PrevTxnAborted() {
 		// Remember that this txn is aborted to reject future requests.
 		tc.mu.txn.Status = roachpb.ABORTED
 		// Abort the old txn. The client is not supposed to use use this
 		// TxnCoordSender any more.
 		tc.interceptorAlloc.txnHeartbeater.abortTxnAsyncLocked(ctx)
 		tc.cleanupTxnLocked(ctx)
-		return retErr
+		return
 	}
 
-	// This is where we get a new epoch.
-	tc.mu.txn.Update(&newTxn)
+	// This is where we get a new read timestamp or a new epoch.
+	tc.mu.txn.Update(&retErr.NextTransaction)
 
-	// Reset state as this is a retryable txn error that is incrementing
+	// Reset state if this is a retryable txn error that is incrementing
 	// the transaction's epoch.
-	log.VEventf(ctx, 2, "resetting epoch-based coordinator state on retry")
-	for _, reqInt := range tc.interceptorStack {
-		reqInt.epochBumpedLocked()
+	if retErr.PrevTxnEpochBumped() {
+		log.VEventf(ctx, 2, "resetting epoch-based coordinator state on retry")
+		for _, reqInt := range tc.interceptorStack {
+			reqInt.epochBumpedLocked()
+		}
 	}
-	return retErr
 }
 
 // updateStateLocked updates the transaction state in both the success and error
@@ -1146,7 +1165,7 @@ func (tc *TxnCoordSender) RequiredFrontier() hlc.Timestamp {
 
 // GenerateForcedRetryableErr is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) GenerateForcedRetryableErr(
-	ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
+	ctx context.Context, ts hlc.Timestamp, mustRestart bool, msg redact.RedactableString,
 ) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -1154,24 +1173,27 @@ func (tc *TxnCoordSender) GenerateForcedRetryableErr(
 		return errors.AssertionFailedf("cannot generate retryable error, current state: %s", tc.mu.txnState)
 	}
 
-	// Invalidate any writes performed by any workers after the retry updated
-	// the txn's proto but before we synchronized (some of these writes might
-	// have been performed at the wrong epoch).
-	tc.mu.txn.Restart(tc.mu.userPriority, 0 /* upgradePriority */, ts)
-
-	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		msg, tc.mu.txn.ID, tc.mu.txn)
-
-	// Move to a retryable error state, where all Send() calls fail until the
-	// state is cleared.
-	tc.mu.txnState = txnRetryableError
-	tc.mu.storedRetryableErr = pErr
-
-	// Reset state as this manual restart incremented the transaction's epoch.
-	for _, reqInt := range tc.interceptorStack {
-		reqInt.epochBumpedLocked()
+	// Construct the next txn proto.
+	prevTxn := tc.mu.txn
+	nextTxn := prevTxn.Clone()
+	nextTxn.WriteTimestamp.Forward(ts)
+	// See kvpb.PrepareTransactionForRetry for an explanation of why the isolation
+	// level dictates whether we need to restart or can bump the read timestamp.
+	if !nextTxn.IsoLevel.PerStatementReadSnapshot() || mustRestart {
+		nextTxn.Restart(tc.mu.userPriority, 0 /* upgradePriority */, nextTxn.WriteTimestamp)
+	} else {
+		nextTxn.BumpReadTimestamp(nextTxn.WriteTimestamp)
 	}
-	return pErr
+
+	// Construct the TransactionRetryWithProtoRefreshError using the next txn proto.
+	retErr := kvpb.NewTransactionRetryWithProtoRefreshError(
+		msg, prevTxn.ID, prevTxn.Epoch, *nextTxn)
+
+	// Update the TxnCoordSender's state.
+	tc.handleTransactionRetryWithProtoRefreshErrorErrLocked(ctx, retErr)
+
+	// Finally, pass a TransactionRetryWithProtoRefreshError up to the next layer.
+	return retErr
 }
 
 // UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.

@@ -19,8 +19,10 @@ import (
 
 // PrepareTransactionForRetry returns a new Transaction to be used for retrying
 // the original Transaction. Depending on the error, this might return an
-// already-existing Transaction with an incremented epoch, or a completely new
-// Transaction.
+// already-existing Transaction with an incremented epoch and timestamp, an
+// already-existing Transaction with the same epoch and an incremented
+// timestamp, or a completely new Transaction. For details, see the comment on
+// TransactionRetryWithProtoRefreshError.NextTransaction.
 //
 // The caller should generally check that the error was meant for this
 // Transaction before calling this.
@@ -28,9 +30,6 @@ import (
 // pri is the priority that should be used when giving the restarted transaction
 // the chance to get a higher priority. Not used when the transaction is being
 // aborted.
-//
-// In case retryErr tells us that a new Transaction needs to be created,
-// isolation and name help initialize this new transaction.
 func PrepareTransactionForRetry(
 	pErr *Error, pri roachpb.UserPriority, clock *hlc.Clock,
 ) (roachpb.Transaction, error) {
@@ -121,7 +120,30 @@ func PrepareTransactionForRetry(
 			return roachpb.Transaction{}, errors.AssertionFailedf(
 				"transaction unexpectedly finalized in (%T): %s", pErr.GetDetail(), pErr)
 		}
-		txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
+		// If the transaction is not aborted, the retry error instead tells the
+		// transaction to adjust its current read snapshot (to txn.WriteTimestamp)
+		// to avoid some form of isolation or consistency related retry condition.
+		// The handling of these errors is isolation level dependent.
+		//
+		// For isolation levels that use a single read timestamp across the entire
+		// transaction (snapshot and serializable), transactions are only permitted
+		// to adjust their read snapshot if they restart from the beginning and
+		// discard all prior writes. In these cases, we perform the restart below by
+		// incrementing the transaction's epoch.
+		//
+		// For isolation levels that use per-statement read timestamps which may
+		// differ between statements (read committed), transactions are permitted to
+		// adjust their read snapshot mid-transaction as long as they restart the
+		// current statement. In these cases, we advance the transaction's read
+		// timestamp below without incrementing the epoch and without discarding any
+		// prior writes. The user of the transaction (e.g. the SQL layer) is
+		// responsible for employing savepoints to selectively discard the writes
+		// from the current statement when it retries that statement.
+		if !txn.IsoLevel.PerStatementReadSnapshot() {
+			txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
+		} else {
+			txn.BumpReadTimestamp(txn.WriteTimestamp)
+		}
 	}
 	return txn, nil
 }
