@@ -723,10 +723,15 @@ func TestDenylistUpdate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	te := newTester()
-	defer te.Close()
 
+	// Create an empty denylist file.
 	denyList, err := os.CreateTemp("", "*_denylist.yml")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(denyList.Name()) }()
+	dlf := denylist.File{Seq: 0}
+	bytes, err := dlf.Serialize()
+	require.NoError(t, err)
+	_, err = denyList.Write(bytes)
 	require.NoError(t, err)
 
 	sql, sqlDB, _ := serverutils.StartServer(t,
@@ -750,52 +755,77 @@ func TestDenylistUpdate(t *testing.T) {
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
 
-	// We wish the proxy to work even without providing a valid TLS client cert to the SQL server.
+	// We wish the proxy to work even without providing a valid TLS client cert
+	// to the SQL server.
 	proxyOutgoingTLSConfig.Certificates = nil
+
+	// Register one SQL pod in the directory server.
+	tenantID := serverutils.TestTenantID()
+	tds := tenantdirsvr.NewTestStaticDirectoryServer(sql.Stopper(), nil /* timeSource */)
+	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.AddPod(tenantID, &tenant.Pod{
+		TenantID:       tenantID.ToUint64(),
+		Addr:           sql.ServingSQLAddr(),
+		State:          tenant.RUNNING,
+		StateTimestamp: timeutil.Now(),
+	})
+	require.NoError(t, tds.Start(ctx))
 
 	originalBackendDial := BackendDial
 	defer testutils.TestingHook(&BackendDial, func(
 		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
-		time.AfterFunc(100*time.Millisecond, func() {
-			dlf := denylist.File{
-				Denylist: []*denylist.DenyEntry{
-					{
-						Entity:     denylist.DenyEntity{Type: denylist.IPAddrType, Item: "127.0.0.1"},
-						Expiration: timeutil.Now().Add(time.Minute),
-						Reason:     "test-denied",
-					},
-				},
-			}
-
-			bytes, err := dlf.Serialize()
-			require.NoError(t, err)
-			_, err = denyList.Write(bytes)
-			require.NoError(t, err)
-		})
 		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
-	s, addr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{
+	opts := &ProxyOptions{
 		Denylist:           denyList.Name(),
 		PollConfigInterval: 10 * time.Millisecond,
-	})
-	defer func() { _ = os.Remove(denyList.Name()) }()
+	}
+	opts.testingKnobs.directoryServer = tds
+	s, addr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), opts)
 
-	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb_29?sslmode=require&options=--cluster=tenant-cluster-28&sslmode=require", addr)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Eventuallyf(
-			t,
-			func() bool {
-				_, err = conn.Exec(context.Background(), "SELECT 1")
-				return err != nil
-			},
-			time.Second, 5*time.Millisecond,
-			"Expected the connection to eventually fail",
-		)
-		require.Regexp(t, "unexpected EOF|connection reset by peer", err.Error())
-		require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
-	})
+	// Establish a connection.
+	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb?sslmode=require&options=--cluster=tenant-cluster-%s&sslmode=require", addr, tenantID)
+	db, err := gosql.Open("postgres", url)
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+	require.NoError(t, err)
+
+	// Use a single connection so that we don't reopen when the connection
+	// is closed.
+	conn, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+
+	// Once connection has been established, attempt to update denylist.
+	dlf.Seq++
+	dlf.Denylist = []*denylist.DenyEntry{
+		{
+			Entity:     denylist.DenyEntity{Type: denylist.IPAddrType, Item: "127.0.0.1"},
+			Expiration: timeutil.Now().Add(time.Minute),
+			Reason:     "test-denied",
+		},
+	}
+	bytes, err = dlf.Serialize()
+	require.NoError(t, err)
+	_, err = denyList.Write(bytes)
+	require.NoError(t, err)
+
+	// Subsequent Exec calls will eventually fail.
+	require.Eventuallyf(
+		t,
+		func() bool {
+			_, err = conn.ExecContext(ctx, "SELECT 1")
+			return err != nil
+		},
+		time.Second, 5*time.Millisecond,
+		"Expected the connection to eventually fail",
+	)
+	require.Regexp(t, "closed|bad connection", err.Error())
+	require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 }
 
 func TestDirectoryConnect(t *testing.T) {
