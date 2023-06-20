@@ -52,8 +52,28 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Emitted Messages"
+      isKvGraph={false}
+      sources={storeSources}
+      tenantSource={tenantSource}
+    >
+      <Axis units={AxisUnits.Count} label="actions">
+        <Metric
+          name="cr.node.changefeed.emitted_messages"
+          title="Messages"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.changefeed.flushes"
+          title="Flushes"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Commit Latency"
-      tooltip={`The difference between an event's MVCC timestamp and the time it was acknowledged as received by the downstream sink.`}
+      tooltip={`The difference between an event's MVCC timestamp and the time it was acknowledged as received by the downstream sink.  To reduce latency, consider setting schema_locked on the relevant tables`}
       isKvGraph={false}
       sources={storeSources}
       tenantSource={tenantSource}
@@ -88,20 +108,31 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Sink Counts"
+      title="Changefeed Restarts"
+      tooltip={`The rate of transient non-fatal errors, such as temporary connectivity issues or a rolling upgrade. This rate constantly becoming non-zero may indicate a more persistent issue.`}
       isKvGraph={false}
       sources={storeSources}
       tenantSource={tenantSource}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
-          name="cr.node.changefeed.emitted_messages"
-          title="Messages"
+          name="cr.node.changefeed.error_retries"
+          title="Retryable Errors"
           nonNegativeRate
         />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Backfill Pending Ranges"
+      tooltip={`The number of ranges being backfilled (ex: due to an initial scan or schema change) that are yet to completely enter the Changefeed pipeline.`}
+      isKvGraph={false}
+      sources={storeSources}
+    >
+      <Axis units={AxisUnits.Count} label="count">
         <Metric
-          name="cr.node.changefeed.flushes"
-          title="Flushes"
+          name="cr.node.changefeed.backfill_pending_ranges"
+          title="Backfill Pending Ranges"
           nonNegativeRate
         />
       </Axis>
@@ -124,22 +155,6 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Changefeed Restarts"
-      tooltip={`The rate of transient non-fatal errors, such as temporary connectivity issues or a rolling upgrade. This rate constantly becoming non-zero may indicate a more persistent issue.`}
-      isKvGraph={false}
-      sources={storeSources}
-      tenantSource={tenantSource}
-    >
-      <Axis units={AxisUnits.Count} label="actions">
-        <Metric
-          name="cr.node.changefeed.error_retries"
-          title="Retryable Errors"
-          nonNegativeRate
-        />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
       title="Oldest Protected Timestamp"
       tooltip={`The oldest data that any changefeed is protecting from being able to be automatically garbage collected.`}
       isKvGraph={false}
@@ -156,16 +171,37 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Backfill Pending Ranges"
-      tooltip={`The number of ranges being backfilled (ex: due to an initial scan or schema change) that are yet to completely enter the Changefeed pipeline.`}
+      title="Lagging Ranges"
       isKvGraph={false}
       sources={storeSources}
+      tooltip="Total number of ranges that haven't been able to emit a value for longer than the configured changefeed.lagging_ranges_threshold duration (default 10min)"
     >
-      <Axis units={AxisUnits.Count} label="count">
+      <Axis units={AxisUnits.Count} label="ranges">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.changefeed.aggregator_lagging_ranges"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+          />
+        ))}
         <Metric
-          name="cr.node.changefeed.backfill_pending_ranges"
-          title="Backfill Pending Ranges"
-          nonNegativeRate
+          name="cr.node.changefeed.aggregator_lagging_ranges"
+          title={"Total Lagging Ranges"}
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Range Health"
+      isKvGraph={false}
+      sources={storeSources}
+      tooltip="The percentage of ranges being tracked by changefeeds which are considered to be healthy and up to date"
+    >
+      <Axis units={AxisUnits.Percentage} label="range health">
+        <Metric
+          name="cr.node.changefeed.aggregator_range_health"
+          title={"Healthy Ranges"}
+          downsampler={TimeSeriesQueryAggregator.AVG}
         />
       </Axis>
     </LineGraph>,
@@ -186,10 +222,10 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Ranges in catchup mode"
+      title="Ranges in Catchup Mode"
       isKvGraph={false}
       sources={storeSources}
-      tooltip="Total number of ranges with an active rangefeed that are performing catchup scan"
+      tooltip="Total number of ranges with an active rangefeed that are performing a catchup scan"
     >
       <Axis units={AxisUnits.Count} label="ranges">
         <Metric
@@ -201,7 +237,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="RangeFeed catchup scans duration"
+      title="RangeFeed Catchup Scans Duration"
       isKvGraph={false}
       sources={storeSources}
     >
