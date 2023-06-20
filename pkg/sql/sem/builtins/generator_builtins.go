@@ -278,6 +278,40 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
+	"workload_index_recs": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(false, false),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "timestamptz", Typ: types.TimestampTZ}},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(true, false),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "budget", Typ: types.String}},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(false, true),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "timestamptz", Typ: types.TimestampTZ},
+				{Name: "budget", Typ: types.String},
+			},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(true, true),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+	),
+
 	"unnest": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
@@ -1080,6 +1114,22 @@ func (s *multipleArrayValueGenerator) Values() (tree.Datums, error) {
 		}
 	}
 	return s.datums, nil
+}
+
+// makeWorkloadIndexRecsGeneratorFactory uses the arrayValueGenerator to
+// return all the index recommendations as an array of strings
+func makeWorkloadIndexRecsGeneratorFactory(hasTs bool, hasBgt bool) eval.GeneratorOverload {
+	return func(_ context.Context, _ *eval.Context, _ tree.Datums) (eval.ValueGenerator, error) {
+		// Invoke the workloadindexrec.FindWorkloadRecs() to get indexRecs, err once it is implemented.
+		indexRecs := []string{"1", "2", "3"}
+		arr := tree.NewDArray(types.String)
+		for _, indexRec := range indexRecs {
+			if err := arr.Append(tree.NewDString(indexRec)); err != nil {
+				return nil, err
+			}
+		}
+		return &arrayValueGenerator{array: arr}, nil
+	}
 }
 
 func makeArrayGenerator(
