@@ -25,7 +25,7 @@ SELECT * FROM v
 1 2
 3 4
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES
 ----
 public  kv  table  root  0  NULL
@@ -47,14 +47,14 @@ SELECT * FROM new_v
 1 2
 3 4
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES
 ----
 public  kv     table  root  0  NULL
 public  new_v  view   root  0  NULL
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
-query TTTTTB
+query TTTTTB rowsort
 SHOW GRANTS ON new_v
 ----
 test  public  new_v  admin  ALL  true
@@ -110,7 +110,7 @@ GRANT CREATE ON DATABASE test TO testuser
 statement ok
 ALTER VIEW test.v RENAME TO v2
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM test
 ----
 public  kv     table  root  0  NULL
@@ -136,7 +136,7 @@ user testuser
 statement ok
 ALTER VIEW test.new_v RENAME TO test.v
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM test
 ----
 public  kv  table  root  0  NULL

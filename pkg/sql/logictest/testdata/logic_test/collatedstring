@@ -380,7 +380,7 @@ UPSERT INTO t46570(rowid) VALUES (0), (1)
 # Test trailing spaces are truncated for char types.
 subtest regression_50015
 
-query T
+query T rowsort
 SELECT
 	t
 FROM

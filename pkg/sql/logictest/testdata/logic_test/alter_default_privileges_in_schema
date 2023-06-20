@@ -24,7 +24,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA public GRANT SELECT ON TABL
 statement ok
 CREATE TABLE t1()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t1
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -42,7 +42,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT INSERT ON TABLES TO testuser2
 statement ok
 CREATE TABLE t2()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t2
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -58,7 +58,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT ALL ON TABLES TO testuser2
 statement ok
 CREATE TABLE t3()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t3
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -74,7 +74,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser2
 statement ok
 CREATE TABLE t4()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t4
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -97,7 +97,7 @@ statement ok
 CREATE TABLE public.t5();
 CREATE TABLE s.t6();
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON public.t5
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -106,7 +106,7 @@ test           public       t5          root       ALL             true
 test           public       t5          testuser   ALL             true
 test           public       t5          testuser2  ALL             false
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s.t6
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -128,7 +128,7 @@ statement ok
 CREATE TABLE public.t7();
 CREATE TABLE s.t8();
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON public.t7
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -137,7 +137,7 @@ test           public       t7          root       ALL             true
 test           public       t7          testuser   ALL             true
 test           public       t7          testuser2  SELECT          false
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s.t8
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -155,7 +155,7 @@ statement ok
 CREATE TABLE public.t9();
 CREATE TABLE s.t10();
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON public.t9
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -163,7 +163,7 @@ test           public       t9          admin      ALL             true
 test           public       t9          root       ALL             true
 test           public       t9          testuser2  SELECT          false
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s.t10
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -181,7 +181,7 @@ CREATE TABLE t11()
 
 # Note that testuser still has CREATE because testuser has CREATE on the parent
 # database.
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON t11
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -204,7 +204,7 @@ CREATE TABLE s2.t12()
 
 # Note that testuser still has CREATE because testuser has CREATE on the parent
 # database.
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON s2.t12
 ----
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
@@ -264,7 +264,7 @@ SHOW DEFAULT PRIVILEGES IN SCHEMA s
 role      for_all_roles  object_type  grantee    privilege_type  is_grantable
 testuser  false          types        testuser2  USAGE           false
 
-query TBTTTB colnames
+query TBTTTB colnames,rowsort
 SHOW DEFAULT PRIVILEGES IN SCHEMA s2
 ----
 role      for_all_roles  object_type  grantee    privilege_type  is_grantable
@@ -274,7 +274,7 @@ testuser  false          tables       testuser2  UPDATE          false
 
 user root
 
-query TBTTTB colnames
+query TBTTTB colnames,rowsort
 SHOW DEFAULT PRIVILEGES FOR ROLE testuser IN SCHEMA s2
 ----
 role      for_all_roles  object_type  grantee    privilege_type  is_grantable

@@ -76,13 +76,13 @@ t1_pkey          i  true
 
 # Check System Descriptor.
 query TTBITTTBBBF colnames
-SELECT * FROM [SHOW INDEX FROM system.descriptor]
+SELECT * FROM [SHOW INDEX FROM system.descriptor] ORDER BY seq_in_index
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
 descriptor  primary     false       1             id           id          ASC        false    false     true     1
 descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true     1
 
-query TT
+query TT rowsort
 SELECT cols.desc->>'name', cols.desc->>'notVisible' FROM (
   SELECT json_array_elements(
     crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes'
@@ -94,7 +94,7 @@ idx_i_invisible  true
 idx_v_invisible  true
 
 # Check crdb_internal.table_indexes.
-query TB colnames
+query TB colnames,rowsort
 SELECT index_name, is_visible FROM crdb_internal.table_indexes ORDER BY index_id
 ----
 index_name       is_visible
@@ -1198,7 +1198,7 @@ CREATE TABLE t1 (
   INDEX idx_invisible (other) NOT VISIBLE
 )
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t1]
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -1228,7 +1228,7 @@ ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (other);
 # A new primary index t1_pkey is created on the column other. The old primary
 # index becomes a secondary index t1_c_key on c. idx_invisible remains
 # invisible.
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t1]
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -1532,7 +1532,7 @@ statement ok
 CREATE INDEX k1_idx on t(k);
 ALTER INDEX k1_idx INVISIBLE
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t]
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -1579,7 +1579,7 @@ t  CREATE TABLE public.t (
      FAMILY fam_0_p_k_v (p, k, v)
    )
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t]
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility

@@ -181,7 +181,8 @@ CREATE FUNCTION sc.proc_f_2(STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT 'he
 
 query TTTTTBBBTITTTTTT
 SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prokind, prosrc
-FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
+FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2')
+ORDER BY 1
 ----
 100118  proc_f    105  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    f  SELECT 1;
 100119  proc_f    105  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  f  SELECT 'hello';
@@ -293,7 +294,7 @@ $$  122  test_cross_db  123  public  124  f_cross_db
 subtest show_create_function
 
 query T
-SELECT create_statement FROM [SHOW CREATE FUNCTION proc_f];
+SELECT create_statement FROM [SHOW CREATE FUNCTION proc_f] ORDER BY 1
 ----
 CREATE FUNCTION public.proc_f(IN INT8)
   RETURNS INT8
@@ -405,7 +406,7 @@ statement ok
 SET search_path = public,sc1
 
 query T
-SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop];
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_drop] ORDER BY 1
 ----
 CREATE FUNCTION public.f_test_drop()
   RETURNS INT8
@@ -650,7 +651,7 @@ NULL     root     test              public           test_priv_f1_100137  test  
 NULL     root     test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
@@ -658,7 +659,7 @@ test           public         100137       test_priv_f1()      root     EXECUTE 
 test           public         100138       test_priv_f2(int8)  root     EXECUTE         true
 test           test_priv_sc1  100139       test_priv_f3()      root     EXECUTE         true
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1(), test_priv_f2(INT), test_priv_f3()
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
@@ -667,7 +668,7 @@ test           public         100138       test_priv_f2(int8)  root     EXECUTE 
 test           test_priv_sc1  100139       test_priv_f3()      root     EXECUTE         true
 
 query TTTTTT colnames
-SHOW FUNCTIONS
+SELECT * FROM [SHOW FUNCTIONS] ORDER BY function_name, result_data_type
 ----
 schema_name    function_name  result_data_type  argument_data_types  function_type  volatility
 public         a              int8              int8                 func           volatile
@@ -678,16 +679,16 @@ public         f              int8              notmyworkday         func       
 public         f_no_ref       int8              int8                 func           immutable
 public         proc_f         int8              int8                 func           volatile
 public         proc_f         text              text, int8           func           immutable
+sc             proc_f_2       text              text                 func           volatile
 public         test_priv_f1   int8              ·                    func           volatile
 public         test_priv_f2   int8              int8                 func           volatile
+test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
 public         test_tbl_f     int8              ·                    func           immutable
 public         test_vf_f      text              ·                    func           volatile
 public         test_vf_g      text              ·                    func           volatile
-sc             proc_f_2       text              text                 func           volatile
-test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
 
 query TTTTTT colnames
-SHOW FUNCTIONS FROM public
+SELECT * FROM [SHOW FUNCTIONS FROM public] ORDER BY function_name, result_data_type
 ----
 schema_name  function_name  result_data_type  argument_data_types  function_type  volatility
 public       a              int8              int8                 func           volatile
@@ -711,7 +712,7 @@ schema_name    function_name  result_data_type  argument_data_types  function_ty
 test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
 
 query TTTTTT colnames
-SHOW FUNCTIONS FROM test
+SELECT * FROM [SHOW FUNCTIONS FROM test] ORDER BY function_name, result_data_type
 ----
 schema_name    function_name  result_data_type  argument_data_types  function_type  volatility
 public         a              int8              int8                 func           volatile
@@ -722,13 +723,13 @@ public         f              int8              notmyworkday         func       
 public         f_no_ref       int8              int8                 func           immutable
 public         proc_f         int8              int8                 func           volatile
 public         proc_f         text              text, int8           func           immutable
+sc             proc_f_2       text              text                 func           volatile
 public         test_priv_f1   int8              ·                    func           volatile
 public         test_priv_f2   int8              int8                 func           volatile
+test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
 public         test_tbl_f     int8              ·                    func           immutable
 public         test_vf_f      text              ·                    func           volatile
 public         test_vf_g      text              ·                    func           volatile
-sc             proc_f_2       text              text                 func           volatile
-test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
 
 statement ok
 GRANT EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 TO udf_test_user WITH GRANT OPTION;
@@ -746,7 +747,7 @@ NULL     udf_test_user  test              public           test_priv_f1_100137  
 NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
@@ -776,7 +777,7 @@ NULL     udf_test_user  test              public           test_priv_f1_100137  
 NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         NO
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
@@ -800,7 +801,7 @@ NULL     root     test              public           test_priv_f1_100137  test  
 NULL     root     test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
@@ -824,7 +825,7 @@ NULL     udf_test_user  test              public           test_priv_f1_100137  
 NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
@@ -851,7 +852,7 @@ NULL     udf_test_user  test              public           test_priv_f1_100137  
 NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         NO
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
@@ -875,7 +876,7 @@ NULL     root     test              public           test_priv_f1_100137  test  
 NULL     root     test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
@@ -929,7 +930,7 @@ NULL     root           test              test_priv_sc1    test_priv_f3_100142  
 NULL     udf_test_user  test              public           test_priv_f2_100141  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100142  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
@@ -974,7 +975,7 @@ NULL     root     test              public           test_priv_f1_100140  test  
 NULL     root     test              public           test_priv_f2_100143  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100144  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
 ----
 database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
@@ -1160,7 +1161,7 @@ statement error pq: unknown function: f_test_alter_name_new\(\): function undefi
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
 
 query T
-SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_diff_in];
+SELECT create_statement FROM [SHOW CREATE FUNCTION f_test_alter_name_diff_in] ORDER BY 1
 ----
 CREATE FUNCTION public.f_test_alter_name_diff_in()
   RETURNS INT8
@@ -1267,7 +1268,8 @@ SELECT get_function_id('test_alter_sc', 'f_test_sc', ARRAY[]:::STRING[]);
 
 query TTT
 SELECT oid, proname, prosrc
-FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc');
+FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc')
+ORDER BY oid
 ----
 100150  f_test_sc  SELECT 1;
 100151  f_test_sc  SELECT 2;
@@ -1330,7 +1332,7 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
 153  152
 
 query T
-SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc];
+SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc] ORDER BY 1
 ----
 CREATE FUNCTION public.f_test_sc()
   RETURNS INT8
@@ -1393,7 +1395,7 @@ CREATE FUNCTION public.f_test_sc()
 $$
 
 query T
-SELECT create_statement FROM [SHOW CREATE FUNCTION test_alter_sc.f_test_sc];
+SELECT create_statement FROM [SHOW CREATE FUNCTION test_alter_sc.f_test_sc] ORDER BY 1
 ----
 CREATE FUNCTION test_alter_sc.f_test_sc()
   RETURNS INT8
@@ -1820,7 +1822,9 @@ WITH tmp AS (
   FROM system.eventlog
   WHERE "eventType" = 'create_function'
 )
-SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement'
+FROM tmp
+ORDER BY 4
 ----
 create_function  203  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
 create_function  203  "test.public.f_test_log"  "CREATE OR REPLACE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 2;$$"
@@ -1911,7 +1915,9 @@ statement error pq: function name "f_test_show_grants" is not unique
 SHOW GRANTS ON FUNCTION f_test_show_grants;
 
 query TTTTTTB colnames
-SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID);
+SELECT * FROM [
+  SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID)
+] ORDER BY function_signature, grantee
 ----
 database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
 test           sc_test_show_grants  100205       f_test_show_grants(int8)             root                EXECUTE         true
@@ -1923,14 +1929,14 @@ statement error pq: function f_test_show_grants\(string\) does not exist: functi
 SHOW GRANTS ON FUNCTION f_test_show_grants(string);
 
 query TTTTTTB colnames
-SHOW GRANTS ON FUNCTION f_test_show_grants(INT)
+SELECT * FROM [SHOW GRANTS ON FUNCTION f_test_show_grants(INT)] ORDER BY grantee
 ----
 database_name  schema_name          function_id  function_signature        grantee             privilege_type  is_grantable
 test           sc_test_show_grants  100205       f_test_show_grants(int8)  root                EXECUTE         true
 test           sc_test_show_grants  100205       f_test_show_grants(int8)  u_test_show_grants  EXECUTE         false
 
 query TTTTTTB colnames
-SHOW GRANTS ON FUNCTION f_test_show_grants(INT, string, OID);
+SELECT * FROM [SHOW GRANTS ON FUNCTION f_test_show_grants(INT, string, OID)] ORDER BY function_signature
 ----
 database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
 test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  root                EXECUTE         true
@@ -1940,14 +1946,16 @@ statement error pq: unknown function: f_not_existing\(\): function undefined
 SHOW GRANTS ON FUNCTION f_not_existing;
 
 query TTTTTTB colnames
-SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) FOR u_test_show_grants;
+SELECT * FROM [
+  SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) FOR u_test_show_grants
+] ORDER BY function_id
 ----
 database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
 test           sc_test_show_grants  100205       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
 test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
 
 query TTTTTB colnames
-SHOW GRANTS FOR u_test_show_grants;
+SELECT * FROM [SHOW GRANTS FOR u_test_show_grants] ORDER BY relation_name
 ----
 database_name  schema_name          relation_name                        grantee             privilege_type  is_grantable
 test           sc_test_show_grants  f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
@@ -2003,7 +2011,7 @@ SELECT *, one() FROM ab WHERE a = one()
 a  b  one
 1  1  1
 
-query III colnames
+query III colnames,rowsort
 SELECT *, one() FROM ab WHERE b = one()
 ----
 a  b  one
@@ -2070,7 +2078,7 @@ SELECT int_identity(10 + int_identity(1))
 ----
 11
 
-query II
+query II rowsort
 SELECT a+b, int_identity(a+b) FROM ab WHERE a = int_identity(a) AND b = int_identity(b)
 ----
 2  2
@@ -2090,7 +2098,7 @@ CREATE FUNCTION sub(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x-y';
 statement ok
 CREATE FUNCTION mult(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x*y';
 
-query II
+query II rowsort
 SELECT a + a + a + b + b + b, add(a, add(a, add(a, add(b, add(b, b))))) FROM ab
 ----
 6   6
@@ -2099,7 +2107,7 @@ SELECT a + a + a + b + b + b, add(a, add(a, add(a, add(b, add(b, b))))) FROM ab
 15  15
 18  18
 
-query II
+query II rowsort
 SELECT (a * (a + b)) - b, sub(mult(a, add(a, b)), b) FROM ab
 ----
 1   1
@@ -2108,7 +2116,7 @@ SELECT (a * (a + b)) - b, sub(mult(a, add(a, b)), b) FROM ab
 19  19
 29  29
 
-query II
+query II rowsort
 SELECT a * (3 + b - a) + a * b * a, add(mult(a, add(3, sub(b, a))), mult(a, mult(b, a))) FROM ab
 ----
 4   4
@@ -2122,7 +2130,7 @@ CREATE FUNCTION fetch_b(arg_a INT) RETURNS INT LANGUAGE SQL AS $$
 SELECT b FROM ab WHERE a = arg_a
 $$
 
-query II
+query II rowsort
 SELECT b, fetch_b(a) FROM ab
 ----
 1  1
@@ -2131,7 +2139,7 @@ SELECT b, fetch_b(a) FROM ab
 1  1
 1  1
 
-query II
+query II rowsort
 SELECT b + (a * 7) - (a * b), add(fetch_b(a), sub(mult(a, 7), mult(a, fetch_b(a)))) FROM ab
 ----
 7   7
@@ -2956,7 +2964,7 @@ SELECT arr(10)
 ----
 {1,2,10}
 
-query T
+query T nosort
 SELECT arr(i) FROM generate_series(1, 3) g(i)
 ----
 {1,2,1}
@@ -3098,7 +3106,7 @@ CREATE FUNCTION f95240(i INT) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 33';
 CREATE TABLE t95240 (a INT);
 INSERT INTO t95240 VALUES (1), (NULL)
 
-query I
+query I rowsort
 SELECT f95240(a) FROM t95240
 ----
 33

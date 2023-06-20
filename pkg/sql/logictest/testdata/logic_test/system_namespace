@@ -125,7 +125,7 @@ SELECT * FROM system.namespace
 104  0   public                           105
 
 # Verify format of system tables.
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.namespace
 ----
 parentID        INT8    false  NULL  ·  {primary}  false

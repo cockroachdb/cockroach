@@ -422,7 +422,7 @@ VALUES ('pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS)
 pg_constraint  pg_constraint
 
 # Ensure that arrays of reg* types work okay.
-query T
+query T rowsort
 SELECT proargtypes::REGTYPE[] FROM pg_proc WHERE proname = 'obj_description'
 ----
 {oid}
@@ -545,7 +545,7 @@ SELECT 'regression_69907'::oid
 
 # 4294967295 is MaxUint32.
 # -2147483648 is MinInt32.
-query OIBB
+query OIBB nosort
 SELECT o, i, o > i, i > o FROM (VALUES
   (1::oid, 4294967295::int8),
   (1::oid, -2147483648::int8),

@@ -36,7 +36,7 @@ CREATE UNIQUE INDEX ON residents (id) PARTITION BY RANGE (id) (
 )
 
 query TT
-SHOW CREATE INDEXES FROM residents
+SELECT * FROM [SHOW CREATE INDEXES FROM residents] ORDER BY index_name DESC
 ----
 residents_pkey    CREATE UNIQUE INDEX residents_pkey ON public.residents (country ASC, id ASC) PARTITION BY LIST (country) (
                   PARTITION north_america VALUES IN (('CA'), ('US'), ('MX')),

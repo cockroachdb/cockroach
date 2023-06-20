@@ -297,7 +297,7 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 
 # Make sure that each index can index join against the new primary key;
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i1] OFFSET 2
 ----
 ·
@@ -314,7 +314,7 @@ SELECT * FROM t@i1
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i2] OFFSET 2
 ----
 ·
@@ -331,7 +331,7 @@ SELECT * FROM t@i2
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i3] OFFSET 2
 ----
 ·
@@ -348,7 +348,7 @@ SELECT * FROM t@i3
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i4] OFFSET 2
 ----
 ·
@@ -365,7 +365,7 @@ SELECT * FROM t@i4
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i5] OFFSET 2
 ----
 ·
@@ -382,7 +382,7 @@ SELECT * FROM t@i5
 ----
 1 2 3 4 {}
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT * FROM t@i7] OFFSET 2
 ----
 ·
@@ -434,7 +434,7 @@ t  CREATE TABLE public.t (
      FAMILY fam_0_x_y_z (x, y, z)
    )
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
 ----
 ·
@@ -1310,7 +1310,7 @@ t_pkey  i  ASC
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i) USING HASH WITH (bucket_count=2)
 
-query TTT
+query TTT rowsort
 SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 ----
 t_pkey  crdb_internal_i_shard_2  ASC

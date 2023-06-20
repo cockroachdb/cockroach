@@ -109,7 +109,7 @@ SELECT v FROM kv ORDER BY v DESC
 NULL
 
 # Check that an SRF is supported.
-query I colnames
+query I colnames,nosort
 SELECT * FROM generate_series(1, 3)
 ----
 generate_series
@@ -139,7 +139,7 @@ SELECT n,a,b FROM a WHERE a = 5 AND b = 2
 ----
 5  5  2
 
-query T
+query T nosort
 SELECT * FROM [EXPLAIN SELECT n,a,b FROM a WHERE a = 5 AND b = 2] OFFSET 2
 ----
 ·

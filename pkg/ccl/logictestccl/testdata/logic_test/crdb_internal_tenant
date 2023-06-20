@@ -19,7 +19,7 @@ CREATE TABLE crdb_internal.t (x INT)
 query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  active_range_feeds                      table  admin  NULL  NULL
@@ -169,7 +169,7 @@ table_id  parent_id  name        database_name  version  format_version         
 statement ok
 CREATE TABLE testdb." ""\'" (i int)
 
-query T
+query T rowsort
 SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
 ----
 foo
@@ -399,7 +399,7 @@ select regexp_replace(regexp_replace(crdb_internal.node_executable_version()::st
 ----
 23.1
 
-query ITTT colnames
+query ITTT colnames,rowsort
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
 ----
 node_id  component  field   value
@@ -597,7 +597,7 @@ CREATE TYPE enum1 AS ENUM ('hello', 'hi');
 CREATE TYPE enum2 AS ENUM ()
 
 query ITTITTT
-SELECT * FROM crdb_internal.create_type_statements
+SELECT * FROM crdb_internal.create_type_statements ORDER BY descriptor_id
 ----
 104  test  public  113  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
 104  test  public  115  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
@@ -625,7 +625,7 @@ BEGIN; SELECT * FROM t_53504; COMMIT;
 statement ok
 SELECT * FROM t_53504
 
-query ITTTI colnames
+query ITTTI colnames,rowsort
 SELECT node_id, application_name, key, statement_ids, count FROM crdb_internal.node_transaction_statistics where application_name = 'test_txn_statistics'
 ----
 node_id  application_name     key                   statement_ids                                                  count

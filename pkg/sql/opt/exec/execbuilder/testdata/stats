@@ -11,7 +11,7 @@ statement ok
 CREATE STATISTICS u ON u FROM uv;
 CREATE STATISTICS v ON v FROM uv
 
-query TTIIIB colnames
+query TTIIIB colnames,rowsort
 SELECT
   statistics_name,
   column_names,

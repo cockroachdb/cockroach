@@ -1,7 +1,7 @@
 statement ok
 CREATE USER user1
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -13,7 +13,7 @@ user1     ·        {}
 statement ok
 DROP USER user1
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -24,7 +24,7 @@ testuser  ·        {}
 statement ok
 CREATE USER user1
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -36,7 +36,7 @@ user1     ·        {}
 statement ok
 DROP USER USEr1
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -83,7 +83,7 @@ CREATE USER user3
 statement ok
 CREATE USER user4
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -98,7 +98,7 @@ user4     ·        {}
 statement ok
 DROP USER user1,user2
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -111,7 +111,7 @@ user4     ·        {}
 statement error user "user1" does not exist
 DROP USER user1,user3
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of
@@ -148,7 +148,7 @@ statement ok
 PREPARE du AS DROP USER user4;
 EXECUTE du
 
-query TTT colnames
+query TTT colnames,rowsort
 SHOW USERS
 ----
 username  options  member_of

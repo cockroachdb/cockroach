@@ -1,4 +1,4 @@
-query TTTTTT
+query TTTTTT rowsort
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -257,13 +257,13 @@ SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
 0
 
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.descriptor
 ----
 id          INT8   false  NULL  ·  {primary}  false
 descriptor  BYTES  true   NULL  ·  {primary}  false
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.users
 ----
 username        STRING  false  NULL   ·  {primary,users_user_id_idx}  false
@@ -271,14 +271,14 @@ hashedPassword  BYTES   true   NULL   ·  {primary}                    false
 isRole          BOOL    false  false  ·  {primary}                    false
 user_id         OID     false  NULL   ·  {primary,users_user_id_idx}  false
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.zones
 ----
 id      INT8   false  NULL  ·  {primary}  false
 config  BYTES  true   NULL  ·  {primary}  false
 
 skipif config local-mixed-22.2-23.1
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.lease
 ----
 descID       INT8       false  NULL  ·  {primary}  false
@@ -288,7 +288,7 @@ expiration   TIMESTAMP  false  NULL  ·  {primary}  false
 crdb_region  BYTES      false  NULL  ·  {primary}  false
 
 onlyif config local-mixed-22.2-23.1
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.lease
 ----
 descID      INT8       false  NULL  ·  {primary}  false
@@ -296,7 +296,7 @@ version     INT8       false  NULL  ·  {primary}  false
 nodeID      INT8       false  NULL  ·  {primary}  false
 expiration  TIMESTAMP  false  NULL  ·  {primary}  false
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.eventlog
 ----
 timestamp    TIMESTAMP  false  NULL       ·  {primary}  false
@@ -306,7 +306,7 @@ reportingID  INT8       false  NULL       ·  {primary}  false
 info         STRING     true   NULL       ·  {primary}  false
 uniqueID     BYTES      false  uuid_v4()  ·  {primary}  false
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.rangelog
 ----
 timestamp     TIMESTAMP  false  NULL            ·  {primary}  false
@@ -317,7 +317,7 @@ otherRangeID  INT8       true   NULL            ·  {primary}  false
 info          STRING     true   NULL            ·  {primary}  false
 uniqueID      INT8       false  unique_rowid()  ·  {primary}  false
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.ui
 ----
 key          STRING     false  NULL  ·  {primary}  false
@@ -325,7 +325,7 @@ value        BYTES      true   NULL  ·  {primary}  false
 lastUpdated  TIMESTAMP  false  NULL  ·  {primary}  false
 
 skipif config local-mixed-22.2-23.1
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.jobs
 ----
 id                 INT8       false  unique_rowid()  ·  {jobs_created_by_type_created_by_id_idx,jobs_job_type_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
@@ -342,7 +342,7 @@ last_run           TIMESTAMP  true   NULL            ·  {jobs_run_stats_idx,pri
 job_type           STRING     true   NULL            ·  {jobs_job_type_idx,primary}                                                                                    false
 
 onlyif config local-mixed-22.2-23.1
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.jobs
 ----
 id                 INT8       false  unique_rowid()  ·  {jobs_created_by_type_created_by_id_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
@@ -357,7 +357,7 @@ claim_instance_id  INT8       true   NULL            ·  {jobs_run_stats_idx,pri
 num_runs           INT8       true   NULL            ·  {jobs_run_stats_idx,primary}                                                                 false
 last_run           TIMESTAMP  true   NULL            ·  {jobs_run_stats_idx,primary}                                                                 false
 
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.settings
 ----
 name         STRING     false  NULL   ·  {primary}  false
@@ -366,7 +366,7 @@ lastUpdated  TIMESTAMP  false  now()  ·  {primary}  false
 valueType    STRING     true   NULL   ·  {primary}  false
 
 skipif config local-mixed-22.2-23.1
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.role_members
 ----
 role       STRING  false  NULL  ·  {primary,role_members_member_id_idx,role_members_member_idx,role_members_role_id_idx,role_members_role_id_member_id_key,role_members_role_idx}  false
@@ -376,7 +376,7 @@ role_id    OID     false  NULL  ·  {primary,role_members_role_id_idx,role_membe
 member_id  OID     false  NULL  ·  {primary,role_members_member_id_idx,role_members_role_id_member_id_key}                                                                         false
 
 onlyif config local-mixed-22.2-23.1
-query TTBTTTB
+query TTBTTTB rowsort
 SHOW COLUMNS FROM system.role_members
 ----
 role     STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_role_idx}  false
@@ -384,7 +384,7 @@ member   STRING  false  NULL  ·  {primary,role_members_member_idx,role_members_
 isAdmin  BOOL    false  NULL  ·  {primary}                                                false
 
 # Verify default privileges on system tables.
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE system
 ----
 system  admin  CONNECT  true
@@ -394,7 +394,7 @@ system  root   CONNECT  true
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
 skipif config local-mixed-22.2-23.1
-query TTTTTB
+query TTTTTB rowsort
 SHOW GRANTS ON system.*
 ----
 system  public  comments                         admin   DELETE  true
@@ -740,7 +740,7 @@ system  public  zones                            root    SELECT  true
 system  public  zones                            root    UPDATE  true
 
 onlyif config 3node-tenant-default-configs
-query TTTTTB
+query TTTTTB rowsort
 SHOW GRANTS ON system.*
 ----
 system  public  comments                         admin   DELETE  true

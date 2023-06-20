@@ -2,7 +2,7 @@ statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX (b) STORING (d))
 
 # Empty data
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
 ----
 t_pkey   NULL
@@ -12,7 +12,7 @@ statement ok
 INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12)
 
 # Add some initial data
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
 ----
 t_pkey   -7903300865687235210
@@ -23,7 +23,7 @@ t_b_idx  -5073888452016928166
 statement ok
 CREATE INDEX ON t(b) STORING (d) WHERE b > 0
 
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
 ----
 t_pkey   -7903300865687235210
@@ -38,7 +38,7 @@ statement ok
 UPDATE t SET b = 9
 
 # b is encoded in both indexes, so both should change
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
 ----
 t_pkey   3722816579880544080
@@ -48,7 +48,7 @@ statement ok
 UPDATE t SET c = 10
 
 # c is encoded only in primary, so t_b_idx shouldn't change
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
 ----
 t_pkey   4547357529681250049
@@ -58,7 +58,7 @@ statement ok
 UPDATE t SET d = 10
 
 # d is encoded in both indexes, so both should change
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
 ----
 t_pkey   492416650140211287
@@ -69,7 +69,7 @@ ALTER TABLE t ADD COLUMN e string;
 
 # Table changed, but the new column is all NULLs so neither fingerprint should
 # change
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
 ----
 t_pkey   492416650140211287
@@ -79,7 +79,7 @@ statement ok
 UPDATE t SET e = 'foo' WHERE a = 1;
 
 # Column e is not in index t_b_idx so its fingerprint shouldn't change
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t
 ----
 t_pkey   1205834892498753533
@@ -108,7 +108,7 @@ INSERT INTO "foo""bar" VALUES (1, 2), (3, 4), (5, 6)
 
 # Make sure we handle table, index, and column name escaping correctly in the
 # internally generated query.
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE "foo""bar"
 ----
 foo"bar_pkey  590693963425091008
@@ -145,7 +145,7 @@ CREATE TABLE t_w_expr_index (a INT PRIMARY KEY, b INT, c INT AS (b + 42) STORED,
 statement ok
 INSERT INTO t_w_expr_index VALUES (1, 1), (2, 2), (3, 3)
 
-query TT
+query TT rowsort
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE t_w_expr_index
 ----
 t_w_expr_index_pkey     -3347212893095932527

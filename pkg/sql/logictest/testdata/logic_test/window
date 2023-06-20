@@ -3962,7 +3962,7 @@ RESET distsql_workmem
 
 # Regression test for #38901 verifying that window frame takes precedence over
 # the concept of peers.
-query I
+query I rowsort
 SELECT count(a) OVER (ROWS 1 PRECEDING) FROM t
 ----
 1

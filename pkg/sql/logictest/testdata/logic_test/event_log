@@ -808,7 +808,7 @@ SELECT jdesc->'schema'->>'name' AS schema, jdesc->'schema'->'privileges'->>'owne
        FROM descs
 ORDER BY 1,2,3,4,5,6
 
-query TTTTTT
+query TTTTTT rowsort
 EXECUTE showOwners('atest')
 ----
 NULL    NULL      NULL  NULL      s     testuser
@@ -834,7 +834,7 @@ ALTER DATABASE atest OWNER TO u;
 # See: https://github.com/cockroachdb/cockroach/issues/57965
 
 # Observe/verify the ownership change.
-query TTTTTT
+query TTTTTT rowsort
 EXECUTE showOwners('atest')
 ----
 NULL    NULL   NULL  NULL  s     testuser
@@ -874,7 +874,7 @@ statement ok
 REASSIGN OWNED BY testuser TO v
 
 # Observe/verify the ownership change.
-query TTTTTT
+query TTTTTT rowsort
 EXECUTE showOwners('atest')
 ----
 NULL    NULL   NULL  NULL  s     v

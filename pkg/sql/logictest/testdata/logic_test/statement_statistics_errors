@@ -1,9 +1,9 @@
 # Check that error messages and error codes are being surfaced correctly
-# 
-# For these tests, a statement containing an intentional error is made and the 
+#
+# For these tests, a statement containing an intentional error is made and the
 # crdb_internal.node_statement_statistics virtual table is queried to validate that the error code
-# is recorded. When querying the node statistics table, we are ignoring statements made internally 
-# by CRDB ("$ internal-migration-manager-find-jobs" for example) since they can be flaky. We are 
+# is recorded. When querying the node statistics table, we are ignoring statements made internally
+# by CRDB ("$ internal-migration-manager-find-jobs" for example) since they can be flaky. We are
 # also ordering by "last_error_code" to maintain consistency.
 
 # Test 1: division by zero. Error code "22012" should be added.
@@ -16,7 +16,7 @@ SELECT last_error_code FROM crdb_internal.node_statement_statistics WHERE last_e
 22012
 
 # Test 2: database does not exist. Error code "3D000" should be added.
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SHOW DATABASES
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal
