@@ -11,7 +11,6 @@ package auditloggingccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
@@ -54,11 +53,7 @@ func validateAuditLogConfig(_ *settings.Values, input string) error {
 		// Empty config
 		return nil
 	}
-	st, clusterID, err := auditlogging.UserAuditEnterpriseParamsHook()
-	if err != nil {
-		return err
-	}
-	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(st, clusterID, "role-based audit logging")
+	_, enterpriseCheckErr := auditlogging.ReadEnterpriseParamsHook()
 	if enterpriseCheckErr != nil {
 		return pgerror.Wrap(enterpriseCheckErr,
 			pgcode.InsufficientPrivilege, "role-based audit logging requires enterprise license")

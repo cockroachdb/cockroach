@@ -20,11 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -43,8 +42,26 @@ var UserAuditReducedConfigEnabled = func(sv *settings.Values) bool {
 	return false
 }
 
-var UserAuditEnterpriseParamsHook = func() (*cluster.Settings, uuid.UUID, error) {
-	return nil, uuid.Nil, errors.New("Cannot validate log config, enterprise parameters not initialized yet")
+var UserAuditEnterpriseParamsHook = struct {
+	syncutil.RWMutex
+	Initialized   bool
+	EnterpriseErr error
+}{}
+
+var ReadEnterpriseParamsHook = func() (initialized bool, enterpriseErr error) {
+	UserAuditEnterpriseParamsHook.RLock()
+	defer UserAuditEnterpriseParamsHook.RUnlock()
+	return UserAuditEnterpriseParamsHook.Initialized, UserAuditEnterpriseParamsHook.EnterpriseErr
+}
+
+var WriteEnterpriseParamsHook = func(ctx context.Context, enterpriseErr error) {
+	UserAuditEnterpriseParamsHook.Lock()
+	defer UserAuditEnterpriseParamsHook.Unlock()
+	UserAuditEnterpriseParamsHook.Initialized = true
+	UserAuditEnterpriseParamsHook.EnterpriseErr = enterpriseErr
+	if enterpriseErr != nil {
+		log.Errorf(ctx, "role-based auditing disabled, enterprise check failed: %v", enterpriseErr)
+	}
 }
 
 // Auditor is an interface used to check and build different audit events.
