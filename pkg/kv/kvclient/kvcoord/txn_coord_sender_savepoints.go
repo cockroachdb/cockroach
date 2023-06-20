@@ -193,6 +193,7 @@ func (tc *TxnCoordSender) checkSavepointLocked(s *savepoint, op redact.SafeStrin
 		return kvpb.NewTransactionRetryWithProtoRefreshError(
 			redact.Sprintf("cannot %s savepoint after a transaction restart", op),
 			s.txnID,
+			s.epoch,
 			tc.mu.txn,
 		)
 	}

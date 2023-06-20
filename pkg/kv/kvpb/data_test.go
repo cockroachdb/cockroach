@@ -24,10 +24,14 @@ import (
 )
 
 func TestPrepareTransactionForRetry(t *testing.T) {
+	isolation.RunEachLevel(t, testPrepareTransactionForRetry)
+}
+
+func testPrepareTransactionForRetry(t *testing.T, isoLevel isolation.Level) {
 	ts1 := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
 	tsClock := hlc.Timestamp{WallTime: 3}
-	txn := roachpb.MakeTransaction("test", nil, isolation.Serializable, -1, ts1, 0, 99)
+	txn := roachpb.MakeTransaction("test", nil, isoLevel, -1, ts1, 0, 99)
 	txn2ID := uuid.MakeV4() // used if txn is aborted
 	tests := []struct {
 		name   string
@@ -69,7 +73,9 @@ func TestPrepareTransactionForRetry(t *testing.T) {
 			err:  NewErrorWithTxn(&ReadWithinUncertaintyIntervalError{ValueTimestamp: ts2}, &txn),
 			expTxn: func() roachpb.Transaction {
 				nextTxn := txn
-				nextTxn.Epoch++
+				if isoLevel != isolation.ReadCommitted {
+					nextTxn.Epoch++
+				}
 				nextTxn.ReadTimestamp = ts2.Next()
 				nextTxn.WriteTimestamp = ts2.Next()
 				return nextTxn
@@ -82,7 +88,9 @@ func TestPrepareTransactionForRetry(t *testing.T) {
 			}, &txn),
 			expTxn: func() roachpb.Transaction {
 				nextTxn := txn
-				nextTxn.Epoch++
+				if isoLevel != isolation.ReadCommitted {
+					nextTxn.Epoch++
+				}
 				nextTxn.ReadTimestamp = ts2
 				nextTxn.WriteTimestamp = ts2
 				nextTxn.Priority = 2
@@ -94,7 +102,9 @@ func TestPrepareTransactionForRetry(t *testing.T) {
 			err:  NewErrorWithTxn(&TransactionRetryError{Reason: RETRY_WRITE_TOO_OLD}, &txn),
 			expTxn: func() roachpb.Transaction {
 				nextTxn := txn
-				nextTxn.Epoch++
+				if isoLevel != isolation.ReadCommitted {
+					nextTxn.Epoch++
+				}
 				return nextTxn
 			}(),
 		},
@@ -103,7 +113,9 @@ func TestPrepareTransactionForRetry(t *testing.T) {
 			err:  NewErrorWithTxn(&TransactionRetryError{Reason: RETRY_SERIALIZABLE}, &txn),
 			expTxn: func() roachpb.Transaction {
 				nextTxn := txn
-				nextTxn.Epoch++
+				if isoLevel != isolation.ReadCommitted {
+					nextTxn.Epoch++
+				}
 				nextTxn.ReadTimestamp = tsClock
 				nextTxn.WriteTimestamp = tsClock
 				return nextTxn
@@ -114,7 +126,9 @@ func TestPrepareTransactionForRetry(t *testing.T) {
 			err:  NewErrorWithTxn(&WriteTooOldError{ActualTimestamp: ts2}, &txn),
 			expTxn: func() roachpb.Transaction {
 				nextTxn := txn
-				nextTxn.Epoch++
+				if isoLevel != isolation.ReadCommitted {
+					nextTxn.Epoch++
+				}
 				nextTxn.ReadTimestamp = ts2
 				nextTxn.WriteTimestamp = ts2
 				return nextTxn
@@ -223,11 +237,13 @@ func TestTransactionRefreshTimestamp(t *testing.T) {
 			expTs: ts2.Next(),
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ok, ts := TransactionRefreshTimestamp(tt.err)
-			require.Equal(t, tt.expOk, ok)
-			require.Equal(t, tt.expTs, ts)
-		})
-	}
+	isolation.RunEachLevel(t, func(t *testing.T, isoLevel isolation.Level) {
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				ok, ts := TransactionRefreshTimestamp(tt.err)
+				require.Equal(t, tt.expOk, ok)
+				require.Equal(t, tt.expTs, ts)
+			})
+		}
+	})
 }
