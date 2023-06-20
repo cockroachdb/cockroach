@@ -798,9 +798,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	ctx context.Context, l *logger.Logger, node Node, cmd string, opts RunCmdOptions,
 ) (*RunResultDetails, error) {
 	// Argument template expansion is node specific (e.g. for {store-dir}).
-	e := expander{
-		node: node,
-	}
+	e := expander{node: node}
 	expandedCmd, err := e.expand(ctx, l, c, cmd)
 	if err != nil {
 		return nil, errors.WithDetailf(err, "error expanding command: %s", cmd)
@@ -841,19 +839,12 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		opts.stderr = io.Discard
 	}
 
-	fmtOut := func(s string) string {
-		if strings.TrimSpace(s) == "" {
-			return "<empty>"
-		}
-		return fmt.Sprintf("\n```\n%s\n```", s)
-	}
 	var res *RunResultDetails
-	output := ""
 	if opts.combinedOut {
 		out, cmdErr := sess.CombinedOutput(ctx)
 		res = newRunResultDetails(node, cmdErr)
 		res.CombinedOut = string(out)
-		output = fmtOut(res.CombinedOut)
+		//output = fmtOut(res.CombinedOut)
 	} else {
 		// We stream the output if running on a single node.
 		var stdoutBuffer, stderrBuffer bytes.Buffer
@@ -866,12 +857,10 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		res = newRunResultDetails(node, sess.Run(ctx))
 		res.Stderr = stderrBuffer.String()
 		res.Stdout = stdoutBuffer.String()
-
-		output = fmt.Sprintf("stdout: %s\nstderr: %s", fmtOut(res.Stdout), fmtOut(res.Stderr))
 	}
 
 	if res.Err != nil {
-		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\nOutput:\n%s\n", node, cmd, output)
+		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", node, cmd)
 		res.Err = errors.WithDetail(res.Err, detailMsg)
 	}
 	return res, nil

@@ -32,7 +32,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -432,160 +431,6 @@ func initBinariesAndLibraries() {
 		if len(paths) > 0 {
 			fmt.Printf("\tlibraries %q at: %s\n", arch, strings.Join(paths, ", "))
 		}
-	}
-}
-
-// execCmd is like execCmdEx, but doesn't return the command's output.
-func execCmd(
-	ctx context.Context, l *logger.Logger, clusterName string, secure bool, args ...string,
-) error {
-	return execCmdEx(ctx, l, clusterName, secure, args...).err
-}
-
-type cmdRes struct {
-	err error
-	// stdout and stderr are the commands output. Note that this is truncated and
-	// only a tail is returned.
-	//TODO: only referenced in when printing error
-	stdout, stderr string
-}
-
-// execCmdEx runs a command and returns its error and output.
-//
-// Note that the output is truncated; only a tail is returned.
-// Also note that if the command exits with an error code, its output is also
-// included in cmdRes.err.
-func execCmdEx(
-	ctx context.Context, l *logger.Logger, clusterName string, secure bool, args ...string,
-) cmdRes {
-	var cancel func()
-	ctx, cancel = context.WithCancel(ctx)
-	defer cancel()
-
-	l.Printf("> %s\n", strings.Join(args, " "))
-	var roachprodRunStdout, roachprodRunStderr io.Writer
-
-	debugStdoutBuffer, _ := circbuf.NewBuffer(4096)
-	debugStderrBuffer, _ := circbuf.NewBuffer(4096)
-
-	// Do a dance around https://github.com/golang/go/issues/23019.
-	// When the command we run launches a subprocess, that subprocess receives
-	// a copy of our Command's Stdout/Stderr file descriptor, which effectively
-	// means that the file descriptors close only when that subcommand returns.
-	// However, proactively killing the subcommand is not really possible - we
-	// will only manage to kill the parent process that we launched directly.
-	// In practice this means that if we try to react to context cancellation,
-	// the pipes we read the output from will wait for the *subprocess* to
-	// terminate, leaving us hanging, potentially indefinitely.
-	// To work around it, use pipes and set a read deadline on our (read) end of
-	// the pipes when we detect a context cancellation.
-	var closePipes func(ctx context.Context)
-	var wg sync.WaitGroup
-	{
-
-		var wOut, wErr, rOut, rErr *os.File
-		var cwOnce sync.Once
-		closePipes = func(ctx context.Context) {
-			// Idempotently closes the writing end of the pipes. This is called either
-			// when the process returns or when it was killed due to context
-			// cancellation. In the former case, close the writing ends of the pipe
-			// so that the copy goroutines started below return (without missing any
-			// output). In the context cancellation case, we set a deadline to force
-			// the goroutines to quit eagerly. This is important since the command
-			// may have duplicated wOut and wErr to its possible subprocesses, which
-			// may continue to run for long periods of time, and would otherwise
-			// block this command. In theory this is possible also when the command
-			// returns on its own accord, so we set a (more lenient) deadline in the
-			// first case as well.
-			//
-			// NB: there's also the option (at least on *nix) to use a process group,
-			// but it doesn't look portable:
-			// https://medium.com/@felixge/killing-a-child-process-and-all-of-its-children-in-go-54079af94773
-			cwOnce.Do(func() {
-				if wOut != nil {
-					_ = wOut.Close()
-				}
-				if wErr != nil {
-					_ = wErr.Close()
-				}
-				dur := 10 * time.Second // wait up to 10s for subprocesses
-				if ctx.Err() != nil {
-					dur = 10 * time.Millisecond
-				}
-				deadline := timeutil.Now().Add(dur)
-				if rOut != nil {
-					_ = rOut.SetReadDeadline(deadline)
-				}
-				if rErr != nil {
-					_ = rErr.SetReadDeadline(deadline)
-				}
-			})
-		}
-		defer closePipes(ctx)
-
-		var err error
-		rOut, wOut, err = os.Pipe()
-		if err != nil {
-			return cmdRes{err: err}
-		}
-
-		rErr, wErr, err = os.Pipe()
-		if err != nil {
-			return cmdRes{err: err}
-		}
-		roachprodRunStdout = wOut
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, _ = io.Copy(l.Stdout, io.TeeReader(rOut, debugStdoutBuffer))
-		}()
-
-		if l.Stderr == l.Stdout {
-			// If l.Stderr == l.Stdout, we use only one pipe to avoid
-			// duplicating everything.
-			roachprodRunStderr = wOut
-		} else {
-			roachprodRunStderr = wErr
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_, _ = io.Copy(l.Stderr, io.TeeReader(rErr, debugStderrBuffer))
-			}()
-		}
-	}
-
-	err := roachprod.Run(ctx, l, clusterName, "" /* SSHOptions */, "" /* processTag */, secure, roachprodRunStdout, roachprodRunStderr, args)
-	closePipes(ctx)
-	wg.Wait()
-
-	stdoutString := debugStdoutBuffer.String()
-	if debugStdoutBuffer.TotalWritten() > debugStdoutBuffer.Size() {
-		stdoutString = "<... some data truncated by circular buffer; go to artifacts for details ...>\n" + stdoutString
-	}
-	stderrString := debugStderrBuffer.String()
-	if debugStderrBuffer.TotalWritten() > debugStderrBuffer.Size() {
-		stderrString = "<... some data truncated by circular buffer; go to artifacts for details ...>\n" + stderrString
-	}
-
-	if err != nil {
-		// Context errors opaquely appear as "signal killed" when manifested.
-		// We surface this error explicitly.
-		if ctx.Err() != nil {
-			err = errors.CombineErrors(ctx.Err(), err)
-		}
-
-		err = &cluster.WithCommandDetails{
-			Wrapped: err,
-			Cmd:     strings.Join(args, " "),
-			Stderr:  stderrString,
-			Stdout:  stdoutString,
-		}
-	}
-
-	return cmdRes{
-		err:    err,
-		stdout: stdoutString,
-		stderr: stderrString,
 	}
 }
 
@@ -2286,44 +2131,30 @@ func (c *clusterImpl) Run(ctx context.Context, node option.NodeListOption, args 
 // will be redirected to a file which is logged via the cluster-wide logger in
 // case of an error. Logs will sort chronologically. Failing invocations will
 // have an additional marker file with a `.failed` extension instead of `.log`.
-func (c *clusterImpl) RunE(ctx context.Context, node option.NodeListOption, args ...string) error {
+func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, args ...string) error {
 	if len(args) == 0 {
 		return errors.New("No command passed")
 	}
-	l, logFile, err := c.loggerForCmd(node, args...)
+	l, logFile, err := c.loggerForCmd(nodes, args...)
 	if err != nil {
 		return err
 	}
-
-	// Make it easier to find the log file for a command from test.log
-	c.t.L().Printf("command `%s` output in %s.log", strings.Join(args, " "), logFile)
-
-	if err := errors.Wrap(ctx.Err(), "cluster.RunE"); err != nil {
-		return err
-	}
-	err = execCmd(ctx, l, c.MakeNodes(node), c.IsSecure(), args...)
-
-	l.Printf("> result: %+v", err)
-	if err := ctx.Err(); err != nil {
-		l.Printf("(note: incoming context was canceled: %s", err)
-	}
-	// We need to protect ourselves from a race where cluster logger is
-	// concurrently closed before child logger is created. In that case child
-	// logger will have no log file but would write to stderr instead and we can't
-	// create a meaningful ".failed" file for it.
+	defer l.Close()
 	physicalFileName := ""
 	if l.File != nil {
 		physicalFileName = l.File.Name()
 	}
-	l.Close()
-	if err != nil && len(physicalFileName) > 0 {
-		failedPhysicalFileName := strings.TrimSuffix(physicalFileName, ".log") + ".failed"
-		if failedFile, err2 := os.Create(failedPhysicalFileName); err2 != nil {
-			failedFile.Close()
+
+	c.t.L().Printf("command `%s` output in %s.log", strings.Join(args, " "), logFile)
+	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args); err != nil {
+		if len(physicalFileName) > 0 {
+			l.Printf("> result: %+v", err)
+			createFailedFile(physicalFileName)
 		}
+		return err
 	}
-	err = errors.Wrapf(err, "output in %s", logFile)
-	return err
+
+	return nil
 }
 
 // RunWithDetailsSingleNode is just like RunWithDetails but used when 1) operating
@@ -2353,19 +2184,17 @@ func (c *clusterImpl) RunWithDetails(
 	if len(args) == 0 {
 		return nil, errors.New("No command passed")
 	}
-	l, _, err := c.loggerForCmd(nodes, args...)
+	l, logFile, err := c.loggerForCmd(nodes, args...)
 	if err != nil {
 		return nil, err
 	}
+	defer l.Close()
 	physicalFileName := ""
 	if l.File != nil {
 		physicalFileName = l.File.Name()
 	}
 
-	if err := ctx.Err(); err != nil {
-		l.Printf("(note: incoming context was canceled: %s", err)
-		return nil, err
-	}
+	c.t.L().Printf("command `%s` output in %s.log", strings.Join(args, " "), logFile)
 
 	l.Printf("running %s on nodes: %v", strings.Join(args, " "), nodes)
 	if testLogger != nil {
@@ -2373,22 +2202,29 @@ func (c *clusterImpl) RunWithDetails(
 	}
 
 	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
+
+	if err := ctx.Err(); err != nil {
+		l.Printf("(note: incoming context was canceled: %s", err)
+		return nil, err
+	}
+
 	if err != nil && len(physicalFileName) > 0 {
 		l.Printf("> result: %+v", err)
 		createFailedFile(physicalFileName)
 		return results, err
 	}
 
+	hasError := false
 	for _, result := range results {
 		if result.Err != nil {
+			hasError = true
 			err = result.Err
 			l.Printf("> Error for Node %d: %+v", int(result.Node), result.Err)
 		}
 	}
-	if err != nil {
+	if err != nil || hasError {
 		createFailedFile(physicalFileName)
 	}
-	l.Close()
 	return results, nil
 }
 
