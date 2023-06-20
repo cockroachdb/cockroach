@@ -186,6 +186,8 @@ func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
 	return fn(t.raftGroup)
 }
 
+func (rp *testProposer) onErrProposalDropped(ents []raftpb.Entry, stateType raft.StateType) {}
+
 func (t *testProposer) leaseDebugRLocked() string {
 	return ""
 }
