@@ -25,7 +25,22 @@ import (
 )
 
 func (env *InteractionEnv) handleStabilize(t *testing.T, d datadriven.TestData) error {
-	idxs := nodeIdxs(t, d)
+	idxs := nodeIdxs(t, d) // skips key=value args
+	for _, arg := range d.CmdArgs {
+		for i := range arg.Vals {
+			switch arg.Key {
+			case "log-level":
+				defer func(old int) {
+					env.Output.Lvl = old
+				}(env.Output.Lvl)
+				var level string
+				arg.Scan(t, i, &level)
+				if err := env.LogLevel(level); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	return env.Stabilize(idxs...)
 }
 
