@@ -16,6 +16,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -724,12 +725,16 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 // to improve this: wrap `pErr.GoError()` with a barrier and then with the
 // TransactionRetryWithProtoRefreshError.
 func NewTransactionRetryWithProtoRefreshError(
-	msg redact.RedactableString, prevTxnID uuid.UUID, nextTxn roachpb.Transaction,
+	msg redact.RedactableString,
+	prevTxnID uuid.UUID,
+	prevTxnEpoch enginepb.TxnEpoch,
+	nextTxn roachpb.Transaction,
 ) *TransactionRetryWithProtoRefreshError {
 	return &TransactionRetryWithProtoRefreshError{
 		Msg:             msg.StripMarkers(),
 		MsgRedactable:   msg,
 		PrevTxnID:       prevTxnID,
+		PrevTxnEpoch:    prevTxnEpoch,
 		NextTransaction: nextTxn,
 	}
 }
@@ -749,6 +754,27 @@ func (e *TransactionRetryWithProtoRefreshError) SafeFormatError(p errors.Printer
 // epoch.
 func (e *TransactionRetryWithProtoRefreshError) PrevTxnAborted() bool {
 	return !e.PrevTxnID.Equal(e.NextTransaction.ID)
+}
+
+// PrevTxnEpochBumped returns true if the previous transaction was not aborted
+// but its epoch was bumped. In this case, the client can continue with the
+// existing transaction, but must restart from the beginning because its writes
+// were discarded.
+//
+// NOTE: the method panics if the previous transaction was aborted and the next
+// transaction has a different identity. Callers must first check PrevTxnAborted.
+func (e *TransactionRetryWithProtoRefreshError) PrevTxnEpochBumped() bool {
+	if e.PrevTxnAborted() {
+		panic("PrevTxnEpochBumped called on aborted txn")
+	}
+	return e.PrevTxnEpoch != e.NextTransaction.Epoch
+}
+
+// TxnMustRestartFromBeginning returns true if the previous transaction's writes
+// were discarded due to the retry error, meaning that it must restart from the
+// beginning.
+func (e *TransactionRetryWithProtoRefreshError) TxnMustRestartFromBeginning() bool {
+	return e.PrevTxnAborted() || e.PrevTxnEpochBumped()
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.

@@ -841,14 +841,16 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	default:
 		tc.metrics.RestartsUnknown.Inc()
 	}
-	errTxnID := pErr.GetTxn().ID
-	newTxn := kvpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
+	prevTxn := pErr.GetTxn()
+	nextTxn := kvpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
 
 	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
 	retErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		redact.Sprint(pErr),
-		errTxnID, // the id of the transaction that encountered the error
-		newTxn)
+		redact.Sprint(pErr), /* msg */
+		prevTxn.ID,          /* prevTxnID */
+		prevTxn.Epoch,       /* prevTxnEpoch */
+		nextTxn,             /* nextTxn */
+	)
 
 	// Move to a retryable error state, where all Send() calls fail until the
 	// state is cleared.
@@ -859,7 +861,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	// old one is toast. This TxnCoordSender cannot be used any more - future
 	// Send() calls will be rejected; the client is supposed to create a new
 	// one.
-	if errTxnID != newTxn.ID {
+	if retErr.PrevTxnAborted() {
 		// Remember that this txn is aborted to reject future requests.
 		tc.mu.txn.Status = roachpb.ABORTED
 		// Abort the old txn. The client is not supposed to use use this
@@ -869,14 +871,16 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		return retErr
 	}
 
-	// This is where we get a new epoch.
-	tc.mu.txn.Update(&newTxn)
+	// This is where we get a new read timestamp or a new epoch.
+	tc.mu.txn.Update(&nextTxn)
 
-	// Reset state as this is a retryable txn error that is incrementing
+	// Reset state if this is a retryable txn error that is incrementing
 	// the transaction's epoch.
-	log.VEventf(ctx, 2, "resetting epoch-based coordinator state on retry")
-	for _, reqInt := range tc.interceptorStack {
-		reqInt.epochBumpedLocked()
+	if retErr.PrevTxnEpochBumped() {
+		log.VEventf(ctx, 2, "resetting epoch-based coordinator state on retry")
+		for _, reqInt := range tc.interceptorStack {
+			reqInt.epochBumpedLocked()
+		}
 	}
 	return retErr
 }
@@ -1162,13 +1166,15 @@ func (tc *TxnCoordSender) ManualRestart(
 		return errors.AssertionFailedf("cannot manually restart, current state: %s", tc.mu.txnState)
 	}
 
+	prevTxnID := tc.mu.txn.ID
+	prevTxnEpoch := tc.mu.txn.Epoch
 	// Invalidate any writes performed by any workers after the retry updated
 	// the txn's proto but before we synchronized (some of these writes might
 	// have been performed at the wrong epoch).
 	tc.mu.txn.Restart(pri, 0 /* upgradePriority */, ts)
 
 	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		msg, tc.mu.txn.ID, tc.mu.txn)
+		msg, prevTxnID, prevTxnEpoch, tc.mu.txn)
 
 	// Move to a retryable error state, where all Send() calls fail until the
 	// state is cleared.

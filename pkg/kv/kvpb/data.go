@@ -118,7 +118,30 @@ func PrepareTransactionForRetry(
 		if txn.Status.IsFinalized() {
 			log.Fatalf(ctx, "transaction unexpectedly finalized in (%T): %s", pErr.GetDetail(), pErr)
 		}
-		txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
+		// If the transaction is not aborted, the retry error instead tells the
+		// transaction to adjust its current read snapshot (to txn.WriteTimestamp)
+		// to avoid some form of isolation or consistency related retry condition.
+		// The handling of these errors is isolation level dependent.
+		//
+		// For isolation levels that use a single read timestamp across the entire
+		// transaction (snapshot and serializable), transactions are only permitted
+		// to adjust their read snapshot if they restart from the beginning and
+		// discard all prior writes. In these cases, we perform the restart below by
+		// incrementing the transaction's epoch.
+		//
+		// For isolation levels that use per-statement read timestamps which may
+		// differ between statements (read committed), transactions are permitted to
+		// adjust their read snapshot mid-transaction as long as they restart the
+		// current statement. In these cases, we advance the transaction's read
+		// timestamp below without incrementing the epoch and without discarding any
+		// prior writes. The user of the transaction (e.g. the SQL layer) is
+		// responsible for employing savepoints to selectively discard the writes
+		// from the current statement when it retries that statement.
+		if !txn.IsoLevel.PerStatementReadSnapshot() {
+			txn.Restart(pri, txn.Priority, txn.WriteTimestamp)
+		} else {
+			txn.BumpReadTimestamp(txn.WriteTimestamp)
+		}
 	}
 	return txn
 }
