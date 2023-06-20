@@ -279,3 +279,31 @@ var EventConsumerElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	"determines whether changefeed event processing integrates with elastic CPU control",
 	false,
 )
+
+var defaultLaggingRangesThreshold = 3 * time.Minute
+
+var defaultLaggingRangesPollingInterval = 1 * time.Minute
+
+// LaggingRangesThreshold specifies the duration by which a range must
+// be lagging behind the present to be considered as 'lagging' behind in
+// metrics.
+var LaggingRangesThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.lagging_ranges_threshold",
+	"specifies the duration by which a range must be lagging behind the "+
+		"present to be considered as 'lagging' behind in metrics. will be "+
+		"removed in v23.2 in favor of a changefeed option",
+	defaultLaggingRangesThreshold,
+	settings.PositiveDuration,
+)
+
+// LaggingRangesPollingInterval is the polling rate at which lagging ranges are
+// checked and metrics are updated.
+var LaggingRangesPollingInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.lagging_ranges_polling_rate",
+	"the polling rate at which lagging ranges are checked and "+
+		"corresponding metrics are updated. will be removed in v23.2 onwards",
+	defaultLaggingRangesPollingInterval,
+	settings.PositiveDuration,
+)
