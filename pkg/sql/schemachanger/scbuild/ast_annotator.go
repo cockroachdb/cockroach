@@ -12,6 +12,9 @@ package scbuild
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -35,6 +38,13 @@ func newAstAnnotator(original tree.Statement) (*astAnnotator, error) {
 	if err != nil {
 		return nil, err
 	}
+	// For `CREATE FUNCTION` stmt, overwrite `NumAnnotations` to be the largest of
+	// parsing the node and parsing all its body statements, to avoid annotation
+	// index-out-of-bound issue during formatting (https://github.com/cockroachdb/cockroach/issues/104242).
+	if _, ok := statement.AST.(*tree.CreateFunction); ok {
+		statement.NumAnnotations = numberAnnotationsOfCreateFunction(statement)
+	}
+
 	return &astAnnotator{
 		nonExistentNames: map[*tree.TableName]struct{}{},
 		statement:        statement.AST,
@@ -87,4 +97,40 @@ func (ann *astAnnotator) ValidateAnnotations() {
 			}
 		}))
 	f.FormatNode(ann.statement)
+}
+
+// numberAnnotationsOfCreateFunction parse each function body statement
+// and return the largest NumAnnotations in `cfStmt` and in each of those
+// parsed function body statement.
+func numberAnnotationsOfCreateFunction(
+	cfStmt statements.Statement[tree.Statement],
+) tree.AnnotationIdx {
+	if cf, ok := cfStmt.AST.(*tree.CreateFunction); !ok {
+		panic(errors.AssertionFailedf("statement is not CREATE FUNCTION"))
+	} else {
+		var funcBodyFound bool
+		var funcBodyStr string
+		for _, option := range cf.Options {
+			switch opt := option.(type) {
+			case tree.FunctionBodyStr:
+				funcBodyFound = true
+				funcBodyStr = string(opt)
+			}
+		}
+		if !funcBodyFound {
+			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no function body specified"))
+		}
+		// ret = max(cfSmt.NumAnnotations, max(funcBodyStmt.NumAnnotations within funcBodyStmts))
+		ret := cfStmt.NumAnnotations
+		funcBodyStmts, err := parser.Parse(funcBodyStr)
+		if err != nil {
+			panic(err)
+		}
+		for _, funcBodyStmt := range funcBodyStmts {
+			if funcBodyStmt.NumAnnotations > ret {
+				ret = funcBodyStmt.NumAnnotations
+			}
+		}
+		return ret
+	}
 }

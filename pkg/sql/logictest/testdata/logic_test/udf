@@ -3566,3 +3566,19 @@ query T
 SELECT f104927()
 ----
 [{"i": 1, "s": "foo"}]
+
+subtest 104242
+
+statement ok
+CREATE TABLE t_104242 (i INT PRIMARY KEY);
+
+statement ok
+CREATE TYPE typ_104242 AS ENUM ('a', 'b', 'c');
+
+# We've only fixed issue with declarative schema changer.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+CREATE FUNCTION f_104242() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 FROM t_104242 WHERE NULL::typ_104242 IN () $$;
+
+subtest end
