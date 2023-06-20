@@ -13,6 +13,7 @@ package auditlogging
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -23,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -33,18 +32,14 @@ import (
 var ConfigureRoleBasedAuditClusterSettings = func(ctx context.Context, acl *AuditConfigLock, st *cluster.Settings, sv *settings.Values) {
 }
 
-// UserAuditLogConfigEmpty is a noop global var injected by CCL hook.
-var UserAuditLogConfigEmpty = func(sv *settings.Values) bool {
-	return true
+// UserAuditEnabled is a noop global var injected by CCL hook.
+var UserAuditEnabled = func(st *cluster.Settings, clusterID uuid.UUID) bool {
+	return false
 }
 
 // UserAuditReducedConfigEnabled is a noop global var injected by CCL hook.
 var UserAuditReducedConfigEnabled = func(sv *settings.Values) bool {
 	return false
-}
-
-var UserAuditEnterpriseParamsHook = func() (*cluster.Settings, uuid.UUID, error) {
-	return nil, uuid.Nil, errors.New("Cannot validate log config, enterprise parameters not initialized yet")
 }
 
 // Auditor is an interface used to check and build different audit events.
