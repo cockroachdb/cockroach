@@ -5353,14 +5353,10 @@ def go_deps():
         name = "com_github_knz_go_libedit",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/go-libedit",
-        patch_args = ["-p1"],
-        patches = [
-            "@com_github_cockroachdb_cockroach//build/patches:com_github_knz_go_libedit.patch",
-        ],
-        sha256 = "d603b4baf8ab6608a79f56edf2e5a24c5bf96af06f665002f47267d8401a7614",
-        strip_prefix = "github.com/knz/go-libedit@v1.10.2-0.20230308124748-6f1b59dd42bc",
+        sha256 = "de5a038a75f45e5c4d19321d39b85b7007b73eb77f9ec3fcca16798236fb081f",
+        strip_prefix = "github.com/knz/go-libedit@v1.10.2-0.20230621133438-5f2b2e7387c5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/go-libedit/com_github_knz_go_libedit-v1.10.2-0.20230308124748-6f1b59dd42bc.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/go-libedit/com_github_knz_go_libedit-v1.10.2-0.20230621133438-5f2b2e7387c5.zip",
         ],
     )
     go_repository(
