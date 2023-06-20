@@ -68,6 +68,10 @@ type AggMetrics struct {
 	InternalRetryMessageCount *aggmetric.AggGauge
 	SchemaRegistrations       *aggmetric.AggCounter
 	SchemaRegistryRetries     *aggmetric.AggCounter
+	AggregatorTotalRanges     *aggmetric.AggGauge
+	AggregatorLaggingRanges   *aggmetric.AggGauge
+	AggregatorProgress        *aggmetric.AggGauge
+	CheckpointProgress        *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -128,6 +132,10 @@ type sliMetrics struct {
 	InternalRetryMessageCount *aggmetric.Gauge
 	SchemaRegistrations       *aggmetric.Counter
 	SchemaRegistryRetries     *aggmetric.Counter
+	AggregatorTotalRanges     *aggmetric.Gauge
+	AggregatorLaggingRanges   *aggmetric.Gauge
+	AggregatorProgress        *aggmetric.Gauge
+	CheckpointProgress        *aggmetric.Gauge
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -551,6 +559,30 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAggregatorTotalRanges := metric.Metadata{
+		Name:        "changefeed.aggregator_total_ranges",
+		Help:        "The number of ranges the aggregator for the node is tracking",
+		Measurement: "Total Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaAggregatorLaggingRanges := metric.Metadata{
+		Name:        "changefeed.aggregator_lagging_ranges",
+		Help:        "The number of ranges the aggregator for the node is tracking that are lagging behind the current time",
+		Measurement: "Lagging Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaAggregatorProgress := metric.Metadata{
+		Name:        "changefeed.aggregator_progress",
+		Help:        "The timestamp of the least up-to-date range being tracked by the aggregator",
+		Measurement: "Unix Timestamp Nanoseconds",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+	metaCheckpointProgress := metric.Metadata{
+		Name:        "changefeed.checkpoint_progress",
+		Help:        "The timestamp of the changefeed's persisted checkpoint (values prior to this timestamp will never need to be re-emitted)",
+		Measurement: "Unix Timestamp Nanoseconds",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -613,6 +645,10 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		InternalRetryMessageCount: b.Gauge(metaInternalRetryMessageCount),
 		SchemaRegistryRetries:     b.Counter(metaSchemaRegistryRetriesCount),
 		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
+		AggregatorTotalRanges:     b.Gauge(metaAggregatorTotalRanges),
+		AggregatorLaggingRanges:   b.Gauge(metaAggregatorLaggingRanges),
+		AggregatorProgress:        b.Gauge(metaAggregatorProgress),
+		CheckpointProgress:        b.Gauge(metaCheckpointProgress),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -672,6 +708,10 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		InternalRetryMessageCount: a.InternalRetryMessageCount.AddChild(scope),
 		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
 		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
+		AggregatorTotalRanges:     a.AggregatorTotalRanges.AddChild(scope),
+		AggregatorLaggingRanges:   a.AggregatorLaggingRanges.AddChild(scope),
+		AggregatorProgress:        a.AggregatorProgress.AddChild(scope),
+		CheckpointProgress:        a.CheckpointProgress.AddChild(scope),
 	}
 
 	a.mu.sliMetrics[scope] = sm
