@@ -6435,11 +6435,11 @@ set_csetting_stmt:
 
 // %Help: ALTER TENANT - alter tenant configuration
 // %Category: Group
-// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING, ALTER TENANT CAPABILITY, ALTER TENANT RENAME
+// %Text: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING, ALTER TENANT CAPABILITY, ALTER TENANT RENAME, ALTER TENANT SERVICE
 alter_tenant_stmt:
   alter_tenant_replication_stmt // EXTEND WITH HELP: ALTER TENANT REPLICATION
 | alter_tenant_csetting_stmt    // EXTEND WITH HELP: ALTER TENANT CLUSTER SETTING
-| alter_tenant_capability_stmt  // EXTEND WITH HELP: ALTER TENANT
+| alter_tenant_capability_stmt  // EXTEND WITH HELP: ALTER TENANT CAPABILITY
 | alter_tenant_rename_stmt      // EXTEND WITH HELP: ALTER TENANT RENAME
 | alter_tenant_service_stmt     // EXTEND WITH HELP: ALTER TENANT SERVICE
 | ALTER TENANT error            // SHOW HELP: ALTER TENANT
@@ -6612,6 +6612,8 @@ alter_tenant_capability_stmt:
       IsRevoke: true,
     }
   }
+| ALTER TENANT tenant_spec GRANT error // SHOW HELP: ALTER TENANT CAPABILITY
+| ALTER TENANT tenant_spec REVOKE error // SHOW HELP: ALTER TENANT CAPABILITY
 
 tenant_capability:
   var_name
