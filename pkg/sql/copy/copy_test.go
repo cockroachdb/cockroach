@@ -550,6 +550,10 @@ func TestLargeDynamicRows(t *testing.T) {
 			batchNumber++
 			return nil
 		},
+		CopyFromInsertRetry: func() error {
+			batchNumber--
+			return nil
+		},
 	}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)

@@ -662,9 +662,9 @@ func (c *copyMachine) processCopyData(ctx context.Context, data string, final bo
 		// If we have a full batch of rows or we have exceeded maxRowMem process
 		// them. Only set finalBatch to true if this is the last
 		// CopyData segment AND we have no more data in the buffer.
-		if len := c.currentBatchSize(); c.rowsMemAcc.Used() > c.maxRowMem || len == c.copyBatchRowSize || batchDone {
+		if len := c.currentBatchSize(); len > 0 && (c.rowsMemAcc.Used() > c.maxRowMem || len >= c.copyBatchRowSize || batchDone) {
 			if len != c.copyBatchRowSize {
-				log.VEventf(ctx, 2, "copy batch of %d rows flushing due to memory usage %d > %d", c.batch.Length(), c.rowsMemAcc.Used(), c.maxRowMem)
+				log.VEventf(ctx, 2, "copy batch of %d rows flushing due to memory usage %d > %d", len, c.rowsMemAcc.Used(), c.maxRowMem)
 			}
 			if err := c.processRows(ctx, final && c.buf.Len() == 0); err != nil {
 				return err
@@ -1046,6 +1046,11 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 			// NOTE: in theory we can also retry if c.insertRows == 0.
 			if c.implicitTxn && !c.p.SessionData().CopyFromAtomicEnabled && c.p.SessionData().CopyFromRetriesEnabled && errIsRetriable(err) {
 				log.SqlExec.Infof(ctx, "%s failed on attempt %d and is retrying, error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
+				if c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry != nil {
+					if err := c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry(); err != nil {
+						return err
+					}
+				}
 				continue
 			}
 			return err
