@@ -286,7 +286,7 @@ func (c *conn) processCommandsAsync(
 		}
 
 		// Inform the client of the default session settings.
-		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange)
+		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange, sessionID)
 		if retErr != nil {
 			return
 		}
@@ -312,7 +312,6 @@ func (c *conn) processCommandsAsync(
 			connHandler,
 			reserved,
 			c.cancelConn,
-			sessionID,
 		)
 	}()
 	return retCh
@@ -331,7 +330,10 @@ func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) erro
 }
 
 func (c *conn) sendInitialConnData(
-	ctx context.Context, sqlServer *sql.Server, onDefaultIntSizeChange func(newSize int32),
+	ctx context.Context,
+	sqlServer *sql.Server,
+	onDefaultIntSizeChange func(newSize int32),
+	sessionID clusterunique.ID,
 ) (sql.ConnectionHandler, error) {
 	connHandler, err := sqlServer.SetupConn(
 		ctx,
@@ -340,6 +342,7 @@ func (c *conn) sendInitialConnData(
 		c,
 		c.metrics.SQLMemMetrics,
 		onDefaultIntSizeChange,
+		sessionID,
 	)
 	if err != nil {
 		_ /* err */ = c.writeErr(ctx, err, c.conn)
