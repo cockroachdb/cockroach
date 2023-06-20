@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1068,6 +1069,188 @@ func TestChangefeedInitialScan(t *testing.T) {
 	}
 
 	cdcTest(t, testFn)
+}
+
+func TestChangefeedRangeHealthCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		changefeedbase.RangeHealthCheckFrequency.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 500*time.Millisecond)
+		changefeedbase.LaggingRangesThreshold.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 5*time.Second)
+
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		percentLagging := sli.AggregatorLaggingRangePercentage
+		laggingRanges := sli.AggregatorLaggingRanges
+
+		// Create a table with multiple ranges
+		numRanges := 10
+		rowsPerRange := 20
+
+		sqlDB.Exec(t, fmt.Sprintf(`
+  CREATE TABLE foo (key INT PRIMARY KEY);
+  INSERT INTO foo (key) SELECT * FROM generate_series(1, %d);
+  ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
+  `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM [SHOW RANGES FROM TABLE foo]`,
+			[][]string{{fmt.Sprint(numRanges)}},
+		)
+
+		// Skip half of the ranges
+		numRangesToSkip := numRanges / 2
+		healthAfterSkip := 1 - (float64(numRangesToSkip) / float64(numRanges))
+		skippedRanges := make(map[string]bool, 0)
+
+		var shouldFilter atomic.Int32
+		shouldFilter.Store(1)
+
+		// FilterSpanWithMutation will receive per-range ResolvedSpans
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) bool {
+			if shouldFilter.Load() == 0 {
+				return false
+			}
+			if skippedRanges[r.Span.String()] || len(skippedRanges) < numRangesToSkip {
+				skippedRanges[r.Span.String()] = true
+				return true
+			}
+			return false
+		}
+
+		require.Equal(t, laggingRanges.Value(), int64(0))
+		require.Equal(t, percentLagging.Value(), float64(0))
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH initial_scan='no', resolved='500ms'`)
+		defer closeFeed(t, foo)
+
+		testutils.SucceedsSoon(t, func() error {
+			numLagging := laggingRanges.Value()
+			percent := percentLagging.Value()
+			if numLagging != int64(numRangesToSkip) || percent != healthAfterSkip {
+				return fmt.Errorf("lagging ranges count %d should be %d and percentage %.2f should be %.2f", numLagging, numRangesToSkip, percent, healthAfterSkip)
+			}
+			return nil
+		})
+
+		shouldFilter.Store(0)
+
+		testutils.SucceedsSoon(t, func() error {
+			numLagging := laggingRanges.Value()
+			percent := percentLagging.Value()
+			if numLagging != 0 || percent != 0 {
+				return fmt.Errorf("lagging ranges count %d should be 0 and percentage %.2f should be 1.00", numLagging, percent)
+			}
+			return nil
+		})
+	}
+
+	cdcTest(t, testFn, feedTestNoTenants, feedTestEnterpriseSinks)
+}
+
+// TestFrontierCountLaggingRanges verifies the functionality of
+// schemaChangeFrontier.countLaggingSpans
+func TestFrontierCountLaggingRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mkSpan := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: []byte(start), EndKey: []byte(end)}
+	}
+
+	// In each test, a frontier across keys [a,z) is created where some spans
+	// (behindSpans) are set to an earlier frontierBehindTs, while the rest are
+	// considered up to date at frontierLatestTs.
+	frontierBehindTs := int64(5)
+	frontierLatestTs := int64(10)
+	type testcase struct {
+		behindSpans []roachpb.Span
+		// The spans to check for whether they are or are not lagging
+		checkSpans []roachpb.Span
+		// The timestamp for which spans at < timestamps are considered "lagging"
+		lagTimestamp int64
+	}
+
+	// Verify that the correct number of spans in tc.checkSpans are considered lagging
+	testFn := func(tc testcase, expected int) {
+		t.Helper()
+		if tc.lagTimestamp == int64(0) {
+			// If no lagTimestamp provided, assume everything behind latest is lagging
+			tc.lagTimestamp = frontierLatestTs
+		}
+
+		frontier, err := makeSchemaChangeFrontier(hlc.Timestamp{}, mkSpan("a", "z"))
+		require.NoError(t, err)
+
+		// Set the behindSpans to the behindTs
+		for _, span := range tc.behindSpans {
+			_, err := frontier.Forward(span, hlc.Timestamp{WallTime: frontierBehindTs})
+			require.NoError(t, err)
+		}
+
+		// Forward the other spans to latestTs
+		var upToDateSpans []roachpb.Span
+		frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+			if ts.WallTime != frontierBehindTs {
+				upToDateSpans = append(upToDateSpans, sp)
+			}
+			return span.ContinueMatch
+		})
+		for _, span := range upToDateSpans {
+			_, err := frontier.Forward(span, hlc.Timestamp{WallTime: frontierLatestTs})
+			require.NoError(t, err)
+		}
+
+		// Count the number of checkSpans that lag >= thresholdTs behind 10
+		require.Equal(t, expected, frontier.countLaggingSpans(tc.checkSpans, timeutil.Unix(0, tc.lagTimestamp)))
+	}
+
+	// no spans to check
+	testFn(testcase{
+		behindSpans: []roachpb.Span{mkSpan("a", "c")},
+		checkSpans:  []roachpb.Span{},
+	}, 0)
+
+	// no overlap between lagging spans and checkSpans
+	testFn(testcase{
+		behindSpans: []roachpb.Span{mkSpan("a", "c")},
+		checkSpans:  []roachpb.Span{mkSpan("f", "g")},
+	}, 0)
+
+	// left lagging overlap
+	testFn(testcase{
+		behindSpans: []roachpb.Span{mkSpan("a", "c")},
+		checkSpans:  []roachpb.Span{mkSpan("b", "f")},
+	}, 1)
+
+	// right lagging overlap
+	testFn(testcase{
+		behindSpans: []roachpb.Span{mkSpan("b", "e")},
+		checkSpans:  []roachpb.Span{mkSpan("a", "c")},
+	}, 1)
+
+	// multiple spans that overlap the lagging area by {partial-right, full, partial-left, none} (3 overlaps)
+	testFn(testcase{
+		behindSpans: []roachpb.Span{mkSpan("b", "m")},
+		checkSpans:  []roachpb.Span{mkSpan("a", "c"), mkSpan("d", "f"), mkSpan("l", "s"), mkSpan("v", "z")},
+	}, 3)
+
+	// no overlap + span that overlaps partially on both sides
+	testFn(testcase{
+		behindSpans: []roachpb.Span{mkSpan("a", "c"), mkSpan("g", "i"), mkSpan("k", "m")},
+		checkSpans:  []roachpb.Span{mkSpan("d", "f"), mkSpan("h", "m")},
+	}, 1)
+
+	// spans that do not pass the lag threshold
+	testFn(testcase{
+		behindSpans:  []roachpb.Span{mkSpan("b", "g")},
+		checkSpans:   []roachpb.Span{mkSpan("a", "c"), mkSpan("d", "e"), mkSpan("f", "h")},
+		lagTimestamp: frontierBehindTs - 1, // all spans should be ahead of this value
+	}, 0)
 }
 
 func TestChangefeedBackfillObservability(t *testing.T) {
