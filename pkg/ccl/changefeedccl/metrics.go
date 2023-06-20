@@ -47,29 +47,31 @@ const defaultSLIScope = "default"
 // AggMetrics are aggregated metrics keeping track of aggregated changefeed performance
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
-	EmittedMessages           *aggmetric.AggCounter
-	FilteredMessages          *aggmetric.AggCounter
-	MessageSize               *aggmetric.AggHistogram
-	EmittedBytes              *aggmetric.AggCounter
-	FlushedBytes              *aggmetric.AggCounter
-	BatchHistNanos            *aggmetric.AggHistogram
-	Flushes                   *aggmetric.AggCounter
-	FlushHistNanos            *aggmetric.AggHistogram
-	SizeBasedFlushes          *aggmetric.AggCounter
-	ParallelIOQueueNanos      *aggmetric.AggHistogram
-	SinkIOInflight            *aggmetric.AggGauge
-	CommitLatency             *aggmetric.AggHistogram
-	BackfillCount             *aggmetric.AggGauge
-	BackfillPendingRanges     *aggmetric.AggGauge
-	ErrorRetries              *aggmetric.AggCounter
-	AdmitLatency              *aggmetric.AggHistogram
-	RunningCount              *aggmetric.AggGauge
-	BatchReductionCount       *aggmetric.AggGauge
-	InternalRetryMessageCount *aggmetric.AggGauge
-	SchemaRegistrations       *aggmetric.AggCounter
-	SchemaRegistryRetries     *aggmetric.AggCounter
-	AggregatorProgress        *aggmetric.AggGauge
-	CheckpointProgress        *aggmetric.AggGauge
+	EmittedMessages                  *aggmetric.AggCounter
+	FilteredMessages                 *aggmetric.AggCounter
+	MessageSize                      *aggmetric.AggHistogram
+	EmittedBytes                     *aggmetric.AggCounter
+	FlushedBytes                     *aggmetric.AggCounter
+	BatchHistNanos                   *aggmetric.AggHistogram
+	Flushes                          *aggmetric.AggCounter
+	FlushHistNanos                   *aggmetric.AggHistogram
+	SizeBasedFlushes                 *aggmetric.AggCounter
+	ParallelIOQueueNanos             *aggmetric.AggHistogram
+	SinkIOInflight                   *aggmetric.AggGauge
+	CommitLatency                    *aggmetric.AggHistogram
+	BackfillCount                    *aggmetric.AggGauge
+	BackfillPendingRanges            *aggmetric.AggGauge
+	ErrorRetries                     *aggmetric.AggCounter
+	AdmitLatency                     *aggmetric.AggHistogram
+	RunningCount                     *aggmetric.AggGauge
+	BatchReductionCount              *aggmetric.AggGauge
+	InternalRetryMessageCount        *aggmetric.AggGauge
+	SchemaRegistrations              *aggmetric.AggCounter
+	SchemaRegistryRetries            *aggmetric.AggCounter
+	AggregatorProgress               *aggmetric.AggGauge
+	CheckpointProgress               *aggmetric.AggGauge
+	AggregatorLaggingRangePercentage *aggmetric.AggGaugeFloat64
+	AggregatorLaggingRanges          *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -109,29 +111,31 @@ func (a *AggMetrics) MetricStruct() {}
 
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
-	EmittedMessages           *aggmetric.Counter
-	FilteredMessages          *aggmetric.Counter
-	MessageSize               *aggmetric.Histogram
-	EmittedBytes              *aggmetric.Counter
-	FlushedBytes              *aggmetric.Counter
-	BatchHistNanos            *aggmetric.Histogram
-	Flushes                   *aggmetric.Counter
-	FlushHistNanos            *aggmetric.Histogram
-	SizeBasedFlushes          *aggmetric.Counter
-	ParallelIOQueueNanos      *aggmetric.Histogram
-	SinkIOInflight            *aggmetric.Gauge
-	CommitLatency             *aggmetric.Histogram
-	ErrorRetries              *aggmetric.Counter
-	AdmitLatency              *aggmetric.Histogram
-	BackfillCount             *aggmetric.Gauge
-	BackfillPendingRanges     *aggmetric.Gauge
-	RunningCount              *aggmetric.Gauge
-	BatchReductionCount       *aggmetric.Gauge
-	InternalRetryMessageCount *aggmetric.Gauge
-	SchemaRegistrations       *aggmetric.Counter
-	SchemaRegistryRetries     *aggmetric.Counter
-	AggregatorProgress        *aggmetric.Gauge
-	CheckpointProgress        *aggmetric.Gauge
+	EmittedMessages                  *aggmetric.Counter
+	FilteredMessages                 *aggmetric.Counter
+	MessageSize                      *aggmetric.Histogram
+	EmittedBytes                     *aggmetric.Counter
+	FlushedBytes                     *aggmetric.Counter
+	BatchHistNanos                   *aggmetric.Histogram
+	Flushes                          *aggmetric.Counter
+	FlushHistNanos                   *aggmetric.Histogram
+	SizeBasedFlushes                 *aggmetric.Counter
+	ParallelIOQueueNanos             *aggmetric.Histogram
+	SinkIOInflight                   *aggmetric.Gauge
+	CommitLatency                    *aggmetric.Histogram
+	ErrorRetries                     *aggmetric.Counter
+	AdmitLatency                     *aggmetric.Histogram
+	BackfillCount                    *aggmetric.Gauge
+	BackfillPendingRanges            *aggmetric.Gauge
+	RunningCount                     *aggmetric.Gauge
+	BatchReductionCount              *aggmetric.Gauge
+	InternalRetryMessageCount        *aggmetric.Gauge
+	SchemaRegistrations              *aggmetric.Counter
+	SchemaRegistryRetries            *aggmetric.Counter
+	AggregatorProgress               *aggmetric.Gauge
+	CheckpointProgress               *aggmetric.Gauge
+	AggregatorLaggingRangePercentage *aggmetric.GaugeFloat64
+	AggregatorLaggingRanges          *aggmetric.Gauge
 
 	mu struct {
 		syncutil.Mutex
@@ -607,6 +611,18 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Unix Timestamp Nanoseconds",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}
+	metaAggregatorLaggingRangePercentage := metric.Metadata{
+		Name:        "changefeed.aggregator_lagging_range_percentage",
+		Help:        "The percentage of ranges the aggregator is responsible for that are considered to be lagging behind",
+		Measurement: "Total Ranges",
+		Unit:        metric.Unit_PERCENT,
+	}
+	metaAggregatorLaggingRanges := metric.Metadata{
+		Name:        "changefeed.aggregator_lagging_ranges",
+		Help:        "The number of ranges the aggregator for the node is tracking that are lagging behind the current time",
+		Measurement: "Lagging Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
 		var min int64
@@ -617,6 +633,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		}
 		return min
 	}
+
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -672,15 +689,17 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 			SigFigs:      1,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
-		BackfillCount:             b.Gauge(metaChangefeedBackfillCount),
-		BackfillPendingRanges:     b.Gauge(metaChangefeedBackfillPendingRanges),
-		RunningCount:              b.Gauge(metaChangefeedRunning),
-		BatchReductionCount:       b.Gauge(metaBatchReductionCount),
-		InternalRetryMessageCount: b.Gauge(metaInternalRetryMessageCount),
-		SchemaRegistryRetries:     b.Counter(metaSchemaRegistryRetriesCount),
-		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
-		AggregatorProgress:        b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
-		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
+		BackfillCount:                    b.Gauge(metaChangefeedBackfillCount),
+		BackfillPendingRanges:            b.Gauge(metaChangefeedBackfillPendingRanges),
+		RunningCount:                     b.Gauge(metaChangefeedRunning),
+		BatchReductionCount:              b.Gauge(metaBatchReductionCount),
+		InternalRetryMessageCount:        b.Gauge(metaInternalRetryMessageCount),
+		SchemaRegistryRetries:            b.Counter(metaSchemaRegistryRetriesCount),
+		SchemaRegistrations:              b.Counter(metaSchemaRegistryRegistrations),
+		AggregatorProgress:               b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
+		CheckpointProgress:               b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
+		AggregatorLaggingRangePercentage: b.GaugeFloat64(metaAggregatorLaggingRangePercentage),
+		AggregatorLaggingRanges:          b.Gauge(metaAggregatorLaggingRanges),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -719,27 +738,29 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	sm := &sliMetrics{
-		EmittedMessages:           a.EmittedMessages.AddChild(scope),
-		FilteredMessages:          a.FilteredMessages.AddChild(scope),
-		MessageSize:               a.MessageSize.AddChild(scope),
-		EmittedBytes:              a.EmittedBytes.AddChild(scope),
-		FlushedBytes:              a.FlushedBytes.AddChild(scope),
-		BatchHistNanos:            a.BatchHistNanos.AddChild(scope),
-		Flushes:                   a.Flushes.AddChild(scope),
-		FlushHistNanos:            a.FlushHistNanos.AddChild(scope),
-		SizeBasedFlushes:          a.SizeBasedFlushes.AddChild(scope),
-		ParallelIOQueueNanos:      a.ParallelIOQueueNanos.AddChild(scope),
-		SinkIOInflight:            a.SinkIOInflight.AddChild(scope),
-		CommitLatency:             a.CommitLatency.AddChild(scope),
-		ErrorRetries:              a.ErrorRetries.AddChild(scope),
-		AdmitLatency:              a.AdmitLatency.AddChild(scope),
-		BackfillCount:             a.BackfillCount.AddChild(scope),
-		BackfillPendingRanges:     a.BackfillPendingRanges.AddChild(scope),
-		RunningCount:              a.RunningCount.AddChild(scope),
-		BatchReductionCount:       a.BatchReductionCount.AddChild(scope),
-		InternalRetryMessageCount: a.InternalRetryMessageCount.AddChild(scope),
-		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
-		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
+		EmittedMessages:                  a.EmittedMessages.AddChild(scope),
+		FilteredMessages:                 a.FilteredMessages.AddChild(scope),
+		MessageSize:                      a.MessageSize.AddChild(scope),
+		EmittedBytes:                     a.EmittedBytes.AddChild(scope),
+		FlushedBytes:                     a.FlushedBytes.AddChild(scope),
+		BatchHistNanos:                   a.BatchHistNanos.AddChild(scope),
+		Flushes:                          a.Flushes.AddChild(scope),
+		FlushHistNanos:                   a.FlushHistNanos.AddChild(scope),
+		SizeBasedFlushes:                 a.SizeBasedFlushes.AddChild(scope),
+		ParallelIOQueueNanos:             a.ParallelIOQueueNanos.AddChild(scope),
+		SinkIOInflight:                   a.SinkIOInflight.AddChild(scope),
+		CommitLatency:                    a.CommitLatency.AddChild(scope),
+		ErrorRetries:                     a.ErrorRetries.AddChild(scope),
+		AdmitLatency:                     a.AdmitLatency.AddChild(scope),
+		BackfillCount:                    a.BackfillCount.AddChild(scope),
+		BackfillPendingRanges:            a.BackfillPendingRanges.AddChild(scope),
+		RunningCount:                     a.RunningCount.AddChild(scope),
+		BatchReductionCount:              a.BatchReductionCount.AddChild(scope),
+		InternalRetryMessageCount:        a.InternalRetryMessageCount.AddChild(scope),
+		SchemaRegistryRetries:            a.SchemaRegistryRetries.AddChild(scope),
+		SchemaRegistrations:              a.SchemaRegistrations.AddChild(scope),
+		AggregatorLaggingRangePercentage: a.AggregatorLaggingRangePercentage.AddChild(scope),
+		AggregatorLaggingRanges:          a.AggregatorLaggingRanges.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)

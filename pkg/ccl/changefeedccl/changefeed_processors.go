@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -91,9 +93,10 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	lastHighWaterFlush time.Time     // last time high watermark was checkpointed.
-	flushFrequency     time.Duration // how often high watermark can be checkpointed.
-	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
+	lastHighWaterFlush   time.Time     // last time high watermark was checkpointed.
+	flushFrequency       time.Duration // how often high watermark can be checkpointed.
+	lastSpanFlush        time.Time     // last time expensive, span based checkpoint was written.
+	lastRangeHealthCheck time.Time     // last time all ranges were healthchecked
 
 	// frontier keeps track of resolved timestamps for spans along with schema change
 	// boundary information.
@@ -331,6 +334,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	// Generate expensive checkpoint only after we ran for a while.
 	ca.lastSpanFlush = timeutil.Now()
+	ca.lastRangeHealthCheck = timeutil.Now()
 
 	if ca.knobs.OnDrain != nil {
 		ca.drainWatchCh = ca.knobs.OnDrain()
@@ -713,6 +717,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	if advanced {
 		ca.sliMetrics.setResolved(ca.sliMetricsID, ca.frontier.Frontier())
 	}
+	ca.checkRangeHealth(resolved)
 
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
@@ -1580,6 +1585,57 @@ func (cf *changeFrontier) isBehind() bool {
 	return timeutil.Since(frontier.GoTime()) > cf.slownessThreshold()
 }
 
+// checkRangeHealth verifies ranges tracked by this aggregator are healthy
+// and are reporting up-to-date rangefeed checkpoints.
+func (ca *changeAggregator) checkRangeHealth(resolved jobspb.ResolvedSpan) {
+	frequency := changefeedbase.RangeHealthCheckFrequency.Get(&ca.flowCtx.Cfg.Settings.SV)
+	if timeutil.Since(ca.lastRangeHealthCheck) < frequency {
+		return
+	}
+	defer func() { ca.lastRangeHealthCheck = timeutil.Now() }()
+
+	// The progress of ranges during a backfill is already tracked by the
+	// backfill_pending_ranges metric.  Ranges lagging during a backfill are going
+	// to be problematic at a different threshold to during normal operation, so
+	// the lagging ranges metrics are reserved for just the non-backfill case.
+	if resolved.Timestamp.Equal(ca.frontier.BackfillTS()) {
+		ca.sliMetrics.AggregatorLaggingRangePercentage.Update(0)
+		ca.sliMetrics.AggregatorLaggingRanges.Update(0)
+		return
+	}
+
+	lagThreshold := changefeedbase.LaggingRangesThreshold.Get(&ca.flowCtx.Cfg.Settings.SV)
+
+	// Don't bother calling the expensive AllRangeSpans if we know nothing is unhealthy
+	if timeutil.Since(ca.frontier.Frontier().GoTime()) < lagThreshold {
+		ca.sliMetrics.AggregatorLaggingRangePercentage.Update(0)
+		ca.sliMetrics.AggregatorLaggingRanges.Update(0)
+		return
+	}
+
+	// Grab all ranges being watched by the aggregator
+	db := ca.flowCtx.Cfg.DB.KV()
+	sender := db.NonTransactionalSender()
+	distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
+	spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+	for _, watch := range ca.spec.Watches {
+		spans = append(spans, watch.Span)
+	}
+
+	ranges := make([]roachpb.Span, 0, len(ca.spec.Watches))
+	if _, err := distSender.AllRangeSpans(ca.Ctx(), spans, func(s roachpb.Span) error {
+		ranges = append(ranges, s)
+		return nil
+	}); err != nil {
+		return
+	}
+
+	behindRanges := ca.frontier.countLaggingSpans(ranges, timeutil.Now().Add(-lagThreshold))
+
+	ca.sliMetrics.AggregatorLaggingRanges.Update(int64(behindRanges))
+	ca.sliMetrics.AggregatorLaggingRangePercentage.Update(float64(behindRanges) / float64(len(ranges)))
+}
+
 // Potentially log the most behind span in the frontier for debugging if the
 // frontier is behind
 func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) {
@@ -1793,6 +1849,37 @@ func (f *schemaChangeFrontier) getCheckpointSpans(
 	maxBytes int64,
 ) (spans []roachpb.Span, timestamp hlc.Timestamp) {
 	return getCheckpointSpans(f.frontierTimestamp(), f.Entries, maxBytes)
+}
+
+// countLaggingSpans, given a sorted list of spans, returns the number of spans
+// that according to the frontier are behind the provided lagThresholdTs
+func (f *schemaChangeFrontier) countLaggingSpans(
+	spansAscending []roachpb.Span, lagThresholdTs time.Time,
+) int {
+	spanIdx := 0
+	behindRanges := 0
+
+	// Ranges from both AllRangeSpans and ca.frontier.Entries are in ascending key
+	// order, so scanning across both together will handle every overlap.
+	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+		// Scan through ranges until the next overlap is found
+		for spanIdx < len(spansAscending) && !sp.Overlaps(spansAscending[spanIdx]) && sp.EndKey.Compare(spansAscending[spanIdx].Key) >= 0 {
+			spanIdx++
+		}
+		for spanIdx < len(spansAscending) && sp.Overlaps(spansAscending[spanIdx]) {
+			if ts.GoTime().Before(lagThresholdTs) {
+				behindRanges += 1
+			} else if spansAscending[spanIdx].EndKey.Compare(sp.EndKey) >= 0 {
+				// If the range extends to the next span, check it against the next one
+				break
+			}
+
+			spanIdx++
+		}
+		return span.ContinueMatch
+	})
+
+	return behindRanges
 }
 
 // BackfillTS returns the timestamp of the incoming spans for an ongoing
