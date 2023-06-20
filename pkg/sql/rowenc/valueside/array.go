@@ -227,6 +227,8 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.True, nil
 	case types.BitFamily:
 		return encoding.BitArray, nil
+	case types.PGLSNFamily:
+		return encoding.Int, nil
 	case types.UuidFamily:
 		return encoding.UUID, nil
 	case types.INetFamily:
@@ -279,6 +281,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedDecimalValue(b, &t.Decimal), nil
 	case *tree.DDate:
 		return encoding.EncodeUntaggedIntValue(b, t.UnixEpochDaysWithOrig()), nil
+	case *tree.DPGLSN:
+		return encoding.EncodeUntaggedIntValue(b, int64(t.LSN)), nil
 	case *tree.DBox2D:
 		return encoding.EncodeUntaggedBox2DValue(b, t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:

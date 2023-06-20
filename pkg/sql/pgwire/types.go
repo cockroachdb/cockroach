@@ -213,6 +213,11 @@ func writeTextDatumNotNull(
 	case *tree.DVoid:
 		b.putInt32(0)
 
+	case *tree.DPGLSN:
+		s := v.LSN.String()
+		b.putInt32(int32(len(s)))
+		b.write([]byte(s))
+
 	case *tree.DBox2D:
 		s := v.Repr()
 		b.putInt32(int32(len(s)))
@@ -722,6 +727,10 @@ func writeBinaryDatumNotNull(
 
 	case *tree.DVoid:
 		b.putInt32(0)
+
+	case *tree.DPGLSN:
+		b.putInt32(8)
+		b.putInt64(int64(v.LSN))
 
 	case *tree.DBox2D:
 		b.putInt32(32)

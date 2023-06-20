@@ -339,6 +339,13 @@ func mustParseDGeometry(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
+func mustParseDPGLSN(t *testing.T, s string) tree.Datum {
+	d, err := tree.ParseDPGLSN(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 func mustParseDINet(t *testing.T, s string) tree.Datum {
 	d, err := tree.ParseDIPAddrFromINetString(s)
 	if err != nil {
@@ -398,6 +405,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.Geometry:         mustParseDGeometry,
 	types.INet:             mustParseDINet,
 	types.VarBit:           mustParseDVarBit,
+	types.PGLSN:            mustParseDPGLSN,
 	types.TSQuery:          mustParseDTSQuery,
 	types.TSVector:         mustParseDTSVector,
 	types.BytesArray:       mustParseDArrayOfType(types.Bytes),
@@ -408,6 +416,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.BoolArray:        mustParseDArrayOfType(types.Bool),
 	types.UUIDArray:        mustParseDArrayOfType(types.Uuid),
 	types.DateArray:        mustParseDArrayOfType(types.Date),
+	types.PGLSNArray:       mustParseDArrayOfType(types.PGLSN),
 	types.TimeArray:        mustParseDArrayOfType(types.Time),
 	types.TimeTZArray:      mustParseDArrayOfType(types.TimeTZ),
 	types.TimestampArray:   mustParseDArrayOfType(types.Timestamp),
@@ -415,6 +424,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.IntervalArray:    mustParseDArrayOfType(types.Interval),
 	types.INetArray:        mustParseDArrayOfType(types.INet),
 	types.VarBitArray:      mustParseDArrayOfType(types.VarBit),
+	types.PGLSNArray:       mustParseDArrayOfType(types.PGLSN),
 }
 
 func typeSet(tys ...*types.T) map[*types.T]struct{} {
@@ -509,6 +519,10 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			),
 		},
 		{
+			c:            tree.NewStrVal("A/1"),
+			parseOptions: typeSet(types.String, types.PGLSN, types.Bytes, types.TSQuery, types.TSVector),
+		},
+		{
 			c:            tree.NewStrVal(`{"a": 1}`),
 			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
 		},
@@ -567,6 +581,11 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.TimestampArray, types.TimestampTZArray, types.TSVector),
 		},
 		{
+			c: tree.NewStrVal("{1A/1,2/2A}"),
+			parseOptions: typeSet(types.String, types.PGLSNArray, types.Bytes, types.BytesArray,
+				types.StringArray, types.TSQuery, types.TSVector),
+		},
+		{
 			c: tree.NewStrVal("{2010-09-28 12:00:00.1, 2010-09-29 12:00:00.1}"),
 			parseOptions: typeSet(
 				types.String,
@@ -620,57 +639,58 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for i, test := range testCases {
-		t.Log(test.c.String())
-		parseableCount := 0
+		t.Run(test.c.String(), func(t *testing.T) {
+			parseableCount := 0
 
-		// Make sure it can be resolved as each of those types or throws a parsing error.
-		for _, availType := range test.c.AvailableTypes() {
+			// Make sure it can be resolved as each of those types or throws a parsing error.
+			for _, availType := range test.c.AvailableTypes() {
 
-			// The enum value in c.AvailableTypes() is AnyEnum, so we will not be able to
-			// resolve that exact type. In actual execution, the constant would be resolved
-			// as a hydrated enum type instead.
-			if availType.Family() == types.EnumFamily {
-				continue
-			}
-
-			semaCtx := tree.MakeSemaContext()
-			typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
-			var res tree.Datum
-			if err == nil {
-				res, err = eval.Expr(context.Background(), evalCtx, typedExpr)
-			}
-			if err != nil {
-				if !strings.Contains(err.Error(), "could not parse") &&
-					!strings.Contains(err.Error(), "parsing") &&
-					!strings.Contains(err.Error(), "out of range") &&
-					!strings.Contains(err.Error(), "exceeds supported") {
-					// Parsing errors are permitted for this test, but the number of correctly
-					// parseable types will be verified. Any other error should throw a failure.
-					t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
-						" or throw a parsing error, found %v",
-						i, test.c, availType, err)
+				// The enum value in c.AvailableTypes() is AnyEnum, so we will not be able to
+				// resolve that exact type. In actual execution, the constant would be resolved
+				// as a hydrated enum type instead.
+				if availType.Family() == types.EnumFamily {
+					continue
 				}
-				continue
-			}
-			parseableCount++
 
-			if _, isExpected := test.parseOptions[availType]; !isExpected {
-				t.Errorf("%d: type %s not expected to be resolvable from the tree.StrVal %v, found %v",
-					i, availType, test.c, res)
-			} else {
-				expectedDatum := parseFuncs[availType](t, test.c.RawString())
-				if res.Compare(evalCtx, expectedDatum) != 0 {
-					t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+
-						", found %v",
-						i, availType, test.c, expectedDatum, res)
+				semaCtx := tree.MakeSemaContext()
+				typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
+				var res tree.Datum
+				if err == nil {
+					res, err = eval.Expr(context.Background(), evalCtx, typedExpr)
+				}
+				if err != nil {
+					if !strings.Contains(err.Error(), "could not parse") &&
+						!strings.Contains(err.Error(), "parsing") &&
+						!strings.Contains(err.Error(), "out of range") &&
+						!strings.Contains(err.Error(), "exceeds supported") {
+						// Parsing errors are permitted for this test, but the number of correctly
+						// parseable types will be verified. Any other error should throw a failure.
+						t.Errorf("%d: expected resolving %v as available type %s would either succeed"+
+							" or throw a parsing error, found %v",
+							i, test.c, availType, err)
+					}
+					continue
+				}
+				parseableCount++
+
+				if _, isExpected := test.parseOptions[availType]; !isExpected {
+					t.Errorf("%d: type %s not expected to be resolvable from the tree.StrVal %v, found %v",
+						i, availType, test.c, res)
+				} else {
+					expectedDatum := parseFuncs[availType](t, test.c.RawString())
+					if res.Compare(evalCtx, expectedDatum) != 0 {
+						t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+
+							", found %v",
+							i, availType, test.c, expectedDatum, res)
+					}
 				}
 			}
-		}
 
-		// Make sure the expected number of types can be resolved from the tree.StrVal.
-		if expCount := len(test.parseOptions); parseableCount != expCount {
-			t.Errorf("%d: expected %d successfully resolvable types for the tree.StrVal %v, found %d",
-				i, expCount, test.c, parseableCount)
-		}
+			// Make sure the expected number of types can be resolved from the tree.StrVal.
+			if expCount := len(test.parseOptions); parseableCount != expCount {
+				t.Errorf("%d: expected %d successfully resolvable types for the tree.StrVal %v, found %d",
+					i, expCount, test.c, parseableCount)
+			}
+		})
 	}
 }

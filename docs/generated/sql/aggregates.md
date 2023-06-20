@@ -39,6 +39,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_agg"></a><code>array_agg(arg1: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: tuple) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
@@ -82,6 +84,8 @@
 <tr><td><a name="array_cat_agg"></a><code>array_cat_agg(arg1: jsonb[]) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Unnests the selected arrays into elements that are then aggregated into a single array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat_agg"></a><code>array_cat_agg(arg1: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Unnests the selected arrays into elements that are then aggregated into a single array.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_cat_agg"></a><code>array_cat_agg(arg1: pg_lsn[]) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Unnests the selected arrays into elements that are then aggregated into a single array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat_agg"></a><code>array_cat_agg(arg1: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Unnests the selected arrays into elements that are then aggregated into a single array.</p>
 </span></td><td>Immutable</td></tr>
@@ -221,6 +225,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="max"></a><code>max(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="max"></a><code>max(arg1: pg_lsn) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="max"></a><code>max(arg1: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="max"></a><code>max(arg1: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
@@ -264,6 +270,8 @@
 <tr><td><a name="min"></a><code>min(arg1: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="min"></a><code>min(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="min"></a><code>min(arg1: pg_lsn) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="min"></a><code>min(arg1: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td><td>Immutable</td></tr>

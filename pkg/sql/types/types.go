@@ -458,6 +458,15 @@ var (
 		},
 	}
 
+	// PGLSN is the type representing a PostgreSQL LSN object.
+	PGLSN = &T{
+		InternalType: InternalType{
+			Family: PGLSNFamily,
+			Oid:    oid.T_pg_lsn,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Void is the type representing void.
 	Void = &T{
 		InternalType: InternalType{
@@ -521,6 +530,7 @@ var (
 		Oid,
 		Uuid,
 		INet,
+		PGLSN,
 		Time,
 		TimeTZ,
 		Jsonb,
@@ -598,9 +608,13 @@ var (
 	UUIDArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: Uuid, Oid: oid.T__uuid, Locale: &emptyLocale}}
 
-	// TimeArray is the type of an array value having Date-typed elements.
+	// DateArray is the type of an array value having Date-typed elements.
 	DateArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: Date, Oid: oid.T__date, Locale: &emptyLocale}}
+
+	// PGLSNArray is the type of an array value having PGLSN-typed elements.
+	PGLSNArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: PGLSN, Oid: oid.T__pg_lsn, Locale: &emptyLocale}}
 
 	// TimeArray is the type of an array value having Time-typed elements.
 	TimeArray = &T{InternalType: InternalType{
@@ -1451,6 +1465,7 @@ var familyNames = map[Family]string{
 	IntervalFamily:       "interval",
 	JsonFamily:           "jsonb",
 	OidFamily:            "oid",
+	PGLSNFamily:          "pg_lsn",
 	StringFamily:         "string",
 	TimeFamily:           "time",
 	TimestampFamily:      "timestamp",
@@ -1718,6 +1733,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		default:
 			panic(errors.AssertionFailedf("unexpected Oid: %v", errors.Safe(t.Oid())))
 		}
+	case PGLSNFamily:
+		return "pg_lsn"
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
 		case oid.T_text:
@@ -1951,7 +1968,7 @@ func (t *T) SQLStringForError() redact.RedactableString {
 		IntervalFamily, StringFamily, BytesFamily, TimestampTZFamily, CollatedStringFamily, OidFamily,
 		UnknownFamily, UuidFamily, INetFamily, TimeFamily, JsonFamily, TimeTZFamily, BitFamily,
 		GeometryFamily, GeographyFamily, Box2DFamily, VoidFamily, EncodedKeyFamily, TSQueryFamily,
-		TSVectorFamily, AnyFamily:
+		TSVectorFamily, AnyFamily, PGLSNFamily:
 		// These types do not contain other types, and do not require redaction.
 		return redact.Sprint(redact.SafeString(t.SQLString()))
 	}

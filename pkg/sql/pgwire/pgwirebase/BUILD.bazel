@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/lex",
         "//pkg/sql/oidext",
+        "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/eval",
