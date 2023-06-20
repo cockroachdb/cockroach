@@ -2291,6 +2291,13 @@ func TestLogic_with(
 	runLogicTest(t, "with")
 }
 
+func TestLogic_workload_indexrecs(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "workload_indexrecs")
+}
+
 func TestLogic_zero(
 	t *testing.T,
 ) {
