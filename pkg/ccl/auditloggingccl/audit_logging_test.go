@@ -32,22 +32,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRoleBasedAuditEnterpriseGated(t *testing.T) {
+func TestRoleBasedAuditEnterpriseEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testQuery := `SET CLUSTER SETTING sql.log.user_audit = 'ALL ALL'`
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+	// Test that we can change the cluster setting when enterprise is enabled.
+	rootRunner.Exec(t, testQuery)
+}
+
+func TestRoleBasedAuditEnterpriseDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testQuery := `SET CLUSTER SETTING sql.log.user_audit = 'ALL ALL'`
+	// Disable enterprise.
+	utilccl.TestingDisableEnterprise()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(context.Background())
-
-	testQuery := `SET CLUSTER SETTING sql.log.user_audit = 'ALL ALL'`
-
 	// Test that we cannot change the cluster setting when enterprise is disabled.
-	enableEnterprise := utilccl.TestingDisableEnterprise()
 	rootRunner.ExpectErr(t, "role-based audit logging requires enterprise license", testQuery)
-	// Enable enterprise.
-	enableEnterprise()
-	// Test that we can change the cluster setting when enterprise is enabled.
-	rootRunner.Exec(t, testQuery)
 }
 
 func TestSingleRoleAuditLogging(t *testing.T) {
