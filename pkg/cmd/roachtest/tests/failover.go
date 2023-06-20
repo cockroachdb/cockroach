@@ -192,9 +192,11 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
+	m := c.NewMonitor(ctx, c.Range(1, 9))
+
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
-		failer := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings, rng)
+		failer := makeFailerWithoutLocalNoop(t, c, m, failureMode, opts, settings, rng)
 		if c.IsLocal() && !failer.CanUseLocal() {
 			t.L().Printf("skipping failure mode %q on local cluster", failureMode)
 			continue
@@ -207,7 +209,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 9))
 
-	m := c.NewMonitor(ctx, c.Range(1, 9))
 	conn := c.Conn(ctx, t.L(), 1)
 
 	// Place 5 replicas of all ranges on n3-n9, keeping n1-n2 as SQL gateways.
@@ -279,7 +280,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 						}
 					}
 				}
-				failer.Ready(ctx, m)
+				failer.Ready(ctx)
 				nodeFailers[node] = failer
 			}
 
@@ -361,14 +362,15 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings, rng).(PartialFailer)
+	m := c.NewMonitor(ctx, c.Range(1, 7))
+
+	failer := makeFailer(t, c, m, failureModeBlackhole, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
 
-	m := c.NewMonitor(ctx, c.Range(1, 7))
 	conn := c.Conn(ctx, t.L(), 1)
 
 	// Place all ranges on n1-n3 to start with.
@@ -433,7 +435,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 			for _, tc := range testcases {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx, m)
+				failer.Ready(ctx)
 
 				// Ranges and leases may occasionally escape their constraints. Move
 				// them to where they should be.
@@ -493,7 +495,9 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings, rng).(PartialFailer)
+	m := c.NewMonitor(ctx, c.Range(1, 6))
+
+	failer := makeFailer(t, c, m, failureModeBlackhole, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -514,7 +518,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
 	c.Start(ctx, t.L(), opts, settings, c.Range(4, 6))
-	m := c.NewMonitor(ctx, c.Range(1, 6))
 
 	// Create the kv database on n4-n6.
 	t.L().Printf("creating workload database")
@@ -567,7 +570,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 			for _, node := range []int{4, 5, 6} {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx, m)
+				failer.Ready(ctx)
 
 				// Ranges may occasionally escape their constraints. Move them to where
 				// they should be.
@@ -625,14 +628,15 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureModeBlackhole, opts, settings, rng).(PartialFailer)
+	m := c.NewMonitor(ctx, c.Range(1, 7))
+
+	failer := makeFailer(t, c, m, failureModeBlackhole, opts, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
 
-	m := c.NewMonitor(ctx, c.Range(1, 7))
 	conn := c.Conn(ctx, t.L(), 1)
 
 	// Place all ranges on n1-n3, and an extra liveness leaseholder replica on n4.
@@ -682,7 +686,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 			for _, node := range []int{5, 6, 7} {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx, m)
+				failer.Ready(ctx)
 
 				// Ranges and leases may occasionally escape their constraints. Move
 				// them to where they should be.
@@ -740,14 +744,15 @@ func runFailoverNonSystem(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureMode, opts, settings, rng)
+	m := c.NewMonitor(ctx, c.Range(1, 6))
+
+	failer := makeFailer(t, c, m, failureMode, opts, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
-	m := c.NewMonitor(ctx, c.Range(1, 6))
 	conn := c.Conn(ctx, t.L(), 1)
 
 	// Constrain all existing zone configs to n1-n3.
@@ -790,7 +795,7 @@ func runFailoverNonSystem(
 			for _, node := range []int{4, 5, 6} {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx, m)
+				failer.Ready(ctx)
 
 				// Ranges may occasionally escape their constraints. Move them
 				// to where they should be.
@@ -848,14 +853,15 @@ func runFailoverLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureMode, opts, settings, rng)
+	m := c.NewMonitor(ctx, c.Range(1, 4))
+
+	failer := makeFailer(t, c, m, failureMode, opts, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 4))
 
-	m := c.NewMonitor(ctx, c.Range(1, 4))
 	conn := c.Conn(ctx, t.L(), 1)
 
 	// Constrain all existing zone configs to n1-n3.
@@ -903,7 +909,7 @@ func runFailoverLiveness(
 		for i := 0; i < 9; i++ {
 			sleepFor(ctx, t, time.Minute)
 
-			failer.Ready(ctx, m)
+			failer.Ready(ctx)
 
 			// Ranges and leases may occasionally escape their constraints. Move them
 			// to where they should be.
@@ -960,14 +966,15 @@ func runFailoverSystemNonLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	failer := makeFailer(t, c, failureMode, opts, settings, rng)
+	m := c.NewMonitor(ctx, c.Range(1, 6))
+
+	failer := makeFailer(t, c, m, failureMode, opts, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
-	m := c.NewMonitor(ctx, c.Range(1, 6))
 	conn := c.Conn(ctx, t.L(), 1)
 
 	// Constrain all existing zone configs to n4-n6, except liveness which is
@@ -1015,7 +1022,7 @@ func runFailoverSystemNonLiveness(
 			for _, node := range []int{4, 5, 6} {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx, m)
+				failer.Ready(ctx)
 
 				// Ranges may occasionally escape their constraints. Move them
 				// to where they should be.
@@ -1070,12 +1077,13 @@ var allFailureModes = []failureMode{
 func makeFailer(
 	t test.Test,
 	c cluster.Cluster,
+	m cluster.Monitor,
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
 	rng *rand.Rand,
 ) Failer {
-	f := makeFailerWithoutLocalNoop(t, c, failureMode, opts, settings, rng)
+	f := makeFailerWithoutLocalNoop(t, c, m, failureMode, opts, settings, rng)
 	if c.IsLocal() && !f.CanUseLocal() {
 		t.L().Printf(
 			`failure mode %q not supported on local clusters, using "noop" failure mode instead`,
@@ -1088,6 +1096,7 @@ func makeFailer(
 func makeFailerWithoutLocalNoop(
 	t test.Test,
 	c cluster.Cluster,
+	m cluster.Monitor,
 	failureMode failureMode,
 	opts option.StartOpts,
 	settings install.ClusterSettings,
@@ -1117,6 +1126,7 @@ func makeFailerWithoutLocalNoop(
 		return &crashFailer{
 			t:             t,
 			c:             c,
+			m:             m,
 			startOpts:     opts,
 			startSettings: settings,
 		}
@@ -1124,6 +1134,7 @@ func makeFailerWithoutLocalNoop(
 		return &diskStallFailer{
 			t:             t,
 			c:             c,
+			m:             m,
 			startOpts:     opts,
 			startSettings: settings,
 			staller:       &dmsetupDiskStaller{t: t, c: c},
@@ -1161,7 +1172,7 @@ type Failer interface {
 
 	// Ready is called some time before failing each node, when the cluster and
 	// workload is running and after recovering the previous node failure if any.
-	Ready(ctx context.Context, m cluster.Monitor)
+	Ready(ctx context.Context)
 
 	// Cleanup cleans up when the test exits. This is needed e.g. when the cluster
 	// is reused by a different test.
@@ -1190,7 +1201,7 @@ func (f *noopFailer) String() string                          { return string(f.
 func (f *noopFailer) CanUseLocal() bool                       { return true }
 func (f *noopFailer) CanRunWith(failureMode) bool             { return true }
 func (f *noopFailer) Setup(context.Context)                   {}
-func (f *noopFailer) Ready(context.Context, cluster.Monitor)  {}
+func (f *noopFailer) Ready(context.Context)                   {}
 func (f *noopFailer) Cleanup(context.Context)                 {}
 func (f *noopFailer) Fail(context.Context, int)               {}
 func (f *noopFailer) FailPartial(context.Context, int, []int) {}
@@ -1218,11 +1229,11 @@ func (f *blackholeFailer) Mode() failureMode {
 	return failureModeBlackhole
 }
 
-func (f *blackholeFailer) String() string                         { return string(f.Mode()) }
-func (f *blackholeFailer) CanUseLocal() bool                      { return false } // needs iptables
-func (f *blackholeFailer) CanRunWith(failureMode) bool            { return true }
-func (f *blackholeFailer) Setup(context.Context)                  {}
-func (f *blackholeFailer) Ready(context.Context, cluster.Monitor) {}
+func (f *blackholeFailer) String() string              { return string(f.Mode()) }
+func (f *blackholeFailer) CanUseLocal() bool           { return false } // needs iptables
+func (f *blackholeFailer) CanRunWith(failureMode) bool { return true }
+func (f *blackholeFailer) Setup(context.Context)       {}
+func (f *blackholeFailer) Ready(context.Context)       {}
 
 func (f *blackholeFailer) Cleanup(ctx context.Context) {
 	f.c.Run(ctx, f.c.All(), `sudo iptables -F`)
@@ -1303,13 +1314,13 @@ type crashFailer struct {
 	startSettings install.ClusterSettings
 }
 
-func (f *crashFailer) Mode() failureMode                          { return failureModeCrash }
-func (f *crashFailer) String() string                             { return string(f.Mode()) }
-func (f *crashFailer) CanUseLocal() bool                          { return true }
-func (f *crashFailer) CanRunWith(failureMode) bool                { return true }
-func (f *crashFailer) Setup(_ context.Context)                    {}
-func (f *crashFailer) Ready(_ context.Context, m cluster.Monitor) { f.m = m }
-func (f *crashFailer) Cleanup(_ context.Context)                  {}
+func (f *crashFailer) Mode() failureMode           { return failureModeCrash }
+func (f *crashFailer) String() string              { return string(f.Mode()) }
+func (f *crashFailer) CanUseLocal() bool           { return true }
+func (f *crashFailer) CanRunWith(failureMode) bool { return true }
+func (f *crashFailer) Setup(context.Context)       {}
+func (f *crashFailer) Ready(context.Context)       {}
+func (f *crashFailer) Cleanup(context.Context)     {}
 
 func (f *crashFailer) Fail(ctx context.Context, nodeID int) {
 	f.m.ExpectDeath()
@@ -1335,13 +1346,10 @@ func (f *diskStallFailer) Mode() failureMode           { return failureModeDiskS
 func (f *diskStallFailer) String() string              { return string(f.Mode()) }
 func (f *diskStallFailer) CanUseLocal() bool           { return false } // needs dmsetup
 func (f *diskStallFailer) CanRunWith(failureMode) bool { return true }
+func (f *diskStallFailer) Ready(context.Context)       {}
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
 	f.staller.Setup(ctx)
-}
-
-func (f *diskStallFailer) Ready(_ context.Context, m cluster.Monitor) {
-	f.m = m
 }
 
 func (f *diskStallFailer) Cleanup(ctx context.Context) {
@@ -1385,7 +1393,7 @@ func (f *pauseFailer) CanRunWith(other failureMode) bool {
 	return other != failureModeDiskStall
 }
 
-func (f *pauseFailer) Ready(ctx context.Context, _ cluster.Monitor) {
+func (f *pauseFailer) Ready(ctx context.Context) {
 	// The process pause can trip the disk stall detector, so we disable it. We
 	// could let it fire, but we'd like to see if the node can recover from the
 	// pause and keep working.
