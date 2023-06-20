@@ -268,6 +268,9 @@ type (
 		// test-only field, allowing us to avoid passing a test.Test
 		// implementation in the tests
 		_buildVersion *version.Version
+		// test-only field, allows us to have deterministic tests even as
+		// the predecessor data changes.
+		predecessorFunc func(*rand.Rand, *version.Version) (string, error)
 	}
 
 	shouldStop chan struct{}
@@ -320,16 +323,17 @@ func NewTest(
 
 	testCtx, cancel := context.WithCancel(ctx)
 	test := &Test{
-		ctx:       testCtx,
-		cancel:    cancel,
-		cluster:   c,
-		logger:    testLogger,
-		crdbNodes: crdbNodes,
-		options:   opts,
-		rt:        t,
-		prng:      prng,
-		seed:      seed,
-		hooks:     &testHooks{prng: prng, crdbNodes: crdbNodes},
+		ctx:             testCtx,
+		cancel:          cancel,
+		cluster:         c,
+		logger:          testLogger,
+		crdbNodes:       crdbNodes,
+		options:         opts,
+		rt:              t,
+		prng:            prng,
+		seed:            seed,
+		hooks:           &testHooks{prng: prng, crdbNodes: crdbNodes},
+		predecessorFunc: release.RandomPredecessor,
 	}
 
 	assertValidTest(test, t.Fatal)
@@ -479,7 +483,7 @@ func (t *Test) run(plan *TestPlan) error {
 }
 
 func (t *Test) plan() (*TestPlan, error) {
-	previousRelease, err := release.LatestPredecessor(t.buildVersion())
+	previousRelease, err := t.predecessorFunc(t.prng, t.buildVersion())
 	if err != nil {
 		return nil, err
 	}
