@@ -161,8 +161,18 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		}
 		logStmt(injectVectorizePanicsStmt)
 		injectOptimizerPanicsStmt := "SET testing_optimizer_inject_panics=true;"
-		if _, err := conn.Exec(injectOptimizerPanicsStmt); err != nil {
-			t.Fatal(err)
+		// Because we've already enabled the vectorized panic injection,
+		// enabling the optimizer panic injection might fail due to the injected
+		// vectorized panic. To go around this, we will retry this statement at
+		// most 100 times.
+		const maxRetries = 100
+		for attempt := 0; ; attempt++ {
+			if _, err = conn.Exec(injectOptimizerPanicsStmt); err == nil {
+				break
+			}
+			if attempt == maxRetries {
+				t.Fatalf("failed to enable optimizer panic injection with %d retries: %v", maxRetries, err)
+			}
 		}
 		logStmt(injectOptimizerPanicsStmt)
 
