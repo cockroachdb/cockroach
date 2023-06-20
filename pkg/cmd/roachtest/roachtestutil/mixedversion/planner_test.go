@@ -12,7 +12,6 @@ package mixedversion
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math/rand"
 	"testing"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
@@ -46,14 +44,7 @@ var (
 
 	// Hardcode build and previous versions so that the test won't fail
 	// when new versions are released.
-	buildVersion    = version.MustParse("v23.1.0")
-	previousVersion = func() string {
-		pv, err := release.LatestPredecessor(buildVersion)
-		if err != nil {
-			panic(err)
-		}
-		return pv
-	}()
+	buildVersion = version.MustParse("v23.1.0")
 )
 
 const (
@@ -75,52 +66,46 @@ func TestTestPlanner(t *testing.T) {
 
 	plan, err := mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 12)
+	require.Len(t, plan.steps, 11)
 
 	// Assert on the pretty-printed version of the test plan as that
 	// asserts the ordering of the steps we want to take, and as a bonus
 	// tests the printing function itself.
-	expectedPrettyPlan := fmt.Sprintf(`
-mixed-version test plan for upgrading from %[1]s to <current>:
-├── starting cluster from fixtures for version "%[1]s" (1)
+	expectedPrettyPlan := `
+mixed-version test plan for upgrading from 22.2.1 to <current>:
+├── starting cluster from fixtures for version "22.2.1" (1)
 ├── upload current binary to all cockroach nodes (:1-4) (2)
 ├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (3)
-├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+` (4)
+├── preventing auto-upgrades by setting ` + "`preserve_downgrade_option`" + ` (4)
 ├── run "initialize bank workload" (5)
 ├── start background hooks concurrently
 │   ├── run "bank workload", after 50ms delay (6)
-│   ├── run "rand workload", after 50ms delay (7)
-│   └── run "csv server", after 200ms delay (8)
-├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 4 with binary version <current> (9)
-│   ├── run mixed-version hooks concurrently
-│   │   ├── run "mixed-version 1", after 100ms delay (10)
-│   │   └── run "mixed-version 2", after 100ms delay (11)
+│   ├── run "rand workload", after 200ms delay (7)
+│   └── run "csv server", after 500ms delay (8)
+├── upgrade nodes :1-4 from "22.2.1" to "<current>"
+│   ├── restart node 1 with binary version <current> (9)
+│   ├── run "mixed-version 1" (10)
+│   ├── restart node 4 with binary version <current> (11)
 │   ├── restart node 3 with binary version <current> (12)
-│   ├── restart node 2 with binary version <current> (13)
-│   └── restart node 1 with binary version <current> (14)
-├── downgrade nodes :1-4 from "<current>" to "%[1]s"
-│   ├── restart node 2 with binary version %[1]s (15)
-│   ├── run "mixed-version 1" (16)
-│   ├── restart node 1 with binary version %[1]s (17)
-│   ├── run "mixed-version 2" (18)
-│   ├── restart node 3 with binary version %[1]s (19)
-│   └── restart node 4 with binary version %[1]s (20)
-├── upgrade nodes :1-4 from "%[1]s" to "<current>"
+│   ├── run "mixed-version 2" (13)
+│   └── restart node 2 with binary version <current> (14)
+├── downgrade nodes :1-4 from "<current>" to "22.2.1"
+│   ├── restart node 4 with binary version 22.2.1 (15)
+│   ├── run "mixed-version 2" (16)
+│   ├── restart node 2 with binary version 22.2.1 (17)
+│   ├── restart node 3 with binary version 22.2.1 (18)
+│   ├── restart node 1 with binary version 22.2.1 (19)
+│   └── run "mixed-version 1" (20)
+├── upgrade nodes :1-4 from "22.2.1" to "<current>"
 │   ├── restart node 4 with binary version <current> (21)
-│   ├── restart node 3 with binary version <current> (22)
+│   ├── run "mixed-version 1" (22)
 │   ├── restart node 1 with binary version <current> (23)
-│   ├── run mixed-version hooks concurrently
-│   │   ├── run "mixed-version 1", after 0s delay (24)
-│   │   └── run "mixed-version 2", after 0s delay (25)
-│   └── restart node 2 with binary version <current> (26)
-├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (27)
-├── run mixed-version hooks concurrently
-│   ├── run "mixed-version 1", after 100ms delay (28)
-│   └── run "mixed-version 2", after 0s delay (29)
-└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (30)
-`, previousVersion,
-	)
+│   ├── restart node 2 with binary version <current> (24)
+│   ├── run "mixed-version 2" (25)
+│   └── restart node 3 with binary version <current> (26)
+├── finalize upgrade by resetting ` + "`preserve_downgrade_option`" + ` (27)
+└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (28)
+`
 
 	expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
 	require.Equal(t, expectedPrettyPlan, plan.PrettyPrint())
@@ -211,15 +196,15 @@ func TestDeterministicHookSeeds(t *testing.T) {
 
 		// We can hardcode these paths since we are using a fixed seed in
 		// these tests.
-		firstRun := plan.steps[4].(sequentialRunStep).steps[2].(runHookStep)
+		firstRun := plan.steps[4].(sequentialRunStep).steps[4].(runHookStep)
 		require.Equal(t, "do something", firstRun.hook.name)
 		require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		secondRun := plan.steps[5].(sequentialRunStep).steps[3].(runHookStep)
+		secondRun := plan.steps[5].(sequentialRunStep).steps[1].(runHookStep)
 		require.Equal(t, "do something", secondRun.hook.name)
 		require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		thirdRun := plan.steps[6].(sequentialRunStep).steps[1].(runHookStep)
+		thirdRun := plan.steps[6].(sequentialRunStep).steps[3].(runHookStep)
 		require.Equal(t, "do something", thirdRun.hook.name)
 		require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
@@ -232,10 +217,10 @@ func TestDeterministicHookSeeds(t *testing.T) {
 	}
 
 	expectedData := [][]int{
-		{82, 1, 17, 3, 87},
-		{73, 17, 6, 37, 43},
-		{82, 35, 57, 54, 8},
-		{7, 95, 26, 31, 65},
+		{97, 94, 35, 65, 21},
+		{40, 30, 46, 88, 46},
+		{96, 91, 48, 85, 76},
+		{31, 40, 59, 37, 1},
 	}
 	const numRums = 50
 	for j := 0; j < numRums; j++ {

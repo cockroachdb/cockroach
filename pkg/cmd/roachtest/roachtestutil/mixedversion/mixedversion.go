@@ -419,7 +419,7 @@ func (t *Test) run(plan *TestPlan) error {
 }
 
 func (t *Test) plan() (*TestPlan, error) {
-	previousRelease, err := release.LatestPredecessor(t.buildVersion())
+	previousRelease, err := release.RandomPredecessor(t.prng, t.buildVersion())
 	if err != nil {
 		return nil, err
 	}
