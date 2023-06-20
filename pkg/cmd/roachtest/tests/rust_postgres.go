@@ -162,6 +162,11 @@ func registerRustPostgres(r registry.Registry) {
 		results.summarizeAll(
 			t, "rust-postgres" /* ormName */, blocklistName, expectedFailures, version, "",
 		)
+
+		// We restart the cluster with the default port again so that any post-test
+		// validation will be able to connect using the default port.
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 	}
 
 	r.Add(registry.TestSpec{
