@@ -76,6 +76,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
+		skip.UnderDeadlockWithIssue(t, 99559)
 		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
 	})
 
@@ -112,6 +113,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("txn_id_resolution", func(t *testing.T) {
+		skip.UnderDeadlockWithIssue(t, 99770)
 		testTxnIDResolutionRPC(ctx, t, testHelper)
 	})
 
@@ -132,6 +134,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("tenant_span_stats", func(t *testing.T) {
+		skip.UnderStressWithIssue(t, 99559)
 		skip.UnderDeadlockWithIssue(t, 99770)
 		testTenantSpanStats(ctx, t, testHelper)
 	})
@@ -1387,6 +1390,7 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 	})
 
 	t.Run("test tenant ranges pagination", func(t *testing.T) {
+		skip.UnderStressWithIssue(t, 92382)
 		ctx := context.Background()
 		resp1, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
 			Limit: 1,
