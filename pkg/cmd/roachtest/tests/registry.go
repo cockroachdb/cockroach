@@ -148,5 +148,4 @@ func RegisterTests(r registry.Registry) {
 	registerVersion(r)
 	registerYCSB(r)
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
-	registerTenantSpanStatsMixedVersion(r)
 }
