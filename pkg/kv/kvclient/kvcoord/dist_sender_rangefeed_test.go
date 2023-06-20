@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -802,6 +803,121 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 
 		// We also know that we have blocked numCatchupToBlock ranges in their catchup scan.
 		require.EqualValues(t, numCatchupToBlock, metrics.RangefeedCatchupRanges.Value())
+	})
+}
+
+// TestRangefeedLaggingRangesCallback ensures the
+// kvcoord.WithLaggingRangesUpdate callback works correctly.
+func TestRangefeedLaggingRangesCallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	// Set a small threshold and frequeny so lagging ranges can be detected faster.
+	kvcoord.LaggingRangesThreshold.Override(
+		context.Background(), &ts.ClusterSettings().SV, 250*time.Millisecond)
+	kvcoord.LaggingRangesCheckFrequency.Override(
+		context.Background(), &ts.ClusterSettings().SV, 25*time.Millisecond)
+
+	// Ensure a fast closed timestamp interval so ranges can catch up fast.
+	kvserver.RangeFeedRefreshInterval.Override(
+		context.Background(), &ts.ClusterSettings().SV, 20*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(
+		context.Background(), &ts.ClusterSettings().SV, 20*time.Millisecond)
+	closedts.TargetDuration.Override(
+		context.Background(), &ts.ClusterSettings().SV, 20*time.Millisecond)
+
+	kvserver.RangefeedEnabled.Override(
+		context.Background(), &ts.ClusterSettings().SV, true)
+
+	// Create 10 ranges and plan to put 4 into a lagging state.
+	numRangesToSkip := int64(4)
+	sqlDB.ExecMultiple(t,
+		`CREATE TABLE foo (key INT PRIMARY KEY)`,
+		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 10)`,
+		`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 9, 1))`,
+	)
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+	testutils.RunTrueAndFalse(t, "mux", func(t *testing.T, useMux bool) {
+		ignoreValues := func(event kvcoord.RangeFeedMessage) {}
+
+		skipMu := syncutil.Mutex{}
+		skippedRanges := map[string]struct{}{}
+		var stopSkip atomic.Bool
+		// `shouldSkip` continuously skips checkpoints for the first `numRangesToSkip` ranges it sees.
+		// skipping is disabled by setting `stopSkip` to true.
+		shouldSkip := func(event *kvpb.RangeFeedEvent) bool {
+			if stopSkip.Load() {
+				return false
+			}
+			switch event.GetValue().(type) {
+			case *kvpb.RangeFeedCheckpoint:
+				sp := event.Checkpoint.Span
+				skipMu.Lock()
+				defer skipMu.Unlock()
+				if _, ok := skippedRanges[sp.String()]; ok || int64(len(skippedRanges)) < numRangesToSkip {
+					skippedRanges[sp.String()] = struct{}{}
+					return true
+				}
+			}
+			return false
+		}
+
+		var numLaggingRanges atomic.Int64
+		laggingRangesCallback := func(i int64) {
+			numLaggingRanges.Store(i)
+		}
+		// Upon shutdown, we should report zero lagging ranges.
+		defer func() {
+			require.EqualValues(t, 0, numLaggingRanges.Load())
+		}()
+
+		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, ts.Clock().Now(), ignoreValues, useMux,
+			kvcoord.TestingWithOnRangefeedEvent(
+				func(ctx context.Context, s roachpb.Span, _ int64, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
+					return shouldSkip(event), nil
+				}),
+			kvcoord.WithLaggingRangesUpdate(laggingRangesCallback))
+		defer closeFeed()
+
+		// Assert there are `numRangesToSkip` lagging ranges.
+		testutils.SucceedsWithin(t, func() error {
+			observedLaggingRanges := numLaggingRanges.Load()
+			if observedLaggingRanges != numRangesToSkip {
+				return errors.Newf("expected %d lagging ranges but found %d", numRangesToSkip, observedLaggingRanges)
+			}
+			return nil
+		}, 10*time.Second)
+
+		// Stop skipping checkpoints. Assert that all ranges catch up.
+		stopSkip.Store(true)
+		testutils.SucceedsWithin(t, func() error {
+			observedLaggingRanges := numLaggingRanges.Load()
+			if observedLaggingRanges != 0 {
+				return errors.Newf("expected %d lagging ranges but found %d", numRangesToSkip, observedLaggingRanges)
+			}
+			return nil
+		}, 10*time.Second)
+
+		// Start skipping ranges again assert there are `numRangesToSkip` lagging ranges.
+		stopSkip.Store(false)
+		testutils.SucceedsWithin(t, func() error {
+			observedLaggingRanges := numLaggingRanges.Load()
+			if observedLaggingRanges != numRangesToSkip {
+				return errors.Newf("expected %d lagging ranges but found %d", numRangesToSkip, observedLaggingRanges)
+			}
+			return nil
+		}, 10*time.Second)
 	})
 }
 

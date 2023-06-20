@@ -47,6 +47,7 @@ type Config struct {
 	Metrics                 *kvevent.Metrics
 	OnBackfillCallback      func() func()
 	OnBackfillRangeCallback func(int64) (func(), func())
+	UpdateLaggingRanges     func(int64)
 	MM                      *mon.BytesMonitor
 	WithDiff                bool
 	SchemaChangeEvents      changefeedbase.SchemaChangeEventClass
@@ -107,6 +108,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.SchemaFeed,
 		sc, pff, bf, cfg.UseMux, cfg.Targets, cfg.Knobs)
 	f.onBackfillCallback = cfg.OnBackfillCallback
+	f.updateLaggingRanges = cfg.UpdateLaggingRanges
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)
@@ -174,9 +176,10 @@ type kvFeed struct {
 	writer              kvevent.Writer
 	codec               keys.SQLCodec
 
-	onBackfillCallback func() func()
-	schemaChangeEvents changefeedbase.SchemaChangeEventClass
-	schemaChangePolicy changefeedbase.SchemaChangePolicy
+	onBackfillCallback  func() func()
+	updateLaggingRanges func(int64)
+	schemaChangeEvents  changefeedbase.SchemaChangeEventClass
+	schemaChangePolicy  changefeedbase.SchemaChangePolicy
 
 	useMux bool
 
@@ -485,11 +488,12 @@ func (f *kvFeed) runUntilTableEvent(
 
 	g := ctxgroup.WithContext(ctx)
 	physicalCfg := rangeFeedConfig{
-		Spans:    stps,
-		Frontier: resumeFrontier.Frontier(),
-		WithDiff: f.withDiff,
-		Knobs:    f.knobs,
-		UseMux:   f.useMux,
+		Spans:               stps,
+		Frontier:            resumeFrontier.Frontier(),
+		WithDiff:            f.withDiff,
+		Knobs:               f.knobs,
+		UseMux:              f.useMux,
+		UpdateLaggingRanges: f.updateLaggingRanges,
 	}
 
 	// The following two synchronous calls works as follows:

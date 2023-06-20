@@ -50,6 +50,8 @@ kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide c
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records	tenant-ro
 kv.rangefeed.closed_timestamp_refresh_interval	duration	3s	the interval at which closed-timestamp updatesare delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval	tenant-ro
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	tenant-rw
+kv.rangefeed.lagging_ranges_frequency	duration	1m0s	controls the frequency at which a rangefeed checks for ranges which have fallen behind	tenant-rw
+kv.rangefeed.lagging_ranges_threshold	duration	3m0s	controls how far behind a range must be from the present to be considered as 'lagging' behind in metrics	tenant-rw
 kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)	tenant-rw
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	tenant-rw
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	tenant-rw

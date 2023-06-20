@@ -455,6 +455,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaFeed:              sf,
 		Knobs:                   ca.knobs.FeedKnobs,
 		UseMux:                  changefeedbase.UseMuxRangeFeed.Get(&cfg.Settings.SV),
+		UpdateLaggingRanges:     ca.sliMetrics.getLaggingRangesCallback(),
 	}, nil
 }
 

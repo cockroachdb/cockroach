@@ -94,8 +94,12 @@ func muxRangeFeed(
 	if cfg.knobs.metrics != nil {
 		m.metrics = cfg.knobs.metrics
 	}
-
 	divideAllSpansOnRangeBoundaries(spans, m.startSingleRangeFeed, ds, &m.g)
+	if cfg.withLaggingRangesUpdate != nil {
+		m.g.GoCtx(func(ctx context.Context) error {
+			return ds.monitorLaggingRanges(ctx, rr, cfg.withLaggingRangesUpdate)
+		})
+	}
 	return errors.CombineErrors(m.g.Wait(), ctx.Err())
 }
 

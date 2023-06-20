@@ -81,6 +81,28 @@ var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 	settings.WithPublic)
 
+// LaggingRangesCheckFrequency is the frequency at which the rangefeed will
+// check for ranges which have fallen behind.
+var LaggingRangesCheckFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"kv.rangefeed.lagging_ranges_frequency",
+	"controls the frequency at which a rangefeed checks for ranges which have fallen behind",
+	1*time.Minute,
+	settings.NonNegativeDuration,
+	settings.WithPublic,
+)
+
+// LaggingRangesThreshold is how far behind a range must be from the present to
+// be considered as 'lagging' behind in metrics
+var LaggingRangesThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"kv.rangefeed.lagging_ranges_threshold",
+	"controls how far behind a range must be from the present to be considered as 'lagging' behind in metrics",
+	3*time.Minute,
+	settings.NonNegativeDuration,
+	settings.WithPublic,
+)
+
 func maxConcurrentCatchupScans(sv *settings.Values) int {
 	l := catchupScanConcurrency.Get(sv)
 	if l == 0 {
@@ -90,9 +112,10 @@ func maxConcurrentCatchupScans(sv *settings.Values) int {
 }
 
 type rangeFeedConfig struct {
-	useMuxRangeFeed bool
-	overSystemTable bool
-	withDiff        bool
+	useMuxRangeFeed         bool
+	overSystemTable         bool
+	withDiff                bool
+	withLaggingRangesUpdate func(int64)
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -136,6 +159,15 @@ func WithSystemTablePriority() RangeFeedOption {
 func WithDiff() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withDiff = true
+	})
+}
+
+// WithLaggingRangesUpdate registers a callback which is called periodically
+// with the number of lagging ranges. The frequency and strictness of this check
+// are determined by cluster settings in this package.
+func WithLaggingRangesUpdate(f func(int64)) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.withLaggingRangesUpdate = f
 	})
 }
 
@@ -239,10 +271,53 @@ func (ds *DistSender) RangeFeedSpans(
 		}
 	})
 
+	if cfg.withLaggingRangesUpdate != nil {
+		g.GoCtx(func(ctx context.Context) error {
+			return ds.monitorLaggingRanges(ctx, rr, cfg.withLaggingRangesUpdate)
+		})
+	}
+
 	// Kick off the initial set of ranges.
 	divideAllSpansOnRangeBoundaries(spans, sendSingleRangeInfo(rangeCh), ds, &g)
 
 	return g.Wait()
+}
+
+func (ds *DistSender) monitorLaggingRanges(
+	ctx context.Context, rr *rangeFeedRegistry, updateLaggingRanges func(int64),
+) error {
+	// If we are getting shut down, we should reset this metric.
+	defer func() {
+		updateLaggingRanges(0)
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(LaggingRangesCheckFrequency.Get(&ds.st.SV)):
+			count := int64(0)
+			thresholdTS := timeutil.Now().Add(-1 * LaggingRangesThreshold.Get(&ds.st.SV))
+			i := 0
+			if err := rr.ForEachPartialRangefeed(func(rfCtx RangeFeedContext, feed PartialRangeFeed) error {
+				// The resolved timestamp of a range determines the timestamp which is caught up to.
+				// However, during catchup scans, this is not set. For catchup scans,
+				// we consider the time the partial rangefeed was created to be its starting time.
+				ts := hlc.Timestamp{WallTime: feed.CreatedTime.UnixNano()}
+				if !feed.Resolved.EqOrdering(hlc.Timestamp{}) {
+					ts = feed.Resolved
+				}
+
+				i += 1
+				if ts.Less(hlc.Timestamp{WallTime: thresholdTS.UnixNano()}) {
+					count += 1
+				}
+				return nil
+			}, true); err != nil {
+				return err
+			}
+			updateLaggingRanges(count)
+		}
+	}
 }
 
 // divideAllSpansOnRangeBoundaries divides all spans on range boundaries and invokes
@@ -303,34 +378,45 @@ type PartialRangeFeed struct {
 
 // ActiveRangeFeedIterFn is an iterator function which is passed PartialRangeFeed structure.
 // Iterator function may return an iterutil.StopIteration sentinel error to stop iteration
-// early; any other error is propagated.
+// early.
 type ActiveRangeFeedIterFn func(rfCtx RangeFeedContext, feed PartialRangeFeed) error
 
-// ForEachActiveRangeFeed invokes provided function for each active range feed.
-func (ds *DistSender) ForEachActiveRangeFeed(fn ActiveRangeFeedIterFn) (iterErr error) {
-	const continueIter = true
-	const stopIter = false
+const continueIter = true
+const stopIter = false
 
+// ForEachActiveRangeFeed invokes provided function for each active rangefeed.
+func (ds *DistSender) ForEachActiveRangeFeed(fn ActiveRangeFeedIterFn) (iterErr error) {
+	ds.activeRangeFeeds.Range(func(k, v interface{}) bool {
+		r := k.(*rangeFeedRegistry)
+		iterErr = r.ForEachPartialRangefeed(fn, false)
+		return iterErr == nil
+	})
+
+	return iterutil.Map(iterErr)
+}
+
+// ForEachPartialRangefeed invokes provided function for each partial rangefeed. Use manageIterationErrs
+// if the fn uses iterutil.StopIteration to stop iteration.
+func (r *rangeFeedRegistry) ForEachPartialRangefeed(
+	fn ActiveRangeFeedIterFn, manageIterationErrs bool,
+) (iterErr error) {
 	partialRangeFeed := func(active *activeRangeFeed) PartialRangeFeed {
 		active.Lock()
 		defer active.Unlock()
 		return active.PartialRangeFeed
 	}
-
-	ds.activeRangeFeeds.Range(func(k, v interface{}) bool {
-		r := k.(*rangeFeedRegistry)
-		r.ranges.Range(func(k, v interface{}) bool {
-			active := k.(*activeRangeFeed)
-			if err := fn(r.RangeFeedContext, partialRangeFeed(active)); err != nil {
-				iterErr = err
-				return stopIter
-			}
-			return continueIter
-		})
-		return iterErr == nil
+	r.ranges.Range(func(k, v interface{}) bool {
+		active := k.(*activeRangeFeed)
+		if err := fn(r.RangeFeedContext, partialRangeFeed(active)); err != nil {
+			iterErr = err
+			return stopIter
+		}
+		return continueIter
 	})
-
-	return iterutil.Map(iterErr)
+	if manageIterationErrs {
+		return iterutil.Map(iterErr)
+	}
+	return iterErr
 }
 
 // activeRangeFeed is a thread safe PartialRangeFeed.
@@ -445,10 +531,10 @@ func newActiveRangeFeed(
 			StartAfter:  startAfter,
 			CreatedTime: timeutil.Now(),
 		},
-		release: func() {
-			rr.ranges.Delete(active)
-			c.Dec(1)
-		},
+	}
+	active.release = func() {
+		rr.ranges.Delete(active)
+		c.Dec(1)
 	}
 	rr.ranges.Store(active, nil)
 	c.Inc(1)
