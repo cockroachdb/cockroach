@@ -280,6 +280,40 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
+	"workload_index_recs": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(false /* hasTimstamp */, false /* hasBudget */),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "timestamptz", Typ: types.TimestampTZ}},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(true /* hasTimstamp */, false /* hasBudget */),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "budget", Typ: types.String}},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(false /* hasTimstamp */, true /* hasBudget */),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "timestamptz", Typ: types.TimestampTZ},
+				{Name: "budget", Typ: types.String},
+			},
+			types.String,
+			makeWorkloadIndexRecsGeneratorFactory(true /* hasTimstamp */, true /* hasBudget */),
+			"Returns set of index recommendations",
+			volatility.Immutable,
+		),
+	),
+
 	"unnest": makeBuiltin(genProps(),
 		// See https://www.postgresql.org/docs/current/static/functions-array.html
 		makeGeneratorOverloadWithReturnType(
@@ -1073,8 +1107,8 @@ func makeVariadicUnnestGenerator(
 	return g, nil
 }
 
-// multipleArrayValueGenerator is a value generator that returns each element of a
-// list of arrays.
+// multipleArrayValueGenerator is a value generator that returns each element of
+// a list of arrays.
 type multipleArrayValueGenerator struct {
 	arrays    []*tree.DArray
 	nextIndex int
@@ -1124,6 +1158,27 @@ func (s *multipleArrayValueGenerator) Values() (tree.Datums, error) {
 		}
 	}
 	return s.datums, nil
+}
+
+// makeWorkloadIndexRecsGeneratorFactory uses the arrayValueGenerator to return
+// all the index recommendations as an array of strings. When the hasTimestamp
+// is true, it means that we only care about the index after some timestamp. The
+// hasBudget represents that there is a space limit if it is true.
+func makeWorkloadIndexRecsGeneratorFactory(
+	hasTimestamp bool, hasBudget bool,
+) eval.GeneratorOverload {
+	return func(_ context.Context, _ *eval.Context, _ tree.Datums) (eval.ValueGenerator, error) {
+		// Invoke the workloadindexrec.FindWorkloadRecs() to get indexRecs, err once
+		// it is implemented. The string array {"1", "2", "3"} is just dummy data
+		indexRecs := []string{"1", "2", "3"}
+		arr := tree.NewDArray(types.String)
+		for _, indexRec := range indexRecs {
+			if err := arr.Append(tree.NewDString(indexRec)); err != nil {
+				return nil, err
+			}
+		}
+		return &arrayValueGenerator{array: arr}, nil
+	}
 }
 
 func makeArrayGenerator(
