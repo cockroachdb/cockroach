@@ -771,6 +771,32 @@ func newRunResultDetails(node Node, err error) *RunResultDetails {
 	return &res
 }
 
+// Output prints either the combined, or separated stdout and stderr command output
+func (r *RunResultDetails) Output() string {
+	var builder strings.Builder
+
+	if s := strings.TrimSpace(r.Stdout); s != "" {
+		builder.WriteString("stdout:\n```\n")
+		builder.WriteString(s)
+		builder.WriteString("\n```")
+	}
+	if s := strings.TrimSpace(r.Stderr); s != "" {
+		if builder.Len() > 0 {
+			builder.WriteByte('\n')
+		}
+		builder.WriteString("stderr:\n```\n")
+		builder.WriteString(s)
+		builder.WriteString("\n```")
+	}
+	if s := strings.TrimSpace(r.CombinedOut); s != "" {
+		builder.WriteString("combined out:\n```\n")
+		builder.WriteString(s)
+		builder.WriteString("\n```")
+	}
+
+	return builder.String()
+}
+
 // RunCmdOptions is used to configure the behavior of `runCmdOnSingleNode`
 type RunCmdOptions struct {
 	combinedOut             bool
@@ -860,7 +886,13 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	}
 
 	if res.Err != nil {
-		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", node, cmd)
+		output := res.Output()
+		// Somewhat arbitrary limit to give us a chance to see some of the output
+		// in the failure_*.log, since the full output is in the run_*.log.
+		if len(output) > 2048 {
+			output = "<truncated> ... " + output[:512]
+		}
+		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n%s", node, cmd, output)
 		res.Err = errors.WithDetail(res.Err, detailMsg)
 	}
 	return res, nil
@@ -912,6 +944,17 @@ func (c *SyncedCluster) Run(
 
 // processResults returns the error from the RunResultDetails with the highest RemoteExitStatus
 func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) error {
+
+	// Easier to read output when we indent each line of the output. If an error is
+	// present, we also include the error message at the top.
+	format := func(s string, e error) string {
+		s = strings.ReplaceAll(strings.TrimSpace(s), "\n", "\n\t")
+		if e != nil {
+			return fmt.Sprintf("%v\n\t%s", e, s)
+		}
+		return s
+	}
+
 	var resultWithError *RunResultDetails
 	for i, r := range results {
 		// We no longer wait for all nodes to complete before returning in the case of an error (#100403)
@@ -923,7 +966,7 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 		// Emit the cached output of each result. When stream == true, the output is emitted
 		// as it is generated in `runCmdOnSingleNode`.
 		if !stream {
-			fmt.Fprintf(stdout, "  %2d: %s\n%v\n", i+1, strings.TrimSpace(r.CombinedOut), r.Err)
+			fmt.Fprintf(stdout, "  %2d: %s\n", i+1, format(r.CombinedOut, r.Err))
 		}
 
 		if r.Err != nil {
