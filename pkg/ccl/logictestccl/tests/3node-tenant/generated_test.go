@@ -2432,6 +2432,13 @@ func TestTenantLogic_with(
 	runLogicTest(t, "with")
 }
 
+func TestTenantLogic_workload_indexrecs(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "workload_indexrecs")
+}
+
 func TestTenantLogic_zero(
 	t *testing.T,
 ) {
