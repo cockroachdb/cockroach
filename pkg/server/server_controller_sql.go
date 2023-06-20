@@ -14,6 +14,7 @@ import (
 	"context"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -60,7 +61,7 @@ func (c *serverController) sqlMux(
 	case pgwire.PreServeReady:
 		tenantName := roachpb.TenantName(status.GetTenantName())
 		if tenantName == "" {
-			tenantName = roachpb.TenantName(defaultTenantSelect.Get(&c.st.SV))
+			tenantName = roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV))
 		}
 
 		s, err := c.getServer(ctx, tenantName)
