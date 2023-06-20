@@ -1428,6 +1428,15 @@ func getSQLStats(
 	return p.extendedEvalCtx.statsProvider, nil
 }
 
+// legacyAnonymizedStmt is a placeholder value for the
+// crdb_internal.node_statement_statistics(anonymized) column. The column used
+// to contain the SQL statement scrubbed of all identifiers. At the time
+// of writing this comment, the column was unused for several releases. Since
+// it's expensive to compute, we no longer populate it. We keep the column in
+// the table to avoid breaking tools that scan crdb_internal tables (even though
+// we don't officially support that, this is an easy step to take).
+var legacyAnonymizedStmt = tree.NewDString("")
+
 var crdbInternalNodeStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics. ` +
 		`The contents of this table are flushed to the system.statement_statistics table at the interval set by the ` +
@@ -1535,12 +1544,6 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		statementVisitor := func(_ context.Context, stats *appstatspb.CollectedStatementStatistics) error {
-			anonymized := tree.DNull
-			anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stats.Key.Query, p)
-			if ok {
-				anonymized = alloc.NewDString(tree.DString(anonStr))
-			}
-
 			errString := tree.DNull
 			if stats.Stats.SensitiveInfo.LastErr != "" {
 				errString = alloc.NewDString(tree.DString(stats.Stats.SensitiveInfo.LastErr))
@@ -1587,10 +1590,10 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				alloc.NewDString(tree.DString(flags)),                                    // flags
 				alloc.NewDString(tree.DString(strconv.FormatUint(uint64(stats.ID), 10))), // statement_id
 				alloc.NewDString(tree.DString(stats.Key.Query)),                          // key
-				anonymized, // anonymized
-				alloc.NewDInt(tree.DInt(stats.Stats.Count)),             // count
-				alloc.NewDInt(tree.DInt(stats.Stats.FirstAttemptCount)), // first_attempt_count
-				alloc.NewDInt(tree.DInt(stats.Stats.MaxRetries)),        // max_retries
+				legacyAnonymizedStmt,                                                     // anonymized
+				alloc.NewDInt(tree.DInt(stats.Stats.Count)),                              // count
+				alloc.NewDInt(tree.DInt(stats.Stats.FirstAttemptCount)),                  // first_attempt_count
+				alloc.NewDInt(tree.DInt(stats.Stats.MaxRetries)),                         // max_retries
 				errString, // last_error
 				errCode,   // last_error_code
 				alloc.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                                                                   // rows_avg
