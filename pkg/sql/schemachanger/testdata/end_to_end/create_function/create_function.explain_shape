@@ -1,0 +1,28 @@
+/* setup */
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE TABLE t2(a notmyworkday);
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN ‹a› ‹notmyworkday›)
+	RETURNS INT8
+	VOLATILE
+	LANGUAGE SQL
+	AS $$SELECT ‹a› FROM ‹defaultdb›.‹public›.‹t›; SELECT ‹b› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_b›; SELECT ‹c› FROM ‹defaultdb›.‹public›.‹t›@‹t_idx_c›; SELECT ‹a› FROM ‹defaultdb›.‹public›.‹v›; SELECT nextval(‹'sq1'›);$$;
+ └── execute 1 system table mutations transaction

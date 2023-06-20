@@ -1,0 +1,59 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE db.public.tbl ADD COLUMN j INT;
+----
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 4 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+)}
+ │         │    └── ABSENT → PUBLIC      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 1 (tbl_pkey)}
+ │         └── 4 Mutation operations
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":2,"TableID":106}}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":106}
+ │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":2,"IsNullable":true,"TableID":106}}
+ │              └── AddColumnToIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 4 elements transitioning toward PUBLIC
+ │    │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 2 (j+)}
+ │    │    │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j+)}
+ │    │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+)}
+ │    │    │    └── PUBLIC      → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 1 (tbl_pkey)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 4 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 2 (j+)}
+ │         │    ├── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+)}
+ │         │    └── ABSENT → PUBLIC      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (j+), IndexID: 1 (tbl_pkey)}
+ │         └── 6 Mutation operations
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":2,"TableID":106}}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":106}
+ │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":2,"IsNullable":true,"TableID":106}}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ ├── PostCommitPhase
+ │    └── Stage 1 of 1 in PostCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── DELETE_ONLY → WRITE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (j+)}
+ │         └── 3 Mutation operations
+ │              ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":2,"TableID":106}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106}
+ │              └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── WRITE_ONLY → PUBLIC Column:{DescID: 106 (tbl), ColumnID: 2 (j+)}
+           └── 4 Mutation operations
+                ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":106}
+                ├── RefreshStats {"TableID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

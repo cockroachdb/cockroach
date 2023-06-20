@@ -1,0 +1,27 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+----
+
+# Ensure that NOT NULL constraint is enforced for inserts with NULL values.
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES ($stageKey, NULL);
+----
+pq: failed to satisfy CHECK constraint \(j IS NOT NULL\)
+
+# Ensure that inserts with non-null values will succeed.
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES ($stageKey, $stageKey);
+DELETE FROM t WHERE j = $stageKey;
+INSERT INTO t VALUES ($stageKey, $stageKey);
+UPDATE t SET j = j + 1;
+----
+
+# One row is expected to be added after each stage.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount FROM t;
+----
+true
+
+test
+ALTER TABLE t ALTER COLUMN j SET NOT NULL
+----

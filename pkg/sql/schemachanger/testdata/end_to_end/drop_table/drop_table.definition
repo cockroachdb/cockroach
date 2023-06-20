@@ -1,0 +1,11 @@
+setup
+CREATE DATABASE db;
+CREATE SCHEMA db.sc;
+CREATE TABLE db.sc.t (k INT, v STRING);
+COMMENT ON TABLE db.sc.t IS 't has a comment';
+CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
+----
+
+test
+DROP TABLE db.sc.t;
+----

@@ -160,18 +160,20 @@ func newJobsKnobs() *jobs.TestingKnobs {
 // test file.
 //
 // It shares a data-driven format with Rollback.
-func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc) {
+func EndToEndSideEffects(t *testing.T, relTestCaseDir string, newCluster NewClusterFunc) {
 	skip.UnderStress(t)
 	skip.UnderStressRace(t)
 	ctx := context.Background()
-	path := datapathutils.RewritableDataPath(t, relPath)
+	testCaseDir := datapathutils.RewritableDataPath(t, relTestCaseDir)
+	testCaseDefinition := filepath.Join(testCaseDir, filepath.Base(testCaseDir)+".definition")
 	// Create a test cluster.
 	s, db, cleanup := newCluster(t, nil /* knobs */)
 	tdb := sqlutils.MakeSQLRunner(db)
 	defer cleanup()
 	numTestStatementsObserved := 0
 	var setupStmts statements.Statements
-	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+	var setupOutput string
+	datadriven.RunTest(t, testCaseDefinition, func(t *testing.T, d *datadriven.TestData) string {
 		parseStmts := func() (statements.Statements, func()) {
 			sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
 			stmts, err := parser.Parse(d.Input)
@@ -187,24 +189,25 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 		switch d.Cmd {
 		case "skip":
 			var issue int
+			var testsCSV string
 			d.ScanArgs(t, "issue-num", &issue)
-			skip.WithIssue(t, issue)
-			return ""
+			d.MaybeScanArgs(t, "tests", &testsCSV)
+			for _, kind := range strings.Split(testsCSV, ",") {
+				if kind == "EndToEndSideEffects" {
+					skip.WithIssue(t, issue)
+				}
+			}
 		case "setup":
 			stmts, execStmts := parseStmts()
 			a := prettyNamespaceDump(t, tdb)
 			execStmts()
 			b := prettyNamespaceDump(t, tdb)
 			setupStmts = stmts
-			return sctestutils.Diff(a, b, sctestutils.DiffArgs{CompactLevel: 1})
-		case "stage-exec":
-			fallthrough
-		case "stage-query":
+			setupOutput = sctestutils.Diff(a, b, sctestutils.DiffArgs{CompactLevel: 1})
+		case "stage-exec", "stage-query":
 			// Both of these commands are DML injections, which is not relevant
-			// for end-to-end testing. We don't actually execute statements here.
-			// So return the original output, these will get rewritten in
-			// cumulativeTest.
-			return d.Expected
+			// for end-to-end side-effect testing, so we ignore them.
+			break
 		case "test":
 			stmts, execStmts := parseStmts()
 			require.Lessf(t, numTestStatementsObserved, 1, "only one test per-file.")
@@ -260,51 +263,77 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 			const inRollback = false
 			for i, stmt := range stmts {
 				if len(stmts) > 1 {
-					fileNameSuffix = fmt.Sprintf(".statement_%d_of_%d", i+1, len(stmts))
+					fileNameSuffix = fmt.Sprintf("__statement_%d_of_%d", i+1, len(stmts))
 				}
-				checkExplainDiagrams(t, path, setupStmts, stmts[:i], stmt.SQL, fileNameSuffix, stmtStates[i], inRollback, d.Rewrite)
+				checkExplainDiagrams(t, testCaseDir, setupStmts, stmts[:i], stmt.SQL, fileNameSuffix, stmtStates[i], inRollback, d.Rewrite)
 			}
-			return replaceNonDeterministicOutput(deps.SideEffectLog())
-
+			output := replaceNonDeterministicOutput(deps.SideEffectLog())
+			checkSideEffects(t, testCaseDir, setupStmts, stmts, setupOutput, output, d.Rewrite)
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
+		return d.Expected
 	})
 }
 
-// Subdirectories of the testdata directory containing test files in which to
-// write explain diagrams.
-const (
-	explainDirName        = "explain"
-	explainVerboseDirName = "explain_verbose"
-	explainShapeDirName   = "explain_shape"
-)
+// checkSideEffects checks or rewrites the side effects log.
+func checkSideEffects(
+	t *testing.T,
+	testCaseDir string,
+	setupStmts, stmts statements.Statements,
+	setupOutput, output string,
+	rewrite bool,
+) {
+	var actual bytes.Buffer
+	{
+		actual.WriteString("/* setup */\n")
+		for _, stmt := range setupStmts {
+			actual.WriteString(stmt.SQL)
+			actual.WriteString(";\n")
+		}
+		actual.WriteString("----\n")
+		actual.WriteString(setupOutput)
+		actual.WriteString("\n\n/* test */\n")
+		for _, stmt := range stmts {
+			actual.WriteString(stmt.SQL)
+			actual.WriteString(";\n")
+		}
+		actual.WriteString("----\n")
+		actual.WriteString(output)
+	}
+	testCaseName := filepath.Base(testCaseDir)
+	expectedOutputFileName := filepath.Join(testCaseDir, testCaseName+".side_effects")
+	if rewrite {
+		f, err := os.Create(expectedOutputFileName)
+		defer func() { require.NoError(t, f.Close()) }()
+		require.NoError(t, err)
+		_, err = f.Write(actual.Bytes())
+		require.NoError(t, err)
+		return
+	}
+	f, err := os.Open(expectedOutputFileName)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, f.Close()) }()
+	expected, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.Equal(t, string(expected), actual.String(), testCaseName)
+}
 
-// checkExplainDiagrams checks the output of the compact and verbose explain
+// checkExplainDiagrams checks the output of the compact and shape explain
 // diagrams for the statements and plans from the test. If rewrite is passed,
 // the plans will be rewritten.
 func checkExplainDiagrams(
 	t *testing.T,
-	path string,
+	testCaseDir string,
 	setupStmts, stmts statements.Statements,
 	explainedStmt, fileNameSuffix string,
 	state scpb.CurrentState,
 	inRollback, rewrite bool,
 ) {
-
-	testDataDir := filepath.Dir(filepath.Dir(path))
-	mkdir := func(name string) string {
-		dir := filepath.Join(testDataDir, name)
-		require.NoError(t, os.MkdirAll(dir, 0777))
-		return dir
-	}
-	explainDir := mkdir(explainDirName)
-	explainVerboseDir := mkdir(explainVerboseDirName)
-	explainShapeDir := mkdir(explainShapeDirName)
-	baseName := filepath.Base(path)
-	makeFile := func(dir string, openFunc func(string) (*os.File, error)) *os.File {
-		name := baseName + fileNameSuffix
-		explainFile, err := openFunc(filepath.Join(dir, name))
+	testCaseName := filepath.Base(testCaseDir)
+	explainFilePrefix := filepath.Join(testCaseDir, testCaseName+fileNameSuffix)
+	makeFile := func(suffix string, openFunc func(string) (*os.File, error)) *os.File {
+		explainFile, err := openFunc(explainFilePrefix + suffix)
 		require.NoError(t, err)
 		return explainFile
 	}
@@ -328,19 +357,19 @@ func checkExplainDiagrams(
 		_, err = io.WriteString(file, out)
 		require.NoError(t, err)
 	}
-	writePlanToFile := func(dir, tag string, fn func() (string, error)) {
-		file := makeFile(dir, os.Create)
+	writePlanToFile := func(suffix, tag string, fn func() (string, error)) {
+		file := makeFile(suffix, os.Create)
 		defer func() { require.NoError(t, file.Close()) }()
 		writePlan(file, tag, fn)
 	}
-	checkPlan := func(dir, tag string, fn func() (string, error)) {
-		file := makeFile(dir, os.Open)
+	checkPlan := func(suffix, tag string, fn func() (string, error)) {
+		file := makeFile(suffix, os.Open)
 		defer func() { require.NoError(t, file.Close()) }()
 		var buf bytes.Buffer
 		writePlan(&buf, tag, fn)
 		got, err := io.ReadAll(file)
 		require.NoError(t, err)
-		require.Equal(t, string(got), buf.String(), filepath.Base(dir))
+		require.Equal(t, string(got), buf.String(), testCaseName+fileNameSuffix)
 	}
 	action := checkPlan
 	if rewrite {
@@ -357,10 +386,9 @@ func checkExplainDiagrams(
 	}
 	pl, err := scplan.MakePlan(context.Background(), state, params)
 	require.NoErrorf(t, err, "%s: %s", fileNameSuffix, explainedStmt)
-	action(explainDir, "ddl", pl.ExplainCompact)
-	action(explainVerboseDir, "ddl, verbose", pl.ExplainVerbose)
+	action(".explain", "DDL", pl.ExplainCompact)
 	if !inRollback {
-		action(explainShapeDir, "ddl, shape", pl.ExplainShape)
+		action(".explain_shape", "DDL, SHAPE", pl.ExplainShape)
 	}
 }
 

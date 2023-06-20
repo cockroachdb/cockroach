@@ -489,10 +489,15 @@ func (p Plan) explainBackfillsAndMerges(root treeprinter.Node, ops []scop.Op) er
 			sb.WriteString(p.IndexName(gb.relationID, id))
 			sb.WriteString(" (")
 			for _, ics := range [][]*scpb.IndexColumn{key, suffix, stored} {
-				for _, ic := range ics {
+				for i, ic := range ics {
 					if ic.IndexID == id {
 						if withComma {
-							sb.WriteString(", ")
+							if i == 0 {
+								sb.WriteRune(';')
+							} else {
+								sb.WriteRune(',')
+							}
+							sb.WriteRune(' ')
 						} else {
 							withComma = true
 						}

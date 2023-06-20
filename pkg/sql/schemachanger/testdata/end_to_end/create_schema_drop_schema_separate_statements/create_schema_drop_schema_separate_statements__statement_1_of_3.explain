@@ -1,0 +1,52 @@
+/* setup */
+
+/* test */
+EXPLAIN (DDL) CREATE SCHEMA sc;
+----
+Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 6 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Schema:{DescID: 104 (sc+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 104 (sc+), ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (sc+)}
+ │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sc+), Name: "admin"}
+ │         │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sc+), Name: "root"}
+ │         └── 8 Mutation operations
+ │              ├── CreateSchemaDescriptor {"SchemaID":104}
+ │              ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sc"}
+ │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sc"}}
+ │              ├── AddSchemaParent {"Parent":{"ParentDatabaseID":100,"SchemaID":104}}
+ │              ├── UpdateOwner {"Owner":{"DescriptorID":104,"Owner":"root"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+ │              └── MarkDescriptorAsPublic {"DescriptorID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 6 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT Schema:{DescID: 104 (sc+)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT SchemaParent:{DescID: 104 (sc+), ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT Owner:{DescID: 104 (sc+)}
+      │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (sc+), Name: "admin"}
+      │    │    └── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (sc+), Name: "root"}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 6 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC Schema:{DescID: 104 (sc+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 104 (sc+), ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (sc+)}
+           │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sc+), Name: "admin"}
+           │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sc+), Name: "root"}
+           └── 8 Mutation operations
+                ├── CreateSchemaDescriptor {"SchemaID":104}
+                ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sc"}
+                ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sc"}}
+                ├── AddSchemaParent {"Parent":{"ParentDatabaseID":100,"SchemaID":104}}
+                ├── UpdateOwner {"Owner":{"DescriptorID":104,"Owner":"root"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"root","WithGrantOption":2}}
+                └── MarkDescriptorAsPublic {"DescriptorID":104}

@@ -1,0 +1,257 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
++object {104 105 tbl} -> 106
+
+/* test */
+ALTER TABLE db.public.tbl ADD COLUMN j INT;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.add_column
+increment telemetry for sql.schema.new_column_type.int8
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 106
+    statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
+    tag: ALTER TABLE
+    user: root
+  tableName: db.public.tbl
+## StatementPhase stage 1 of 1 with 4 MutationType ops
+upsert descriptor #106
+  ...
+     - columnIds:
+       - 1
+  +    - 2
+       columnNames:
+       - i
+  +    - j
+  +    defaultColumnId: 2
+       name: primary
+     formatVersion: 3
+     id: 106
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      id: 2
+  +      name: j
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: tbl
+  -  nextColumnId: 2
+  +  nextColumnId: 3
+     nextConstraintId: 2
+     nextFamilyId: 1
+  ...
+       partitioning: {}
+       sharded: {}
+  +    storeColumnIds:
+  +    - 2
+  +    storeColumnNames:
+  +    - j
+       unique: true
+       version: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 6 MutationType ops
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 106
+  +      indexes:
+  +        "1": tbl_pkey
+  +      name: tbl
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
+  +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+       - 1
+  +    - 2
+       columnNames:
+       - i
+  +    - j
+  +    defaultColumnId: 2
+       name: primary
+     formatVersion: 3
+     id: 106
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      id: 2
+  +      name: j
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: tbl
+  -  nextColumnId: 2
+  +  nextColumnId: 3
+     nextConstraintId: 2
+     nextFamilyId: 1
+  ...
+       partitioning: {}
+       sharded: {}
+  +    storeColumnIds:
+  +    - 2
+  +    storeColumnNames:
+  +    - j
+       unique: true
+       version: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8"
+  descriptor IDs: [106]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #106
+  ...
+           statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8
+           statementTag: ALTER TABLE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+       direction: ADD
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: tbl
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending"
+set schema change job #1 to non-cancellable
+commit transaction #3
+begin transaction #4
+## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
+upsert descriptor #106
+  ...
+         oid: 20
+         width: 64
+  +  - id: 2
+  +    name: j
+  +    nullable: true
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 106
+  -      indexes:
+  -        "1": tbl_pkey
+  -      name: tbl
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 106
+     modificationTime: {}
+  -  mutations:
+  -  - column:
+  -      id: 2
+  -      name: j
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  +  mutations: []
+     name: tbl
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+adding table for stats refresh: 106
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 106
+commit transaction #4
+# end PostCommitPhase
