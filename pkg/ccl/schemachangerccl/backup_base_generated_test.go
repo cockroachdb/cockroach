@@ -21,215 +21,215 @@ import (
 func TestBackup_base_add_column(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column", sctest.SingleNodeCluster)
 }
 func TestBackup_base_add_column_default_seq(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_seq", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_seq", sctest.SingleNodeCluster)
 }
 func TestBackup_base_add_column_default_unique(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_unique", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_unique", sctest.SingleNodeCluster)
 }
 func TestBackup_base_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default", sctest.SingleNodeCluster)
 }
 func TestBackup_base_add_column_with_stored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored", sctest.SingleNodeCluster)
 }
 func TestBackup_base_add_column_with_stored_family(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored_family", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_with_stored_family", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_add_check_udf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_udf", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_udf", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_add_check_unvalidated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_unvalidated", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_unvalidated", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_add_check_vanilla(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_vanilla", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_vanilla", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_add_check_with_seq_and_udt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_with_seq_and_udt", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_with_seq_and_udt", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_add_foreign_key(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_foreign_key", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_foreign_key", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_add_primary_key_drop_rowid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_primary_key_drop_rowid", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_primary_key_drop_rowid", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_add_unique_without_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_unique_without_index", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_unique_without_index", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_alter_column_set_not_null(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_column_set_not_null", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_column_set_not_null", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_alter_primary_key_drop_rowid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_drop_rowid", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_drop_rowid", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_alter_primary_key_using_hash(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_using_hash", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_using_hash", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_alter_primary_key_vanilla(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_vanilla", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_vanilla", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_drop_constraint_check(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_check", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_check", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_drop_constraint_fk(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_fk", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_fk", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_drop_constraint_uwi(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_uwi", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_uwi", sctest.SingleNodeCluster)
 }
 func TestBackup_base_alter_table_validate_constraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_validate_constraint", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_validate_constraint", sctest.SingleNodeCluster)
 }
 func TestBackup_base_create_function(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_function", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_function", sctest.SingleNodeCluster)
 }
 func TestBackup_base_create_function_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_function_in_txn", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_function_in_txn", sctest.SingleNodeCluster)
 }
 func TestBackup_base_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index", sctest.SingleNodeCluster)
 }
 func TestBackup_base_create_index_create_schema_separate_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", sctest.SingleNodeCluster)
 }
 func TestBackup_base_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_schema", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_schema", sctest.SingleNodeCluster)
 }
 func TestBackup_base_create_schema_drop_schema_separate_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_schema_drop_schema_separate_statements", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/create_schema_drop_schema_separate_statements", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_column_basic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_basic", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_basic", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_column_computed_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_computed_index", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_computed_index", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_column_create_index_separate_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_create_index_separate_statements", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_create_index_separate_statements", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_column_unique_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_unique_index", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_unique_index", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_column_with_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_index", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_index", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_column_with_partial_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_partial_index", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_partial_index", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_column_with_udf_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_udf_default", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_udf_default", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_function(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_function", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_function", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_index_hash_sharded_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_hash_sharded_index", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_hash_sharded_index", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_index_partial_expression_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_partial_expression_index", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_partial_expression_index", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_index_vanilla_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_vanilla_index", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_vanilla_index", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_index_with_materialized_view_dep(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_with_materialized_view_dep", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_with_materialized_view_dep", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_multiple_columns_separate_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_multiple_columns_separate_statements", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_multiple_columns_separate_statements", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_schema", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_schema", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table", sctest.SingleNodeCluster)
 }
 func TestBackup_base_drop_table_udf_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table_udf_default", newCluster)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table_udf_default", sctest.SingleNodeCluster)
 }
