@@ -41,6 +41,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="first_value"></a><code>first_value(val: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the first row of the window frame.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="first_value"></a><code>first_value(val: pg_lsn) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the first row of the window frame.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="first_value"></a><code>first_value(val: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the first row of the window frame.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="first_value"></a><code>first_value(val: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the first row of the window frame.</p>
@@ -153,6 +155,12 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="lag"></a><code>lag(val: oid, n: <a href="int.html">int</a>, default: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="lag"></a><code>lag(val: pg_lsn) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the previous row within current row’s partition; if there is no such row, instead returns null.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lag"></a><code>lag(val: pg_lsn, n: <a href="int.html">int</a>) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lag"></a><code>lag(val: pg_lsn, n: <a href="int.html">int</a>, default: pg_lsn) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="lag"></a><code>lag(val: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the previous row within current row’s partition; if there is no such row, instead returns null.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="lag"></a><code>lag(val: timetz, n: <a href="int.html">int</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows before the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
@@ -200,6 +208,8 @@
 <tr><td><a name="last_value"></a><code>last_value(val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the last row of the window frame.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="last_value"></a><code>last_value(val: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the last row of the window frame.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="last_value"></a><code>last_value(val: pg_lsn) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the last row of the window frame.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="last_value"></a><code>last_value(val: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the last row of the window frame.</p>
 </span></td><td>Immutable</td></tr>
@@ -313,6 +323,12 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="lead"></a><code>lead(val: oid, n: <a href="int.html">int</a>, default: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="lead"></a><code>lead(val: pg_lsn) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the following row within current row’s partition; if there is no such row, instead returns null.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lead"></a><code>lead(val: pg_lsn, n: <a href="int.html">int</a>) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lead"></a><code>lead(val: pg_lsn, n: <a href="int.html">int</a>, default: pg_lsn) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such, row, instead returns <code>default</code> (which must be of the same type as <code>val</code>). Both <code>n</code> and <code>default</code> are evaluated with respect to the current row.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="lead"></a><code>lead(val: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the following row within current row’s partition; if there is no such row, instead returns null.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="lead"></a><code>lead(val: timetz, n: <a href="int.html">int</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is <code>n</code> rows after the current row within its partition; if there is no such row, instead returns null. <code>n</code> is evaluated with respect to the current row.</p>
@@ -360,6 +376,8 @@
 <tr><td><a name="nth_value"></a><code>nth_value(val: jsonb, n: <a href="int.html">int</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the <code>n</code>th row of the window frame (counting from 1); null if no such row.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="nth_value"></a><code>nth_value(val: oid, n: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the <code>n</code>th row of the window frame (counting from 1); null if no such row.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="nth_value"></a><code>nth_value(val: pg_lsn, n: <a href="int.html">int</a>) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the <code>n</code>th row of the window frame (counting from 1); null if no such row.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="nth_value"></a><code>nth_value(val: timetz, n: <a href="int.html">int</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns <code>val</code> evaluated at the row that is the <code>n</code>th row of the window frame (counting from 1); null if no such row.</p>
 </span></td><td>Immutable</td></tr>

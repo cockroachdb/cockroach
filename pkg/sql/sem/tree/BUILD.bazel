@@ -126,6 +126,7 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
+        "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
