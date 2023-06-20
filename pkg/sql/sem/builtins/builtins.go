@@ -642,6 +642,91 @@ var regularBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		}),
 
+	"workload_index_recs": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
+				// Invoke the workloadindexrec.FindWorkloadRecs() to get indexRecs, err once it is implemented.
+				indexRecs, err := []string{}, error(nil)
+				if err != nil {
+					return nil, err
+				}
+				arr := tree.NewDArray(types.String)
+				for _, indexRec := range indexRecs {
+					if err := arr.Append(tree.NewDString(indexRec)); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info:       "Returns an array of index recommendations.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "timestamptz", Typ: types.TimestampTZ}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// Invoke the workloadindexrec.FindWorkloadRecs() to get indexRecs, err once it is implemented.
+				indexRecs, err := []string{}, error(nil)
+				if err != nil {
+					return nil, err
+				}
+				arr := tree.NewDArray(types.String)
+				for _, indexRec := range indexRecs {
+					if err := arr.Append(tree.NewDString(indexRec)); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info:       "Returns an array of index recommendations for the recent time interval.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "budget", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// Invoke the workloadindexrec.FindWorkloadRecs() to get indexRecs, err once it is implemented.
+				indexRecs, err := []string{}, error(nil)
+				if err != nil {
+					return nil, err
+				}
+				arr := tree.NewDArray(types.String)
+				for _, indexRec := range indexRecs {
+					if err := arr.Append(tree.NewDString(indexRec)); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info:       "Returns an array of index recommendations with a constrained space budget.",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "timestamptz", Typ: types.TimestampTZ},
+				{Name: "budget", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// Invoke the workloadindexrec.FindWorkloadRecs() to get indexRecs, err once it is implemented.
+				indexRecs, err := []string{}, error(nil)
+				if err != nil {
+					return nil, err
+				}
+				arr := tree.NewDArray(types.String)
+				for _, indexRec := range indexRecs {
+					if err := arr.Append(tree.NewDString(indexRec)); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			Info:       "Returns an array of index recommendations with a constrained space budget for recent time interval.",
+			Volatility: volatility.Immutable,
+		}),
+
 	"uuid_generate_v4": generateRandomUUID4Impl(),
 
 	"uuid_nil": generateConstantUUIDImpl(
