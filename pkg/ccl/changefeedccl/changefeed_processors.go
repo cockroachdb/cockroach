@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -88,9 +90,10 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	lastHighWaterFlush time.Time     // last time high watermark was checkpointed.
-	flushFrequency     time.Duration // how often high watermark can be checkpointed.
-	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
+	lastHighWaterFlush    time.Time     // last time high watermark was checkpointed.
+	flushFrequency        time.Duration // how often high watermark can be checkpointed.
+	lastSpanFlush         time.Time     // last time expensive, span based checkpoint was written.
+	lastLaggingRangeCheck time.Time     // last time all ranges were healthchecked
 
 	// frontier keeps track of resolved timestamps for spans along with schema change
 	// boundary information.
@@ -678,6 +681,12 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	if err != nil {
 		return err
 	}
+
+	if advanced {
+		ca.sliMetrics.AggregatorProgress.Update(ca.frontier.Frontier().WallTime)
+	}
+
+	ca.maybeLogLaggingRanges(resolved)
 
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
@@ -1326,6 +1335,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 			cf.metrics.mu.resolved[cf.metricsID] = newResolved
 		}
 		cf.metrics.mu.Unlock()
+		cf.sliMetrics.CheckpointProgress.Update(newResolved.WallTime)
 
 		return cf.maybeEmitResolved(newResolved)
 	}
@@ -1521,6 +1531,64 @@ func (cf *changeFrontier) isBehind() bool {
 	}
 
 	return timeutil.Since(frontier.GoTime()) > cf.slownessThreshold()
+}
+
+func (ca *changeAggregator) maybeLogLaggingRanges(resolved jobspb.ResolvedSpan) {
+	frequency := changefeedbase.LaggingRangesLogFrequency.Get(&ca.flowCtx.Cfg.Settings.SV)
+	if timeutil.Since(ca.lastLaggingRangeCheck) < frequency {
+		return
+	}
+	defer func() { ca.lastLaggingRangeCheck = timeutil.Now() }()
+
+	// The progress of ranges during a backfill is already tracked by the
+	// backfill_pending_ranges metric.  Ranges lagging during a backfill are going
+	// to be problematic at a different threshold to duiring normal operation, so
+	// the lagging ranges metric is reserved for just the non-backfill case.
+	if resolved.Timestamp.Equal(ca.frontier.BackfillTS()) {
+		return
+	}
+
+	lagThreshold := changefeedbase.LaggingRangesThreshold.Get(&ca.flowCtx.Cfg.Settings.SV)
+
+	// Grab all ranges being watched by the aggregator
+	db := ca.flowCtx.Cfg.DB.KV()
+	sender := db.NonTransactionalSender()
+	distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
+	spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+	for _, watch := range ca.spec.Watches {
+		spans = append(spans, watch.Span)
+	}
+	ranges, _, err := kvfeed.AllRangeSpans(ca.Ctx(), distSender, spans)
+	if err != nil {
+		return
+	}
+
+	ca.sliMetrics.AggregatorTotalRanges.Update(int64(len(ranges)))
+
+	rangeIdx := 0
+	behindRanges := 0
+
+	// Both ranges and ca.frontier.Entries are in ascending timestamp order, so
+	// scanning across both together will handle every overlap.
+	ca.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+		// Scan through ranges until the next overlap is found
+		for rangeIdx < len(ranges) && !sp.Overlaps(ranges[rangeIdx]) {
+			rangeIdx++
+		}
+		for rangeIdx < len(ranges) && sp.Overlaps(ranges[rangeIdx]) {
+			if timeutil.Since(ts.GoTime()) > lagThreshold {
+				behindRanges += 1
+			} else if ranges[rangeIdx].EndKey.Compare(sp.EndKey) >= 0 {
+				// If the range extends to the next span, check it against the next one
+				break
+			}
+
+			rangeIdx++
+		}
+		return span.ContinueMatch
+	})
+
+	ca.sliMetrics.AggregatorLaggingRanges.Update(int64(behindRanges))
 }
 
 // Potentially log the most behind span in the frontier for debugging if the
