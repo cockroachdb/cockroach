@@ -302,8 +302,7 @@ pg_catalog,pg_database,table,admin,NULL
 pg_catalog,pg_db_role_setting,table,admin,NULL
 pg_catalog,pg_default_acl,table,admin,NULL
 pg_catalog,pg_depend,table,admin,NULL
-pg_catalog,pg_description,table,admin,NULL
-pg_catalog,pg_description_objoid_idx,index,admin,NULL
+pg_catalog,pg_description,view,admin,NULL
 pg_catalog,pg_enum,table,admin,NULL
 pg_catalog,pg_event_trigger,table,admin,NULL
 pg_catalog,pg_extension,table,admin,NULL
@@ -351,7 +350,7 @@ pg_catalog,pg_sequences,table,admin,NULL
 pg_catalog,pg_settings,table,admin,NULL
 pg_catalog,pg_shadow,table,admin,NULL
 pg_catalog,pg_shdepend,table,admin,NULL
-pg_catalog,pg_shdescription,table,admin,NULL
+pg_catalog,pg_shdescription,view,admin,NULL
 pg_catalog,pg_shmem_allocations,table,admin,NULL
 pg_catalog,pg_shseclabel,table,admin,NULL
 pg_catalog,pg_stat_activity,table,admin,NULL
@@ -562,9 +561,8 @@ pg_catalog,pg_default_acl,table,admin,NULL,permanent,prefix,"default ACLs; these
 https://www.postgresql.org/docs/13/catalog-pg-default-acl.html"
 pg_catalog,pg_depend,table,admin,NULL,permanent,prefix,"dependency relationships (incomplete)
 https://www.postgresql.org/docs/9.5/catalog-pg-depend.html"
-pg_catalog,pg_description,table,admin,NULL,permanent,prefix,"object comments
+pg_catalog,pg_description,view,admin,NULL,permanent,NULL,"object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-description.html"
-pg_catalog,pg_description_objoid_idx,index,admin,NULL,permanent,prefix,
 pg_catalog,pg_enum,table,admin,NULL,permanent,prefix,"enum types and labels (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-enum.html"
 pg_catalog,pg_event_trigger,table,admin,NULL,permanent,prefix,"event triggers (empty - feature does not exist)
@@ -641,7 +639,7 @@ pg_catalog,pg_shadow,table,admin,NULL,permanent,prefix,"pg_shadow lists properti
 https://www.postgresql.org/docs/13/view-pg-shadow.html"
 pg_catalog,pg_shdepend,table,admin,NULL,permanent,prefix,"Shared Dependencies (Roles depending on objects). 
 https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html"
-pg_catalog,pg_shdescription,table,admin,NULL,permanent,prefix,"shared object comments
+pg_catalog,pg_shdescription,view,admin,NULL,permanent,NULL,"shared object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html"
 pg_catalog,pg_shmem_allocations,table,admin,NULL,permanent,prefix,pg_shmem_allocations was created for compatibility and is currently unimplemented
 pg_catalog,pg_shseclabel,table,admin,NULL,permanent,prefix,"shared security labels (empty - feature not supported)

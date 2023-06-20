@@ -848,8 +848,13 @@ func getTableNameFromCreateTable(createTableText string) (string, error) {
 		return "", err
 	}
 
-	create := stmt.AST.(*tree.CreateTable)
-	return create.Table.Table(), nil
+	if create, ok := stmt.AST.(*tree.CreateTable); ok {
+		return create.Table.Table(), nil
+	}
+	if create, ok := stmt.AST.(*tree.CreateView); ok {
+		return create.Name.Table(), nil
+	}
+	return "", errors.Newf("could not find table name in stmt: %s", createTableText)
 }
 
 // getUndefinedTablesText retrieves pgCatalog.undefinedTables, then it merges the
