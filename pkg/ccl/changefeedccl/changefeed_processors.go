@@ -310,7 +310,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		pool = ca.knobs.MemMonitor
 	}
 	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
-	ca.eventProducer, ca.kvFeedDoneCh, ca.errCh, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, feed, pool, limit)
+	ca.eventProducer, ca.kvFeedDoneCh, ca.errCh, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, feed, pool, limit, opts)
 	if err != nil {
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -361,6 +361,7 @@ func (ca *changeAggregator) startKVFeed(
 	config ChangefeedConfig,
 	parentMemMon *mon.BytesMonitor,
 	memLimit int64,
+	opts changefeedbase.StatementOptions,
 ) (kvevent.Reader, chan struct{}, chan error, error) {
 	cfg := ca.flowCtx.Cfg
 	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon)
@@ -371,7 +372,7 @@ func (ca *changeAggregator) startKVFeed(
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, config, spans, buf, initialHighWater, needsInitialScan, kvFeedMemMon)
+	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, config, spans, buf, initialHighWater, needsInitialScan, kvFeedMemMon, opts)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -414,6 +415,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
 	memMon *mon.BytesMonitor,
+	opts changefeedbase.StatementOptions,
 ) (kvfeed.Config, error) {
 	schemaChange, err := config.Opts.GetSchemaChangeHandlingOptions()
 	if err != nil {
@@ -430,6 +432,11 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	} else {
 		sf = schemafeed.New(ctx, cfg, schemaChange.EventClass, AllTargets(ca.spec.Feed),
 			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
+	}
+
+	laggingRangesThreshold, laggingRangesInterval, err := opts.GetLaggingRangesConfig()
+	if err != nil {
+		return kvfeed.Config{}, err
 	}
 
 	return kvfeed.Config{
@@ -455,6 +462,11 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaFeed:              sf,
 		Knobs:                   ca.knobs.FeedKnobs,
 		UseMux:                  changefeedbase.UseMuxRangeFeed.Get(&cfg.Settings.SV),
+		LaggingRangesPollerCfg: kvfeed.LaggingRangesPollerCfg{
+			UpdateLaggingRangesMetric:    ca.sliMetrics.getLaggingRangesCallback(),
+			LaggingRangesThreshold:       laggingRangesThreshold,
+			LaggingRangesPollingInterval: laggingRangesInterval,
+		},
 	}, nil
 }
 

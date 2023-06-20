@@ -15,6 +15,7 @@ package kvfeed
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -30,8 +31,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+type LaggingRangesPollerCfg struct {
+	// UpdateLaggingRangesMetric is a callback which is called to update the
+	// current number of lagging ranges in metrics.
+	UpdateLaggingRangesMetric func(int64)
+	// LaggingRangesPollingInterval is how often the kv feed will poll for
+	// lagging ranges and update lagging ranges metrics.
+	LaggingRangesPollingInterval time.Duration
+	// LaggingRangesThreshold is how far behind a range must be to be considered
+	// lagging.
+	LaggingRangesThreshold time.Duration
+}
 
 // Config configures a kvfeed.
 type Config struct {
@@ -47,6 +61,7 @@ type Config struct {
 	Metrics                 *kvevent.Metrics
 	OnBackfillCallback      func() func()
 	OnBackfillRangeCallback func(int64) (func(), func())
+	LaggingRangesPollerCfg  LaggingRangesPollerCfg
 	MM                      *mon.BytesMonitor
 	WithDiff                bool
 	SchemaChangeEvents      changefeedbase.SchemaChangeEventClass
@@ -98,6 +113,7 @@ func Run(ctx context.Context, cfg Config) error {
 		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, cfg.Metrics)
 	}
 
+	g := ctxgroup.WithContext(ctx)
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
@@ -107,8 +123,8 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.SchemaFeed,
 		sc, pff, bf, cfg.UseMux, cfg.Targets, cfg.Knobs)
 	f.onBackfillCallback = cfg.OnBackfillCallback
+	f.rangeObserver = makeLaggingRangesObserver(g, cfg.LaggingRangesPollerCfg)
 
-	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)
 	g.GoCtx(f.run)
 	err := g.Wait()
@@ -152,6 +168,49 @@ func Run(ctx context.Context, cfg Config) error {
 	return err
 }
 
+func makeLaggingRangesObserver(
+	g ctxgroup.Group, cfg LaggingRangesPollerCfg,
+) func(fn kvcoord.ForEachRangeFn) {
+	return func(fn kvcoord.ForEachRangeFn) {
+		g.GoCtx(func(ctx context.Context) error {
+			// Reset metrics on shutdown.
+			defer func() {
+				cfg.UpdateLaggingRangesMetric(0)
+			}()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(cfg.LaggingRangesPollingInterval):
+					count := int64(0)
+					thresholdTS := timeutil.Now().Add(-1 * cfg.LaggingRangesThreshold)
+					err := fn(func(rfCtx kvcoord.RangeFeedContext, feed kvcoord.PartialRangeFeed) error {
+						// The resolved timestamp of a range determines the timestamp which is caught up to.
+						// However, during catchup scans, this is not set. For catchup scans, we consider the
+						// time the partial rangefeed was created to be its resolved ts. Note that a range can
+						// restart due to a range split, transient error etc. In these cases you also expect
+						// to see a `CreatedTime` but no resolved timestamp.
+						ts := feed.Resolved
+						if ts.IsEmpty() {
+							ts = hlc.Timestamp{WallTime: feed.CreatedTime.UnixNano()}
+						}
+
+						if ts.Less(hlc.Timestamp{WallTime: thresholdTS.UnixNano()}) {
+							count += 1
+						}
+						return nil
+					})
+					if err != nil {
+						return err
+					}
+					cfg.UpdateLaggingRangesMetric(count)
+				}
+			}
+		})
+	}
+}
+
 // schemaChangeDetectedError is a sentinel error to indicate to Run() that the
 // schema change is stopping due to a schema change. This is handy to trigger
 // the context group to stop; the error is handled entirely in this package.
@@ -175,6 +234,7 @@ type kvFeed struct {
 	codec               keys.SQLCodec
 
 	onBackfillCallback func() func()
+	rangeObserver      func(fn kvcoord.ForEachRangeFn)
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
@@ -485,11 +545,12 @@ func (f *kvFeed) runUntilTableEvent(
 
 	g := ctxgroup.WithContext(ctx)
 	physicalCfg := rangeFeedConfig{
-		Spans:    stps,
-		Frontier: resumeFrontier.Frontier(),
-		WithDiff: f.withDiff,
-		Knobs:    f.knobs,
-		UseMux:   f.useMux,
+		Spans:         stps,
+		Frontier:      resumeFrontier.Frontier(),
+		WithDiff:      f.withDiff,
+		Knobs:         f.knobs,
+		UseMux:        f.useMux,
+		RangeObserver: f.rangeObserver,
 	}
 
 	// The following two synchronous calls works as follows:

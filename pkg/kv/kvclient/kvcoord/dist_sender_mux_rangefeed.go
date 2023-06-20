@@ -94,7 +94,6 @@ func muxRangeFeed(
 	if cfg.knobs.metrics != nil {
 		m.metrics = cfg.knobs.metrics
 	}
-
 	divideAllSpansOnRangeBoundaries(spans, m.startSingleRangeFeed, ds, &m.g)
 	return errors.CombineErrors(m.g.Wait(), ctx.Err())
 }
