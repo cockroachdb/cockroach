@@ -203,6 +203,9 @@ message LocalOnlySessionData {
   // InjectRetryErrorsEnabled causes statements inside an explicit
   // transaction to return a transaction retry error. It is intended for
   // developers to test their app's retry logic.
+  //
+  // Note that this session variable is **not** propagated to the internal
+  // executors - use InternalExecutorOverride for that.
   bool inject_retry_errors_enabled = 54;
   // NullOrderedLast controls whether NULL is ordered last. We default to
   // NULLS FIRST for ascending order by default, whereas postgres defaults
