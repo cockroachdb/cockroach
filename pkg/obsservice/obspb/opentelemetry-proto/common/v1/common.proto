@@ -72,6 +72,10 @@ message InstrumentationScope {
   // An empty instrumentation scope name means the name is unknown.
   string name = 1;
   string version = 2;
+
+  // Additional attributes that describe the scope. [Optional].
+  // Attribute keys MUST be unique (it is not allowed to have more than one
+  // attribute with the same key).
   repeated KeyValue attributes = 3;
   uint32 dropped_attributes_count = 4;
 }
