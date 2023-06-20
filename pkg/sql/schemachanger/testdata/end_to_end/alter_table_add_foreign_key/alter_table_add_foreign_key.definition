@@ -1,0 +1,46 @@
+setup
+CREATE TABLE t1 (i INT PRIMARY KEY);
+CREATE TABLE t2 (i INT PRIMARY KEY);
+INSERT INTO t2 (i) VALUES(-1), (-2), (-3);
+INSERT INTO t1 (i) VALUES(-1), (-2), (-3);
+----
+
+# For rollback testing intentionally inject an error.
+stage-exec phase=PreCommitPhase stage=1 schemaChangeExecErrorForRollback=(.*: foreign key violation: \"t1\" row i=-4 has no match in \"t2\".*)
+UPDATE t1 SET i=-4 WHERE i = -1
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=: rollback=true
+INSERT INTO t1 (i) VALUES(-5)
+----
+insert on table "t1" violates foreign key constraint "t1_i_fkey"
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitNonRevertiblePhase stage=: rollback=true
+SELECT count(*)=($successfulStageCount*2)+3 FROM t2;
+----
+true
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t2 (i) VALUES($stageKey);
+INSERT INTO t2 (i) VALUES($stageKey + 1);
+INSERT INTO t1 (i) VALUES($stageKey);
+INSERT INTO t1 (i) VALUES($stageKey + 1);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t1 (i) VALUES($stageKey+3)
+----
+insert on table "t1" violates foreign key constraint "t1_i_fkey"
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM t2;
+----
+true
+
+test
+ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i)
+----

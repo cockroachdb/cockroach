@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -539,12 +540,13 @@ func (m *stageExecStmtMap) GetInjectionCallback(t *testing.T, rewrite bool) exec
 //     it, only when rewrite is enabled.
 func cumulativeTest(
 	t *testing.T,
-	relPath string,
+	testKind, relTestCaseDir string,
 	tf func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], stageExecMap *stageExecStmtMap),
 ) {
 	skip.UnderStress(t)
 	skip.UnderRace(t)
-	path := datapathutils.RewritableDataPath(t, relPath)
+	testCaseDir := datapathutils.RewritableDataPath(t, relTestCaseDir)
+	testCaseDefinition := filepath.Join(testCaseDir, filepath.Base(testCaseDir)+".definition")
 	var setup []statements.Statement[tree.Statement]
 	stageExecMap := makeStageExecStmtMap()
 	rewrite := false
@@ -560,7 +562,7 @@ func cumulativeTest(
 	// purpose is to run the "test"-ed statement, inject DMLs as specified, and
 	// collect output of those DML injections, so they can be used to rewrite the
 	// expected output of those DML injected in the second pass.
-	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+	datadriven.RunTest(t, testCaseDefinition, func(t *testing.T, d *datadriven.TestData) string {
 		// Assert that only one "test"-directive statement shows up and nothing can
 		// follow it afterwards.
 		require.Zero(t, numTestStmts, "only one test command per-test, "+
@@ -568,8 +570,14 @@ func cumulativeTest(
 		switch d.Cmd {
 		case "skip":
 			var issue int
+			var csv string
 			d.ScanArgs(t, "issue-num", &issue)
-			skip.WithIssue(t, issue)
+			d.MaybeScanArgs(t, "tests", &csv)
+			for _, skippedKind := range strings.Split(csv, ",") {
+				if skippedKind == testKind {
+					skip.WithIssue(t, issue)
+				}
+			}
 		case "setup":
 			// Store setup stmts into `setup` slice (without executing them).
 			stmts, err := parser.Parse(d.Input)
@@ -577,8 +585,6 @@ func cumulativeTest(
 			require.NoError(t, err)
 			require.NotEmpty(t, stmts)
 		case "stage-exec":
-			// DML injected statements will only be executed on cumalative tests,
-			// for end-to-end tests these are fully ignored.
 			stageExecMap.ParseStageExec(t, d)
 		case "stage-query":
 			stageExecMap.ParseStageQuery(t, d)
@@ -592,7 +598,7 @@ func cumulativeTest(
 			}
 			rewrite = d.Rewrite
 			numTestStmts++
-			tf(t, path, rewrite, setup, testStmts, stageExecMap)
+			tf(t, testCaseDir, rewrite, setup, testStmts, stageExecMap)
 		default:
 			t.Fatalf("unknown command type %s", d.Cmd)
 		}
@@ -603,7 +609,7 @@ func cumulativeTest(
 	// all other directives, this pass effectively ignores them by returning
 	// d.Expected.
 	if rewrite {
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+		datadriven.RunTest(t, testCaseDefinition, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "stage-exec" || d.Cmd == "stage-query" {
 				// Retrieve the actual output of each DML injection block (from first
 				// pass), indexed by file:line.
@@ -632,9 +638,9 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 		return n
 	}
 	var testRollbackCase func(
-		t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], ord, n int,
+		t *testing.T, testCaseDir string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], ord, n int,
 	)
-	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
+	testFunc := func(t *testing.T, testCaseDir string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
 		n := countRevertiblePostCommitStages(t, setup, stmts)
 		if n == 0 {
 			t.Logf("test case has no revertible post-commit stages, skipping...")
@@ -644,7 +650,7 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 		for i := 1; i <= n; i++ {
 			if !t.Run(
 				fmt.Sprintf("rollback stage %d of %d", i, n),
-				func(t *testing.T) { testRollbackCase(t, path, rewrite, setup, stmts, i, n) },
+				func(t *testing.T) { testRollbackCase(t, testCaseDir, rewrite, setup, stmts, i, n) },
 			) {
 				return
 			}
@@ -652,7 +658,7 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	}
 
 	testRollbackCase = func(
-		t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], ord, n int,
+		t *testing.T, testCaseDir string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], ord, n int,
 	) {
 		var numInjectedFailures uint32
 		var numCheckedExplainInRollback uint32
@@ -667,10 +673,10 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 					return nil
 				}
 				atomic.AddUint32(&numCheckedExplainInRollback, 1)
-				fileNameSuffix := fmt.Sprintf(".rollback_%d_of_%d", ord, n)
+				fileNameSuffix := fmt.Sprintf("__rollback_%d_of_%d", ord, n)
 				explainedStmt := fmt.Sprintf("rollback at post-commit stage %d of %d", ord, n)
 				const inRollback = true
-				checkExplainDiagrams(t, path, setup, stmts, explainedStmt, fileNameSuffix, p.CurrentState, inRollback, rewrite)
+				checkExplainDiagrams(t, testCaseDir, setup, stmts, explainedStmt, fileNameSuffix, p.CurrentState, inRollback, rewrite)
 				return nil
 			}
 			if s.Phase == scop.PostCommitPhase && s.Ordinal == ord {
@@ -715,7 +721,7 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 			require.NotZero(t, atomic.LoadUint32(&numCheckedExplainInRollback))
 		}
 	}
-	cumulativeTest(t, relPath, testFunc)
+	cumulativeTest(t, "Rollback", relPath, testFunc)
 }
 
 // fetchDescriptorStateQuery returns the CREATE statements for all descriptors
@@ -826,7 +832,7 @@ func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 		))
 		require.Equal(t, uint32(1), atomic.LoadUint32(&numInjectedFailures))
 	}
-	cumulativeTest(t, relPath, testFunc)
+	cumulativeTest(t, "Pause", relPath, testFunc)
 }
 
 // ExecuteWithDMLInjection tests that the schema changer behaviour is sane
@@ -948,7 +954,7 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 		}
 		require.Equal(t, errorDetected, schemaChangeErrorRegex != nil)
 	}
-	cumulativeTest(t, relPath, testFunc)
+	cumulativeTest(t, "ExecuteWithDMLInjection", relPath, testFunc)
 }
 
 // Used for saving corpus information in TestGenerateCorpus
@@ -978,7 +984,7 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 	var testCorpusCollect func(
 		t *testing.T, setup, stmts []statements.Statement[tree.Statement],
 	)
-	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
+	testFunc := func(t *testing.T, _ string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
 		if !t.Run("starting",
 			func(t *testing.T) { testCorpusCollect(t, setup, stmts) },
 		) {
@@ -1002,7 +1008,7 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 			context.Background(), t, setup, stmts, db, nil, nil, nil,
 		))
 	}
-	cumulativeTest(t, path, testFunc)
+	cumulativeTest(t, "GenerateSchemaChangeCorpus", path, testFunc)
 }
 
 // runAllBackups runs all the backup tests, disabling the random skipping.
@@ -1462,7 +1468,7 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 		}
 	}
 
-	cumulativeTest(t, path, testFunc)
+	cumulativeTest(t, "Backup", path, testFunc)
 }
 
 func maybeGetDatabaseForIDs(
@@ -1750,7 +1756,7 @@ WHERE
 			}
 		}
 	}
-	cumulativeTest(t, path, testFunc)
+	cumulativeTest(t, "ValidateMixedVersionElements", path, testFunc)
 }
 
 func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedClusterFunc) {
@@ -2112,5 +2118,5 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 		}
 	}
 
-	cumulativeTest(t, path, testFunc)
+	cumulativeTest(t, "BackupMixedVersionElements", path, testFunc)
 }

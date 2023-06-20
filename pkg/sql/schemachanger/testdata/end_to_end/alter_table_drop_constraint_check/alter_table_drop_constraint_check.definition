@@ -1,0 +1,18 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY CHECK (i > 0));
+----
+
+# Constraint is still enforced in this stage.
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO t VALUES (0);
+----
+pq: failed to satisfy CHECK constraint \(i > 0:::INT8\)
+
+stage-query phase=PostCommitNonRevertiblePhase stage=1
+SELECT count(*) FROM t;
+----
+0
+
+test
+ALTER TABLE t DROP CONSTRAINT check_i;
+----
