@@ -597,6 +597,8 @@ func (s StatementOptions) getEnumValue(k string) (string, error) {
 	return rawVal, nil
 }
 
+// getDurationValue validates that the option `k` was supplied with a
+// valid duration.
 func (s StatementOptions) getDurationValue(k string) (*time.Duration, error) {
 	v, ok := s.m[k]
 	if !ok {

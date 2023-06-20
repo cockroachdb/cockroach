@@ -1659,6 +1659,12 @@ var charts = []sectionDescription{
 					"changefeed.checkpoint_progress",
 				},
 			},
+			{
+				Title: "Changefeed Lagging Ranges",
+				Metrics: []string{
+					"changefeed.lagging_ranges",
+				},
+			},
 		},
 	},
 	{

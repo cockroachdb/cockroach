@@ -392,30 +392,50 @@ func (ca *changeAggregator) makeKVFeedCfg(
 			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
 	}
 
+	monitoringCfg, err := makeKVFeedMonitoringCfg(ca.sliMetrics, ca.flowCtx.Cfg.Settings)
+	if err != nil {
+		return kvfeed.Config{}, err
+	}
+
 	return kvfeed.Config{
-		Writer:                  buf,
-		Settings:                cfg.Settings,
-		DB:                      cfg.DB.KV(),
-		Codec:                   cfg.Codec,
-		Clock:                   cfg.DB.KV().Clock(),
-		Gossip:                  cfg.Gossip,
-		Spans:                   spans,
-		CheckpointSpans:         ca.spec.Checkpoint.Spans,
-		CheckpointTimestamp:     ca.spec.Checkpoint.Timestamp,
-		Targets:                 AllTargets(ca.spec.Feed),
-		Metrics:                 &ca.metrics.KVFeedMetrics,
-		OnBackfillCallback:      ca.sliMetrics.getBackfillCallback(),
-		OnBackfillRangeCallback: ca.sliMetrics.getBackfillRangeCallback(),
-		MM:                      ca.kvFeedMemMon,
-		InitialHighWater:        initialHighWater,
-		EndTime:                 config.EndTime,
-		WithDiff:                filters.WithDiff,
-		NeedsInitialScan:        needsInitialScan,
-		SchemaChangeEvents:      schemaChange.EventClass,
-		SchemaChangePolicy:      schemaChange.Policy,
-		SchemaFeed:              sf,
-		Knobs:                   ca.knobs.FeedKnobs,
-		UseMux:                  changefeedbase.UseMuxRangeFeed.Get(&cfg.Settings.SV),
+		Writer:              buf,
+		Settings:            cfg.Settings,
+		DB:                  cfg.DB.KV(),
+		Codec:               cfg.Codec,
+		Clock:               cfg.DB.KV().Clock(),
+		Gossip:              cfg.Gossip,
+		Spans:               spans,
+		CheckpointSpans:     ca.spec.Checkpoint.Spans,
+		CheckpointTimestamp: ca.spec.Checkpoint.Timestamp,
+		Targets:             AllTargets(ca.spec.Feed),
+		Metrics:             &ca.metrics.KVFeedMetrics,
+		MM:                  ca.kvFeedMemMon,
+		InitialHighWater:    initialHighWater,
+		EndTime:             config.EndTime,
+		WithDiff:            filters.WithDiff,
+		NeedsInitialScan:    needsInitialScan,
+		SchemaChangeEvents:  schemaChange.EventClass,
+		SchemaChangePolicy:  schemaChange.Policy,
+		SchemaFeed:          sf,
+		Knobs:               ca.knobs.FeedKnobs,
+		UseMux:              changefeedbase.UseMuxRangeFeed.Get(&cfg.Settings.SV),
+		MonitoringCfg:       monitoringCfg,
+	}, nil
+}
+
+func makeKVFeedMonitoringCfg(
+	sliMetrics *sliMetrics, settings *cluster.Settings,
+) (kvfeed.MonitoringConfig, error) {
+	laggingRangesThreshold := changefeedbase.LaggingRangesThreshold.Get(&settings.SV)
+	laggingRangesInterval := changefeedbase.LaggingRangesPollingInterval.Get(&settings.SV)
+
+	return kvfeed.MonitoringConfig{
+		LaggingRangesCallback:        sliMetrics.getLaggingRangesCallback(),
+		LaggingRangesThreshold:       laggingRangesThreshold,
+		LaggingRangesPollingInterval: laggingRangesInterval,
+
+		OnBackfillCallback:      sliMetrics.getBackfillCallback(),
+		OnBackfillRangeCallback: sliMetrics.getBackfillRangeCallback(),
 	}, nil
 }
 
