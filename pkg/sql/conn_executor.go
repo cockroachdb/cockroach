@@ -753,6 +753,7 @@ func (s *Server) SetupConn(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	onDefaultIntSizeChange func(newSize int32),
+	sessionID clusterunique.ID,
 ) (ConnectionHandler, error) {
 	sd := newSessionData(args)
 	sds := sessiondata.NewStack(sd)
@@ -778,8 +779,14 @@ func (s *Server) SetupConn(
 	}
 
 	ex := s.newConnExecutor(
-		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
+		ctx,
+		sdMutIterator,
+		stmtBuf,
+		clientComm,
+		memMetrics,
+		&s.Metrics,
 		s.sqlStats.GetApplicationStats(sd.ApplicationName, false /* internal */),
+		sessionID,
 		nil, /* postSetupFn */
 	)
 	return ConnectionHandler{ex}, nil
@@ -879,11 +886,7 @@ func (h ConnectionHandler) GetQueryCancelKey() pgwirecancel.BackendKeyData {
 // connExecutor takes ownership of this memory and will close the account before
 // exiting.
 func (s *Server) ServeConn(
-	ctx context.Context,
-	h ConnectionHandler,
-	reserved *mon.BoundAccount,
-	cancel context.CancelFunc,
-	sessionID clusterunique.ID,
+	ctx context.Context, h ConnectionHandler, reserved *mon.BoundAccount, cancel context.CancelFunc,
 ) error {
 	// Make sure to close the reserved account even if closeWrapper below
 	// panics: so we do it in a defer that is guaranteed to execute. We also
@@ -894,7 +897,7 @@ func (s *Server) ServeConn(
 		r := recover()
 		h.ex.closeWrapper(ctx, r)
 	}(ctx, h)
-	return h.ex.run(ctx, s.pool, reserved, cancel, sessionID)
+	return h.ex.run(ctx, s.pool, reserved, cancel)
 }
 
 // GetLocalIndexStatistics returns a idxusage.LocalIndexUsageStats.
@@ -969,6 +972,7 @@ func (s *Server) newConnExecutor(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
+	sessionID clusterunique.ID,
 	// postSetupFn is to override certain field of a conn executor.
 	// It is set when conn executor is init under an internal executor
 	// with a not-nil txn.
@@ -1111,6 +1115,7 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.initPlanner(ctx, &ex.planner)
+	ex.planner.extendedEvalCtx.SessionID = sessionID
 
 	return ex
 }
@@ -2070,7 +2075,6 @@ func (ex *connExecutor) run(
 	parentMon *mon.BytesMonitor,
 	reserved *mon.BoundAccount,
 	onCancel context.CancelFunc,
-	sessionID clusterunique.ID,
 ) (err error) {
 	if !ex.activated {
 		ex.activate(ctx, parentMon, reserved)
@@ -2078,8 +2082,8 @@ func (ex *connExecutor) run(
 	ex.ctxHolder.connCtx = ctx
 	ex.onCancelSession = onCancel
 
+	sessionID := ex.planner.extendedEvalCtx.SessionID
 	ex.server.cfg.SessionRegistry.register(sessionID, ex.queryCancelKey, ex)
-	ex.planner.extendedEvalCtx.SessionID = sessionID
 
 	defer func() {
 		ex.server.cfg.SessionRegistry.deregister(sessionID, ex.queryCancelKey)
