@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
@@ -845,7 +846,7 @@ func findAndDecodeSessionCookie(
 // findSessionCookieValueForTenant finds the encoded session in the provided
 // aggregated session cookie value established in multi-tenant clusters that's
 // associated with the provided tenant name. If an empty tenant name is provided,
-// we default to the defaultTenantSelect cluster setting value.
+// we default to the DefaultTenantSelect cluster setting value.
 //
 // If the method cannot find a match between the tenant name and session, or
 // if the provided session cookie is nil, it will return an empty string.
@@ -875,7 +876,7 @@ func findSessionCookieValueForTenant(
 			return mtSessionStr, nil
 		}
 		if tenantName == "" {
-			tenantName = defaultTenantSelect.Get(&st.SV)
+			tenantName = multitenant.DefaultTenantSelect.Get(&st.SV)
 		}
 		var encodedSession string
 		for idx, val := range sessionSlice {

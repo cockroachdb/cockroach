@@ -503,3 +503,50 @@ RESET disable_drop_tenant
 
 statement ok
 DROP TENANT nodelete
+
+subtest regression_105115
+
+statement ok
+CREATE TENANT noservice
+
+statement error shared service not enabled for tenant "noservice"
+SET CLUSTER SETTING server.controller.default_tenant = noservice
+
+statement ok
+SET CLUSTER SETTING server.controller.default_tenant.check_service.enabled = false
+
+statement ok
+SET CLUSTER SETTING server.controller.default_tenant = noservice
+
+statement ok
+RESET CLUSTER SETTING server.controller.default_tenant.check_service.enabled
+
+statement ok
+RESET CLUSTER SETTING server.controller.default_tenant
+
+statement ok
+DROP TENANT noservice;
+CREATE TENANT withservice;
+ALTER TENANT withservice START SERVICE SHARED
+
+statement ok
+SET CLUSTER SETTING server.controller.default_tenant = withservice
+
+statement error cannot stop service while tenant is selected as default
+ALTER TENANT withservice STOP SERVICE
+
+statement ok
+SET CLUSTER SETTING server.controller.default_tenant.check_service.enabled = false
+
+statement ok
+ALTER TENANT withservice STOP SERVICE
+
+# clean up
+statement ok
+RESET CLUSTER SETTING server.controller.default_tenant.check_service.enabled
+
+statement ok
+RESET CLUSTER SETTING server.controller.default_tenant
+
+statement ok
+DROP TENANT withservice

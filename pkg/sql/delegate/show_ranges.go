@@ -323,8 +323,6 @@ AND s.end_key > r.start_key`)
 	//                            ...
 	//
 
-	buf.WriteString(",\nnamed_ranges AS (")
-
 	mode := n.Options.Mode
 	if n.Source == tree.ShowRangesIndex {
 		// The index view needs to see table_id/index_id propagate. We
@@ -339,6 +337,40 @@ AND s.end_key > r.start_key`)
 	if n.Source == tree.ShowRangesCluster && mode != tree.UniqueRanges {
 		dbNameCol = ", database_name"
 	}
+
+	// Include all_span_stats if DETAILS is a requested option.
+	if n.Options.Details {
+		var arrayArgs string
+		if mode == tree.UniqueRanges {
+			arrayArgs = "SELECT DISTINCT (start_key, end_key)"
+		} else {
+			arrayArgs = "SELECT (per_range_start_key, per_range_end_key)"
+		}
+		fmt.Fprintf(&buf, `,
+all_span_stats AS (
+	SELECT
+		start_key,
+		end_key,
+		jsonb_build_object(
+			'approximate_disk_bytes', stats->'approximate_disk_bytes',
+			'key_count', stats->'total_stats'->'key_count',
+			'key_bytes', stats->'total_stats'->'key_bytes',
+			'val_count', stats->'total_stats'->'val_count',
+			'val_bytes', stats->'total_stats'->'val_bytes',
+			'sys_count', stats->'total_stats'->'sys_count',
+			'sys_bytes', stats->'total_stats'->'sys_bytes',
+			'live_count', stats->'total_stats'->'live_count',
+			'live_bytes', stats->'total_stats'->'live_bytes',
+			'intent_count', stats->'total_stats'->'intent_count',
+			'intent_bytes', stats->'total_stats'->'intent_bytes'
+		) as stats
+	FROM crdb_internal.tenant_span_stats(ARRAY(%s FROM ranges))
+)`,
+			arrayArgs,
+		)
+	}
+
+	buf.WriteString(",\nnamed_ranges AS (")
 
 	switch mode {
 	case tree.UniqueRanges:
@@ -374,6 +406,24 @@ AND s.end_key > r.start_key`)
 	// columns from crdb_internal.ranges.
 	if n.Options.Details {
 		fmt.Fprintf(&buf, ",\n  %s", colinfo.RangesExtraRenders)
+
+		// When the row identifier is a range ID, we must find span stats
+		// that match the range start and end keys.
+		// Otherwise, we are free to use the "span_(end|start)_key" identifier.
+		var startKey string
+		var endKey string
+		if mode == tree.UniqueRanges {
+			startKey = "r.start_key"
+			endKey = "r.end_key"
+		} else {
+			startKey = "r.per_range_start_key"
+			endKey = "r.per_range_end_key"
+		}
+
+		fmt.Fprintf(&buf, `, (SELECT stats FROM all_span_stats sps WHERE %s = sps.start_key AND %s = sps.end_key LIMIT 1) AS span_stats`,
+			startKey,
+			endKey,
+		)
 	}
 	buf.WriteString("\nFROM named_ranges r)\n")
 
@@ -658,6 +708,7 @@ AND s.end_key > r.start_key`)
 			}
 			fmt.Fprintf(&buf, ",\n  %s", tree.NameString(colinfo.Ranges[i].Name))
 		}
+		buf.WriteString(",\n  span_stats")
 	}
 
 	// Complete this CTE. and add an order if needed.

@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -130,18 +129,6 @@ func newServerController(
 	parentStopper.AddCloser(c)
 	return c
 }
-
-// DefaultTenantSelectSettingName is the name of the setting that
-// configures the default tenant to use when a client does not specify
-// a specific tenant.
-var DefaultTenantSelectSettingName = "server.controller.default_tenant"
-
-var defaultTenantSelect = settings.RegisterStringSetting(
-	settings.SystemOnly,
-	DefaultTenantSelectSettingName,
-	"name of the tenant to use to serve requests when clients don't specify a tenant",
-	catconstants.SystemTenantName,
-).WithPublic()
 
 // tenantServerWrapper implements the onDemandServer interface for SQLServerWrapper.
 type tenantServerWrapper struct {
