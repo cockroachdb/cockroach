@@ -4,9 +4,6 @@
 # throw DML while we are mutating and dropping dependencies
 # at stage of the schema change plan.
 
-skip issue-num=103896
-----
-
 setup
 CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((j+1), k));
 ----
