@@ -12,9 +12,11 @@ package raftlog
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -129,9 +131,9 @@ const (
 	RaftCommandPrefixLen = 1 + RaftCommandIDLen
 )
 
-// EncodeRaftCommand encodes a marshaled kvserverpb.RaftCommand using
+// EncodeCommandBytes encodes a marshaled kvserverpb.RaftCommand using
 // the given encoding (one of EntryEncoding{Standard,Sideloaded}With{,out}AC).
-func EncodeRaftCommand(enc EntryEncoding, commandID kvserverbase.CmdIDKey, command []byte) []byte {
+func EncodeCommandBytes(enc EntryEncoding, commandID kvserverbase.CmdIDKey, command []byte) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
 	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], enc, commandID)
 	copy(b[RaftCommandPrefixLen:], command)
@@ -169,4 +171,11 @@ func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, er
 		return kvflowcontrolpb.RaftAdmissionMeta{}, err
 	}
 	return raftAdmissionMeta, nil
+}
+
+// MakeCmdIDKey populates a random CmdIDKey.
+func MakeCmdIDKey() kvserverbase.CmdIDKey {
+	idKeyBuf := make([]byte, 0, RaftCommandIDLen)
+	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
+	return kvserverbase.CmdIDKey(idKeyBuf)
 }
