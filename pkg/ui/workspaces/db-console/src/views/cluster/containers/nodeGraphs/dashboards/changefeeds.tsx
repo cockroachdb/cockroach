@@ -53,7 +53,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Commit Latency"
-      tooltip={`The difference between an event's MVCC timestamp and the time it was acknowledged as received by the downstream sink.`}
+      tooltip={`The difference between an event's MVCC timestamp and the time it was acknowledged as received by the downstream sink.  To reduce latency, consider setting schema_locked on the relevant tables`}
       isKvGraph={false}
       sources={storeSources}
       tenantSource={tenantSource}
@@ -140,6 +140,21 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Backfill Pending Ranges"
+      tooltip={`The number of ranges being backfilled (ex: due to an initial scan or schema change) that are yet to completely enter the Changefeed pipeline.`}
+      isKvGraph={false}
+      sources={storeSources}
+    >
+      <Axis units={AxisUnits.Count} label="count">
+        <Metric
+          name="cr.node.changefeed.backfill_pending_ranges"
+          title="Backfill Pending Ranges"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Oldest Protected Timestamp"
       tooltip={`The oldest data that any changefeed is protecting from being able to be automatically garbage collected.`}
       isKvGraph={false}
@@ -156,16 +171,22 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Backfill Pending Ranges"
-      tooltip={`The number of ranges being backfilled (ex: due to an initial scan or schema change) that are yet to completely enter the Changefeed pipeline.`}
+      title="Lagging Ranges"
       isKvGraph={false}
       sources={storeSources}
+      tooltip="Total number of ranges that haven't been able to emit a value for longer than the configured changefeed.lagging_ranges_threshold duration (default 10min)"
     >
-      <Axis units={AxisUnits.Count} label="count">
+      <Axis units={AxisUnits.Count} label="ranges">
+        {nodeIDs.map(nid => (
         <Metric
-          name="cr.node.changefeed.backfill_pending_ranges"
-          title="Backfill Pending Ranges"
-          nonNegativeRate
+          name="cr.node.changefeed.aggregator_lagging_ranges"
+          title={nodeDisplayName(nodeDisplayNameByID, nid)}
+          sources={[nid]}
+        />
+        ))}
+        <Metric
+          name="cr.node.changefeed.aggregator_lagging_ranges"
+          title={"Total Lagging Ranges"}
         />
       </Axis>
     </LineGraph>,
