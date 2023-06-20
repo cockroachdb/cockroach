@@ -362,3 +362,10 @@ type sharedSchemaRegistryCaches struct {
 }
 
 var schemaRegistrySingletons = &sharedSchemaRegistryCaches{cachePerEndpoint: make(map[string]*schemaRegistryCache)}
+
+// TestingClearSchemaRegistrySingleton clears out the singleton so that different tests don't pollute each other
+func TestingClearSchemaRegistrySingleton() {
+	schemaRegistrySingletons.mu.Lock()
+	defer schemaRegistrySingletons.mu.Unlock()
+	schemaRegistrySingletons.cachePerEndpoint = make(map[string]*schemaRegistryCache)
+}
