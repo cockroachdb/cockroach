@@ -109,7 +109,7 @@ export function DurationToNumber(
   duration?: protos.google.protobuf.IDuration,
   defaultIfNull = 0,
 ): number {
-  if (!duration) {
+  if (!duration || !duration?.seconds) {
     return defaultIfNull;
   }
   return duration.seconds.toNumber() + NanoToMilli(duration.nanos) * 1e-3;
@@ -124,7 +124,7 @@ export function DurationToMomentDuration(
   duration?: protos.google.protobuf.IDuration,
   defaultIfNullSeconds = 0,
 ): moment.Duration {
-  if (!duration) {
+  if (!duration || !duration?.seconds) {
     return moment.duration(defaultIfNullSeconds, "seconds");
   }
 
