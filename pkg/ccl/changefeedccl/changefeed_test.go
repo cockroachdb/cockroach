@@ -1189,6 +1189,86 @@ func TestChangefeedInitialScan(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+func TestChangefeedRangeHealthCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		changefeedbase.RangeHealthCheckFrequency.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 500*time.Millisecond)
+		changefeedbase.LaggingRangesThreshold.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 5*time.Second)
+
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		sli, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(defaultSLIScope)
+		require.NoError(t, err)
+		percentLagging := sli.AggregatorLaggingRangePercentage
+		laggingRanges := sli.AggregatorLaggingRanges
+
+		// Create a table with multiple ranges
+		numRanges := 10
+		rowsPerRange := 20
+
+		sqlDB.Exec(t, fmt.Sprintf(`
+  CREATE TABLE foo (key INT PRIMARY KEY);
+  INSERT INTO foo (key) SELECT * FROM generate_series(1, %d);
+  ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
+  `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM [SHOW RANGES FROM TABLE foo]`,
+			[][]string{{fmt.Sprint(numRanges)}},
+		)
+
+		// Skip half of the ranges
+		numRangesToSkip := numRanges / 2
+		healthAfterSkip := 1 - (float64(numRangesToSkip) / float64(numRanges))
+		skippedRanges := make(map[string]bool, 0)
+
+		var shouldFilter int32 = 1
+
+		// FilterSpanWithMutation will receive per-range ResolvedSpans
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) bool {
+			if atomic.LoadInt32(&shouldFilter) == 0 {
+				return false
+			}
+			if skippedRanges[r.Span.String()] || len(skippedRanges) < numRangesToSkip {
+				skippedRanges[r.Span.String()] = true
+				return true
+			}
+			return false
+		}
+
+		require.Equal(t, laggingRanges.Value(), int64(0))
+		require.Equal(t, percentLagging.Value(), float64(0))
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH initial_scan='no', resolved='500ms'`)
+		defer closeFeed(t, foo)
+
+		testutils.SucceedsSoon(t, func() error {
+			numLagging := laggingRanges.Value()
+			percent := percentLagging.Value()
+			if numLagging != int64(numRangesToSkip) || percent != healthAfterSkip {
+				return fmt.Errorf("lagging ranges count %d should be %d and percentage %.2f should be %.2f", numLagging, numRangesToSkip, percent, healthAfterSkip)
+			}
+			return nil
+		})
+
+		atomic.StoreInt32(&shouldFilter, 0)
+
+		testutils.SucceedsSoon(t, func() error {
+			numLagging := laggingRanges.Value()
+			percent := percentLagging.Value()
+			if numLagging != 0 || percent != 0 {
+				return fmt.Errorf("lagging ranges count %d should be 0 and percentage %.2f should be 1.00", numLagging, percent)
+			}
+			return nil
+		})
+	}
+
+	cdcTest(t, testFn, feedTestNoTenants, feedTestEnterpriseSinks)
+}
+
 func TestChangefeedBackfillObservability(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
