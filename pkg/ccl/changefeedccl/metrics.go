@@ -70,6 +70,7 @@ type AggMetrics struct {
 	SchemaRegistryRetries     *aggmetric.AggCounter
 	AggregatorProgress        *aggmetric.AggGauge
 	CheckpointProgress        *aggmetric.AggGauge
+	LaggingRanges             *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -132,6 +133,7 @@ type sliMetrics struct {
 	SchemaRegistryRetries     *aggmetric.Counter
 	AggregatorProgress        *aggmetric.Gauge
 	CheckpointProgress        *aggmetric.Gauge
+	LaggingRanges             *aggmetric.Gauge
 
 	mu struct {
 		syncutil.Mutex
@@ -607,6 +609,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Unix Timestamp Nanoseconds",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}
+	metaLaggingRangePercentage := metric.Metadata{
+		Name:        "changefeed.lagging_ranges",
+		Help:        "The number of ranges considered to be lagging behind",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
 		var min int64
@@ -617,6 +625,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		}
 		return min
 	}
+
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -681,6 +690,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
 		AggregatorProgress:        b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
 		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
+		LaggingRanges:             b.Gauge(metaLaggingRangePercentage),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -740,6 +750,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		InternalRetryMessageCount: a.InternalRetryMessageCount.AddChild(scope),
 		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
 		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
+		LaggingRanges:             a.LaggingRanges.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
@@ -767,6 +778,31 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 
 	a.mu.sliMetrics[scope] = sm
 	return sm, nil
+}
+
+// getLaggingRangesCallback returns a function which can be called to update the
+// lagging ranges metric. It should be called with the current number of lagging
+// ranges.
+func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
+	// Because this gauge is shared between changefeeds in the same metrics scope,
+	// we must instead modify it using `Inc` and `Dec` (as opposed to `Update`) to
+	// ensure values written by others are not overwritten. The code below is used
+	// to determine the deltas based on the last known number of lagging ranges.
+	//
+	// Example:
+	//
+	// Initially there are 0 lagging ranges, so `last` is 0. Assume the gauge
+	// has an arbitrary value X.
+	//
+	// If 10 ranges are behind, last=0,i=10: X.Dec(0 - 10) = X.Inc(10)
+	// If 3 ranges catch up, last=10,i=7: X.Dec(10 - 7) = X.Dec(3)
+	// If 4 ranges fall behind, last=7,i=11: X.Dec(7 - 11) = X.Inc(4)
+	// If 1 lagging range is deleted, last=7,i=10: X.Dec(11-10) = X.Dec(1)
+	var last int64
+	return func(i int64) {
+		s.LaggingRanges.Dec(last - i)
+		last = i
+	}
 }
 
 // Metrics are for production monitoring of changefeeds.

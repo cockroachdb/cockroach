@@ -73,33 +73,35 @@ const (
 
 // Constants for the options.
 const (
-	OptAvroSchemaPrefix        = `avro_schema_prefix`
-	OptConfluentSchemaRegistry = `confluent_schema_registry`
-	OptCursor                  = `cursor`
-	OptCustomKeyColumn         = `key_column`
-	OptEndTime                 = `end_time`
-	OptEnvelope                = `envelope`
-	OptFormat                  = `format`
-	OptFullTableName           = `full_table_name`
-	OptKeyInValue              = `key_in_value`
-	OptTopicInValue            = `topic_in_value`
-	OptResolvedTimestamps      = `resolved`
-	OptMinCheckpointFrequency  = `min_checkpoint_frequency`
-	OptUpdatedTimestamps       = `updated`
-	OptMVCCTimestamps          = `mvcc_timestamp`
-	OptDiff                    = `diff`
-	OptCompression             = `compression`
-	OptSchemaChangeEvents      = `schema_change_events`
-	OptSchemaChangePolicy      = `schema_change_policy`
-	OptSplitColumnFamilies     = `split_column_families`
-	OptExpirePTSAfter          = `gc_protect_expires_after`
-	OptWebhookAuthHeader       = `webhook_auth_header`
-	OptWebhookClientTimeout    = `webhook_client_timeout`
-	OptOnError                 = `on_error`
-	OptMetricsScope            = `metrics_label`
-	OptUnordered               = `unordered`
-	OptVirtualColumns          = `virtual_columns`
-	OptExecutionLocality       = `execution_locality`
+	OptAvroSchemaPrefix             = `avro_schema_prefix`
+	OptConfluentSchemaRegistry      = `confluent_schema_registry`
+	OptCursor                       = `cursor`
+	OptCustomKeyColumn              = `key_column`
+	OptEndTime                      = `end_time`
+	OptEnvelope                     = `envelope`
+	OptFormat                       = `format`
+	OptFullTableName                = `full_table_name`
+	OptKeyInValue                   = `key_in_value`
+	OptTopicInValue                 = `topic_in_value`
+	OptResolvedTimestamps           = `resolved`
+	OptMinCheckpointFrequency       = `min_checkpoint_frequency`
+	OptUpdatedTimestamps            = `updated`
+	OptMVCCTimestamps               = `mvcc_timestamp`
+	OptDiff                         = `diff`
+	OptCompression                  = `compression`
+	OptSchemaChangeEvents           = `schema_change_events`
+	OptSchemaChangePolicy           = `schema_change_policy`
+	OptSplitColumnFamilies          = `split_column_families`
+	OptExpirePTSAfter               = `gc_protect_expires_after`
+	OptWebhookAuthHeader            = `webhook_auth_header`
+	OptWebhookClientTimeout         = `webhook_client_timeout`
+	OptOnError                      = `on_error`
+	OptMetricsScope                 = `metrics_label`
+	OptUnordered                    = `unordered`
+	OptVirtualColumns               = `virtual_columns`
+	OptExecutionLocality            = `execution_locality`
+	OptLaggingRangesThreshold       = `lagging_ranges_threshold`
+	OptLaggingRangesPollingInterval = `lagging_ranges_polling_interval`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -348,6 +350,8 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptUnordered:                          flagOption,
 	OptVirtualColumns:                     enum("omitted", "null"),
 	OptExecutionLocality:                  stringOption,
+	OptLaggingRangesThreshold:             durationOption,
+	OptLaggingRangesPollingInterval:       durationOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -360,7 +364,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptOnError,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered, OptCustomKeyColumn,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
-	OptExecutionLocality,
+	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -617,6 +621,8 @@ func (s StatementOptions) getEnumValue(k string) (string, error) {
 	return rawVal, nil
 }
 
+// getDurationValue validates that the option `k` was supplied with a
+// valid duration.
 func (s StatementOptions) getDurationValue(k string) (*time.Duration, error) {
 	v, ok := s.m[k]
 	if !ok {
@@ -933,6 +939,34 @@ func (s StatementOptions) GetResolvedTimestampInterval() (*time.Duration, bool, 
 func (s StatementOptions) GetMetricScope() (string, bool) {
 	v, ok := s.m[OptMetricsScope]
 	return v, ok
+}
+
+// GetLaggingRangesConfig returns the threshold and polling rate to use for
+// lagging ranges metrics.
+func (s StatementOptions) GetLaggingRangesConfig() (
+	threshold time.Duration,
+	pollingInterval time.Duration,
+	e error,
+) {
+	threshold = DefaultLaggingRangesThreshold
+	pollingInterval = DefaultLaggingRangesPollingInterval
+	_, ok := s.m[OptLaggingRangesThreshold]
+	if ok {
+		t, err := s.getDurationValue(OptLaggingRangesThreshold)
+		if err != nil {
+			return threshold, pollingInterval, err
+		}
+		threshold = *t
+	}
+	_, ok = s.m[OptLaggingRangesPollingInterval]
+	if ok {
+		i, err := s.getDurationValue(OptLaggingRangesPollingInterval)
+		if err != nil {
+			return threshold, pollingInterval, err
+		}
+		pollingInterval = *i
+	}
+	return threshold, pollingInterval, nil
 }
 
 // IncludeVirtual returns true if we need to set placeholder nulls for virtual columns.

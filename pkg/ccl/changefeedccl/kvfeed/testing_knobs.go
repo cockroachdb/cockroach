@@ -33,6 +33,8 @@ type TestingKnobs struct {
 	// ModifyTimestamps is called on the timestamp for each RangefeedMessage
 	// before converting it into a kv event.
 	ModifyTimestamps func(*hlc.Timestamp)
+	// RangefeedOptions lets the kvfeed override rangefeed settings.
+	RangefeedOptions []kvcoord.RangeFeedOption
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
