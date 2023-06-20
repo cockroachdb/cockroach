@@ -5393,15 +5393,10 @@ def go_deps():
         name = "com_github_knz_go_libedit",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/go-libedit",
-        patch_args = ["-p1"],
-        patches = [
-            "@com_github_cockroachdb_cockroach//build/patches:com_github_knz_go_libedit.patch",
-        ],
-        sha256 = "d603b4baf8ab6608a79f56edf2e5a24c5bf96af06f665002f47267d8401a7614",
-        strip_prefix = "github.com/knz/go-libedit@v1.10.2-0.20230308124748-6f1b59dd42bc",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/go-libedit/com_github_knz_go_libedit-v1.10.2-0.20230308124748-6f1b59dd42bc.zip",
-        ],
+        replace = "github.com/rickystewart/go-libedit",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:UHc8PBcSZ1af/VMEuU19xF/yVh+/PhKf8YicESAsers=",
+        version = "v0.0.0-20230620172017-4598a4bed7d4",
     )
     go_repository(
         name = "com_github_knz_lipgloss_convert",
