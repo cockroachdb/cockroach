@@ -1,0 +1,29 @@
+/* setup */
+
+/* test */
+CREATE SCHEMA sc;
+EXPLAIN (DDL) DROP SCHEMA sc;
+----
+Schema change plan for DROP SCHEMA ‹""›.‹sc›; following CREATE SCHEMA ‹defaultdb›.‹sc›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 6 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (sc-), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (sc-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (sc-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (sc-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Schema:{DescID: 104 (sc-)}
+ │         │    └── PUBLIC → ABSENT  SchemaParent:{DescID: 104 (sc-), ReferencedDescID: 100 (defaultdb)}
+ │         └── 6 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
+ │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":100,"SchemaID":104}}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sc"}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
+ │              └── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
+ └── PreCommitPhase
+      └── Stage 1 of 1 in PreCommitPhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── DROPPED → ABSENT Schema:{DescID: 104 (sc-)}
+           └── 1 Mutation operation
+                └── UndoAllInTxnImmediateMutationOpSideEffects

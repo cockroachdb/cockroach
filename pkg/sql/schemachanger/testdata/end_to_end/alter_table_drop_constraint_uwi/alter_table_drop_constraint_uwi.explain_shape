@@ -1,0 +1,10 @@
+/* setup */
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t DROP CONSTRAINT unique_j;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CONSTRAINT ‹unique_j›;
+ └── execute 2 system table mutations transactions

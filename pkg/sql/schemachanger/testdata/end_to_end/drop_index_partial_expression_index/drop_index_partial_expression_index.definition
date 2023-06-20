@@ -1,0 +1,12 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j STRING);
+CREATE INDEX idx ON t(lower(j)) WHERE i > 0
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t (i, j) VALUES($stageKey, 'TESt1');
+----
+
+test
+DROP INDEX idx CASCADE
+----

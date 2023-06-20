@@ -1,0 +1,12 @@
+/* setup */
+CREATE SEQUENCE s;
+CREATE TYPE typ AS ENUM ('a', 'b');
+CREATE TABLE t (i INT PRIMARY KEY, j STRING);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a');
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›));
+ ├── execute 1 system table mutations transaction
+ ├── validate non-index-backed constraint check_i_j+ in relation t
+ └── execute 1 system table mutations transaction

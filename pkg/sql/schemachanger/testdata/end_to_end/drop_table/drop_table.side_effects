@@ -1,0 +1,132 @@
+/* setup */
+CREATE DATABASE db;
+CREATE SCHEMA db.sc;
+CREATE TABLE db.sc.t (k INT, v STRING);
+COMMENT ON TABLE db.sc.t IS 't has a comment';
+CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
++schema {104 0 sc} -> 106
++object {104 106 t} -> 107
++object {104 106 e} -> 108
++object {104 106 _e} -> 109
+
+/* test */
+DROP TABLE db.sc.t;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP TABLE
+increment telemetry for sql.schema.drop_table
+write *eventpb.DropTable to event log:
+  sql:
+    descriptorId: 107
+    statement: DROP TABLE ‹db›.‹sc›.‹t›
+    tag: DROP TABLE
+    user: root
+  tableName: db.sc.t
+## StatementPhase stage 1 of 1 with 38 MutationType ops
+delete object namespace entry {104 106 t} -> 107
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 106
+  -  version: "1"
+  +  version: "2"
+delete comment TableCommentType(objID: 107, subID: 0)
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 40 MutationType ops
+delete object namespace entry {104 106 t} -> 107
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 107
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TABLE ‹db›.‹sc›.‹t›
+  +        statement: DROP TABLE db.sc.t
+  +        statementTag: DROP TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 106
+  -  version: "1"
+  +  version: "2"
+delete comment TableCommentType(objID: 107, subID: 0)
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
+  descriptor IDs: [107]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 107
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP TABLE ‹db›.‹sc›.‹t›
+  -        statement: DROP TABLE db.sc.t
+  -        statementTag: DROP TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     dropTime: <redacted>"
+     families:
+  ...
+     state: DROP
+     unexposedParentSchemaId: 106
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for DROP TABLE db.sc.t"
+  descriptor IDs: [107]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 107
+commit transaction #3
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

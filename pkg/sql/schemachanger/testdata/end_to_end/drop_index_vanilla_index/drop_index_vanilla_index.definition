@@ -1,0 +1,25 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+CREATE INDEX idx ON t(j)
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t (i, j) VALUES($stageKey, $stageKey);
+INSERT INTO t (i, j) VALUES($stageKey + 1, $stageKey + 1);
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+DELETE FROM t WHERE j=$stageKey+1;
+INSERT INTO t (i, j) VALUES($stageKey + 1, $stageKey + 1);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t;
+----
+true
+
+test
+DROP INDEX idx CASCADE
+----
