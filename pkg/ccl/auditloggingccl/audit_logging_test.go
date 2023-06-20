@@ -41,11 +41,15 @@ func TestRoleBasedAuditEnterpriseGated(t *testing.T) {
 
 	testQuery := `SET CLUSTER SETTING sql.log.user_audit = 'ALL ALL'`
 
-	// Test that we cannot change the cluster setting when enterprise is disabled.
+	// Disable enterprise.
 	enableEnterprise := utilccl.TestingDisableEnterprise()
+
+	// Test that we cannot change the cluster setting when enterprise is disabled.
 	rootRunner.ExpectErr(t, "role-based audit logging requires enterprise license", testQuery)
-	// Enable enterprise.
+
+	// Enable enterprise
 	enableEnterprise()
+
 	// Test that we can change the cluster setting when enterprise is enabled.
 	rootRunner.Exec(t, testQuery)
 }

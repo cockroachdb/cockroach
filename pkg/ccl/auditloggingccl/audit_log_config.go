@@ -10,13 +10,12 @@ package auditloggingccl
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -27,7 +26,7 @@ const auditConfigDefaultValue = ""
 var UserAuditLogConfig = settings.RegisterValidatedStringSetting(
 	settings.TenantWritable,
 	"sql.log.user_audit",
-	"user/role-based audit logging configuration",
+	"User/role-based audit logging configuration. An enterprise license is required for this cluster setting to take effect.",
 	auditConfigDefaultValue,
 	validateAuditLogConfig,
 ).WithPublic()
@@ -53,15 +52,6 @@ func validateAuditLogConfig(_ *settings.Values, input string) error {
 	if input == auditConfigDefaultValue {
 		// Empty config
 		return nil
-	}
-	st, clusterID, err := auditlogging.UserAuditEnterpriseParamsHook()
-	if err != nil {
-		return err
-	}
-	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(st, clusterID, "role-based audit logging")
-	if enterpriseCheckErr != nil {
-		return pgerror.Wrap(enterpriseCheckErr,
-			pgcode.InsufficientPrivilege, "role-based audit logging requires enterprise license")
 	}
 	// Ensure it can be parsed.
 	conf, err := auditlogging.Parse(input)
@@ -104,8 +94,9 @@ var ConfigureRoleBasedAuditClusterSettings = func(ctx context.Context, acl *audi
 	UpdateAuditConfigOnChange(ctx, acl, st)
 }
 
-var UserAuditLogConfigEmpty = func(sv *settings.Values) bool {
-	return UserAuditLogConfig.Get(sv) == ""
+var UserAuditEnabled = func(st *cluster.Settings, clusterID uuid.UUID) bool {
+	enterpriseEnabled := utilccl.IsEnterpriseEnabled(st, clusterID, "role-based audit logging")
+	return UserAuditLogConfig.Get(&st.SV) != "" && enterpriseEnabled
 }
 
 var UserAuditReducedConfigEnabled = func(sv *settings.Values) bool {
@@ -114,6 +105,6 @@ var UserAuditReducedConfigEnabled = func(sv *settings.Values) bool {
 
 func init() {
 	auditlogging.ConfigureRoleBasedAuditClusterSettings = ConfigureRoleBasedAuditClusterSettings
-	auditlogging.UserAuditLogConfigEmpty = UserAuditLogConfigEmpty
+	auditlogging.UserAuditEnabled = UserAuditEnabled
 	auditlogging.UserAuditReducedConfigEnabled = UserAuditReducedConfigEnabled
 }
