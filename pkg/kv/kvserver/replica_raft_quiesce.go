@@ -40,7 +40,7 @@ var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCEN
 func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) {
 	if !r.mu.quiescent {
 		if log.V(3) {
-			log.Infof(ctx, "quiescing %d", r.RangeID)
+			log.Infof(ctx, "quiescing r%d", r.RangeID)
 		}
 		r.mu.quiescent = true
 		r.mu.laggingFollowersOnQuiesce = lagging
@@ -48,7 +48,7 @@ func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) 
 		delete(r.store.unquiescedReplicas.m, r.RangeID)
 		r.store.unquiescedReplicas.Unlock()
 	} else if log.V(4) {
-		log.Infof(ctx, "already quiesced")
+		log.Infof(ctx, "r%d already quiesced", r.RangeID)
 	}
 }
 
@@ -78,7 +78,7 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	}
 	ctx := r.AnnotateCtx(context.TODO())
 	if log.V(3) {
-		log.Infof(ctx, "unquiescing %d", r.RangeID)
+		log.Infof(ctx, "unquiescing r%d", r.RangeID)
 	}
 	r.mu.quiescent = false
 	r.mu.laggingFollowersOnQuiesce = nil
@@ -94,7 +94,7 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	} else if st.RaftState == raft.StateFollower && wakeLeader {
 		// Propose an empty command which will wake the leader.
 		if log.V(3) {
-			log.Infof(ctx, "waking %d leader", r.RangeID)
+			log.Infof(ctx, "waking r%d leader", r.RangeID)
 		}
 		data := raftlog.EncodeRaftCommand(raftlog.EntryEncodingStandardWithoutAC, makeIDKey(), nil)
 		_ = r.mu.internalRaftGroup.Propose(data)
