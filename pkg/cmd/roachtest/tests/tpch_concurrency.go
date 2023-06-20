@@ -169,7 +169,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		// Each iteration can take on the order of 3 hours, so we choose the
 		// iteration count such that it'd be definitely completed with 18 hour
 		// timeout.
-		const numIterations = 3
+		const numIterations = 4
 		var numFails int
 		for i := 0; i < numIterations; i++ {
 			if err := checkConcurrency(ctx, t, c, concurrency); err != nil {
@@ -179,10 +179,20 @@ func registerTPCHConcurrency(r registry.Registry) {
 		// Restart the cluster so that if any nodes crashed in the last
 		// iteration, it doesn't fail the test.
 		restartCluster(ctx, c, t)
-		if numFails > numIterations/2 {
-			// If we had a node crash in more than half of all iterations, then
-			// we fail the test.
-			t.Fatalf("crashed %d times out of %d iterations", numFails, numIterations)
+		// When the streamer is enabled, we expect better stability, so the
+		// failure condition depends on the disableStreamer boolean.
+		if disableStreamer {
+			if numFails == numIterations {
+				// If we had a node crash in every iteration when the streamer
+				// is disabled, then we fail the test.
+				t.Fatalf("crashed %d times (streamer disabled)", numFails)
+			}
+		} else {
+			if numFails > numIterations/2 {
+				// If we had a node crash in more than half of all iterations
+				// when the streamer is enabled, then we fail the test.
+				t.Fatalf("crashed %d times out of %d iterations (streamer enabled)", numFails, numIterations)
+			}
 		}
 	}
 
