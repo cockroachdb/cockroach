@@ -417,6 +417,10 @@ func (ih *instrumentationHelper) Finish(
 				ob.BuildString(), trace, placeholders, res.Err(), payloadErr, retErr,
 				&p.extendedEvalCtx.Settings.SV,
 			)
+			// Include all non-critical errors as warnings. Note that these
+			// error strings might contain PII, but the warnings are only shown
+			// to the current user and aren't included into the bundle.
+			warnings = append(warnings, bundle.errorStrings...)
 			bundle.insert(
 				ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
 			)

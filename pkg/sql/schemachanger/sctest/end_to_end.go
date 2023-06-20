@@ -90,13 +90,15 @@ func SingleNodeCluster(
 	}
 }
 
+const OldVersionKey = clusterversion.BinaryMinSupportedVersionKey
+
 // SingleNodeMixedCluster is a NewClusterFunc.
 func SingleNodeMixedCluster(
 	t *testing.T, knobs *scexec.TestingKnobs, downlevelVersion bool,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
 	targetVersion := clusterversion.TestingBinaryVersion
 	if downlevelVersion {
-		targetVersion = clusterversion.ByKey(clusterversion.V22_2)
+		targetVersion = clusterversion.ByKey(OldVersionKey)
 	}
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Disabled due to a failure in TestBackupRestore. Tracked with #76378.
