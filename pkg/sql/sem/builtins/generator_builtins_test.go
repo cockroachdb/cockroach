@@ -53,3 +53,34 @@ func TestConcurrentProcessorsReadEpoch(t *testing.T) {
 		exp++
 	}
 }
+
+func TestWorkloadIndexRecs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	testCases := []struct {
+		sql string
+	}{
+		{ // No input
+			sql: "SELECT workload_index_recs();",
+		},
+		{ // Timestampsz only
+			sql: "SELECT workload_index_recs(now() - '2 weeks'::interval)",
+		},
+		{ // Budget only
+			sql: "SELECT workload_index_recs('42MB');",
+		},
+		{ // Both Timestampsz and Budget
+			sql: "SELECT workload_index_recs('2023-06-13 10:10:10-05:00', '58GiB');",
+		},
+	}
+	for i, tc := range testCases {
+		rows, err := db.Query(tc.sql)
+		require.NoError(t, err)
+		require.Equalf(t, false, rows.Next(), "failed test case %d", i+1)
+	}
+}
