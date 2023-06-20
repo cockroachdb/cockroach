@@ -495,15 +495,24 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 }
 
 func (r *Replica) MaybeUnquiesce() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
+	return r.maybeUnquiesce(true /* wakeLeader */, true /* mayCampaign */)
 }
 
-func (r *Replica) MaybeUnquiesceAndWakeLeader() bool {
+// MaybeUnquiesceAndPropose will unquiesce the range and submit a noop proposal.
+// This is useful when unquiescing the leader and wanting to also unquiesce
+// followers, since the leader may otherwise simply quiesce again immediately.
+func (r *Replica) MaybeUnquiesceAndPropose() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.maybeUnquiesceAndWakeLeaderLocked()
+	if !r.canUnquiesceRLocked() {
+		return false, nil
+	}
+	return true, r.withRaftGroupLocked(false, func(r *raft.RawNode) (bool, error) {
+		if err := r.Propose(nil); err != nil {
+			return false, err
+		}
+		return true /* unquiesceAndWakeLeader */, nil
+	})
 }
 
 func (r *Replica) ReadCachedProtectedTS() (readAt, earliestProtectionTimestamp hlc.Timestamp) {
