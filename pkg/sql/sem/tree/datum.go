@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -3580,6 +3581,132 @@ func (d *DGeometry) Size() uintptr {
 	return d.Geometry.SpatialObjectRef().MemSize()
 }
 
+type DPGLSN struct {
+	lsn.LSN
+}
+
+// NewDPGLSN returns a new PGLSN Datum.
+func NewDPGLSN(l lsn.LSN) *DPGLSN {
+	return &DPGLSN{LSN: l}
+}
+
+// ParseDPGLSN attempts to pass `str` as a PGLSN type.
+func ParseDPGLSN(str string) (*DPGLSN, error) {
+	v, err := lsn.ParseLSN(str)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not parse pg_lsn")
+	}
+	return NewDPGLSN(v), nil
+}
+
+// AsDPGLSN attempts to retrieve a *DPGLSN from an Expr, returning a
+// *DPGLSN and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DPGLSN wrapped by a *DOidWrapper is possible.
+func AsDPGLSN(e Expr) (*DPGLSN, bool) {
+	switch t := e.(type) {
+	case *DPGLSN:
+		return t, true
+	case *DOidWrapper:
+		return AsDPGLSN(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDPGLSN attempts to retrieve a *DPGLSN from an Expr, panicking
+// if the assertion fails.
+func MustBeDPGLSN(e Expr) *DPGLSN {
+	i, ok := AsDPGLSN(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DPGLSN, found %T", e))
+	}
+	return i
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DPGLSN) ResolvedType() *types.T {
+	return types.PGLSN
+}
+
+// Compare implements the Datum interface.
+func (d *DPGLSN) Compare(ctx CompareContext, other Datum) int {
+	res, err := d.CompareError(ctx, other)
+	if err != nil {
+		panic(err)
+	}
+	return res
+}
+
+// CompareError implements the Datum interface.
+func (d *DPGLSN) CompareError(ctx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	v, ok := ctx.UnwrapDatum(other).(*DPGLSN)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	return d.LSN.Compare(v.LSN), nil
+}
+
+// Prev implements the Datum interface.
+func (d *DPGLSN) Prev(ctx CompareContext) (Datum, bool) {
+	if d.IsMin(ctx) {
+		return nil, false
+	}
+	return NewDPGLSN(d.LSN.Sub(1)), true
+}
+
+// Next implements the Datum interface.
+func (d *DPGLSN) Next(ctx CompareContext) (Datum, bool) {
+	if d.IsMax(ctx) {
+		return nil, false
+	}
+	return NewDPGLSN(d.LSN.Add(1)), true
+}
+
+// IsMax implements the Datum interface.
+func (d *DPGLSN) IsMax(ctx CompareContext) bool {
+	return d.LSN == math.MaxUint64
+}
+
+// IsMin implements the Datum interface.
+func (d *DPGLSN) IsMin(ctx CompareContext) bool {
+	return d.LSN == 0
+}
+
+// Max implements the Datum interface.
+func (d *DPGLSN) Max(ctx CompareContext) (Datum, bool) {
+	return NewDPGLSN(math.MaxUint64), false
+}
+
+// Min implements the Datum interface.
+func (d *DPGLSN) Min(ctx CompareContext) (Datum, bool) {
+	return NewDPGLSN(0), false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DPGLSN) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DPGLSN) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lexbase.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	ctx.WriteString(d.LSN.String())
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DPGLSN) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
 // DBox2D is the Datum representation of the Box2D type.
 type DBox2D struct {
 	geo.CartesianBoundingBox
@@ -3863,7 +3990,7 @@ func AsJSON(
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D,
-		*DTSVector, *DTSQuery:
+		*DTSVector, *DTSQuery, *DPGLSN:
 		return json.FromString(
 			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
 		), nil
@@ -5941,6 +6068,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.DateFamily:           {unsafe.Sizeof(DDate{}), fixedSize},
 	types.GeographyFamily:      {unsafe.Sizeof(DGeography{}), variableSize},
 	types.GeometryFamily:       {unsafe.Sizeof(DGeometry{}), variableSize},
+	types.PGLSNFamily:          {unsafe.Sizeof(DPGLSN{}), fixedSize},
 	types.TimeFamily:           {unsafe.Sizeof(DTime(0)), fixedSize},
 	types.TimeTZFamily:         {unsafe.Sizeof(DTimeTZ{}), fixedSize},
 	types.TimestampFamily:      {unsafe.Sizeof(DTimestamp{}), fixedSize},
