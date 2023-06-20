@@ -1,0 +1,23 @@
+setup
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
+----
+
+# Constraint is still enforced in this stage, so the second
+# insert will fail.
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO t VALUES ($stageKey, $stageKey);
+INSERT INTO t VALUES ($stageKey+1, $stageKey);
+----
+pq: duplicate key value violates unique constraint "crdb_internal_constraint_2_name_placeholder"
+
+stage-query phase=PostCommitNonRevertiblePhase stage=1
+SELECT count(*) FROM t;
+----
+1
+
+
+test
+ALTER TABLE t DROP CONSTRAINT unique_j;
+----

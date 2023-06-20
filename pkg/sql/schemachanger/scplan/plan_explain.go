@@ -483,21 +483,28 @@ func (p Plan) explainBackfillsAndMerges(root treeprinter.Node, ops []scop.Op) er
 			})
 		}
 		for _, id := range gb.dstIndexIDs.Ordered() {
-			var withComma bool
 			var sb strings.Builder
 			sb.WriteString("into ")
 			sb.WriteString(p.IndexName(gb.relationID, id))
 			sb.WriteString(" (")
-			for _, ics := range [][]*scpb.IndexColumn{key, suffix, stored} {
+			for i, ics := range [][]*scpb.IndexColumn{key, suffix, stored} {
+				var notFirstColumnInKind bool
 				for _, ic := range ics {
-					if ic.IndexID == id {
-						if withComma {
-							sb.WriteString(", ")
-						} else {
-							withComma = true
-						}
-						sb.WriteString(p.ColumnName(gb.relationID, ic.ColumnID))
+					if ic.IndexID != id {
+						continue
 					}
+					if notFirstColumnInKind {
+						// Separator between columns of same kind.
+						sb.WriteString(", ")
+					} else if i == 1 {
+						// Separator between key column and key suffix column.
+						sb.WriteString(": ")
+					} else if i == 2 {
+						// Separator between key or key suffix column and stored column.
+						sb.WriteString("; ")
+					}
+					sb.WriteString(p.ColumnName(gb.relationID, ic.ColumnID))
+					notFirstColumnInKind = true
 				}
 			}
 			sb.WriteString(")")

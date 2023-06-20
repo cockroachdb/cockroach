@@ -1,0 +1,12 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+SET experimental_enable_unique_without_index_constraints = true;
+INSERT INTO t(i, j) VALUES(-1, -1), (-2, -2), (-3, -3);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›);
+ ├── execute 1 system table mutations transaction
+ ├── validate non-index-backed constraint unique_j+ in relation t
+ └── execute 1 system table mutations transaction

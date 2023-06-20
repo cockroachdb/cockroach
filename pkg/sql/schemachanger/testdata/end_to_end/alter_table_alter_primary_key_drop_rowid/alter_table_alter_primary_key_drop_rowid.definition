@@ -1,0 +1,34 @@
+setup
+CREATE TABLE t (a INT NOT NULL)
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES($stageKey + 1);
+----
+pq: INSERT has more expressions than target columns, 2 expressions for 1 targets
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t;
+----
+true
+
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES($stageKey);
+INSERT INTO t VALUES($stageKey + 1);
+----
+pq: INSERT has more expressions than target columns, 2 expressions for 1 targets
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM t;
+----
+true
+
+test
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a)
+----

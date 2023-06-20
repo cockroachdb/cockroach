@@ -1,0 +1,49 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, b INT);
+CREATE FUNCTION f(b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT b + 1 $$;
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹check_b› CHECK (f(‹b›) > ‹1›);
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+ │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_b", ConstraintID: 2 (check_b+)}
+ │         └── 3 Mutation operations
+ │              ├── AddCheckConstraint {"CheckExpr":"[FUNCTION 100105...","ConstraintID":2,"TableID":104,"Validity":2}
+ │              ├── AddTableConstraintBackReferencesInFunctions {"BackReferencedConstraintID":2,"BackReferencedTableID":104}
+ │              └── SetConstraintName {"ConstraintID":2,"Name":"check_b","TableID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 2 elements transitioning toward PUBLIC
+ │    │    │    ├── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+ │    │    │    └── PUBLIC     → ABSENT ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_b", ConstraintID: 2 (check_b+)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 2 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+ │         │    └── ABSENT → PUBLIC     ConstraintWithoutIndexName:{DescID: 104 (t), Name: "check_b", ConstraintID: 2 (check_b+)}
+ │         └── 6 Mutation operations
+ │              ├── AddCheckConstraint {"CheckExpr":"[FUNCTION 100105...","ConstraintID":2,"TableID":104,"Validity":2}
+ │              ├── AddTableConstraintBackReferencesInFunctions {"BackReferencedConstraintID":2,"BackReferencedTableID":104}
+ │              ├── SetConstraintName {"ConstraintID":2,"Name":"check_b","TableID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ └── PostCommitPhase
+      ├── Stage 1 of 2 in PostCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+      │    └── 1 Validation operation
+      │         └── ValidateConstraint {"ConstraintID":2,"TableID":104}
+      └── Stage 2 of 2 in PostCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── VALIDATED → PUBLIC CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_b+)}
+           └── 4 Mutation operations
+                ├── MakeValidatedCheckConstraintPublic {"ConstraintID":2,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

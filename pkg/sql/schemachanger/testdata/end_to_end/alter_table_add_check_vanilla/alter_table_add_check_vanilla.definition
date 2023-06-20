@@ -1,0 +1,37 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY);
+INSERT INTO t(i) VALUES (1), (2), (3);
+----
+
+#For rollback testing intentionally inject an error.
+stage-exec phase=PreCommitPhase stage=1 schemaChangeExecErrorForRollback=(.*validation of CHECK "i > 0:::INT8" failed on row: i=-4.*)
+UPDATE t SET i=-4 WHERE i = 3;
+----
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=2: rollback=true
+INSERT INTO t(i) VALUES(-$stageKey);
+INSERT INTO t(i) VALUES(-$stageKey - 1);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t(i) VALUES($stageKey);
+INSERT INTO t(i) VALUES($stageKey + 1);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t(i) VALUES(-1)
+----
+pq: failed to satisfy CHECK constraint .*
+
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM t;
+----
+true
+
+test
+ALTER TABLE t ADD CHECK (i > 0)
+---
+----

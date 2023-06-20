@@ -1,0 +1,10 @@
+setup
+CREATE DATABASE multi_region_test_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+CREATE TABLE multi_region_test_db.public.table_regional_by_table (
+  a INT PRIMARY KEY
+) LOCALITY REGIONAL BY TABLE IN "us-east2";
+----
+
+test
+DROP DATABASE multi_region_test_db CASCADE
+----

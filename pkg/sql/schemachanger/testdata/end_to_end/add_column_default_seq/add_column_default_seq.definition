@@ -1,0 +1,44 @@
+setup
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+CREATE SEQUENCE db.public.sq1;
+----
+
+stage-exec phase=PostCommitPhase stage=1:2 schemaChangeExecError=(.*unimplemented: cannot evaluate scalar expressions containing sequence operations in this context.*)
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=1:2
+SELECT count(*) FROM db.public.tbl;
+----
+2
+
+stage-exec phase=PostCommitPhase stage=3:
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=3:
+SELECT count(*)=$successfulStageCount*2 FROM db.public.tbl;
+----
+true
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+
+
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*2 FROM db.public.tbl;
+----
+true
+
+test
+ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAULT nextval('db.public.sq1')
+----

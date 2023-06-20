@@ -1,0 +1,11 @@
+/* setup */
+CREATE TABLE t1(i INT PRIMARY KEY, j INT);
+CREATE MATERIALIZED VIEW v2 AS SELECT i, j FROM t1;
+CREATE INDEX idx ON v2(j);
+CREATE MATERIALIZED VIEW v3 AS SELECT j FROM v2@idx;
+
+/* test */
+EXPLAIN (DDL, SHAPE) DROP INDEX idx CASCADE;
+----
+Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE;
+ └── execute 3 system table mutations transactions
