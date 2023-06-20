@@ -840,13 +840,19 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		opts.stderr = io.Discard
 	}
 
+	fmtOut := func(s string) string {
+		if strings.TrimSpace(s) == "" {
+			return "<empty>"
+		}
+		return fmt.Sprintf("\n```\n%s\n```", s)
+	}
 	var res *RunResultDetails
 	output := ""
 	if opts.combinedOut {
 		out, cmdErr := sess.CombinedOutput(ctx)
 		res = newRunResultDetails(node, cmdErr)
 		res.CombinedOut = string(out)
-		output = fmt.Sprintf("```\n%s\n```", out)
+		output = fmtOut(res.CombinedOut)
 	} else {
 		// We stream the output if running on a single node.
 		var stdoutBuffer, stderrBuffer bytes.Buffer
@@ -860,7 +866,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		res.Stderr = stderrBuffer.String()
 		res.Stdout = stdoutBuffer.String()
 
-		output = fmt.Sprintf("stdout:\n```\n%s\n```\nstderr:\n```\n%s\n```", res.Stdout, res.Stderr)
+		output = fmt.Sprintf("stdout: %s\nstderr: %s", fmtOut(res.Stdout), fmtOut(res.Stderr))
 	}
 
 	if res.Err != nil {
