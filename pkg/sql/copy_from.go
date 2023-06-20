@@ -498,7 +498,6 @@ type copyTxnOpt struct {
 	txn           *kv.Txn
 	txnTimestamp  time.Time
 	stmtTimestamp time.Time
-	initPlanner   func(ctx context.Context, p *planner)
 	resetPlanner  func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time)
 }
 
@@ -1112,7 +1111,6 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 		},
 		Returning: tree.AbsentReturningClause,
 	}
-	c.txnOpt.initPlanner(ctx, c.p)
 
 	// TODO(cucaroach): We shouldn't need to do this for every batch.
 	if err := c.p.makeOptimizerPlan(ctx); err != nil {

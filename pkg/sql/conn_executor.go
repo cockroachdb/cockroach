@@ -2952,9 +2952,6 @@ func (ex *connExecutor) execCopyIn(
 		txn:           ex.state.mu.txn,
 		txnTimestamp:  ex.state.sqlTimestamp,
 		stmtTimestamp: ex.server.cfg.Clock.PhysicalTime(),
-		initPlanner: func(ctx context.Context, p *planner) {
-			ex.initPlanner(ctx, p)
-		},
 		resetPlanner: func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, stmtTS)
