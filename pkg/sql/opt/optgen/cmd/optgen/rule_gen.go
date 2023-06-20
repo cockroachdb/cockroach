@@ -225,6 +225,9 @@ func (g *newRuleGen) genMatch(match lang.Expr, context *contextDecl, noMatch boo
 	case *lang.LetExpr:
 		g.genMatchLet(t, noMatch)
 
+	case *lang.MatchExpr:
+		g.genMatchBuiltin(t, noMatch)
+
 	case *lang.AndExpr:
 		if noMatch {
 			panic("noMatch is not yet supported by the and match op")
@@ -703,6 +706,16 @@ func (g *newRuleGen) genMatchLet(let *lang.LetExpr, noMatch bool) {
 	g.genNestedExpr(let)
 
 	g.w.write(" {\n")
+}
+
+func (g *newRuleGen) genMatchBuiltin(match *lang.MatchExpr, noMatch bool) {
+	g.genBoundStatements(match.Input)
+	varName := g.uniquifier.makeUnique("_matchInput")
+	g.w.writeIndent("%s := ", varName)
+	g.genNestedExpr(match.Input)
+	g.w.newline()
+	newContext := &contextDecl{code: varName, typ: g.md.lookupType("Expr")}
+	g.genMatch(match.Match, newContext, noMatch)
 }
 
 // genNormalizeReplace generates the replace pattern code for normalization

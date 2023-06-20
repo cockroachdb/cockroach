@@ -491,6 +491,144 @@ define Op {
 )
 
 #
+# Test Match builtin function.
+#
+parse
+define Op {
+    Input  Expr
+    Scalar ScalarExpr
+}
+
+[Match]
+(Op
+  $input:* &
+    (Match (Func $input) (Op)) &
+    (Match $input $result:(Op *) & (Func $result)) &
+    (Match $input $matched:(Op) & (Match (Func $matched) (Op)))
+)
+=>
+(Op $input)
+----
+(Root
+	Defines=(DefineSet
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="Scalar" Type="ScalarExpr" Src=<test.opt:3:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	Rules=(RuleSet
+		(Rule
+			Comments=(Comments)
+			Name="Match"
+			Tags=(Tags)
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Bind
+						Label="input"
+						Target=(And
+							Left=(Any)
+							Right=(And
+								Left=(Match
+									Input=(Func
+										Name=(Names Func)
+										Args=(Slice
+											(Ref Label="input" Src=<test.opt:9:18>)
+										)
+										Src=<test.opt:9:12>
+									)
+									Match=(Func
+										Name=(Names Op)
+										Args=(Slice)
+										Src=<test.opt:9:26>
+									)
+									Src=<test.opt:9:6>
+								)
+								Right=(And
+									Left=(Match
+										Input=(Ref Label="input" Src=<test.opt:10:12>)
+										Match=(Bind
+											Label="result"
+											Target=(And
+												Left=(Func
+													Name=(Names Op)
+													Args=(Slice (Any))
+													Src=<test.opt:10:27>
+												)
+												Right=(Func
+													Name=(Names Func)
+													Args=(Slice
+														(Ref Label="result" Src=<test.opt:10:42>)
+													)
+													Src=<test.opt:10:36>
+												)
+												Src=<test.opt:10:27>
+											)
+											Src=<test.opt:10:19>
+										)
+										Src=<test.opt:10:6>
+									)
+									Right=(Match
+										Input=(Ref Label="input" Src=<test.opt:11:12>)
+										Match=(Bind
+											Label="matched"
+											Target=(And
+												Left=(Func
+													Name=(Names Op)
+													Args=(Slice)
+													Src=<test.opt:11:28>
+												)
+												Right=(Match
+													Input=(Func
+														Name=(Names Func)
+														Args=(Slice
+															(Ref Label="matched" Src=<test.opt:11:48>)
+														)
+														Src=<test.opt:11:42>
+													)
+													Match=(Func
+														Name=(Names Op)
+														Args=(Slice)
+														Src=<test.opt:11:58>
+													)
+													Src=<test.opt:11:36>
+												)
+												Src=<test.opt:11:28>
+											)
+											Src=<test.opt:11:19>
+										)
+										Src=<test.opt:11:6>
+									)
+									Src=<test.opt:10:5>
+								)
+								Src=<test.opt:9:5>
+							)
+							Src=<test.opt:8:10>
+						)
+						Src=<test.opt:8:3>
+					)
+				)
+				Src=<test.opt:7:1>
+			)
+			Replace=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Ref Label="input" Src=<test.opt:14:5>)
+				)
+				Src=<test.opt:14:1>
+			)
+			Src=<test.opt:6:1>
+		)
+	)
+)
+
+#
 # Match boolean expressions.
 #
 parse

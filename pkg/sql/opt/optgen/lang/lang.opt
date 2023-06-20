@@ -143,6 +143,12 @@ define Let {
 }
 
 [HasType]
+define Match {
+    Input Expr
+    Match Expr
+}
+
+[HasType]
 define Ref {
     Label String
 }

@@ -27,6 +27,7 @@ const (
 	ListAnyOp
 	BindOp
 	LetOp
+	MatchOp
 	RefOp
 	AnyOp
 	SliceOp

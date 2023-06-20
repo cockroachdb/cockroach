@@ -200,6 +200,27 @@ A let expression can also be used in a replace pattern. For example:
 	  $newFilters
 	)
 
+# Match Expression
+
+A Match expression can be used to apply an optgen match pattern to the result of
+calling a custom function. This expression consists of two elements, an input
+and a match pattern. It can only be used in a match pattern context.
+
+For example:
+
+	[RemovePassthroughProjects]
+	(Project
+	  $input:* & (Match $result:(SkipPassthroughProjects $input) (Scan))
+	  []
+	)
+	=>
+	$result
+
+The "$result:(SkipPassthroughProjects $input)" part calls a (fake) custom
+function that unwraps any pass-through Project operators from the given
+expression, then binds the result to "result". The (Scan) portion checks that
+the first part is a ScanExpr.
+
 # Matching Names
 
 In addition to simple name matching, a node matcher can match tag names. Any

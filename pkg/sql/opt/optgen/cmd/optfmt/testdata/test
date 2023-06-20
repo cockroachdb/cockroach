@@ -88,6 +88,14 @@ define FiltersItem {
 =>
 (False)
 
+[TestMatch]
+(Select
+  $input:* & (Match $unwrapped:(Unwrap $input) (Scan) & (CheckStuff $unwrapped)) &
+    (Match $input $project:(Project))
+)
+=>
+(False)
+
 ----
 ----
 #
@@ -231,6 +239,18 @@ define FiltersItem {
             )
             $foo
         )
+)
+=>
+(False)
+
+[TestMatch]
+(Select
+    $input:* &
+        (Match
+            $unwrapped:(Unwrap $input)
+            (Scan) & (CheckStuff $unwrapped)
+        ) &
+        (Match $input $project:(Project))
 )
 =>
 (False)

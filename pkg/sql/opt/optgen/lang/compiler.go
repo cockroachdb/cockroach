@@ -378,6 +378,12 @@ func (c *ruleCompiler) inferTypes(e Expr, suggested DataType) {
 		}
 		t.Typ = mostRestrictiveDataType(typ, suggested)
 
+	case *MatchExpr:
+		// There is no information about the input type.
+		c.inferTypes(t.Input, AnyDataType)
+		c.inferTypes(t.Match, suggested)
+		t.Typ = t.Match.InferredType()
+
 	case *BindExpr:
 		// Set type of binding to the type of its target.
 		c.inferTypes(t.Target, suggested)
@@ -463,6 +469,12 @@ func (c *ruleContentCompiler) compile(e Expr) Expr {
 
 	case *BindExpr:
 		return c.compileBind(t)
+
+	case *MatchExpr:
+		if !c.matchPattern || c.customFunc {
+			c.addDisallowedErr(t, "cannot use Match builtin function")
+		}
+		return c.compileMatchBuiltin(t)
 
 	case *RefExpr:
 		if c.matchPattern && !c.customFunc && !c.let {
@@ -586,6 +598,25 @@ func (c *ruleContentCompiler) compileLet(let *LetExpr) Expr {
 		Target: target,
 		Result: result,
 		Src:    let.Source(),
+	}
+}
+
+func (c *ruleContentCompiler) compileMatchBuiltin(matchBuiltin *MatchExpr) Expr {
+	// Compile the input expression in a customFunc context.
+	nested := ruleContentCompiler{
+		compiler:     c.compiler,
+		src:          matchBuiltin.Source(),
+		matchPattern: c.matchPattern,
+		customFunc:   true,
+	}
+	input := nested.compile(matchBuiltin.Input)
+	// Compile the match expression in a match-pattern context.
+	nested.customFunc = false
+	match := nested.compile(matchBuiltin.Match)
+	return &MatchExpr{
+		Input: input,
+		Match: match,
+		Src:   match.Source(),
 	}
 }
 

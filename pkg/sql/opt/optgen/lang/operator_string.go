@@ -29,13 +29,14 @@ func _() {
 	_ = x[ListAnyOp-18]
 	_ = x[BindOp-19]
 	_ = x[LetOp-20]
-	_ = x[RefOp-21]
-	_ = x[AnyOp-22]
-	_ = x[SliceOp-23]
-	_ = x[StringOp-24]
-	_ = x[StringsOp-25]
-	_ = x[NumberOp-26]
-	_ = x[CustomFuncOp-27]
+	_ = x[MatchOp-21]
+	_ = x[RefOp-22]
+	_ = x[AnyOp-23]
+	_ = x[SliceOp-24]
+	_ = x[StringOp-25]
+	_ = x[StringsOp-26]
+	_ = x[NumberOp-27]
+	_ = x[CustomFuncOp-28]
 }
 
 func (i Operator) String() string {
@@ -82,6 +83,8 @@ func (i Operator) String() string {
 		return "BindOp"
 	case LetOp:
 		return "LetOp"
+	case MatchOp:
+		return "MatchOp"
 	case RefOp:
 		return "RefOp"
 	case AnyOp:

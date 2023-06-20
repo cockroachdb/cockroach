@@ -1168,6 +1168,71 @@ func (e *LetExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 
+type MatchExpr struct {
+	Input Expr
+	Match Expr
+	Src   *SourceLoc
+	Typ   DataType
+}
+
+func (e *MatchExpr) Op() Operator {
+	return MatchOp
+}
+
+func (e *MatchExpr) ChildCount() int {
+	return 2
+}
+
+func (e *MatchExpr) Child(nth int) Expr {
+	switch nth {
+	case 0:
+		return e.Input
+	case 1:
+		return e.Match
+	}
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *MatchExpr) ChildName(nth int) string {
+	switch nth {
+	case 0:
+		return "Input"
+	case 1:
+		return "Match"
+	}
+	return ""
+}
+
+func (e *MatchExpr) Value() interface{} {
+	return nil
+}
+
+func (e *MatchExpr) Visit(visit VisitFunc) Expr {
+	children := visitChildren(e, visit)
+	if children != nil {
+		return &MatchExpr{Input: children[0], Match: children[1], Src: e.Source()}
+	}
+	return e
+}
+
+func (e *MatchExpr) Source() *SourceLoc {
+	return e.Src
+}
+
+func (e *MatchExpr) InferredType() DataType {
+	return e.Typ
+}
+
+func (e *MatchExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *MatchExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
 type RefExpr struct {
 	Label StringExpr
 	Src   *SourceLoc

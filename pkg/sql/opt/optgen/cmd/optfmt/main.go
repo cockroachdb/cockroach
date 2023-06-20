@@ -410,6 +410,18 @@ func (p *pp) docOnlyExpr(e lang.Expr) pretty.Doc {
 			inner,
 			pretty.Text(")"),
 		)
+	case *lang.MatchExpr:
+		inner := pretty.Group(pretty.Fold(
+			pretty.Concat,
+			p.docExpr(e.Input),
+			pretty.Line,
+			p.docExpr(e.Match),
+		))
+		return pretty.BracketDoc(
+			pretty.Text("(Match "),
+			inner,
+			pretty.Text(")"),
+		)
 	case *lang.AnyExpr:
 		return pretty.Text("*")
 	case *lang.ListAnyExpr:

@@ -854,6 +854,148 @@ define Op {
 )
 
 #
+# Test Match builtin function.
+#
+compile
+define Op {
+    Input  Expr
+    Scalar ScalarExpr
+}
+
+[Match]
+(Op
+  $input:* &
+    (Match (Func $input) (Op)) &
+    (Match $input $result:(Op *) & (Func $result)) &
+    (Match $input $matched:(Op) & (Match (Func $matched) (Op)))
+)
+=>
+(Op $input)
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Comments=(Comments) Name="Scalar" Type="ScalarExpr" Src=<test.opt:3:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="Match"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="input"
+						Target=(And
+							Left=(Any Typ=Expr)
+							Right=(And
+								Left=(Match
+									Input=(CustomFunc
+										Name=Func
+										Args=(Slice
+											(Ref Label="input" Src=<test.opt:9:18>)
+										)
+										Src=<test.opt:9:12>
+									)
+									Match=(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:9:26>)
+									Typ=Op
+									Src=<test.opt:9:26>
+								)
+								Right=(And
+									Left=(Match
+										Input=(Ref Label="input" Src=<test.opt:10:12>)
+										Match=(Bind
+											Label="result"
+											Target=(And
+												Left=(Func
+													Name=Op
+													Args=(Slice (Any Typ=Expr))
+													Typ=Op
+													Src=<test.opt:10:27>
+												)
+												Right=(CustomFunc
+													Name=Func
+													Args=(Slice
+														(Ref Label="result" Src=<test.opt:10:42>)
+													)
+													Typ=Expr
+													Src=<test.opt:10:36>
+												)
+												Typ=Op
+												Src=<test.opt:10:27>
+											)
+											Typ=Op
+											Src=<test.opt:10:19>
+										)
+										Typ=Op
+										Src=<test.opt:10:19>
+									)
+									Right=(Match
+										Input=(Ref Label="input" Src=<test.opt:11:12>)
+										Match=(Bind
+											Label="matched"
+											Target=(And
+												Left=(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:11:28>)
+												Right=(Match
+													Input=(CustomFunc
+														Name=Func
+														Args=(Slice
+															(Ref Label="matched" Src=<test.opt:11:48>)
+														)
+														Src=<test.opt:11:42>
+													)
+													Match=(Func Name=Op Args=(Slice) Typ=Op Src=<test.opt:11:58>)
+													Typ=Op
+													Src=<test.opt:11:58>
+												)
+												Typ=Op
+												Src=<test.opt:11:28>
+											)
+											Typ=Op
+											Src=<test.opt:11:19>
+										)
+										Typ=Op
+										Src=<test.opt:11:19>
+									)
+									Typ=Op
+									Src=<test.opt:10:5>
+								)
+								Typ=Op
+								Src=<test.opt:9:5>
+							)
+							Typ=Op
+							Src=<test.opt:8:10>
+						)
+						Typ=Op
+						Src=<test.opt:8:3>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:7:1>
+			)
+			Replace=(Func
+				Name=Op
+				Args=(Slice
+					(Ref Label="input" Typ=Op Src=<test.opt:14:5>)
+				)
+				Typ=Op
+				Src=<test.opt:14:1>
+			)
+			Src=<test.opt:6:1>
+		)
+	)
+)
+
+#
 # Test type inference.
 #
 compile
@@ -1291,6 +1433,15 @@ define Op {
 
 [LetResultDeclaredOutsideLet]
 (Op $input:"foo" & (Func $a:(Func2 $input)) & (Let ($b $c):(Func3 $input) $a)) => (Op)
+
+[MatchInReplacePattern]
+(Op $input:*) => (Op (Match $input (Op)))
+
+[MatchBuiltinAtRoot]
+(Match $input:*) => (Op $input)
+
+[MatchInCustomFunc]
+(Op $input:* & (Func (Match $input (Op)))) => (Op)
 ----
 test.opt:5:1: duplicate 'Op' define statement
 test.opt:12:1: unrecognized match name 'Unknown'
@@ -1327,6 +1478,9 @@ test.opt:105:25: duplicate bind label 'input'
 test.opt:108:37: match pattern cannot use variable references
 test.opt:108:25: let target must be a custom function
 test.opt:111:75: unrecognized variable name 'a'
+test.opt:114:23: replace pattern cannot use Match builtin function
+test.opt:117:1: unrecognized match name 'Match'
+test.opt:120:23: custom match function cannot use Match builtin function
 
 # Type inference errors.
 compile

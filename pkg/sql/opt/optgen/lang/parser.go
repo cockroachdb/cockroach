@@ -19,8 +19,12 @@ import (
 	"strings"
 )
 
-// letLiteral is the keyword that designates a let expression.
-const letLiteral = "Let"
+const (
+	// letLiteral is the keyword that designates a let expression.
+	letLiteral = "Let"
+	// matchLiteral is the keyword that designates a Match expression.
+	matchLiteral = "Match"
+)
 
 // FileResolver is used by the parser to abstract the opening and reading of
 // input files. Callers of the parser can override the default behavior
@@ -357,7 +361,8 @@ func (p *Parser) parseReplace() Expr {
 
 // func = '(' func-name arg* ')'
 // let = '(' 'Let' '(' '$' label ('$' label)* ')' ':' func ref ')'
-func (p *Parser) parseFuncOrLet() Expr {
+// match = '(' 'Match' input-expr match-func ')'
+func (p *Parser) parseFuncOrLetOrMatch() Expr {
 	if p.scan() != LPAREN {
 		panic("caller should have checked for left parenthesis")
 	}
@@ -366,8 +371,13 @@ func (p *Parser) parseFuncOrLet() Expr {
 	tok := p.scan()
 	literal := p.s.Literal()
 	p.unscan()
-	if tok == IDENT && literal == letLiteral {
-		return p.parseLet()
+	if tok == IDENT {
+		switch literal {
+		case letLiteral:
+			return p.parseLet()
+		case matchLiteral:
+			return p.parseMatchFunc()
+		}
 	}
 	return p.parseFuncImpl()
 }
@@ -437,7 +447,7 @@ func (p *Parser) parseFuncName() Expr {
 }
 
 // let = '(' 'Let' '(' '$' label ('$' label)* ')' ':' func ref ')'
-// Note: the leading '(' has already been scanned by parseFuncOrLet.
+// Note: the leading '(' has already been scanned by parseFuncOrLetOrMatch.
 func (p *Parser) parseLet() Expr {
 	if p.scan() != IDENT && p.s.Literal() != letLiteral {
 		panic("caller should have checked for let literal")
@@ -507,6 +517,31 @@ func (p *Parser) parseLet() Expr {
 		Labels: labels,
 		Target: target.(*FuncExpr),
 		Result: result,
+	}
+}
+
+// match = '(' 'Match' input-expr match-func ')'
+// Note: the leading '(' has already been scanned by parseFuncOrLetOrMatch.
+func (p *Parser) parseMatchFunc() Expr {
+	if p.scan() != IDENT && p.s.Literal() != matchLiteral {
+		panic("caller should have checked for match literal")
+	}
+	src := p.src
+	input := p.parseArg()
+	if input == nil {
+		return nil
+	}
+	match := p.parseArg()
+	if match == nil {
+		return nil
+	}
+	if !p.scanToken(RPAREN, "')'") {
+		return nil
+	}
+	return &MatchExpr{
+		Input: input,
+		Match: match,
+		Src:   &src,
 	}
 }
 
@@ -595,7 +630,7 @@ func (p *Parser) parseExpr() Expr {
 	switch tok {
 	case LPAREN:
 		p.unscan()
-		e = p.parseFuncOrLet()
+		e = p.parseFuncOrLetOrMatch()
 
 	case CARET:
 		p.unscan()
