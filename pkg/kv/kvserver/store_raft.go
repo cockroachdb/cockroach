@@ -811,13 +811,12 @@ func (s *Store) updateLivenessMap() {
 		// that this policy is different from the one governing the releasing of
 		// proposal quota; see comments over there.
 		//
-		// NB: This has false negatives. If a node doesn't have a conn open to it
-		// when ConnHealth is called, then ConnHealth will return
-		// rpc.ErrNotHeartbeated regardless of whether the node is up or not. That
-		// said, for the nodes that matter, we're likely talking to them via the
-		// Raft transport, so ConnHealth should usually indicate a real problem if
-		// it gives us an error back. The check can also have false positives if the
-		// node goes down after populating the map, but that matters even less.
+		// NB: This has false negatives when we haven't attempted to connect to the
+		// node yet, where it will return rpc.ErrNotHeartbeated regardless of
+		// whether the node is up or not. Once connected, the RPC circuit breakers
+		// will continually probe the connection. The check can also have false
+		// positives if the node goes down after populating the map, but that
+		// matters even less.
 		entry.IsLive = !s.TestingKnobs().DisableLivenessMapConnHealth &&
 			(s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
 		nextMap[nodeID] = entry
