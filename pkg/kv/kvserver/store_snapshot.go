@@ -973,54 +973,22 @@ func (s *Store) checkSnapshotOverlapLocked(
 	return nil
 }
 
-// getCrossLocalityComparison compares the localities of the two given replicas.
-func (s *Store) getCrossLocalityComparison(
-	ctx context.Context, firstReplica roachpb.ReplicaDescriptor, secReplica roachpb.ReplicaDescriptor,
+// getLocalityComparison takes two nodeIDs as input and returns the locality
+// comparison result between their corresponding nodes. This result indicates
+// whether the two nodes are located in different regions or zones.
+func (s *Store) getLocalityComparison(
+	ctx context.Context, fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID,
 ) roachpb.LocalityComparisonType {
-	firstLocality := s.cfg.StorePool.GetNodeLocality(firstReplica.NodeID)
-	secLocality := s.cfg.StorePool.GetNodeLocality(secReplica.NodeID)
+	firstLocality := s.cfg.StorePool.GetNodeLocality(fromNodeID)
+	secLocality := s.cfg.StorePool.GetNodeLocality(toNodeID)
 	comparisonResult, regionErr, zoneErr := firstLocality.CompareWithLocality(secLocality)
 	if regionErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if snapshot is cross region %v", regionErr)
+		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross region %+v", regionErr)
 	}
 	if zoneErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if snapshot is cross zone %v", zoneErr)
+		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross zone %+v", zoneErr)
 	}
 	return comparisonResult
-}
-
-// checkAndUpdateCrossLocalitySnapshotMetrics updates the snapshot metrics in
-// a more meaningful way. Cross-region metrics monitor activities across
-// different regions. Cross-zone metrics monitor cross-zone activities within
-// the same region or in cases where region tiers are not configured.
-func (s *Store) checkAndUpdateCrossLocalitySnapshotMetrics(
-	ctx context.Context,
-	firstReplica roachpb.ReplicaDescriptor,
-	secReplica roachpb.ReplicaDescriptor,
-	inc int64,
-	isSent bool,
-) {
-	comparisonResult := s.getCrossLocalityComparison(ctx, firstReplica, secReplica)
-	if isSent {
-		switch comparisonResult {
-		case roachpb.LocalityComparisonType_CROSS_REGION:
-			s.metrics.RangeSnapShotCrossRegionSentBytes.Inc(inc)
-		case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
-			s.metrics.RangeSnapShotCrossZoneSentBytes.Inc(inc)
-		case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
-			// No metrics or error reporting.
-		}
-	} else {
-		// isReceived
-		switch comparisonResult {
-		case roachpb.LocalityComparisonType_CROSS_REGION:
-			s.metrics.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
-		case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
-			s.metrics.RangeSnapShotCrossZoneRcvdBytes.Inc(inc)
-		case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
-			// No metrics or error reporting.
-		}
-	}
 }
 
 // receiveSnapshot receives an incoming snapshot via a pre-opened GRPC stream.
@@ -1137,10 +1105,12 @@ func (s *Store) receiveSnapshot(
 		log.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
+	comparisonResult := s.getLocalityComparison(ctx,
+		header.RaftMessageRequest.FromReplica.NodeID, header.RaftMessageRequest.ToReplica.NodeID)
+
 	recordBytesReceived := func(inc int64) {
 		s.metrics.RangeSnapshotRcvdBytes.Inc(inc)
-		s.checkAndUpdateCrossLocalitySnapshotMetrics(
-			ctx, header.RaftMessageRequest.FromReplica, header.RaftMessageRequest.ToReplica, inc, false /* isSent */)
+		s.metrics.updateCrossLocalityMetricsOnSnapshotRcvd(comparisonResult, inc)
 
 		switch header.Priority {
 		case kvserverpb.SnapshotRequest_RECOVERY:
