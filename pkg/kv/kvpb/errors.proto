@@ -474,18 +474,47 @@ message TransactionRetryWithProtoRefreshError {
   // TODO(davidh): Remove in 23.2
   optional string msg = 1 [(gogoproto.nullable) = false];
 
-  // The ID of the transaction being restarted. The client is supposed to check
-  // this against the ID of its transaction and make sure the retryable error
-  // is meant for its level and didn't escape from some inner transaction.
+  // The ID of the transaction being retried. The client can compare this ID
+  // that of the new transaction (below) to check whether the transaction was
+  // aborted and will restart from the beginning with a new identity.
   optional bytes prev_txn_id = 2 [
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.customname) = "PrevTxnID",
     (gogoproto.nullable) = false];
 
+  // The epoch of the transaction being retried. The client can compare this
+  // epoch that of the new transaction (below) to check whether the transaction
+  // is being restarted from the beginning with all writes discarded.
+  optional int32 prev_txn_epoch = 5 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnEpoch",
+    (gogoproto.nullable) = false];
+
   // The Transaction that should be used by next attempts. Depending on the
-  // original cause of this method, this can either be the same Transaction as
-  // before, but with an incremented epoch and timestamp, or a completely new
-  // Transaction.
+  // original cause of this method and the isolation level of the transaction,
+  // this can be:
+  //
+  // - the same Transaction as before (same ID), but with an incremented epoch
+  // and read timestamp. The transaction must start again from the beginning,
+  // with all writes discarded. This case applies to isolation levels that do
+  // not use a per-statement read snapshot, and must therefore start from the
+  // beginning if the read snapshot must be adjusted.
+  //
+  // - the same Transaction as before (same ID) with the same epoch as before,
+  // but with an incremented read timestamp. The transaction can proceed without
+  // the loss of any of its writes, although clients may employ savepoints to
+  // selectively discard the writes from the read snapshot scope (i.e. the
+  // statement) being retried. This case applies to isolation levels that use a
+  // per-statement read snapshot, and can therefore retry select portions of the
+  // transaction if the read snapshot must be adjusted, without starting from
+  // the beginning.
+  //
+  // - a completely new Transaction (different ID). The transaction must start
+  // again from the beginning with all writes discarded and with a new identity.
+  // This case applies to all isolation levels. Transaction aborts are typically
+  // associated with locking deadlocks where the previous transaction's locks
+  // were discarded to break a deadlock between transactions and also with cases
+  // where the kv layer determines that it has lost information cannot process a
+  // certain transaction.
   optional roachpb.Transaction next_transaction = 3 [(gogoproto.nullable) = false];
 
   // A user-readable message containing redaction markers.
