@@ -316,6 +316,8 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 				failer.Recover(ctx, node)
 			}
 		}
+
+		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
 	m.Wait()
@@ -460,6 +462,8 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 				}
 			}
 		}
+
+		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
 	m.Wait()
@@ -594,6 +598,8 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 				failer.Recover(ctx, node)
 			}
 		}
+
+		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
 	m.Wait()
@@ -709,6 +715,8 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 				failer.Recover(ctx, node)
 			}
 		}
+
+		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
 	m.Wait()
@@ -929,6 +937,8 @@ func runFailoverLiveness(
 			failer.Recover(ctx, 4)
 			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
 		}
+
+		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
 	m.Wait()
@@ -1044,6 +1054,8 @@ func runFailoverSystemNonLiveness(
 				failer.Recover(ctx, node)
 			}
 		}
+
+		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
 	m.Wait()
