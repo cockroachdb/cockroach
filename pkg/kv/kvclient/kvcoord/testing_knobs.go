@@ -61,19 +61,6 @@ type ClientTestingKnobs struct {
 	// error which, if non-nil, becomes the result of the batch. Otherwise, execution
 	// continues.
 	OnRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
-
-	// Currently, BatchRequestInterceptor and BatchResponseInterceptor only
-	// intercepts DistSender.Send() to pass the actual batch request and response
-	// byte count to the test. However, it can be easily extended to validate
-	// other properties of batch requests / response if required.
-
-	// BatchRequestInterceptor is designed to intercept calls to DistSender
-	// function calls to validate BatchRequest properties.
-	BatchRequestInterceptor func(ba *kvpb.BatchRequest)
-
-	// BatchResponseInterceptor is designed to intercept calls to DistSender
-	// function calls to validate BatchResponse properties.
-	BatchResponseInterceptor func(br *kvpb.BatchResponse)
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

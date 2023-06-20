@@ -320,6 +320,44 @@ func (nm nodeMetrics) getNodeCounterMetrics(metricsName []string) (map[string]in
 	return metricCountMap, nil
 }
 
+// updateCrossLocalityMetricsOnBatchRequest updates nodeMetrics for batch
+// requests processed on the node. The metrics being updated include 1.
+// cross-region metrics, which monitor activities across different regions, and
+// 2. cross-zone metrics, which monitor activities across different zones within
+// the same region or in cases where region tiers are not configured. These
+// metrics may include batches that were not successfully sent but were
+// terminated at an early stage.
+func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	nm.BatchRequestsBytes.Inc(inc)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		nm.CrossRegionBatchRequestBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		nm.CrossZoneBatchRequestBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
+		// No metrics or error reporting.
+	}
+}
+
+// updateCrossLocalityMetricsOnBatchResponse updates nodeMetrics for batch
+// responses that are received back. It updates based on the comparisonResult
+// parameter determined during the initial batch requests check. The underlying
+// assumption is that the response should match the cross-region or cross-zone
+// nature of the requests.
+func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	nm.BatchResponsesBytes.Inc(inc)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		nm.CrossRegionBatchResponseBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		nm.CrossZoneBatchResponseBytes.Inc(inc)
+	}
+}
+
 // A Node manages a map of stores (by store ID) for which it serves
 // traffic. A node is the top-level data structure. There is one node
 // instance per process. A node accepts incoming RPCs and services
@@ -1325,11 +1363,11 @@ func (n *Node) batchInternal(
 	return br, nil
 }
 
-// getCrossLocalityComparison compares the localities of the gateway node and
-// the current node to determine if the given batch request is cross-region and
-// cross-zone.
-func (n *Node) getCrossLocalityComparison(
-	ctx context.Context, ba *kvpb.BatchRequest,
+// getLocalityComparison takes gatewayNodeID as input and returns the locality
+// comparison result between the gateway node and the current node. This result
+// indicates whether the two nodes are located in different regions or zones.
+func (n *Node) getLocalityComparison(
+	ctx context.Context, gatewayNodeID roachpb.NodeID,
 ) roachpb.LocalityComparisonType {
 	gossip := n.storeCfg.Gossip
 	if gossip == nil {
@@ -1337,7 +1375,7 @@ func (n *Node) getCrossLocalityComparison(
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
-	gatewayNodeDesc, err := gossip.GetNodeDescriptor(ba.GatewayNodeID)
+	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
 	if err != nil {
 		log.VEventf(ctx, 2,
 			"failed to perform look up for node descriptor %v", err)
@@ -1346,61 +1384,13 @@ func (n *Node) getCrossLocalityComparison(
 
 	comparisonResult, regionErr, zoneErr := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
 	if regionErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if batch is cross region %v", regionErr)
+		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross region %+v", regionErr)
 	}
 	if zoneErr != nil {
-		log.VEventf(ctx, 2, "unable to determine if batch is cross zone %v", zoneErr)
+		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross zone %+v", zoneErr)
 	}
 
 	return comparisonResult
-}
-
-// checkAndUpdateCrossLocalityBatchMetrics updates the batch requests metrics in
-// a more meaningful way. Cross-region metrics monitor activities across
-// different regions. Cross-zone metrics monitor cross-zone activities within
-// the same region or in cases where region tiers are not configured. The
-// locality comparison result is returned here to avoid redundant check for
-// metrics updates after receiving batch responses.
-func (n *Node) checkAndUpdateCrossLocalityBatchMetrics(
-	ctx context.Context, ba *kvpb.BatchRequest, shouldIncrement bool,
-) roachpb.LocalityComparisonType {
-	if !shouldIncrement {
-		// shouldIncrement is set to false using testing knob in specific tests to
-		// filter out metrics changes caused by irrelevant batch requests.
-		return roachpb.LocalityComparisonType_UNDEFINED
-	}
-	n.metrics.BatchRequestsBytes.Inc(int64(ba.Size()))
-	comparisonResult := n.getCrossLocalityComparison(ctx, ba)
-	switch comparisonResult {
-	case roachpb.LocalityComparisonType_CROSS_REGION:
-		n.metrics.CrossRegionBatchRequestBytes.Inc(int64(ba.Size()))
-	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
-		n.metrics.CrossZoneBatchRequestBytes.Inc(int64(ba.Size()))
-	case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
-		// No metrics or error reporting.
-	}
-	return comparisonResult
-}
-
-// updateCrossLocalityBatchMetrics updates the batch response metrics based on
-// the comparisonResult parameter determined during the initial batch requests
-// check. The underlying assumption is that the response should match the
-// cross-region or cross-zone nature of the request.
-func (n *Node) updateCrossLocalityBatchMetrics(
-	br *kvpb.BatchResponse, comparisonResult roachpb.LocalityComparisonType, shouldIncrement bool,
-) {
-	if !shouldIncrement {
-		// shouldIncrement is set to false using testing knob in specific tests to
-		// filter out metrics changes caused by irrelevant batch requests.
-		return
-	}
-	n.metrics.BatchResponsesBytes.Inc(int64(br.Size()))
-	switch comparisonResult {
-	case roachpb.LocalityComparisonType_CROSS_REGION:
-		n.metrics.CrossRegionBatchResponseBytes.Inc(int64(br.Size()))
-	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
-		n.metrics.CrossZoneBatchResponseBytes.Inc(int64(br.Size()))
-	}
 }
 
 // incrementBatchCounters increments counters to track the batch and composite
@@ -1417,19 +1407,13 @@ func (n *Node) incrementBatchCounters(ba *kvpb.BatchRequest) {
 func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	n.incrementBatchCounters(args)
 
-	shouldIncrement := true
-	if fn := n.storeCfg.TestingKnobs.TestingBatchRequestFilter; fn != nil {
-		// ShouldIncrement is always set to true in the production environment. The
-		// testing knob is used here to filter out metrics changes caused by batch
-		// requests that are irrelevant to our tests.
-		shouldIncrement = fn(args)
-	}
-	comparisonResult := n.checkAndUpdateCrossLocalityBatchMetrics(ctx, args, shouldIncrement)
-
 	// NB: Node.Batch is called directly for "local" calls. We don't want to
 	// carry the associated log tags forward as doing so makes adding additional
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
+
+	comparisonResult := n.getLocalityComparison(ctx, args.GatewayNodeID)
+	n.metrics.updateCrossLocalityMetricsOnBatchRequest(comparisonResult, int64(args.Size()))
 
 	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
@@ -1475,14 +1459,7 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		br.Error = kvpb.NewError(err)
 	}
 
-	shouldIncrement = true
-	if fn := n.storeCfg.TestingKnobs.TestingBatchResponseFilter; fn != nil {
-		// ShouldIncrement is always set to true in the production environment. The
-		// testing knob is used here to filter out metrics changes caused by batch
-		// requests that are irrelevant to our tests.
-		shouldIncrement = fn(br)
-	}
-	n.updateCrossLocalityBatchMetrics(br, comparisonResult, shouldIncrement)
+	n.metrics.updateCrossLocalityMetricsOnBatchResponse(comparisonResult, int64(br.Size()))
 	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}

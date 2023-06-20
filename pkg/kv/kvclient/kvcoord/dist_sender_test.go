@@ -5664,186 +5664,75 @@ func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[stri
 	return diffMap
 }
 
-// TestDistSenderBatchMetrics verifies that the DistSender.Send()
-// correctly updates the cross-region, cross-zone byte count metrics.
-func TestDistSenderBatchMetrics(t *testing.T) {
+// TestDistSenderCrossLocalityMetrics verifies that
+// updateMetricsOnReplicaAddressedBatch{Request|Response} correctly updates
+// cross-region, cross-zone byte count metrics for batch requests sent and batch
+// responses received.
+func TestDistSenderCrossLocalityMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
+	defer log.Scope(t).Close(t)
+	const expectedInc = 10
 
-	// The initial setup ensures the correct setup for three nodes (with different
-	// localities), single-range, three replicas (on different nodes).
-	clock := hlc.NewClockForTesting(nil)
-	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	rangeDesc := testUserRangeDescriptor3Replicas
-	replicas := rangeDesc.InternalReplicas
-
-	// The servers localities are configured so that the first batch request sent
-	// from server0 to server0 is same-region, same-zone. The second batch request
-	// sent from server0 to server1 is cross-region. The second batch request sent
-	// from server0 to server2 is cross-zone within the same region.
-	const numNodes = 3
-	serverLocality := [numNodes]roachpb.Locality{
-		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-1"}}},
-		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}, {Key: "az", Value: "us-west-1"}}},
-		{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-2"}}},
-	}
-
-	nodes := make([]roachpb.NodeDescriptor, 3)
-	for i := 0; i < numNodes; i++ {
-		nodes[i] = roachpb.NodeDescriptor{
-			NodeID:   roachpb.NodeID(i + 1 /* 0 is not a valid NodeID */),
-			Address:  util.UnresolvedAddr{},
-			Locality: serverLocality[i],
-		}
-	}
-	ns := &mockNodeStore{nodes: nodes}
-
-	var transportFn = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
-		return ba.CreateReply(), nil
-	}
-	interceptedBatchRequestBytes, interceptedBatchResponseBytes := int64(-1), int64(-1)
-	cfg := DistSenderConfig{
-		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
-		Clock:             clock,
-		NodeDescs:         ns,
-		RPCContext:        rpcContext,
-		RangeDescriptorDB: mockRangeDescriptorDBForDescs(rangeDesc),
-		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptSimpleTransport(transportFn),
-			BatchRequestInterceptor: func(ba *kvpb.BatchRequest) {
-				interceptedBatchRequestBytes = int64(ba.Size())
-			},
-			BatchResponseInterceptor: func(br *kvpb.BatchResponse) {
-				interceptedBatchResponseBytes = int64(br.Size())
-			},
-		},
-		Settings: cluster.MakeTestingClusterSettings(),
-	}
-
-	distSender := NewDistSender(cfg)
 	metricsNames := []string{
 		"distsender.batch_requests.replica_addressed.bytes",
-		"distsender.batch_responses.replica_addressed.bytes",
 		"distsender.batch_requests.cross_region.bytes",
-		"distsender.batch_responses.cross_region.bytes",
 		"distsender.batch_requests.cross_zone.bytes",
-		"distsender.batch_responses.cross_zone.bytes"}
-
-	getExpectedDelta := func(
-		isCrossRegion bool, isCrossZone bool, interceptedRequest int64, interceptedResponse int64,
-	) map[string]int64 {
-		ternaryOp := func(b bool, num int64) (res int64) {
-			if b {
-				res = num
-			}
-			return res
-		}
-
-		expectedDelta := make(map[string]int64)
-		expectedDelta[metricsNames[0]] = interceptedRequest
-		expectedDelta[metricsNames[1]] = interceptedResponse
-		expectedDelta[metricsNames[2]] = ternaryOp(isCrossRegion, interceptedRequest)
-		expectedDelta[metricsNames[3]] = ternaryOp(isCrossRegion, interceptedResponse)
-		expectedDelta[metricsNames[4]] = ternaryOp(isCrossZone, interceptedRequest)
-		expectedDelta[metricsNames[5]] = ternaryOp(isCrossZone, interceptedResponse)
-		return expectedDelta
+		"distsender.batch_responses.replica_addressed.bytes",
+		"distsender.batch_responses.cross_region.bytes",
+		"distsender.batch_responses.cross_zone.bytes",
 	}
-
-	sameRegionSameZoneRequest := int64(0)
-	sameRegionSameZoneResponse := int64(0)
-
 	for _, tc := range []struct {
-		toReplica     int
-		isCrossRegion bool
-		isCrossZone   bool
+		crossLocalityType    roachpb.LocalityComparisonType
+		expectedMetricChange [6]int64
+		forRequest           bool
 	}{
-		// First test sets replica[0] as leaseholder, enforcing a within-region,
-		// within-zone batch request / response.
-		{toReplica: 0, isCrossRegion: false, isCrossZone: false},
-		// Second test sets replica[1] as leaseholder, enforcing a cross-region,
-		// batch request / response. Note that although the request is cross-zone,
-		// the cross-zone metrics is not expected to increment.
-		{toReplica: 1, isCrossRegion: true, isCrossZone: false},
-		// Third test sets replica[2] as leaseholder, enforcing a within-region,
-		// cross-zone batch request / response. Cross-zone metrics is only expected
-		// to increment when it is cross-zone, same-region activities.
-		{toReplica: 2, isCrossRegion: false, isCrossZone: true},
+		{crossLocalityType: roachpb.LocalityComparisonType_CROSS_REGION,
+			expectedMetricChange: [6]int64{expectedInc, expectedInc, 0, 0, 0, 0},
+			forRequest:           true,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE,
+			expectedMetricChange: [6]int64{expectedInc, 0, expectedInc, 0, 0, 0},
+			forRequest:           true,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE,
+			expectedMetricChange: [6]int64{expectedInc, 0, 0, 0, 0, 0},
+			forRequest:           true,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_CROSS_REGION,
+			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, expectedInc, 0},
+			forRequest:           false,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE,
+			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, 0, expectedInc},
+			forRequest:           false,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE,
+			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, 0, 0},
+			forRequest:           false,
+		},
 	} {
-		t.Run(fmt.Sprintf("isCrossRegion:%t-isCrossZone:%t", tc.isCrossRegion, tc.isCrossZone), func(t *testing.T) {
-			beforeMetrics, err := distSender.metrics.getDistSenderCounterMetrics(metricsNames)
+		t.Run(fmt.Sprintf("%-v", tc.crossLocalityType), func(t *testing.T) {
+			metrics := makeDistSenderMetrics()
+			beforeMetrics, err := metrics.getDistSenderCounterMetrics(metricsNames)
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
-
-			ba := &kvpb.BatchRequest{}
-			if tc.toReplica == 0 {
-				// Send a different request type for the first request to avoid having
-				// the same byte count for three requests and coincidental correct
-				// results.
-				get := &kvpb.GetRequest{}
-				get.Key = rangeDesc.StartKey.AsRawKey()
-				ba.Add(get)
+			if tc.forRequest {
+				metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(tc.crossLocalityType, expectedInc)
 			} else {
-				put := &kvpb.PutRequest{}
-				put.Key = rangeDesc.StartKey.AsRawKey()
-				ba.Add(put)
+				metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchResponse(tc.crossLocalityType, expectedInc)
 			}
 
-			ba.Header = kvpb.Header{
-				// DistSender is set to be at the server0.
-				GatewayNodeID: 1,
-			}
-			distSender.rangeCache.Insert(ctx, roachpb.RangeInfo{
-				Desc: rangeDesc,
-				Lease: roachpb.Lease{
-					Replica: replicas[tc.toReplica],
-				},
-			})
-
-			if _, err := distSender.Send(ctx, ba); err != nil {
-				t.Fatal(err)
-			}
-
-			require.NotEqual(t, interceptedBatchRequestBytes, int64(-1),
-				"expected bytes not set correctly")
-			require.NotEqual(t, interceptedBatchResponseBytes, int64(-1),
-				"expected bytes not set correctly")
-			if tc.toReplica == 0 {
-				// Record the first batch request and response that was sent same
-				// region, same zone for future testing.
-				sameRegionSameZoneRequest = interceptedBatchRequestBytes
-				sameRegionSameZoneResponse = interceptedBatchResponseBytes
-			}
-
-			expected := getExpectedDelta(tc.isCrossRegion, tc.isCrossZone,
-				interceptedBatchRequestBytes, interceptedBatchResponseBytes)
-			afterMetrics, err := distSender.metrics.getDistSenderCounterMetrics(metricsNames)
-			diffMetrics := getMapsDiff(beforeMetrics, afterMetrics)
+			afterMetrics, err := metrics.getDistSenderCounterMetrics(metricsNames)
 			if err != nil {
 				t.Error(err)
 			}
-			require.Equal(t, expected, diffMetrics)
-		})
-		t.Run("SameRegionSameZone", func(t *testing.T) {
-			// Since the region and zone tiers are all configured in this test, we
-			// expect that the byte count of batch requests sent within the same
-			// region and same zone should equal to the total byte count of requests
-			// minus the combined byte count of cross-region and cross-zone requests
-			// metrics. Similar expectation for batch responses.
-			metrics, err := distSender.metrics.getDistSenderCounterMetrics(metricsNames)
-			if err != nil {
-				t.Error(err)
+			metricsDiff := getMapsDiff(beforeMetrics, afterMetrics)
+			expectedDiff := make(map[string]int64, 6)
+			for i, inc := range tc.expectedMetricChange {
+				expectedDiff[metricsNames[i]] = inc
 			}
-			totalRequest := metrics["distsender.batch_requests.replica_addressed.bytes"]
-			totalResponse := metrics["distsender.batch_responses.replica_addressed.bytes"]
-			crossRegionRequest := metrics["distsender.batch_requests.cross_region.bytes"]
-			crossRegionResponse := metrics["distsender.batch_responses.cross_region.bytes"]
-			crossZoneRequest := metrics["distsender.batch_requests.cross_zone.bytes"]
-			crossZoneResponse := metrics["distsender.batch_responses.cross_zone.bytes"]
-			require.Equal(t, sameRegionSameZoneRequest, totalRequest-crossRegionRequest-crossZoneRequest)
-			require.Equal(t, sameRegionSameZoneResponse, totalResponse-crossRegionResponse-crossZoneResponse)
+			require.Equal(t, metricsDiff, expectedDiff)
 		})
 	}
 }
