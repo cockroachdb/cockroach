@@ -13,6 +13,8 @@ func (_fp *fastPathExplorer) tryFastPath() (_rel memo.RelExpr, _ok bool) {
 	_root := _fp.f.Memo().RootExpr().(memo.RelExpr)
 	_required := _fp.f.Memo().RootProps()
 	switch t := _root.(type) {
+	case *memo.InsertExpr:
+		return _fp.fastPathInsert(t, _required)
 	case *memo.SelectExpr:
 		return _fp.fastPathSelect(t, _required)
 	case *memo.ProjectExpr:
@@ -20,6 +22,26 @@ func (_fp *fastPathExplorer) tryFastPath() (_rel memo.RelExpr, _ok bool) {
 	}
 
 	// No rules for other operator types.
+	return nil, false
+}
+
+func (_fp *fastPathExplorer) fastPathInsert(
+	_root *memo.InsertExpr,
+	_required *physical.Required,
+) (_rel memo.RelExpr, _ok bool) {
+	opt.MaybeInjectOptimizerTestingPanic(_fp.ctx, _fp.evalCtx)
+	// [SimpleInsertFastPath]
+	{
+		input := _root.Input
+		_values, _ := input.(*memo.ValuesExpr)
+		if _values != nil {
+			if _fp.funcs.IsValuesConstantsAndPlaceholders(_values) {
+				// The matched expression will be kept as-is.
+				return _root, true
+			}
+		}
+	}
+
 	return nil, false
 }
 
@@ -61,6 +83,24 @@ func (_fp *fastPathExplorer) fastPathProject(
 	_required *physical.Required,
 ) (_rel memo.RelExpr, _ok bool) {
 	opt.MaybeInjectOptimizerTestingPanic(_fp.ctx, _fp.evalCtx)
+	// [SimpleProjectInsertFastPath]
+	{
+		insert := _root.Input
+		_insert, _ := insert.(*memo.InsertExpr)
+		if _insert != nil {
+			input := _insert.Input
+			_values, _ := input.(*memo.ValuesExpr)
+			if _values != nil {
+				if _fp.funcs.IsValuesConstantsAndPlaceholders(_values) {
+					if len(_root.Projections) == 0 {
+						// The matched expression will be kept as-is.
+						return _root, true
+					}
+				}
+			}
+		}
+	}
+
 	// [PlaceholderProjectSelectFastPath]
 	{
 		_select, _ := _root.Input.(*memo.SelectExpr)
