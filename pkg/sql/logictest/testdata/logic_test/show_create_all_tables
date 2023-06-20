@@ -41,7 +41,7 @@ CREATE SEQUENCE d.s
 # parent should come before full_test due to dependency ordering.
 # if dependency's aren't considered, full_test will appear first due to
 # lexicographical ordering.
-query T colnames
+query T colnames,nosort
 SHOW CREATE ALL TABLES
 ----
 create_statement
@@ -91,7 +91,7 @@ GRANT CREATE on DATABASE d TO testuser
 # CREATE privilege on the database.
 # TODO(richardjcai): Replace this with CONNECT and
 # add CONNECT privilege required on the builtin description once #59676 is in.
-query T colnames
+query T colnames,nosort
 SHOW CREATE ALL TABLES
 ----
 create_statement
@@ -166,7 +166,7 @@ CREATE SEQUENCE s;
 CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT,  FAMILY f1 (id, v));
 
 # Table order should be B, A, G, F, E, D, C, sequence s, s_tbl.
-query T colnames
+query T colnames,nosort
 SHOW CREATE ALL TABLES
 ----
 create_statement
@@ -250,7 +250,7 @@ statement ok
 ALTER TABLE loop_a ADD CONSTRAINT b_id_delete_constraint
 FOREIGN KEY (b_id) REFERENCES loop_b (id) ON DELETE CASCADE;
 
-query T colnames
+query T colnames,nosort
 SHOW CREATE ALL TABLES
 ----
 create_statement
@@ -369,7 +369,7 @@ CREATE SCHEMA sc2;
 CREATE TABLE sc1.t (x int);
 CREATE TABLE sc2.t (x int);
 
-query T colnames
+query T colnames,nosort
 SHOW CREATE ALL TABLES
 ----
 create_statement

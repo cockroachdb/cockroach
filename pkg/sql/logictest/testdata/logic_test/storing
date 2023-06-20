@@ -8,7 +8,7 @@ CREATE TABLE t (
   UNIQUE INDEX c_idx (c) STORING (b, d)
 )
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility

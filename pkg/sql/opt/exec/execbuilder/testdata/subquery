@@ -436,7 +436,7 @@ vectorized: true
 
 # Case where the plan has an apply join.
 query T
-EXPLAIN(verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
+EXPLAIN (verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
 ----
 distribution: local
 vectorized: true

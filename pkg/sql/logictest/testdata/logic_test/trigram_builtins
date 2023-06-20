@@ -1,4 +1,4 @@
-query T
+query T nosort
 SELECT show_trgm(str) FROM (VALUES
     (''),
     ('a'),
@@ -42,7 +42,7 @@ SELECT show_trgm('a b,c|d_e3 bl  ')
 {"  a","  b","  c","  d","  e"," a "," b "," bl"," c "," d "," e3","bl ","e3 "}
 
 # Test the similarity builtin.
-query F
+query F nosort
 SELECT similarity(a, b) FROM (VALUES
     ('', ''),
     ('foo', ''),
@@ -67,7 +67,7 @@ NULL
 0.333333333333333
 1
 
-query F
+query F nosort
 SELECT similarity(a, b) FROM (VALUES
     ('f', 'bfr'),
     ('foo', 'foobar'),
@@ -80,7 +80,7 @@ SELECT similarity(a, b) FROM (VALUES
 0
 0
 
-query F
+query F nosort
 SELECT similarity(a, b) FROM (VALUES
     ('FOO', 'foo'),
     ('foobar', 'foo'),
@@ -94,7 +94,7 @@ SELECT similarity(a, b) FROM (VALUES
 0
 
 # Similarity is commutative.
-query F
+query F nosort
 SELECT similarity(a, b) FROM (VALUES
     ('foo', 'foobar'),
     ('foobar', 'foo'),

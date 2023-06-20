@@ -40,7 +40,7 @@ SET ROLE root
 statement ok
 GRANT ALL ON SEQUENCE a TO readwrite WITH GRANT OPTION
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON SEQUENCE a
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -51,7 +51,7 @@ test           public       a           root       ALL             true
 statement ok
 REVOKE UPDATE ON SEQUENCE a FROM readwrite
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON SEQUENCE a
 ----
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
@@ -95,7 +95,7 @@ GRANT CREATE, DROP, USAGE, UPDATE ON SEQUENCE a TO readwrite WITH GRANT OPTION
 ----
 NOTICE: some privileges have no effect on sequences: [CREATE]
 
-query TTTTTTTT
+query TTTTTTTT rowsort
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
 NULL  readwrite  test  public  a  CHANGEFEED  YES  NO
@@ -111,7 +111,7 @@ NULL  readwrite  test  public  a  ZONECONFIG  YES  NO
 statement ok
 REVOKE SELECT,DROP,CREATE ON SEQUENCE a FROM readwrite
 
-query TTTTTTTT
+query TTTTTTTT rowsort
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
 NULL  readwrite  test  public  a  CHANGEFEED  YES  NO
@@ -127,7 +127,7 @@ CREATE SEQUENCE b START 1 INCREMENT BY 2
 statement ok
 GRANT ALL ON ALL SEQUENCES IN SCHEMA test.public TO readwrite WITH GRANT OPTION;
 
-query TTTTTTTT
+query TTTTTTTT rowsort
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
 NULL  readwrite  test  public  a  ALL  YES  NO
@@ -136,7 +136,7 @@ NULL  readwrite  test  public  b  ALL  YES  NO
 statement ok
 REVOKE SELECT ON ALL SEQUENCES IN SCHEMA test.public FROM readwrite;
 
-query TTTTTTTT
+query TTTTTTTT rowsort
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'readwrite';
 ----
 NULL  readwrite  test  public  a  CHANGEFEED  YES  NO
@@ -257,7 +257,7 @@ GRANT SELECT, UPDATE ON mix_seq, mix_tab TO mix_u WITH GRANT OPTION
 statement error pq: invalid privilege type USAGE for table
 GRANT USAGE ON mix_seq, mix_tab TO mix_u WITH GRANT OPTION
 
-query TTTTTTTT
+query TTTTTTTT rowsort
 SELECT * FROM information_schema.table_privileges WHERE grantee = 'mix_u';
 ----
 NULL  mix_u  test  public  mix_seq  SELECT  YES  YES

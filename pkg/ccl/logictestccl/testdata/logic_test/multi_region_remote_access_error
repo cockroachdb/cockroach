@@ -608,7 +608,7 @@ SELECT * FROM parent LIMIT 1
 1
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM parent LIMIT 1
+EXPLAIN (OPT) SELECT * FROM parent LIMIT 1
 ----
 locality-optimized-search
  ├── scan parent
@@ -689,7 +689,7 @@ AND rbr.crdb_region = 'ap-southeast-2'
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
+EXPLAIN (OPT) SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
 project
@@ -709,7 +709,7 @@ AND rbr.crdb_region = 'ap-southeast-2'
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
+EXPLAIN (OPT) SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
 project
@@ -726,7 +726,7 @@ SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.acco
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+EXPLAIN (OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
 ----
 inner-join (lookup messages_global [as=g2])
  ├── flags: force lookup join (into right side)
@@ -741,7 +741,7 @@ SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.acco
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
+EXPLAIN (OPT) SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
   INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
 ----
 inner-join (lookup messages_global [as=g3])
@@ -777,7 +777,7 @@ SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
+EXPLAIN (OPT) SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
   messages_global g2 ON rbr.account_id = g2.account_id
   INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
 ----
@@ -823,7 +823,7 @@ SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
 query T nodeidx=4
 SET enforce_home_region = true;
 USE multi_region_test_db;
-EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
+EXPLAIN (OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
 ----
 project
  └── scan messages_rbr@msg_idx
@@ -849,7 +849,7 @@ SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
 Hello, Region!
 
 query T retry
-EXPLAIN(OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
+EXPLAIN (OPT) SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
 ----
 project
  └── scan messages_rbr@msg_idx
@@ -974,7 +974,7 @@ SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON 
 ----
 
 query T retry
-EXPLAIN(OPT) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON t1.j @> t2.j
+EXPLAIN (OPT) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbt AS t1 ON t1.j @> t2.j
 ----
 project
  └── inner-join (lookup json_arr1_rbt [as=t1])
@@ -1002,7 +1002,7 @@ AND t1.crdb_region = 'ap-southeast-2'
 # A local inverted join should not have high cost estimates (due to
 # `largeDistributeCost`).
 query T retry
-EXPLAIN(OPT,VERBOSE) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
+EXPLAIN (OPT,VERBOSE) SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
 AND t1.crdb_region = 'ap-southeast-2' LIMIT 1
 ----
 project

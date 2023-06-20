@@ -430,7 +430,7 @@ start_key  end_key  raw_start_key  raw_end_key  range_id  range_size_mb  lease_h
 
 # Now also look at the output.
 query TTIT colnames
-SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx]
+SELECT start_key, end_key, range_id, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx] ORDER BY start_key
 ----
 start_key                 end_key                  range_id  split_enforced_until
 <before:/Table/106/1/10>  …/20                     64        2262-04-11 23:47:16.854776 +0000 +0000
@@ -439,7 +439,7 @@ start_key                 end_key                  range_id  split_enforced_unti
 
 # Ditto, verbose form.
 query TTIIT colnames
-SELECT start_key, end_key, range_id, lease_holder, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx WITH DETAILS]
+SELECT start_key, end_key, range_id, lease_holder, split_enforced_until FROM [SHOW RANGES FROM INDEX t@idx WITH DETAILS] ORDER BY start_key
 ----
 start_key                 end_key                  range_id  lease_holder  split_enforced_until
 <before:/Table/106/1/10>  …/20                     64        1             2262-04-11 23:47:16.854776 +0000 +0000

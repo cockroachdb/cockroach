@@ -1793,7 +1793,7 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
             └── • scan buffer
                   label: buffer 1
 
-query TIIIIIIIIT colnames
+query TIIIIIIIIT colnames,rowsort
 SELECT * FROM (VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)) AS v(crdb_region, pk, pk2, a, b)
 LEFT JOIN regional_by_row_table t ON v.pk = t.pk;
 ----
@@ -1881,7 +1881,7 @@ CREATE TABLE regional_by_row_table_as (
   FAMILY (pk, a, b)
 ) LOCALITY REGIONAL BY ROW AS crdb_region_col
 
-query TI
+query TI rowsort
 INSERT INTO regional_by_row_table_as (pk) VALUES (1), (10), (20)
 RETURNING crdb_region_col, pk
 ----
@@ -3275,7 +3275,8 @@ index-join t88047
 query TTT
 SELECT * FROM t88047
 WHERE json_col->'loc' @> '{"state":"NY"}'
-  LIMIT 2
+ORDER BY 2
+LIMIT 2
 ----
 {"loc": {"state": "NY"}}  Big Apple          us-east-1
 {"loc": {"state": "NY"}}  Statue of Liberty  us-east-1
@@ -3287,7 +3288,8 @@ DROP INDEX t88047_inv_idx
 query TTT
 SELECT * FROM t88047
 WHERE json_col->'loc' @> '{"state":"NY"}'
-  LIMIT 2
+ORDER BY 2
+LIMIT 2
 ----
 {"loc": {"state": "NY"}}  Big Apple          us-east-1
 {"loc": {"state": "NY"}}  Statue of Liberty  us-east-1

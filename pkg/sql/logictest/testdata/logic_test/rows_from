@@ -1,4 +1,4 @@
-query II colnames
+query II colnames,nosort
 SELECT * FROM ROWS FROM (generate_series(1,2), generate_series(4,8))
 ----
 generate_series  generate_series
@@ -8,7 +8,7 @@ NULL             6
 NULL             7
 NULL             8
 
-query II colnames
+query II colnames,nosort
 SELECT * FROM ROWS FROM (generate_series(1,4), generate_series(4,5))
 ----
 generate_series  generate_series
@@ -28,21 +28,21 @@ SELECT * FROM ROWS FROM (generate_series(1,0), generate_series(1,1))
 generate_series  generate_series
 NULL             1
 
-query II colnames
+query II colnames,nosort
 SELECT * FROM ROWS FROM (generate_series(1,2), greatest(1,2,3,4))
 ----
 generate_series  greatest
 1                4
 2                NULL
 
-query IT colnames
+query IT colnames,nosort
 SELECT * FROM ROWS FROM (generate_series(1,2), current_user)
 ----
 generate_series  current_user
 1                root
 2                NULL
 
-query TI colnames
+query TI colnames,nosort
 SELECT * FROM ROWS FROM (current_user, generate_series(1,2))
 ----
 current_user generate_series
@@ -55,7 +55,7 @@ SELECT * FROM ROWS FROM (current_user, current_user)
 current_user current_user
 root         root
 
-query III colnames
+query III colnames,nosort
 SELECT * FROM ROWS FROM (information_schema._pg_expandarray(array[4,5,6]), generate_series(10,15));
 ----
 x     n     generate_series
