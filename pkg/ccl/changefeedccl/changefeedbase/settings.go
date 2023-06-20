@@ -90,6 +90,26 @@ var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// RangeHealthCheckFrequency controls how often an aggregator checks all of its
+// ranges for whether or not they are sufficiently lagging behind.
+var RangeHealthCheckFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.range_health_check_frequency",
+	"controls the frequency by which each aggregator checks each of its ranges for whether or not it is considered healthy and up to date",
+	1*time.Minute,
+	settings.NonNegativeDuration,
+)
+
+// LaggingRangesThreshold controls how far behind a range has to be from the
+// present in order to be considered "lagging" and logged as such.
+var LaggingRangesThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.lagging_ranges_threshold",
+	"controls how far behind a range must be from the present to be considered as 'lagging' behind in metrics",
+	5*time.Minute,
+	settings.NonNegativeDuration,
+)
+
 // FrontierCheckpointMaxBytes controls the maximum number of key bytes that will be added
 // to the checkpoint record.
 // Checkpoint record could be fairly large.
