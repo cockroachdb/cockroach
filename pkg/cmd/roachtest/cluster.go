@@ -2142,8 +2142,9 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 		physicalFileName = l.File.Name()
 	}
 
-	c.t.L().Printf("command `%s` output in %s.log", strings.Join(args, " "), logFile)
+	c.t.L().Printf("running command `%s`; output in %s.log", strings.Join(args, " "), logFile)
 	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args); err != nil {
+		err = errors.Wrapf(err, "full command output in %s.log", logFile)
 		if len(physicalFileName) > 0 {
 			l.Printf("> result: %+v", err)
 			createFailedFile(physicalFileName)
@@ -2165,10 +2166,7 @@ func (c *clusterImpl) RunWithDetailsSingleNode(
 		return install.RunResultDetails{}, errors.Newf("RunWithDetailsSingleNode received %d nodes. Use RunWithDetails if you need to run on multiple nodes.", len(nodes))
 	}
 	results, err := c.RunWithDetails(ctx, testLogger, nodes, args...)
-	if err != nil {
-		return install.RunResultDetails{}, err
-	}
-	return results[0], results[0].Err
+	return results[0], errors.CombineErrors(err, results[0].Err)
 }
 
 // RunWithDetails runs a command on the specified nodes, returning the results
@@ -2191,7 +2189,9 @@ func (c *clusterImpl) RunWithDetails(
 		physicalFileName = l.File.Name()
 	}
 
-	c.t.L().Printf("command `%s` output in %s.log", strings.Join(args, " "), logFile)
+	// This logs to the test logger to easily identify the command that is being run and
+	// where to find the output.
+	c.t.L().Printf("running command `%s`; output in %s.log", strings.Join(args, " "), logFile)
 
 	l.Printf("running %s on nodes: %v", strings.Join(args, " "), nodes)
 	if testLogger != nil {
@@ -2205,30 +2205,33 @@ func (c *clusterImpl) RunWithDetails(
 		return nil, err
 	}
 
-	if err != nil && len(physicalFileName) > 0 {
+	if err != nil {
 		l.Printf("> result: %+v", err)
 		createFailedFile(physicalFileName)
-		return results, err
+		return nil, err
 	}
 
 	hasError := false
 	for _, result := range results {
 		if result.Err != nil {
 			hasError = true
-			err = result.Err
 			l.Printf("> Error for Node %d: %+v", int(result.Node), result.Err)
 		}
 	}
-	if err != nil || hasError {
+	if hasError {
 		createFailedFile(physicalFileName)
 	}
 	return results, nil
 }
 
 func createFailedFile(logFileName string) {
+	if len(logFileName) == 0 {
+		return
+	}
 	failedPhysicalFileName := strings.TrimSuffix(logFileName, ".log") + ".failed"
-	if failedFile, err2 := os.Create(failedPhysicalFileName); err2 != nil {
-		failedFile.Close()
+	file, err := os.Create(failedPhysicalFileName)
+	if err == nil {
+		file.Close()
 	}
 }
 
