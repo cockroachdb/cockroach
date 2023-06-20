@@ -102,3 +102,37 @@ func (l *RedirectLogger) Panicf(format string, v ...interface{}) {
 	// and testing the cases when panic is expected.
 	panic(fmt.Sprintf(format, v...))
 }
+
+// Override StringBuilder write methods to silence them under NONE.
+
+func (l *RedirectLogger) Quiet() bool {
+	return l.Lvl == len(lvlNames)-1
+}
+
+func (l *RedirectLogger) Write(p []byte) (int, error) {
+	if l.Quiet() {
+		return 0, nil
+	}
+	return l.Builder.Write(p)
+}
+
+func (l *RedirectLogger) WriteByte(c byte) error {
+	if l.Quiet() {
+		return nil
+	}
+	return l.Builder.WriteByte(c)
+}
+
+func (l *RedirectLogger) WriteRune(r rune) (int, error) {
+	if l.Quiet() {
+		return 0, nil
+	}
+	return l.Builder.WriteRune(r)
+}
+
+func (l *RedirectLogger) WriteString(s string) (int, error) {
+	if l.Quiet() {
+		return 0, nil
+	}
+	return l.Builder.WriteString(s)
+}

@@ -16,7 +16,7 @@ ok
 
 stabilize
 ----
-ok (quiet)
+ok
 
 # Propose 3 entries.
 propose 1 prop_1_12
@@ -33,7 +33,7 @@ ok
 
 stabilize
 ----
-ok (quiet)
+ok
 
 # Re-enable log messages.
 log-level debug
@@ -70,7 +70,7 @@ ok
 # Commit entries on nodes 1 and 2.
 stabilize 1 2
 ----
-ok (quiet)
+ok
 
 log-level debug
 ----
@@ -107,7 +107,7 @@ ok
 
 stabilize
 ----
-ok (quiet)
+ok
 
 log-level debug
 ----
