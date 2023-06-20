@@ -55,8 +55,8 @@ const (
 // testPlanner field. Currently, the test will always follow the
 // following high level outline:
 //
-//   - start all nodes in the cluster from the predecessor version,
-//     using fixtures.
+//   - start all nodes in the cluster from a random predecessor
+//     version, using fixtures.
 //   - set `preserve_downgrade_option`.
 //   - run startup hooks.
 //   - upgrade all nodes to the current cockroach version (running
@@ -72,7 +72,6 @@ const (
 //
 // TODO(renato): further opportunities for random exploration:
 // - going back multiple releases instead of just one
-// - picking a patch release randomly instead of just the latest release
 // - inserting arbitrary delays (`sleep` calls) during the test.
 func (p *testPlanner) Plan() *TestPlan {
 	var steps []testStep

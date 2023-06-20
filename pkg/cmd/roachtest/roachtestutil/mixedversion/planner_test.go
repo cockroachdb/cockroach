@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
@@ -46,14 +45,8 @@ var (
 
 	// Hardcode build and previous versions so that the test won't fail
 	// when new versions are released.
-	buildVersion    = version.MustParse("v23.1.0")
-	previousVersion = func() string {
-		pv, err := release.LatestPredecessor(buildVersion)
-		if err != nil {
-			panic(err)
-		}
-		return pv
-	}()
+	buildVersion       = version.MustParse("v23.1.0")
+	predecessorVersion = "22.2.8"
 )
 
 const (
@@ -119,8 +112,7 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 │   ├── run "mixed-version 1", after 100ms delay (28)
 │   └── run "mixed-version 2", after 0s delay (29)
 └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (30)
-`, previousVersion,
-	)
+`, predecessorVersion)
 
 	expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
 	require.Equal(t, expectedPrettyPlan, plan.PrettyPrint())
@@ -248,13 +240,21 @@ func TestDeterministicHookSeeds(t *testing.T) {
 func newTest(t *testing.T) *Test {
 	prng := rand.New(rand.NewSource(seed))
 	return &Test{
-		ctx:           ctx,
-		logger:        nilLogger,
-		crdbNodes:     nodes,
-		_buildVersion: buildVersion,
-		prng:          prng,
-		hooks:         &testHooks{prng: prng, crdbNodes: nodes},
+		ctx:             ctx,
+		logger:          nilLogger,
+		crdbNodes:       nodes,
+		_buildVersion:   buildVersion,
+		prng:            prng,
+		hooks:           &testHooks{prng: prng, crdbNodes: nodes},
+		predecessorFunc: testPredecessorFunc,
 	}
+}
+
+// Always use the same predecessor version to make this test
+// deterministic even as changes continue to happen in the
+// cockroach_releases.yaml file.
+func testPredecessorFunc(rng *rand.Rand, v *version.Version) (string, error) {
+	return predecessorVersion, nil
 }
 
 // requireConcurrentHooks asserts that the given step is a concurrent
