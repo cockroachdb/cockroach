@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func newCluster(
+func newMultiRegionCluster(
 	t *testing.T, knobs *scexec.TestingKnobs,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
 	c, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -42,12 +42,12 @@ func newCluster(
 	return c.Server(0), sqlDB, cleanup
 }
 
-func newClusterMixed(
+func newMultiRegionMixedCluster(
 	t *testing.T, knobs *scexec.TestingKnobs, downlevelVersion bool,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
 	targetVersion := clusterversion.TestingBinaryVersion
 	if downlevelVersion {
-		targetVersion = clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates - 1)
+		targetVersion = clusterversion.ByKey(sctest.OldVersionKey)
 	}
 	c, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t,
 		3, /* numServers */
@@ -70,5 +70,5 @@ func TestDecomposeToElements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sctest.DecomposeToElements(t, datapathutils.TestDataPath(t, "decomp"), newCluster)
+	sctest.DecomposeToElements(t, datapathutils.TestDataPath(t, "decomp"), newMultiRegionCluster)
 }
