@@ -30,6 +30,10 @@ func TestOptTester(t *testing.T) {
 			// Skip any .json files; used for inject-stats
 			return
 		}
+		if strings.HasSuffix(path, ".sql") {
+			// Skip any .sql files; used for statement-bundle
+			return
+		}
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			tester := opttester.New(catalog, d.Input)
