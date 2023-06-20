@@ -62,7 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1324,9 +1323,30 @@ func (t *logicTest) newCluster(
 		}
 		return st
 	}
-	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
-	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
-		corpusCollectionCallback = t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t())
+	setSQLTestingKnobs := func(knobs *base.TestingKnobs) {
+		knobs.SQLEvalContext = &eval.TestingKnobs{
+			AssertBinaryExprReturnTypes:     true,
+			AssertUnaryExprReturnTypes:      true,
+			AssertFuncExprReturnTypes:       true,
+			DisableOptimizerRuleProbability: *disableOptRuleProbability,
+			OptimizerCostPerturbation:       *optimizerCostPerturbation,
+			ForceProductionValues:           serverArgs.ForceProductionValues,
+		}
+		knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+			DeterministicExplain:            true,
+			UseTransactionalDescIDGenerator: true,
+		}
+		knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
+			AOSTClause: "AS OF SYSTEM TIME '-1us'",
+		}
+		if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
+			knobs.SQLDeclarativeSchemaChanger = &scexec.TestingKnobs{
+				BeforeStage: t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t()),
+			}
+		}
+		knobs.DistSQL = &execinfra.TestingKnobs{
+			ForceDiskSpill: t.cfg.SQLExecUseDisk,
+		}
 	}
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
@@ -1359,24 +1379,6 @@ func (t *logicTest) newCluster(
 						UseRangeTombstonesForPointDeletes: shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
 				},
-				SQLEvalContext: &eval.TestingKnobs{
-					AssertBinaryExprReturnTypes:     true,
-					AssertUnaryExprReturnTypes:      true,
-					AssertFuncExprReturnTypes:       true,
-					DisableOptimizerRuleProbability: *disableOptRuleProbability,
-					OptimizerCostPerturbation:       *optimizerCostPerturbation,
-					ForceProductionValues:           serverArgs.ForceProductionValues,
-				},
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DeterministicExplain:            true,
-					UseTransactionalDescIDGenerator: true,
-				},
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause: "AS OF SYSTEM TIME '-1us'",
-				},
-				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
-					BeforeStage: corpusCollectionCallback,
-				},
 				RangeFeed: &rangefeed.TestingKnobs{
 					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
 				},
@@ -1388,15 +1390,13 @@ func (t *logicTest) newCluster(
 		// matter where the data really is.
 		ReplicationMode: base.ReplicationManual,
 	}
+	setSQLTestingKnobs(&params.ServerArgs.Knobs)
 
 	cfg := t.cfg
 	if cfg.UseTenant {
 		// In the tenant case we need to enable replication in order to split and
 		// relocate ranges correctly.
 		params.ReplicationMode = base.ReplicationAuto
-	}
-	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
-		ForceDiskSpill: cfg.SQLExecUseDisk,
 	}
 	if cfg.BootstrapVersion != clusterversion.Key(0) {
 		if params.ServerArgs.Knobs.Server == nil {
@@ -1472,13 +1472,6 @@ func (t *logicTest) newCluster(
 				TenantID: serverutils.TestTenantID(),
 				Settings: settings,
 				TestingKnobs: base.TestingKnobs{
-					SQLExecutor: &sql.ExecutorTestingKnobs{
-						DeterministicExplain:            true,
-						UseTransactionalDescIDGenerator: true,
-					},
-					SQLStatsKnobs: &sqlstats.TestingKnobs{
-						AOSTClause: "AS OF SYSTEM TIME '-1us'",
-					},
 					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
@@ -1488,6 +1481,7 @@ func (t *logicTest) newCluster(
 				// Give every tenant its own ExternalIO directory.
 				ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(i)),
 			}
+			setSQLTestingKnobs(&tenantArgs.TestingKnobs)
 
 			for _, opt := range knobOpts {
 				t.rootT.Logf("apply knob opt %T to tenant", opt)
