@@ -589,6 +589,7 @@ index_spans                             NULL
 index_usage_statistics                  NULL
 invalid_objects                         NULL
 jobs                                    NULL
+kv_builtin_function_comments            NULL
 kv_catalog_comments                     NULL
 kv_catalog_descriptor                   NULL
 kv_catalog_namespace                    NULL

@@ -259,7 +259,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 
 			// Check whether we can reproduce this slowness to prevent false
 			// positives.
-			var helper tpchVecPerfHelper
+			helper := newTpchVecPerfHelper(runConfig.setupNames)
 			for setupIdx, setup := range runConfig.clusterSetups {
 				performClusterSetup(t, conn, setup)
 				result, err := c.RunWithDetailsSingleNode(
