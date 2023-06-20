@@ -20,8 +20,8 @@ SELECT c.relname AS completion,
            FROM pg_catalog.pg_class c
            JOIN pg_catalog.pg_namespace n
                 ON c.relnamespace = n.oid AND n.nspname IN (TABLE unnest(current_schemas(true)))
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON c.oid = d.objoid AND d.classoid = 4294967100
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
           WHERE c.reltype != 0
             AND left(relname, length($1:::STRING)) = $1::STRING
             AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
@@ -47,8 +47,8 @@ SELECT c.relname AS completion,
            FROM pg_catalog.pg_class c
            JOIN pg_catalog.pg_namespace n
                 ON c.relnamespace = n.oid AND n.nspname IN (TABLE unnest(current_schemas(true)))
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON c.oid = d.objoid AND d.classoid = 4294967100
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
           WHERE c.reltype != 0
             AND left(relname, length($1:::STRING)) = $1::STRING
             AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
@@ -70,8 +70,8 @@ SELECT c.relname AS completion,
            FROM pg_catalog.pg_class c
            JOIN pg_catalog.pg_namespace n
                 ON c.relnamespace = n.oid AND n.nspname IN (TABLE unnest(current_schemas(true)))
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON c.oid = d.objoid AND d.classoid = 4294967100
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
           WHERE c.reltype != 0
             AND left(relname, length($1:::STRING)) = $1::STRING
             AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
@@ -97,8 +97,8 @@ SELECT c.relname AS completion,
            FROM pg_catalog.pg_class c
            JOIN pg_catalog.pg_namespace n
                 ON c.relnamespace = n.oid AND n.nspname = 'a'
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON c.oid = d.objoid AND d.classoid = 4294967100
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
           WHERE c.reltype != 0
             AND left(relname, length($1:::STRING)) = $1::STRING
             AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
@@ -120,8 +120,8 @@ SELECT c.relname AS completion,
            FROM pg_catalog.pg_class c
            JOIN pg_catalog.pg_namespace n
                 ON c.relnamespace = n.oid AND n.nspname = 'a'
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON c.oid = d.objoid AND d.classoid = 4294967100
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
           WHERE c.reltype != 0
             AND left(relname, length($1:::STRING)) = $1::STRING
             AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
@@ -143,8 +143,8 @@ SELECT c.relname AS completion,
            FROM pg_catalog.pg_class c
            JOIN pg_catalog.pg_namespace n
                 ON c.relnamespace = n.oid AND n.nspname = 'a'
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON c.oid = d.objoid AND d.classoid = 4294967100
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
           WHERE c.reltype != 0
             AND left(relname, length($1:::STRING)) = $1::STRING
             AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
@@ -171,8 +171,8 @@ SELECT c.relname AS completion,
            FROM pg_catalog.pg_class c
            JOIN pg_catalog.pg_namespace n
                 ON c.relnamespace = n.oid AND n.nspname = 'pg_catalog'
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON c.oid = d.objoid AND d.classoid = 4294967100
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
           WHERE c.reltype != 0
             AND left(relname, length($1:::STRING)) = $1::STRING
             AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
@@ -195,8 +195,8 @@ SELECT c.relname AS completion,
            FROM pg_catalog.pg_class c
            JOIN pg_catalog.pg_namespace n
                 ON c.relnamespace = n.oid AND n.nspname = 'PG_CATALOG'
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON c.oid = d.objoid AND d.classoid = 4294967100
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
           WHERE c.reltype != 0
             AND left(relname, length($1:::STRING)) = $1::STRING
             AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
