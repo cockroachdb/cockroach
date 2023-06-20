@@ -950,7 +950,11 @@ func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) 
 	format := func(s string, e error) string {
 		s = strings.ReplaceAll(strings.TrimSpace(s), "\n", "\n\t")
 		if e != nil {
-			return fmt.Sprintf("%v\n\t%s", e, s)
+			return fmt.Sprintf("<err> %v\n\t%s", e, s)
+		}
+
+		if s == "" {
+			s = "<ok>"
 		}
 		return s
 	}
