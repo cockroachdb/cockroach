@@ -265,7 +265,17 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		for i := 0; i < 20; i++ {
 			sleepFor(ctx, t, time.Minute)
 
-			// Pick 1 or 2 random nodes and failure modes.
+			// Ranges may occasionally escape their constraints. Move them to where
+			// they should be.
+			relocateRanges(t, ctx, conn, `true`, []int{1, 2}, []int{3, 4, 5, 6, 7, 8, 9})
+
+			// Randomly sleep up to the lease renewal interval, to vary the time
+			// between the last lease renewal and the failure.
+			sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
+
+			// Pick 1 or 2 random nodes and failure modes. Make sure we call Ready()
+			// on both before failing, since we may need to fetch information from the
+			// cluster which won't work if there's an active failure.
 			nodeFailers := map[int]Failer{}
 			for numNodes := 1 + rng.Intn(2); len(nodeFailers) < numNodes; {
 				var node int
@@ -286,17 +296,9 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 					d.numReplicas = 1 + rng.Intn(5)
 					d.onlyLeaseholders = rng.Float64() < 0.5
 				}
-				failer.Ready(ctx)
+				failer.Ready(ctx, node)
 				nodeFailers[node] = failer
 			}
-
-			// Ranges may occasionally escape their constraints. Move them to where
-			// they should be.
-			relocateRanges(t, ctx, conn, `true`, []int{1, 2}, []int{3, 4, 5, 6, 7, 8, 9})
-
-			// Randomly sleep up to the lease renewal interval, to vary the time
-			// between the last lease renewal and the failure.
-			sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
 
 			for node, failer := range nodeFailers {
 				// If the failer supports partial failures (e.g. partial partitions), do
@@ -441,8 +443,6 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 			for _, tc := range testcases {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx)
-
 				// Ranges and leases may occasionally escape their constraints. Move
 				// them to where they should be.
 				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 7}, []int{2, 3, 4, 5, 6})
@@ -452,6 +452,10 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 				// Randomly sleep up to the lease renewal interval, to vary the time
 				// between the last lease renewal and the failure.
 				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
+
+				for _, node := range tc.nodes {
+					failer.Ready(ctx, node)
+				}
 
 				for _, node := range tc.nodes {
 					t.L().Printf("failing n%d to n%v (%s lease/gateway)", node, tc.peers, failer)
@@ -576,8 +580,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 			for _, node := range []int{4, 5, 6} {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx)
-
 				// Ranges may occasionally escape their constraints. Move them to where
 				// they should be.
 				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
@@ -586,6 +588,8 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 				// Randomly sleep up to the lease renewal interval, to vary the time
 				// between the last lease renewal and the failure.
 				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
+
+				failer.Ready(ctx, node)
 
 				peer := node + 1
 				if peer > 6 {
@@ -692,8 +696,6 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 			for _, node := range []int{5, 6, 7} {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx)
-
 				// Ranges and leases may occasionally escape their constraints. Move
 				// them to where they should be.
 				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3, 4}, []int{5, 6, 7})
@@ -704,6 +706,8 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 				// Randomly sleep up to the lease renewal interval, to vary the time
 				// between the last lease renewal and the failure.
 				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
+
+				failer.Ready(ctx, node)
 
 				peer := 4
 				t.L().Printf("failing n%d to n%d (%s lease/liveness)", node, peer, failer)
@@ -802,8 +806,6 @@ func runFailoverNonSystem(
 			for _, node := range []int{4, 5, 6} {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx)
-
 				// Ranges may occasionally escape their constraints. Move them
 				// to where they should be.
 				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
@@ -812,6 +814,8 @@ func runFailoverNonSystem(
 				// Randomly sleep up to the lease renewal interval, to vary the time
 				// between the last lease renewal and the failure.
 				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
+
+				failer.Ready(ctx, node)
 
 				t.L().Printf("failing n%d (%s)", node, failer)
 				failer.Fail(ctx, node)
@@ -917,8 +921,6 @@ func runFailoverLiveness(
 		for i := 0; i < 9; i++ {
 			sleepFor(ctx, t, time.Minute)
 
-			failer.Ready(ctx)
-
 			// Ranges and leases may occasionally escape their constraints. Move them
 			// to where they should be.
 			relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
@@ -927,6 +929,8 @@ func runFailoverLiveness(
 			// Randomly sleep up to the lease renewal interval, to vary the time
 			// between the last lease renewal and the failure.
 			sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
+
+			failer.Ready(ctx, 4)
 
 			t.L().Printf("failing n%d (%s)", 4, failer)
 			failer.Fail(ctx, 4)
@@ -1031,8 +1035,6 @@ func runFailoverSystemNonLiveness(
 			for _, node := range []int{4, 5, 6} {
 				sleepFor(ctx, t, time.Minute)
 
-				failer.Ready(ctx)
-
 				// Ranges may occasionally escape their constraints. Move them
 				// to where they should be.
 				relocateRanges(t, ctx, conn, `database_name != 'kv' AND range_id != 2`,
@@ -1043,6 +1045,8 @@ func runFailoverSystemNonLiveness(
 				// Randomly sleep up to the lease renewal interval, to vary the time
 				// between the last lease renewal and the failure.
 				sleepFor(ctx, t, randutil.RandDuration(rng, rangeLeaseRenewalDuration))
+
+				failer.Ready(ctx, node)
 
 				t.L().Printf("failing n%d (%s)", node, failer)
 				failer.Fail(ctx, node)
@@ -1192,13 +1196,13 @@ type Failer interface {
 	// Setup prepares the failer. It is called before the cluster is started.
 	Setup(ctx context.Context)
 
-	// Ready is called some time before failing each node, when the cluster and
-	// workload is running and after recovering the previous node failure if any.
-	Ready(ctx context.Context)
-
 	// Cleanup cleans up when the test exits. This is needed e.g. when the cluster
 	// is reused by a different test.
 	Cleanup(ctx context.Context)
+
+	// Ready is called before failing each node, when the cluster and workload is
+	// running and after recovering the previous node failure if any.
+	Ready(ctx context.Context, nodeID int)
 
 	// Fail fails the given node.
 	Fail(ctx context.Context, nodeID int)
@@ -1223,7 +1227,7 @@ func (f *noopFailer) String() string                          { return string(f.
 func (f *noopFailer) CanUseLocal() bool                       { return true }
 func (f *noopFailer) CanRunWith(failureMode) bool             { return true }
 func (f *noopFailer) Setup(context.Context)                   {}
-func (f *noopFailer) Ready(context.Context)                   {}
+func (f *noopFailer) Ready(context.Context, int)              {}
 func (f *noopFailer) Cleanup(context.Context)                 {}
 func (f *noopFailer) Fail(context.Context, int)               {}
 func (f *noopFailer) FailPartial(context.Context, int, []int) {}
@@ -1255,7 +1259,7 @@ func (f *blackholeFailer) String() string              { return string(f.Mode())
 func (f *blackholeFailer) CanUseLocal() bool           { return false } // needs iptables
 func (f *blackholeFailer) CanRunWith(failureMode) bool { return true }
 func (f *blackholeFailer) Setup(context.Context)       {}
-func (f *blackholeFailer) Ready(context.Context)       {}
+func (f *blackholeFailer) Ready(context.Context, int)  {}
 
 func (f *blackholeFailer) Cleanup(ctx context.Context) {
 	f.c.Run(ctx, f.c.All(), `sudo iptables -F`)
@@ -1341,7 +1345,7 @@ func (f *crashFailer) String() string              { return string(f.Mode()) }
 func (f *crashFailer) CanUseLocal() bool           { return true }
 func (f *crashFailer) CanRunWith(failureMode) bool { return true }
 func (f *crashFailer) Setup(context.Context)       {}
-func (f *crashFailer) Ready(context.Context)       {}
+func (f *crashFailer) Ready(context.Context, int)  {}
 func (f *crashFailer) Cleanup(context.Context)     {}
 
 func (f *crashFailer) Fail(ctx context.Context, nodeID int) {
@@ -1378,12 +1382,15 @@ func (f *deadlockFailer) CanRunWith(m failureMode) bool { return true }
 func (f *deadlockFailer) Setup(context.Context)         {}
 func (f *deadlockFailer) Cleanup(context.Context)       {}
 
-func (f *deadlockFailer) Ready(ctx context.Context) {
+func (f *deadlockFailer) Ready(ctx context.Context, nodeID int) {
 	// In chaos tests, other nodes will be failing concurrently. We therefore
 	// can't run SHOW CLUSTER RANGES WITH DETAILS in Fail(), since it needs to
 	// read from all ranges. Instead, we fetch a snapshot of replicas and leases
 	// now, and if any replicas should move we'll skip them later.
-	conn := f.c.Conn(ctx, f.t.L(), 1)
+	//
+	// We also have to ensure we have an active connection to the node in the
+	// pool, since we may be unable to create one during concurrent failures.
+	conn := f.c.Conn(ctx, f.t.L(), nodeID)
 	rows, err := conn.QueryContext(ctx,
 		`SELECT range_id, replicas, lease_holder FROM [SHOW CLUSTER RANGES WITH DETAILS]`)
 	require.NoError(f.t, err)
@@ -1493,7 +1500,7 @@ func (f *diskStallFailer) Mode() failureMode           { return failureModeDiskS
 func (f *diskStallFailer) String() string              { return string(f.Mode()) }
 func (f *diskStallFailer) CanUseLocal() bool           { return false } // needs dmsetup
 func (f *diskStallFailer) CanRunWith(failureMode) bool { return true }
-func (f *diskStallFailer) Ready(context.Context)       {}
+func (f *diskStallFailer) Ready(context.Context, int)  {}
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
 	f.staller.Setup(ctx)
@@ -1540,11 +1547,11 @@ func (f *pauseFailer) CanRunWith(other failureMode) bool {
 	return other != failureModeDiskStall
 }
 
-func (f *pauseFailer) Ready(ctx context.Context) {
+func (f *pauseFailer) Ready(ctx context.Context, nodeID int) {
 	// The process pause can trip the disk stall detector, so we disable it. We
 	// could let it fire, but we'd like to see if the node can recover from the
 	// pause and keep working.
-	conn := f.c.Conn(ctx, f.t.L(), 1)
+	conn := f.c.Conn(ctx, f.t.L(), nodeID)
 	_, err := conn.ExecContext(ctx,
 		`SET CLUSTER SETTING storage.max_sync_duration.fatal.enabled = false`)
 	require.NoError(f.t, err)
