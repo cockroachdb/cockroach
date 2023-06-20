@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -455,7 +456,56 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		SchemaFeed:              sf,
 		Knobs:                   ca.knobs.FeedKnobs,
 		UseMux:                  changefeedbase.UseMuxRangeFeed.Get(&cfg.Settings.SV),
+		RangeObserver:           makeLaggingRangesObserver(ctx, cfg.Settings, ca.sliMetrics),
 	}, nil
+}
+
+func makeLaggingRangesObserver(
+	ctx context.Context, settings *cluster.Settings, sliMetrics *sliMetrics,
+) func(fn kvcoord.ForEachRangeFn) {
+	updateLaggingRanges := sliMetrics.getLaggingRangesCallback()
+	return func(fn kvcoord.ForEachRangeFn) {
+		go func() {
+			log.Info(ctx, "starting changefeed lagging ranges observer")
+			// Reset metrics on shutdown.
+			defer func() {
+				updateLaggingRanges(0)
+			}()
+
+			for {
+				select {
+				case <-ctx.Done():
+					log.Infof(ctx, "changefeed lagging ranges observer shutting down: %s", ctx.Err())
+					return
+				case <-time.After(changefeedbase.LaggingRangesCheckFrequency.Get(&settings.SV)):
+					count := int64(0)
+					thresholdTS := timeutil.Now().Add(-1 * changefeedbase.LaggingRangesThreshold.Get(&settings.SV))
+					i := 0
+					err := fn(func(rfCtx kvcoord.RangeFeedContext, feed kvcoord.PartialRangeFeed) error {
+						// The resolved timestamp of a range determines the timestamp which is caught up to.
+						// However, during catchup scans, this is not set. For catchup scans,
+						// we consider the time the partial rangefeed was created to be its starting time.
+						ts := feed.Resolved
+						if ts.IsEmpty() {
+							ts = hlc.Timestamp{WallTime: feed.CreatedTime.UnixNano()}
+						}
+
+						i += 1
+						if ts.Less(hlc.Timestamp{WallTime: thresholdTS.UnixNano()}) {
+							count += 1
+						}
+						return nil
+					})
+					// We expect `fn` to only return errors which are returned by the function parameter.
+					// Since the parameter does not return errors, we expect no errors to occur.
+					if err != nil {
+						logcrash.ReportOrPanic(ctx, &settings.SV, "changefeed lagging ranges observer encountered error ")
+					}
+					updateLaggingRanges(count)
+				}
+			}
+		}()
+	}
 }
 
 // setupSpans is called on start to extract the spans for this changefeed as a

@@ -47,11 +47,13 @@ type Config struct {
 	Metrics                 *kvevent.Metrics
 	OnBackfillCallback      func() func()
 	OnBackfillRangeCallback func(int64) (func(), func())
-	MM                      *mon.BytesMonitor
-	WithDiff                bool
-	SchemaChangeEvents      changefeedbase.SchemaChangeEventClass
-	SchemaChangePolicy      changefeedbase.SchemaChangePolicy
-	SchemaFeed              schemafeed.SchemaFeed
+	// RangeObserver is used with the kvcoord.WithRangeObserver option.
+	RangeObserver      func(fn kvcoord.ForEachRangeFn)
+	MM                 *mon.BytesMonitor
+	WithDiff           bool
+	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
+	SchemaChangePolicy changefeedbase.SchemaChangePolicy
+	SchemaFeed         schemafeed.SchemaFeed
 
 	// If true, the feed will begin with a dump of data at exactly the
 	// InitialHighWater. This is a peculiar behavior. In general the
@@ -107,6 +109,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.SchemaFeed,
 		sc, pff, bf, cfg.UseMux, cfg.Targets, cfg.Knobs)
 	f.onBackfillCallback = cfg.OnBackfillCallback
+	f.rangeObserver = cfg.RangeObserver
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)
@@ -175,6 +178,7 @@ type kvFeed struct {
 	codec               keys.SQLCodec
 
 	onBackfillCallback func() func()
+	rangeObserver      func(fn kvcoord.ForEachRangeFn)
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
@@ -485,11 +489,12 @@ func (f *kvFeed) runUntilTableEvent(
 
 	g := ctxgroup.WithContext(ctx)
 	physicalCfg := rangeFeedConfig{
-		Spans:    stps,
-		Frontier: resumeFrontier.Frontier(),
-		WithDiff: f.withDiff,
-		Knobs:    f.knobs,
-		UseMux:   f.useMux,
+		Spans:         stps,
+		Frontier:      resumeFrontier.Frontier(),
+		WithDiff:      f.withDiff,
+		Knobs:         f.knobs,
+		UseMux:        f.useMux,
+		RangeObserver: f.rangeObserver,
 	}
 
 	// The following two synchronous calls works as follows:

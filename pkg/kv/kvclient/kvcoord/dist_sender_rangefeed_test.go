@@ -12,6 +12,7 @@ package kvcoord_test
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -802,6 +803,112 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 
 		// We also know that we have blocked numCatchupToBlock ranges in their catchup scan.
 		require.EqualValues(t, numCatchupToBlock, metrics.RangefeedCatchupRanges.Value())
+	})
+}
+
+// TestRangefeedRangeObserver ensures the kvcoord.WithRangeObserver option
+// works correctly.
+func TestRangefeedRangeObserver(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	kvserver.RangefeedEnabled.Override(
+		context.Background(), &ts.ClusterSettings().SV, true)
+
+	testutils.RunTrueAndFalse(t, "mux", func(t *testing.T, useMux bool) {
+		sqlDB.ExecMultiple(t,
+			`CREATE TABLE foo (key INT PRIMARY KEY)`,
+			`INSERT INTO foo (key) SELECT * FROM generate_series(1, 4)`,
+			`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 4, 1))`,
+		)
+		defer func() {
+			sqlDB.Exec(t, `DROP TABLE foo`)
+		}()
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+			ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+		ignoreValues := func(event kvcoord.RangeFeedMessage) {}
+
+		ctx2, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Set up an observer to continuously poll for the list of ranges
+		// being watched.
+		var observedRangesMu syncutil.Mutex
+		observedRanges := make(map[string]struct{})
+		observer := func(fn kvcoord.ForEachRangeFn) {
+			go func() {
+				for {
+					select {
+					case <-ctx2.Done():
+						return
+					default:
+					}
+					observedRangesMu.Lock()
+					observedRanges = make(map[string]struct{})
+					err := fn(func(rfCtx kvcoord.RangeFeedContext, feed kvcoord.PartialRangeFeed) error {
+						observedRanges[feed.Span.String()] = struct{}{}
+						return nil
+					})
+					observedRangesMu.Unlock()
+					require.NoError(t, err)
+				}
+			}()
+		}
+
+		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, ts.Clock().Now(), ignoreValues, useMux,
+			kvcoord.WithRangeObserver(observer))
+		defer closeFeed()
+
+		makeSpan := func(suffix string) string {
+			return fmt.Sprintf("/Table/%d/%s", fooDesc.GetID(), suffix)
+		}
+
+		// The initial set of ranges we expect to observe.
+		expectedRanges := map[string]struct{}{
+			makeSpan("1{-/1}"):  {},
+			makeSpan("1/{1-2}"): {},
+			makeSpan("1/{2-3}"): {},
+			makeSpan("1/{3-4}"): {},
+			makeSpan("{1/4-2}"): {},
+		}
+		checkExpectedRanges := func() {
+			testutils.SucceedsWithin(t, func() error {
+				observedRangesMu.Lock()
+				defer observedRangesMu.Unlock()
+				for r := range expectedRanges {
+					if _, ok := observedRanges[r]; !ok {
+						return errors.Newf("expected range %s to be observed in map %v", r, observedRanges)
+					}
+				}
+				return nil
+			}, 10*time.Second)
+		}
+		checkExpectedRanges()
+
+		// Add another range and ensure we can observe it.
+		sqlDB.ExecMultiple(t,
+			`INSERT INTO FOO VALUES(5)`,
+			`ALTER TABLE foo SPLIT AT VALUES(5)`,
+		)
+		expectedRanges = map[string]struct{}{
+			makeSpan("1{-/1}"):  {},
+			makeSpan("1/{1-2}"): {},
+			makeSpan("1/{2-3}"): {},
+			makeSpan("1/{3-4}"): {},
+			makeSpan("1/{4-5}"): {},
+			makeSpan("{1/5-2}"): {},
+		}
+		checkExpectedRanges()
 	})
 }
 

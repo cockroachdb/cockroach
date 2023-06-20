@@ -308,3 +308,25 @@ var SinkPacerRequestSize = settings.RegisterDurationSetting(
 	50*time.Millisecond,
 	settings.PositiveDuration,
 )
+
+// LaggingRangesCheckFrequency is the frequency at which a changefeed will
+// check for ranges which have fallen behind.
+var LaggingRangesCheckFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.lagging_ranges_frequency",
+	"controls the frequency at which a changefeed checks for ranges which have fallen behind",
+	1*time.Minute,
+	settings.NonNegativeDuration,
+	settings.WithPublic,
+)
+
+// LaggingRangesThreshold is how far behind a range must be from the present to
+// be considered as 'lagging' behind in metrics
+var LaggingRangesThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.lagging_ranges_threshold",
+	"controls how far behind a range must be from the present to be considered as 'lagging' behind in metrics",
+	3*time.Minute,
+	settings.NonNegativeDuration,
+	settings.WithPublic,
+)
