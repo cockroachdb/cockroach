@@ -328,7 +328,15 @@ func (r *Registry) resumeJob(
 				return err
 			}
 			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job payload not found in system.job_info")
+				// 23.1.3 could finalize an upgrade but leave some jobs behind with rows
+				// not copied to info table. If we get here, try backfilling the info
+				// table for this job in the txn and proceed if it succeeds.
+				fixedPayload, err := infoStorage.BackfillLegacyPayload(ctx)
+				if err != nil {
+					return errors.Wrap(err, "job payload not found in system.job_info")
+				}
+				log.Infof(ctx, "fixed missing payload info for job %d", jobID)
+				payloadBytes = fixedPayload
 			}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
 				return err
@@ -339,7 +347,12 @@ func (r *Registry) resumeJob(
 				return err
 			}
 			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job progress not found in system.job_info")
+				fixedProgress, err := infoStorage.BackfillLegacyProgress(ctx)
+				if err != nil {
+					return errors.Wrap(err, "job progress not found in system.job_info")
+				}
+				log.Infof(ctx, "fixed missing progress info for job %d", jobID)
+				progressBytes = fixedProgress
 			}
 			return protoutil.Unmarshal(progressBytes, progress)
 		}); err != nil {
