@@ -1769,7 +1769,9 @@ func nodeMetric(
 	ctx context.Context, t test.Test, c cluster.Cluster, node int, metric string,
 ) float64 {
 	var value float64
-	err := c.Conn(ctx, t.L(), node).QueryRowContext(
+	conn := c.Conn(ctx, t.L(), node)
+	defer conn.Close()
+	err := conn.QueryRowContext(
 		ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = $1`, metric).Scan(&value)
 	require.NoError(t, err)
 	return value
