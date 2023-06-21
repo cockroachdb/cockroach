@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package pgcrypto
+package pgcryptocipher
 
 import (
 	"testing"
@@ -53,7 +53,7 @@ func TestPKCSPad(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			actual, err := PKCSPad(tc.data, tc.blockSize)
+			actual, err := pkcsPad(tc.data, tc.blockSize)
 			if tc.expectedErr != "" {
 				require.EqualError(t, err, tc.expectedErr)
 				return
@@ -102,7 +102,7 @@ func TestPKCSUnpad(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			actual, err := PKCSUnpad(tc.data)
+			actual, err := pkcsUnpad(tc.data)
 			if tc.expectedErr != "" {
 				require.EqualError(t, err, tc.expectedErr)
 				return
