@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -517,7 +518,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			// Choose the tenant to use when no tenant is specified on a
 			// connection or web URL.
 			if _, err := ie.Exec(ctx, "default-tenant", nil,
-				`SET CLUSTER SETTING `+server.DefaultTenantSelectSettingName+` = $1`,
+				`SET CLUSTER SETTING `+multitenant.DefaultTenantSelectSettingName+` = $1`,
 				demoTenantName); err != nil {
 				return err
 			}
