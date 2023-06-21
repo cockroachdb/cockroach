@@ -122,7 +122,7 @@ func (c *conn) GetErr() error {
 	return nil
 }
 
-func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err error) error {
+func (c *conn) sendError(ctx context.Context, err error) error {
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
@@ -226,7 +226,7 @@ func (c *conn) processCommandsAsync(
 
 		var decrementConnectionCount func()
 		if decrementConnectionCount, retErr = sqlServer.IncrementConnectionCount(c.sessionArgs); retErr != nil {
-			_ = c.sendError(ctx, sqlServer.GetExecutorConfig(), retErr)
+			_ = c.sendError(ctx, retErr)
 			return
 		}
 		defer decrementConnectionCount()
