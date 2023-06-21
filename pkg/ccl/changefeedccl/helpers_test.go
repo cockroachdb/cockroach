@@ -1082,6 +1082,7 @@ func cdcTestNamedWithSystem(
 	t.Helper()
 	options := makeOptions(testOpts...)
 	cleanupCloudStorage := addCloudStorageOptions(t, &options)
+	TestingClearSchemaRegistrySingleton()
 
 	sinkType := randomSinkTypeWithOptions(options)
 	if sinkType == "skip" {
