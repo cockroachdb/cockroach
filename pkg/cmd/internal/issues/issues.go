@@ -16,9 +16,9 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"os/exec"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -71,25 +71,11 @@ func (ctx *postCtx) Printf(format string, args ...interface{}) {
 	fmt.Fprintf(&ctx.Builder, format, args...)
 }
 
-func getLatestTag() (string, error) {
-	cmd := exec.Command("git", "describe", "--abbrev=0", "--tags", "--match=v[0-9]*")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
 func (p *poster) getProbableMilestone(ctx *postCtx) *int {
-	tag, err := p.getLatestTag()
+	bv := p.getBinaryVersion()
+	v, err := version.Parse(bv)
 	if err != nil {
-		ctx.Printf("unable to get latest tag to determine milestone: %s", err)
-		return nil
-	}
-
-	v, err := version.Parse(tag)
-	if err != nil {
-		ctx.Printf("unable to parse version from tag to determine milestone: %s", err)
+		ctx.Printf("unable to parse version from binary version to determine milestone: %s", err)
 		return nil
 	}
 	vstring := fmt.Sprintf("%d.%d", v.Major(), v.Minor())
@@ -163,17 +149,17 @@ func (p *poster) parameters(extraParams map[string]string) map[string]string {
 
 // Options configures the issue poster.
 type Options struct {
-	Token        string // GitHub API token
-	Org          string
-	Repo         string
-	SHA          string
-	BuildTypeID  string
-	BuildID      string
-	ServerURL    string
-	Branch       string
-	Tags         string
-	Goflags      string
-	getLatestTag func() (string, error)
+	Token            string // GitHub API token
+	Org              string
+	Repo             string
+	SHA              string
+	BuildTypeID      string
+	BuildID          string
+	ServerURL        string
+	Branch           string
+	Tags             string
+	Goflags          string
+	getBinaryVersion func() string
 }
 
 // DefaultOptionsFromEnv initializes the Options from the environment variables,
@@ -203,14 +189,14 @@ func DefaultOptionsFromEnv() *Options {
 		// This was chosen simply because it exists and while surprising,
 		// at least it'll be obvious that something went wrong (as an
 		// issue will be posted pointing at that SHA).
-		SHA:          maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
-		BuildTypeID:  maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
-		BuildID:      maybeEnv(teamcityBuildIDEnv, "NOTFOUNDINENV"),
-		ServerURL:    maybeEnv(teamcityServerURLEnv, "https://server-url-not-found-in-env.com"),
-		Branch:       maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
-		Tags:         maybeEnv(tagsEnv, ""),
-		Goflags:      maybeEnv(goFlagsEnv, ""),
-		getLatestTag: getLatestTag,
+		SHA:              maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
+		BuildTypeID:      maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
+		BuildID:          maybeEnv(teamcityBuildIDEnv, "NOTFOUNDINENV"),
+		ServerURL:        maybeEnv(teamcityServerURLEnv, "https://server-url-not-found-in-env.com"),
+		Branch:           maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
+		Tags:             maybeEnv(tagsEnv, ""),
+		Goflags:          maybeEnv(goFlagsEnv, ""),
+		getBinaryVersion: build.BinaryVersion,
 	}
 }
 
