@@ -2383,6 +2383,8 @@ var builtinOidsArray = []string{
 	2410: `crdb_internal.pretty_value(raw_value: bytes) -> string`,
 	2411: `to_char(date: date, format: string) -> string`,
 	2412: `crdb_internal.unsafe_lock_replica(range_id: int, lock: bool) -> bool`,
+	2413: `levenshtein_less_equal(source: string, target: string, max_d: int) -> int`,
+	2414: `levenshtein_less_equal(source: string, target: string, ins_cost: int, del_cost: int, sub_cost: int, max_d: int) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
