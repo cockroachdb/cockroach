@@ -2802,7 +2802,7 @@ func (t *logicTest) processSubtest(
 					return errors.Wrapf(err, "error creating database on admin tenant")
 				}
 			}
-			defer cleanupUserFunc()
+			t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, cleanupUserFunc)
 
 		case "skip":
 			reason := "skipped"

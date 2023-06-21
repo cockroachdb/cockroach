@@ -508,7 +508,10 @@ func (p PrivilegeDescriptor) CheckPrivilege(user username.SQLUsername, priv priv
 		return user.IsNodeUser()
 	}
 
-	if privilege.ALL.IsSetIn(userPriv.Privileges) {
+	if privilege.ALL.IsSetIn(userPriv.Privileges) && priv != privilege.NOSQLLOGIN {
+		// Since NOSQLLOGIN is a "negative" privilege, it's ignored for the ALL
+		// check. It's poor UX for someone with ALL privileges to not be able to
+		// log in.
 		return true
 	}
 	return priv.IsSetIn(userPriv.Privileges)
