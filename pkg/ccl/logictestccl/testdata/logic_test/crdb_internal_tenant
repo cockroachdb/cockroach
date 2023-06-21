@@ -59,6 +59,7 @@ crdb_internal  index_spans                             table  admin  NULL  NULL
 crdb_internal  index_usage_statistics                  table  admin  NULL  NULL
 crdb_internal  invalid_objects                         table  admin  NULL  NULL
 crdb_internal  jobs                                    table  admin  NULL  NULL
+crdb_internal  kv_builtin_function_comments            table  admin  NULL  NULL
 crdb_internal  kv_catalog_comments                     table  admin  NULL  NULL
 crdb_internal  kv_catalog_descriptor                   table  admin  NULL  NULL
 crdb_internal  kv_catalog_namespace                    table  admin  NULL  NULL
@@ -275,10 +276,10 @@ SELECT * FROM crdb_internal.cluster_contention_events WHERE table_id < 0
 ----
 table_id  index_id  num_contention_events  cumulative_contention_time  key  txn_id  count
 
-query TTTTT colnames
+query TTTTTO colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
-function  signature  category  details  schema
+function  signature  category  details  schema  oid
 
 query ITTITTTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''

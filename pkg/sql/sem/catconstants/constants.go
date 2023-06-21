@@ -105,6 +105,7 @@ const (
 	CrdbInternalBackwardDependenciesTableID
 	CrdbInternalBuildInfoTableID
 	CrdbInternalBuiltinFunctionsTableID
+	CrdbInternalBuiltinFunctionCommentsTableID
 	CrdbInternalCatalogCommentsTableID
 	CrdbInternalCatalogDescriptorTableID
 	CrdbInternalCatalogNamespaceTableID

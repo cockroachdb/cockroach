@@ -174,6 +174,11 @@ func (tc *Catalog) ResolveDataSource(
 		// that this is a virtual table.
 		return tc.CreateTable(table), *name, nil
 	}
+	if view, ok := resolveVirtualView(name); ok {
+		// We rely on the check in CreateView against this table's schema to infer
+		// that this is a virtual table.
+		return tc.CreateView(view), *name, nil
+	}
 
 	// If this didn't end up being a virtual table, then return the original
 	// error returned by resolveDataSource.

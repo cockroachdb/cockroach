@@ -41,13 +41,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+LEFT OUTER JOIN "".pg_catalog.pg_description cc
+    ON t.table_id = cc.objoid AND cc.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
 --placeholders: []interface {}{"xor", 9, 12, "a", "public"}
 
 comp at=10
@@ -67,13 +66,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+LEFT OUTER JOIN "".pg_catalog.pg_description cc
+    ON t.table_id = cc.objoid AND cc.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
 --placeholders: []interface {}{"", 10, 10, "a", "public"}
 
 comp at=9
@@ -93,13 +91,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+LEFT OUTER JOIN "".pg_catalog.pg_description cc
+    ON t.table_id = cc.objoid AND cc.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
 --placeholders: []interface {}{"", 9, 9, "a", "public"}
 
 
@@ -124,13 +121,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+LEFT OUTER JOIN "".pg_catalog.pg_description cc
+    ON t.table_id = cc.objoid AND cc.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
 --placeholders: []interface {}{"xor", 11, 14, "a", "b"}
 
 comp at=12
@@ -150,13 +146,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+LEFT OUTER JOIN "".pg_catalog.pg_description cc
+    ON t.table_id = cc.objoid AND cc.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
 --placeholders: []interface {}{"", 12, 12, "a", "b"}
 
 comp at=11
@@ -176,13 +171,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+LEFT OUTER JOIN "".pg_catalog.pg_description cc
+    ON t.table_id = cc.objoid AND cc.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
 --placeholders: []interface {}{"", 11, 11, "a", "b"}
 
 
@@ -207,13 +201,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+LEFT OUTER JOIN "".pg_catalog.pg_description cc
+    ON t.table_id = cc.objoid AND cc.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
 --placeholders: []interface {}{"pg_", 12, 16, "mydb", "public"}
 
 # Quoted uppercase is an entire schema entirely.
@@ -234,13 +227,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+LEFT OUTER JOIN "".pg_catalog.pg_description cc
+    ON t.table_id = cc.objoid AND cc.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
 --placeholders: []interface {}{"PG_", 12, 16, "mydb", "public"}
 
 
