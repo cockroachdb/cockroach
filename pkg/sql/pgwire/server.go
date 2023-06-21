@@ -86,43 +86,6 @@ var logSessionAuth = settings.RegisterBoolSetting(
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false).WithPublic()
 
-var maxNumNonAdminConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
-	"server.max_connections_per_gateway",
-	"the maximum number of SQL connections per gateway allowed at a given time "+
-		"(note: this will only limit future connection attempts and will not affect already established connections). "+
-		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
-	-1, // Postgres defaults to 100, but we default to -1 to match our previous behavior of unlimited.
-).WithPublic()
-
-// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud to limit
-// connections to serverless clusters while still being able to connect from the Cockroach Cloud control plane.
-// This setting may be extended one day to include an arbitrary list of users to exclude from connection limiting.
-// This setting may be removed one day.
-var maxNumNonRootConnections = settings.RegisterIntSetting(
-	settings.TenantWritable,
-	"server.cockroach_cloud.max_client_connections_per_gateway",
-	"this setting is intended to be used by Cockroach Cloud for limiting connections to serverless clusters. "+
-		"The maximum number of SQL connections per gateway allowed at a given time "+
-		"(note: this will only limit future connection attempts and will not affect already established connections). "+
-		"Negative values result in unlimited number of connections. Cockroach Cloud internal users (including root user) "+
-		"are not affected by this limit.",
-	-1,
-)
-
-// maxNumNonRootConnectionsReason is used to supplement the error message for connections that denied due to
-// server.cockroach_cloud.max_client_connections_per_gateway.
-// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud when limiting
-// connections to serverless clusters.
-// This setting may be removed one day.
-var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
-	settings.TenantWritable,
-	"server.cockroach_cloud.max_client_connections_per_gateway_reason",
-	"a reason to provide in the error message for connections that are denied due to "+
-		"server.cockroach_cloud.max_client_connections_per_gateway",
-	"",
-)
-
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
 	// secure server in cleartext.
