@@ -359,11 +359,12 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	// Cutover to a time far in the future, to make sure we see the pending-cutover state.
 	var cutoverTime time.Time
 	c.DestSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-	cutoverTime.Add(time.Hour * 24)
+	cutoverTime = cutoverTime.Add(time.Hour * 24)
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 		args.DestTenantName, cutoverTime)
 
 	require.Equal(c.T, "replication pending cutover", getTenantStatus())
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`, args.DestTenantName)
 	unblockResumerExit()
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 	require.Equal(c.T, "ready", getTenantStatus())
