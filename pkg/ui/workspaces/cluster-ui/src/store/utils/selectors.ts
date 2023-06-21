@@ -24,7 +24,7 @@ export const localStorageSelector = createSelector(
   adminUISelector,
   adminUiState => {
     if (adminUiState) {
-      return adminUiState.localStorage;
+      return adminUiState?.localStorage;
     }
     return {} as LocalStorageState;
   },
