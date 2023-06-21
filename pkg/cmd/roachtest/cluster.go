@@ -2140,19 +2140,16 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 		return err
 	}
 	defer l.Close()
-	physicalFileName := ""
-	if l.File != nil {
-		physicalFileName = l.File.Name()
-	}
 
 	c.t.L().Printf("running command `%s`; output in %s.log", strings.Join(args, " "), logFile)
 	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args); err != nil {
-		err = errors.Wrapf(err, "full command output in %s.log", logFile)
-		if len(physicalFileName) > 0 {
-			l.Printf("> result: %+v", err)
-			createFailedFile(physicalFileName)
+		if err := ctx.Err(); err != nil {
+			l.Printf("(note: incoming context was canceled: %s)", err)
+			return err
 		}
-		return err
+
+		createFailedFile(logFile)
+		return errors.Wrapf(err, "full command output in %s.log", logFile)
 	}
 
 	return nil
@@ -2187,30 +2184,27 @@ func (c *clusterImpl) RunWithDetails(
 		return nil, err
 	}
 	defer l.Close()
-	physicalFileName := ""
-	if l.File != nil {
-		physicalFileName = l.File.Name()
-	}
 
 	// This logs to the test logger to easily identify the command that is being run and
 	// where to find the output.
-	c.t.L().Printf("running command `%s`; output in %s.log", strings.Join(args, " "), logFile)
+	joined := strings.Join(args, " ")
 
-	l.Printf("running %s on nodes: %v", strings.Join(args, " "), nodes)
+	// This could probably be removed in favour of c.t.L() but it's used extensively in roachtests.
 	if testLogger != nil {
-		testLogger.Printf("> %s\n", strings.Join(args, " "))
+		testLogger.Printf("running command `%s`; output in %s.log", joined, logFile)
 	}
+	l.Printf("running %s on nodes: %v", joined, nodes)
 
 	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
 
 	if err := ctx.Err(); err != nil {
-		l.Printf("(note: incoming context was canceled: %s", err)
+		l.Printf("(note: incoming context was canceled: %s)", err)
 		return nil, err
 	}
 
+	logFileFull := l.File.Name()
 	if err != nil {
-		l.Printf("> result: %+v", err)
-		createFailedFile(physicalFileName)
+		createFailedFile(logFileFull)
 		return nil, err
 	}
 
@@ -2222,17 +2216,16 @@ func (c *clusterImpl) RunWithDetails(
 		}
 	}
 	if hasError {
-		createFailedFile(physicalFileName)
+		createFailedFile(logFileFull)
 	}
 	return results, nil
 }
 
-func createFailedFile(logFileName string) {
-	if len(logFileName) == 0 {
+func createFailedFile(logFile string) {
+	if logFile == "" {
 		return
 	}
-	failedPhysicalFileName := strings.TrimSuffix(logFileName, ".log") + ".failed"
-	file, err := os.Create(failedPhysicalFileName)
+	file, err := os.Create(strings.TrimSuffix(logFile, ".log") + ".failed")
 	if err == nil {
 		file.Close()
 	}
@@ -2323,7 +2316,7 @@ func (c *clusterImpl) ExternalPGUrl(
 	return c.pgURLErr(ctx, l, node, true, tenant)
 }
 
-func addrToAdminUIAddr(c *clusterImpl, addr string) (string, error) {
+func addrToAdminUIAddr(addr string) (string, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return "", err
@@ -2375,7 +2368,7 @@ func (c *clusterImpl) InternalAdminUIAddr(
 		return nil, err
 	}
 	for _, u := range urls {
-		adminUIAddr, err := addrToAdminUIAddr(c, u)
+		adminUIAddr, err := addrToAdminUIAddr(u)
 		if err != nil {
 			return nil, err
 		}
@@ -2395,7 +2388,7 @@ func (c *clusterImpl) ExternalAdminUIAddr(
 		return nil, err
 	}
 	for _, u := range externalAddrs {
-		adminUIAddr, err := addrToAdminUIAddr(c, u)
+		adminUIAddr, err := addrToAdminUIAddr(u)
 		if err != nil {
 			return nil, err
 		}
