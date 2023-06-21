@@ -888,8 +888,9 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		output := res.Output()
 		// Somewhat arbitrary limit to give us a chance to see some of the output
 		// in the failure_*.log, since the full output is in the run_*.log.
-		if len(output) > 2048 {
-			output = "<truncated> ... " + output[:512]
+		oLen := len(output)
+		if oLen > 2048 {
+			output = "<truncated> ... " + output[oLen-2048:oLen-1]
 		}
 		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n%s", node, cmd, output)
 		res.Err = errors.WithDetail(res.Err, detailMsg)

@@ -2137,19 +2137,16 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 		return err
 	}
 	defer l.Close()
-	physicalFileName := ""
-	if l.File != nil {
-		physicalFileName = l.File.Name()
-	}
 
 	c.t.L().Printf("running command `%s`; output in %s.log", strings.Join(args, " "), logFile)
 	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args); err != nil {
-		err = errors.Wrapf(err, "full command output in %s.log", logFile)
-		if len(physicalFileName) > 0 {
-			l.Printf("> result: %+v", err)
-			createFailedFile(physicalFileName)
+		if err := ctx.Err(); err != nil {
+			l.Printf("(note: incoming context was canceled: %s)", err)
+			return err
 		}
-		return err
+
+		createFailedFile(logFile)
+		return errors.Wrapf(err, "full command output in %s.log", logFile)
 	}
 
 	return nil
@@ -2184,30 +2181,22 @@ func (c *clusterImpl) RunWithDetails(
 		return nil, err
 	}
 	defer l.Close()
-	physicalFileName := ""
-	if l.File != nil {
-		physicalFileName = l.File.Name()
-	}
 
 	// This logs to the test logger to easily identify the command that is being run and
 	// where to find the output.
-	c.t.L().Printf("running command `%s`; output in %s.log", strings.Join(args, " "), logFile)
-
-	l.Printf("running %s on nodes: %v", strings.Join(args, " "), nodes)
-	if testLogger != nil {
-		testLogger.Printf("> %s\n", strings.Join(args, " "))
-	}
+	joined := strings.Join(args, " ")
+	c.t.L().Printf("running command `%s`; output in %s.log", joined, logFile)
+	l.Printf("running %s on nodes: %v", joined, nodes)
 
 	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
 
 	if err := ctx.Err(); err != nil {
-		l.Printf("(note: incoming context was canceled: %s", err)
+		l.Printf("(note: incoming context was canceled: %s)", err)
 		return nil, err
 	}
 
 	if err != nil {
-		l.Printf("> result: %+v", err)
-		createFailedFile(physicalFileName)
+		createFailedFile(logFile)
 		return nil, err
 	}
 
@@ -2219,17 +2208,16 @@ func (c *clusterImpl) RunWithDetails(
 		}
 	}
 	if hasError {
-		createFailedFile(physicalFileName)
+		createFailedFile(logFile)
 	}
 	return results, nil
 }
 
-func createFailedFile(logFileName string) {
-	if len(logFileName) == 0 {
+func createFailedFile(logFile string) {
+	if logFile == "" {
 		return
 	}
-	failedPhysicalFileName := strings.TrimSuffix(logFileName, ".log") + ".failed"
-	file, err := os.Create(failedPhysicalFileName)
+	file, err := os.Create(logFile + ".failed")
 	if err == nil {
 		file.Close()
 	}
