@@ -48,11 +48,11 @@ const mapStateToProps = (state: AppState): DatabasesPageData => {
   const nodeRegions = nodeRegionsByIDSelector(state);
   const isTenant = selectIsTenant(state);
   return {
-    loading: databasesListState.inFlight,
-    loaded: databasesListState.valid,
-    lastError: databasesListState.lastError,
+    loading: !!databasesListState?.inFlight,
+    loaded: !!databasesListState?.valid,
+    lastError: databasesListState?.lastError,
     databases: deriveDatabaseDetailsMemoized({
-      dbListResp: databasesListState.data,
+      dbListResp: databasesListState?.data,
       databaseDetails: state.adminUI?.databaseDetails,
       nodeRegions,
       isTenant,
