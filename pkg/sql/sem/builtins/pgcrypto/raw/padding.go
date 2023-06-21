@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package pgcrypto
+package raw
 
 import (
 	"bytes"
@@ -17,10 +17,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// PKCSPad pads a slice of bytes to a multiple of the given block size
+// pkcsPad pads a slice of bytes to a multiple of the given block size
 // using the process specified in
 // https://datatracker.ietf.org/doc/html/rfc5652#section-6.3.
-func PKCSPad(data []byte, blockSize int) ([]byte, error) {
+func pkcsPad(data []byte, blockSize int) ([]byte, error) {
 	if blockSize <= 0 || blockSize > math.MaxUint8 {
 		return nil, errors.Newf("invalid block size for PKCS padding: %d", blockSize)
 	}
@@ -31,8 +31,8 @@ func PKCSPad(data []byte, blockSize int) ([]byte, error) {
 	return append(data, padding...), nil
 }
 
-// PKCSUnpad removes the padding added by PKCSPad.
-func PKCSUnpad(data []byte) ([]byte, error) {
+// pkcsUnpad removes the padding added by pkcsPad.
+func pkcsUnpad(data []byte) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, errors.New("PKCS-padded data is empty")
 	}

@@ -1,18 +1,21 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "pgcrypto",
-    srcs = ["padding.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgcrypto",
+    name = "raw",
+    srcs = [
+        "doc.go",
+        "padding.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgcrypto/raw",
     visibility = ["//visibility:public"],
     deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 go_test(
-    name = "pgcrypto_test",
+    name = "raw_test",
     srcs = ["padding_test.go"],
     args = ["-test.timeout=295s"],
-    embed = [":pgcrypto"],
+    embed = [":raw"],
     deps = [
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
