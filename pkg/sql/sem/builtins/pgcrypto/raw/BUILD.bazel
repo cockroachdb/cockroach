@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "raw",
     srcs = [
+        "cipher_type.go",
         "doc.go",
         "padding.go",
     ],
@@ -13,7 +14,10 @@ go_library(
 
 go_test(
     name = "raw_test",
-    srcs = ["padding_test.go"],
+    srcs = [
+        "cipher_type_test.go",
+        "padding_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":raw"],
     deps = [
