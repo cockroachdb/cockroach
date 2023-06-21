@@ -10,11 +10,7 @@
 
 package clisqlshell
 
-import (
-	"os"
-
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-)
+import "os"
 
 // editor is the interface between the shell and a line editor.
 type editor interface {
@@ -44,13 +40,8 @@ func getEditor(useEditor bool, displayPrompt bool) editor {
 	if !useEditor {
 		return &bufioReader{displayPrompt: displayPrompt}
 	}
-	if useLibEdit {
-		return &editlineReader{}
-	}
 	return &bimodalEditor{
 		main: &bubblineReader{},
 		copy: &bufioReader{displayPrompt: displayPrompt},
 	}
 }
-
-var useLibEdit = envutil.EnvOrDefaultBool("COCKROACH_SQL_FORCE_LIBEDIT", false)
