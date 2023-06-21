@@ -159,7 +159,7 @@ func dropSecondaryIndex(
 	b.QueryByID(sie.TableID).
 		Filter(hasIndexIDAttrFilter(sie.IndexID)).
 		Filter(publicTargetFilter).
-		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			b.Drop(e)
 		})
 }
@@ -261,14 +261,14 @@ func maybeDropDependentFKConstraints(
 	// FK constraint with ID `fkConstraintID`.
 	dropDependentFKConstraint := func(fkConstraintID catid.ConstraintID) {
 		b.BackReferences(tableID).Filter(hasConstraintIDAttrFilter(fkConstraintID)).
-			ForEachElementStatus(func(
+			ForEach(func(
 				current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 			) {
 				b.Drop(e)
 			})
 	}
 
-	b.BackReferences(tableID).ForEachElementStatus(func(
+	b.BackReferences(tableID).ForEach(func(
 		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 	) {
 		switch t := e.(type) {
@@ -339,7 +339,7 @@ func maybeDropAdditionallyForShardedIndex(
 		}
 
 		// This check constraint uses the shard column. Resolve it and drop its elements.
-		constraintElements(b, toBeDroppedIndex.TableID, e.ConstraintID).ForEachElementStatus(func(
+		constraintElements(b, toBeDroppedIndex.TableID, e.ConstraintID).ForEach(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
 			if target != scpb.ToAbsent {
@@ -349,7 +349,7 @@ func maybeDropAdditionallyForShardedIndex(
 	})
 
 	// Drop the shard column's resolved elements.
-	shardColElms.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	shardColElms.ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if target != scpb.ToAbsent {
 			b.Drop(e)
 		}
@@ -377,7 +377,7 @@ func dropAdditionallyForExpressionIndex(b BuildCtx, toBeDroppedIndex *scpb.Secon
 		// This expression column was created when we created the to-be-dropped as an "expression" index.
 		// We also know no other index uses this column, so we will need to resolve this column and
 		// drop its constituent elements.
-		columnElements(b, toBeDroppedIndex.TableID, ce.ColumnID).ForEachElementStatus(func(
+		columnElements(b, toBeDroppedIndex.TableID, ce.ColumnID).ForEach(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
 			if target != scpb.ToAbsent {
@@ -507,7 +507,7 @@ func hasColsUniquenessConstraintOtherThan(
 	b BuildCtx, tableID descpb.ID, columnIDs []descpb.ColumnID, otherThan descpb.ConstraintID,
 ) (ret bool) {
 	b.QueryByID(tableID).Filter(publicTargetFilter).Filter(publicStatusFilter).
-		ForEachElementStatus(func(
+		ForEach(func(
 			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 		) {
 			if ret {

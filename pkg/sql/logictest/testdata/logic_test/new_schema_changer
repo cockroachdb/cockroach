@@ -387,7 +387,7 @@ CREATE VIEW v4Dep AS (SELECT n2, n1 FROM v2Dep);
 statement ok
 EXPLAIN (DDL) DROP VIEW v1Dep CASCADE;
 
-statement error pq: cannot drop relation "v1dep" because view "v3dep" depends on it
+statement error pq: cannot drop relation "v1dep" because view "v2dep" depends on it
 DROP VIEW v1Dep RESTRICT;
 
 statement error pq: "v1dep" is not a materialized view
@@ -442,7 +442,7 @@ CREATE TABLE defaultdb.shipments (
     CONSTRAINT fk_orders FOREIGN KEY (customer_id) REFERENCES defaultdb.orders(customer)
  );
 
-statement error "customers" is referenced by foreign key from table "shipments"
+statement error "customers" is referenced by foreign key from table "orders"
 DROP TABLE defaultdb.customers;
 
 statement ok
