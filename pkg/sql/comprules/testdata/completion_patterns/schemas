@@ -18,8 +18,8 @@ SELECT n.nspname AS completion,
                 $2:::INT AS start,
                 $3:::INT AS end
            FROM pg_catalog.pg_namespace n
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON n.oid = d.objoid AND d.classoid = 4294967071
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 10}
@@ -38,8 +38,8 @@ SELECT n.nspname AS completion,
                 $2:::INT AS start,
                 $3:::INT AS end
            FROM pg_catalog.pg_namespace n
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON n.oid = d.objoid AND d.classoid = 4294967071
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 12, 12}
@@ -91,8 +91,8 @@ SELECT n.nspname AS completion,
                 $2:::INT AS start,
                 $3:::INT AS end
            FROM pg_catalog.pg_namespace n
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON n.oid = d.objoid AND d.classoid = 4294967071
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 --placeholders: []interface {}{"pg_", 7, 11}
@@ -112,8 +112,8 @@ SELECT n.nspname AS completion,
                 $2:::INT AS start,
                 $3:::INT AS end
            FROM pg_catalog.pg_namespace n
-LEFT OUTER JOIN crdb_internal.kv_catalog_comments d
-                ON n.oid = d.objoid AND d.classoid = 4294967071
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 --placeholders: []interface {}{"PG_", 7, 11}
