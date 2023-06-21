@@ -337,6 +337,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="cardinality"></a><code>cardinality(input: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of elements contained in <code>input</code></p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="crdb_internal.merge_aggregated_stmt_metadata"></a><code>crdb_internal.merge_aggregated_stmt_metadata(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of AggregatedStatementMetadata into a single JSONB object</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.merge_statement_stats"></a><code>crdb_internal.merge_statement_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of appstatspb.StatementStatistics into a single JSONB object</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.merge_stats_metadata"></a><code>crdb_internal.merge_stats_metadata(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of StmtStatsMetadata into a single JSONB object</p>

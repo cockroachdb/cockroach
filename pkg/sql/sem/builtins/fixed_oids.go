@@ -2422,6 +2422,7 @@ var builtinOidsArray = []string{
 	2449: `st_asmvtgeom(geometry: geometry, bbox: box2d, extent: int, buffer: int) -> geometry`,
 	2450: `st_asmvtgeom(geometry: geometry, bbox: box2d, extent: int) -> geometry`,
 	2451: `st_asmvtgeom(geometry: geometry, bbox: box2d) -> geometry`,
+	2452: `crdb_internal.merge_aggregated_stmt_metadata(input: jsonb[]) -> jsonb`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
