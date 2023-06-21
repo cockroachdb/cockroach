@@ -52,7 +52,11 @@ func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
 		return nil
 	}
 	b.ensureDescriptor(id)
-	return b.descCache[id].ers
+	c := b.descCache[id]
+	if c.cachedCollection == nil {
+		c.cachedCollection = b.newCollection(id)
+	}
+	return c.cachedCollection
 }
 
 // Ensure implements the scbuildstmt.BuilderState interface.
@@ -185,9 +189,10 @@ func (b *builderState) addNewElementState(es elementState) {
 	id := screl.GetDescID(es.element)
 	key := screl.ElementString(es.element)
 	c := b.descCache[id]
-	c.ers.indexes = append(c.ers.indexes, len(b.output))
+	c.outputIndexes = append(c.outputIndexes, len(b.output))
 	c.elementIndexMap[key] = len(b.output)
 	b.output = append(b.output, es)
+	c.cachedCollection = nil
 }
 
 // LogEventForExistingTarget implements the scbuildstmt.BuilderState interface.
@@ -209,15 +214,6 @@ func (b *builderState) LogEventForExistingTarget(e scpb.Element) {
 		panic(errors.AssertionFailedf("no target set for element %s in builder state", key))
 	}
 	es.withLogEvent = true
-}
-
-// ForEachElementStatus implements the scpb.ElementStatusIterator interface.
-func (b *builderState) ForEachElementStatus(
-	fn func(current scpb.Status, target scpb.TargetStatus, e scpb.Element),
-) {
-	for _, es := range b.output {
-		fn(es.current, es.target, es.element)
-	}
 }
 
 var _ scbuildstmt.PrivilegeChecker = (*builderState)(nil)
@@ -259,11 +255,14 @@ func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 		// Validate if this descriptor can be resolved under the current schema.
 		if c.desc.DescriptorType() != catalog.Schema &&
 			c.desc.DescriptorType() != catalog.Database {
-			scpb.ForEachSchemaParent(c.ers, func(current scpb.Status, target scpb.TargetStatus, e *scpb.SchemaParent) {
-				if current == scpb.Status_PUBLIC {
-					b.checkPrivilege(e.SchemaID, privilege.USAGE)
-				}
-			})
+			scpb.ForEachSchemaParent(
+				b.QueryByID(id),
+				func(current scpb.Status, _ scpb.TargetStatus, e *scpb.SchemaParent) {
+					if current == scpb.Status_PUBLIC {
+						b.checkPrivilege(e.SchemaID, privilege.USAGE)
+					}
+				},
+			)
 		}
 		err = b.auth.CheckPrivilege(b.ctx, c.desc, priv)
 		c.privileges[priv] = err
@@ -304,14 +303,17 @@ func (b *builderState) NextTableColumnID(table *scpb.Table) (ret catid.ColumnID)
 		}
 		ret = tbl.GetNextColumnID()
 	}
-	scpb.ForEachColumn(b, func(_ scpb.Status, _ scpb.TargetStatus, column *scpb.Column) {
-		if column.IsSystemColumn {
-			return
-		}
-		if column.TableID == table.TableID && column.ColumnID >= ret {
-			ret = column.ColumnID + 1
-		}
-	})
+	scpb.ForEachColumn(
+		b.QueryByID(table.TableID),
+		func(_ scpb.Status, _ scpb.TargetStatus, column *scpb.Column) {
+			if column.IsSystemColumn {
+				return
+			}
+			if column.ColumnID >= ret {
+				ret = column.ColumnID + 1
+			}
+		},
+	)
 	return ret
 }
 
@@ -327,11 +329,14 @@ func (b *builderState) NextColumnFamilyID(table *scpb.Table) (ret catid.FamilyID
 		}
 		ret = tbl.GetNextFamilyID()
 	}
-	scpb.ForEachColumnFamily(b, func(_ scpb.Status, _ scpb.TargetStatus, cf *scpb.ColumnFamily) {
-		if cf.TableID == table.TableID && cf.FamilyID >= ret {
-			ret = cf.FamilyID + 1
-		}
-	})
+	scpb.ForEachColumnFamily(
+		b.QueryByID(table.TableID),
+		func(_ scpb.Status, _ scpb.TargetStatus, cf *scpb.ColumnFamily) {
+			if cf.FamilyID >= ret {
+				ret = cf.FamilyID + 1
+			}
+		},
+	)
 	return ret
 }
 
@@ -364,7 +369,7 @@ func (b *builderState) NextTableConstraintID(id catid.DescID) (ret catid.Constra
 		}
 	}
 
-	b.QueryByID(id).ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	b.QueryByID(id).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		v, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
 		if id, ok := v.(catid.ConstraintID); ok && id >= ret {
 			ret = id + 1
@@ -393,21 +398,30 @@ func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 		}
 		ret = tbl.GetNextIndexID()
 	}
-	scpb.ForEachPrimaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.PrimaryIndex) {
-		if index.TableID == id && index.IndexID >= ret {
-			ret = index.IndexID + 1
-		}
-	})
-	scpb.ForEachTemporaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.TemporaryIndex) {
-		if index.TableID == id && index.IndexID >= ret {
-			ret = index.IndexID + 1
-		}
-	})
-	scpb.ForEachSecondaryIndex(b, func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.SecondaryIndex) {
-		if index.TableID == id && index.IndexID >= ret {
-			ret = index.IndexID + 1
-		}
-	})
+	scpb.ForEachPrimaryIndex(
+		b.QueryByID(id),
+		func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.PrimaryIndex) {
+			if index.IndexID >= ret {
+				ret = index.IndexID + 1
+			}
+		},
+	)
+	scpb.ForEachTemporaryIndex(
+		b.QueryByID(id),
+		func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.TemporaryIndex) {
+			if index.IndexID >= ret {
+				ret = index.IndexID + 1
+			}
+		},
+	)
+	scpb.ForEachSecondaryIndex(
+		b.QueryByID(id),
+		func(_ scpb.Status, _ scpb.TargetStatus, index *scpb.SecondaryIndex) {
+			if index.IndexID >= ret {
+				ret = index.IndexID + 1
+			}
+		},
+	)
 	return ret
 }
 
@@ -426,12 +440,14 @@ func (b *builderState) IndexPartitioningDescriptor(
 	}
 	var oldNumImplicitColumns int
 
-	scpb.ForEachIndexPartitioning(bd.ers, func(_ scpb.Status, _ scpb.TargetStatus, p *scpb.IndexPartitioning) {
-		if p.TableID != index.TableID || p.IndexID != index.IndexID {
-			return
-		}
-		oldNumImplicitColumns = int(p.PartitioningDescriptor.NumImplicitColumns)
-	})
+	scpb.ForEachIndexPartitioning(
+		b.QueryByID(index.TableID),
+		func(_ scpb.Status, _ scpb.TargetStatus, p *scpb.IndexPartitioning) {
+			if p.IndexID == index.IndexID {
+				oldNumImplicitColumns = int(p.PartitioningDescriptor.NumImplicitColumns)
+			}
+		},
+	)
 
 	keyColumns := make([]*scpb.IndexColumn, 0, len(columns))
 	for _, column := range columns {
@@ -445,19 +461,25 @@ func (b *builderState) IndexPartitioningDescriptor(
 	})
 	oldKeyColumnNames := make([]string, len(keyColumns))
 	for i, ic := range keyColumns {
-		scpb.ForEachColumnName(b, func(_ scpb.Status, _ scpb.TargetStatus, cn *scpb.ColumnName) {
-			if cn.TableID != index.TableID || cn.ColumnID != ic.ColumnID {
-				return
-			}
-			oldKeyColumnNames[i] = cn.Name
-		})
+		scpb.ForEachColumnName(
+			b.QueryByID(index.TableID),
+			func(_ scpb.Status, _ scpb.TargetStatus, cn *scpb.ColumnName) {
+				if cn.ColumnID != ic.ColumnID {
+					return
+				}
+				oldKeyColumnNames[i] = cn.Name
+			},
+		)
 	}
 	var allowedNewColumnNames []tree.Name
-	scpb.ForEachColumnName(b, func(current scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
-		if cn.TableID != index.TableID && current != scpb.Status_PUBLIC && target == scpb.ToPublic {
-			allowedNewColumnNames = append(allowedNewColumnNames, tree.Name(cn.Name))
-		}
-	})
+	scpb.ForEachColumnName(
+		b.QueryByID(index.TableID),
+		func(current scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
+			if current != scpb.Status_PUBLIC && target == scpb.ToPublic {
+				allowedNewColumnNames = append(allowedNewColumnNames, tree.Name(cn.Name))
+			}
+		},
+	)
 	allowImplicitPartitioning := b.evalCtx.SessionData().ImplicitColumnPartitioningEnabled ||
 		tbl.IsLocalityRegionalByRow()
 	_, ret, err := b.createPartCCL(
@@ -676,16 +698,7 @@ var _ scbuildstmt.ElementReferences = (*builderState)(nil)
 // ForwardReferences implements the scbuildstmt.ElementReferences interface.
 func (b *builderState) ForwardReferences(e scpb.Element) scbuildstmt.ElementResultSet {
 	ids := screl.AllDescIDs(e)
-	var c int
-	ids.ForEach(func(id descpb.ID) {
-		b.ensureDescriptor(id)
-		c = c + len(b.descCache[id].ers.indexes)
-	})
-	ret := &elementResultSet{b: b, indexes: make([]int, 0, c)}
-	ids.ForEach(func(id descpb.ID) {
-		ret.indexes = append(ret.indexes, b.descCache[id].ers.indexes...)
-	})
-	return ret
+	return b.newCollection(ids.Ordered()...)
 }
 
 // BackReferences implements the scbuildstmt.ElementReferences interface.
@@ -716,11 +729,20 @@ func (b *builderState) BackReferences(id catid.DescID) scbuildstmt.ElementResult
 		}
 		ids.ForEach(b.ensureDescriptor)
 	}
-	ret := &elementResultSet{b: b}
-	ids.ForEach(func(id descpb.ID) {
-		ret.indexes = append(ret.indexes, b.descCache[id].ers.indexes...)
-	})
-	return ret
+	return b.newCollection(ids.Ordered()...)
+}
+
+func (b *builderState) newCollection(ids ...descpb.ID) *scpb.ElementCollection[scpb.Element] {
+	var n int
+	for _, id := range ids {
+		b.ensureDescriptor(id)
+		n = n + len(b.descCache[id].outputIndexes)
+	}
+	indexes := make([]int, 0, n)
+	for _, id := range ids {
+		indexes = append(indexes, b.descCache[id].outputIndexes...)
+	}
+	return scpb.NewElementCollection(b, indexes)
 }
 
 var _ scbuildstmt.NameResolver = (*builderState)(nil)
@@ -748,7 +770,7 @@ func (b *builderState) ResolveDatabase(
 	}
 	b.ensureDescriptor(db.GetID())
 	b.checkPrivilege(db.GetID(), p.RequiredPrivilege)
-	return b.descCache[db.GetID()].ers
+	return b.QueryByID(db.GetID())
 }
 
 // ResolveSchema implements the scbuildstmt.NameResolver interface.
@@ -763,7 +785,7 @@ func (b *builderState) ResolveSchema(
 		panic(sqlerrors.NewUndefinedSchemaError(name.Schema()))
 	}
 	b.checkOwnershipOrPrivilegesOnSchemaDesc(name, sc, p)
-	return b.descCache[sc.GetID()].ers
+	return b.QueryByID(sc.GetID())
 }
 
 // ResolvePrefix implements the scbuildstmt.NameResolver interface.
@@ -780,7 +802,7 @@ func (b *builderState) ResolvePrefix(
 	}
 	b.ensureDescriptor(sc.GetID())
 	b.checkOwnershipOrPrivilegesOnSchemaDesc(prefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
-	return b.descCache[db.GetID()].ers, b.descCache[sc.GetID()].ers
+	return b.QueryByID(db.GetID()), b.QueryByID(sc.GetID())
 }
 
 // checkOwnershipOrPrivilegesOnSchemaDesc checks ownership or privileges
@@ -842,7 +864,7 @@ func (b *builderState) ResolveUserDefinedTypeType(
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}
-	return b.descCache[typ.GetID()].ers
+	return b.QueryByID(typ.GetID())
 }
 
 // ResolveRelation implements the scbuildstmt.NameResolver interface.
@@ -853,7 +875,7 @@ func (b *builderState) ResolveRelation(
 	if c == nil {
 		return nil
 	}
-	return c.ers
+	return b.QueryByID(c.desc.GetID())
 }
 
 func (b *builderState) resolveRelation(
@@ -924,7 +946,7 @@ func (b *builderState) ResolveTable(
 	if rel := c.desc.(catalog.TableDescriptor); !rel.IsTable() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table", rel.GetName()))
 	}
-	return c.ers
+	return b.QueryByID(c.desc.GetID())
 }
 
 // ResolveSequence implements the scbuildstmt.NameResolver interface.
@@ -938,7 +960,7 @@ func (b *builderState) ResolveSequence(
 	if rel := c.desc.(catalog.TableDescriptor); !rel.IsSequence() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a sequence", rel.GetName()))
 	}
-	return c.ers
+	return b.QueryByID(c.desc.GetID())
 }
 
 // ResolveView implements the scbuildstmt.NameResolver interface.
@@ -952,7 +974,7 @@ func (b *builderState) ResolveView(
 	if rel := c.desc.(catalog.TableDescriptor); !rel.IsView() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a view", rel.GetName()))
 	}
-	return c.ers
+	return b.QueryByID(c.desc.GetID())
 }
 
 // ResolveIndex implements the scbuildstmt.NameResolver interface.
@@ -960,16 +982,16 @@ func (b *builderState) ResolveIndex(
 	relationID catid.DescID, indexName tree.Name, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	b.ensureDescriptor(relationID)
-	c := b.descCache[relationID]
-	rel := c.desc.(catalog.TableDescriptor)
+	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
 	if !rel.IsPhysicalTable() || rel.IsSequence() {
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%q is not an indexable table or a materialized view", rel.GetName()))
 	}
 	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
+	elts := b.QueryByID(rel.GetID())
 	var indexID catid.IndexID
-	scpb.ForEachIndexName(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
-		if e.TableID == relationID && tree.Name(e.Name) == indexName {
+	scpb.ForEachIndexName(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
+		if tree.Name(e.Name) == indexName {
 			indexID = e.IndexID
 		}
 	})
@@ -983,7 +1005,7 @@ func (b *builderState) ResolveIndex(
 		panic(pgerror.Newf(pgcode.UndefinedObject,
 			"index %q not found in relation %q", indexName, rel.GetName()))
 	}
-	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, element scpb.Element) bool {
+	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, element scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.IndexID, element)
 		return idI != nil && idI.(catid.IndexID) == indexID
 	})
@@ -1025,12 +1047,12 @@ func (b *builderState) ResolveColumn(
 	relationID catid.DescID, columnName tree.Name, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	b.ensureDescriptor(relationID)
-	c := b.descCache[relationID]
-	rel := c.desc.(catalog.TableDescriptor)
+	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
+	elts := b.QueryByID(rel.GetID())
 	b.checkPrivilege(rel.GetID(), p.RequiredPrivilege)
 	var columnID catid.ColumnID
-	scpb.ForEachColumnName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) {
-		if e.TableID == relationID && tree.Name(e.Name) == columnName {
+	scpb.ForEachColumnName(elts, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) {
+		if tree.Name(e.Name) == columnName {
 			columnID = e.ColumnID
 		}
 	})
@@ -1040,7 +1062,7 @@ func (b *builderState) ResolveColumn(
 		}
 		panic(colinfo.NewUndefinedColumnError(string(columnName)))
 	}
-	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ColumnID, e)
 		return idI != nil && idI.(catid.ColumnID) == columnID
 	})
@@ -1051,33 +1073,39 @@ func (b *builderState) ResolveConstraint(
 	relationID catid.DescID, constraintName tree.Name, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	b.ensureDescriptor(relationID)
-	c := b.descCache[relationID]
-	rel := c.desc.(catalog.TableDescriptor)
+	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
+	elts := b.QueryByID(rel.GetID())
 	var constraintID catid.ConstraintID
-	scpb.ForEachConstraintWithoutIndexName(c.ers, func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
-		if e.TableID == relationID && tree.Name(e.Name) == constraintName {
-			constraintID = e.ConstraintID
-		}
-	})
+	scpb.ForEachConstraintWithoutIndexName(elts,
+		func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
+			if tree.Name(e.Name) == constraintName {
+				constraintID = e.ConstraintID
+			}
+		},
+	)
 
 	if constraintID == 0 {
 		var indexID catid.IndexID
-		scpb.ForEachIndexName(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
-			if e.TableID == relationID && tree.Name(e.Name) == constraintName {
+		scpb.ForEachIndexName(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
+			if tree.Name(e.Name) == constraintName {
 				indexID = e.IndexID
 			}
 		})
 		if indexID != 0 {
-			scpb.ForEachPrimaryIndex(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.PrimaryIndex) {
-				if e.TableID == relationID && e.IndexID == indexID {
-					constraintID = e.ConstraintID
-				}
-			})
-			scpb.ForEachSecondaryIndex(c.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.SecondaryIndex) {
-				if e.TableID == relationID && e.IndexID == indexID && e.IsUnique {
-					constraintID = e.ConstraintID
-				}
-			})
+			scpb.ForEachPrimaryIndex(elts,
+				func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.PrimaryIndex) {
+					if e.IndexID == indexID {
+						constraintID = e.ConstraintID
+					}
+				},
+			)
+			scpb.ForEachSecondaryIndex(elts,
+				func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.SecondaryIndex) {
+					if e.IndexID == indexID && e.IsUnique {
+						constraintID = e.ConstraintID
+					}
+				},
+			)
 		}
 	}
 
@@ -1088,7 +1116,7 @@ func (b *builderState) ResolveConstraint(
 		panic(sqlerrors.NewUndefinedConstraintError(string(constraintName), rel.GetName()))
 	}
 
-	return c.ers.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
 		return idI != nil && idI.(catid.ConstraintID) == constraintID
 	})
@@ -1131,7 +1159,7 @@ func (b *builderState) ResolveUDF(
 	fnID := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
 	b.mustOwn(fnID)
 	b.ensureDescriptor(fnID)
-	return b.descCache[fnID].ers
+	return b.QueryByID(fnID)
 }
 
 func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
@@ -1139,7 +1167,6 @@ func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
 		desc:            b.readDescriptor(id),
 		privileges:      make(map[privilege.Kind]error),
 		hasOwnership:    b.hasAdmin,
-		ers:             &elementResultSet{b: b},
 		elementIndexMap: map[string]int{},
 	}
 }
@@ -1148,7 +1175,6 @@ func (b *builderState) newCachedDescForNewDesc() *cachedDesc {
 	return &cachedDesc{
 		privileges:      make(map[privilege.Kind]error),
 		hasOwnership:    true,
-		ers:             &elementResultSet{b: b},
 		elementIndexMap: map[string]int{},
 	}
 }
@@ -1526,53 +1552,13 @@ func (b *builderState) ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix
 	}
 }
 
-type elementResultSet struct {
-	b       *builderState
-	indexes []int
+var _ scpb.ElementCollectionGetter = &builderState{}
+
+func (b *builderState) Get(ordinal int) (_ scpb.Status, _ scpb.TargetStatus, _ scpb.Element) {
+	es := &b.output[ordinal]
+	return es.current, es.target, es.element
 }
 
-var _ scbuildstmt.ElementResultSet = &elementResultSet{}
-
-// ForEachElementStatus implements the scpb.ElementStatusIterator interface.
-func (ers *elementResultSet) ForEachElementStatus(
-	fn func(current scpb.Status, target scpb.TargetStatus, element scpb.Element),
-) {
-	if ers.IsEmpty() {
-		return
-	}
-	for _, i := range ers.indexes {
-		es := &ers.b.output[i]
-		fn(es.current, es.target, es.element)
-	}
-}
-
-// IsEmpty implements the scbuildstmt.ElementResultSet interface.
-func (ers *elementResultSet) IsEmpty() bool {
-	return ers == nil || len(ers.indexes) == 0
-}
-
-// Filter implements the scbuildstmt.ElementResultSet interface.
-func (ers *elementResultSet) Filter(
-	predicate func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool,
-) scbuildstmt.ElementResultSet {
-	return ers.filter(predicate)
-}
-
-func (ers *elementResultSet) filter(
-	predicate func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool,
-) *elementResultSet {
-	if ers.IsEmpty() {
-		return nil
-	}
-	ret := elementResultSet{b: ers.b}
-	for _, i := range ers.indexes {
-		es := &ers.b.output[i]
-		if predicate(es.current, es.target, es.element) {
-			ret.indexes = append(ret.indexes, i)
-		}
-	}
-	if len(ret.indexes) == 0 {
-		return nil
-	}
-	return &ret
+func (b *builderState) Size() int {
+	return len(b.output)
 }
