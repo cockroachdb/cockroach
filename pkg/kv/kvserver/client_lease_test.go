@@ -916,7 +916,6 @@ func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
 // lease in a single cycle of the replicate_queue.
 func TestLeasePreferencesDuringOutage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 88769, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	stickyRegistry := server.NewStickyInMemEnginesRegistry()
@@ -979,6 +978,9 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		})
 
 	defer tc.Stopper().Stop(ctx)
+	// TODO(kvoli): Add comment.
+	st := &tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV
+	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, st, false)
 
 	key := bootstrap.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, key)
@@ -1002,7 +1004,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		}
 	}
 	// We need to wait until 2 and 3 are considered to be dead.
-	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(st)
 	wait(timeUntilNodeDead)
 
 	checkDead := func(store *kvserver.Store, storeIdx int) error {
@@ -1035,10 +1037,11 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		}
 		return nil
 	})
+  // Transfer the lease to node 1
+  tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(0))
 	_, _, enqueueError := tc.GetFirstStoreFromServer(t, 0).
 		Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
-
-	require.NoError(t, enqueueError, "failed to enqueue replica for replication")
+	require.NoError(t, enqueueError)
 
 	var newLeaseHolder roachpb.ReplicationTarget
 	testutils.SucceedsSoon(t, func() error {
