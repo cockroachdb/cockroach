@@ -224,7 +224,19 @@ func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
 	}
 	defer file.Close()
 	httpClient := &http.Client{}
-	req, _ := http.NewRequest("POST", beaverHubServerEndpoint, file)
+
+	// TODO(dt): Ideally this would be <100ms since it is blocking the process
+	// from exiting and returning to the user to the their prompt, and any delay
+	// longer than that is noticeable. However empirical testing suggests we need
+	// ~300ms to upload successfully. Ideally we would move the invocation of this
+	// function to its own subcommand, and then post-build we would just exec that
+	// command forked in a new process, but not wait for it before exiting.
+	const timeout = 400 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, "POST", beaverHubServerEndpoint, file)
 	req.Header.Add("Run-Env", "dev")
 	req.Header.Add("Content-Type", "application/octet-stream")
 	if _, err := httpClient.Do(req); err != nil {
