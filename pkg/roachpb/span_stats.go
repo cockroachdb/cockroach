@@ -18,7 +18,7 @@ import (
 
 // Put span statistics cluster settings here to avoid import cycle.
 
-const DefaultSpanStatsSpanLimit = 500
+const DefaultSpanStatsSpanLimit = 2048
 
 // SpanStatsBatchLimit registers the maximum number of spans allowed in a
 // span stats request payload.
