@@ -791,9 +791,6 @@ SQLPARSER_TARGETS = \
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
 $(PROTOBUF_TARGETS): fake-protobufs
 
-SWAGGER_TARGETS :=
-  #docs/generated/swagger/spec.json
-
 DOCGEN_TARGETS := \
 	bin/.docgen_bnfs \
 	bin/.docgen_functions \
@@ -1213,7 +1210,7 @@ dupl: bin/.bootstrap
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGES) $(SWAGGER_TARGETS) bin/langgen bin/terraformgen
+generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGES) bin/langgen bin/terraformgen
 	$(info $(yellow)[WARNING] Use `dev generate` instead.$(term-reset))
 	$(GO) generate $(GOFLAGS) -mod=vendor -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 	$(MAKE) execgen
@@ -1715,8 +1712,6 @@ pkg/util/log/logpb/json_encode_generated.go: $(EVENTPBGEN_PKG) pkg/util/log/logp
 docs/generated/logging.md: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
 	$(GO) run $^ logging.md $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
-
-docs/generated/swagger/spec.json: pkg/server/api*.go bin/.bootstrap
 
 pkg/util/log/severity/severity_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto | bin/.bootstrap
 	$(GO) run $^ severity.go $@.tmp || { rm -f $@.tmp; exit 1; }
