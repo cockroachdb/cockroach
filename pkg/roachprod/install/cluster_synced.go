@@ -48,7 +48,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// A SyncedCluster is created from the cluster mSetadata in the synced clusters
+// A SyncedCluster is created from the cluster metadata in the synced clusters
 // cache and is used as the target for installing and managing various software
 // components.
 type SyncedCluster struct {
@@ -134,7 +134,7 @@ var DefaultSSHRetryOpts = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDe
 var noScpRetrySubstrings = []string{"no such file or directory", "permission denied", "connection timed out"}
 var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
 	func(res *RunResultDetails) bool {
-		out := strings.ToLower(res.Stderr)
+		out := strings.ToLower(res.Output())
 		for _, s := range noScpRetrySubstrings {
 			if strings.Contains(out, s) {
 				return false
@@ -147,10 +147,13 @@ var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
 // runWithMaybeRetry will run the specified function `f` at least once, or only
 // once if `runRetryOpts` is nil
 //
-// Any RunResultDetails with a non nil err from `f` is passed to `runRetryOpts.shouldRetryFn` which,
+// Any RunResultDetails containing a non nil err from `f` is passed to `runRetryOpts.shouldRetryFn` which,
 // if it returns true, will result in `f` being retried using the `retryOpts`
 // If the `shouldRetryFn` is not specified (nil), then retries will be performed
-// regardless of the previous result / error
+// regardless of the previous result / error.
+//
+// If a non-nil error (as opposed to the result containing a non-nil error) is returned,
+// the function will *not* be retried.
 //
 // We operate on a pointer to RunResultDetails as it has already been
 // captured in a *RunResultDetails[] in Run, but here we may enrich with attempt
@@ -813,9 +816,9 @@ func defaultCmdOpts(debugName string) RunCmdOptions {
 	}
 }
 
-// runCmdOnSingleNode runs a command on a single node. It serves as a common entry point for
-// all commands that run on a single node, including user commands and roachprod commands.
-// opts is used to configure the behavior of the command, including
+// runCmdOnSingleNode is a common entry point for all commands that run on a single node,
+// including user commands from roachtests and roachprod commands.
+// The `opts` struct is used to configure the behavior of the command, including
 // - whether stdout and stderr or combined output is desired
 // - specifying the stdin, stdout, and stderr streams
 // - specifying the remote session options
@@ -889,8 +892,9 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		output := res.Output()
 		// Somewhat arbitrary limit to give us a chance to see some of the output
 		// in the failure_*.log, since the full output is in the run_*.log.
-		if len(output) > 2048 {
-			output = "<truncated> ... " + output[:512]
+		oLen := len(output)
+		if oLen > 2048 {
+			output = "<truncated> ... " + output[oLen-2048:oLen-1]
 		}
 		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n%s", node, cmd, output)
 		res.Err = errors.WithDetail(res.Err, detailMsg)
