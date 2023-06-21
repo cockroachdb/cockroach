@@ -176,7 +176,7 @@ func alterTableAddCheck(
 // contain backfilled values for the new column and hence would mistakenly
 // allow the validation query to succeed).
 func getIndexIDForValidationForConstraint(b BuildCtx, tableID catid.DescID) (ret catid.IndexID) {
-	b.QueryByID(tableID).ForEachElementStatus(func(
+	b.QueryByID(tableID).ForEach(func(
 		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
 	) {
 		if pie, ok := e.(*scpb.PrimaryIndex); ok &&
@@ -556,7 +556,7 @@ func getFullyResolvedColNames(
 
 // areColsUniqueInTable ensures uniqueness on columns is guaranteed on this table.
 func areColsUniqueInTable(b BuildCtx, tableID catid.DescID, columnIDs []catid.ColumnID) (ret bool) {
-	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if ret {
 			return
 		}
@@ -860,7 +860,7 @@ func maybeRetrieveIndexPartitioningElem(
 }
 
 func getCurrentPrimaryIndexID(b BuildCtx, tableID catid.DescID) (ret catid.IndexID) {
-	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if pie, ok := e.(*scpb.PrimaryIndex); ok && current == scpb.Status_PUBLIC {
 			ret = pie.IndexID
 		}
