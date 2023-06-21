@@ -131,10 +131,10 @@ Commands specific to the demo shell (EXPERIMENTAL):
   \demo add <locality>         add a node (locality specified as "region=<region>,zone=<zone>").
 `
 
-	defaultPromptPattern = "%n@%M/%C%/%x>"
+	defaultPromptPattern = "%n@%M:%>/%C%/%x>"
 
 	// debugPromptPattern avoids substitution patterns that require a db roundtrip.
-	debugPromptPattern = "%n@%M %C>"
+	debugPromptPattern = "%n@%M:%> %C>"
 )
 
 // cliState defines the current state of the CLI during
@@ -530,7 +530,7 @@ var options = map[string]struct {
 		deprecated:                true,
 	},
 	`prompt1`: {
-		description:               "prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
+		description:               "prompt string to use before each command (expansions: %M full host, %m host, %> port number, %n user, %/ database, %x txn status, %C logical cluster)",
 		isBoolean:                 false,
 		validDuringMultilineEntry: true,
 		set: func(c *cliState, val string) error {
@@ -971,31 +971,92 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		}
 
 		c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.iCtx.customPromptPattern, func(m string) string {
+			// See:
+			// https://www.postgresql.org/docs/15/app-psql.html#APP-PSQL-PROMPTING
 			switch m {
 			case "%M":
-				_, host, port := parsedURL.GetNetworking()
-				return host + ":" + port // server:port
+				// "The full host name (with domain name) of the database
+				// server, or [local] if the connection is over a Unix domain
+				// socket, or [local:/dir/name], if the Unix domain socket is
+				// not at the compiled in default location."
+				net, host, _ := parsedURL.GetNetworking()
+				switch net {
+				case pgurl.ProtoTCP:
+					return host
+				case pgurl.ProtoUnix:
+					// We do not have "compiled-in default location" in
+					// CockroachDB so the location is always explicit.
+					return fmt.Sprintf("[local:%s]", host)
+				default:
+					// unreachable
+					return ""
+				}
+
 			case "%m":
-				_, host, _ := parsedURL.GetNetworking()
-				return host
+				// "The host name of the database server, truncated at the
+				// first dot, or [local] if the connection is over a Unix
+				// domain socket."
+				net, host, _ := parsedURL.GetNetworking()
+				switch net {
+				case pgurl.ProtoTCP:
+					return strings.SplitN(host, ".", 2)[0]
+				case pgurl.ProtoUnix:
+					return "[local]"
+				default:
+					// unreachable
+					return ""
+				}
+
 			case "%>":
+				// "The port number at which the database server is listening."
 				_, _, port := parsedURL.GetNetworking()
 				return port
-			case "%n": // user name.
+
+			case "%n":
+				// "The database session user name."
+				//
+				// TODO(sql): in psql this is updated based on the current user
+				// in the session set via SET SESSION AUTHORIZATION.
+				// See: https://github.com/cockroachdb/cockroach/issues/105136
 				return userName
-			case "%/": // database name.
+
+			case "%/":
+				// "The name of the current database."
 				return dbName
-			case "%x": // txn status.
+
+			case "%x":
+				// "Transaction status:..."
+				// Note: the specific string here is incompatible with psql.
+				// For example we use "OPEN" instead of '*". This was an extremely
+				// early decision in the SQL shell's history.
 				return c.lastKnownTxnStatus
+
 			case "%%":
 				return "%"
+
 			case "%C":
+				// CockroachDB extension: the logical cluster name.
 				return logicalCluster
+
 			default:
+				// Not implemented:
+				// %~: "Like %/, but the output is ~ (tilde) if the database is your default database."
+				//     CockroachDB does not have per-user default databases (yet).
+				// %#: "If the session user is a database superuser, then a #, otherwise a >."
+				//     The shell does not know how to determine this yet. See: #105136
+				// %p: "The process ID of the backend currently connected to."
+				//     CockroachDB does not have "backend process IDs" like PostgreSQL.
+				// %R: continuation character
+				//     The mechanism for continuation is handled internally by the input editor.
+				// %l: "The line number inside the current statement, starting from 1."
+				//     Lines are handled internally by the input editor.
+				// %w: "Whitespace of the same width as the most recent output of PROMPT1."
+				//     The prompt alignment for multi-line edits is handled internally by the input editor.
+				// %digits: "Character with given octal code."
+				//     This can also be done via `\set prompt1 '\NNN'`
 				err = fmt.Errorf("unrecognized format code in prompt: %q", m)
 				return ""
 			}
-
 		})
 		if err != nil {
 			c.fullPrompt = err.Error()
