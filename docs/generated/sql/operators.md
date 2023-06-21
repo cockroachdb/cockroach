@@ -188,6 +188,7 @@
 <tr><td>jsonb <code><</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code><</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code><</code> oid</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>pg_lsn <code><</code> pg_lsn</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code><</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code><</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="time.html">time</a> <code><</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -251,6 +252,7 @@
 <tr><td>jsonb <code><=</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code><=</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code><=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>pg_lsn <code><=</code> pg_lsn</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code><=</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code><=</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="time.html">time</a> <code><=</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -313,6 +315,7 @@
 <tr><td>jsonb <code>=</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>=</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>pg_lsn <code>=</code> pg_lsn</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>=</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code>=</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="time.html">time</a> <code>=</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -392,6 +395,7 @@
 <tr><td><a href="interval.html">interval</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>pg_lsn <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="time.html">time</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
@@ -438,6 +442,7 @@
 <tr><td>jsonb <code>IS NOT DISTINCT FROM</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>IS NOT DISTINCT FROM</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>IS NOT DISTINCT FROM</code> oid</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>pg_lsn <code>IS NOT DISTINCT FROM</code> pg_lsn</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>IS NOT DISTINCT FROM</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code>IS NOT DISTINCT FROM</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="time.html">time</a> <code>IS NOT DISTINCT FROM</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -540,6 +545,8 @@
 <tr><td>jsonb <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td>oid <code>||</code> oid</td><td>oid</td></tr>
 <tr><td>oid <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
+<tr><td>pg_lsn <code>||</code> pg_lsn</td><td>pg_lsn</td></tr>
+<tr><td>pg_lsn <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="bool.html">bool</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> box2d</td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="date.html">date</a></td><td><a href="string.html">string</a></td></tr>
@@ -552,6 +559,7 @@
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="interval.html">interval</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> jsonb</td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> oid</td><td><a href="string.html">string</a></td></tr>
+<tr><td><a href="string.html">string</a> <code>||</code> pg_lsn</td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="string.html">string[]</a></td><td><a href="string.html">string[]</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="time.html">time</a></td><td><a href="string.html">string</a></td></tr>

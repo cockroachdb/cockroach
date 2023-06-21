@@ -542,6 +542,8 @@ var (
 		types.UUIDArray,
 		types.INet,
 		types.Jsonb,
+		types.PGLSN,
+		types.PGLSNArray,
 		types.TSQuery,
 		types.TSVector,
 		types.VarBit,

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -85,6 +86,11 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 	case types.Box2DFamily:
 		if v, ok := val.(*tree.DBox2D); ok {
 			r.SetBox2D(v.CartesianBoundingBox.BoundingBox)
+			return r, nil
+		}
+	case types.PGLSNFamily:
+		if v, ok := val.(*tree.DPGLSN); ok {
+			r.SetInt(int64(v.LSN))
 			return r, nil
 		}
 	case types.GeographyFamily:
@@ -237,6 +243,12 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDInt(tree.DInt(v)), nil
+	case types.PGLSNFamily:
+		v, err := value.GetInt()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDPGLSN(tree.DPGLSN{LSN: lsn.LSN(v)}), nil
 	case types.FloatFamily:
 		v, err := value.GetFloat()
 		if err != nil {

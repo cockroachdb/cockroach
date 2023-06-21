@@ -321,6 +321,14 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 			}
 			return tree.NewDEnum(e), nil
 		}
+	case types.PGLSNFamily:
+		populateLogicalStringCol(schemaEl)
+		col.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return []byte(d.(*tree.DPGLSN).LSN.String()), nil
+		}
+		col.DecodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.ParseDPGLSN(string(x.([]byte)))
+		}
 	case types.Box2DFamily:
 		populateLogicalStringCol(schemaEl)
 		col.encodeFn = func(d tree.Datum) (interface{}, error) {

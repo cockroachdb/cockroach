@@ -429,6 +429,8 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 		return geo.SpatialObjectToEWKT(d.Geography.SpatialObject(), 2)
 	case *tree.DGeometry:
 		return geo.SpatialObjectToEWKT(d.Geometry.SpatialObject(), 2)
+	case *tree.DPGLSN:
+		return d.LSN.String(), nil
 	case *tree.DTSQuery:
 		return d.String(), nil
 	case *tree.DTSVector:

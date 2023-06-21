@@ -1311,6 +1311,13 @@ func TestLogic_pg_extension(
 	runLogicTest(t, "pg_extension")
 }
 
+func TestLogic_pg_lsn(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "pg_lsn")
+}
+
 func TestLogic_pgcrypto_builtins(
 	t *testing.T,
 ) {

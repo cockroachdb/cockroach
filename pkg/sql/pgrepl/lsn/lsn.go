@@ -26,3 +26,21 @@ func ParseLSN(str string) (LSN, error) {
 	}
 	return (LSN(hi) << 32) | LSN(lo), nil
 }
+
+func (lsn LSN) Compare(other LSN) int {
+	if lsn > other {
+		return 1
+	}
+	if lsn < other {
+		return -1
+	}
+	return 0
+}
+
+func (lsn LSN) Add(val LSN) LSN {
+	return lsn + val
+}
+
+func (lsn LSN) Sub(val LSN) LSN {
+	return lsn - val
+}

@@ -1333,6 +1333,13 @@ func TestTenantLogic_pg_extension(
 	runLogicTest(t, "pg_extension")
 }
 
+func TestTenantLogic_pg_lsn(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "pg_lsn")
+}
+
 func TestTenantLogic_pgcrypto_builtins(
 	t *testing.T,
 ) {
