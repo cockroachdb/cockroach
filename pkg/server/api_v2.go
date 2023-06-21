@@ -8,9 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// TODO(ricky): re-enable.
-//-go:generate swagger generate spec -w . -o ../../docs/generated/swagger/spec.json --scan-models
-
 // CockroachDB v2 API
 //
 // API for querying information about CockroachDB health, nodes, ranges,
