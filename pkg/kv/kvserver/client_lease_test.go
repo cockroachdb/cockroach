@@ -1035,10 +1035,16 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		}
 		return nil
 	})
-	_, _, enqueueError := tc.GetFirstStoreFromServer(t, 0).
-		Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 
-	require.NoError(t, enqueueError, "failed to enqueue replica for replication")
+	testutils.SucceedsSoon(t, func() error {
+		// n1 requires the lease to process the replica through the replicate
+		// queue. It will try and acquire the lease if it doesn't have it. It is
+		// possible that another node gets there before n1 - expect the acquisition
+		// to succeed eventually.
+		_, _, enqueueError := tc.GetFirstStoreFromServer(t, 0).
+			Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
+		return enqueueError
+	})
 
 	var newLeaseHolder roachpb.ReplicationTarget
 	testutils.SucceedsSoon(t, func() error {
