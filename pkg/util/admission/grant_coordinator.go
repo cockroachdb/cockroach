@@ -54,6 +54,7 @@ type StoreGrantCoordinators struct {
 	kvIOTokensExhaustedDuration     *metric.Counter
 	kvIOTokensAvailable             *metric.Gauge
 	kvIOTokensTookWithoutPermission *metric.Counter
+	kvIOTotalTokensTaken            *metric.Counter
 
 	// These metrics are shared by WorkQueues across stores.
 	workQueueMetrics *WorkQueueMetrics
@@ -167,6 +168,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
 		availableTokensMetrics:          sgc.kvIOTokensAvailable,
 		tookWithoutPermissionMetric:     sgc.kvIOTokensTookWithoutPermission,
+		totalTokensTaken:                sgc.kvIOTotalTokensTaken,
 	}
 	kvg.coordMu.availableIOTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
@@ -456,6 +458,7 @@ func makeStoresGrantCoordinators(
 		makeStoreRequesterFunc:          makeStoreRequester,
 		kvIOTokensExhaustedDuration:     metrics.KVIOTokensExhaustedDuration,
 		kvIOTokensTookWithoutPermission: metrics.KVIOTokensTookWithoutPermission,
+		kvIOTotalTokensTaken:            metrics.KVIOTotalTokensTaken,
 		kvIOTokensAvailable:             metrics.KVIOTokensAvailable,
 		workQueueMetrics:                storeWorkQueueMetrics,
 		onLogEntryAdmitted:              onLogEntryAdmitted,
@@ -997,6 +1000,7 @@ type GrantCoordinatorMetrics struct {
 	// TODO(banabrick): Make these metrics per store.
 	KVIOTokensExhaustedDuration     *metric.Counter
 	KVIOTokensTookWithoutPermission *metric.Counter
+	KVIOTotalTokensTaken            *metric.Counter
 	KVIOTokensAvailable             *metric.Gauge
 	SQLLeafStartUsedSlots           *metric.Gauge
 	SQLRootStartUsedSlots           *metric.Gauge
@@ -1018,6 +1022,7 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 		SQLLeafStartUsedSlots:           metric.NewGauge(addName(workKindString(SQLStatementLeafStartWork), usedSlots)),
 		SQLRootStartUsedSlots:           metric.NewGauge(addName(workKindString(SQLStatementRootStartWork), usedSlots)),
 		KVIOTokensTookWithoutPermission: metric.NewCounter(kvIONumIOTokensTookWithoutPermission),
+		KVIOTotalTokensTaken:            metric.NewCounter(kvIOTotalTokensTaken),
 		KVIOTokensAvailable:             metric.NewGauge(kvIOTokensAvailable),
 	}
 	return m
