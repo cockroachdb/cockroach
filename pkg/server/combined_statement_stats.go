@@ -591,7 +591,20 @@ FROM (SELECT fingerprint_id,
 		it, err = getIterator(
 			ctx,
 			ie,
-			queryFormat,
+			// The statement activity table has aggregated metadata.
+			`
+SELECT *
+FROM (SELECT fingerprint_id,
+             array_agg(distinct transaction_fingerprint_id),
+             app_name,
+             max(aggregated_ts)                                                AS aggregated_ts,
+             crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
+             crdb_internal.merge_statement_stats(array_agg(statistics))        AS statistics
+      FROM %s %s
+      GROUP BY
+          fingerprint_id,
+          app_name) %s
+%s`,
 			"crdb_internal.statement_activity",
 			"combined-stmts-activity-by-interval",
 			whereClause,
@@ -900,7 +913,6 @@ GROUP BY
 	const expectedNumDatums = 5
 	var it isql.Rows
 	var err error
-	var query string
 	defer func() {
 		closeErr := it.Close()
 		if closeErr != nil {
@@ -909,15 +921,26 @@ GROUP BY
 	}()
 
 	if activityTableHasAllData {
-		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_activity", whereClause)
 		it, err = ie.QueryIteratorEx(ctx, "stmts-activity-for-txn", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
+			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
+SELECT fingerprint_id,
+       transaction_fingerprint_id,
+       crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata))   AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+       app_name
+FROM crdb_internal.statement_activity %s
+GROUP BY
+    fingerprint_id,
+    transaction_fingerprint_id,
+    app_name`, whereClause),
+			args...)
 		if err != nil {
 			return nil, serverError(ctx, err)
 		}
 	}
 
 	// If there are no results from the activity table, retrieve the data from the persisted table.
+	var query string
 	if it == nil || !it.HasResults() {
 		if it != nil {
 			err = closeIterator(it, err)
@@ -1202,24 +1225,30 @@ LIMIT 1`
 
 	var row tree.Datums
 	var err error
-	var query string
 
 	if activityTableHasAllData {
-		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_activity", whereClause)
 		row, err = ie.QueryRowEx(ctx, "combined-stmts-activity-details-total", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
+			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
+SELECT crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
+       array_agg(app_name)                                               AS app_names,
+       crdb_internal.merge_statement_stats(array_agg(statistics))        AS statistics,
+       encode(fingerprint_id, 'hex')                                     AS fingerprint_id
+FROM crdb_internal.statement_activity %s
+GROUP BY
+    fingerprint_id
+LIMIT 1`, whereClause), args...)
 		if err != nil {
 			return statement, serverError(ctx, err)
 		}
 	}
 	// If there are no results from the activity table, retrieve the data from the persisted table.
 	if row == nil || row.Len() == 0 {
-		query = fmt.Sprintf(
-			queryFormat,
-			"crdb_internal.statement_statistics_persisted"+tableSuffix,
-			whereClause)
 		row, err = ie.QueryRowEx(ctx, "combined-stmts-persisted-details-total", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(
+				queryFormat,
+				"crdb_internal.statement_statistics_persisted"+tableSuffix,
+				whereClause), args...)
 		if err != nil {
 			return statement, serverError(ctx, err)
 		}
@@ -1228,9 +1257,9 @@ LIMIT 1`
 	// If there are no results from the persisted table, retrieve the data from the combined view
 	// with data in-memory.
 	if row.Len() == 0 {
-		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause)
 		row, err = ie.QueryRowEx(ctx, "combined-stmts-details-total-with-memory", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause), args...)
 		if err != nil {
 			return statement, serverError(ctx, err)
 		}
@@ -1302,21 +1331,24 @@ LIMIT $%d`
 
 	var it isql.Rows
 	var err error
-	var query string
 	defer func() {
 		err = closeIterator(it, err)
 	}()
 	args = append(args, limit)
 
 	if activityTableHasAllData {
-		query = fmt.Sprintf(
-			queryFormat,
-			"crdb_internal.statement_activity",
-			whereClause,
-			len(args))
-
 		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-activity-details-by-aggregated-timestamp", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(`
+SELECT aggregated_ts,
+       crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+FROM crdb_internal.statement_activity %s
+GROUP BY
+    aggregated_ts
+ORDER BY aggregated_ts ASC
+LIMIT $%d`, whereClause, len(args)),
+			args...)
 
 		if err != nil {
 			return nil, serverError(ctx, err)
@@ -1324,6 +1356,7 @@ LIMIT $%d`
 	}
 
 	// If there are no results from the activity table, retrieve the data from the persisted table.
+	var query string
 	if it == nil || !it.HasResults() {
 		if it != nil {
 			err = closeIterator(it, err)
@@ -1477,7 +1510,7 @@ func getStatementDetailsPerPlanHash(
 	expectedNumDatums := 5
 	const queryFormat = `
 SELECT plan_hash,
-       (statistics - > 'statistics' - > 'planGists' ->>0)         AS plan_gist,
+       (statistics -> 'statistics' -> 'planGists' ->> 0)          AS plan_gist,
        crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
        crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
        index_recommendations
@@ -1487,29 +1520,41 @@ GROUP BY
     plan_gist,
     index_recommendations
 LIMIT $%d`
-	args = append(args, limit)
 
-	var it isql.Rows
+	args = append(args, limit)
 	var err error
-	var query string
+	// We will have 1 open iterator at a time. For the deferred close operation, we will
+	// only close the iterator if there were no errors creating the iterator. Closing an
+	// iterator that returned an error on creation will cause a nil pointer deref.
+	var it isql.Rows
+	var iterErr error
 	defer func() {
-		err = closeIterator(it, err)
+		if iterErr == nil {
+			err = closeIterator(it, err)
+		}
 	}()
 
 	if activityTableHasAllData {
-		query = fmt.Sprintf(
-			queryFormat,
-			"crdb_internal.statement_activity",
-			whereClause,
-			len(args))
-		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-activity-details-by-plan-hash", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
-		if err != nil {
+		it, iterErr = ie.QueryIteratorEx(ctx, "combined-stmts-activity-details-by-plan-hash", nil,
+			sessiondata.NodeUserSessionDataOverride, fmt.Sprintf(`
+SELECT plan_hash,
+       (statistics -> 'statistics' -> 'planGists' ->> 0)                 AS plan_gist,
+       crdb_internal.merge_aggregated_stmt_metadata(array_agg(metadata)) AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(statistics))        AS statistics,
+       index_recommendations
+FROM crdb_internal.statement_activity %s
+GROUP BY
+    plan_hash,
+    plan_gist,
+    index_recommendations
+LIMIT $%d`, whereClause, len(args)), args...)
+		if iterErr != nil {
 			return nil, serverError(ctx, err)
 		}
 	}
 
 	// If there are no results from the activity table, retrieve the data from the persisted table.
+	var query string
 	if it == nil || !it.HasResults() {
 		if it != nil {
 			err = closeIterator(it, err)
@@ -1519,9 +1564,9 @@ LIMIT $%d`
 			"crdb_internal.statement_statistics_persisted"+tableSuffix,
 			whereClause,
 			len(args))
-		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-persisted-details-by-plan-hash", nil,
+		it, iterErr = ie.QueryIteratorEx(ctx, "combined-stmts-persisted-details-by-plan-hash", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
-		if err != nil {
+		if iterErr != nil {
 			return nil, serverError(ctx, err)
 		}
 	}
@@ -1531,9 +1576,9 @@ LIMIT $%d`
 	if !it.HasResults() {
 		err = closeIterator(it, err)
 		query = fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics", whereClause, len(args))
-		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash-with-memory", nil,
+		it, iterErr = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
-		if err != nil {
+		if iterErr != nil {
 			return nil, serverError(ctx, err)
 		}
 	}

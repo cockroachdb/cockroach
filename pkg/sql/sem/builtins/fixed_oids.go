@@ -2382,6 +2382,7 @@ var builtinOidsArray = []string{
 	2411: `to_char(date: date, format: string) -> string`,
 	2412: `crdb_internal.fingerprint(span: bytes[], start_time: decimal, all_revisions: bool) -> int`,
 	2453: `crdb_internal.reset_activity_tables() -> bool`,
+	2456: `crdb_internal.merge_aggregated_stmt_metadata(input: jsonb[]) -> jsonb`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
