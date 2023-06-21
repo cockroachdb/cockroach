@@ -1,6 +1,19 @@
 load("//pkg/sql/schemachanger/sctest/sctestgen:gen.bzl", "sctest_gen")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+go_library(
+    name = "schemachangerccl",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/schemachangerccl",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "end_to_end_ccl_testdata_definitions",
+    srcs = glob(["testdata/end_to_end/*/*.definition"]),
+    visibility = ["//visibility:public"],
+)
+
 go_test(
     name = "schemachangerccl_test",
     size = "enormous",
@@ -17,7 +30,7 @@ go_test(
         "//conditions:default": ["-test.timeout=3595s"],
     }),
     data = glob(["testdata/**"]) + [
-        "//pkg/sql/schemachanger:testdata",
+        "//pkg/sql/schemachanger:end_to_end_testdata",
     ],
     embed = [":schemachangerccl"],
     shard_count = 48,
@@ -46,13 +59,6 @@ go_test(
     ],
 )
 
-go_library(
-    name = "schemachangerccl",
-    srcs = ["doc.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/schemachangerccl",
-    visibility = ["//visibility:public"],
-)
-
 sctest_gen(
     name = "test_gen_backup_base",
     out = "backup_base_generated_test.go",
@@ -60,9 +66,7 @@ sctest_gen(
     new_cluster_func = "sctest.SingleNodeCluster",
     package = "schemachangerccl",
     suffix = "_base",
-    test_data = [
-        "//pkg/sql/schemachanger:end_to_end_testdata",
-    ],
+    test_data = ["//pkg/sql/schemachanger:end_to_end_testdata_definitions"],
     tests = ["Backup"],
     visibility = [
         ":__pkg__",
@@ -77,9 +81,7 @@ sctest_gen(
     new_cluster_func = "sctest.SingleNodeMixedCluster",
     package = "schemachangerccl",
     suffix = "_base",
-    test_data = [
-        "//pkg/sql/schemachanger:end_to_end_testdata",
-    ],
+    test_data = ["//pkg/sql/schemachanger:end_to_end_testdata_definitions"],
     tests = ["BackupMixedVersionElements"],
     visibility = [
         ":__pkg__",
@@ -94,7 +96,7 @@ sctest_gen(
     new_cluster_func = "newMultiRegionCluster",
     package = "schemachangerccl",
     suffix = "_ccl",
-    test_data = glob(["testdata/end_to_end/**"]),
+    test_data = [":end_to_end_ccl_testdata_definitions"],
     tests = [
         "Backup",
         "EndToEndSideEffects",
@@ -115,7 +117,7 @@ sctest_gen(
     new_cluster_func = "newMultiRegionMixedCluster",
     package = "schemachangerccl",
     suffix = "_ccl",
-    test_data = glob(["testdata/end_to_end/**"]),
+    test_data = [":end_to_end_ccl_testdata_definitions"],
     tests = ["BackupMixedVersionElements"],
     visibility = [
         ":__pkg__",

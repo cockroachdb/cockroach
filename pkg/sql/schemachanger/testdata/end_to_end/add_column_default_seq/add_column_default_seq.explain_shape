@@ -1,0 +1,19 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+CREATE SEQUENCE db.public.sq1;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAULT nextval('db.public.sq1');
+----
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›);
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index tbl_pkey- in relation tbl
+ │    └── into tbl_pkey+ (i; l+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation tbl
+ │    └── from tbl@[3] into tbl_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index tbl_pkey+ in relation tbl
+ ├── validate NOT NULL constraint on column l+ in index tbl_pkey+ in relation tbl
+ └── execute 3 system table mutations transactions
