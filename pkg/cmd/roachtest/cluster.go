@@ -2308,7 +2308,7 @@ func (c *clusterImpl) ExternalPGUrl(
 	return c.pgURLErr(ctx, l, node, true, tenant)
 }
 
-func addrToAdminUIAddr(c *clusterImpl, addr string) (string, error) {
+func addrToAdminUIAddr(addr string) (string, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return "", err
@@ -2360,7 +2360,7 @@ func (c *clusterImpl) InternalAdminUIAddr(
 		return nil, err
 	}
 	for _, u := range urls {
-		adminUIAddr, err := addrToAdminUIAddr(c, u)
+		adminUIAddr, err := addrToAdminUIAddr(u)
 		if err != nil {
 			return nil, err
 		}
@@ -2380,7 +2380,7 @@ func (c *clusterImpl) ExternalAdminUIAddr(
 		return nil, err
 	}
 	for _, u := range externalAddrs {
-		adminUIAddr, err := addrToAdminUIAddr(c, u)
+		adminUIAddr, err := addrToAdminUIAddr(u)
 		if err != nil {
 			return nil, err
 		}
