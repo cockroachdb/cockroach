@@ -49,15 +49,15 @@ ORDER BY tenant_id, name
 system-sql
 SHOW TENANTS WITH CAPABILITIES
 ----
-1 system ready shared can_admin_relocate_range false
+1 system ready shared can_admin_relocate_range true
 1 system ready shared can_admin_scatter true
 1 system ready shared can_admin_split true
-1 system ready shared can_admin_unsplit false
-1 system ready shared can_check_consistency false
-1 system ready shared can_use_nodelocal_storage false
-1 system ready shared can_view_node_info false
-1 system ready shared can_view_tsdb_metrics false
-1 system ready shared exempt_from_rate_limiting false
+1 system ready shared can_admin_unsplit true
+1 system ready shared can_check_consistency true
+1 system ready shared can_use_nodelocal_storage true
+1 system ready shared can_view_node_info true
+1 system ready shared can_view_tsdb_metrics true
+1 system ready shared exempt_from_rate_limiting true
 1 system ready shared span_config_bounds {}
 2 template ready none can_admin_relocate_range true
 2 template ready none can_admin_scatter true

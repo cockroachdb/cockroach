@@ -84,6 +84,7 @@ import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 import { RequestState } from "../api";
+import moment from "moment-timezone";
 
 const cx = classNames.bind(styles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -384,6 +385,9 @@ export class TransactionsPage extends React.Component<
   };
 
   changeTimeScale = (ts: TimeScale): void => {
+    if (ts.key !== "Custom") {
+      ts.fixedWindowEnd = moment();
+    }
     this.setState(prevState => ({ ...prevState, timeScale: ts }));
   };
 
@@ -404,6 +408,8 @@ export class TransactionsPage extends React.Component<
       this.props.onChangeReqSort(this.state.reqSortSetting);
     }
 
+    // Force an update on TimeScale to update the fixedWindowEnd
+    this.changeTimeScale(this.state.timeScale);
     if (this.props.timeScale !== this.state.timeScale) {
       this.props.onTimeScaleChange(this.state.timeScale);
     }
