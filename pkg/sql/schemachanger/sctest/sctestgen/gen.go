@@ -30,7 +30,10 @@ var (
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, arguments []string) error {
 			var buf bytes.Buffer
-			args.Files = arguments
+			args.Files = make([]string, len(arguments))
+			for i, arg := range arguments {
+				args.Files[i] = filepath.Dir(arg)
+			}
 			if err := templ.Execute(&buf, args); err != nil {
 				return err
 			}

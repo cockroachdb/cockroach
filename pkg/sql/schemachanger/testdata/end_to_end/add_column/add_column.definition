@@ -1,0 +1,47 @@
+setup
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
+CREATE SEQUENCE db.public.sq1;
+INSERT INTO db.public.tbl VALUES(-1);
+INSERT INTO db.public.tbl VALUES(-2);
+INSERT INTO db.public.tbl VALUES(-3);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+UPDATE db.public.tbl SET k=$stageKey;
+UPDATE db.public.tbl SET k=i;
+DELETE FROM db.public.tbl WHERE i=-1;
+DELETE FROM db.public.tbl WHERE i=$stageKey;
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES(-1);
+----
+
+# Each insert will be injected twice per stage, plus 1 extra.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM db.public.tbl;
+----
+true
+
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+UPDATE db.public.tbl SET k=$stageKey;
+UPDATE db.public.tbl SET k=i;
+DELETE FROM db.public.tbl WHERE i=-1;
+DELETE FROM db.public.tbl WHERE i=$stageKey;
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES(-1);
+----
+
+# Each insert will be injected twice per stage, , plus 1 extra.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=($successfulStageCount*2)+3 FROM db.public.tbl;
+----
+true
+
+test
+ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42
+----

@@ -1,0 +1,13 @@
+/* setup */
+CREATE TABLE t1 (i INT PRIMARY KEY);
+CREATE TABLE t2 (i INT PRIMARY KEY);
+INSERT INTO t2 (i) VALUES(-1), (-2), (-3);
+INSERT INTO t1 (i) VALUES(-1), (-2), (-3);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›);
+ ├── execute 1 system table mutations transaction
+ ├── validate non-index-backed constraint t1_i_fkey+ in relation t1
+ └── execute 1 system table mutations transaction

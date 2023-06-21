@@ -1,0 +1,17 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((j+1), k));
+
+/* test */
+ALTER TABLE t DROP COLUMN j CASCADE;
+EXPLAIN (DDL, SHAPE) ALTER TABLE t DROP COLUMN k CASCADE;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE; following ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey+ (i; k-)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from crdb_internal_index_4_name_placeholder into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ └── execute 3 system table mutations transactions

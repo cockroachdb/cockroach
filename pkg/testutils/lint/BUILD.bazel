@@ -20,7 +20,7 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]) + [
-        "@co_honnef_go_tools//cmd/unused",
+        "@co_honnef_go_tools//cmd/staticcheck",
         "@go_sdk//:files",
     ],
     embed = [":lint"],
