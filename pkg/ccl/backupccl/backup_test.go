@@ -3136,7 +3136,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `DROP TABLE otherstore.receipts`)
 
 		db.ExpectErr(
-			t, `cannot drop relation "customers" because view "unused_view" depends on it`,
+			t, `cannot drop relation "customers" because view "early_customers" depends on it`,
 			`DROP TABLE otherstore.customers`,
 		)
 

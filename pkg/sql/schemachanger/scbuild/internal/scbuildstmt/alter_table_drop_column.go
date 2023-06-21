@@ -326,7 +326,7 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 	panicIfColReferencedInPredicate(b, col, tblElts)
 	tblElts.
 		Filter(referencesColumnIDFilter(col.ColumnID)).
-		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch elt := e.(type) {
 			case *scpb.Column, *scpb.ColumnName, *scpb.ColumnComment, *scpb.ColumnNotNull,
 				*scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression,
@@ -368,7 +368,7 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 				panic(errors.AssertionFailedf("unknown column-dependent element type %T", elt))
 			}
 		})
-	tblElts.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch elt := e.(type) {
 		case *scpb.Column:
 			if columnsToDrop.Contains(elt.ColumnID) {
@@ -391,7 +391,7 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 		}
 	})
 	backrefs := undroppedBackrefs(b, col.TableID)
-	backrefs.ForEachElementStatus(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	backrefs.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		switch elt := e.(type) {
 		case *scpb.View:
 			for _, ref := range elt.ForwardReferences {
@@ -430,7 +430,7 @@ func panicIfColReferencedInPredicate(b BuildCtx, col *scpb.Column, tblElts Eleme
 
 	var violatingIndex catid.IndexID
 	var violatingUWI catid.ConstraintID
-	tblElts.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+	tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		if violatingIndex != 0 || violatingUWI != 0 {
 			return
 		}
@@ -575,7 +575,7 @@ func handleDropColumnFreshlyAddedPrimaryIndex(
 func assertAllColumnElementsAreDropped(colElts ElementResultSet) {
 	if stillPublic := colElts.Filter(publicTargetFilter); !stillPublic.IsEmpty() {
 		var elements []scpb.Element
-		stillPublic.ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		stillPublic.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			elements = append(elements, e)
 		})
 		panic(errors.AssertionFailedf("failed to drop all of the relevant elements: %v", elements))

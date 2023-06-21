@@ -71,7 +71,6 @@ type ClusterAndSessionInfo interface {
 // its internal state to anything that ends up using it and only allowing
 // state changes via the provided methods.
 type BuilderState interface {
-	scpb.ElementStatusIterator
 	ElementReferences
 	NameResolver
 	PrivilegeChecker
@@ -272,16 +271,7 @@ type SchemaHelpers interface {
 	ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix)
 }
 
-// ElementResultSet wraps the results of an element query.
-type ElementResultSet interface {
-	scpb.ElementStatusIterator
-
-	// IsEmpty returns true iff there are no elements in the result set.
-	IsEmpty() bool
-
-	// Filter returns a subset of this result set according to the predicate.
-	Filter(predicate func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool) ElementResultSet
-}
+type ElementResultSet = *scpb.ElementCollection[scpb.Element]
 
 // ElementReferences looks up an element's forward and backward references.
 type ElementReferences interface {

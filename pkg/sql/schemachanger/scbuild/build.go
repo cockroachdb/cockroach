@@ -98,7 +98,7 @@ func Build(
 		Targets:       make([]scpb.Target, 0, len(bs.output)),
 		Statements:    els.statements,
 		Authorization: els.authorization,
-		NameMappings:  makeNameMappings(b),
+		NameMappings:  makeNameMappings(bs.output),
 	}
 	initial := make([]scpb.Status, 0, len(bs.output))
 	current := make([]scpb.Status, 0, len(bs.output))
@@ -241,7 +241,8 @@ type cachedDesc struct {
 	desc             catalog.Descriptor
 	prefix           tree.ObjectNamePrefix
 	backrefs         catalog.DescriptorIDSet
-	ers              *elementResultSet
+	outputIndexes    []int
+	cachedCollection *scpb.ElementCollection[scpb.Element]
 	privileges       map[privilege.Kind]error
 	hasOwnership     bool
 	backrefsResolved bool
@@ -302,7 +303,7 @@ func newBuilderState(
 	return &bs
 }
 
-func makeNameMappings(b scbuildstmt.BuildCtx) (ret scpb.NameMappings) {
+func makeNameMappings(elementStates []elementState) (ret scpb.NameMappings) {
 	id2Idx := make(map[catid.DescID]int)
 	getOrCreate := func(id catid.DescID) (_ *scpb.NameMapping, isNew bool) {
 		if idx, ok := id2Idx[id]; ok {
@@ -322,39 +323,39 @@ func makeNameMappings(b scbuildstmt.BuildCtx) (ret scpb.NameMappings) {
 	isNotDropping := func(ts scpb.TargetStatus) bool {
 		return ts != scpb.ToAbsent && ts != scpb.Transient
 	}
-	scpb.ForEachNamespace(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.Namespace) {
-		dnm, isNew := getOrCreate(e.DescriptorID)
-		if isNew || isNotDropping(ts) {
-			dnm.Name = e.Name
-		}
-	})
-	scpb.ForEachFunctionName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.FunctionName) {
-		dnm, isNew := getOrCreate(e.FunctionID)
-		if isNew || isNotDropping(ts) {
-			dnm.Name = e.Name
-		}
-	})
-	scpb.ForEachIndexName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.IndexName) {
-		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-			ret[idx].Indexes[e.IndexID] = e.Name
-		}
-	})
-	scpb.ForEachColumnName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ColumnName) {
-		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-			ret[idx].Columns[e.ColumnID] = e.Name
-		}
-	})
-	scpb.ForEachColumnFamily(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ColumnFamily) {
-		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-			ret[idx].Families[e.FamilyID] = e.Name
-		}
-	})
-	scpb.ForEachConstraintWithoutIndexName(b,
-		func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
-			if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-				ret[idx].Constraints[e.ConstraintID] = e.Name
+	for _, es := range elementStates {
+		switch e := es.element.(type) {
+		case *scpb.Namespace:
+			dnm, isNew := getOrCreate(e.DescriptorID)
+			if isNew || isNotDropping(es.target) {
+				dnm.Name = e.Name
 			}
-		})
+		case *scpb.FunctionName:
+			dnm, isNew := getOrCreate(e.FunctionID)
+			if isNew || isNotDropping(es.target) {
+				dnm.Name = e.Name
+			}
+		}
+	}
+	for _, es := range elementStates {
+		if !isNotDropping(es.target) {
+			continue
+		}
+		idx, ok := id2Idx[screl.GetDescID(es.element)]
+		if !ok {
+			continue
+		}
+		switch e := es.element.(type) {
+		case *scpb.IndexName:
+			ret[idx].Indexes[e.IndexID] = e.Name
+		case *scpb.ColumnName:
+			ret[idx].Columns[e.ColumnID] = e.Name
+		case *scpb.ColumnFamily:
+			ret[idx].Families[e.FamilyID] = e.Name
+		case *scpb.ConstraintWithoutIndexName:
+			ret[idx].Constraints[e.ConstraintID] = e.Name
+		}
+	}
 	sort.Sort(ret)
 	return ret
 }
