@@ -3,17 +3,26 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "pgcryptocipher",
     srcs = [
+        "cipher_method.go",
         "doc.go",
         "padding.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgcrypto/pgcryptocipher",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/errorutil/unimplemented",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 go_test(
     name = "pgcryptocipher_test",
-    srcs = ["padding_test.go"],
+    srcs = [
+        "cipher_method_test.go",
+        "padding_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":pgcryptocipher"],
     deps = [
