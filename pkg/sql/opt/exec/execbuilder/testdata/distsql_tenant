@@ -22,12 +22,10 @@ CREATE TABLE tbl2 (k INT PRIMARY KEY, v INT, w INT, x INT,
    FAMILY fam_2 (v, w)
 )
 
-# This should be a local query, even though it uses two spans due to the column
-# family configuration.
 query T
 EXPLAIN SELECT v, w FROM tbl2 WHERE k = 23
 ----
-distribution: local
+distribution: full
 vectorized: true
 ·
 • scan
