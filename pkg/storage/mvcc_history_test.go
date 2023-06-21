@@ -97,6 +97,7 @@ var (
 // merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
+// put_blind_inline	k=<key> v=<string> [prev=<string>]
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
@@ -730,6 +731,7 @@ var commands = map[string]cmd{
 	"initput":               {typDataUpdate, cmdInitPut},
 	"merge":                 {typDataUpdate, cmdMerge},
 	"put":                   {typDataUpdate, cmdPut},
+	"put_blind_inline":      {typDataUpdate, cmdPutBlindInline},
 	"put_rangekey":          {typDataUpdate, cmdPutRangeKey},
 	"scan":                  {typReadOnly, cmdScan},
 	"is_span_empty":         {typReadOnly, cmdIsSpanEmpty},
@@ -1351,6 +1353,24 @@ func cmdPut(e *evalCtx) error {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
+	})
+}
+
+func cmdPutBlindInline(e *evalCtx) error {
+	key := e.getKey()
+
+	var val, prev roachpb.Value
+	if e.hasArg("v") {
+		val = e.getValInternal("v")
+		val.InitChecksum(key)
+	}
+	if e.hasArg("prev") {
+		prev = e.getValInternal("prev")
+		prev.InitChecksum(key)
+	}
+
+	return e.withWriter("put_blind_inline", func(rw storage.ReadWriter) error {
+		return storage.MVCCBlindPutInlineWithPrev(e.ctx, rw, e.ms, key, val, prev)
 	})
 }
 
