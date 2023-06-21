@@ -285,11 +285,47 @@ func (c *conn) processCommandsAsync(
 			return
 		}
 
-		// Inform the client of the default session settings.
-		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange, sessionID)
+		connHandler, retErr = sqlServer.SetupConn(
+			ctx,
+			c.sessionArgs,
+			&c.stmtBuf,
+			c,
+			c.metrics.SQLMemMetrics,
+			onDefaultIntSizeChange,
+			sessionID,
+		)
 		if retErr != nil {
+			_ /* err */ = c.writeErr(ctx, retErr, c.conn)
 			return
 		}
+
+		// Send the initial "status parameters" to the client.  This
+		// overlaps partially with session variables. The client wants to
+		// see the values that result from the combination of server-side
+		// defaults with client-provided values.
+		// For details see: https://www.postgresql.org/docs/10/static/libpq-status.html
+		for _, param := range statusReportParams {
+			param := param
+			value := connHandler.GetParamStatus(ctx, param)
+			if retErr = c.bufferParamStatus(param, value); retErr != nil {
+				return
+			}
+		}
+		// The two following status parameters have no equivalent session
+		// variable.
+		if retErr = c.bufferParamStatus("session_authorization", c.sessionArgs.User.Normalized()); retErr != nil {
+			return
+		}
+
+		if retErr = c.bufferInitialReadyForQuery(connHandler.GetQueryCancelKey()); retErr != nil {
+			return
+		}
+		// We don't have a CmdPos to pass in, since we haven't received any commands
+		// yet, so we just use the initial lastFlushed value.
+		if retErr = c.Flush(c.writerState.fi.lastFlushed); retErr != nil {
+			return
+		}
+
 		// Signal the connection was established to the authenticator.
 		ac.AuthOK(ctx)
 		ac.LogAuthOK(ctx)
@@ -327,55 +363,6 @@ func (c *conn) bufferParamStatus(param, value string) error {
 func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgNoticeResponse)
 	return c.writeErrFields(ctx, noticeErr, &c.writerState.buf)
-}
-
-func (c *conn) sendInitialConnData(
-	ctx context.Context,
-	sqlServer *sql.Server,
-	onDefaultIntSizeChange func(newSize int32),
-	sessionID clusterunique.ID,
-) (sql.ConnectionHandler, error) {
-	connHandler, err := sqlServer.SetupConn(
-		ctx,
-		c.sessionArgs,
-		&c.stmtBuf,
-		c,
-		c.metrics.SQLMemMetrics,
-		onDefaultIntSizeChange,
-		sessionID,
-	)
-	if err != nil {
-		_ /* err */ = c.writeErr(ctx, err, c.conn)
-		return sql.ConnectionHandler{}, err
-	}
-
-	// Send the initial "status parameters" to the client.  This
-	// overlaps partially with session variables. The client wants to
-	// see the values that result from the combination of server-side
-	// defaults with client-provided values.
-	// For details see: https://www.postgresql.org/docs/10/static/libpq-status.html
-	for _, param := range statusReportParams {
-		param := param
-		value := connHandler.GetParamStatus(ctx, param)
-		if err := c.bufferParamStatus(param, value); err != nil {
-			return sql.ConnectionHandler{}, err
-		}
-	}
-	// The two following status parameters have no equivalent session
-	// variable.
-	if err := c.bufferParamStatus("session_authorization", c.sessionArgs.User.Normalized()); err != nil {
-		return sql.ConnectionHandler{}, err
-	}
-
-	if err := c.bufferInitialReadyForQuery(connHandler.GetQueryCancelKey()); err != nil {
-		return sql.ConnectionHandler{}, err
-	}
-	// We don't have a CmdPos to pass in, since we haven't received any commands
-	// yet, so we just use the initial lastFlushed value.
-	if err := c.Flush(c.writerState.fi.lastFlushed); err != nil {
-		return sql.ConnectionHandler{}, err
-	}
-	return connHandler, nil
 }
 
 // bufferInitialReadyForQuery sends the final messages of the connection
