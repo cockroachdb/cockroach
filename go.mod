@@ -158,7 +158,7 @@ require (
 	github.com/jackc/pgx/v5 v5.3.1
 	github.com/jaegertracing/jaeger v1.18.1
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
-	github.com/jordanlewis/gcassert v0.0.0-20221027203946-81f097ad35a0
+	github.com/jordanlewis/gcassert v0.0.0-20230505190637-fed79d91cd5f
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.6.1-0.20210625163953-8ddee489636a
 	github.com/kisielk/gotool v1.0.0
