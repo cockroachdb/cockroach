@@ -86,7 +86,45 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"golang.org/x/net/trace"
+)
+
+var maxNumNonAdminConnections = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"server.max_connections_per_gateway",
+	"the maximum number of SQL connections per gateway allowed at a given time "+
+		"(note: this will only limit future connection attempts and will not affect already established connections). "+
+		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
+	-1, // Postgres defaults to 100, but we default to -1 to match our previous behavior of unlimited.
+).WithPublic()
+
+// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud to limit
+// connections to serverless clusters while still being able to connect from the Cockroach Cloud control plane.
+// This setting may be extended one day to include an arbitrary list of users to exclude from connection limiting.
+// This setting may be removed one day.
+var maxNumNonRootConnections = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"server.cockroach_cloud.max_client_connections_per_gateway",
+	"this setting is intended to be used by Cockroach Cloud for limiting connections to serverless clusters. "+
+		"The maximum number of SQL connections per gateway allowed at a given time "+
+		"(note: this will only limit future connection attempts and will not affect already established connections). "+
+		"Negative values result in unlimited number of connections. Cockroach Cloud internal users (including root user) "+
+		"are not affected by this limit.",
+	-1,
+)
+
+// maxNumNonRootConnectionsReason is used to supplement the error message for connections that denied due to
+// server.cockroach_cloud.max_client_connections_per_gateway.
+// Note(alyshan): This setting is not public. It is intended to be used by Cockroach Cloud when limiting
+// connections to serverless clusters.
+// This setting may be removed one day.
+var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"server.cockroach_cloud.max_client_connections_per_gateway_reason",
+	"a reason to provide in the error message for connections that are denied due to "+
+		"server.cockroach_cloud.max_client_connections_per_gateway",
+	"cluster connections are limited",
 )
 
 // noteworthyMemoryUsageBytes is the minimum size tracked by a
@@ -795,46 +833,68 @@ func (s *Server) SetupConn(
 	return ConnectionHandler{ex}, nil
 }
 
-// IncrementConnectionCount increases connectionCount by 1.
-func (s *Server) IncrementConnectionCount() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.connectionCount++
-}
-
-// IncrementRootConnectionCount increases both connectionCount and rootConnectionCount by 1.
-func (s *Server) IncrementRootConnectionCount() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.connectionCount++
-	s.mu.rootConnectionCount++
-}
-
-// DecrementConnectionCount decreases connectionCount by 1.
-func (s *Server) DecrementConnectionCount() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.connectionCount--
-}
-
-// DecrementRootConnectionCount decreases both connectionCount and rootConnectionCount by 1.
-func (s *Server) DecrementRootConnectionCount() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.connectionCount--
-	s.mu.rootConnectionCount--
-}
-
-// IncrementConnectionCountIfLessThan increases connectionCount by 1 and returns true if connectionCount < max,
-// otherwise it does nothing and returns false.
-func (s *Server) IncrementConnectionCountIfLessThan(max int64) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	lt := s.mu.connectionCount < max
-	if lt {
+// IncrementConnectionCount increases connectionCount by 1 if possible and
+// rootConnectionCount by 1 if applicable.
+//
+// decrementConnectionCount must be called if err is nil.
+func (s *Server) IncrementConnectionCount(
+	sessionArgs SessionArgs,
+) (decrementConnectionCount func(), _ error) {
+	sv := &s.cfg.Settings.SV
+	maxNumNonRootConnectionsValue := maxNumNonRootConnections.Get(sv)
+	maxNumConnectionsValue := maxNumNonAdminConnections.Get(sv)
+	maxNumNonRootConnectionsReasonValue := maxNumNonRootConnectionsReason.Get(sv)
+	var maxNumNonRootConnectionsExceeded, maxNumConnectionsExceeded bool
+	// This lock blocks other connections from being made so minimize the amount
+	// of work done inside lock.
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		// Root user is not affected by connection limits.
+		if sessionArgs.User.IsRootUser() {
+			s.mu.connectionCount++
+			s.mu.rootConnectionCount++
+			decrementConnectionCount = func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				s.mu.connectionCount--
+				s.mu.rootConnectionCount--
+			}
+			return
+		}
+		connectionCount := s.mu.connectionCount
+		nonRootConnectionCount := connectionCount - s.mu.rootConnectionCount
+		maxNumNonRootConnectionsExceeded = maxNumNonRootConnectionsValue >= 0 && nonRootConnectionCount >= maxNumNonRootConnectionsValue
+		if maxNumNonRootConnectionsExceeded {
+			return
+		}
+		maxNumConnectionsExceeded = !sessionArgs.IsSuperuser && maxNumConnectionsValue >= 0 && connectionCount >= maxNumConnectionsValue
+		if maxNumConnectionsExceeded {
+			return
+		}
 		s.mu.connectionCount++
+		decrementConnectionCount = func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.mu.connectionCount--
+		}
+	}()
+	if maxNumNonRootConnectionsExceeded {
+		return nil, errors.WithHintf(
+			pgerror.Newf(pgcode.TooManyConnections, "%s", redact.SafeString(maxNumNonRootConnectionsReasonValue)),
+			"the maximum number of allowed connections is %d",
+			maxNumNonRootConnectionsValue,
+		)
 	}
-	return lt
+	if maxNumConnectionsExceeded {
+		return nil, errors.WithHintf(
+			pgerror.New(pgcode.TooManyConnections, "sorry, too many clients already"),
+			"the maximum number of allowed connections is %d and can be modified using the %s config key",
+			maxNumConnectionsValue,
+			maxNumNonAdminConnections.Key(),
+		)
+	}
+	return decrementConnectionCount, nil
 }
 
 // GetConnectionCount returns the current number of connections.
@@ -842,13 +902,6 @@ func (s *Server) GetConnectionCount() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.connectionCount
-}
-
-// GetNonRootConnectionCount returns the current number of non root connections.
-func (s *Server) GetNonRootConnectionCount() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.connectionCount - s.mu.rootConnectionCount
 }
 
 // ConnectionHandler is the interface between the result of SetupConn
