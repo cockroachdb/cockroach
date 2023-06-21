@@ -1826,6 +1826,8 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 2287    _record                4294967112    NULL        -1      false     b
 2950    uuid                   4294967112    NULL        16      true      b
 2951    _uuid                  4294967112    NULL        -1      false     b
+3220    pg_lsn                 4294967112    NULL        8       true      b
+3221    _pg_lsn                4294967112    NULL        -1      false     b
 3614    tsvector               4294967112    NULL        -1      false     b
 3615    tsquery                4294967112    NULL        -1      false     b
 3643    _tsvector              4294967112    NULL        -1      false     b
@@ -1935,6 +1937,8 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 2287    _record                A            false           true          ,         0         2249     0
 2950    uuid                   U            false           true          ,         0         0        2951
 2951    _uuid                  A            false           true          ,         0         2950     0
+3220    pg_lsn                 U            false           true          ,         0         0        3221
+3221    _pg_lsn                A            false           true          ,         0         3220     0
 3614    tsvector               U            false           true          ,         0         0        3643
 3615    tsquery                U            false           true          ,         0         0        3645
 3643    _tsvector              A            false           true          ,         0         3614     0
@@ -2044,6 +2048,8 @@ oid     typname                typinput        typoutput        typreceive      
 2287    _record                array_in        array_out        array_recv        array_send        0         0          0
 2950    uuid                   uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
 2951    _uuid                  array_in        array_out        array_recv        array_send        0         0          0
+3220    pg_lsn                 pg_lsnin        pg_lsnout        pg_lsnrecv        pg_lsnsend        0         0          0
+3221    _pg_lsn                array_in        array_out        array_recv        array_send        0         0          0
 3614    tsvector               tsvectorin      tsvectorout      tsvectorrecv      tsvectorsend      0         0          0
 3615    tsquery                tsqueryin       tsqueryout       tsqueryrecv       tsquerysend       0         0          0
 3643    _tsvector              array_in        array_out        array_recv        array_send        0         0          0
@@ -2153,6 +2159,8 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 2287    _record                NULL      NULL        false       0            -1
 2950    uuid                   NULL      NULL        false       0            -1
 2951    _uuid                  NULL      NULL        false       0            -1
+3220    pg_lsn                 NULL      NULL        false       0            -1
+3221    _pg_lsn                NULL      NULL        false       0            -1
 3614    tsvector               NULL      NULL        false       0            -1
 3615    tsquery                NULL      NULL        false       0            -1
 3643    _tsvector              NULL      NULL        false       0            -1
@@ -2262,6 +2270,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 2287    _record                0         0             NULL           NULL        NULL
 2950    uuid                   0         0             NULL           NULL        NULL
 2951    _uuid                  0         0             NULL           NULL        NULL
+3220    pg_lsn                 0         0             NULL           NULL        NULL
+3221    _pg_lsn                0         0             NULL           NULL        NULL
 3614    tsvector               0         0             NULL           NULL        NULL
 3615    tsquery                0         0             NULL           NULL        NULL
 3643    _tsvector              0         0             NULL           NULL        NULL
@@ -3419,6 +3429,7 @@ oid         oprname  aggsortop
 3802002898  >        3802002898
 3457382662  >        3457382662
 3421685890  >        3421685890
+3626766962  >        3626766962
 1064453514  >        1064453514
 1778355034  >        1778355034
 3944320082  >        3944320082
@@ -3454,6 +3465,7 @@ oid         oprname  aggsortop
 3842027408  <        3842027408
 2897050084  <        2897050084
 4132205728  <        4132205728
+1634400784  <        1634400784
 2300570720  <        2300570720
 3675947880  <        3675947880
 3575809104  <        3575809104

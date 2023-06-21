@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -353,6 +354,8 @@ func DecodeDatum(
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return tree.NewDInt(tree.DInt(i)), nil
+		case oid.T_pg_lsn:
+			return tree.ParseDPGLSN(bs)
 		case oid.T_oid,
 			oid.T_regoper,
 			oid.T_regproc,
@@ -511,6 +514,12 @@ func DecodeDatum(
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.NewDInt(tree.DInt(i)), nil
+		case oid.T_pg_lsn:
+			if len(b) < 8 {
+				return nil, pgerror.Newf(pgcode.Syntax, "lsn requires 8 bytes for binary format")
+			}
+			i := int64(binary.BigEndian.Uint64(b))
+			return tree.NewDPGLSN(lsn.LSN(i)), nil
 		case oid.T_float4:
 			if len(b) < 4 {
 				return nil, pgerror.Newf(pgcode.Syntax, "float4 requires 4 bytes for binary format")

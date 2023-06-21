@@ -295,6 +295,20 @@ func writeInt64(
 	return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
 }
 
+func writePGLSN(
+	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
+	}
+	di, ok := tree.AsDPGLSN(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DPGLSN, found %T", d)
+	}
+	a.int64Batch[0] = int64(di.LSN)
+	return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
+}
+
 func writeBool(
 	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
 ) error {
