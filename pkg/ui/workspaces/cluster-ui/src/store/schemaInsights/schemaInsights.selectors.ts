@@ -16,7 +16,7 @@ const selectSchemaInsightState = createSelector(
   adminUISelector,
   adminUiState => {
     if (!adminUiState.schemaInsights) return null;
-    return adminUiState.schemaInsights;
+    return adminUiState?.schemaInsights;
   },
 );
 
