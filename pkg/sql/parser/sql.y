@@ -8401,6 +8401,11 @@ show_range_for_row_stmt:
 //   DETAILS: add range size, leaseholder and other details
 //   KEYS:    include binary start/end keys
 //   EXPLAIN: show the SQL queries that produces the result
+//
+// Note: the availability of some of the options listed above is subject
+// to cluster configuration. See the documentation for details.
+//
+// %SeeAlso: WEBDOCS/show-ranges.html
 show_ranges_stmt:
   SHOW RANGES FROM INDEX table_index_name opt_show_ranges_options
   {
