@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeEvery } from "redux-saga/effects";
 
 import { actions } from "./tableDetails.reducer";
 import { ErrorWithKey, getTableDetails, TableDetailsReqParams } from "src/api";
@@ -44,7 +44,7 @@ export function* requestTableDetailsSaga(
 
 export function* tableDetailsSaga() {
   yield all([
-    takeLatest(actions.refresh, refreshTableDetailsSaga),
-    takeLatest(actions.request, requestTableDetailsSaga),
+    takeEvery(actions.refresh, refreshTableDetailsSaga),
+    takeEvery(actions.request, requestTableDetailsSaga),
   ]);
 }
