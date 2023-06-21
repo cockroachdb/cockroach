@@ -12,7 +12,6 @@ go_library(
         "editor_bimodal.go",
         "editor_bubbline.go",
         "editor_bufio.go",
-        "editor_editline.go",
         "parser.go",
         "scan_local_cmd.go",
         "sql.go",
@@ -46,7 +45,6 @@ go_library(
         "@com_github_knz_bubbline//computil",
         "@com_github_knz_bubbline//editline",
         "@com_github_knz_bubbline//history",
-        "@com_github_knz_go_libedit//:go-libedit",
     ],
 )
 
