@@ -267,10 +267,10 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 
 			var buf strings.Builder
 			opts := opts // play it safe since we're mutating it below
-			opts.getLatestTag = func() (string, error) {
-				const tag = "v3.3.0"
-				_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
-				return tag, nil
+			opts.getBinaryVersion = func() string {
+				const v = "v3.3.0"
+				_, _ = fmt.Fprintf(&buf, "getBinaryVersion: result %s\n", v)
+				return v
 			}
 
 			l, err := logger.RootLogger("", false)

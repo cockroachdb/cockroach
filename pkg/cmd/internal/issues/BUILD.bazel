@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/internal/issues",
     visibility = ["//pkg/cmd:__subpackages__"],
     deps = [
+        "//pkg/build",
         "//pkg/roachprod/logger",
         "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
