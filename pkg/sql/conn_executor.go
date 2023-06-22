@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -742,7 +743,7 @@ func (s *Server) SetupConn(
 	memMetrics MemoryMetrics,
 	onDefaultIntSizeChange func(newSize int32),
 ) (ConnectionHandler, error) {
-	sd := s.newSessionData(args)
+	sd := s.newSessionData(args, &s.cfg.Settings.SV)
 	sds := sessiondata.NewStack(sd)
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
@@ -887,7 +888,7 @@ func (s *Server) GetLocalIndexStatistics() *idxusage.LocalIndexUsageStats {
 }
 
 // newSessionData a SessionData that can be passed to newConnExecutor.
-func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
+func (s *Server) newSessionData(args SessionArgs, sv *settings.Values) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
 		SessionData: sessiondatapb.SessionData{
 			UserProto: args.User.EncodeProto(),
@@ -896,8 +897,9 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 			RemoteAddr: args.RemoteAddr,
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-			ResultsBufferSize: args.ConnResultsBufferSize,
-			IsSuperuser:       args.IsSuperuser,
+			ResultsBufferSize:        args.ConnResultsBufferSize,
+			IsSuperuser:              args.IsSuperuser,
+			OptimizerFKCascadesLimit: optDrivenFKCascadesClusterLimit.Get(sv),
 		},
 	}
 	if len(args.CustomOptionSessionDefaults) > 0 {

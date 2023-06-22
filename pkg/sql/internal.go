@@ -893,7 +893,7 @@ func (ie *InternalExecutor) execInternal(
 		// internal queries spawned from the same context should never do so.
 		sd.LocalOnlySessionData.EnforceHomeRegion = false
 	} else {
-		sd = ie.s.newSessionData(SessionArgs{})
+		sd = ie.s.newSessionData(SessionArgs{}, &ie.s.cfg.Settings.SV)
 	}
 	applyOverrides(sessionDataOverride, sd)
 	sd.Internal = true
@@ -1134,7 +1134,7 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	if ie.sessionDataStack != nil {
 		sd = ie.sessionDataStack.Top().Clone()
 	} else {
-		sd = ie.s.newSessionData(SessionArgs{})
+		sd = ie.s.newSessionData(SessionArgs{}, &ie.s.cfg.Settings.SV)
 	}
 
 	rw := newAsyncIEResultChannel()
