@@ -109,18 +109,20 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() (err error) 
 	defer func() {
 		err = errors.Wrapf(err, "schema %q (%d)", sdb.original.Name, sdb.original.ID)
 	}()
-	// Set the ModificationTime field before doing anything else.
-	// Other changes may depend on it.
-	mustSetModTime, err := descpb.MustSetModificationTime(
-		sdb.original.ModificationTime, sdb.mvccTimestamp, sdb.original.Version,
-	)
-	if err != nil {
-		return err
-	}
-	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
-	if mustSetModTime {
-		sdb.maybeModified.ModificationTime = sdb.mvccTimestamp
-		sdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+	{
+		orig := sdb.getLatestDesc()
+		// Set the ModificationTime field before doing anything else.
+		// Other changes may depend on it.
+		mustSetModTime, err := descpb.MustSetModificationTime(
+			orig.ModificationTime, sdb.mvccTimestamp, orig.Version,
+		)
+		if err != nil {
+			return err
+		}
+		if mustSetModTime {
+			sdb.getOrInitModifiedDesc().ModificationTime = sdb.mvccTimestamp
+			sdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+		}
 	}
 	return nil
 }

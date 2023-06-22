@@ -127,8 +127,7 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() (err error
 			return err
 		}
 		if mustSetModTime {
-			modifiedDesc := ddb.getOrInitModifiedDesc()
-			modifiedDesc.ModificationTime = ddb.mvccTimestamp
+			ddb.getOrInitModifiedDesc().ModificationTime = ddb.mvccTimestamp
 			ddb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
 		}
 	}

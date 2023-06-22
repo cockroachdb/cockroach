@@ -109,18 +109,20 @@ func (fdb *functionDescriptorBuilder) RunPostDeserializationChanges() (err error
 	defer func() {
 		err = errors.Wrapf(err, "function %q (%d)", fdb.original.Name, fdb.original.ID)
 	}()
-	// Set the ModificationTime field before doing anything else.
-	// Other changes may depend on it.
-	mustSetModTime, err := descpb.MustSetModificationTime(
-		fdb.original.ModificationTime, fdb.mvccTimestamp, fdb.original.Version,
-	)
-	if err != nil {
-		return err
-	}
-	fdb.maybeModified = protoutil.Clone(fdb.original).(*descpb.FunctionDescriptor)
-	if mustSetModTime {
-		fdb.maybeModified.ModificationTime = fdb.mvccTimestamp
-		fdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+	{
+		orig := fdb.getLatestDesc()
+		// Set the ModificationTime field before doing anything else.
+		// Other changes may depend on it.
+		mustSetModTime, err := descpb.MustSetModificationTime(
+			orig.ModificationTime, fdb.mvccTimestamp, orig.Version,
+		)
+		if err != nil {
+			return err
+		}
+		if mustSetModTime {
+			fdb.getOrInitModifiedDesc().ModificationTime = fdb.mvccTimestamp
+			fdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+		}
 	}
 	return nil
 }
