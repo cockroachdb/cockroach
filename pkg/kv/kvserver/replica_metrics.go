@@ -62,7 +62,10 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context, now hlc.ClockTimestamp, livenessMap livenesspb.IsLiveMap, clusterNodes int,
+	ctx context.Context,
+	now hlc.ClockTimestamp,
+	vitalityMap livenesspb.NodeVitalityMap,
+	clusterNodes int,
 ) ReplicaMetrics {
 	r.store.unquiescedReplicas.Lock()
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
@@ -83,7 +86,7 @@ func (r *Replica) Metrics(
 	input := calcReplicaMetricsInput{
 		raftCfg:               &r.store.cfg.RaftConfig,
 		conf:                  r.mu.conf,
-		livenessMap:           livenessMap,
+		vitalityMap:           vitalityMap,
 		clusterNodes:          clusterNodes,
 		desc:                  r.mu.state.Desc,
 		raftStatus:            r.raftSparseStatusRLocked(),
@@ -109,7 +112,7 @@ func (r *Replica) Metrics(
 type calcReplicaMetricsInput struct {
 	raftCfg               *base.RaftConfig
 	conf                  roachpb.SpanConfig
-	livenessMap           livenesspb.IsLiveMap
+	vitalityMap           livenesspb.NodeVitalityMap
 	clusterNodes          int
 	desc                  *roachpb.RangeDescriptor
 	raftStatus            *raftSparseStatus
@@ -138,14 +141,14 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 	}
 
 	rangeCounter, unavailable, underreplicated, overreplicated := calcRangeCounter(
-		d.storeID, d.desc, d.leaseStatus, d.livenessMap, d.conf.GetNumVoters(), d.conf.NumReplicas, d.clusterNodes)
+		d.storeID, d.desc, d.leaseStatus, d.vitalityMap, d.conf.GetNumVoters(), d.conf.NumReplicas, d.clusterNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
 	leader := d.raftStatus != nil && d.raftStatus.RaftState == raft.StateLeader
 	var leaderBehindCount, leaderPausedFollowerCount int64
 	if leader {
-		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.livenessMap)
+		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.vitalityMap)
 		leaderPausedFollowerCount = int64(len(d.paused))
 	}
 
@@ -199,18 +202,18 @@ func calcRangeCounter(
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	leaseStatus kvserverpb.LeaseStatus,
-	livenessMap livenesspb.IsLiveMap,
+	vitalityMap livenesspb.NodeVitalityMap,
 	numVoters, numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
 	// If there is a live leaseholder (regardless of whether the lease is still
 	// valid) that leaseholder is responsible for range-level metrics.
-	if livenessMap[leaseStatus.Lease.Replica.NodeID].IsLive {
+	if vitalityMap[leaseStatus.Lease.Replica.NodeID].IsLive(livenesspb.Metrics) {
 		rangeCounter = leaseStatus.OwnedBy(storeID)
 	} else {
 		// Otherwise, use the first live replica.
 		for _, rd := range desc.Replicas().Descriptors() {
-			if livenessMap[rd.NodeID].IsLive {
+			if vitalityMap[rd.NodeID].IsLive(livenesspb.Metrics) {
 				rangeCounter = rd.StoreID == storeID
 				break
 			}
@@ -223,15 +226,15 @@ func calcRangeCounter(
 		neededVoters := allocatorimpl.GetNeededVoters(numVoters, clusterNodes)
 		neededNonVoters := allocatorimpl.GetNeededNonVoters(int(numVoters), int(numReplicas-numVoters), clusterNodes)
 		status := desc.Replicas().ReplicationStatus(func(rDesc roachpb.ReplicaDescriptor) bool {
-			return livenessMap[rDesc.NodeID].IsLive
+			return vitalityMap[rDesc.NodeID].IsLive(livenesspb.Metrics)
 		},
 			// needed{Voters,NonVoters} - we don't care about the
 			// under/over-replication determinations from the report because
 			// it's too magic. We'll do our own determination below.
 			0, -1)
 		unavailable = !status.Available
-		liveVoters := calcLiveVoterReplicas(desc, livenessMap)
-		liveNonVoters := calcLiveNonVoterReplicas(desc, livenessMap)
+		liveVoters := calcLiveVoterReplicas(desc, vitalityMap)
+		liveNonVoters := calcLiveNonVoterReplicas(desc, vitalityMap)
 		if neededVoters > liveVoters || neededNonVoters > liveNonVoters {
 			underreplicated = true
 		} else if neededVoters < liveVoters || neededNonVoters < liveNonVoters {
@@ -245,20 +248,26 @@ func calcRangeCounter(
 // replica is determined by checking its node in the provided liveness map. This
 // method is used when indicating under-replication so only voter replicas are
 // considered.
-func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap) int {
-	return calcLiveReplicas(desc.Replicas().VoterDescriptors(), livenessMap)
+func calcLiveVoterReplicas(
+	desc *roachpb.RangeDescriptor, vitalityMap livenesspb.NodeVitalityMap,
+) int {
+	return calcLiveReplicas(desc.Replicas().VoterDescriptors(), vitalityMap)
 }
 
 // calcLiveNonVoterReplicas returns a count of the live non-voter replicas; a live
 // replica is determined by checking its node in the provided liveness map.
-func calcLiveNonVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap) int {
-	return calcLiveReplicas(desc.Replicas().NonVoterDescriptors(), livenessMap)
+func calcLiveNonVoterReplicas(
+	desc *roachpb.RangeDescriptor, vitalityMap livenesspb.NodeVitalityMap,
+) int {
+	return calcLiveReplicas(desc.Replicas().NonVoterDescriptors(), vitalityMap)
 }
 
-func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap livenesspb.IsLiveMap) int {
+func calcLiveReplicas(
+	repls []roachpb.ReplicaDescriptor, vitalityMap livenesspb.NodeVitalityMap,
+) int {
 	var live int
 	for _, rd := range repls {
-		if livenessMap[rd.NodeID].IsLive {
+		if vitalityMap[rd.NodeID].IsLive(livenesspb.Metrics) {
 			live++
 		}
 	}
@@ -268,7 +277,9 @@ func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap livenesspb.
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raftSparseStatus, desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap,
+	raftStatus *raftSparseStatus,
+	desc *roachpb.RangeDescriptor,
+	vitalityMap livenesspb.NodeVitalityMap,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas().Descriptors() {

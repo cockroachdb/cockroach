@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -1055,6 +1056,19 @@ func TestReplicaLeaseCounters(t *testing.T) {
 
 	var tc testContext
 	cfg := TestStoreConfig(nil)
+	nlActive, nlRenewal := cfg.NodeLivenessDurations()
+	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
+		AmbientCtx:        log.AmbientContext{},
+		Stopper:           stopper,
+		Settings:          cfg.Settings,
+		Gossip:            cfg.Gossip,
+		Clock:             cfg.Clock,
+		DB:                cfg.DB,
+		LivenessThreshold: nlActive,
+		RenewalDuration:   nlRenewal,
+		Engines:           []storage.Engine{},
+		NodeDialer:        cfg.NodeDialer,
+	})
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	assert := func(actual, min, max int64) error {
@@ -9120,12 +9134,8 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		return d
 	}
-	live := func(ids ...roachpb.NodeID) livenesspb.IsLiveMap {
-		m := livenesspb.IsLiveMap{}
-		for _, id := range ids {
-			m[id] = livenesspb.IsLiveMapEntry{IsLive: true}
-		}
-		return m
+	live := func(ids ...roachpb.NodeID) livenesspb.NodeVitalityInterface {
+		return livenesspb.TestCreateNodeVitality(ids...)
 	}
 
 	ctx := context.Background()
@@ -9140,7 +9150,7 @@ func TestReplicaMetrics(t *testing.T) {
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
 		raftStatus  *raftSparseStatus
-		liveness    livenesspb.IsLiveMap
+		liveness    livenesspb.NodeVitalityInterface
 		raftLogSize int64
 		expected    ReplicaMetrics
 	}{
@@ -9336,7 +9346,7 @@ func TestReplicaMetrics(t *testing.T) {
 			metrics := calcReplicaMetrics(calcReplicaMetricsInput{
 				raftCfg:            &cfg.RaftConfig,
 				conf:               spanConfig,
-				livenessMap:        c.liveness,
+				vitalityMap:        c.liveness.ScanNodeVitalityFromCache(),
 				desc:               &c.desc,
 				raftStatus:         c.raftStatus,
 				storeID:            c.storeID,
