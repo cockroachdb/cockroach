@@ -68,6 +68,8 @@ const (
 	// SourceIndexID is the index ID of the source index for a newly created
 	// index.
 	SourceIndexID
+	// ConfigKey is the key in a zone configuration.
+	ConfigKey
 
 	// TargetStatus is the target status of an element.
 	TargetStatus
@@ -346,12 +348,24 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(IndexID, "IndexID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
 	),
+	rel.EntityMapping(t((*scpb.DatabaseZoneConfig)(nil)),
+		rel.EntityAttr(DescID, "DatabaseID"),
+		rel.EntityAttr(ConfigKey, "Key"),
+	),
 	rel.EntityMapping(t((*scpb.TableZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ConfigKey, "Key"),
 	),
 	rel.EntityMapping(t((*scpb.IndexZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(ConfigKey, "Key"),
+	),
+	rel.EntityMapping(t((*scpb.IndexPartitionZoneConfig)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(Name, "PartitionName"),
+		rel.EntityAttr(ConfigKey, "Key"),
 	),
 	rel.EntityMapping(t((*scpb.DatabaseData)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),

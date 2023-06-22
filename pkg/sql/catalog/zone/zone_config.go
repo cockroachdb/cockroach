@@ -11,9 +11,15 @@
 package zone
 
 import (
+	"bytes"
+	"fmt"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"gopkg.in/yaml.v2"
 )
 
 // ZoneConfigWithRawBytes wraps a zone config together with its expected
@@ -57,4 +63,71 @@ func (zc *ZoneConfigWithRawBytes) Clone() catalog.ZoneConfig {
 	}
 	clone := protoutil.Clone(zc.zc).(*zonepb.ZoneConfig)
 	return NewZoneConfigWithRawBytes(clone, zc.rb)
+}
+
+// VisitFormattedKeyValues applies the visitor function to the SQL-formatted
+// key-value pairs defining the zone config.
+func VisitFormattedKeyValues(zc *zonepb.ZoneConfig, visitor func(k, v string)) error {
+	yaml.FutureLineWrap()
+	constraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
+		Constraints: zc.Constraints,
+		Inherited:   zc.InheritedConstraints})
+	if err != nil {
+		return err
+	}
+	constraints = strings.TrimSpace(constraints)
+	voterConstraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
+		Constraints: zc.VoterConstraints,
+		Inherited:   zc.InheritedVoterConstraints(),
+	})
+	if err != nil {
+		return err
+	}
+	voterConstraints = strings.TrimSpace(voterConstraints)
+	prefs, err := yamlMarshalFlow(zc.LeasePreferences)
+	if err != nil {
+		return err
+	}
+	prefs = strings.TrimSpace(prefs)
+	if zc.RangeMinBytes != nil {
+		visitor("range_min_bytes", fmt.Sprintf("%d", *zc.RangeMinBytes))
+	}
+	if zc.RangeMaxBytes != nil {
+		visitor("range_max_bytes", fmt.Sprintf("%d", *zc.RangeMaxBytes))
+	}
+	if zc.GC != nil {
+		visitor("gc.ttlseconds", fmt.Sprintf("%d", zc.GC.TTLSeconds))
+	}
+	if zc.GlobalReads != nil {
+		visitor("global_reads", fmt.Sprintf("%t", *zc.GlobalReads))
+	}
+	if zc.NumReplicas != nil {
+		visitor("num_replicas", fmt.Sprintf("%d", *zc.NumReplicas))
+	}
+	if zc.NumVoters != nil {
+		visitor("num_voters", fmt.Sprintf("%d", *zc.NumVoters))
+	}
+	if !zc.InheritedConstraints {
+		visitor("constraints", lexbase.EscapeSQLString(constraints))
+	}
+	if !zc.InheritedVoterConstraints() && zc.NumVoters != nil && *zc.NumVoters > 0 {
+		visitor("voter_constraints", lexbase.EscapeSQLString(voterConstraints))
+	}
+	if !zc.InheritedLeasePreferences {
+		visitor("lease_preferences", lexbase.EscapeSQLString(prefs))
+	}
+	return nil
+}
+
+func yamlMarshalFlow(v interface{}) (string, error) {
+	var buf bytes.Buffer
+	e := yaml.NewEncoder(&buf)
+	e.UseStyle(yaml.FlowStyle)
+	if err := e.Encode(v); err != nil {
+		return "", err
+	}
+	if err := e.Close(); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }

@@ -22,6 +22,9 @@ CREATE TABLE table_partitioned_index (
 COMMENT ON TABLE public.table_implicit IS 'implicit partitioning is good';
 COMMENT ON COLUMN public.table_implicit.a IS 'a is good';
 COMMENT ON INDEX public.table_implicit@table_implicit_pkey IS 'pkey is good';
+ALTER TABLE public.table_implicit CONFIGURE ZONE USING gc.ttlseconds=1;
+ALTER INDEX public.table_implicit@table_implicit_pkey CONFIGURE ZONE USING gc.ttlseconds=2;
+ALTER PARTITION pk_implicit OF INDEX public.table_implicit@table_implicit_pkey CONFIGURE ZONE USING gc.ttlseconds=3;
 ----
 
 decompose
@@ -343,6 +346,13 @@ ElementState:
     name: table_implicit_j_idx
     tableId: 104
   Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: gc.ttlseconds
+    partitionName: pk_implicit
+    tableId: 104
+    value: "3"
+  Status: PUBLIC
 - IndexPartitioning:
     indexId: 1
     partitioning:
@@ -376,6 +386,12 @@ ElementState:
       numImplicitColumns: 1
       range: []
     tableId: 104
+  Status: PUBLIC
+- IndexZoneConfig:
+    indexId: 1
+    key: gc.ttlseconds
+    tableId: 104
+    value: "2"
   Status: PUBLIC
 - Namespace:
     databaseId: 100
@@ -433,6 +449,11 @@ ElementState:
 - TableData:
     databaseId: 100
     tableId: 104
+  Status: PUBLIC
+- TableZoneConfig:
+    key: gc.ttlseconds
+    tableId: 104
+    value: "1"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104

@@ -792,6 +792,43 @@ func (c *ElementCollection[E]) FilterDatabaseRoleSetting() *ElementCollection[*D
 	return (*ElementCollection[*DatabaseRoleSetting])(ret)
 }
 
+func (e DatabaseZoneConfig) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_DatabaseZoneConfig) Element() Element {
+	return e.DatabaseZoneConfig
+}
+
+// ForEachDatabaseZoneConfig iterates over elements of type DatabaseZoneConfig.
+// Deprecated
+func ForEachDatabaseZoneConfig(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseZoneConfig),
+) {
+  c.FilterDatabaseZoneConfig().ForEach(fn)
+}
+
+// FindDatabaseZoneConfig finds the first element of type DatabaseZoneConfig.
+// Deprecated
+func FindDatabaseZoneConfig(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DatabaseZoneConfig) {
+	if tc := c.FilterDatabaseZoneConfig(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DatabaseZoneConfig)
+	}
+	return current, target, element
+}
+
+// DatabaseZoneConfigElements filters elements of type DatabaseZoneConfig.
+func (c *ElementCollection[E]) FilterDatabaseZoneConfig() *ElementCollection[*DatabaseZoneConfig] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DatabaseZoneConfig)
+		return ok
+	})
+	return (*ElementCollection[*DatabaseZoneConfig])(ret)
+}
+
 func (e EnumType) element() {}
 
 // Element implements ElementGetter.
@@ -1345,6 +1382,43 @@ func (c *ElementCollection[E]) FilterIndexName() *ElementCollection[*IndexName] 
 		return ok
 	})
 	return (*ElementCollection[*IndexName])(ret)
+}
+
+func (e IndexPartitionZoneConfig) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_IndexPartitionZoneConfig) Element() Element {
+	return e.IndexPartitionZoneConfig
+}
+
+// ForEachIndexPartitionZoneConfig iterates over elements of type IndexPartitionZoneConfig.
+// Deprecated
+func ForEachIndexPartitionZoneConfig(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexPartitionZoneConfig),
+) {
+  c.FilterIndexPartitionZoneConfig().ForEach(fn)
+}
+
+// FindIndexPartitionZoneConfig finds the first element of type IndexPartitionZoneConfig.
+// Deprecated
+func FindIndexPartitionZoneConfig(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *IndexPartitionZoneConfig) {
+	if tc := c.FilterIndexPartitionZoneConfig(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*IndexPartitionZoneConfig)
+	}
+	return current, target, element
+}
+
+// IndexPartitionZoneConfigElements filters elements of type IndexPartitionZoneConfig.
+func (c *ElementCollection[E]) FilterIndexPartitionZoneConfig() *ElementCollection[*IndexPartitionZoneConfig] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*IndexPartitionZoneConfig)
+		return ok
+	})
+	return (*ElementCollection[*IndexPartitionZoneConfig])(ret)
 }
 
 func (e IndexPartitioning) element() {}
@@ -2467,6 +2541,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_DatabaseRegionConfig{ DatabaseRegionConfig: t}
 		case *DatabaseRoleSetting:
 			e.ElementOneOf = &ElementProto_DatabaseRoleSetting{ DatabaseRoleSetting: t}
+		case *DatabaseZoneConfig:
+			e.ElementOneOf = &ElementProto_DatabaseZoneConfig{ DatabaseZoneConfig: t}
 		case *EnumType:
 			e.ElementOneOf = &ElementProto_EnumType{ EnumType: t}
 		case *EnumTypeValue:
@@ -2497,6 +2573,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_IndexData{ IndexData: t}
 		case *IndexName:
 			e.ElementOneOf = &ElementProto_IndexName{ IndexName: t}
+		case *IndexPartitionZoneConfig:
+			e.ElementOneOf = &ElementProto_IndexPartitionZoneConfig{ IndexPartitionZoneConfig: t}
 		case *IndexPartitioning:
 			e.ElementOneOf = &ElementProto_IndexPartitioning{ IndexPartitioning: t}
 		case *IndexZoneConfig:
@@ -2582,6 +2660,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_DatabaseData)(nil)),
 	((*ElementProto_DatabaseRegionConfig)(nil)),
 	((*ElementProto_DatabaseRoleSetting)(nil)),
+	((*ElementProto_DatabaseZoneConfig)(nil)),
 	((*ElementProto_EnumType)(nil)),
 	((*ElementProto_EnumTypeValue)(nil)),
 	((*ElementProto_ForeignKeyConstraint)(nil)),
@@ -2597,6 +2676,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_IndexComment)(nil)),
 	((*ElementProto_IndexData)(nil)),
 	((*ElementProto_IndexName)(nil)),
+	((*ElementProto_IndexPartitionZoneConfig)(nil)),
 	((*ElementProto_IndexPartitioning)(nil)),
 	((*ElementProto_IndexZoneConfig)(nil)),
 	((*ElementProto_Namespace)(nil)),
@@ -2654,6 +2734,7 @@ func GetElementTypes() []interface{} {
 	((*DatabaseData)(nil)),
 	((*DatabaseRegionConfig)(nil)),
 	((*DatabaseRoleSetting)(nil)),
+	((*DatabaseZoneConfig)(nil)),
 	((*EnumType)(nil)),
 	((*EnumTypeValue)(nil)),
 	((*ForeignKeyConstraint)(nil)),
@@ -2669,6 +2750,7 @@ func GetElementTypes() []interface{} {
 	((*IndexComment)(nil)),
 	((*IndexData)(nil)),
 	((*IndexName)(nil)),
+	((*IndexPartitionZoneConfig)(nil)),
 	((*IndexPartitioning)(nil)),
 	((*IndexZoneConfig)(nil)),
 	((*Namespace)(nil)),

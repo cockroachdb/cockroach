@@ -129,6 +129,12 @@ object DatabaseRoleSetting
 DatabaseRoleSetting :  DatabaseID
 DatabaseRoleSetting :  RoleName
 
+object DatabaseZoneConfig
+
+DatabaseZoneConfig :  DatabaseID
+DatabaseZoneConfig :  Key
+DatabaseZoneConfig :  Value
+
 object EnumType
 
 EnumType :  TypeID
@@ -235,6 +241,14 @@ IndexName :  TableID
 IndexName :  IndexID
 IndexName :  Name
 
+object IndexPartitionZoneConfig
+
+IndexPartitionZoneConfig :  TableID
+IndexPartitionZoneConfig :  IndexID
+IndexPartitionZoneConfig :  PartitionName
+IndexPartitionZoneConfig :  Key
+IndexPartitionZoneConfig :  Value
+
 object IndexPartitioning
 
 IndexPartitioning :  TableID
@@ -245,7 +259,8 @@ object IndexZoneConfig
 
 IndexZoneConfig :  TableID
 IndexZoneConfig :  IndexID
-IndexZoneConfig :  PartitionName
+IndexZoneConfig :  Key
+IndexZoneConfig :  Value
 
 object Namespace
 
@@ -357,6 +372,8 @@ TableSchemaLocked :  TableID
 object TableZoneConfig
 
 TableZoneConfig :  TableID
+TableZoneConfig :  Key
+TableZoneConfig :  Value
 
 object TemporaryIndex
 
@@ -419,6 +436,7 @@ Database <|-- DatabaseComment
 Database <|-- DatabaseData
 Database <|-- DatabaseRegionConfig
 Database <|-- DatabaseRoleSetting
+Database <|-- DatabaseZoneConfig
 EnumType <|-- EnumTypeValue
 Table <|-- ForeignKeyConstraint
 Table <|-- ForeignKeyConstraintUnvalidated
@@ -439,9 +457,12 @@ SecondaryIndex <|-- IndexData
 TemporaryIndex <|-- IndexData
 PrimaryIndex <|-- IndexName
 SecondaryIndex <|-- IndexName
+PrimaryIndex <|-- IndexPartitionZoneConfig
+SecondaryIndex <|-- IndexPartitionZoneConfig
 PrimaryIndex <|-- IndexPartitioning
 SecondaryIndex <|-- IndexPartitioning
-Index <|-- IndexZoneConfig
+PrimaryIndex <|-- IndexZoneConfig
+SecondaryIndex <|-- IndexZoneConfig
 Table <|-- Namespace
 View <|-- Namespace
 Sequence <|-- Namespace

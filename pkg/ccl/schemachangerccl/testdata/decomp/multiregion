@@ -38,6 +38,31 @@ ElementState:
     databaseId: 104
     roleName: __placeholder_role_name__
   Status: PUBLIC
+- DatabaseZoneConfig:
+    databaseId: 104
+    key: constraints
+    value: '''{+region=us-east1: 1, +region=us-east2: 1, +region=us-east3: 1}'''
+  Status: PUBLIC
+- DatabaseZoneConfig:
+    databaseId: 104
+    key: lease_preferences
+    value: '''[[+region=us-east1]]'''
+  Status: PUBLIC
+- DatabaseZoneConfig:
+    databaseId: 104
+    key: num_replicas
+    value: "5"
+  Status: PUBLIC
+- DatabaseZoneConfig:
+    databaseId: 104
+    key: num_voters
+    value: "5"
+  Status: PUBLIC
+- DatabaseZoneConfig:
+    databaseId: 104
+    key: voter_constraints
+    value: '''{+region=us-east1: 2}'''
+  Status: PUBLIC
 - Namespace:
     databaseId: 0
     descriptorId: 104
@@ -329,7 +354,9 @@ ElementState:
     tableId: 110
   Status: PUBLIC
 - TableZoneConfig:
+    key: global_reads
     tableId: 110
+    value: "true"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
@@ -608,7 +635,19 @@ ElementState:
     tableId: 109
   Status: PUBLIC
 - TableZoneConfig:
+    key: lease_preferences
     tableId: 109
+    value: '''[[+region=us-east2]]'''
+  Status: PUBLIC
+- TableZoneConfig:
+    key: num_voters
+    tableId: 109
+    value: "5"
+  Status: PUBLIC
+- TableZoneConfig:
+    key: voter_constraints
+    tableId: 109
+    value: '''{+region=us-east2: 2}'''
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
@@ -917,6 +956,69 @@ ElementState:
     name: table_regional_by_row_pkey
     tableId: 108
   Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: lease_preferences
+    partitionName: us-east1
+    tableId: 108
+    value: '''[[+region=us-east1]]'''
+  Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: lease_preferences
+    partitionName: us-east2
+    tableId: 108
+    value: '''[[+region=us-east2]]'''
+  Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: lease_preferences
+    partitionName: us-east3
+    tableId: 108
+    value: '''[[+region=us-east3]]'''
+  Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: num_voters
+    partitionName: us-east1
+    tableId: 108
+    value: "5"
+  Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: num_voters
+    partitionName: us-east2
+    tableId: 108
+    value: "5"
+  Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: num_voters
+    partitionName: us-east3
+    tableId: 108
+    value: "5"
+  Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: voter_constraints
+    partitionName: us-east1
+    tableId: 108
+    value: '''{+region=us-east1: 2}'''
+  Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: voter_constraints
+    partitionName: us-east2
+    tableId: 108
+    value: '''{+region=us-east2: 2}'''
+  Status: PUBLIC
+- IndexPartitionZoneConfig:
+    indexId: 1
+    key: voter_constraints
+    partitionName: us-east3
+    tableId: 108
+    value: '''{+region=us-east3: 2}'''
+  Status: PUBLIC
 - IndexPartitioning:
     indexId: 1
     partitioning:
@@ -948,21 +1050,6 @@ ElementState:
       numColumns: 1
       numImplicitColumns: 1
       range: []
-    tableId: 108
-  Status: PUBLIC
-- IndexZoneConfig:
-    indexId: 1
-    partitionName: us-east1
-    tableId: 108
-  Status: PUBLIC
-- IndexZoneConfig:
-    indexId: 1
-    partitionName: us-east2
-    tableId: 108
-  Status: PUBLIC
-- IndexZoneConfig:
-    indexId: 1
-    partitionName: us-east3
     tableId: 108
   Status: PUBLIC
 - Namespace:
@@ -1014,7 +1101,9 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - TableZoneConfig:
+    key: num_replicas
     tableId: 108
+    value: "0"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108

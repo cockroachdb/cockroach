@@ -727,7 +727,9 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - TableZoneConfig:
+    key: gc.ttlseconds
     tableId: 105
+    value: "10"
   Status: PUBLIC
 - UniqueWithoutIndexConstraint:
     columnIds:

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -144,6 +145,20 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 			DatabaseID: db.GetID(),
 			Comment:    comment,
 		})
+	}
+	if zc, err := w.zoneConfigReader.GetZoneConfig(w.ctx, db.GetID()); err != nil {
+		panic(err)
+	} else if zc != nil {
+		err = zone.VisitFormattedKeyValues(zc.ZoneConfigProto(), func(k, v string) {
+			w.ev(scpb.Status_PUBLIC, &scpb.DatabaseZoneConfig{
+				DatabaseID: db.GetID(),
+				Key:        k,
+				Value:      v,
+			})
+		})
+		if err != nil {
+			panic(err)
+		}
 	}
 	if db.IsMultiRegion() {
 		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseRegionConfig{
@@ -351,22 +366,41 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	// operations on tables. To minimize RTT impact limit
 	// this to only tables and materialized views.
 	if (tbl.IsTable() && !tbl.IsVirtualTable()) || tbl.MaterializedView() {
-		zoneCfg, err := w.zoneConfigReader.GetZoneConfig(w.ctx, tbl.GetID())
-		if err != nil {
+		if zc, err := w.zoneConfigReader.GetZoneConfig(w.ctx, tbl.GetID()); err != nil {
 			panic(err)
-		}
-		if zoneCfg != nil {
-			w.ev(scpb.Status_PUBLIC,
-				&scpb.TableZoneConfig{
+		} else if zc != nil {
+			err = zone.VisitFormattedKeyValues(zc.ZoneConfigProto(), func(k, v string) {
+				w.ev(scpb.Status_PUBLIC, &scpb.TableZoneConfig{
 					TableID: tbl.GetID(),
+					Key:     k,
+					Value:   v,
 				})
-			for _, subZoneCfg := range zoneCfg.ZoneConfigProto().Subzones {
-				w.ev(scpb.Status_PUBLIC,
-					&scpb.IndexZoneConfig{
-						TableID:       tbl.GetID(),
-						IndexID:       catid.IndexID(subZoneCfg.IndexID),
-						PartitionName: subZoneCfg.PartitionName,
-					})
+			})
+			if err != nil {
+				panic(err)
+			}
+			for _, szc := range zc.ZoneConfigProto().Subzones {
+				err = zone.VisitFormattedKeyValues(&szc.Config, func(k, v string) {
+					if szc.PartitionName == "" {
+						w.ev(scpb.Status_PUBLIC, &scpb.IndexZoneConfig{
+							TableID: tbl.GetID(),
+							IndexID: catid.IndexID(szc.IndexID),
+							Key:     k,
+							Value:   v,
+						})
+					} else {
+						w.ev(scpb.Status_PUBLIC, &scpb.IndexPartitionZoneConfig{
+							TableID:       tbl.GetID(),
+							IndexID:       catid.IndexID(szc.IndexID),
+							PartitionName: szc.PartitionName,
+							Key:           k,
+							Value:         v,
+						})
+					}
+				})
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 	}

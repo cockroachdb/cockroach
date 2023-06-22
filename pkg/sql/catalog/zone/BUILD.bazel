@@ -8,6 +8,8 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/sql/catalog",
+        "//pkg/sql/lexbase",
         "//pkg/util/protoutil",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

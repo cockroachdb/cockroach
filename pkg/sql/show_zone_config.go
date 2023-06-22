@@ -11,15 +11,13 @@
 package sql
 
 import (
-	"bytes"
 	"context"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	catzone "github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -169,74 +167,20 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 	// characters interspersed every 80 characters. FutureLineWrap ensures that
 	// the whole field shows up as a single line.
 	yaml.FutureLineWrap()
-	constraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
-		Constraints: zone.Constraints,
-		Inherited:   zone.InheritedConstraints})
-	if err != nil {
-		return "", err
-	}
-	constraints = strings.TrimSpace(constraints)
-	voterConstraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
-		Constraints: zone.VoterConstraints,
-		Inherited:   zone.InheritedVoterConstraints(),
-	})
-	if err != nil {
-		return "", err
-	}
-	voterConstraints = strings.TrimSpace(voterConstraints)
-	prefs, err := yamlMarshalFlow(zone.LeasePreferences)
-	if err != nil {
-		return "", err
-	}
-	prefs = strings.TrimSpace(prefs)
-
-	useComma := false
-	maybeWriteComma := func(f *tree.FmtCtx) {
-		if useComma {
-			f.Printf(",\n")
-		}
-		useComma = true
-	}
-
 	f := tree.NewFmtCtx(tree.FmtParsable)
 	f.WriteString("ALTER ")
 	f.FormatNode(zs)
 	f.WriteString(" CONFIGURE ZONE USING\n")
-	if zone.RangeMinBytes != nil {
-		maybeWriteComma(f)
-		f.Printf("\trange_min_bytes = %d", *zone.RangeMinBytes)
-	}
-	if zone.RangeMaxBytes != nil {
-		maybeWriteComma(f)
-		f.Printf("\trange_max_bytes = %d", *zone.RangeMaxBytes)
-	}
-	if zone.GC != nil {
-		maybeWriteComma(f)
-		f.Printf("\tgc.ttlseconds = %d", zone.GC.TTLSeconds)
-	}
-	if zone.GlobalReads != nil {
-		maybeWriteComma(f)
-		f.Printf("\tglobal_reads = %t", *zone.GlobalReads)
-	}
-	if zone.NumReplicas != nil {
-		maybeWriteComma(f)
-		f.Printf("\tnum_replicas = %d", *zone.NumReplicas)
-	}
-	if zone.NumVoters != nil {
-		maybeWriteComma(f)
-		f.Printf("\tnum_voters = %d", *zone.NumVoters)
-	}
-	if !zone.InheritedConstraints {
-		maybeWriteComma(f)
-		f.Printf("\tconstraints = %s", lexbase.EscapeSQLString(constraints))
-	}
-	if !zone.InheritedVoterConstraints() && zone.NumVoters != nil && *zone.NumVoters > 0 {
-		maybeWriteComma(f)
-		f.Printf("\tvoter_constraints = %s", lexbase.EscapeSQLString(voterConstraints))
-	}
-	if !zone.InheritedLeasePreferences {
-		maybeWriteComma(f)
-		f.Printf("\tlease_preferences = %s", lexbase.EscapeSQLString(prefs))
+	useComma := false
+	err := catzone.VisitFormattedKeyValues(zone, func(k, v string) {
+		if useComma {
+			f.Printf(",\n")
+		}
+		useComma = true
+		f.Printf("\t%s = %s", k, v)
+	})
+	if err != nil {
+		return "", err
 	}
 	return f.String(), nil
 }
@@ -339,19 +283,6 @@ func generateZoneConfigIntrospectionValues(
 		values[fullConfigSQLCol] = tree.NewDString(sqlStr)
 	}
 	return nil
-}
-
-func yamlMarshalFlow(v interface{}) (string, error) {
-	var buf bytes.Buffer
-	e := yaml.NewEncoder(&buf)
-	e.UseStyle(yaml.FlowStyle)
-	if err := e.Encode(v); err != nil {
-		return "", err
-	}
-	if err := e.Close(); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 // ascendZoneSpecifier logically ascends the zone hierarchy for the zone

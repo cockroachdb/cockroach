@@ -804,6 +804,10 @@ func fallBackIfSubZoneConfigExists(b BuildCtx, n tree.NodeFormatter, id catid.De
 			panic(scerrors.NotImplementedErrorf(n,
 				"sub zone configs are not supported"))
 		}
+		if _, _, elem := scpb.FindIndexPartitionZoneConfig(tableElts); elem != nil {
+			panic(scerrors.NotImplementedErrorf(n,
+				"sub zone configs are not supported"))
+		}
 	}
 }
 
