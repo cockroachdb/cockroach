@@ -917,7 +917,7 @@ func (s *systemStatusServer) AllocatorRange(
 		return nil, err
 	}
 
-	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	isLiveMap := s.nodeLiveness.ScanNodeVitalityFromCache()
 	type nodeResponse struct {
 		nodeID roachpb.NodeID
 		resp   *serverpb.AllocatorResponse
@@ -2289,7 +2289,7 @@ func (s *systemStatusServer) rangesHelper(
 		}
 	}
 
-	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	isLiveMap := s.nodeLiveness.ScanNodeVitalityFromCache()
 	clusterNodes := s.storePool.ClusterNodeCount()
 
 	// There are two possibilities for ordering of ranges in the results:

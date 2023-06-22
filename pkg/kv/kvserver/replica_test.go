@@ -9113,12 +9113,8 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		return d
 	}
-	live := func(ids ...roachpb.NodeID) livenesspb.IsLiveMap {
-		m := livenesspb.IsLiveMap{}
-		for _, id := range ids {
-			m[id] = livenesspb.IsLiveMapEntry{IsLive: true}
-		}
-		return m
+	live := func(ids ...roachpb.NodeID) livenesspb.NodeVitalityInterface {
+		return livenesspb.TestCreateNodeVitality(ids...)
 	}
 
 	ctx := context.Background()
@@ -9133,7 +9129,7 @@ func TestReplicaMetrics(t *testing.T) {
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
 		raftStatus  *raftSparseStatus
-		liveness    livenesspb.IsLiveMap
+		liveness    livenesspb.NodeVitalityInterface
 		raftLogSize int64
 		expected    ReplicaMetrics
 	}{
@@ -9329,7 +9325,7 @@ func TestReplicaMetrics(t *testing.T) {
 			metrics := calcReplicaMetrics(calcReplicaMetricsInput{
 				raftCfg:            &cfg.RaftConfig,
 				conf:               spanConfig,
-				livenessMap:        c.liveness,
+				livenessMap:        c.liveness.ScanNodeVitalityFromCache(),
 				desc:               &c.desc,
 				raftStatus:         c.raftStatus,
 				storeID:            c.storeID,

@@ -3444,7 +3444,7 @@ func (s *systemAdminServer) RecoveryVerify(
 		return nil, err
 	}
 
-	return s.server.recoveryServer.Verify(ctx, request, s.nodeLiveness.GetIsLiveMap(), s.db)
+	return s.server.recoveryServer.Verify(ctx, request, s.nodeLiveness, s.db)
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
