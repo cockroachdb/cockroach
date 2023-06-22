@@ -482,6 +482,18 @@ func (u *sqlSymUnion) tblExprs() tree.TableExprs {
 func (u *sqlSymUnion) from() tree.From {
     return u.val.(tree.From)
 }
+func (u *sqlSymUnion) batch() *tree.Batch {
+    if batch, ok := u.val.(*tree.Batch); ok {
+        return batch
+    }
+    return nil
+}
+func (u *sqlSymUnion) batchParam() tree.BatchParam {
+    return u.val.(tree.BatchParam)
+}
+func (u *sqlSymUnion) batchParams() []tree.BatchParam {
+    return u.val.([]tree.BatchParam)
+}
 func (u *sqlSymUnion) superRegion() tree.SuperRegion {
     return u.val.(tree.SuperRegion)
 }
@@ -893,7 +905,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AS_JSON AT_AT
 %token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
-%token <str> BACKUP BACKUPS BACKWARD BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
+%token <str> BACKUP BACKUPS BACKWARD BATCH BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
@@ -978,7 +990,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
 %token <str> SEARCH SECOND SECONDARY SECURITY SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SERVICE SESSION SESSIONS SESSION_USER SET SETOF SETS SETTING SETTINGS
-%token <str> SHARE SHARED SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
+%token <str> SHARE SHARED SHOW SIMILAR SIMPLE SIZE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SKIP_MISSING_UDFS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
 %token <str> STABLE START STATE STATISTICS STATUS STDIN STDOUT STOP STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
@@ -1436,6 +1448,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.IndexElemList> index_params create_as_params
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
+%type <*tree.Batch> opt_batch_clause
 %type <tree.From> from_clause
 %type <tree.TableExprs> from_list rowsfrom_list opt_from_list
 %type <tree.TablePatterns> table_pattern_list
@@ -1456,6 +1469,9 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.ReturningClause> returning_clause
 %type <tree.TableExprs> opt_using_clause
 %type <tree.RefreshDataOption> opt_clear_data
+
+%type <tree.BatchParam> batch_param
+%type <[]tree.BatchParam> batch_param_list
 
 %type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
 %type <tree.SequenceOption> sequence_option_elem
@@ -5261,26 +5277,61 @@ changefeed_sink:
   }
 // %Help: DELETE - delete rows from a table
 // %Category: DML
-// %Text: DELETE FROM <tablename> [WHERE <expr>]
-//               [ORDER BY <exprs...>]
-//               [USING <exprs...>]
-//               [LIMIT <expr>]
-//               [RETURNING <exprs...>]
+// %Text:
+// DELETE
+//    [BATCH [SIZE <expr>]]
+//    FROM <tablename>
+//    [WHERE <expr>]
+//    [ORDER BY <exprs...>]
+//    [USING <exprs...>]
+//    [LIMIT <expr>]
+//    [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
-  opt_with_clause DELETE FROM table_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+  opt_with_clause DELETE opt_batch_clause FROM table_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Delete{
       With: $1.with(),
-      Table: $4.tblExpr(),
-      Using: $5.tblExprs(),
-      Where: tree.NewWhere(tree.AstWhere, $6.expr()),
-      OrderBy: $7.orderBy(),
-      Limit: $8.limit(),
-      Returning: $9.retClause(),
+      Batch: $3.batch(),
+      Table: $5.tblExpr(),
+      Using: $6.tblExprs(),
+      Where: tree.NewWhere(tree.AstWhere, $7.expr()),
+      OrderBy: $8.orderBy(),
+      Limit: $9.limit(),
+      Returning: $10.retClause(),
     }
   }
 | opt_with_clause DELETE error // SHOW HELP: DELETE
+
+opt_batch_clause:
+  BATCH
+  {
+    $$.val = &tree.Batch{}
+  }
+| BATCH '(' batch_param_list ')'
+  {
+    $$.val = &tree.Batch{Params: $3.batchParams()}
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.Batch)(nil)
+  }
+
+batch_param_list:
+  batch_param
+  {
+    $$.val = []tree.BatchParam{$1.batchParam()}
+  }
+| batch_param_list ',' batch_param
+  {
+    $$.val = append($1.batchParams(), $3.batchParam())
+  }
+
+batch_param:
+  SIZE a_expr
+  {
+    $$.val = &tree.SizeBatchParam{Size: $2.expr()}
+  }
 
 opt_using_clause:
   USING from_list
@@ -16353,6 +16404,7 @@ unreserved_keyword:
 | BACKUP
 | BACKUPS
 | BACKWARD
+| BATCH
 | BEFORE
 | BEGIN
 | BINARY
@@ -16694,6 +16746,7 @@ unreserved_keyword:
 | SHARED
 | SHOW
 | SIMPLE
+| SIZE
 | SKIP
 | SKIP_LOCALITIES_CHECK
 | SKIP_MISSING_FOREIGN_KEYS
@@ -16817,6 +16870,7 @@ bare_label_keywords:
 | BACKUP
 | BACKUPS
 | BACKWARD
+| BATCH
 | BEFORE
 | BEGIN
 | BETWEEN
@@ -17243,6 +17297,7 @@ bare_label_keywords:
 | SHOW
 | SIMILAR
 | SIMPLE
+| SIZE
 | SKIP
 | SKIP_LOCALITIES_CHECK
 | SKIP_MISSING_FOREIGN_KEYS
