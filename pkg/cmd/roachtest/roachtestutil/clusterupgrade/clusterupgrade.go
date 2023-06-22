@@ -117,7 +117,10 @@ func UploadVersion(
 func InstallFixtures(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodes option.NodeListOption, v string,
 ) error {
-	c.Run(ctx, nodes, "mkdir -p {store-dir}")
+	if err := c.RunE(ctx, nodes, "mkdir -p {store-dir}"); err != nil {
+		return fmt.Errorf("creating store-dir: %w", err)
+	}
+
 	vv := version.MustParse("v" + v)
 	// The fixtures use cluster version (major.minor) but the input might be
 	// a patch release.
@@ -133,7 +136,10 @@ func InstallFixtures(
 		}
 	}
 	// Extract fixture. Fail if there's already an LSM in the store dir.
-	c.Run(ctx, nodes, "ls {store-dir}/marker.* 1> /dev/null 2>&1 && exit 1 || (cd {store-dir} && tar -xf fixture.tgz)")
+	if err := c.RunE(ctx, nodes, "ls {store-dir}/marker.* 1> /dev/null 2>&1 && exit 1 || (cd {store-dir} && tar -xf fixture.tgz)"); err != nil {
+		return fmt.Errorf("extracting fixtures: %w", err)
+	}
+
 	return nil
 }
 
