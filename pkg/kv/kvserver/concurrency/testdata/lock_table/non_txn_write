@@ -248,7 +248,7 @@ num=2
    queued writers:
     active: false req: 6, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0
    queued writers:
     active: false req: 4, txn: none
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000003
