@@ -295,7 +295,7 @@ func TestBudgetLimits(t *testing.T) {
 			require.Equal(t, provisionalSize, size)
 			return adjustedSize
 		},
-		totalRangeReedBudget:    100000,
+		totalRangeFeedBudget:    100000,
 		histogramWindowInterval: time.Second * 5,
 		settings:                &s.SV,
 	})
@@ -311,7 +311,7 @@ func TestBudgetLimits(t *testing.T) {
 		adjustLimit: func(int64) int64 {
 			return 0
 		},
-		totalRangeReedBudget:    100000,
+		totalRangeFeedBudget:    100000,
 		histogramWindowInterval: time.Second * 5,
 		settings:                &s.SV,
 	})
