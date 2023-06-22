@@ -136,14 +136,14 @@ filegroup(
 def cdep_alias(lib):
     actual = {
         "//build/toolchains:force_build_cdeps": ":{}_foreign".format(lib),
-        "@io_bazel_rules_go//go/platform:linux_amd64": ":archived_cdep_{}_linux".format(lib),
-        "@io_bazel_rules_go//go/platform:linux_arm64": ":archived_cdep_{}_linuxarm".format(lib),
+        "//build/toolchains:is_linux_amd64_no_force_build_cdeps": ":archived_cdep_{}_linux".format(lib),
+        "//build/toolchains:is_linux_arm64_no_force_build_cdeps": ":archived_cdep_{}_linuxarm".format(lib),
         "//conditions:default": ":{}_foreign".format(lib),
     }
     if lib != "libkrb5":
-        actual["@io_bazel_rules_go//go/platform:darwin_amd64"] = ":archived_cdep_{}_macos".format(lib)
-        actual["@io_bazel_rules_go//go/platform:darwin_arm64"] = ":archived_cdep_{}_macosarm".format(lib)
-        actual["@io_bazel_rules_go//go/platform:windows"] = ":archived_cdep_{}_windows".format(lib)
+        actual["//build/toolchains:is_darwin_amd64_no_force_build_cdeps"] = ":archived_cdep_{}_macos".format(lib)
+        actual["//build/toolchains:is_darwin_arm64_no_force_build_cdeps"] = ":archived_cdep_{}_macosarm".format(lib)
+        actual["//build/toolchains:is_windows_amd64_no_force_build_cdeps"] = ":archived_cdep_{}_windows".format(lib)
     native.alias(
         name = lib,
         actual = select(actual),
