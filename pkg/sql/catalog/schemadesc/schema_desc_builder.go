@@ -13,9 +13,7 @@ package schemadesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -102,17 +100,6 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() (err error) 
 	if mustSetModTime {
 		sdb.maybeModified.ModificationTime = sdb.mvccTimestamp
 		sdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
-	}
-	if privsChanged, err := catprivilege.MaybeFixPrivileges(
-		&sdb.maybeModified.Privileges,
-		sdb.maybeModified.GetParentID(),
-		descpb.InvalidID,
-		privilege.Schema,
-		sdb.maybeModified.GetName(),
-	); err != nil {
-		return err
-	} else if privsChanged {
-		sdb.changes.Add(catalog.UpgradedPrivileges)
 	}
 	return nil
 }

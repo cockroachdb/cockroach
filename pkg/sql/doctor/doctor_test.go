@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
@@ -71,63 +70,10 @@ var validTableDesc = &descpb.Descriptor{
 }
 
 func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
-	table, database, typ, schema, function := descpb.GetDescriptors(desc)
+	table, _, _, _, _ := descpb.GetDescriptors(desc)
 	if table != nil {
-		parentSchemaID := table.GetUnexposedParentSchemaID()
-		if parentSchemaID == descpb.InvalidID {
-			parentSchemaID = keys.PublicSchemaID
-		}
-		if _, err := catprivilege.MaybeFixPrivileges(
-			&table.Privileges,
-			table.GetParentID(),
-			parentSchemaID,
-			privilege.Table,
-			table.GetName(),
-		); err != nil {
-			panic(err)
-		}
 		if table.FormatVersion == 0 {
 			table.FormatVersion = descpb.InterleavedFormatVersion
-		}
-	} else if database != nil {
-		if _, err := catprivilege.MaybeFixPrivileges(
-			&database.Privileges,
-			descpb.InvalidID,
-			descpb.InvalidID,
-			privilege.Database,
-			database.GetName(),
-		); err != nil {
-			panic(err)
-		}
-	} else if typ != nil {
-		if _, err := catprivilege.MaybeFixPrivileges(
-			&typ.Privileges,
-			typ.GetParentID(),
-			typ.GetParentSchemaID(),
-			privilege.Type,
-			typ.GetName(),
-		); err != nil {
-			panic(err)
-		}
-	} else if schema != nil {
-		if _, err := catprivilege.MaybeFixPrivileges(
-			&schema.Privileges,
-			schema.GetParentID(),
-			descpb.InvalidID,
-			privilege.Schema,
-			schema.GetName(),
-		); err != nil {
-			panic(err)
-		}
-	} else if function != nil {
-		if _, err := catprivilege.MaybeFixPrivileges(
-			&function.Privileges,
-			function.GetParentID(),
-			descpb.InvalidID,
-			privilege.Function,
-			function.GetName(),
-		); err != nil {
-			panic(err)
 		}
 	}
 	res, err := protoutil.Marshal(desc)

@@ -14,11 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -280,31 +278,6 @@ func maybeFillInDescriptor(
 		}
 	}
 
-	parentSchemaID := desc.GetUnexposedParentSchemaID()
-	// TODO(richardjcai): Remove this case in 22.2.
-	if parentSchemaID == descpb.InvalidID {
-		parentSchemaID = keys.PublicSchemaID
-	}
-
-	var objectType privilege.ObjectType
-
-	if desc.IsSequence() {
-		objectType = privilege.Sequence
-	} else {
-		objectType = privilege.Table
-	}
-
-	fixedPrivileges, err := catprivilege.MaybeFixPrivileges(
-		&desc.Privileges,
-		desc.GetParentID(),
-		parentSchemaID,
-		objectType,
-		desc.GetName(),
-	)
-	if err != nil {
-		return catalog.PostDeserializationChanges{}, err
-	}
-	set(catalog.UpgradedPrivileges, fixedPrivileges)
 	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
 	return changes, nil
 }
