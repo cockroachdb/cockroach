@@ -206,7 +206,7 @@ func activityTablesHaveFullData(
 	// Used to verify the table contained data.
 	zeroDate := time.Time{}
 
-	queryWithPlaceholders := `
+	const queryWithPlaceholders = `
 SELECT 
     COALESCE(min(aggregated_ts), '%s')
 FROM crdb_internal.statement_activity 
@@ -275,26 +275,20 @@ func getTotalRuntimeSecs(
 
 	whereClause := buffer.String()
 
-	queryWithPlaceholders := `
-SELECT
-COALESCE(
-  sum(
-    (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
-    (statistics -> 'statistics' ->> 'cnt')::FLOAT
-  )
-, 0)
-FROM %s 
-%s
-`
-
 	getRuntime := func(table string) (float32, error) {
 		it, err := ie.QueryIteratorEx(
 			ctx,
 			fmt.Sprintf(`%s-total-runtime`, table),
 			nil,
 			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(queryWithPlaceholders, table, whereClause),
-			args...)
+			fmt.Sprintf(`
+SELECT COALESCE(
+          sum(
+             (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
+             (statistics -> 'statistics' ->> 'cnt')::FLOAT
+          ),
+       0)
+FROM %s %s`, table, whereClause), args...)
 
 		if err != nil {
 			return 0, err
@@ -573,20 +567,18 @@ func collectCombinedStatements(
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 	aostClause := testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 6
-	queryFormat := `
-SELECT * FROM (
-SELECT
-    fingerprint_id,
-    array_agg(distinct transaction_fingerprint_id),
-    app_name,
-    max(aggregated_ts) as aggregated_ts,
-    crdb_internal.merge_stats_metadata(array_agg(metadata)) as metadata,
-    crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-FROM %s %s
-GROUP BY
-    fingerprint_id,
-    app_name
-) %s
+	const queryFormat = `
+SELECT *
+FROM (SELECT fingerprint_id,
+             array_agg(distinct transaction_fingerprint_id),
+             app_name,
+             max(aggregated_ts)                                         AS aggregated_ts,
+             crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
+             crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+      FROM %s %s
+      GROUP BY
+          fingerprint_id,
+          app_name) %s
 %s`
 
 	var it isql.Rows
@@ -755,19 +747,17 @@ func collectCombinedTransactions(
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
 	aostClause := testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 5
-	queryFormat := `
-SELECT * FROM (
-SELECT
-    app_name,
-    max(aggregated_ts) as aggregated_ts,
-    fingerprint_id,
-    max(metadata),
-    crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
-FROM %s %s
-GROUP BY
-    app_name,
-    fingerprint_id
-) %s
+	const queryFormat = `
+SELECT *
+FROM (SELECT app_name,
+             max(aggregated_ts)                                           AS aggregated_ts,
+             fingerprint_id,
+             max(metadata),
+             crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics
+      FROM %s %s
+      GROUP BY
+          app_name,
+          fingerprint_id) %s
 %s`
 
 	var it isql.Rows
@@ -894,13 +884,12 @@ func collectStmtsForTxns(
 
 	whereClause, args := buildWhereClauseForStmtsByTxn(req, transactions, testingKnobs)
 
-	queryFormat := `
-SELECT
-    fingerprint_id,
-    transaction_fingerprint_id,
-    crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-    crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-    app_name
+	const queryFormat = `
+SELECT fingerprint_id,
+       transaction_fingerprint_id,
+       crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+       app_name
 FROM %s %s
 GROUP BY
     fingerprint_id,
@@ -1209,15 +1198,16 @@ func getTotalStatementDetails(
 ) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
 	const expectedNumDatums = 4
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
-	queryFormat := `SELECT
-				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				array_agg(app_name) as app_names,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				encode(fingerprint_id, 'hex') as fingerprint_id
-		FROM %s %s
-		GROUP BY
-				fingerprint_id
-		LIMIT 1`
+	const queryFormat = `
+SELECT crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
+       array_agg(app_name)                                        AS app_names,
+       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+       encode(fingerprint_id, 'hex')                              AS fingerprint_id
+FROM %s %s
+GROUP BY
+    fingerprint_id
+LIMIT 1`
+
 	var row tree.Datums
 	var err error
 	var query string
@@ -1307,15 +1297,15 @@ func getStatementDetailsPerAggregatedTs(
 	tableSuffix string,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByAggregatedTs, error) {
 	const expectedNumDatums = 3
-	queryFormat := `SELECT
-				aggregated_ts,
-				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-		FROM %s %s
-		GROUP BY
-				aggregated_ts
-		ORDER BY aggregated_ts ASC
-		LIMIT $%d`
+	const queryFormat = `
+SELECT aggregated_ts,
+       crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+FROM %s %s
+GROUP BY
+    aggregated_ts
+ORDER BY aggregated_ts ASC
+LIMIT $%d`
 	var it isql.Rows
 	var err error
 	var query string
@@ -1416,7 +1406,7 @@ func getExplainPlanFromGist(ctx context.Context, ie *sql.InternalExecutor, planG
 	planError := "Error collecting Explain Plan."
 	var args []interface{}
 
-	query := `SELECT crdb_internal.decode_plan_gist($1)`
+	const query = `SELECT crdb_internal.decode_plan_gist($1)`
 	args = append(args, planGist)
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-get-explain-plan", nil,
@@ -1461,9 +1451,11 @@ func getIdxAndTableName(ctx context.Context, ie *sql.InternalExecutor, indexInfo
 	args = append(args, tableID)
 	args = append(args, indexID)
 
-	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-get-index-and-table-names", nil,
-		sessiondata.NodeUserSessionDataOverride, `SELECT descriptor_name, index_name FROM crdb_internal.table_indexes 
-    WHERE descriptor_id =$1 AND index_id=$2`, args...)
+	row, err := ie.QueryRowEx(ctx,
+		"combined-stmts-details-get-index-and-table-names", nil,
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT descriptor_name, index_name FROM crdb_internal.table_indexes WHERE descriptor_id = $1 AND index_id = $2`,
+		args...)
 	if err != nil {
 		return indexInfo
 	}
@@ -1489,18 +1481,18 @@ func getStatementDetailsPerPlanHash(
 	tableSuffix string,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash, error) {
 	expectedNumDatums := 5
-	queryFormat := `SELECT
-				plan_hash,
-				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
-				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				index_recommendations
-		FROM %s %s
-		GROUP BY
-				plan_hash,
-				plan_gist,
-				index_recommendations
-		LIMIT $%d`
+	const queryFormat = `
+SELECT plan_hash,
+       (statistics - > 'statistics' - > 'planGists' ->>0)         AS plan_gist,
+       crdb_internal.merge_stats_metadata(array_agg(metadata))    AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+       index_recommendations
+FROM %s %s
+GROUP BY
+    plan_hash,
+    plan_gist,
+    index_recommendations
+LIMIT $%d`
 	args = append(args, limit)
 	var it isql.Rows
 	var err error
