@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -671,6 +672,10 @@ func generateNewProgress(
 ) (jobspb.Progress, hlc.Timestamp, error) {
 	prevHighWater := prevProgress.GetHighWater()
 	changefeedProgress := prevProgress.GetChangefeed()
+	ptsRecord := uuid.UUID{}
+	if changefeedProgress != nil {
+		ptsRecord = changefeedProgress.ProtectedTimestampRecord
+	}
 
 	haveHighwater := !(prevHighWater == nil || prevHighWater.IsEmpty())
 	haveCheckpoint := changefeedProgress != nil && changefeedProgress.Checkpoint != nil &&
@@ -713,6 +718,7 @@ func generateNewProgress(
 					Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
 						Spans: existingTargetSpans,
 					},
+					ProtectedTimestampRecord: ptsRecord,
 				},
 			},
 		}
@@ -742,6 +748,7 @@ func generateNewProgress(
 				Checkpoint: &jobspb.ChangefeedProgress_Checkpoint{
 					Spans: mergedSpanGroup.Slice(),
 				},
+				ProtectedTimestampRecord: ptsRecord,
 			},
 		},
 	}
