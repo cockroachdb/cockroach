@@ -7699,6 +7699,43 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 
+	"crdb_internal.request_job_execution_details": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "jobID", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// TODO(adityamaru): Figure out the correct permissions for collecting a
+				// job profiler bundle. For now only allow the admin role.
+				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+				if err != nil {
+					return nil, err
+				}
+
+				if !isAdmin {
+					return nil, errors.New("must be admin to request a job profiler bundle")
+				}
+
+				jobID := int(tree.MustBeDInt(args[0]))
+				if err := evalCtx.JobsProfiler.RequestExecutionDetails(
+					ctx,
+					jobspb.JobID(jobID),
+				); err != nil {
+					return nil, err
+				}
+
+				return tree.DBoolTrue, nil
+			},
+			Volatility: volatility.Volatile,
+			Info:       `Used to request the collection of execution details for a given job ID`,
+		},
+	),
+
 	"crdb_internal.request_statement_bundle": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemInfo,

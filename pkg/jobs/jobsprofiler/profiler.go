@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // StorePlanDiagram stores the DistSQL diagram generated from p in the job info
@@ -45,10 +44,7 @@ func StorePlanDiagram(
 				return err
 			}
 
-			dspKey, err := profilerconstants.MakeDSPDiagramInfoKey(timeutil.Now().UnixNano())
-			if err != nil {
-				return errors.Wrap(err, "failed to construct DSP diagram info key")
-			}
+			dspKey := profilerconstants.MakeDSPDiagramInfoKey(timeutil.Now().UnixNano())
 			infoStorage := jobs.InfoStorageForJob(txn, jobID)
 			return infoStorage.Write(ctx, dspKey, []byte(diagURL.String()))
 		})
@@ -75,11 +71,8 @@ func StorePerNodeProcessorProgressFraction(
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := jobs.InfoStorageForJob(txn, jobID)
 		for componentID, fraction := range perComponentProgress {
-			key, err := profilerconstants.MakeNodeProcessorProgressInfoKey(componentID.FlowID.String(),
+			key := profilerconstants.MakeNodeProcessorProgressInfoKey(componentID.FlowID.String(),
 				componentID.SQLInstanceID.String(), componentID.ID)
-			if err != nil {
-				return errors.Wrap(err, "failed to construct progress info key")
-			}
 			fractionBytes := []byte(fmt.Sprintf("%f", fraction))
 			return infoStorage.Write(ctx, key, fractionBytes)
 		}
