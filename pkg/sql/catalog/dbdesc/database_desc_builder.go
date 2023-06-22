@@ -139,16 +139,7 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() (err error
 		)
 	}
 
-	privsChanged, err := catprivilege.MaybeFixPrivileges(
-		&ddb.maybeModified.Privileges,
-		descpb.InvalidID,
-		descpb.InvalidID,
-		privilege.Database,
-		ddb.maybeModified.GetName())
-	if err != nil {
-		return err
-	}
-	if privsChanged || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
+	if removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
 		ddb.changes.Add(catalog.UpgradedPrivileges)
 	}
 	if maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified) {

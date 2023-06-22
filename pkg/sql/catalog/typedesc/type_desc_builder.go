@@ -13,9 +13,7 @@ package typedesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -103,17 +101,6 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 	if mustSetModTime {
 		tdb.maybeModified.ModificationTime = tdb.mvccTimestamp
 		tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
-	}
-	if fixedPrivileges, err := catprivilege.MaybeFixPrivileges(
-		&tdb.maybeModified.Privileges,
-		tdb.maybeModified.GetParentID(),
-		tdb.maybeModified.GetParentSchemaID(),
-		privilege.Type,
-		tdb.maybeModified.GetName(),
-	); err != nil {
-		return err
-	} else if fixedPrivileges {
-		tdb.changes.Add(catalog.UpgradedPrivileges)
 	}
 	return nil
 }
