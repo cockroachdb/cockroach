@@ -147,7 +147,7 @@ func constructBackupExecutionDetails(
 			}
 			key, err := profilerconstants.MakeDSPDiagramInfoKey(timeutil.Now().UnixNano())
 			if err != nil {
-				return errors.Wrap(err, "failed to construct DSP info key")
+				return err
 			}
 			if err := infoStorage.Write(ctx, key, []byte(annotatedURL.String())); err != nil {
 				return err

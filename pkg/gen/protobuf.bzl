@@ -26,6 +26,7 @@ PROTOBUF_SRCS = [
     "//pkg/gossip:gossip_go_proto",
     "//pkg/inspectz/inspectzpb:inspectzpb_go_proto",
     "//pkg/jobs/jobspb:jobspb_go_proto",
+    "//pkg/jobs/jobsprofiler/profilerpb:profilerpb_go_proto",
     "//pkg/keyvisualizer/keyvispb:keyvispb_go_proto",
     "//pkg/kv/bulk/bulkpb:bulkpb_go_proto",
     "//pkg/kv/kvnemesis:kvnemesis_go_proto",

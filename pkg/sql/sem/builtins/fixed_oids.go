@@ -2418,6 +2418,7 @@ var builtinOidsArray = []string{
 	2445: `lead(val: pg_lsn, n: int, default: pg_lsn) -> pg_lsn`,
 	2446: `last_value(val: pg_lsn) -> pg_lsn`,
 	2447: `pg_lsnsend(pg_lsn: pg_lsn) -> bytes`,
+	2448: `crdb_internal.request_job_profiler_bundle(jobID: int) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
