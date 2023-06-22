@@ -21,7 +21,9 @@ apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
 cat > /etc/apt/sources.list.d/docker.list <<EOF
 deb https://download.docker.com/linux/ubuntu focal stable
 EOF
-apt-get update --yes
+# Some images come with apt autoupgrade job running at start.
+echo "Waiting for the lock to allow the apt daily cronjob to finish..."
+apt-get -o DPkg::Lock::Timeout=300 update --yes
 
 # Install the sudo version patched for CVE-2021-3156
 apt-get install --yes sudo
