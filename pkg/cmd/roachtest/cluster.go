@@ -2185,7 +2185,11 @@ func (c *clusterImpl) RunWithDetails(
 	// This logs to the test logger to easily identify the command that is being run and
 	// where to find the output.
 	joined := strings.Join(args, " ")
-	c.t.L().Printf("running command `%s`; output in %s.log", joined, logFile)
+
+	// This could probably be removed in favour of c.t.L() but it's used extensively in roachtests.
+	if testLogger != nil {
+		testLogger.Printf("running command `%s`; output in %s.log", joined, logFile)
+	}
 	l.Printf("running %s on nodes: %v", joined, nodes)
 
 	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)

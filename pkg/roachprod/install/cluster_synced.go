@@ -129,8 +129,21 @@ func newRunRetryOpts(
 
 var DefaultSSHRetryOpts = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDetails) bool { return errors.Is(res.Err, rperrors.ErrSSH255) })
 
-// defaultSCPRetry assumes any error is retryable
-var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDetails) bool { return true })
+// defaultSCPRetry won't retry if the error is "no such file or directory" or
+// "permission denied" which are unlikely to resolve themselves. We use string
+// matching here because of the lack of defined exit codes for scp.
+var noScpRetrySubstrings = []string{"no such file or directory", "permission denied"}
+var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
+	func(res *RunResultDetails) bool {
+		out := strings.ToLower(res.Output())
+		for _, s := range noScpRetrySubstrings {
+			if strings.Contains(out, s) {
+				return false
+			}
+		}
+		return true
+	},
+)
 
 // runWithMaybeRetry will run the specified function `f` at least once, or only
 // once if `runRetryOpts` is nil
