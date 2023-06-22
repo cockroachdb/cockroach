@@ -278,8 +278,9 @@ var defaultCreateZones = []string{
 // not specifying an Availability Zone in your request or choosing us-east-2b, us-east-2c."
 // N.B. we implicitly specify AZ to select an AMI in that zone, hence we fall back to instance-specific overrides.
 var overrideDefaultCreateZones = map[string][]string{
-	"c6id.4xlarge": {"us-east-2c", "us-west-2b", "eu-west-2b"},
-	"c6id.8xlarge": {"us-east-2c", "us-west-2b", "eu-west-2b"},
+	"c6id.4xlarge":  {"us-east-2c", "us-west-2b", "eu-west-2b"},
+	"c6id.8xlarge":  {"us-east-2c", "us-west-2b", "eu-west-2b"},
+	"c6id.24xlarge": {"us-east-2b", "us-west-2b", "eu-west-2b"},
 }
 
 type Tag struct {
