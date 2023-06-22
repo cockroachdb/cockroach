@@ -73,7 +73,7 @@ add-discovered r=req2 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 2, txn: 00000000-0000-0000-0000-000000000001
 
