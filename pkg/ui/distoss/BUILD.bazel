@@ -6,6 +6,7 @@ genrule(
     outs = ["assets.tar.gz"],
     cmd = """$(location //pkg/util/targz/gen) $< $@""",
     exec_tools = ["//pkg/util/targz/gen"],
+    visibility = ["//pkg/gen:__subpackages__"],
 )
 
 go_library(

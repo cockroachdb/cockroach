@@ -20,9 +20,15 @@ type queryData struct {
 }
 
 var targets = []struct {
-	target        target
-	query         string
+	target target
+	query  string
+	// If doNotGenerate is set, no .bzl file will be generated for this
+	// target.
 	doNotGenerate bool
+	// If this is a non-empty slice, then we don't perform a query at all
+	// for this target, and instead use this list as the list of targets to
+	// hoist instead.
+	hardCodedQueryResults []string
 }{
 	{
 		target: "protobuf",
@@ -110,6 +116,17 @@ kind("generated file", {{ .All }}) - (
   + ({{ template "diagrams" $ }})
   + ({{ template "bnf" $ }})
 )`,
+	},
+	{
+		target: "ui",
+		// NB: Note that we don't execute a query to list these genrules.
+		// There are very few specifically in `pkg/ui`, and performing this
+		// query requires fetching a lot of the JS stuff. We don't need to
+		// perform this query just to list these two genrules.
+		hardCodedQueryResults: []string{
+			"//pkg/ui/distccl:genassets",
+			"//pkg/ui/distoss:genassets",
+		},
 	},
 }
 

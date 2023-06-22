@@ -186,7 +186,7 @@ func TestPublish(t *testing.T) {
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos --enable_runfiles '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' -c opt --config=ci --config=force_build_cdeps --config=crosswindowsbase",
 				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=force_build_cdeps --config=crosswindowsbase",
 				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinux --config=ci",
-        	            	"env=[] args=bazel info bazel-bin -c opt --config=crosslinux --config=ci",
+				"env=[] args=bazel info bazel-bin -c opt --config=crosslinux --config=ci",
 			},
 			expectedPuts: []string{
 				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
