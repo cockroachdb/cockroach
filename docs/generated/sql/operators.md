@@ -113,6 +113,7 @@
 <tr><td>jsonb <code>-</code> <a href="string.html">string</a></td><td>jsonb</td></tr>
 <tr><td>jsonb <code>-</code> <a href="string.html">string[]</a></td><td>jsonb</td></tr>
 <tr><td>pg_lsn <code>-</code> <a href="decimal.html">decimal</a></td><td>pg_lsn</td></tr>
+<tr><td>pg_lsn <code>-</code> pg_lsn</td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="time.html">time</a> <code>-</code> <a href="interval.html">interval</a></td><td><a href="time.html">time</a></td></tr>
 <tr><td><a href="time.html">time</a> <code>-</code> <a href="time.html">time</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>-</code> <a href="interval.html">interval</a></td><td><a href="timestamp.html">timestamp</a></td></tr>

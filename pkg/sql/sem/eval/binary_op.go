@@ -1567,6 +1567,28 @@ func (e *evaluator) EvalPlusPGLSNDecimalOp(
 	return decimalPGLSNEval(right, left, lsnMathCtx.Add)
 }
 
+func (e *evaluator) EvalMinusPGLSNOp(
+	ctx context.Context, _ *tree.MinusPGLSNOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	lLSN := tree.MustBeDPGLSN(left)
+	rLSN := tree.MustBeDPGLSN(right)
+
+	lDecimal, err := lLSN.Decimal()
+	if err != nil {
+		return nil, err
+	}
+	rDecimal, err := rLSN.Decimal()
+	if err != nil {
+		return nil, err
+	}
+
+	var ret apd.Decimal
+	if _, err := lsnMathCtx.Sub(&ret, lDecimal, rDecimal); err != nil {
+		return nil, err
+	}
+	return &tree.DDecimal{Decimal: ret}, nil
+}
+
 func (e *evaluator) EvalMinusPGLSNDecimalOp(
 	ctx context.Context, _ *tree.MinusPGLSNDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
@@ -1590,7 +1612,7 @@ func decimalPGLSNEval(
 		return nil, errors.AssertionFailedf("unknown apd form: %d", n.Form)
 	}
 
-	lsnAsDecimal, _, err := apd.NewFromString(fmt.Sprintf("%d", lsnVal.LSN))
+	lsnAsDecimal, err := lsnVal.Decimal()
 	if err != nil {
 		return nil, err
 	}
