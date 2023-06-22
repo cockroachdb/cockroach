@@ -3,6 +3,7 @@
 set -euo pipefail
 
 image=cockroachdb/builder
+# TODO
 version=20230614-164006
 
 function init() {
