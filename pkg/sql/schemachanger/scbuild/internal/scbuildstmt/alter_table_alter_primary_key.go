@@ -346,7 +346,7 @@ func isNewPrimaryKeySameAsOldPrimaryKey(b BuildCtx, tbl *scpb.Table, t alterPrim
 // there are any other concurrent schema change on this table. This is determined
 // by searching for any element that is currently not in its terminal status.
 func fallBackIfConcurrentSchemaChange(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
-	b.QueryByID(tableID).ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		if current != target.Status() {
 			_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
 			if ns == nil {

@@ -589,12 +589,14 @@ func addSecondaryIndexTargetsForAddColumn(
 	// schema changer.
 	{
 		// Apply any implicit partitioning columns first, if they are missing.
-		scpb.ForEachIndexPartitioning(b, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
-			if e.IndexID == newPrimaryIdx.IndexID &&
-				e.TableID == newPrimaryIdx.TableID {
-				partitioning = &e.PartitioningDescriptor
-			}
-		})
+		scpb.ForEachIndexPartitioning(
+			b.QueryByID(tbl.TableID),
+			func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
+				if e.IndexID == newPrimaryIdx.IndexID {
+					partitioning = &e.PartitioningDescriptor
+				}
+			},
+		)
 		keyColSet := catalog.TableColSet{}
 		extraSuffixColumns := catalog.TableColSet{}
 		for _, colID := range desc.KeyColumnIDs {
