@@ -316,7 +316,7 @@ FROM %s
 		}
 		// If there are no results from the activity table, retrieve the data from the persisted table.
 		if stmtsRuntime == 0 {
-			stmtsRuntime, err = getRuntime(fmt.Sprintf("crdb_internal.statement_statistics_persisted%s", tableSuffix))
+			stmtsRuntime, err = getRuntime("crdb_internal.statement_statistics_persisted" + tableSuffix)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -341,7 +341,7 @@ FROM %s
 		}
 		// If there are no results from the activity table, retrieve the data from the persisted table.
 		if txnsRuntime == 0 {
-			txnsRuntime, err = getRuntime(fmt.Sprintf("crdb_internal.transaction_statistics_persisted%s", tableSuffix))
+			txnsRuntime, err = getRuntime("crdb_internal.transaction_statistics_persisted" + tableSuffix)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -607,7 +607,7 @@ GROUP BY
 			ctx,
 			ie,
 			queryFormat,
-			fmt.Sprintf("crdb_internal.statement_statistics_persisted%s", tableSuffix),
+			"crdb_internal.statement_statistics_persisted"+tableSuffix,
 			"combined-stmts-persisted-by-interval",
 			whereClause,
 			args,
@@ -787,7 +787,7 @@ GROUP BY
 			ctx,
 			ie,
 			queryFormat,
-			fmt.Sprintf("crdb_internal.transaction_statistics_persisted%s", tableSuffix),
+			"crdb_internal.transaction_statistics_persisted"+tableSuffix,
 			"combined-txns-persisted-by-interval",
 			whereClause,
 			args,
@@ -918,7 +918,7 @@ GROUP BY
 		}
 		query = fmt.Sprintf(
 			queryFormat,
-			fmt.Sprintf("crdb_internal.statement_statistics_persisted%s", tableSuffix),
+			"crdb_internal.statement_statistics_persisted"+tableSuffix,
 			whereClause)
 		it, err = ie.QueryIteratorEx(ctx, "stmts-persisted-for-txn", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -1219,7 +1219,7 @@ func getTotalStatementDetails(
 	if row == nil || row.Len() == 0 {
 		query = fmt.Sprintf(
 			queryFormat,
-			fmt.Sprintf("crdb_internal.statement_statistics_persisted%s", tableSuffix),
+			"crdb_internal.statement_statistics_persisted"+tableSuffix,
 			whereClause)
 		row, err = ie.QueryRowEx(ctx, "combined-stmts-persisted-details-total", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -1331,7 +1331,7 @@ func getStatementDetailsPerAggregatedTs(
 		}
 		query = fmt.Sprintf(
 			queryFormat,
-			fmt.Sprintf("crdb_internal.statement_statistics_persisted%s", tableSuffix),
+			"crdb_internal.statement_statistics_persisted"+tableSuffix,
 			whereClause,
 			len(args))
 
@@ -1514,7 +1514,7 @@ func getStatementDetailsPerPlanHash(
 		}
 		query = fmt.Sprintf(
 			queryFormat,
-			fmt.Sprintf("crdb_internal.statement_statistics_persisted%s", tableSuffix),
+			"crdb_internal.statement_statistics_persisted"+tableSuffix,
 			whereClause,
 			len(args))
 		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-persisted-details-by-plan-hash", nil,
