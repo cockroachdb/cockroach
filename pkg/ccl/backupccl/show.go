@@ -101,18 +101,11 @@ func (m manifestInfoReader) showBackup(
 		mem.Shrink(ctx, memReserved)
 	}()
 	// Ensure that the descriptors in the backup manifests are up to date.
-	//
-	// This is necessary in particular for upgrading descriptors with old-style
-	// foreign keys which are no longer supported.
-	// If we are restoring a backup with old-style foreign keys, skip over the
-	// FKs for which we can't resolve the cross-table references. We can't
-	// display them anyway, because we don't have the referenced table names,
-	// etc.
 	err := maybeUpgradeDescriptorsInBackupManifests(ctx,
 		kmsEnv.ClusterSettings().Version.ActiveVersion(ctx),
 		info.manifests,
 		info.layerToIterFactory,
-		true /* skipFKsWithNoMatchingTable */)
+	)
 	if err != nil {
 		return err
 	}
