@@ -258,7 +258,7 @@ func createTestStoreWithoutStart(
 		NodeDescs:          mockNodeStore{desc: nodeDesc},
 		RPCContext:         rpcContext,
 		RPCRetryOptions:    &retry.Options{},
-		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(cfg.Gossip)), // TODO
+		NodeDialer:         cfg.NodeDialer,
 		FirstRangeProvider: rangeProv,
 		TestingKnobs: kvcoord.ClientTestingKnobs{
 			TransportFactory: kvcoord.SenderTransportFactory(cfg.AmbientCtx.Tracer, &storeSender),

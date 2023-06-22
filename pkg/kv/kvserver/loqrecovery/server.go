@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -468,10 +469,7 @@ func (s Server) NodeStatus(
 }
 
 func (s Server) Verify(
-	ctx context.Context,
-	req *serverpb.RecoveryVerifyRequest,
-	liveNodes livenesspb.IsLiveMap,
-	db *kv.DB,
+	ctx context.Context, req *serverpb.RecoveryVerifyRequest, nl *liveness.NodeLiveness, db *kv.DB,
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	// Block requests that require fan-out to other nodes until upgrade is finalized.
 	if !s.settings.Version.IsActive(ctx, clusterversion.V23_1) {
@@ -497,24 +495,20 @@ func (s Server) Verify(
 	if err != nil {
 		return nil, err
 	}
-
-	decomStatus := make(map[roachpb.NodeID]livenesspb.MembershipStatus)
-	decomNodes := make(map[roachpb.NodeID]interface{})
+	decomNodes := make(map[roachpb.NodeID]bool)
+	decomStatus := make(map[roachpb.NodeID]livenesspb.MembershipStatus, len(req.DecommissionedNodeIDs))
 	for _, plannedID := range req.DecommissionedNodeIDs {
-		decomNodes[plannedID] = struct{}{}
-		if ns, ok := liveNodes[plannedID]; ok {
-			decomStatus[plannedID] = ns.Membership
-		}
+		decomNodes[plannedID] = true
+		decomStatus[plannedID] = nl.GetNodeVitalityFromCache(plannedID).MembershipStatus()
 	}
 
 	isNodeLive := func(rd roachpb.ReplicaDescriptor) bool {
 		// Preemptively remove dead nodes as they would return Forbidden error if
 		// liveness is not stale enough.
-		if _, removed := decomNodes[rd.NodeID]; removed {
+		if decomNodes[rd.NodeID] {
 			return false
 		}
-		l, ok := liveNodes[rd.NodeID]
-		return ok && l.IsLive
+		return nl.GetNodeVitalityFromCache(rd.NodeID).IsLive(livenesspb.LossOfQuorum)
 	}
 
 	getRangeInfo := func(

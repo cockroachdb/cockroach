@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -444,15 +445,13 @@ func (mr *MetricsRecorder) getNetworkActivity(
 ) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
 	activity := make(map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity)
 	if mr.nodeLiveness != nil {
-		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
-
 		var currentAverages map[roachpb.NodeID]time.Duration
 		if mr.remoteClocks != nil {
 			currentAverages = mr.remoteClocks.AllLatencies()
 		}
-		for nodeID, entry := range isLiveMap {
+		for nodeID, entry := range mr.nodeLiveness.ScanNodeVitalityFromCache() {
 			na := statuspb.NodeStatus_NetworkActivity{}
-			if entry.IsLive {
+			if entry.IsLive(livenesspb.NetworkMap) {
 				if latency, ok := currentAverages[nodeID]; ok {
 					na.Latency = latency.Nanoseconds()
 				}
