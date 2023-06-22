@@ -115,8 +115,7 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 			return err
 		}
 		if mustSetModTime {
-			modifiedDesc := tdb.getOrInitModifiedDesc()
-			modifiedDesc.ModificationTime = tdb.mvccTimestamp
+			tdb.getOrInitModifiedDesc().ModificationTime = tdb.mvccTimestamp
 			tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
 		}
 	}

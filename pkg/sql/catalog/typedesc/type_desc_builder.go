@@ -110,18 +110,20 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 	defer func() {
 		err = errors.Wrapf(err, "type %q (%d)", tdb.original.Name, tdb.original.ID)
 	}()
-	// Set the ModificationTime field before doing anything else.
-	// Other changes may depend on it.
-	mustSetModTime, err := descpb.MustSetModificationTime(
-		tdb.original.ModificationTime, tdb.mvccTimestamp, tdb.original.Version,
-	)
-	if err != nil {
-		return err
-	}
-	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
-	if mustSetModTime {
-		tdb.maybeModified.ModificationTime = tdb.mvccTimestamp
-		tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+	{
+		orig := tdb.getLatestDesc()
+		// Set the ModificationTime field before doing anything else.
+		// Other changes may depend on it.
+		mustSetModTime, err := descpb.MustSetModificationTime(
+			orig.ModificationTime, tdb.mvccTimestamp, orig.Version,
+		)
+		if err != nil {
+			return err
+		}
+		if mustSetModTime {
+			tdb.getOrInitModifiedDesc().ModificationTime = tdb.mvccTimestamp
+			tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+		}
 	}
 	return nil
 }
