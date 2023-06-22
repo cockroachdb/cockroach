@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -91,8 +90,6 @@ func WriteDescriptors(
 					desc.GetID(), desc)
 			}
 		}
-		privilegeDesc := desc.GetPrivileges()
-		catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
 		if descCoverage == tree.RequestedDescriptors || desc.GetName() == inheritParentName {
 			wroteDBs[desc.GetID()] = desc
 		}
@@ -158,9 +155,6 @@ func WriteDescriptors(
 					table.GetID(), table)
 			}
 		}
-		privilegeDesc := table.GetPrivileges()
-		catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
-
 		if err := processTableForMultiRegion(ctx, txn, descsCol, table); err != nil {
 			return err
 		}
