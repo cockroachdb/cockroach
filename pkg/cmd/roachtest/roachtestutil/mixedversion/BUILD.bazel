@@ -23,12 +23,16 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_pkg_errors//:errors",
     ],
 )
 
 go_test(
     name = "mixedversion_test",
-    srcs = ["planner_test.go"],
+    srcs = [
+        "mixedversion_test.go",
+        "planner_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":mixedversion"],
     deps = [
