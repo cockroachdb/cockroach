@@ -67,7 +67,7 @@ const (
 )
 
 func TestTestPlanner(t *testing.T) {
-	mvt := newTest(t)
+	mvt := newTest()
 	mvt.InMixedVersion("mixed-version 1", dummyHook)
 	mvt.InMixedVersion("mixed-version 2", dummyHook)
 	initBank := roachtestutil.NewCommand("./cockroach workload bank init")
@@ -80,50 +80,45 @@ func TestTestPlanner(t *testing.T) {
 
 	plan, err := mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 12)
+	require.Len(t, plan.steps, 11)
 
 	// Assert on the pretty-printed version of the test plan as that
 	// asserts the ordering of the steps we want to take, and as a bonus
 	// tests the printing function itself.
 	expectedPrettyPlan := fmt.Sprintf(`
 mixed-version test plan for upgrading from %[1]s to <current>:
-├── starting cluster from fixtures for version "%[1]s" (1)
+├── starting cluster at version "%[1]s" (1)
 ├── upload current binary to all cockroach nodes (:1-4) (2)
 ├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (3)
 ├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+` (4)
 ├── run "initialize bank workload" (5)
 ├── start background hooks concurrently
 │   ├── run "bank workload", after 50ms delay (6)
-│   ├── run "rand workload", after 50ms delay (7)
-│   └── run "csv server", after 200ms delay (8)
+│   ├── run "rand workload", after 200ms delay (7)
+│   └── run "csv server", after 500ms delay (8)
 ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 4 with binary version <current> (9)
-│   ├── run mixed-version hooks concurrently
-│   │   ├── run "mixed-version 1", after 100ms delay (10)
-│   │   └── run "mixed-version 2", after 100ms delay (11)
+│   ├── restart node 1 with binary version <current> (9)
+│   ├── run "mixed-version 1" (10)
+│   ├── restart node 4 with binary version <current> (11)
 │   ├── restart node 3 with binary version <current> (12)
-│   ├── restart node 2 with binary version <current> (13)
-│   └── restart node 1 with binary version <current> (14)
+│   ├── run "mixed-version 2" (13)
+│   └── restart node 2 with binary version <current> (14)
 ├── downgrade nodes :1-4 from "<current>" to "%[1]s"
-│   ├── restart node 2 with binary version %[1]s (15)
-│   ├── run "mixed-version 1" (16)
-│   ├── restart node 1 with binary version %[1]s (17)
-│   ├── run "mixed-version 2" (18)
-│   ├── restart node 3 with binary version %[1]s (19)
-│   └── restart node 4 with binary version %[1]s (20)
+│   ├── restart node 4 with binary version %[1]s (15)
+│   ├── run "mixed-version 2" (16)
+│   ├── restart node 2 with binary version %[1]s (17)
+│   ├── restart node 3 with binary version %[1]s (18)
+│   ├── restart node 1 with binary version %[1]s (19)
+│   └── run "mixed-version 1" (20)
 ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
 │   ├── restart node 4 with binary version <current> (21)
-│   ├── restart node 3 with binary version <current> (22)
+│   ├── run "mixed-version 1" (22)
 │   ├── restart node 1 with binary version <current> (23)
-│   ├── run mixed-version hooks concurrently
-│   │   ├── run "mixed-version 1", after 0s delay (24)
-│   │   └── run "mixed-version 2", after 0s delay (25)
-│   └── restart node 2 with binary version <current> (26)
+│   ├── restart node 2 with binary version <current> (24)
+│   ├── run "mixed-version 2" (25)
+│   └── restart node 3 with binary version <current> (26)
 ├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (27)
-├── run mixed-version hooks concurrently
-│   ├── run "mixed-version 1", after 100ms delay (28)
-│   └── run "mixed-version 2", after 0s delay (29)
-└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (30)
+└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (28)
 `, previousVersion,
 	)
 
@@ -133,7 +128,7 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 	// Assert that startup hooks are scheduled to run before any
 	// upgrades, i.e., after cluster is initialized (step 1), and after
 	// we wait for the cluster version to match on all nodes (step 2).
-	mvt = newTest(t)
+	mvt = newTest()
 	mvt.OnStartup("startup 1", dummyHook)
 	mvt.OnStartup("startup 2", dummyHook)
 	plan, err = mvt.plan()
@@ -142,7 +137,7 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 
 	// Assert that AfterUpgradeFinalized hooks are scheduled to run in
 	// the last step of the test.
-	mvt = newTest(t)
+	mvt = newTest()
 	mvt.AfterUpgradeFinalized("finalizer 1", dummyHook)
 	mvt.AfterUpgradeFinalized("finalizer 2", dummyHook)
 	mvt.AfterUpgradeFinalized("finalizer 3", dummyHook)
@@ -156,7 +151,7 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 // the same seed multiple times yields the same plan every time.
 func TestDeterministicTestPlan(t *testing.T) {
 	makePlan := func() *TestPlan {
-		mvt := newTest(t)
+		mvt := newTest()
 		mvt.InMixedVersion("mixed-version 1", dummyHook)
 		mvt.InMixedVersion("mixed-version 2", dummyHook)
 
@@ -185,7 +180,7 @@ var unused float64
 func TestDeterministicHookSeeds(t *testing.T) {
 	generateData := func(generateMoreRandomNumbers bool) [][]int {
 		var generatedData [][]int
-		mvt := newTest(t)
+		mvt := newTest()
 		mvt.InMixedVersion("do something", func(_ context.Context, _ *logger.Logger, rng *rand.Rand, _ *Helper) error {
 			var data []int
 			for j := 0; j < 5; j++ {
@@ -216,31 +211,26 @@ func TestDeterministicHookSeeds(t *testing.T) {
 
 		// We can hardcode these paths since we are using a fixed seed in
 		// these tests.
-		firstRun := plan.steps[4].(sequentialRunStep).steps[2].(runHookStep)
+		firstRun := plan.steps[4].(sequentialRunStep).steps[4].(runHookStep)
 		require.Equal(t, "do something", firstRun.hook.name)
 		require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		secondRun := plan.steps[5].(sequentialRunStep).steps[3].(runHookStep)
+		secondRun := plan.steps[5].(sequentialRunStep).steps[1].(runHookStep)
 		require.Equal(t, "do something", secondRun.hook.name)
 		require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		thirdRun := plan.steps[6].(sequentialRunStep).steps[1].(runHookStep)
+		thirdRun := plan.steps[6].(sequentialRunStep).steps[3].(runHookStep)
 		require.Equal(t, "do something", thirdRun.hook.name)
 		require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		fourthRun := plan.steps[8].(runHookStep)
-		require.Equal(t, "do something", fourthRun.hook.name)
-		require.NoError(t, fourthRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
-
-		require.Len(t, generatedData, 4)
+		require.Len(t, generatedData, 3)
 		return generatedData
 	}
 
 	expectedData := [][]int{
-		{82, 1, 17, 3, 87},
-		{73, 17, 6, 37, 43},
-		{82, 35, 57, 54, 8},
-		{7, 95, 26, 31, 65},
+		{97, 94, 35, 65, 21},
+		{40, 30, 46, 88, 46},
+		{96, 91, 48, 85, 76},
 	}
 	const numRums = 50
 	for j := 0; j < numRums; j++ {
@@ -250,12 +240,49 @@ func TestDeterministicHookSeeds(t *testing.T) {
 	}
 }
 
-func newTest(t *testing.T) *Test {
+// Test_startClusterID tests that the plan generated by the test
+// planner keeps track of the correct ID for the test's start step.
+func Test_startClusterID(t *testing.T) {
+	// When fixtures are disabled, the startStep should always be the
+	// first step of the test (ID = 1).
+	mvt := newTest(NeverUseFixtures)
+	plan, err := mvt.plan()
+	require.NoError(t, err)
+
+	step, isStartStep := plan.steps[0].(startStep)
+	require.True(t, isStartStep)
+	require.Equal(t, 1, step.ID())
+	require.Equal(t, 1, plan.startClusterID)
+
+	// Overwrite probability to 1 so that our test plan will always
+	// start the cluster from fixtures.
+	origProbability := defaultTestOptions.useFixturesProbability
+	defaultTestOptions.useFixturesProbability = 1
+	defer func() { defaultTestOptions.useFixturesProbability = origProbability }()
+
+	// When fixtures are used, the startStep should always be the second
+	// step of the test (ID = 2), after fixtures are installed.
+	mvt = newTest()
+	plan, err = mvt.plan()
+	require.NoError(t, err)
+	step, isStartStep = plan.steps[1].(startStep)
+	require.True(t, isStartStep)
+	require.Equal(t, 2, step.ID())
+	require.Equal(t, 2, plan.startClusterID)
+}
+
+func newTest(options ...customOption) *Test {
+	testOptions := defaultTestOptions
+	for _, fn := range options {
+		fn(&testOptions)
+	}
+
 	prng := rand.New(rand.NewSource(seed))
 	return &Test{
 		ctx:           ctx,
 		logger:        nilLogger,
 		crdbNodes:     nodes,
+		options:       testOptions,
 		_buildVersion: buildVersion,
 		prng:          prng,
 		hooks:         &testHooks{prng: prng, crdbNodes: nodes},
