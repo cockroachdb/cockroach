@@ -286,12 +286,6 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			objMap = make(map[string]descpb.ID)
 		}
 		descName := desc.GetName()
-		// Handle special case of system.namespace table which used to be named
-		// system.namespace2.
-		if desc.GetID() == keys.NamespaceTableID &&
-			desc.GetPostDeserializationChanges().Contains(catalog.UpgradedNamespaceName) {
-			descName = catconstants.PreMigrationNamespaceTableName
-		}
 		if _, ok := objMap[descName]; ok {
 			return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
 				kind, parentDesc.GetName(), scName, descName, desc.GetID(), objMap[descName])
