@@ -126,20 +126,23 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 	defer func() {
 		err = errors.Wrapf(err, "table %q (%d)", tdb.original.Name, tdb.original.ID)
 	}()
-	// Set the ModificationTime field before doing anything else.
-	// Other changes may depend on it.
-	mustSetModTime, err := descpb.MustSetModificationTime(
-		tdb.original.ModificationTime, tdb.mvccTimestamp, tdb.original.Version,
-	)
-	if err != nil {
-		return err
+	{
+		orig := tdb.getLatestDesc()
+		// Set the ModificationTime field before doing anything else.
+		// Other changes may depend on it.
+		mustSetModTime, err := descpb.MustSetModificationTime(
+			orig.ModificationTime, tdb.mvccTimestamp, orig.Version,
+		)
+		if err != nil {
+			return err
+		}
+		if mustSetModTime {
+			modifiedDesc := tdb.getOrInitModifiedDesc()
+			modifiedDesc.ModificationTime = tdb.mvccTimestamp
+			tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+		}
 	}
-	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
-	if mustSetModTime {
-		tdb.maybeModified.ModificationTime = tdb.mvccTimestamp
-		tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
-	}
-	c, err := maybeFillInDescriptor(tdb.maybeModified)
+	c, err := maybeFillInDescriptor(tdb)
 	if err != nil {
 		return err
 	}
@@ -246,6 +249,27 @@ func (tdb *tableDescriptorBuilder) BuildCreatedMutableTable() *Mutable {
 	}
 }
 
+// getLatestDesc returns the modified descriptor if it exists, or else the
+// original descriptor.
+func (tdb *tableDescriptorBuilder) getLatestDesc() *descpb.TableDescriptor {
+	desc := tdb.maybeModified
+	if desc == nil {
+		desc = tdb.original
+	}
+	return desc
+}
+
+// getOrInitModifiedDesc returns the modified descriptor, and clones it from
+// the original descriptor if it is not already available. This is a helper
+// function that makes it easier to lazily initialize the modified descriptor,
+// since protoutil.Clone is expensive.
+func (tdb *tableDescriptorBuilder) getOrInitModifiedDesc() *descpb.TableDescriptor {
+	if tdb.maybeModified == nil {
+		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
+	}
+	return tdb.maybeModified
+}
+
 // makeImmutable returns an immutable from the given TableDescriptor.
 func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 	desc := immutable{wrapper: wrapper{TableDescriptor: *tbl}}
@@ -260,25 +284,27 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 // This includes format upgrades and optional changes that can be handled by all version
 // (for example: additional default privileges).
 func maybeFillInDescriptor(
-	desc *descpb.TableDescriptor,
+	builder *tableDescriptorBuilder,
 ) (changes catalog.PostDeserializationChanges, err error) {
 	set := func(change catalog.PostDeserializationChangeType, cond bool) {
 		if cond {
 			changes.Add(change)
 		}
 	}
-	set(catalog.SetCreateAsOfTimeUsingModTime, maybeSetCreateAsOfTime(desc))
-
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
-		// TODO(rytaft): Remove this case in 24.1.
-		if idx.NotVisible && idx.Invisibility == 0.0 {
-			set(catalog.SetIndexInvisibility, true)
-			idx.Invisibility = 1.0
+	set(catalog.SetCreateAsOfTimeUsingModTime, maybeSetCreateAsOfTime(builder))
+	{
+		orig := builder.getLatestDesc()
+		for i := range orig.Indexes {
+			origIdx := orig.Indexes[i]
+			// TODO(rytaft): Remove this case in 24.1.
+			if origIdx.NotVisible && origIdx.Invisibility == 0.0 {
+				modifiedDesc := builder.getOrInitModifiedDesc()
+				set(catalog.SetIndexInvisibility, true)
+				modifiedDesc.Indexes[i].Invisibility = 1.0
+			}
 		}
 	}
-
-	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
+	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(builder))
 	return changes, nil
 }
 
@@ -476,13 +502,14 @@ const FamilyPrimaryName = "primary"
 
 // maybeSetCheckConstraintColumnIDs ensures that all check constraints have a
 // ColumnIDs slice which is populated if it should be.
-func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
+func maybeSetCheckConstraintColumnIDs(builder *tableDescriptorBuilder) (hasChanged bool) {
+	orig := builder.getLatestDesc()
 	// Collect valid column names.
-	nonDropColumnIDs := make(map[string]descpb.ColumnID, len(desc.Columns))
-	for i := range desc.Columns {
-		nonDropColumnIDs[desc.Columns[i].Name] = desc.Columns[i].ID
+	nonDropColumnIDs := make(map[string]descpb.ColumnID, len(orig.Columns))
+	for i := range orig.Columns {
+		nonDropColumnIDs[orig.Columns[i].Name] = orig.Columns[i].ID
 	}
-	for _, m := range desc.Mutations {
+	for _, m := range orig.Mutations {
 		if col := m.GetColumn(); col != nil && m.Direction != descpb.DescriptorMutation_DROP {
 			nonDropColumnIDs[col.Name] = col.ID
 		}
@@ -506,7 +533,7 @@ func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged 
 		return true, expr, nil
 	}
 
-	for _, ck := range desc.Checks {
+	for i, ck := range orig.Checks {
 		if len(ck.ColumnIDs) > 0 {
 			continue
 		}
@@ -521,7 +548,8 @@ func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged 
 			continue
 		}
 		if !colIDsUsed.Empty() {
-			ck.ColumnIDs = colIDsUsed.Ordered()
+			modified := builder.getOrInitModifiedDesc()
+			modified.Checks[i].ColumnIDs = colIDsUsed.Ordered()
 			hasChanged = true
 		}
 	}
@@ -538,14 +566,16 @@ func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged 
 // ModificationTime fields are both unset for the first Version of a
 // TableDescriptor and the code relies on the value being set based on the
 // MVCC timestamp.
-func maybeSetCreateAsOfTime(desc *descpb.TableDescriptor) (hasChanged bool) {
+func maybeSetCreateAsOfTime(builder *tableDescriptorBuilder) (hasChanged bool) {
+	desc := builder.getLatestDesc()
 	if !desc.CreateAsOfTime.IsEmpty() || desc.Version > 1 || desc.ModificationTime.IsEmpty() {
 		return false
 	}
 	// The expectation is that this is only set when the version is 2.
 	// For any version greater than that, this is not accurate but better than
 	// nothing at all.
-	desc.CreateAsOfTime = desc.ModificationTime
+	modifiedDesc := builder.getOrInitModifiedDesc()
+	modifiedDesc.CreateAsOfTime = desc.ModificationTime
 	return true
 }
 
