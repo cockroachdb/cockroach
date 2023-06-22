@@ -688,7 +688,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	kvMemoryMonitor.StartNoReserved(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
-	rangeReedBudgetFactory := serverrangefeed.NewBudgetFactory(
+	rangeFeedBudgetFactory := serverrangefeed.NewBudgetFactory(
 		ctx,
 		serverrangefeed.CreateBudgetFactoryConfig(
 			kvMemoryMonitor,
@@ -704,12 +704,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				return limit
 			},
 			&st.SV))
-	if rangeReedBudgetFactory != nil {
-		nodeRegistry.AddMetricStruct(rangeReedBudgetFactory.Metrics())
+	if rangeFeedBudgetFactory != nil {
+		nodeRegistry.AddMetricStruct(rangeFeedBudgetFactory.Metrics())
 	}
 	// Closer order is important with BytesMonitor.
 	stopper.AddCloser(stop.CloserFn(func() {
-		rangeReedBudgetFactory.Stop(ctx)
+		rangeFeedBudgetFactory.Stop(ctx)
 	}))
 	stopper.AddCloser(stop.CloserFn(func() {
 		kvMemoryMonitor.Stop(ctx)
@@ -854,7 +854,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		ProtectedTimestampReader:     protectedTSReader,
 		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
 		KVMemoryMonitor:              kvMemoryMonitor,
-		RangefeedBudgetFactory:       rangeReedBudgetFactory,
+		RangefeedBudgetFactory:       rangeFeedBudgetFactory,
 		SharedStorageEnabled:         cfg.SharedStorage != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
