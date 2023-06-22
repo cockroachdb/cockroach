@@ -99,7 +99,7 @@ DROP TABLE splitmerge.t;
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.AlwaysUseFixtures)
 	mvt.OnStartup("setup schema changer workload", func(ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper) error {
 		// Execute the workload init.
 		return c.RunE(ctx, c.All(), "./workload init schemachange")
