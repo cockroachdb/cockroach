@@ -156,6 +156,7 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ccache \
     google-cloud-sdk \
+    google-cloud-cli-gke-gcloud-auth-plugin \
     lsof \
     netcat \
     netbase \
