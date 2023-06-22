@@ -5078,6 +5078,51 @@ Support status: [reserved](#support-status)
 
 
 
+## GetJobProfilerBundle
+
+`GET /_status/job_profiler_bundle/{job_id}/{bundle_id}`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| bundle_id | [string](#cockroach.server.serverpb.GetJobProfilerBundleRequest-string) |  |  | [reserved](#support-status) |
+| job_id | [int64](#cockroach.server.serverpb.GetJobProfilerBundleRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| bundle | [bytes](#cockroach.server.serverpb.GetJobProfilerBundleResponse-bytes) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

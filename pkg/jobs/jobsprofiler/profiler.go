@@ -75,11 +75,8 @@ func StorePerNodeProcessorProgressFraction(
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := jobs.InfoStorageForJob(txn, jobID)
 		for componentID, fraction := range perComponentProgress {
-			key, err := profilerconstants.MakeNodeProcessorProgressInfoKey(componentID.FlowID.String(),
+			key := profilerconstants.MakeNodeProcessorProgressInfoKey(componentID.FlowID.String(),
 				componentID.SQLInstanceID.String(), componentID.ID)
-			if err != nil {
-				return errors.Wrap(err, "failed to construct progress info key")
-			}
 			fractionBytes := []byte(fmt.Sprintf("%f", fraction))
 			return infoStorage.Write(ctx, key, fractionBytes)
 		}

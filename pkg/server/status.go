@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvisstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -62,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -74,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -3915,4 +3919,58 @@ func (s *statusServer) TransactionContentionEvents(
 	})
 
 	return resp, nil
+}
+
+// GetJobProfilerBundle reads all the chunks of a profiler bundle for a given
+// job and bundle ID.
+func (s *statusServer) GetJobProfilerBundle(
+	ctx context.Context, req *serverpb.GetJobProfilerBundleRequest,
+) (*serverpb.GetJobProfilerBundleResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	err := s.privilegeChecker.requireViewDebugPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	bundleID := req.BundleId
+	jobID := jobspb.JobID(req.JobId)
+
+	execCfg := s.sqlServer.execCfg
+	buf := bytes.NewBuffer([]byte{})
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// Reset the buf inside the txn closure to guard against txn retries.
+		buf.Reset()
+		jobInfo := jobs.InfoStorageForJob(txn, jobID)
+		mdKey := profilerconstants.MakeProfilerBundleMetadataKey(bundleID)
+		md, exists, err := jobInfo.Get(ctx, mdKey)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get bundle metadata key for job %d", jobID)
+		}
+		if !exists {
+			return nil
+		}
+		profilerMetadata := &profilerpb.ProfilerBundleMetadata{}
+		if err := protoutil.Unmarshal(md, profilerMetadata); err != nil {
+			return err
+		}
+
+		chunkKeyPrefix := profilerconstants.MakeProfilerBundleChunkKeyPrefix(bundleID)
+		var numChunks int
+		if err := jobInfo.Iterate(ctx, chunkKeyPrefix, func(infoKey string, value []byte) error {
+			buf.WriteString(string(value))
+			numChunks++
+			return nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to iterate over chunks for job %d", jobID)
+		}
+
+		if numChunks != int(profilerMetadata.NumChunks) {
+			return errors.AssertionFailedf("number of chunks read %d is less than expected number of chunks %d",
+				numChunks, profilerMetadata.NumChunks)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return &serverpb.GetJobProfilerBundleResponse{Bundle: buf.Bytes()}, nil
 }

@@ -1213,6 +1213,7 @@ GO_TARGETS = [
     "//pkg/jobs/jobspb:jobspb",
     "//pkg/jobs/jobspb:jobspb_test",
     "//pkg/jobs/jobsprofiler/profilerconstants:profilerconstants",
+    "//pkg/jobs/jobsprofiler/profilerpb:profilerpb",
     "//pkg/jobs/jobsprofiler:jobsprofiler",
     "//pkg/jobs/jobsprofiler:jobsprofiler_test",
     "//pkg/jobs/jobsprotectedts:jobsprotectedts",

@@ -283,6 +283,10 @@ type JobsProfiler interface {
 	// GenerateExecutionDetailsJSON generates a JSON blob of the job specific
 	// execution details.
 	GenerateExecutionDetailsJSON(ctx context.Context, evalCtx *Context, jobID jobspb.JobID) ([]byte, error)
+
+	// GenerateBundle generates a job profiler diagnostic bundle for the specified
+	// jobID.
+	GenerateBundle(ctx context.Context, jobID jobspb.JobID) error
 }
 
 // DescIDGenerator generates unique descriptor IDs.

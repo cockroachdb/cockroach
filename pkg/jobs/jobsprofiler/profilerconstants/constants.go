@@ -32,11 +32,35 @@ const NodeProcessorProgressInfoKeyPrefix = "~node-processor-progress-"
 
 // MakeNodeProcessorProgressInfoKey returns the info_key used for rows that
 // store the per node, per processor progress for a job.
-func MakeNodeProcessorProgressInfoKey(
-	flowID string, instanceID string, processorID int32,
-) (string, error) {
+func MakeNodeProcessorProgressInfoKey(flowID string, instanceID string, processorID int32) string {
 	// The info key is of the form: <prefix>-<flowID>,<instanceID>,<processorID>.
-	return fmt.Sprintf("%s%s,%s,%d", NodeProcessorProgressInfoKeyPrefix, flowID, instanceID, processorID), nil
+	return fmt.Sprintf("%s%s,%s,%d", NodeProcessorProgressInfoKeyPrefix, flowID, instanceID, processorID)
+}
+
+// ProfilerBundleChunkKeyPrefix is the prefix of the info key used for rows that
+// store chunks of a job's profiler bundle.
+const ProfilerBundleChunkKeyPrefix = "~profiler-bundle-chunk-"
+
+// MakeProfilerBundleChunkKeyPrefix is the prefix of the info key used to store all
+// chunks of a given profiler bundle.
+func MakeProfilerBundleChunkKeyPrefix(bundleID string) string {
+	return fmt.Sprintf("%s%s-", ProfilerBundleChunkKeyPrefix, bundleID)
+}
+
+// MakeProfilerBundleChunkKey is the info key used to store a chunk of a job's
+// profiler bundle.
+func MakeProfilerBundleChunkKey(bundleID string, unixNanos int64) string {
+	return fmt.Sprintf("%s%s-%d", ProfilerBundleChunkKeyPrefix, bundleID, unixNanos)
+}
+
+// ProfilerBundleMetadataKeyPrefix is the prefix of the info key used for rows
+// that store the metadata entry for a profiler bundle.
+const ProfilerBundleMetadataKeyPrefix = "~profiler-bundle-metadata-"
+
+// MakeProfilerBundleMetadataKey is the info key used for rows that store the
+// metadata entry for a profiler bundle.
+func MakeProfilerBundleMetadataKey(bundleID string) string {
+	return fmt.Sprintf("%s%s", ProfilerBundleMetadataKeyPrefix, bundleID)
 }
 
 // GetNodeProcessorProgressInfoKeyParts deconstructs the passed in info key and
