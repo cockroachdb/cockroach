@@ -712,8 +712,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// Create an unlimited (for now) monitor for bytes used by raft entries. Use a
 	// 512 KiB allocation size, so that 96 raft scheduler workers would typically
 	// account as a 48 MiB baseline.
+	raftEntriesMetric := metric.NewGauge(metric.Metadata{
+		Name:        "raft.loaded_entries.bytes",
+		Help:        "Bytes allocated by raft Storage.Entries calls that are still kept in memory.",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	})
+	nodeRegistry.AddMetric(raftEntriesMetric)
 	raftEntriesMonitor := mon.NewMonitorWithSoftLimit("raft-entries", mon.MemoryResource,
-		math.MaxInt64 /* limit */, nil /* curCount */, nil /* maxHist */, 512<<10, /* increment */
+		math.MaxInt64 /* limit */, raftEntriesMetric, nil /* maxHist */, 512<<10, /* increment */
 		math.MaxInt64 /* noteworthy */, st)
 	raftEntriesMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 
