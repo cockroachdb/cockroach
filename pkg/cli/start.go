@@ -1260,7 +1260,7 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 	if !sqlAddrSpecified {
 		log.Ops.Shoutf(ctx, severity.WARNING,
 			"Running a server without --sql-addr, with a combined RPC/SQL listener, is deprecated.\n"+
-				"This feature will be removed in the next version of CockroachDB.")
+				"This feature will be removed in a later version of CockroachDB.")
 	}
 
 	changed := func(flagName string) bool {
