@@ -96,16 +96,17 @@ const OldVersionKey = clusterversion.BinaryMinSupportedVersionKey
 func SingleNodeMixedCluster(
 	t *testing.T, knobs *scexec.TestingKnobs, downlevelVersion bool,
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
-	targetVersion := clusterversion.TestingBinaryVersion
+	targetVersionKey := clusterversion.BinaryVersionKey
 	if downlevelVersion {
-		targetVersion = clusterversion.ByKey(OldVersionKey)
+		targetVersionKey = OldVersionKey
 	}
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Disabled due to a failure in TestBackupRestore. Tracked with #76378.
 		DefaultTestTenant: base.TestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          targetVersion,
+				BootstrapVersionKeyOverride:    targetVersionKey,
+				BinaryVersionOverride:          clusterversion.ByKey(targetVersionKey),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 			SQLDeclarativeSchemaChanger: knobs,
