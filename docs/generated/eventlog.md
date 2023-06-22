@@ -2140,6 +2140,7 @@ Events of this type are only emitted when the cluster setting
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `SessionID` | The connection's hex encoded session id. | no |
 | `Transport` | The connection type after transport negotiation. | no |
 | `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
 | `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
@@ -2168,6 +2169,7 @@ Events of this type are only emitted when the cluster setting
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `SessionID` | The connection's hex encoded session id. | no |
 | `Transport` | The connection type after transport negotiation. | no |
 | `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
 | `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
@@ -2195,6 +2197,7 @@ Events of this type are only emitted when the cluster setting
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `SessionID` | The connection's hex encoded session id. | no |
 | `Transport` | The connection type after transport negotiation. | no |
 | `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
 | `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
@@ -2223,6 +2226,7 @@ Events of this type are only emitted when the cluster setting
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `SessionID` | The connection's hex encoded session id. | no |
 
 ### `client_connection_start`
 
@@ -2245,6 +2249,7 @@ Events of this type are only emitted when the cluster setting
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `SessionID` | The connection's hex encoded session id. | no |
 
 ### `client_session_end`
 
@@ -2269,6 +2274,7 @@ Events of this type are only emitted when the cluster setting
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `SessionID` | The connection's hex encoded session id. | no |
 | `Transport` | The connection type after transport negotiation. | no |
 | `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
 | `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |

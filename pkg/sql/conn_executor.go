@@ -753,6 +753,7 @@ func (s *Server) SetupConn(
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
 	onDefaultIntSizeChange func(newSize int32),
+	sessionID clusterunique.ID,
 ) (ConnectionHandler, error) {
 	sd := newSessionData(args)
 	sds := sessiondata.NewStack(sd)
@@ -778,8 +779,14 @@ func (s *Server) SetupConn(
 	}
 
 	ex := s.newConnExecutor(
-		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
+		ctx,
+		sdMutIterator,
+		stmtBuf,
+		clientComm,
+		memMetrics,
+		&s.Metrics,
 		s.sqlStats.GetApplicationStats(sd.ApplicationName, false /* internal */),
+		sessionID,
 		nil, /* postSetupFn */
 	)
 	return ConnectionHandler{ex}, nil
@@ -965,6 +972,7 @@ func (s *Server) newConnExecutor(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
+	sessionID clusterunique.ID,
 	// postSetupFn is to override certain field of a conn executor.
 	// It is set when conn executor is init under an internal executor
 	// with a not-nil txn.
@@ -1107,6 +1115,7 @@ func (s *Server) newConnExecutor(
 	}
 
 	ex.initPlanner(ctx, &ex.planner)
+	ex.planner.extendedEvalCtx.SessionID = sessionID
 
 	return ex
 }
@@ -1208,7 +1217,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			ctx,
 			ex.server.cfg.InternalDB,
 			ex.server.cfg.Codec,
-			ex.sessionID,
+			ex.planner.extendedEvalCtx.SessionID,
 		)
 		if err != nil {
 			log.Errorf(
@@ -1597,8 +1606,6 @@ type connExecutor struct {
 	// queryCancelKey is a 64-bit identifier for the session used by the
 	// pgwire cancellation protocol.
 	queryCancelKey pgwirecancel.BackendKeyData
-
-	sessionID clusterunique.ID
 
 	// activated determines whether activate() was called already.
 	// When this is set, close() must be called to release resources.
@@ -2075,13 +2082,12 @@ func (ex *connExecutor) run(
 	ex.ctxHolder.connCtx = ctx
 	ex.onCancelSession = onCancel
 
-	ex.sessionID = ex.generateID()
-	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex.queryCancelKey, ex)
-	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
+	sessionID := ex.planner.extendedEvalCtx.SessionID
+	ex.server.cfg.SessionRegistry.register(sessionID, ex.queryCancelKey, ex)
 
 	defer func() {
-		ex.server.cfg.SessionRegistry.deregister(ex.sessionID, ex.queryCancelKey)
-		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, ex.sessionID, ex.serialize())
+		ex.server.cfg.SessionRegistry.deregister(sessionID, ex.queryCancelKey)
+		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, sessionID, ex.serialize())
 		if addErr != nil {
 			err = errors.CombineErrors(err, addErr)
 		}
@@ -2713,7 +2719,7 @@ func (ex *connExecutor) execCopyOut(
 	var numOutputRows int
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
-	queryID := ex.generateID()
+	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
@@ -2931,7 +2937,7 @@ func (ex *connExecutor) execCopyIn(
 	ex.incrementStartedStmtCounter(cmd.Stmt)
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
-	queryID := ex.generateID()
+	queryID := ex.server.cfg.GenerateID()
 	ex.addActiveQuery(cmd.ParsedStmt, nil /* placeholders */, queryID, cancelQuery)
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
@@ -3167,13 +3173,6 @@ func (ex *connExecutor) execCopyIn(
 // type should return NoData.
 func stmtHasNoData(stmt tree.Statement) bool {
 	return stmt == nil || stmt.StatementReturnType() != tree.Rows
-}
-
-// generateID generates a unique ID based on the SQL instance ID and its current
-// HLC timestamp. These IDs are either scoped at the query level or at the
-// session level.
-func (ex *connExecutor) generateID() clusterunique.ID {
-	return clusterunique.GenerateID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeInfo.NodeID.SQLInstanceID())
 }
 
 // commitPrepStmtNamespace deallocates everything in
@@ -3992,7 +3991,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		NumTxnsExecuted:            int32(ex.extraTxnState.txnCounter),
 		TxnFingerprintIDs:          txnFingerprintIDs,
 		LastActiveQuery:            lastActiveQuery,
-		ID:                         ex.sessionID.GetBytes(),
+		ID:                         ex.planner.extendedEvalCtx.SessionID.GetBytes(),
 		AllocBytes:                 ex.mon.AllocBytes(),
 		MaxAllocBytes:              ex.mon.MaximumBytes(),
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
