@@ -15,10 +15,14 @@ WHERE variable IN (
 'spanconfig.tenant_coalesce_adjacent.enabled',
 'sql.drop_tenant.enabled',
 'sql.create_tenant.default_template',
-'server.controller.default_tenant'
+'server.controller.default_tenant',
+'kv.rangefeed.enabled',
+'cross_cluster_replication.enabled'
 )
 ORDER BY variable
 ----
+cross_cluster_replication.enabled false
+kv.rangefeed.enabled false
 server.controller.default_tenant system
 server.secondary_tenants.redact_trace.enabled false
 spanconfig.storage_coalesce_adjacent.enabled false
