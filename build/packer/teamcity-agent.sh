@@ -21,9 +21,6 @@ apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
 cat > /etc/apt/sources.list.d/docker.list <<EOF
 deb https://download.docker.com/linux/ubuntu focal stable
 EOF
-# This was necessary for a bug back in Xenial.
-# TODO(#90203): Determine if this is still necessary.
-add-apt-repository ppa:git-core/ppa
 apt-get update --yes
 
 # Install the sudo version patched for CVE-2021-3156
@@ -66,26 +63,15 @@ EOF
 tar --strip-components=1 -C /usr -xzf /tmp/cmake.tar.gz
 rm -f /tmp/cmake.tar.gz
 
-if [ $ARCH = x86_64 ]; then
+if [[ $ARCH = x86_64 ]]; then
     curl -fsSL https://dl.google.com/go/go1.19.10.linux-amd64.tar.gz > /tmp/go.tgz
     sha256sum -c - <<EOF
 8b045a483d3895c6edba2e90a9189262876190dbbd21756870cdd63821810677  /tmp/go.tgz
 EOF
     tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
-
-    # Install the older version in parallel in order to run the acceptance test on older branches
-    # TODO: Remove this when 21.1 is EOL (2022-11-18, according to
-    # https://www.cockroachlabs.com/docs/releases/release-support-policy.html)
-    curl -fsSL https://dl.google.com/go/go1.15.14.linux-amd64.tar.gz > /tmp/go_old.tgz
-    sha256sum -c - <<EOF
-6f5410c113b803f437d7a1ee6f8f124100e536cc7361920f7e640fedf7add72d /tmp/go_old.tgz
-EOF
-    mkdir -p /usr/local/go1.15
-    tar -C /usr/local/go1.15 --strip-components=1 -zxf /tmp/go_old.tgz && rm /tmp/go_old.tgz
-
-# Explicitly symlink the pinned version to /usr/bin.
-    for f in `ls /usr/local/go/bin`; do
-        ln -s /usr/local/go/bin/$f /usr/bin
+    # Explicitly symlink the pinned version to /usr/bin.
+    for f in /usr/local/go/bin/*; do
+        ln -s "/usr/local/go/bin/$f" /usr/bin
     done
 fi
 
@@ -169,7 +155,7 @@ if [ $ARCH = x86_64 ]; then
     # which would corrupt the submodule defs. Probably good to remove once the
     # builder uses Ubuntu 18.04 or higher.
     git submodule update --init --recursive
-    for branch in $(git branch --all --list --sort=-committerdate 'origin/release-*' | head -n1) master
+    for branch in $(git branch --all --list --sort=-committerdate 'origin/release-*' | head -n2) master
     do
         git checkout "$branch"
         # TODO(benesch): store the acceptanceversion somewhere more accessible.
