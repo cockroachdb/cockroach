@@ -120,6 +120,7 @@ type BinaryOpEvaluator interface {
 	EvalMinusJsonbStringArrayOp(context.Context, *MinusJsonbStringArrayOp, Datum, Datum) (Datum, error)
 	EvalMinusJsonbStringOp(context.Context, *MinusJsonbStringOp, Datum, Datum) (Datum, error)
 	EvalMinusPGLSNDecimalOp(context.Context, *MinusPGLSNDecimalOp, Datum, Datum) (Datum, error)
+	EvalMinusPGLSNOp(context.Context, *MinusPGLSNOp, Datum, Datum) (Datum, error)
 	EvalMinusTimeIntervalOp(context.Context, *MinusTimeIntervalOp, Datum, Datum) (Datum, error)
 	EvalMinusTimeOp(context.Context, *MinusTimeOp, Datum, Datum) (Datum, error)
 	EvalMinusTimeTZIntervalOp(context.Context, *MinusTimeTZIntervalOp, Datum, Datum) (Datum, error)
@@ -567,6 +568,11 @@ func (op *MinusJsonbStringOp) Eval(ctx context.Context, e OpEvaluator, a, b Datu
 // Eval is part of the BinaryEvalOp interface.
 func (op *MinusPGLSNDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusPGLSNDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *MinusPGLSNOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalMinusPGLSNOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
