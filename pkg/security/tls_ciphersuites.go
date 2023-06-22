@@ -52,7 +52,7 @@ func RecommendedCipherSuites() []uint16 {
 }
 
 // OldCipherSuites returns a list of "old" cipher suites for TLS v1.2,
-// from the list created by Mozilla[1]. These are enabled with the
+// which adds back all ciphers from v22.1. These are enabled with the
 // use of the COCKROACH_TLS_ENABLE_OLD_CIPHER_SUITES environment
 // variable, and should strictly be used when the software
 // CockroachDB is being used with cannot be upgraded.
@@ -62,11 +62,15 @@ func RecommendedCipherSuites() []uint16 {
 // backwards compatibility should be added here, so organizations
 // can opt into using deprecated cipher suites rather than opting
 // every CRDB cluster into a worse security stance.
-//
-// [1]: https://wiki.mozilla.org/Security/Server_Side_TLS#Old_backward_compatibility
 func OldCipherSuites() []uint16 {
 	return []uint16{
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
 		tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
 		tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
 	}
 }

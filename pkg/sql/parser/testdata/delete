@@ -173,3 +173,27 @@ DELETE FROM a USING b AS one, c AS two, d AS three, e AS four WHERE (f != g) AND
 DELETE FROM a USING b AS one, c AS two, d AS three, e AS four WHERE ((((f) != (g))) AND (((g) = (h)))) RETURNING (e) -- fully parenthesized
 DELETE FROM a USING b AS one, c AS two, d AS three, e AS four WHERE (f != g) AND (g = h) RETURNING e -- literals removed
 DELETE FROM _ USING _ AS _, _ AS _, _ AS _, _ AS _ WHERE (_ != _) AND (_ = _) RETURNING _ -- identifiers removed
+
+parse
+DELETE BATCH FROM a
+----
+DELETE BATCH FROM a
+DELETE BATCH FROM a -- fully parenthesized
+DELETE BATCH FROM a -- literals removed
+DELETE BATCH FROM _ -- identifiers removed
+
+parse
+DELETE BATCH (SIZE 1) FROM a
+----
+DELETE BATCH (SIZE 1) FROM a
+DELETE BATCH (SIZE 1) FROM a -- fully parenthesized
+DELETE BATCH (SIZE 1) FROM a -- literals removed
+DELETE BATCH (SIZE 1) FROM _ -- identifiers removed
+
+parse
+DELETE BATCH (SIZE (SELECT 1)) FROM a
+----
+DELETE BATCH (SIZE (SELECT 1)) FROM a
+DELETE BATCH (SIZE (SELECT (1))) FROM a -- fully parenthesized
+DELETE BATCH (SIZE (SELECT _)) FROM a -- literals removed
+DELETE BATCH (SIZE (SELECT 1)) FROM _ -- identifiers removed
