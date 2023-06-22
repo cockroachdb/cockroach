@@ -1424,3 +1424,10 @@ user root
 
 statement ok
 REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+# Regression tests for not setting SQL stats provider in the backfill (#76710).
+statement ok
+CREATE TABLE t76710_1 AS SELECT * FROM crdb_internal.statement_statistics;
+
+statement ok
+CREATE MATERIALIZED VIEW t76710_2 AS SELECT fingerprint_id FROM crdb_internal.cluster_statement_statistics;
