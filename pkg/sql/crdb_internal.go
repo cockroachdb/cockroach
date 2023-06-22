@@ -68,7 +68,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -1137,18 +1136,6 @@ func execStatVar(count int64, n roachpb.NumericStat) tree.Datum {
 	return tree.NewDFloat(tree.DFloat(n.GetVariance(count)))
 }
 
-// getSQLStats retrieves a sqlStats provider from the planner or
-// returns an error if not available. virtualTableName specifies the virtual
-// table for which this sqlStats object is needed.
-func getSQLStats(
-	p *planner, virtualTableName string,
-) (*persistedsqlstats.PersistedSQLStats, error) {
-	if p.extendedEvalCtx.statsProvider == nil {
-		return nil, errors.Newf("%s cannot be used in this context", virtualTableName)
-	}
-	return p.extendedEvalCtx.statsProvider, nil
-}
-
 // legacyAnonymizedStmt is a placeholder value for the
 // crdb_internal.node_statement_statistics(anonymized) column. The column used
 // to contain the SQL statement scrubbed of all identifiers. At the time
@@ -1219,11 +1206,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
-		sqlStats, err := getSQLStats(p, "crdb_internal.node_statement_statistics")
-		if err != nil {
-			return err
-		}
-
+		sqlStats := p.extendedEvalCtx.statsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		statementVisitor := func(_ context.Context, stats *roachpb.CollectedStatementStatistics) error {
@@ -1366,11 +1349,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
-		sqlStats, err := getSQLStats(p, "crdb_internal.node_transaction_statistics")
-		if err != nil {
-			return err
-		}
-
+		sqlStats := p.extendedEvalCtx.statsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		transactionVisitor := func(_ context.Context, stats *roachpb.CollectedTransactionStatistics) error {
@@ -1440,11 +1419,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			return err
 		}
 
-		sqlStats, err := getSQLStats(p, "crdb_internal.node_txn_stats")
-		if err != nil {
-			return err
-		}
-
+		sqlStats := p.extendedEvalCtx.statsProvider
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		appTxnStatsVisitor := func(appName string, stats *roachpb.TxnStats) error {
