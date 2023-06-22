@@ -270,28 +270,6 @@ func (c *Cache) convertToNodeVitality(l livenesspb.Liveness) livenesspb.NodeVita
 	)
 }
 
-// getIsLiveMap returns a map of nodeID to boolean liveness status of
-// each node. This excludes nodes that were removed completely (dead +
-// decommissioned)
-func (c *Cache) getIsLiveMap() livenesspb.IsLiveMap {
-	lMap := livenesspb.IsLiveMap{}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	now := c.clock.Now()
-	for nID, l := range c.mu.nodes {
-		isLive := l.IsLive(now)
-		if l.Membership.Decommissioned() {
-			// This is a node that was completely removed. Skip over it.
-			continue
-		}
-		lMap[nID] = livenesspb.IsLiveMapEntry{
-			Liveness: l.Liveness,
-			IsLive:   isLive,
-		}
-	}
-	return lMap
-}
-
 // getAllLivenessEntries returns a copy of all the entries currently in the
 // liveness Cache. Most places should avoid calling this method and instead just
 // get the entry they need. In a few places in the code it is more efficient to
