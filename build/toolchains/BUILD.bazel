@@ -351,6 +351,17 @@ config_setting(
 )
 
 config_setting(
+    name = "is_non_dev_macos_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:aarch64",
+    ],
+    flag_values = {
+        ":dev_flag": "false",
+    },
+)
+
+config_setting(
     name = "is_dev_macos_arm64",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:darwin",
@@ -506,4 +517,79 @@ config_setting(
         ":prebuild_cdeps_flag": "true",
     },
     visibility = ["//c-deps:__pkg__"],
+)
+
+config_setting(
+    name = "is_linux_amd64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_linux_arm64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_amd64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_arm64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:arm64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_windows_amd64_no_force_build_cdeps",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:windows",
+        "@platforms//cpu:x86_64",
+    ],
+    flag_values = {
+        ":force_build_cdeps_flag": "false",
+    },
+    visibility = [
+        "//build/bazelutil:__pkg__",
+        "//c-deps:__pkg__",
+    ],
 )
