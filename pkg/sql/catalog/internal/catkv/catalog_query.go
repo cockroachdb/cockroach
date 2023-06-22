@@ -191,9 +191,6 @@ func build(
 	if expectedType != catalog.Any && b.DescriptorType() != expectedType {
 		return nil, pgerror.Newf(pgcode.WrongObjectType, "descriptor is a %s", b.DescriptorType())
 	}
-	if err := b.RunPostDeserializationChanges(); err != nil {
-		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
-	}
 	b.SetRawBytesInStorage(rowValue.TagAndDataBytes())
 	desc := b.BuildImmutable()
 	if id != desc.GetID() {
