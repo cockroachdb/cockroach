@@ -4014,3 +4014,25 @@ func (s *statusServer) TransactionContentionEvents(
 
 	return resp, nil
 }
+
+// GetJobProfilerExecutionDetails reads all the stored execution details for a
+// given job ID.
+func (s *statusServer) GetJobProfilerExecutionDetails(
+	ctx context.Context, req *serverpb.GetJobProfilerExecutionDetailRequest,
+) (*serverpb.GetJobProfilerExecutionDetailResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	// TODO(adityamaru): Figure out the correct privileges required to get execution details.
+	_, err := s.privilegeChecker.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	jobID := jobspb.JobID(req.JobId)
+	execCfg := s.sqlServer.execCfg
+	eb := sql.MakeJobProfilerExecutionDetailsBuilder(execCfg.InternalDB, jobID)
+	data, err := eb.ReadExecutionDetail(ctx, req.Filename)
+	if err != nil {
+		return nil, err
+	}
+	return &serverpb.GetJobProfilerExecutionDetailResponse{Data: data}, nil
+}

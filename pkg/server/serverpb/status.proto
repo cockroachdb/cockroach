@@ -2044,6 +2044,16 @@ message NetworkConnectivityResponse {
   ];
 }
 
+ message GetJobProfilerExecutionDetailRequest {
+   int64 job_id = 1;
+   string filename = 2;
+ }
+
+ message GetJobProfilerExecutionDetailResponse {
+   bytes data = 1;
+ }
+
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2510,6 +2520,13 @@ service Status {
   rpc NetworkConnectivity(NetworkConnectivityRequest) returns (NetworkConnectivityResponse) {
     option (google.api.http) = {
       get: "/_status/connectivity"
+    };
+  }
+
+
+  rpc GetJobProfilerExecutionDetails(GetJobProfilerExecutionDetailRequest) returns (GetJobProfilerExecutionDetailResponse) {
+    option (google.api.http) = {
+      get: "/_status/job_profiler_execution_details/{job_id}/{filename}"
     };
   }
 }

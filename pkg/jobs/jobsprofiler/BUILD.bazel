@@ -15,7 +15,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

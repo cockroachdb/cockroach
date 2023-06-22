@@ -2427,6 +2427,7 @@ var builtinOidsArray = []string{
 	2454: `crdb_internal.sstable_metrics(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> tuple{int AS node_id,, int AS store_id, int AS level, int AS file_num, jsonb AS metrics}`,
 	2455: `crdb_internal.repair_catalog_corruption(descriptor_id: int, corruption: string) -> bool`,
 	2456: `crdb_internal.merge_aggregated_stmt_metadata(input: jsonb[]) -> jsonb`,
+	2457: `crdb_internal.request_job_execution_details(jobID: int) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
