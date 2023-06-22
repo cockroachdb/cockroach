@@ -914,8 +914,8 @@ type queuedGuard struct {
 	active bool // protected by lockState.mu
 }
 
-// Information about a lock holder.
-type lockHolderInfo struct {
+// Information about a lock holder for unreplicated locks.
+type unreplicatedLockHolderInfo struct {
 	// nil if there is no holder. Else this is the TxnMeta of the latest call to
 	// acquire/update the lock by this transaction. For a given transaction if
 	// the lock is continuously held by a succession of different TxnMetas, the
@@ -924,19 +924,92 @@ type lockHolderInfo struct {
 	// is initialized, the timestamps inside txn are not used.
 	txn *enginepb.TxnMeta
 
-	// All the TxnSeqs in the current epoch at which this lock has been
-	// acquired. In increasing order. We track these so that if a lock is
-	// acquired at both seq 5 and seq 7, rollback of 7 does not cause the lock
-	// to be released. This is also consistent with PostgreSQL semantics
+	// All the TxnSeqs in the current epoch at which this lock has been acquired,
+	// in increasing order. We track these so that if a lock is acquired at both
+	// seq 5 and seq 7, rollback of 7 does not cause the lock to be released. This
+	// consistent with PostgreSQL semantics; see:
 	// https://www.postgresql.org/docs/12/sql-select.html#SQL-FOR-UPDATE-SHARE
 	seqs []enginepb.TxnSeq
 
-	// The timestamp at which the lock is held.
+	// The timestamp at which the unreplicated lock is held.
 	ts hlc.Timestamp
 }
 
-func (lh *lockHolderInfo) isEmpty() bool {
-	return lh.txn == nil && lh.seqs == nil && lh.ts.IsEmpty()
+func (ulh *unreplicatedLockHolderInfo) isEmpty() bool {
+	return ulh.txn == nil && ulh.seqs == nil && ulh.ts.IsEmpty()
+}
+
+func (ulh *unreplicatedLockHolderInfo) safeFormat(
+	sb *redact.StringBuilder, txnStatusCache *txnStatusCache,
+) {
+	if ulh.txn == nil {
+		return
+	}
+	sb.SafeString("unrepl ")
+	if txnStatusCache != nil {
+		finalizedTxn, ok := txnStatusCache.finalizedTxns.get(ulh.txn.ID)
+		if ok {
+			var statusStr string
+			switch finalizedTxn.Status {
+			case roachpb.COMMITTED:
+				statusStr = "committed"
+			case roachpb.ABORTED:
+				statusStr = "aborted"
+			}
+			sb.Printf("[holder finalized: %s] ", redact.Safe(statusStr))
+		}
+	}
+	sb.Printf("epoch: %d, seqs: [%d", redact.Safe(ulh.txn.Epoch), redact.Safe(ulh.seqs[0]))
+	for j := 1; j < len(ulh.seqs); j++ {
+		sb.Printf(", %d", redact.Safe(ulh.seqs[j]))
+	}
+	sb.SafeString("]")
+}
+
+// Information about a lock holder for replicated locks. Notably, unlike
+// unreplicated locks, this does not include any sequence numbers.
+type replicatedLockHolderInfo struct {
+	// nil if there is no holder. Else this is the TxnMeta of the latest call to
+	// acquire/update the lock by this transaction. For a given transaction if
+	// the lock is continuously held by a succession of different TxnMetas, the
+	// epoch must be monotonic and the ts (derived from txn.WriteTimestamp for
+	// some calls, and request.ts for other calls) must be monotonic. After ts
+	// is initialized, the timestamps inside txn are not used.
+	//
+	// TODO(arul): we don't really need to track the entire txnMeta here. We
+	// mostly use it as a proxy for whether the lock is held or not -- a simple
+	// boolean would do.
+	txn *enginepb.TxnMeta
+
+	// The timestamp at which the replicated lock is held.
+	ts hlc.Timestamp
+}
+
+func (rlh *replicatedLockHolderInfo) isEmpty() bool {
+	return rlh.txn == nil && rlh.ts.IsEmpty()
+}
+
+func (rlh *replicatedLockHolderInfo) safeFormat(
+	sb *redact.StringBuilder, txnStatusCache *txnStatusCache,
+) {
+	if rlh.txn == nil {
+		return
+	}
+	sb.SafeString("repl ")
+	if txnStatusCache != nil {
+		finalizedTxn, ok := txnStatusCache.finalizedTxns.get(rlh.txn.ID)
+		if ok {
+			var statusStr string
+			switch finalizedTxn.Status {
+			case roachpb.COMMITTED:
+				statusStr = "committed"
+			case roachpb.ABORTED:
+				statusStr = "aborted"
+			}
+			sb.Printf("[holder finalized: %s] ", redact.Safe(statusStr))
+		}
+	}
+	sb.Printf("epoch: %d", redact.Safe(rlh.txn.Epoch))
 }
 
 // Per lock state in lockTableImpl.
@@ -975,7 +1048,18 @@ type lockState struct {
 	holder struct {
 		locked bool
 		// Lock strength is always lock.Intent.
-		holder [lock.MaxDurability + 1]lockHolderInfo
+
+		// INVARIANT: If the lock is held (i.e. the locked boolean is set to true),
+		// then atleast one of (and possibly both of) unreplicatedInfo and
+		// replicatedInfo must track lock holder information.
+
+		// unreplicatedInfo tracks lock holder information if the lock is held with
+		// durability unreplicated.
+		unreplicatedInfo unreplicatedLockHolderInfo
+
+		// replicatedInfo tracks lock holder information if the lock is held with
+		// durability replicated.
+		replicatedInfo replicatedLockHolderInfo
 
 		// The start time of the lockholder being marked as held in the lock table.
 		// NB: In the case of a replicated lock that is held by a transaction, if
@@ -1157,47 +1241,19 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 		sb.SafeString("  empty\n")
 		return
 	}
-	writeHolderInfo := func(sb *redact.StringBuilder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
+	txn, ts := l.getLockHolder()
+	if txn != nil { // lock is held
 		sb.Printf("  holder: txn: %v, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(ts))
-		first := true
-		for i := range l.holder.holder {
-			h := &l.holder.holder[i]
-			if h.txn == nil {
-				continue
+		if !l.holder.replicatedInfo.isEmpty() {
+			l.holder.replicatedInfo.safeFormat(sb, txnStatusCache)
+			if !l.holder.unreplicatedInfo.isEmpty() {
+				sb.Printf(", ")
 			}
-			if !first {
-				sb.SafeString(", ")
-			}
-			first = false
-			if lock.Durability(i) == lock.Replicated {
-				sb.SafeString("repl ")
-			} else {
-				sb.SafeString("unrepl ")
-			}
-			if txnStatusCache != nil {
-				finalizedTxn, ok := txnStatusCache.finalizedTxns.get(h.txn.ID)
-				if ok {
-					var statusStr string
-					switch finalizedTxn.Status {
-					case roachpb.COMMITTED:
-						statusStr = "committed"
-					case roachpb.ABORTED:
-						statusStr = "aborted"
-					}
-					sb.Printf("[holder finalized: %s] ", redact.Safe(statusStr))
-				}
-			}
-			sb.Printf("epoch: %d, seqs: [%d", redact.Safe(h.txn.Epoch), redact.Safe(h.seqs[0]))
-			for j := 1; j < len(h.seqs); j++ {
-				sb.Printf(", %d", redact.Safe(h.seqs[j]))
-			}
-			sb.SafeString("]")
+		}
+		if !l.holder.unreplicatedInfo.isEmpty() {
+			l.holder.unreplicatedInfo.safeFormat(sb, txnStatusCache)
 		}
 		sb.SafeString("\n")
-	}
-	txn, ts := l.getLockHolder()
-	if txn != nil {
-		writeHolderInfo(sb, txn, ts)
 	}
 	// TODO(sumeer): Add an optional `description string` field to Request and
 	// lockTableGuardImpl that tests can set to avoid relying on the seqNum to
@@ -1271,11 +1327,11 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 
 	durability := lock.Unreplicated
 	if l.holder.locked {
-		if l.holder.holder[lock.Replicated].txn != nil {
+		if l.holder.replicatedInfo.txn != nil {
 			durability = lock.Replicated
-			txnHolder = l.holder.holder[lock.Replicated].txn
-		} else if l.holder.holder[lock.Unreplicated].txn != nil {
-			txnHolder = l.holder.holder[lock.Unreplicated].txn
+			txnHolder = l.holder.replicatedInfo.txn
+		} else if l.holder.unreplicatedInfo.txn != nil {
+			txnHolder = l.holder.unreplicatedInfo.txn
 		}
 	}
 
@@ -1542,9 +1598,8 @@ func (l *lockState) isEmptyLock() bool {
 	// The lock isn't held. Sanity check the lock state is sane:
 	// 1. Lock holder information should be zero-ed out.
 	// 2. There should be no waiting readers.
-	for i := range l.holder.holder {
-		assert(l.holder.holder[i].isEmpty(), "lockState with !locked but non-zero lockHolderInfo")
-	}
+	assert(l.holder.unreplicatedInfo.isEmpty(), "lockState !locked but non-zero unreplicatedInfo")
+	assert(l.holder.replicatedInfo.isEmpty(), "lockState !locked but non-zero replicatedInfo")
 	assert(l.waitingReaders.Len() == 0, "lockState with waiting readers but no holder")
 	// Determine if the lock is empty or not by checking the list of queued
 	// writers.
@@ -1616,10 +1671,10 @@ func (l *lockState) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 func (l *lockState) isLockedBy(id uuid.UUID) bool {
 	if l.holder.locked {
 		var holderID uuid.UUID
-		if l.holder.holder[lock.Unreplicated].txn != nil {
-			holderID = l.holder.holder[lock.Unreplicated].txn.ID
+		if l.holder.unreplicatedInfo.txn != nil {
+			holderID = l.holder.unreplicatedInfo.txn.ID
 		} else {
-			holderID = l.holder.holder[lock.Replicated].txn.ID
+			holderID = l.holder.replicatedInfo.txn.ID
 		}
 		return id == holderID
 	}
@@ -1634,21 +1689,22 @@ func (l *lockState) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 		return nil, hlc.Timestamp{}
 	}
 
+	assert(
+		l.holder.replicatedInfo.txn != nil || l.holder.unreplicatedInfo.txn != nil,
+		"lock held, but no replicated or unreplicated lock holder info",
+	)
+
 	// If the lock is held as both replicated and unreplicated we want to
 	// provide the lower of the two timestamps, since the lower timestamp
 	// contends with more transactions. Else we provide whichever one it is held
 	// at.
-
-	// Start with the assumption that it is held as replicated.
-	index := lock.Replicated
-	// Condition under which we prefer the unreplicated holder.
-	if l.holder.holder[index].txn == nil || (l.holder.holder[lock.Unreplicated].txn != nil &&
+	if l.holder.replicatedInfo.txn == nil || (l.holder.unreplicatedInfo.txn != nil &&
 		// If we are evaluating the following clause we are sure that it is held
 		// as both replicated and unreplicated.
-		l.holder.holder[lock.Unreplicated].ts.Less(l.holder.holder[lock.Replicated].ts)) {
-		index = lock.Unreplicated
+		l.holder.unreplicatedInfo.ts.Less(l.holder.replicatedInfo.ts)) {
+		return l.holder.unreplicatedInfo.txn, l.holder.unreplicatedInfo.ts
 	}
-	return l.holder.holder[index].txn, l.holder.holder[index].ts
+	return l.holder.replicatedInfo.txn, l.holder.replicatedInfo.ts
 }
 
 // getLockMode returns the Mode with which a lock is held.
@@ -1666,9 +1722,8 @@ func (l *lockState) getLockMode() lock.Mode {
 func (l *lockState) clearLockHolder() {
 	l.holder.locked = false
 	l.holder.startTime = time.Time{}
-	for i := range l.holder.holder {
-		l.holder.holder[i] = lockHolderInfo{}
-	}
+	l.holder.replicatedInfo = replicatedLockHolderInfo{}
+	l.holder.unreplicatedInfo = unreplicatedLockHolderInfo{}
 }
 
 // scanAndMaybeEnqueue scans all locks held on the receiver's key and performs
@@ -1832,7 +1887,7 @@ func (l *lockState) conflictsWithLockHolder(g *lockTableGuardImpl) bool {
 		up := roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: l.key})
 		// The lock belongs to a finalized transaction. There's no conflict, but the
 		// lock must be resolved -- accumulate it on the appropriate slice.
-		if l.holder.holder[lock.Replicated].txn == nil {
+		if l.holder.replicatedInfo.txn == nil { // only held unreplicated
 			g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
 		} else {
 			g.toResolve = append(g.toResolve, up)
@@ -1860,7 +1915,7 @@ func (l *lockState) conflictsWithLockHolder(g *lockTableGuardImpl) bool {
 			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
 			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
 				up := roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: l.key})
-				if l.holder.holder[lock.Replicated].txn == nil {
+				if l.holder.replicatedInfo.txn == nil {
 					// Only held unreplicated. Accumulate it as an unreplicated lock to
 					// resolve, in case any other waiting readers can benefit from the
 					// pushed timestamp.
@@ -2207,75 +2262,57 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		if acq.Txn.ID != beforeTxn.ID {
 			return errors.AssertionFailedf("existing lock cannot be acquired by different transaction")
 		}
-		if acq.Durability == lock.Unreplicated &&
-			l.holder.holder[lock.Unreplicated].txn != nil &&
-			l.holder.holder[lock.Unreplicated].txn.Epoch > acq.Txn.Epoch {
-			// If the lock is being re-acquired as an unreplicated lock, and the
-			// request trying to do so belongs to a prior epoch, we reject the
-			// request. This parallels the logic mvccPutInternal has for intents.
-			return errors.Errorf(
-				"locking request with epoch %d came after lock(unreplicated) had already been acquired at epoch %d in txn %s",
-				acq.Txn.Epoch, l.holder.holder[acq.Durability].txn.Epoch, acq.Txn.ID,
-			)
-		}
 		// TODO(arul): Once we stop storing sequence numbers/transaction protos
 		// associated with replicated locks, the following logic can be deleted.
 		if acq.Durability == lock.Replicated &&
-			l.holder.holder[lock.Replicated].txn != nil &&
-			l.holder.holder[lock.Replicated].txn.Epoch > acq.Txn.Epoch {
+			l.holder.replicatedInfo.txn != nil &&
+			l.holder.replicatedInfo.txn.Epoch > acq.Txn.Epoch {
 			// If we're dealing with a replicated lock (intent), and the transaction
 			// acquiring this lock belongs to a prior epoch, we expect mvccPutInternal
 			// to return an error. As such, the request should never call into
 			// AcquireLock and reach this point.
 			return errors.AssertionFailedf(
 				"locking request with epoch %d came after lock(replicated) had already been acquired at epoch %d in txn %s",
-				acq.Txn.Epoch, l.holder.holder[acq.Durability].txn.Epoch, acq.Txn.ID,
+				acq.Txn.Epoch, l.holder.replicatedInfo.txn.Epoch, acq.Txn.ID,
 			)
 		}
-		seqs := l.holder.holder[acq.Durability].seqs
-		// Lock is being re-acquired...
-		if l.holder.holder[acq.Durability].txn != nil &&
+		// An unreplicated lock is being re-acquired...
+		if acq.Durability == lock.Unreplicated && l.holder.unreplicatedInfo.txn != nil {
+			switch {
 			// ...at a higher epoch.
-			l.holder.holder[acq.Durability].txn.Epoch < acq.Txn.Epoch {
-			// Clear the sequences for the older epoch.
-			seqs = seqs[:0]
-		}
-		// Lock is being re-acquired with durability Unreplicated...
-		if acq.Durability == lock.Unreplicated && l.holder.holder[lock.Unreplicated].txn != nil &&
-			// ... at the same epoch.
-			l.holder.holder[lock.Unreplicated].txn.Epoch == acq.Txn.Epoch {
-			// Prune the list of sequence numbers tracked for this lock by removing
-			// any sequence numbers that are considered ignored by virtue of a
-			// savepoint rollback.
-			//
-			// Note that the in-memory lock table is the source of truth for just
-			// unreplicated locks, so we only do this pruning for unreplicated lock
-			// acquisition. On the other hand, for replicated locks, the source of
-			// truth is what's written in MVCC. We could try and mimic that logic
-			// here, but we choose not to, as doing so is error-prone/difficult to
-			// maintain.
-			seqs = removeIgnored(seqs, acq.IgnoredSeqNums)
-		}
-
-		if len(seqs) > 0 && seqs[len(seqs)-1] >= acq.Txn.Sequence {
-			// Idempotent lock acquisition. In this case, we simply ignore the lock
-			// acquisition as long as it corresponds to an existing sequence number.
-			// If the sequence number is not being tracked yet, insert it into the
-			// sequence history. The validity of such a lock re-acquisition should
-			// have already been determined at the MVCC level.
-			if i := sort.Search(len(seqs), func(i int) bool {
-				return seqs[i] >= acq.Txn.Sequence
-			}); i == len(seqs) {
-				panic("lockTable bug - search value <= last element")
-			} else if seqs[i] != acq.Txn.Sequence {
-				seqs = append(seqs, 0)
-				copy(seqs[i+1:], seqs[i:])
-				seqs[i] = acq.Txn.Sequence
-				l.holder.holder[acq.Durability].seqs = seqs
+			case l.holder.unreplicatedInfo.txn.Epoch < acq.Txn.Epoch:
+				// Clear sequence numbers from the older epoch.
+				l.holder.unreplicatedInfo.seqs = l.holder.unreplicatedInfo.seqs[:0]
+				//...at the same epoch.
+			case l.holder.unreplicatedInfo.txn.Epoch == acq.Txn.Epoch:
+				// Prune the list of sequence numbers tracked for this lock by removing
+				// any sequence numbers that are considered ignored by virtue of a
+				// savepoint rollback.
+				//
+				// Note that the in-memory lock table is the source of truth for just
+				// unreplicated locks, so we only do this pruning for unreplicated lock
+				// acquisition. On the other hand, for replicated locks, the source of
+				// truth is what's written in MVCC. We could try and mimic that logic
+				// here, but we choose not to, as doing so is error-prone/difficult to
+				// maintain.
+				l.holder.unreplicatedInfo.seqs = removeIgnored(
+					l.holder.unreplicatedInfo.seqs, acq.IgnoredSeqNums,
+				)
+			//...at a prior epoch.
+			case l.holder.unreplicatedInfo.txn.Epoch > acq.Txn.Epoch:
+				// Reject the request; the logic here parallels how mvccPutInternal
+				// handles this case for intents.
+				return errors.Errorf(
+					"locking request with epoch %d came after lock(unreplicated) had already been acquired at epoch %d in txn %s",
+					acq.Txn.Epoch, l.holder.unreplicatedInfo.txn.Epoch, acq.Txn.ID,
+				)
+			default:
+				panic("unreachable")
 			}
-			return nil
 		}
-		l.holder.holder[acq.Durability].txn = &acq.Txn
+		if l.isIdempotentLockAcquisition(acq) {
+			return nil // nothing more to do here.
+		}
 		// Forward the lock's timestamp instead of assigning to it blindly.
 		// While lock acquisition uses monotonically increasing timestamps
 		// from the perspective of the transaction's coordinator, this does
@@ -2314,8 +2351,17 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		// timestamp at that point, which may cause them to conflict with the
 		// lock even if they had not conflicted before. In a sense, it is no
 		// different than the first time a lock is added to the lockTable.
-		l.holder.holder[acq.Durability].ts.Forward(acq.Txn.WriteTimestamp)
-		l.holder.holder[acq.Durability].seqs = append(seqs, acq.Txn.Sequence)
+		switch acq.Durability {
+		case lock.Unreplicated:
+			l.holder.unreplicatedInfo.txn = &acq.Txn
+			l.holder.unreplicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
+			l.holder.unreplicatedInfo.seqs = append(l.holder.unreplicatedInfo.seqs, acq.Txn.Sequence)
+		case lock.Replicated:
+			l.holder.replicatedInfo.txn = &acq.Txn
+			l.holder.replicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
+		default:
+			panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
+		}
 
 		_, afterTs := l.getLockHolder()
 		if beforeTs.Less(afterTs) {
@@ -2356,14 +2402,72 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 	}
 
 	l.holder.locked = true
-	l.holder.holder[acq.Durability].txn = &acq.Txn
-	l.holder.holder[acq.Durability].ts = acq.Txn.WriteTimestamp
-	l.holder.holder[acq.Durability].seqs = append([]enginepb.TxnSeq(nil), acq.Txn.Sequence)
 	l.holder.startTime = clock.PhysicalTime()
+	switch acq.Durability {
+	case lock.Unreplicated:
+		l.holder.unreplicatedInfo.txn = &acq.Txn
+		l.holder.unreplicatedInfo.ts = acq.Txn.WriteTimestamp
+		l.holder.unreplicatedInfo.seqs = append([]enginepb.TxnSeq(nil), acq.Txn.Sequence)
+	case lock.Replicated:
+		l.holder.replicatedInfo.txn = &acq.Txn
+		l.holder.replicatedInfo.ts = acq.Txn.WriteTimestamp
+	default:
+		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
+	}
 
 	// Inform active waiters since lock has transitioned to held.
 	l.informActiveWaiters()
 	return nil
+}
+
+// isIdempotentLockAcquisition returns true if the lock acquisition is
+// idempotent. Idempotent lock acquisitions do not require any changes to what
+// is being tracked in the lock's state.
+//
+// REQUIRES: l.mu to be locked.
+func (l *lockState) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) bool {
+	txn, _ := l.getLockHolder()
+	assert(txn.ID == acq.Txn.ID, "existing lock transaction is different from the acquisition")
+	switch acq.Durability {
+	case lock.Unreplicated:
+		seqs := l.holder.unreplicatedInfo.seqs
+		// Cheaply check if this could be an idempotent lock acquisition.
+		if len(seqs) > 0 && seqs[len(seqs)-1] >= acq.Txn.Sequence {
+			// Idempotent lock acquisition. In this case, we simply ignore the lock
+			// acquisition as long as it corresponds to an existing sequence number.
+			// If the sequence number is not being tracked yet, insert it into the
+			// sequence history. The validity of such a lock re-acquisition should
+			// have already been determined at the MVCC level.
+
+			if i := sort.Search(len(seqs), func(i int) bool {
+				return seqs[i] >= acq.Txn.Sequence
+			}); i == len(seqs) {
+				panic("lockTable bug - search value <= last element")
+			} else if seqs[i] != acq.Txn.Sequence {
+				// TODO(arul): Once we change the lockState datastructure to only track
+				// the highest sequence number, we should remove all mutations happening
+				// inside this function.
+				seqs = append(seqs, 0)
+				copy(seqs[i+1:], seqs[i:])
+				seqs[i] = acq.Txn.Sequence
+				l.holder.unreplicatedInfo.seqs = seqs
+			}
+			// NB: Lock re-acquisitions at different timestamps are not considered
+			// idempotent. Strictly speaking, we could tighten this condition to
+			// consider lock re-acquisition at lower timestamps idempotent, as a
+			// lock's timestamp at a given durability never regresses.
+			return l.holder.unreplicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+		}
+		return false
+	case lock.Replicated:
+		// NB: Lock re-acquisitions at different timestamps are not considered
+		// idempotent. Strictly speaking, we could tighten this condition to
+		// consider lock re-acquisition at lower timestamps idempotent, as a
+		// lock's timestamp at a given durability never regresses.
+		return l.holder.replicatedInfo.txn != nil && l.holder.replicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+	default:
+		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
+	}
 }
 
 // A replicated lock held by txn with timestamp ts was discovered by guard g
@@ -2393,11 +2497,10 @@ func (l *lockState) discoveredLock(
 		l.holder.locked = true
 		l.holder.startTime = clock.PhysicalTime()
 	}
-	holder := &l.holder.holder[lock.Replicated]
+	holder := &l.holder.replicatedInfo
 	if holder.txn == nil {
 		holder.txn = txn
 		holder.ts = ts
-		holder.seqs = append(holder.seqs, txn.Sequence)
 	}
 
 	switch accessStrength {
@@ -2476,7 +2579,7 @@ func (l *lockState) tryClearLock(force bool) bool {
 	// Clear lock holder. While doing so, construct the closure used to transition
 	// waiters.
 	lockHolderTxn, _ := l.getLockHolder() // only needed if this is a replicated lock
-	replicatedHeld := l.holder.locked && l.holder.holder[lock.Replicated].txn != nil
+	replicatedHeld := l.holder.locked && l.holder.replicatedInfo.txn != nil
 	transitionWaiter := func(g *lockTableGuardImpl) {
 		if replicatedHeld && !force {
 			// Note that none of the current waiters can be requests from
@@ -2588,51 +2691,59 @@ func (l *lockState) tryUpdateLockLocked(up roachpb.LockUpdate) (heldByTxn, gc bo
 	_, beforeTs := l.getLockHolder()
 	advancedTs := beforeTs.Less(ts)
 	isLocked := false
-	for i := range l.holder.holder {
-		holder := &l.holder.holder[i]
-		if holder.txn == nil {
-			continue
-		}
-		// Note that mvccResolveWriteIntent() has special handling of the case
-		// where the pusher is using an epoch lower than the epoch of the intent
-		// (replicated lock), but is trying to push to a higher timestamp. The
-		// replicated lock gets written with the newer epoch (not the epoch known
-		// to the pusher) but a higher timestamp. Then the pusher will call into
-		// this function with that lower epoch. Instead of trying to be consistent
-		// with mvccResolveWriteIntent() in the current state of the replicated
-		// lock we simply forget the replicated lock since it is no longer in the
-		// way of this request. Eventually, once we have segregated locks, the
-		// lock table will be the source of truth for replicated locks too, and
-		// this forgetting behavior will go away.
-		//
-		// For unreplicated locks the lock table is the source of truth, so we
-		// best-effort mirror the behavior of mvccResolveWriteIntent() by updating
-		// the timestamp.
-		if lock.Durability(i) == lock.Replicated || txn.Epoch > holder.txn.Epoch {
-			*holder = lockHolderInfo{}
-			continue
-		}
-		// Unreplicated lock held in same epoch or a higher epoch.
-		if advancedTs {
-			// We may advance ts here but not update the holder.txn object below
-			// for the reason stated in the comment about mvccResolveWriteIntent().
-			// The lockHolderInfo.ts is the source of truth regarding the timestamp
-			// of the lock, and not TxnMeta.WriteTimestamp.
-			holder.ts = ts
-		}
-		if txn.Epoch == holder.txn.Epoch {
-			holder.seqs = removeIgnored(holder.seqs, up.IgnoredSeqNums)
-			if len(holder.seqs) == 0 {
-				*holder = lockHolderInfo{}
-				continue
+	// The MVCC keyspace is the source of truth about the disposition of a
+	// replicated lock. Replicated locks are updated using
+	// mvccResolveWriteIntent(). Trying to be consistent[1] with the handling in
+	// mvccResolveWriteIntent() is error-prone, especially as things evolve.
+	// Instead of attempting to do so, we simply forget the replicated lock.
+	//
+	// [1] For a little flavour of the complexity here, mvccResolveWriteIntent()
+	// has special handling of the case where a pusher is using an epoch lower
+	// than the epoch of the intent. The intent is written at the newer epoch (the
+	// one not known to the pusher) but at a higher timestamp. The pusher will
+	// then call into this function with that lower epoch.
+	if l.holder.replicatedInfo.txn != nil {
+		l.holder.replicatedInfo = replicatedLockHolderInfo{}
+	}
+	// However, for unreplicated locks, the lock table is the source of truth.
+	// As such, we best-effort mirror the behavior of mvccResolveWriteIntent().
+	if l.holder.unreplicatedInfo.txn != nil {
+		switch {
+		//...update corresponds to a higher epoch.
+		case txn.Epoch > l.holder.unreplicatedInfo.txn.Epoch:
+			// Forget what was tracked previously.
+			l.holder.unreplicatedInfo = unreplicatedLockHolderInfo{}
+
+			// ...update corresponds to the current epoch.
+		case txn.Epoch == l.holder.unreplicatedInfo.txn.Epoch:
+			l.holder.unreplicatedInfo.seqs = removeIgnored(l.holder.unreplicatedInfo.seqs, up.IgnoredSeqNums)
+			if len(l.holder.unreplicatedInfo.seqs) == 0 {
+				l.holder.unreplicatedInfo = unreplicatedLockHolderInfo{}
+				isLocked = false
+				break
 			}
 			if advancedTs {
-				holder.txn = txn
+				// NB: Unlike the case below, where we can't update the txn object
+				// because of the desire to best-effort mirror mvccResolveWriteIntent
+				// internal, we can do so here because the epochs are the same.
+				l.holder.unreplicatedInfo.txn = txn
+				l.holder.unreplicatedInfo.ts = ts
 			}
+			isLocked = true
+
+			// ...update corresponds to an older epoch of the transaction.
+		case txn.Epoch < l.holder.unreplicatedInfo.txn.Epoch:
+			if advancedTs {
+				// We may advance ts here but not update the holder.txn object below for
+				// the reason stated in the comment about mvccResolveWriteIntent(). The
+				// {unreplicated,replicated}LockHolderInfo.ts is the source of truth
+				// regarding the timestamp of the lock, and not TxnMeta.WriteTimestamp.
+				l.holder.unreplicatedInfo.ts = ts
+			}
+			isLocked = true
+		default:
+			panic("unreachable")
 		}
-		// Else txn.Epoch < lockHolderTxn.Epoch, so only the timestamp has been
-		// potentially updated.
-		isLocked = true
 	}
 
 	if !isLocked {
@@ -2796,7 +2907,7 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 	defer l.mu.Unlock()
 
 	// Bail if not locked with only the Unreplicated durability.
-	if !l.holder.locked || l.holder.holder[lock.Replicated].txn != nil {
+	if !l.holder.locked || l.holder.replicatedInfo.txn != nil {
 		return false
 	}
 
