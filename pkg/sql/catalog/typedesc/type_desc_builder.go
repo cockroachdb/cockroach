@@ -78,6 +78,27 @@ func newBuilder(
 	return b
 }
 
+// getLatestDesc returns the modified descriptor if it exists, or else the
+// original descriptor.
+func (tdb *typeDescriptorBuilder) getLatestDesc() *descpb.TypeDescriptor {
+	desc := tdb.maybeModified
+	if desc == nil {
+		desc = tdb.original
+	}
+	return desc
+}
+
+// getOrInitModifiedDesc returns the modified descriptor, and clones it from
+// the original descriptor if it is not already available. This is a helper
+// function that makes it easier to lazily initialize the modified descriptor,
+// since protoutil.Clone is expensive.
+func (tdb *typeDescriptorBuilder) getOrInitModifiedDesc() *descpb.TypeDescriptor {
+	if tdb.maybeModified == nil {
+		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
+	}
+	return tdb.maybeModified
+}
+
 // DescriptorType implements the catalog.DescriptorBuilder interface.
 func (tdb *typeDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 	return catalog.Type
@@ -110,7 +131,13 @@ func (tdb *typeDescriptorBuilder) RunRestoreChanges(
 	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state
-	if scpb.MigrateDescriptorState(version, tdb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(
+		version,
+		tdb.getLatestDesc().DeclarativeSchemaChangerState,
+		func() *scpb.DescriptorState {
+			return tdb.getOrInitModifiedDesc().DeclarativeSchemaChangerState
+		},
+	) {
 		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 	return nil
