@@ -42,6 +42,7 @@ go_test(
     embed = [":tenantcapabilities"],
     deps = [
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

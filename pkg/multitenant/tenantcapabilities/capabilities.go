@@ -11,7 +11,10 @@
 package tenantcapabilities
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigbounds"
 	"github.com/cockroachdb/cockroach/pkg/util/stringerutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -125,4 +128,26 @@ var capabilities = [MaxCapabilityID + 1]Capability{
 	CanViewTSDBMetrics:     boolCapability(CanViewTSDBMetrics),
 	ExemptFromRateLimiting: boolCapability(ExemptFromRateLimiting),
 	TenantSpanConfigBounds: spanConfigBoundsCapability(TenantSpanConfigBounds),
+}
+
+// EnableAll enables maximum access to services.
+func EnableAll(t *tenantcapabilitiespb.TenantCapabilities) {
+	for i := ID(1); i <= MaxCapabilityID; i++ {
+		val, err := GetValueByID(t, i)
+		if err != nil {
+			panic(err)
+		}
+		switch v := val.(type) {
+		case TypedValue[bool]:
+			// Access to the service is enabled.
+			v.Set(true)
+
+		case TypedValue[*spanconfigbounds.Bounds]:
+			// No bound.
+			v.Set(nil)
+
+		default:
+			panic(errors.AssertionFailedf("unhandled type: %T", val))
+		}
+	}
 }
