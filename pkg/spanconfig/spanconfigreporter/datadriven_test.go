@@ -216,7 +216,7 @@ type mockCluster struct {
 
 	nodes    map[roachpb.NodeID]roachpb.NodeDescriptor
 	ranges   map[roachpb.RangeID]roachpb.RangeDescriptor
-	liveness map[roachpb.NodeID]bool
+	liveness livenesspb.TestNodeVitality
 	store    *spanconfigstore.Store
 }
 
@@ -232,7 +232,7 @@ func newMockCluster(
 		t:        t,
 		nodes:    make(map[roachpb.NodeID]roachpb.NodeDescriptor),
 		ranges:   make(map[roachpb.RangeID]roachpb.RangeDescriptor),
-		liveness: make(map[roachpb.NodeID]bool),
+		liveness: make(livenesspb.TestNodeVitality),
 		store: spanconfigstore.New(
 			roachpb.TestingDefaultSpanConfig(),
 			st,
@@ -242,15 +242,9 @@ func newMockCluster(
 	}
 }
 
-// GetIsLiveMap implements spanconfigreporter.Liveness.
-func (s *mockCluster) GetIsLiveMap() livenesspb.IsLiveMap {
-	isLiveMap := livenesspb.IsLiveMap{}
-	for nid, isLive := range s.liveness {
-		isLiveMap[nid] = livenesspb.IsLiveMapEntry{
-			IsLive: isLive,
-		}
-	}
-	return isLiveMap
+// ScanNodeVitalityFromCache implements spanconfigreporter.Liveness.
+func (s *mockCluster) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	return s.liveness.ScanNodeVitalityFromCache()
 }
 
 // GetStoreDescriptor implements constraint.StoreResolver.
@@ -307,7 +301,11 @@ func (s *mockCluster) addNode(desc roachpb.NodeDescriptor) {
 func (s *mockCluster) markLive(id roachpb.NodeID, live bool) {
 	_, found := s.nodes[id]
 	require.Truef(s.t, found, "n%d not found", id)
-	s.liveness[id] = live
+	if live {
+		s.liveness.RestartNode(id)
+	} else {
+		s.liveness.DownNode(id)
+	}
 }
 
 func (s *mockCluster) addRange(desc roachpb.RangeDescriptor) {
