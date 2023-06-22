@@ -72,7 +72,7 @@ func newBuilder(
 	changes catalog.PostDeserializationChanges,
 ) SchemaDescriptorBuilder {
 	return &schemaDescriptorBuilder{
-		original:             protoutil.Clone(desc).(*descpb.SchemaDescriptor),
+		original:             desc,
 		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,

@@ -77,7 +77,7 @@ func newBuilder(
 	changes catalog.PostDeserializationChanges,
 ) DatabaseDescriptorBuilder {
 	return &databaseDescriptorBuilder{
-		original:             protoutil.Clone(desc).(*descpb.DatabaseDescriptor),
+		original:             desc,
 		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,

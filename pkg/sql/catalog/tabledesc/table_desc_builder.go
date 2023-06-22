@@ -111,7 +111,7 @@ func newBuilder(
 	changes catalog.PostDeserializationChanges,
 ) *tableDescriptorBuilder {
 	return &tableDescriptorBuilder{
-		original:             protoutil.Clone(desc).(*descpb.TableDescriptor),
+		original:             desc,
 		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,

@@ -72,7 +72,7 @@ func newBuilder(
 	changes catalog.PostDeserializationChanges,
 ) TypeDescriptorBuilder {
 	b := &typeDescriptorBuilder{
-		original:             protoutil.Clone(desc).(*descpb.TypeDescriptor),
+		original:             desc,
 		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,

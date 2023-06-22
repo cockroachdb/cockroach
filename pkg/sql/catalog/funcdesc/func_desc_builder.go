@@ -60,7 +60,7 @@ func newBuilder(
 	changes catalog.PostDeserializationChanges,
 ) FunctionDescriptorBuilder {
 	return &functionDescriptorBuilder{
-		original:             protoutil.Clone(desc).(*descpb.FunctionDescriptor),
+		original:             desc,
 		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
