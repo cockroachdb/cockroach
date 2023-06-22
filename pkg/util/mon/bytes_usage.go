@@ -593,7 +593,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 			ctx, &mm.settings.SV,
 			"%s: unexpected %d leftover bytes",
 			mm.name, mm.mu.curAllocated)
-		mm.releaseBytes(ctx, mm.mu.curAllocated)
+		mm.releaseBytesMutexHeld(ctx, mm.mu.curAllocated)
 	}
 
 	mm.releaseBudget(ctx)
@@ -1026,6 +1026,13 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
+	mm.releaseBytesMutexHeld(ctx, sz)
+}
+
+// releaseBytesMutexHeld is similar to releaseBytes but requires that mm.mu
+// has already been locked.
+func (mm *BytesMonitor) releaseBytesMutexHeld(ctx context.Context, sz int64) {
+	mm.mu.AssertHeld()
 	if mm.mu.curAllocated < sz {
 		logcrash.ReportOrPanic(ctx, &mm.settings.SV,
 			"%s: no bytes to release, current %d, free %d",
