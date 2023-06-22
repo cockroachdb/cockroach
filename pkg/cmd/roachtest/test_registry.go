@@ -162,7 +162,7 @@ func (r *testRegistryImpl) PromFactory() promauto.Factory {
 	return promauto.With(r.promRegistry)
 }
 
-// GetTests returns all the tests that match the given regexp.
+// GetTests returns all the tests that match the given regexp, sorted by name.
 // Skipped tests are included, and tests that don't match their minVersion spec
 // are also included but marked as skipped.
 func (r testRegistryImpl) GetTests(
