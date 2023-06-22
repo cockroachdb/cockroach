@@ -46,7 +46,6 @@ go_test(
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
-        "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_redact//:redact",

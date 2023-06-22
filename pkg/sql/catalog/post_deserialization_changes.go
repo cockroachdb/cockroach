@@ -45,12 +45,6 @@ const (
 	// UpgradedPrivileges indicates that the PrivilegeDescriptor version was upgraded.
 	UpgradedPrivileges PostDeserializationChangeType = iota
 
-	// RemovedSelfEntryInSchemas corresponds to a change which occurred in
-	// database descriptors to recover from an earlier bug whereby when
-	// dropping a schema, we'd mark the database itself as though it was the
-	// schema which was dropped.
-	RemovedSelfEntryInSchemas
-
 	// SetModTimeToMVCCTimestamp indicates that a descriptor's ModificationTime
 	// field was unset and that the MVCC timestamp value was assigned to it.
 	SetModTimeToMVCCTimestamp
