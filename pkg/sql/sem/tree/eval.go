@@ -765,6 +765,20 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			EvalOp:     &PlusIntINetOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.Decimal,
+			RightType:  types.PGLSN,
+			ReturnType: types.PGLSN,
+			EvalOp:     &PlusDecimalPGLSNOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.PGLSN,
+			RightType:  types.Decimal,
+			ReturnType: types.PGLSN,
+			EvalOp:     &PlusPGLSNDecimalOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	treebin.Minus: {overloads: []*BinOp{
@@ -935,6 +949,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			RightType:  types.Int,
 			ReturnType: types.INet,
 			EvalOp:     &MinusINetIntOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.PGLSN,
+			RightType:  types.Decimal,
+			ReturnType: types.PGLSN,
+			EvalOp:     &MinusPGLSNDecimalOp{},
 			Volatility: volatility.Immutable,
 		},
 	}},
