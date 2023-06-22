@@ -20,6 +20,8 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -97,6 +99,7 @@ func main() {
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
+	var selectProbability float64
 
 	cobra.EnableCommandSorting = false
 
@@ -145,6 +148,9 @@ func main() {
 				if fipsProbability == 1 && arm64Probability != 0 {
 					return fmt.Errorf("'metamorphic-arm64-probability' must be 0 when 'metamorphic-fips-probability' is 1")
 				}
+				if !(0 <= selectProbability && selectProbability <= 1) {
+					return fmt.Errorf("'select-probability' must be in [0,1]")
+				}
 				arm64Opt := cmd.Flags().Lookup("metamorphic-arm64-probability")
 				if !arm64Opt.Changed && runtime.GOARCH == "arm64" && cloud == spec.Local {
 					fmt.Printf("Detected 'arm64' in 'local mode', setting 'metamorphic-arm64-probability' to 1; use --metamorphic-arm64-probability to run (emulated) with other binaries\n")
@@ -164,6 +170,10 @@ func main() {
 					// N.B. arm64Probability < 1, otherwise fipsProbability == 0, as per above check.
 					// Hence, amd64Probability > 0 is implied.
 					fmt.Printf("FIPS clusters will be provisioned with probability %.2f\n", fipsProbability*amd64Probability)
+				}
+
+				if selectProbability > 0 {
+					fmt.Printf("Matching tests will be selected with probability %.2f\n", selectProbability)
 				}
 			}
 			return nil
@@ -240,13 +250,15 @@ Examples:
 			r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, listBench)
 			tests.RegisterTests(&r)
 
-			matchedTests := r.List(args)
-			for _, test := range matchedTests {
+			filter := registry.NewTestFilter(args, runSkipped)
+			specs := testsToRun(r, filter, selectProbability, false)
+
+			for _, s := range specs {
 				var skip string
-				if test.Skip != "" && !runSkipped {
-					skip = " (skipped: " + test.Skip + ")"
+				if s.Skip != "" && !runSkipped {
+					skip = " (skipped: " + s.Skip + ")"
 				}
-				fmt.Printf("%s [%s]%s\n", test.Name, test.Owner, skip)
+				fmt.Printf("%s [%s]%s\n", s.Name, s.Owner, skip)
 			}
 			return nil
 		},
@@ -288,6 +300,7 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
+				selectProbability:      selectProbability,
 			}, false /* benchOnly */)
 		},
 	}
@@ -301,6 +314,9 @@ runner itself.
 	runCmd.Flags().IntVar(
 		&promPort, "prom-port", 2113,
 		"the http port on which to expose prom metrics from the roachtest process")
+	runCmd.Flags().Float64Var(
+		&selectProbability, "select-probability", 1.0,
+		"the probability of a matched test being selected to run. Note: this will return at least one test per prefix.")
 
 	var benchCmd = &cobra.Command{
 		// Don't display usage when tests fail.
@@ -325,6 +341,7 @@ runner itself.
 				user:                   username,
 				clusterID:              clusterID,
 				versionsBinaryOverride: versionsBinaryOverride,
+				selectProbability:      selectProbability,
 			}, true /* benchOnly */)
 		},
 	}
@@ -428,6 +445,7 @@ type cliCfg struct {
 	user                   string
 	clusterID              string
 	versionsBinaryOverride map[string]string
+	selectProbability      float64
 }
 
 func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) error {
@@ -473,8 +491,9 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 		return err
 	}
 
-	tests := testsToRun(r, filter)
-	n := len(tests)
+	specs := testsToRun(r, filter, cfg.selectProbability, true)
+
+	n := len(specs)
 	if n*cfg.count < cfg.parallelism {
 		// Don't spin up more workers than necessary. This has particular
 		// implications for the common case of running a single test once: if
@@ -513,7 +532,7 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
 	err := runner.Run(
-		ctx, tests, cfg.count, cfg.parallelism, opt,
+		ctx, specs, cfg.count, cfg.parallelism, opt,
 		testOpts{
 			versionsBinaryOverride: cfg.versionsBinaryOverride,
 			skipInit:               cfg.skipInit,
@@ -626,27 +645,113 @@ func testRunnerLogger(
 	return l, teeOpt
 }
 
-func testsToRun(r testRegistryImpl, filter *registry.TestFilter) []registry.TestSpec {
-	tests, tagMismatch := r.GetTests(filter)
+func testsToRun(
+	r testRegistryImpl, filter *registry.TestFilter, selectProbability float64, print bool,
+) []registry.TestSpec {
+	specs, tagMismatch := r.GetTests(filter)
 
 	var notSkipped []registry.TestSpec
-	for _, s := range tests {
+	for _, s := range specs {
 		if s.Skip == "" || filter.RunSkipped {
 			notSkipped = append(notSkipped, s)
 		} else {
-			if teamCity {
+			if print && teamCity {
 				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
 					s.Name, teamCityEscape(s.Skip))
 			}
-			fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
+			if print {
+				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
+			}
 		}
 	}
 	for _, s := range tagMismatch {
-		if teamCity {
+		if print && teamCity {
 			fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='tag mismatch']\n",
 				s.Name)
 		}
-		fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\ttag mismatch\n", s.Name, "0.00s")
+		if print {
+			fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\ttag mismatch\n", s.Name, "0.00s")
+		}
 	}
-	return notSkipped
+
+	return selectSpecs(notSkipped, selectProbability, true, print)
+}
+
+// selectSpecs returns a random sample of the given test specs.
+// If atLeastOnePerPrefix is true, it guarantees that at least one test is
+// selected for each prefix (e.g. kv0/, acceptance/).
+// This assumes that specs are sorted by name, which is the case for
+// testRegistryImpl.GetTests().
+// TODO(smg260): Perhaps expose `atLeastOnePerPrefix` via CLI
+func selectSpecs(
+	specs []registry.TestSpec, samplePct float64, atLeastOnePerPrefix bool, print bool,
+) []registry.TestSpec {
+	if samplePct == 1 || len(specs) == 0 {
+		return specs
+	}
+
+	var sampled []registry.TestSpec
+	var selectedIdxs []int
+
+	prefix := strings.Split(specs[0].Name, "/")[0]
+	prefixSelected := false
+	prefixIdx := 0
+
+	// Selects one random spec from the range [start, end) and appends it to sampled.
+	collectRandomSpecFromRange := func(start, end int) {
+		i := start + rand.Intn(end-start)
+		sampled = append(sampled, specs[i])
+		selectedIdxs = append(selectedIdxs, i)
+	}
+	for i, s := range specs {
+		if atLeastOnePerPrefix {
+			currPrefix := strings.Split(s.Name, "/")[0]
+			// New prefix. Check we've at least one selected test for the previous prefix.
+			if currPrefix != prefix {
+				if !prefixSelected {
+					collectRandomSpecFromRange(prefixIdx, i)
+				}
+				prefix = currPrefix
+				prefixIdx = i
+				prefixSelected = false
+			}
+		}
+
+		if rand.Float64() < samplePct {
+			sampled = append(sampled, s)
+			selectedIdxs = append(selectedIdxs, i)
+			prefixSelected = true
+			continue
+		}
+
+		if atLeastOnePerPrefix && i == len(specs)-1 && !prefixSelected {
+			// i + 1 since we want to include the last element
+			collectRandomSpecFromRange(prefixIdx, i+1)
+		}
+	}
+
+	p := 0
+	// The list would already be sorted were it not for the lookback to
+	// ensure at least one test per prefix.
+	if atLeastOnePerPrefix {
+		sort.Ints(selectedIdxs)
+	}
+	// This loop depends on an ordered list as we are essentially
+	// skipping all values in between the selected indexes.
+	for _, i := range selectedIdxs {
+		for j := p; j < i; j++ {
+			s := specs[j]
+			if print && teamCity {
+				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='excluded via sampling']\n",
+					s.Name)
+			}
+
+			if print {
+				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\texcluded via sampling\n", s.Name, "0.00s")
+			}
+		}
+		p = i + 1
+	}
+
+	return sampled
 }
