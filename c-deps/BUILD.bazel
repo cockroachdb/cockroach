@@ -19,7 +19,7 @@ configure_make(
     ] + select({
         "@io_bazel_rules_go//go/platform:windows": ["--host=x86_64-w64-mingw32"],
         "@io_bazel_rules_go//go/platform:darwin_amd64": ["--host=x86_64-apple-darwin21.2"],
-        "@io_bazel_rules_go//go/platform:darwin_arm64": [
+        "//build/toolchains:is_non_dev_macos_arm64": [
             "--host=aarch64-apple-darwin21.2",
             "--with-lg-page=14",
         ],
