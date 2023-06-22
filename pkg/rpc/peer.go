@@ -282,7 +282,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 		// If ctx is done, Stopper is draining. Unconditionally override the error
 		// to clean up the logging in this case.
 		if ctx.Err() != nil {
-			err = errQuiescing
+			err = ErrQuiescing
 		}
 
 		// Transition peer into unhealthy state.
@@ -293,7 +293,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 		// whether this happened after looping around.
 		p.maybeDelete(ctx, now)
 
-		if errors.Is(err, errQuiescing) {
+		if errors.Is(err, ErrQuiescing) {
 			// Heartbeat loop ended due to shutdown. Exit the probe, it won't be
 			// started again since that means running an async task through the
 			// Stopper.
@@ -558,7 +558,7 @@ func maybeLogOnFailedHeartbeat(
 	snap PeerSnap, // already accounting for `err`
 	every *log.EveryN,
 ) {
-	if errors.Is(err, errQuiescing) {
+	if errors.Is(err, ErrQuiescing) {
 		return
 	}
 	// If the error is wrapped in InitialHeartbeatFailedError, unwrap it because that
@@ -695,11 +695,11 @@ func (p *peer) onHeartbeatFailed(
 // quiescing.
 func (p *peer) onQuiesce(report func(error)) {
 	// Stopper quiescing, node shutting down.
-	report(errQuiescing)
+	report(ErrQuiescing)
 	// NB: it's important that connFuture is resolved, or a caller sitting on
 	// `c.ConnectNoBreaker` would never be unblocked; after all, the probe won't
 	// start again in the future.
-	p.snap().c.connFuture.Resolve(nil, errQuiescing)
+	p.snap().c.connFuture.Resolve(nil, ErrQuiescing)
 }
 
 func (p PeerSnap) deletable(now time.Time) bool {
