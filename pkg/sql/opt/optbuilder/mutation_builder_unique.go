@@ -252,13 +252,16 @@ func (h *uniqueCheckHelper) init(mb *mutationBuilder, uniqueOrdinal int) bool {
 			return false
 		}
 
-		// If one of the columns is a UUID set to gen_random_uuid() and we don't
-		// require uniqueness checks for gen_random_uuid(), unique check not needed.
-		if mb.md.ColumnMeta(colID).Type.Family() == types.UuidFamily &&
-			columnIsGenRandomUUID(mb.outScope.expr, colID) {
-			requireCheck := UniquenessChecksForGenRandomUUIDClusterMode.Get(&mb.b.evalCtx.Settings.SV)
-			if !requireCheck {
-				return false
+		// If one of the columns is a UUID (or UUID casted to STRING or BYTES) set
+		// to gen_random_uuid() and we don't require uniqueness checks for
+		// gen_random_uuid(), unique check not needed.
+		switch mb.md.ColumnMeta(colID).Type.Family() {
+		case types.UuidFamily, types.StringFamily, types.BytesFamily:
+			if columnIsGenRandomUUID(mb.outScope.expr, colID) {
+				requireCheck := UniquenessChecksForGenRandomUUIDClusterMode.Get(&mb.b.evalCtx.Settings.SV)
+				if !requireCheck {
+					return false
+				}
 			}
 		}
 	}
@@ -418,6 +421,15 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 // gen_random_uuid() for the given column.
 func columnIsGenRandomUUID(e memo.RelExpr, col opt.ColumnID) bool {
 	isGenRandomUUIDFunction := func(scalar opt.ScalarExpr) bool {
+		if cast, ok := scalar.(*memo.CastExpr); ok &&
+			(cast.Typ.Family() == types.StringFamily || cast.Typ.Family() == types.BytesFamily) &&
+			cast.Typ.Width() == 0 {
+			scalar = cast.Input
+		} else if cast, ok := scalar.(*memo.AssignmentCastExpr); ok &&
+			(cast.Typ.Family() == types.StringFamily || cast.Typ.Family() == types.BytesFamily) &&
+			cast.Typ.Width() == 0 {
+			scalar = cast.Input
+		}
 		if function, ok := scalar.(*memo.FunctionExpr); ok {
 			if function.Name == "gen_random_uuid" {
 				return true
