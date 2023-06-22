@@ -198,16 +198,6 @@ func (desc *wrapper) ValidateForwardReferences(
 		}
 	}
 
-	// Row-level TTL is not compatible with inbound foreign keys.
-	// This check should be in ValidateSelf but interferes with AllocateIDs.
-	if desc.HasRowLevelTTL() && len(desc.InboundForeignKeys()) > 0 {
-		vea.Report(unimplemented.NewWithIssuef(
-			76407,
-			`foreign keys to table with TTL %q are not permitted`,
-			desc.GetName(),
-		))
-	}
-
 	// Check enforced outbound foreign keys.
 	for _, fk := range desc.EnforcedOutboundForeignKeys() {
 		vea.Report(desc.validateOutboundFK(fk.ForeignKeyDesc(), vdg))
