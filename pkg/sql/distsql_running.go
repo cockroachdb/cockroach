@@ -655,7 +655,7 @@ const executingParallelAndSerialChecks = "executing %d checks concurrently and %
 // - evalCtx is the evaluation context in which the plan will run. It might be
 // mutated.
 // - finishedSetupFn, if non-nil, is called synchronously after all the
-// processors have successfully started up.
+// processors have been created but haven't started running yet.
 func (dsp *DistSQLPlanner) Run(
 	ctx context.Context,
 	planCtx *PlanningCtx,
@@ -1223,6 +1223,17 @@ func MakeDistSQLReceiver(
 	return r
 }
 
+// resetForLocalRerun prepares the DistSQLReceiver to be used again for
+// executing the plan - that encountered an error when run in the distributed
+// fashion - locally.
+func (r *DistSQLReceiver) resetForLocalRerun(stats topLevelQueryStats) {
+	r.resultWriterMu.row.SetError(nil)
+	r.updateStatus.Store(false)
+	r.status = execinfra.NeedMoreRows
+	r.closed = false
+	r.stats = stats
+}
+
 // Release releases this DistSQLReceiver back to the pool.
 func (r *DistSQLReceiver) Release() {
 	r.cleanup()
@@ -1583,7 +1594,8 @@ func (r *DistSQLReceiver) ProducerDone() {
 // function updates the passed-in planner to make sure that the "inner" plans
 // use the LeafTxns if the "outer" plan happens to have concurrency. It also
 // returns a non-nil cleanup function that must be called once all plans (the
-// "outer" as well as all "inner" ones) are done.
+// "outer" as well as all "inner" ones) are done. The returned functions can be
+// called multiple times.
 func getFinishedSetupFn(planner *planner) (finishedSetupFn func(flowinfra.Flow), cleanup func()) {
 	finishedSetupFn = func(localFlow flowinfra.Flow) {
 		if localFlow.GetFlowCtx().Txn.Type() == kv.LeafTxn {
@@ -1884,13 +1896,22 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 }
 
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
-// assumes that the tree is supported (see CheckSupport).
+// assumes that the tree is supported (see checkSupportForPlanNode).
 //
 // All errors encountered are reported to the DistSQLReceiver's resultWriter.
 // Additionally, if the error is a "communication error" (an error encountered
 // while using that resultWriter), the error is also stored in
 // DistSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
+//
+// An allow-list of errors that are encountered during the distributed query
+// execution are transparently retried by re-planning and re-running the query
+// as local.
+//
+// - finishedSetupFn, if non-nil, is called synchronously after all the local
+// processors have been created but haven't started running yet. If the query is
+// re-planned as local after having encountered an error during distributed
+// execution, then finishedSetupFn will be called twice.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -1901,7 +1922,9 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	finishedSetupFn func(localFlow flowinfra.Flow),
 ) {
 	log.VEventf(ctx, 2, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
-
+	// Copy query-level stats before executing this plan in case we need to
+	// re-run it as local.
+	subqueriesStats := recv.stats
 	physPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, planCtx, plan)
 	defer physPlanCleanup()
 	if err != nil {
@@ -1911,6 +1934,29 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
 	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
+	if distributedErr := recv.getError(); distributedErr != nil && !planCtx.isLocal && !plan.isPhysicalPlan() {
+		if recv.commErr != nil {
+			// For communication errors, we don't try to rerun the query since
+			// the connection is toast.
+			return
+		}
+		if !pgerror.IsSQLRetryableError(distributedErr) && !flowinfra.IsFlowRetryableError(distributedErr) {
+			// Only re-run the query if we think there is a high chance of a
+			// successful local execution.
+			return
+		}
+		log.Warningf(ctx, "encountered an error when running the distributed plan, re-running it as local: %v", distributedErr)
+		recv.resetForLocalRerun(subqueriesStats)
+		localPlanCtx := dsp.newPlanningCtxForLocal(evalCtx, planCtx.planner, planCtx.localityFilter)
+		localPhysPlan, localPhysPlanCleanup, err := dsp.createPhysPlan(ctx, localPlanCtx, plan)
+		defer localPhysPlanCleanup()
+		if err != nil {
+			recv.SetError(err)
+			return
+		}
+		finalizePlanWithRowCount(ctx, localPlanCtx, localPhysPlan, localPlanCtx.planner.curPlan.mainRowCount)
+		dsp.Run(ctx, localPlanCtx, txn, localPhysPlan, recv, evalCtx, finishedSetupFn)
+	}
 }
 
 // PlanAndRunCascadesAndChecks runs any cascade and check queries.

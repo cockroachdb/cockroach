@@ -4587,19 +4587,8 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 	localityFiler roachpb.Locality,
 ) *PlanningCtx {
 	distribute := distributionType == DistributionTypeAlways || (distributionType == DistributionTypeSystemTenantOnly && evalCtx.Codec.ForSystemTenant())
-	infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewaySQLInstanceID)
-	planCtx := &PlanningCtx{
-		ExtendedEvalCtx: evalCtx,
-		localityFilter:  localityFiler,
-		infra:           infra,
-		isLocal:         !distribute,
-		planner:         planner,
-		// Make sure to release the physical infrastructure after the execution
-		// finishes. Note that onFlowCleanup might not be called in some cases
-		// (when DistSQLPlanner.Run is not called), but that is ok since on the
-		// main query path it will get called.
-		onFlowCleanup: []func(){infra.Release},
-	}
+	planCtx := dsp.newPlanningCtxForLocal(evalCtx, planner, localityFiler)
+	planCtx.isLocal = !distribute
 	if !distribute {
 		if planner == nil || dsp.spanResolver == nil || planner.curPlan.flags.IsSet(planFlagContainsMutation) ||
 			planner.curPlan.flags.IsSet(planFlagContainsNonDefaultLocking) {
@@ -4624,6 +4613,26 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 	planCtx.nodeStatuses = make(map[base.SQLInstanceID]NodeStatus)
 	planCtx.nodeStatuses[dsp.gatewaySQLInstanceID] = NodeOK
 	return planCtx
+}
+
+// newPlanningCtxForLocal returns a new PlanningCtx that is set up for local
+// execution.
+func (dsp *DistSQLPlanner) newPlanningCtxForLocal(
+	evalCtx *extendedEvalContext, planner *planner, localityFiler roachpb.Locality,
+) *PlanningCtx {
+	infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), dsp.gatewaySQLInstanceID)
+	return &PlanningCtx{
+		ExtendedEvalCtx: evalCtx,
+		localityFilter:  localityFiler,
+		infra:           infra,
+		isLocal:         true,
+		planner:         planner,
+		// Make sure to release the physical infrastructure after the execution
+		// finishes. Note that onFlowCleanup might not be called in some cases
+		// (when DistSQLPlanner.Run is not called), but that is ok since on the
+		// main query path it will get called.
+		onFlowCleanup: []func(){infra.Release},
+	}
 }
 
 // maybeMoveSingleFlowToGateway checks whether plan consists of a single flow
