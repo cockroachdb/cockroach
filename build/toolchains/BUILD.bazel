@@ -32,7 +32,7 @@ platform(
         "@platforms//cpu:x86_64",
     ],
     exec_properties = {
-        "container-image": "docker://cockroachdb/bazel@sha256:2fdff6a4a2c66bf01d6ad4c6973eb4b38acdb812d07a431a0471f2b6449bb653",
+        "container-image": "docker://cockroachdb/bazel@sha256:1750e641004b38f8f8920e42dd60a9e3e97843e9775f04cd47d903d0ea0ea0ae",
         "dockerReuse": "True",
         "Pool": "default",
     },
@@ -137,7 +137,7 @@ platform(
         "@platforms//cpu:arm64",
     ],
     exec_properties = {
-        "container-image": "docker://cockroachdb/bazel@sha256:6acc131994de3e9adcdf05ddd0956a047cb7a7e07a939a76fa9cad11af3a1a8a",
+        "container-image": "docker://cockroachdb/bazel@sha256:c656152a8bc6674496fb9b85a8554beb5842442a02073de72bf8e6f9531a2524",
         "dockerReuse": "True",
         "Pool": "default",
     },

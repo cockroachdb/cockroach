@@ -29,7 +29,7 @@ func makeComposeCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 	addCommonBuildFlags(composeCmd)
 	addCommonTestFlags(composeCmd)
 	composeCmd.Flags().Bool(noRebuildCockroachFlag, false, "set if it is unnecessary to rebuild cockroach (artifacts/cockroach must already exist, e.g. after being created by a previous `dev compose` run)")
-	composeCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
+	composeCmd.Flags().String(volumeFlag, "bzlhome2", "the Docker volume to use as the container home directory (only used for cross builds)")
 	return composeCmd
 }
 

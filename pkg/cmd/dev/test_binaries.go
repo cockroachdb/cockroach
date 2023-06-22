@@ -88,7 +88,7 @@ func makeTestBinariesCmd(runE func(cmd *cobra.Command, args []string) error) *co
 		Args:    cobra.MinimumNArgs(1),
 		RunE:    runE,
 	}
-	testBinariesCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
+	testBinariesCmd.Flags().String(volumeFlag, "bzlhome2", "the Docker volume to use as the container home directory (only used for cross builds)")
 	testBinariesCmd.Flags().StringArray(dockerArgsFlag, []string{}, "additional arguments to pass to Docker (only used for cross builds)")
 	testBinariesCmd.Flags().String(outputFlag, "bin/test_binaries.tar.gz", "the file output path of the archived test binaries")
 	testBinariesCmd.Flags().Bool(raceFlag, false, "produce race builds")

@@ -36,7 +36,7 @@ func makeRoachprodStressCmd(runE func(cmd *cobra.Command, args []string) error) 
 		RunE:    runE,
 	}
 	roachprodStressCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
-	roachprodStressCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
+	roachprodStressCmd.Flags().String(volumeFlag, "bzlhome2", "the Docker volume to use as the container home directory (only used for cross builds)")
 	roachprodStressCmd.Flags().String(clusterFlag, "", "the name of the cluster (must be set)")
 	roachprodStressCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	roachprodStressCmd.Flags().Bool(deadlockFlag, false, "run tests using the deadlock detector")

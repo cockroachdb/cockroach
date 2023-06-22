@@ -33,7 +33,7 @@ run_bazel() {
     artifacts_dir=$root/artifacts
     mkdir -p "$artifacts_dir"
     vols="${vols} --volume ${artifacts_dir}:/artifacts"
-    cache=/home/agent/.bzlhome
+    cache=/home/agent/.bzlhome2
     mkdir -p $cache
     vols="${vols} --volume ${root}:/go/src/github.com/cockroachdb/cockroach"
     vols="${vols} --volume ${cache}:/home/roach"

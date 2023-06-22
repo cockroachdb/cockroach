@@ -35,7 +35,7 @@ func makeAcceptanceCmd(runE func(cmd *cobra.Command, args []string) error) *cobr
 	addCommonBuildFlags(acceptanceCmd)
 	addCommonTestFlags(acceptanceCmd)
 	acceptanceCmd.Flags().Bool(noRebuildCockroachFlag, false, "set if it is unnecessary to rebuild cockroach (artifacts/cockroach-short must already exist, e.g. after being created by a previous `dev acceptance` run)")
-	acceptanceCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
+	acceptanceCmd.Flags().String(volumeFlag, "bzlhome2", "the Docker volume to use as the container home directory (only used for cross builds)")
 	acceptanceCmd.Flags().BoolP(acceptanceVerboseFlag, "v", false, "show all output")
 	return acceptanceCmd
 }
