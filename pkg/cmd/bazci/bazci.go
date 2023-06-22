@@ -205,6 +205,7 @@ func (s *monitorBuildServer) handleBuildEvent(
 			outputDir = strings.ReplaceAll(outputDir, ":", "/")
 			outputDir = filepath.Join("bazel-testlogs", outputDir)
 			summary := bazelBuildEvent.GetTestSummary()
+			lastAttempt := summary.AttemptCount
 			for _, testResult := range s.testResults[label] {
 				outputDir := outputDir
 				if testResult.run > 1 {
@@ -213,9 +214,10 @@ func (s *monitorBuildServer) handleBuildEvent(
 				if summary != nil && summary.ShardCount > 1 {
 					outputDir = filepath.Join(outputDir, fmt.Sprintf("shard_%d_of_%d", testResult.shard, summary.ShardCount))
 				}
-				if testResult.attempt > 1 {
-					outputDir = filepath.Join(outputDir, fmt.Sprintf("attempt_%d", testResult.attempt))
-				}
+				// Add `.tc_ignore_attempt#` to the filename of all attempts but the last one. This ensures that
+				// those results are uploaded to TC in case we need them but the results are ignored
+				// by TC because the filename doesn't end with `.xml`.
+				append_tc_ignore := testResult.attempt != lastAttempt
 				if testResult.testResult == nil {
 					continue
 				}
@@ -223,6 +225,9 @@ func (s *monitorBuildServer) handleBuildEvent(
 					if output.Name == "test.log" || output.Name == "test.xml" {
 						src := strings.TrimPrefix(output.GetUri(), "file://")
 						dst := filepath.Join(artifactsDir, outputDir, filepath.Base(src))
+						if append_tc_ignore {
+							dst += fmt.Sprintf(".tc_ignore_%d", int(testResult.attempt))
+						}
 						if err := doCopy(src, dst); err != nil {
 							return nil, err
 						}
