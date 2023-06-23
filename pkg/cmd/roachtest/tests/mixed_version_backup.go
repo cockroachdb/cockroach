@@ -1964,7 +1964,7 @@ func (mvb *mixedVersionBackup) resetCluster(
 	ctx context.Context, l *logger.Logger, version string,
 ) error {
 	l.Printf("resetting cluster using version %s", version)
-	if err := mvb.cluster.WipeE(ctx, l, mvb.roachNodes); err != nil {
+	if err := mvb.cluster.WipeE(ctx, l, true /* preserveCerts */, mvb.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
 
