@@ -163,21 +163,6 @@ type IsLiveMapEntry struct {
 // IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
 type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
 
-// VitalityStatus tracks the current health of a node.
-type VitalityStatus int
-
-const (
-	_ VitalityStatus = iota
-	// VitalityAlive means the node is able to publish gossip updates.
-	VitalityAlive
-	// VitalitySuspect means the node is able to currently publish gossip updates, but has been recently unavailable.
-	VitalitySuspect
-	// VitalityUnavailable means the node is not currently publishing gossip updates.
-	VitalityUnavailable
-	// VitalityDead means The node has not published a gossip update for an extended period.
-	VitalityDead
-)
-
 // NodeVitality should be used any place other than epoch leases where it is
 // necessary to determine if a node is currently alive and what its health is.
 // Aliveness and deadness are concepts that refer to our best guess of the
@@ -187,23 +172,97 @@ const (
 // offline recently or if failing to consistently gossip. Different areas of the
 // code have the flexibility to treat this condition differently.
 type NodeVitality struct {
+	nodeID roachpb.NodeID
 	// draining is whether this node currently draining.
 	draining bool
 	// membership is whether the node is active or in a state of decommissioning.
 	membership MembershipStatus
-	// health is the best estimate of the current health of this node.
-	health VitalityStatus
 	// connected is whether we are currently directly connect to this node.
 	connected bool
-	// The underlying liveness record this NodeVitality record was created from.
-	// Most code should not access this directly, however epoch leases need the
-	// underlying liveness record. Additionally some admin methods directly report
-	// the Liveness protobuf record to the end user.
-	// TODO(baptist): Don't expose directly, use explicit methods to access this.
-	Liveness Liveness
+
+	// When the record is created. Records are not held for long, but they should
+	// always give consistent results when asked.
+	now                  hlc.Timestamp
+	timeUntilNodeDead    time.Duration
+	timeAfterNodeSuspect time.Duration
+
+	// Data that comes from the node/store descriptor cache.
+	descUpdateTime      hlc.Timestamp
+	descUnavailableTime hlc.Timestamp
+
+	// Data that comes from the liveness range
+	livenessExpiration hlc.Timestamp
+	livenessEpoch      int64
 }
 
 type NodeVitalityMap map[roachpb.NodeID]NodeVitality
+
+type VitalityUsage int
+
+const (
+	_ VitalityUsage = iota
+	IsAliveNotification
+	EpochLease
+	Rebalance
+	Admin
+	DistSQL
+	Upgrade
+	ConsistencyQueue
+	AdminHealthCheck
+	DecommissionCheck
+	SpanConfigConformance
+	ReplicaProgress
+	Metrics
+	LeaseCampaign
+	RangeQuiesience
+	NetworkMap
+	LossOfQuorum
+)
+
+func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
+	switch usage {
+	case IsAliveNotification:
+		return nv.isAlive()
+	case EpochLease:
+		return nv.isAliveEpoch()
+	case Rebalance:
+		return nv.isAlive()
+	case DistSQL:
+		return nv.isAliveAndConnected()
+	case Upgrade:
+		return nv.isAlive()
+	case ConsistencyQueue:
+		return nv.isAvailableNotDraining()
+	case AdminHealthCheck:
+		return nv.isAvailableNotDraining()
+	case DecommissionCheck:
+		return nv.isAlive()
+	case SpanConfigConformance:
+		return nv.isAlive()
+	case ReplicaProgress:
+		return nv.isAliveAndConnected()
+	case Metrics:
+		return nv.isAlive()
+	case LeaseCampaign:
+		{
+			if !nv.isValid() {
+				// If we don't know about the leader in our liveness map, then we err on the side
+				// of caution and don't campaign, so assume it is alive.
+				return true
+			}
+			return nv.isAlive()
+		}
+	case RangeQuiesience:
+		return nv.isAliveAndConnected()
+	case NetworkMap:
+		return nv.connected
+	case LossOfQuorum:
+		return nv.isAlive()
+	}
+
+	// TODO(baptist): Should be an assertion that we don't know this uasge.
+	return false
+}
 
 // IsAvailableNotDraining returns whether or not the specified node is available
 // to serve requests (i.e. it is live and not decommissioned) and is not in the
@@ -211,39 +270,79 @@ type NodeVitalityMap map[roachpb.NodeID]NodeVitality
 // could still be leaseholders for ranges until drained, so this should not be
 // used when the caller needs to be able to contact leaseholders directly.
 // Returns false if the node is not in the local liveness table.
-func (nv NodeVitality) IsAvailableNotDraining() bool {
-	return nv.IsValid() &&
-		nv.IsAlive() &&
+func (nv NodeVitality) isAvailableNotDraining() bool {
+	return nv.isValid() &&
+		nv.isAlive() &&
 		!nv.membership.Decommissioning() &&
 		!nv.membership.Decommissioned() &&
 		!nv.draining
 }
 
-func (nv NodeVitality) IsAliveAndConnected() bool {
-	return nv.IsAlive() && nv.connected
+func (nv NodeVitality) isAliveAndConnected() bool {
+	return nv.isAvailableNotDraining() && nv.connected
 }
 
-func (nv NodeVitality) IsAlive() bool {
-	return nv.IsValid() && nv.health == VitalityAlive && !nv.IsDecommissioned()
+// isAliveEpoch is used for epoch leases. It is similar to isAlive, but doesn't
+// treat epoch 0 as alive, and doesn't care about the store descriptor updates.
+func (nv NodeVitality) isAliveEpoch() bool {
+	if !nv.isValid() || nv.IsDecommissioned() {
+		return false
+	}
+
+	return nv.now.Less(nv.livenessExpiration)
+}
+
+// isAlive is used for many cases. It returns true if the node descriptor has
+// been gossipped recently and the liveness expiration is in the future. Also
+// excludes decommissioned nodes, however that check is usually redundant as
+// they shouldn't be gossiping after they are decommissioned.
+func (nv NodeVitality) isAlive() bool {
+	if !nv.isValid() || nv.IsDecommissioned() {
+		return false
+	}
+
+	// If there is a valid descriptor, check that it is being updated. If we don't
+	// have one it may be because we haven't gotten the first gossip update yet.
+	if nv.descUpdateTime.IsSet() && nv.now.After(nv.descUpdateTime.AddDuration(nv.timeUntilNodeDead)) {
+		// If the store descriptor is not being updated, we mark the node as dead
+		// regardless of what liveness says.
+		return false
+	}
+	// If the descriptor was recently unavailable, treat the node as suspect and
+	// don't report as alive. This handles recent restarts or missed updates.
+	if nv.descUnavailableTime.IsSet() && nv.descUnavailableTime.AddDuration(nv.timeAfterNodeSuspect).After(nv.now) {
+		return false
+	}
+
+	// If we have a 0 epoch, the expiration time won't be written, so we assume
+	// that it is alive since the store descriptor is being updated.
+	if nv.livenessEpoch == 0 {
+		return true
+	}
+	return nv.now.Less(nv.livenessExpiration)
 }
 
 func (nv NodeVitality) IsDecommissioning() bool {
-	return nv.IsValid() && nv.membership.Decommissioning()
+	return nv.isValid() && nv.membership.Decommissioning()
 }
 
 func (nv NodeVitality) IsDecommissioned() bool {
-	return nv.IsValid() && nv.membership.Decommissioned()
+	return nv.isValid() && nv.membership.Decommissioned()
 }
 
 // MembershipStatus returns the current membership status of this node.
-// It is preferable to use IsDecommissioning or IsDecommissined since they will
+// It is preferable to use isDecommissioning or isDecommissined since they will
 // check if the entry is valid first.
 func (nv NodeVitality) MembershipStatus() MembershipStatus {
 	return nv.membership
 }
 
+func (nv NodeVitality) IsDraining() bool {
+	return nv.draining
+}
+
 // IsValid returns whether this entry was found.
-func (nv NodeVitality) IsValid() bool {
+func (nv NodeVitality) isValid() bool {
 	return nv != NodeVitality{}
 }
 
@@ -252,7 +351,29 @@ func (nv NodeVitality) IsValid() bool {
 // 2) Epoch leases
 // Avoid using this method as the Liveness expiration is not always populated.
 func (nv NodeVitality) GetInternalLiveness() Liveness {
-	return nv.Liveness
+	return Liveness{
+		NodeID:     nv.nodeID,
+		Epoch:      nv.livenessEpoch,
+		Expiration: nv.livenessExpiration.ToLegacyTimestamp(),
+		Draining:   nv.draining,
+		Membership: nv.membership,
+	}
+}
+
+// GenLiveness is used to generate a liveness record that is similar to the
+// actual liveness record, but has the epoch and expiration filled in with
+// meaningful values.
+// TODO(baptist): If we are not updating the expiration use the store descriptor
+// time.
+// TODO(baptist): Track down all uses of this and remove them.
+func (nv NodeVitality) GenLiveness() Liveness {
+	return Liveness{
+		NodeID:     nv.nodeID,
+		Epoch:      nv.livenessEpoch,
+		Expiration: nv.livenessExpiration.ToLegacyTimestamp(),
+		Draining:   nv.draining,
+		Membership: nv.membership,
+	}
 }
 
 // LivenessStatus returns a NodeLivenessStatus enumeration value for the
@@ -283,117 +404,112 @@ func (nv NodeVitality) GetInternalLiveness() Liveness {
 // "Decommissioning". This was kept this way for backwards compatibility, and
 // ideally we should remove usage of NodeLivenessStatus altogether. See #50707
 // for more details.
-// TODO(baptist): Remove NodeLivenessStatus and all usages.
+// TODO(baptist): Remove NodeLivenessStatus and all usages. The logic in this
+// method is somewhat convoluted but this should be changed as part of a
+// allocator refactor, not as part of liveness.
 func (nv NodeVitality) LivenessStatus() NodeLivenessStatus {
 	// If we don't have a liveness expiration time, treat the status as unknown.
 	// This is different than unavailable as it doesn't transition through being
 	// marked as suspect. In unavailable we still won't transfer leases or
 	// replicas to it in this state. A node that is in UNKNOWN status can
 	// immediately transition to Available once it passes a liveness heartbeat.
-	if !nv.IsValid() {
+	if !nv.isValid() {
 		return NodeLivenessStatus_UNKNOWN
 	}
 
-	if nv.health == VitalityDead {
-		if !nv.membership.Active() {
-			return NodeLivenessStatus_DECOMMISSIONED
-		}
-		return NodeLivenessStatus_DEAD
+	isDead := false
+	isAlive := false
+
+	if nv.descUpdateTime.IsSet() && nv.now.After(nv.descUpdateTime.AddDuration(nv.timeUntilNodeDead)) {
+		isDead = true
 	}
-	if nv.health == VitalityAlive {
-		if !nv.membership.Active() {
+
+	// If it expired longer than timeUntiLNodeDead ago, then treat as DEAD,
+	// otherwise it is UNAVAILABLE. If livenessEpoch is 0, we don't want to assume
+	// its dead since it hasn't had a chance to update its expiration yet.
+	if nv.livenessEpoch > 0 && nv.now.After(nv.livenessExpiration.AddDuration(nv.timeUntilNodeDead)) {
+		isDead = true
+	}
+
+	// Expiration on liveness record is still valid.
+	if nv.now.Less(nv.livenessExpiration) {
+		isAlive = true
+	}
+
+	if nv.descUpdateTime.IsSet() && nv.now.Less(nv.descUpdateTime.AddDuration(nv.timeAfterNodeSuspect)) {
+		isAlive = true
+	}
+
+	// If the descriptor was recently unavailable, treat the node as unavailable (not alive).
+	if nv.descUnavailableTime.IsSet() && nv.descUnavailableTime.AddDuration(nv.timeAfterNodeSuspect).After(nv.now) {
+		isAlive = false
+	}
+
+	if nv.membership == MembershipStatus_DECOMMISSIONED {
+		if isAlive {
+			// Despite having marked the node as fully decommissioned, through
+			// this NodeLivenessStatus API we still surface the node as
+			// "Decommissioning". See #50707 for more details.
 			return NodeLivenessStatus_DECOMMISSIONING
 		}
-		if nv.draining {
-			return NodeLivenessStatus_DRAINING
-		}
-		return NodeLivenessStatus_LIVE
+		return NodeLivenessStatus_DECOMMISSIONED
 	}
-	// Not yet dead, but has not heartbeated recently enough to be alive either.
-	return NodeLivenessStatus_UNAVAILABLE
+
+	// Somewhat arbitrarily, being unavailable trumps decommissioning.
+	if !isAlive && !isDead {
+		return NodeLivenessStatus_UNAVAILABLE
+	}
+
+	if nv.membership == MembershipStatus_DECOMMISSIONING {
+		// We return decommissioned here even though it hasn't fully transitioned in
+		// the membership table. Decommissioning has had bugs where it gets stuck in
+		// the decommissioning state.
+		if isDead {
+			return NodeLivenessStatus_DECOMMISSIONED
+		}
+		return NodeLivenessStatus_DECOMMISSIONING
+	}
+
+	if isDead {
+		return NodeLivenessStatus_DEAD
+	}
+
+	// We check this after dead because for a dead node, we dead is more important
+	// than draining.
+	if nv.draining {
+		return NodeLivenessStatus_DRAINING
+	}
+
+	return NodeLivenessStatus_LIVE
+
 }
 
 // CreateNodeVitality creates a NodeVitality record based on a liveness record
 // and information whether it should be treated as dead or alive. Computing
 // whether it is dead or alive requires external data sources so the information
 // must be passed in.
-func (l Liveness) CreateNodeVitality(health VitalityStatus, connected bool) NodeVitality {
+func (l Liveness) CreateNodeVitality(
+	now hlc.Timestamp,
+	descUpdateTime hlc.Timestamp,
+	descUnavailableTime hlc.Timestamp,
+	connected bool,
+	timeUntilNodeDead time.Duration,
+	timeAfterNodeSuspect time.Duration,
+) NodeVitality {
 	// Dead means that there is low chance this node is online.
 	// Alive means that there is a high probability the node is online.
 	// A node can be neither dead nor alive (but not both).
 	return NodeVitality{
-		draining:   l.Draining,
-		membership: l.Membership,
-		health:     health,
-		connected:  connected,
-		Liveness:   l,
+		nodeID:               l.NodeID,
+		draining:             l.Draining,
+		membership:           l.Membership,
+		connected:            connected,
+		now:                  now,
+		descUpdateTime:       descUpdateTime,
+		descUnavailableTime:  descUnavailableTime,
+		timeUntilNodeDead:    timeUntilNodeDead,
+		timeAfterNodeSuspect: timeAfterNodeSuspect,
+		livenessExpiration:   l.Expiration.ToTimestamp(),
+		livenessEpoch:        l.Epoch,
 	}
-}
-
-// These should not be used as they are only for testing. NodeStatusEntries are
-// generally meant to be immutable and passed by value.
-
-// TestDecommission marks a given node as decommissioned.
-func (nv *NodeVitality) TestDecommission() {
-	nv.membership = MembershipStatus_DECOMMISSIONED
-}
-
-// TestDownNode marks a given node as down (not alive, but not dead).
-func (nv *NodeVitality) TestDownNode() {
-	nv.health = VitalityUnavailable
-}
-
-// TestRestartNode marks a node as alive.
-func (nv *NodeVitality) TestRestartNode() {
-	nv.health = VitalityAlive
-}
-
-// TestNodeVitalityEntry is here to minimize the impact on tests of changing to
-// the new interface for tests that previously used IsLiveMap. It doesn't
-// directly look at timestamps, so the status must be manually updated.
-type TestNodeVitalityEntry struct {
-	Liveness Liveness
-	Health   VitalityStatus
-}
-
-// TestNodeVitality is a test class for simulating and modifying NodeLiveness
-// directly. The map is intended to be manually modified prior to running a
-// test.
-type TestNodeVitality map[roachpb.NodeID]TestNodeVitalityEntry
-
-// TestCreateNodeVitality creates a test instance of node vitality which is easy
-// to simulate different health conditions without requiring the need to take
-// nodes down or publish anything through gossip.  This method takes an optional
-// list of ides which are all marked as healthy when created.
-func TestCreateNodeVitality(ids ...roachpb.NodeID) TestNodeVitality {
-	m := TestNodeVitality{}
-	for _, id := range ids {
-		m[id] = TestNodeVitalityEntry{
-			Liveness: Liveness{},
-			Health:   VitalityAlive,
-		}
-	}
-	return m
-}
-
-func (m TestNodeVitality) GetNodeVitalityFromCache(id roachpb.NodeID) NodeVitality {
-	val, found := m[id]
-	if !found {
-		return NodeVitality{}
-	}
-	return val.Liveness.CreateNodeVitality(val.Health, true)
-}
-
-// ScanNodeVitalityFromKV is only for testing so doesn't actually scan KV,
-// instead it returns the cached values.
-func (m TestNodeVitality) ScanNodeVitalityFromKV(_ context.Context) (NodeVitalityMap, error) {
-	return m.ScanNodeVitalityFromCache(), nil
-}
-
-func (m TestNodeVitality) ScanNodeVitalityFromCache() NodeVitalityMap {
-	nvm := make(NodeVitalityMap, len(m))
-	for key, entry := range m {
-		nvm[key] = entry.Liveness.CreateNodeVitality(entry.Health, true)
-	}
-	return nvm
 }

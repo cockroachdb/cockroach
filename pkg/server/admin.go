@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -2229,16 +2228,13 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 func getLivenessStatusMap(
 	ctx context.Context, nl *liveness.NodeLiveness, now hlc.Timestamp, st *cluster.Settings,
 ) (map[roachpb.NodeID]livenesspb.NodeLivenessStatus, error) {
-	livenesses, err := nl.GetLivenessesFromKV(ctx)
+	nodeVitalityMap, err := nl.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
 		return nil, err
 	}
-	threshold := liveness.TimeUntilNodeDead.Get(&st.SV)
-
-	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
-	for _, liveness := range livenesses {
-		status := storepool.LivenessStatus(liveness, now, threshold)
-		statusMap[liveness.NodeID] = status
+	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeVitalityMap))
+	for nodeID, vitality := range nodeVitalityMap {
+		statusMap[nodeID] = vitality.LivenessStatus()
 	}
 	return statusMap, nil
 }
@@ -2249,18 +2245,22 @@ func getLivenessStatusMap(
 func getLivenessResponse(
 	ctx context.Context, nl optionalnodeliveness.Interface, now hlc.Timestamp, st *cluster.Settings,
 ) (*serverpb.LivenessResponse, error) {
-	livenesses, err := nl.GetLivenessesFromKV(ctx)
+	nodeVitalityMap, err := nl.ScanNodeVitalityFromKV(ctx)
+
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 
-	threshold := liveness.TimeUntilNodeDead.Get(&st.SV)
+	livenesses := make([]livenesspb.Liveness, 0, len(nodeVitalityMap))
+	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeVitalityMap))
 
-	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
-	for _, liveness := range livenesses {
-		status := storepool.LivenessStatus(liveness, now, threshold)
-		statusMap[liveness.NodeID] = status
+	for nodeID, vitality := range nodeVitalityMap {
+		livenesses = append(livenesses, vitality.GenLiveness())
+		statusMap[nodeID] = vitality.LivenessStatus()
 	}
+	sort.Slice(livenesses, func(i, j int) bool {
+		return livenesses[i].NodeID < livenesses[j].NodeID
+	})
 	return &serverpb.LivenessResponse{
 		Livenesses: livenesses,
 		Statuses:   statusMap,

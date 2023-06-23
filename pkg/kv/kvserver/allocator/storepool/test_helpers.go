@@ -55,9 +55,7 @@ func (m *MockNodeLiveness) SetNodeStatus(
 
 // NodeLivenessFunc is the method that can be injected as part of store pool
 // construction to mock out node liveness, in tests.
-func (m *MockNodeLiveness) NodeLivenessFunc(
-	nodeID roachpb.NodeID, now hlc.Timestamp, threshold time.Duration,
-) livenesspb.NodeLivenessStatus {
+func (m *MockNodeLiveness) NodeLivenessFunc(nodeID roachpb.NodeID) livenesspb.NodeLivenessStatus {
 	m.Lock()
 	defer m.Unlock()
 	if status, ok := m.nodes[nodeID]; ok {

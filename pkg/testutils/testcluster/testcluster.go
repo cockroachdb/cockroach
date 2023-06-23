@@ -1540,6 +1540,9 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 			if (liveness == livenesspb.Liveness{}) {
 				return fmt.Errorf("no liveness record")
 			}
+			if liveness.Epoch < 1 {
+				return fmt.Errorf("liveness not incremented")
+			}
 			fmt.Printf("n%d: found liveness\n", s.NodeID())
 		}
 		return nil
