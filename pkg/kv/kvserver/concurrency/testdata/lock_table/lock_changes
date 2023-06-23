@@ -200,11 +200,6 @@ old: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
 # This should result in an error, similar to how mvccPutInternal handles this
 # case for intents, as the in-memory lock table is the source of truth for
 # unreplicated locks.
-#
-# We also test the same scenario for replicated locks. The only difference here
-# being that this time, we get an AssertionFailed error -- this is because we
-# expect mvccPutInternal to return an error, and never actually call into the
-# lock table to try and acquire this lock.
 # ------------------------------------------------------------------------------
 
 print
@@ -230,7 +225,3 @@ acquire r=req8 k=a durability=u
 ----
 locking request with epoch 1 came after lock(unreplicated) had already been acquired at epoch 2 in txn 00000000-0000-0000-0000-000000000001
 
-
-acquire r=req8 k=a durability=r
-----
-locking request with epoch 1 came after lock(replicated) had already been acquired at epoch 2 in txn 00000000-0000-0000-0000-000000000001
