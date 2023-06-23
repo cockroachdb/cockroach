@@ -2538,6 +2538,7 @@ system         public        statement_diagnostics_requests   completed         
 system         public        statement_diagnostics_requests   expires_at                                                                                                7
 system         public        statement_diagnostics_requests   id                                                                                                        1
 system         public        statement_diagnostics_requests   min_execution_latency                                                                                     6
+system         public        statement_diagnostics_requests   plan_gist                                                                                                 9
 system         public        statement_diagnostics_requests   requested_at                                                                                              5
 system         public        statement_diagnostics_requests   sampling_probability                                                                                      8
 system         public        statement_diagnostics_requests   statement_diagnostics_id                                                                                  4

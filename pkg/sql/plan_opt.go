@@ -713,10 +713,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if bld.ContainsNonDefaultKeyLocking {
 		planTop.flags.Set(planFlagContainsNonDefaultLocking)
 	}
-	if planTop.instrumentation.ShouldSaveMemo() {
-		planTop.mem = mem
-		planTop.catalog = opc.catalog
-	}
+	planTop.mem = mem
+	planTop.catalog = opc.catalog
 	return nil
 }
 

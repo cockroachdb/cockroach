@@ -304,7 +304,8 @@ type planTop struct {
 	planComponents
 
 	// mem/catalog retains the memo and catalog that were used to create the
-	// plan. Only set if needed by instrumentation (see ShouldSaveMemo).
+	// plan. Set unconditionally but used only by instrumentation (in order to
+	// build the stmt bundle).
 	mem     *memo.Memo
 	catalog optPlanningCatalog
 
