@@ -951,8 +951,10 @@ func (c *txnCache) add(txn *roachpb.Transaction) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
-		if !txn.Status.IsFinalized() {
-			txn.Update(c.txns[idx])
+		if curTxn := c.txns[idx]; txn.WriteTimestamp.Less(curTxn.WriteTimestamp) {
+			// If the new txn has a lower write timestamp than the cached txn,
+			// just move the cached txn to the front of the LRU cache.
+			txn = curTxn
 		}
 		c.moveFrontLocked(txn, idx)
 	} else {
