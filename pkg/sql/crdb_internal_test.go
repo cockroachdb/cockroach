@@ -14,12 +14,14 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -27,11 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -64,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1646,4 +1653,205 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 
 	// Sanity check that the callback was added at least once.
 	require.Greater(t, numCallbacksAdded.Load(), int32(0))
+}
+
+type ptsTestContext struct {
+	pts protectedts.Manager
+	tc  *testcluster.TestCluster
+	db  isql.DB
+
+	// If set to false, the test will be run with
+	// `DisableProtectedTimestampForMultiTenant` set to true, thereby testing the
+	// "new" protected timestamp logic that runs on targets instead of spans.
+	runWithDeprecatedSpans bool
+
+	state ptpb.State
+}
+
+func newPTSRecord(
+	tCtx *ptsTestContext,
+	ts hlc.Timestamp,
+	metaType string,
+	meta []byte,
+	target *ptpb.Target,
+	spans ...roachpb.Span,
+) ptpb.Record {
+	if tCtx.runWithDeprecatedSpans {
+		target = nil
+	} else {
+		spans = nil
+	}
+	return ptpb.Record{
+		ID:              uuid.MakeV4().GetBytes(),
+		Timestamp:       ts,
+		Mode:            ptpb.PROTECT_AFTER,
+		MetaType:        metaType,
+		Meta:            meta,
+		DeprecatedSpans: spans,
+		Target:          target,
+	}
+}
+
+func tableTargets(ids ...uint32) *ptpb.Target {
+	var tableIDs []descpb.ID
+	for _, id := range ids {
+		tableIDs = append(tableIDs, descpb.ID(id))
+	}
+	return ptpb.MakeSchemaObjectsTarget(tableIDs)
+}
+
+func tableTarget(tableID uint32) *ptpb.Target {
+	return ptpb.MakeSchemaObjectsTarget([]descpb.ID{descpb.ID(tableID)})
+}
+
+func largeTableTarget(targetBytesSize int64) *ptpb.Target {
+	var tableID descpb.ID
+	idSize := int64(unsafe.Sizeof(tableID))
+	ids := make([]descpb.ID, 0)
+	for i := int64(0); i < targetBytesSize/idSize; i++ {
+		ids = append(ids, descpb.ID(rand.Uint32()))
+	}
+	return ptpb.MakeSchemaObjectsTarget(ids)
+}
+
+func tableSpan(tableID uint32) roachpb.Span {
+	return roachpb.Span{
+		Key:    keys.SystemSQLCodec.TablePrefix(tableID),
+		EndKey: keys.SystemSQLCodec.TablePrefix(tableID).PrefixEnd(),
+	}
+}
+
+func tableSpans(tableIDs ...uint32) []roachpb.Span {
+	spans := make([]roachpb.Span, len(tableIDs))
+	for i, tableID := range tableIDs {
+		spans[i] = tableSpan(tableID)
+	}
+	return spans
+}
+
+func TestPTSTable(t *testing.T) {
+
+	runWithDeprecatedSpans := false
+
+	ctx := context.Background()
+	var params base.TestServerArgs
+
+	ptsKnobs := &protectedts.TestingKnobs{}
+	if runWithDeprecatedSpans {
+		ptsKnobs.DisableProtectedTimestampForMultiTenant = true
+		params.Knobs.ProtectedTS = ptsKnobs
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	defer tc.Stopper().Stop(ctx)
+
+	s := tc.Server(0)
+
+	db := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	// Create two tables with 100 and 200 ranges respectively.
+	db.ExecMultiple(t,
+		`CREATE TABLE foo (i INT PRIMARY KEY)`,
+		`INSERT INTO foo (i) SELECT * FROM generate_series(1, 1000);`,
+		`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 100));`,
+
+		`CREATE TABLE foo2 (i INT PRIMARY KEY)`,
+		`INSERT INTO foo2 (i) SELECT * FROM generate_series(1, 1000);`,
+		`ALTER TABLE foo2 SPLIT AT (SELECT * FROM generate_series(1, 200));`,
+	)
+	var tableID1 uint32
+	var tableID2 uint32
+	db.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
+		` WHERE name = 'foo' AND database_name = current_database()`).Scan(&tableID1)
+	db.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
+		` WHERE name = 'foo2' AND database_name = current_database()`).Scan(&tableID2)
+
+	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
+	tCtx := ptsTestContext{
+		pts:                    ptm,
+		db:                     s.InternalDB().(isql.DB),
+		tc:                     tc,
+		runWithDeprecatedSpans: runWithDeprecatedSpans,
+	}
+
+	defaultRecord := jobs.Record{
+		// Job does not accept an empty Details field, so arbitrarily provide
+		// ImportDetails.
+		Details:  jobspb.BackupDetails{},
+		Progress: jobspb.BackupProgress{},
+		Username: username.TestUserName(),
+	}
+
+	reg := s.JobRegistry().(*jobs.Registry)
+	jobID := reg.MakeJobID()
+
+	job, err := reg.CreateJobWithTxn(ctx, defaultRecord, jobID, nil /* txn */)
+	require.NoError(t, err)
+
+	rec := jobsprotectedts.MakeRecord(uuid.MakeV4(),
+		int64(job.ID()),
+		tCtx.tc.Server(0).Clock().Now(),
+		[]roachpb.Span{},
+		jobsprotectedts.Jobs,
+		tableTargets(tableID1, tableID2))
+
+	err = tCtx.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return tCtx.pts.WithTxn(txn).Protect(ctx, rec)
+	})
+	require.NoError(t, err)
+
+	systemRows := db.Query(t, "SELECT * FROM system.protected_ts_records")
+	internalRows := db.Query(t, "SELECT * FROM crdb_internal.kv_protected_ts_records")
+	systemCols, err := systemRows.Columns()
+	require.NoError(t, err)
+	internalCols, err := internalRows.Columns()
+	require.NoError(t, err)
+
+	require.Equal(t, systemCols, []string{"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target"},
+		"unexpected column in PTS system.protected_ts_records. make sure to add this column to "+
+			" crdb_internal.kv_protected_ts_records as well")
+	require.Equal(t, internalCols, []string{
+		"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target", "decoded_meta", "decoded_target", "internal_meta", "num_ranges",
+	})
+
+	t.Run("simple", func(t *testing.T) {
+		systemRow := db.QueryRow(t, "SELECT * FROM system.protected_ts_records WHERE id = $1", rec.ID.String())
+		internalRow := db.QueryRow(t, "SELECT * FROM crdb_internal.kv_protected_ts_records WHERE id = $1", rec.ID.String())
+
+		var id string
+		var ts string
+		var metaType string
+		var meta []byte
+		var numSpans int
+		var spans []byte
+		var verified bool
+		var target []byte
+		systemRow.Scan(&id, &ts, &metaType, &meta, &numSpans, &spans, &verified, &target)
+
+		var id2 string
+		var ts2 string
+		var metaType2 string
+		var meta2 []byte
+		var numSpans2 int
+		var spans2 []byte
+		var verified2 bool
+		var target2 []byte
+		var decodedMeta []byte
+		var decodedTargets []byte
+		var internalMeta []byte
+		var numRanges int
+		internalRow.Scan(&id2, &ts2, &metaType2, &meta2, &numSpans2, &spans2, &verified2, &target2, &decodedMeta, &decodedTargets, &internalMeta, &numRanges)
+
+		require.Equal(t, id, id2)
+		require.Equal(t, ts, ts2)
+		require.Equal(t, metaType, metaType2)
+		require.Equal(t, meta, meta2)
+		require.Equal(t, numSpans, numSpans2)
+		require.Equal(t, spans, spans2)
+		require.Equal(t, verified, verified2)
+		require.Equal(t, target, target2)
+		require.Equal(t, []byte(fmt.Sprintf(`{"jobID": %d}`, jobID)), decodedMeta)
+		require.Equal(t, []byte(fmt.Sprintf(`{"schemaObjects": {"ids": [%d, %d]}}`, tableID1, tableID2)), decodedTargets)
+		require.Equal(t, []byte(fmt.Sprintf(`{"jobUsername": "%s"}`, username.TestUserName().Normalized())), internalMeta)
+		require.Equal(t, 302, numRanges)
+	})
 }

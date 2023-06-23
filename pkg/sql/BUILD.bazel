@@ -753,6 +753,8 @@ go_test(
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/rpc",

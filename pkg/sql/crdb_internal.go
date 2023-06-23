@@ -24,12 +24,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -217,6 +220,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalKVFlowHandlesID:                    crdbInternalKVFlowHandles,
 		catconstants.CrdbInternalKVFlowControllerID:                 crdbInternalKVFlowController,
 		catconstants.CrdbInternalKVFlowTokenDeductions:              crdbInternalKVFlowTokenDeductions,
+		catconstants.CrdbInternalKVProtectedTS:                      crdbInternalKVProtectedTSTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -1399,6 +1403,185 @@ func makeJobsTableRows(
 		}
 		matched = true
 	}
+}
+
+var crdbInternalKVProtectedTSTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.kv_protected_ts_records (
+   id        			UUID NOT NULL,
+   ts        			DECIMAL NOT NULL,
+   meta_type 			STRING NOT NULL,
+   meta      			BYTES,
+   num_spans 			INT8 NOT NULL, -- num spans is important to know how to decode spans
+   spans     			BYTES NOT NULL,
+   verified  			BOOL NOT NULL,
+   target    			BYTES,        -- target is an encoded protobuf that specifies what the pts record will protect
+   decoded_meta 		JSON,   -- Decoded data from the meta column converted to JSON.     
+   decoded_target 		JSON,   -- Additional metadata added by this table (ex. job owner for job meta_type)
+   internal_meta        JSON,   -- Additional metadata added by this table (ex. job owner for job meta_type) 
+   num_ranges  			INT
+)`,
+	comment: `decoded protected timestamp metadata from system.protected_ts_records (KV scan)`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+		defer func() {
+			err = pgerror.Wrap(err, pgcode.Internal, "internal pts table")
+		}()
+
+		q := `
+			SELECT id, ts, meta_type, meta, num_spans, spans, verified, target, 
+			       crdb_internal.pb_to_json(
+                  'cockroach.protectedts.Target',
+                  target, false /* emit defaults */, false /* do not emit redacted values since this is included in the debug zip */
+                ) as decoded_targets
+			FROM system.protected_ts_records
+        `
+		// We use QueryIteratorEx here and specify the current user
+		// instead of using InternalExecutor.QueryIterator because
+		// the latter is being deprecated for sometimes executing
+		// the query as the root user.
+		it, err := p.InternalSQLTxn().QueryIteratorEx(
+			ctx, "crdb-internal-protected-timestamps-table", p.txn,
+			sessiondata.InternalExecutorOverride{User: p.User()},
+			q)
+		if err != nil {
+			return err
+		}
+
+		cleanup := func(ctx context.Context) {
+			if err := it.Close(); err != nil {
+				// TODO(yuzefovich): this error should be propagated further up
+				// and not simply being logged. Fix it (#61123).
+				//
+				// Doing that as a return parameter would require changes to
+				// `planNode.Close` signature which is a bit annoying. One other
+				// possible solution is to panic here and catch the error
+				// somewhere.
+				log.Warningf(ctx, "error closing an iterator: %v", err)
+			}
+		}
+		defer cleanup(ctx)
+
+		for {
+			hasNext, err := it.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !hasNext {
+				return nil
+			}
+			var id, ts, metaType, meta, numSpans, spans, verified, target, decodedTarget tree.Datum
+
+			r := it.Cur()
+			id, ts, metaType, meta, numSpans, spans, verified, target, decodedTarget =
+				r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]
+
+			metaDatum, ok := metaType.(*tree.DString)
+			if !ok {
+				return errors.AssertionFailedf("could not get datum string from meta type")
+			}
+			metaString := tree.NewFmtCtx(tree.FmtBareStrings)
+			metaDatum.Format(metaString)
+
+			// In case there is no metadata or if the decoding for a particular meta type has not been implemented
+			// yet below, we use JSON.
+			var decodedMeta tree.Datum
+			decodedMeta = tree.DNull
+
+			var internalMeta tree.Datum
+			internalMeta = tree.DNull
+
+			if meta != tree.DNull {
+				metaBytes, ok := meta.(*tree.DBytes)
+				if !ok {
+					return errors.AssertionFailedf("could not get datum bytes from meta")
+				}
+
+				switch metaString.CloseAndGetString() {
+				case jobsprotectedts.GetMetaType(jobsprotectedts.Jobs):
+					builder, err := json.NewFixedKeysObjectBuilder([]string{"jobID"})
+					if err != nil {
+						return err
+					}
+					jobID, err := jobsprotectedts.DecodeID(metaBytes.UnsafeBytes())
+					if err != nil {
+						return err
+					}
+					err = builder.Set("jobID", json.FromInt64(jobID))
+					if err != nil {
+						return err
+					}
+					metaJSON, err := builder.Build()
+					if err != nil {
+						return err
+					}
+					decodedMeta = tree.NewDJSON(metaJSON)
+
+					job, err := p.ExecCfg().JobRegistry.LoadJob(ctx, jobspb.JobID(jobID))
+					if err != nil {
+						return err
+					}
+					builder, err = json.NewFixedKeysObjectBuilder([]string{"jobUsername"})
+					if err != nil {
+						return err
+					}
+					err = builder.Set("jobUsername", json.FromString(job.Payload().UsernameProto.Decode().Normalized()))
+					if err != nil {
+						return err
+					}
+					internalMetaJSON, err := builder.Build()
+					if err != nil {
+						return err
+					}
+					internalMeta = tree.NewDJSON(internalMetaJSON)
+				default:
+				}
+			}
+
+			var numRanges tree.Datum
+			numRanges = tree.NewDInt(-1)
+			targetBytes, ok := target.(*tree.DBytes)
+			var targetProto ptpb.Target
+			// It is safe to use UnsafeBytes if we do not mutate them.
+			if err := protoutil.Unmarshal(targetBytes.UnsafeBytes(), &targetProto); err != nil {
+				return err
+			}
+			switch t := targetProto.Union.(type) {
+			// TODO (#104161): support range estimate for clusters, tenants,
+			// and database targets.
+			case *ptpb.Target_Cluster:
+			case *ptpb.Target_Tenants:
+			case *ptpb.Target_SchemaObjects:
+				// Add note about leased. and p.InternalSQLTxn()
+				descs, err := p.Descriptors().ByIDWithLeased(p.InternalSQLTxn().KV()).Get().Descs(ctx, t.SchemaObjects.IDs)
+				if err != nil {
+					return err
+				}
+				var spans []roachpb.Span
+				for _, desc := range descs {
+					switch desc.DescriptorType() {
+					case catalog.Table:
+						tableDesc := desc.(catalog.TableDescriptor)
+						// Use all Indexes because presumably dropping the table will GC all that data too.
+						for _, idx := range tableDesc.AllIndexes() {
+							idxSpan := tableDesc.IndexSpan(p.execCfg.Codec, idx.GetID())
+							spans = append(spans, idxSpan)
+						}
+					default:
+					}
+				}
+				ranges, _, err := kvfeed.AllRangeSpans(ctx, p.DistSQLPlanner().distSender, spans)
+				if err != nil {
+					return err
+				}
+				numRanges = tree.NewDInt(tree.DInt(len(ranges)))
+			}
+
+			if err := addRow(id, ts, metaType, meta, numSpans, spans, verified, target, decodedMeta, decodedTarget, internalMeta, numRanges); err != nil {
+				return err
+			}
+
+		}
+	},
 }
 
 // execStatAvg is a helper for execution stats shown in virtual tables. Returns
