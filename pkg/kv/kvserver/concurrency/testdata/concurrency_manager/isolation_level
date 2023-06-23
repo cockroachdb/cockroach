@@ -166,37 +166,37 @@ debug-lock-table
 ----
 num=16
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSIHigh1"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSIHigh2"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSIHigh3"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSIHigh4"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSINormal1"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSINormal2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSINormal3"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSINormal4"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 # -------------------------------------------------------------
 # Pushee: isolation=serializable, priority=normal
@@ -335,37 +335,37 @@ debug-lock-table
 ----
 num=16
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSIHigh1"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSIHigh2"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSIHigh3"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSIHigh4"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSINormal1"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal3"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal4"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
 
 # -------------------------------------------------------------
 # Pushee: isolation=serializable, priority=high
@@ -504,37 +504,37 @@ debug-lock-table
 ----
 num=16
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kSSIHigh1"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh2"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh3"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh4"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal1"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal3"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal4"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
 
 # -------------------------------------------------------------
 # Pushee: isolation=read-committed, priority=normal
@@ -668,37 +668,37 @@ debug-lock-table
 ----
 num=16
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,2, info: unrepl seqs: [0]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh1"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh2"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh3"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh4"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal1"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal3"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal4"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
 
 # -------------------------------------------------------------
 # Pushee: isolation=read-committed, priority=high
@@ -832,37 +832,37 @@ debug-lock-table
 ----
 num=16
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,2, info: unrepl seqs: [0]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,2, info: unrepl seqs: [0]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh1"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh2"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh3"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSIHigh4"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal1"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 11.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal3"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 12.000000000,2, info: unrepl seqs: [0]
  lock: "kSSINormal4"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 13.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 13.000000000,2, info: unrepl seqs: [0]
 
 reset
 ----
