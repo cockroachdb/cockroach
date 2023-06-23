@@ -311,6 +311,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		NoTenantUpgradeFunc,
 	),
+	upgrade.NewTenantUpgrade(
+		"update system.statement_diagnostics_requests to support plan gist matching",
+		toCV(clusterversion.V23_2_StmtDiagForPlanGist),
+		upgrade.NoPrecondition,
+		stmtDiagForPlanGistMigration,
+	),
 }
 
 var (

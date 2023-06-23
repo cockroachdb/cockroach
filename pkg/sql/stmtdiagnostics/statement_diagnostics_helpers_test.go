@@ -27,11 +27,13 @@ func (r *Registry) TestingFindRequest(requestID int64) bool {
 func (r *Registry) InsertRequestInternal(
 	ctx context.Context,
 	fprint string,
+	planGist string,
+	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (int64, error) {
-	id, err := r.insertRequestInternal(ctx, fprint, samplingProbability, minExecutionLatency, expiresAfter)
+	id, err := r.insertRequestInternal(ctx, fprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAfter)
 	return int64(id), err
 }
 

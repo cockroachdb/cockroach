@@ -2437,6 +2437,8 @@ var builtinOidsArray = []string{
 	2464: `workload_index_recs(budget: string) -> string`,
 	2465: `workload_index_recs(timestamptz: timestamptz, budget: string) -> string`,
 	2466: `crdb_internal.setup_span_configs_stream(tenant_name: string) -> bytes`,
+	2467: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval) -> bool`,
+	2468: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, antiPlanGist: bool, samplingProbability: float, minExecutionLatency: interval, expiresAfter: interval) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

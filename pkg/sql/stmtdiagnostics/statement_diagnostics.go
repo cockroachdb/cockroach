@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -113,6 +114,8 @@ type Registry struct {
 // information.
 type Request struct {
 	fingerprint         string
+	planGist            string
+	antiPlanGist        bool
 	samplingProbability float64
 	minExecutionLatency time.Duration
 	expiresAt           time.Time
@@ -228,6 +231,8 @@ func (r *Registry) addRequestInternalLocked(
 	ctx context.Context,
 	id RequestID,
 	queryFingerprint string,
+	planGist string,
+	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAt time.Time,
@@ -241,6 +246,8 @@ func (r *Registry) addRequestInternalLocked(
 	}
 	r.mu.requestFingerprints[id] = Request{
 		fingerprint:         queryFingerprint,
+		planGist:            planGist,
+		antiPlanGist:        antiPlanGist,
 		samplingProbability: samplingProbability,
 		minExecutionLatency: minExecutionLatency,
 		expiresAt:           expiresAt,
@@ -272,25 +279,32 @@ func (r *Registry) cancelRequest(requestID RequestID) {
 	delete(r.mu.unconditionalOngoing, requestID)
 }
 
-// InsertRequest is part of the StmtDiagnosticsRequester interface.
+// InsertRequest is part of the server.StmtDiagnosticsRequester interface.
 func (r *Registry) InsertRequest(
 	ctx context.Context,
 	stmtFingerprint string,
+	planGist string,
+	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) error {
-	_, err := r.insertRequestInternal(ctx, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAfter)
+	_, err := r.insertRequestInternal(ctx, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAfter)
 	return err
 }
 
 func (r *Registry) insertRequestInternal(
 	ctx context.Context,
 	stmtFingerprint string,
+	planGist string,
+	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (RequestID, error) {
+	if planGist != "" && !r.st.Version.IsActive(ctx, clusterversion.V23_2_StmtDiagForPlanGist) {
+		return 0, errors.Newf("plan gists only supported after 23.2 version migrations have completed")
+	}
 	if samplingProbability != 0 {
 		if samplingProbability < 0 || samplingProbability > 1 {
 			return 0, errors.Newf(
@@ -333,9 +347,14 @@ func (r *Registry) insertRequestInternal(
 
 		now := timeutil.Now()
 		insertColumns := "statement_fingerprint, requested_at"
-		qargs := make([]interface{}, 2, 5)
+		qargs := make([]interface{}, 2, 7)
 		qargs[0] = stmtFingerprint // statement_fingerprint
 		qargs[1] = now             // requested_at
+		if planGist != "" {
+			insertColumns += ", plan_gist, anti_plan_gist"
+			qargs = append(qargs, planGist)     // plan_gist
+			qargs = append(qargs, antiPlanGist) // anti_plan_gist
+		}
 		if samplingProbability != 0 {
 			insertColumns += ", sampling_probability"
 			qargs = append(qargs, samplingProbability) // sampling_probability
@@ -380,7 +399,7 @@ func (r *Registry) insertRequestInternal(
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.mu.epoch++
-		r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
+		r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt)
 	}()
 
 	return reqID, nil
@@ -447,7 +466,7 @@ func (r *Registry) MaybeRemoveRequest(requestID RequestID, req Request, execLate
 //
 // If shouldCollect is true, MaybeRemoveRequest needs to be called.
 func (r *Registry) ShouldCollectDiagnostics(
-	ctx context.Context, fingerprint string,
+	ctx context.Context, fingerprint string, planGist string,
 ) (shouldCollect bool, reqID RequestID, req Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -463,9 +482,23 @@ func (r *Registry) ShouldCollectDiagnostics(
 				delete(r.mu.requestFingerprints, id)
 				return false, 0, req
 			}
-			reqID = id
-			req = f
-			break
+			// We found non-expired request that matches the fingerprint.
+			if f.planGist == "" {
+				// The request didn't specify the plan gist, so this execution
+				// will do.
+				reqID = id
+				req = f
+				break
+			}
+			if (f.planGist == planGist && !f.antiPlanGist) ||
+				(planGist != "" && f.planGist != planGist && f.antiPlanGist) {
+				// The execution's plan gist matches the one from the request,
+				// or the execution's plan gist doesn't match the one from the
+				// request and "anti-match" is requested.
+				reqID = id
+				req = f
+				break
+			}
 		}
 	}
 
@@ -634,6 +667,7 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
+	isPlanGistSupported := r.st.Version.IsActive(ctx, clusterversion.V23_2_StmtDiagForPlanGist)
 
 	// Loop until we run the query without straddling an epoch increment.
 	for {
@@ -641,11 +675,15 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
+		var extraColumns string
+		if isPlanGistSupported {
+			extraColumns = ", plan_gist, anti_plan_gist"
+		}
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.RootUserSessionDataOverride,
-			`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability
+			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability%s
 				FROM system.statement_diagnostics_requests
-				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`, extraColumns),
 		)
 		if err != nil {
 			return err
@@ -679,6 +717,8 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		var minExecutionLatency time.Duration
 		var expiresAt time.Time
 		var samplingProbability float64
+		var planGist string
+		var antiPlanGist bool
 
 		if minExecLatency, ok := row[2].(*tree.DInterval); ok {
 			minExecutionLatency = time.Duration(minExecLatency.Nanos())
@@ -694,8 +734,16 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 				samplingProbability = 1.0
 			}
 		}
+		if isPlanGistSupported {
+			if gist, ok := row[5].(*tree.DString); ok {
+				planGist = string(*gist)
+			}
+			if antiGist, ok := row[6].(*tree.DBool); ok {
+				antiPlanGist = bool(*antiGist)
+			}
+		}
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, stmtFingerprint, samplingProbability, minExecutionLatency, expiresAt)
+		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt)
 	}
 
 	// Remove all other requests.
