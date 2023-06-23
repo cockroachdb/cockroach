@@ -1262,6 +1262,7 @@ unreserved_keyword ::=
 	| 'NOLOGIN'
 	| 'NOMODIFYCLUSTERSETTING'
 	| 'NONVOTERS'
+	| 'NOREPLICATION'
 	| 'NOSQLLOGIN'
 	| 'NOVIEWACTIVITY'
 	| 'NOVIEWACTIVITYREDACTED'
@@ -3012,6 +3013,8 @@ role_option ::=
 	| 'NOVIEWCLUSTERSETTING'
 	| password_clause
 	| valid_until_clause
+	| 'REPLICATION'
+	| 'NOREPLICATION'
 
 array_subscripts ::=
 	( array_subscript ) ( ( array_subscript ) )*
@@ -3806,6 +3809,7 @@ bare_label_keywords ::=
 	| 'NONE'
 	| 'NONVOTERS'
 	| 'NORMAL'
+	| 'NOREPLICATION'
 	| 'NOSQLLOGIN'
 	| 'NOT'
 	| 'NOTHING'

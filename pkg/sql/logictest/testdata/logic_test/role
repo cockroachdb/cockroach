@@ -915,6 +915,9 @@ statement error pq: conflicting role options
 CREATE ROLE rolewithcreate NOCREATEROLE CREATEROLE
 
 statement error pq: conflicting role options
+CREATE ROLE rolewithcreate REPLICATION NOREPLICATION
+
+statement error pq: conflicting role options
 ALTER ROLE testrole WITH CREATEROLE NOCREATEROLE
 
 statement error pq: conflicting role options
@@ -1503,6 +1506,40 @@ ALTER USER testuser2 WITH PASSWORD 'abc'
 
 statement ok
 RESET ROLE
+
+subtest end
+
+subtest replication
+
+statement ok
+CREATE ROLE repluser NOREPLICATION LOGIN
+
+query TT rowsort
+SELECT option, value FROM system.role_options WHERE username = 'repluser'
+----
+
+statement ok
+ALTER ROLE repluser REPLICATION
+
+query TT rowsort
+SELECT  option, value FROM system.role_options WHERE username = 'repluser'
+----
+REPLICATION  NULL
+
+statement ok
+DROP ROLE repluser; CREATE ROLE repluser REPLICATION LOGIN
+
+query TT rowsort
+SELECT  option, value FROM system.role_options WHERE username = 'repluser'
+----
+REPLICATION  NULL
+
+statement ok
+ALTER ROLE repluser NOREPLICATION
+
+query TT rowsort
+SELECT option, value FROM system.role_options WHERE username = 'repluser'
+----
 
 subtest end
 
