@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -247,7 +248,9 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
 		startOpts.RoachprodOpts.Sequential = false
-		if err := clusterupgrade.StartWithBinary(ctx, t.L(), u.c, nodes, binary, startOpts); err != nil {
+		if err := clusterupgrade.StartWithSettings(
+			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -259,7 +262,9 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
 		startOpts.RoachprodOpts.Sequential = false
-		if err := clusterupgrade.StartWithBinary(ctx, t.L(), u.c, nodes, binary, startOpts); err != nil {
+		if err := clusterupgrade.StartWithSettings(
+			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}

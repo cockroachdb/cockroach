@@ -75,7 +75,7 @@ func registerValidateSystemSchemaAfterVersionUpgrade(r registry.Registry) {
 			// Wipe nodes in this test's cluster.
 			wipeClusterStep := func(nodes option.NodeListOption) versionStep {
 				return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-					u.c.Wipe(ctx, nodes)
+					u.c.Wipe(ctx, false /* preserveCerts */, nodes)
 				}
 			}
 
