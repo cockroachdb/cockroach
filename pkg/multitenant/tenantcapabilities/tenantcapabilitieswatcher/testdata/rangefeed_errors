@@ -10,24 +10,24 @@ ok
 updates
 ----
 
-upsert ten=10 can_admin_unsplit=true
+upsert ten=10 name=foo service=shared can_admin_unsplit=true
 ----
 ok
 
-upsert ten=11 can_admin_unsplit=false
+upsert ten=11 name=bar can_admin_unsplit=false
 ----
 ok
 
-upsert ten=12 can_admin_unsplit=false
+upsert ten=12 name=baz data=ready can_admin_unsplit=false
 ----
 ok
 
 updates
 ----
 Incremental Update
-update: ten=10 cap={can_admin_unsplit:true}
-update: ten=11 cap={default}
-update: ten=12 cap={default}
+update: ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
+update: ten=11 name=bar state=add service=none cap={default}
+update: ten=12 name=baz state=ready service=none cap={default}
 
 inject-error
 ----
@@ -36,7 +36,7 @@ big-yikes
 # Update some more state. However, because of the injected error, we shouldn't
 # observe any updates.
 
-upsert ten=12 can_admin_unsplit=true
+upsert ten=12 name=bli data=add can_admin_unsplit=true
 ----
 ok
 
@@ -44,7 +44,7 @@ delete ten=10
 ----
 ok
 
-upsert ten=50 can_admin_unsplit=false
+upsert ten=50 name=blax can_admin_unsplit=false
 ----
 ok
 
@@ -56,9 +56,9 @@ updates
 
 flush-state
 ----
-ten=10 cap={can_admin_unsplit:true}
-ten=11 cap={default}
-ten=12 cap={default}
+ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
+ten=11 name=bar state=add service=none cap={default}
+ten=12 name=baz state=ready service=none cap={default}
 
 get-capabilities ten=50
 ----
@@ -66,11 +66,11 @@ not-found
 
 get-capabilities ten=12
 ----
-{default}
+ten=12 name=baz state=ready service=none cap={default}
 
 get-capabilities ten=10
 ----
-{can_admin_unsplit:true}
+ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
 
 # Let the Watcher attempt to restart.
 restart-after-injected-error
@@ -82,23 +82,23 @@ ok
 updates
 ----
 Complete Update
-update: ten=11 cap={default}
-update: ten=12 cap={can_admin_unsplit:true}
-update: ten=50 cap={default}
+update: ten=11 name=bar state=add service=none cap={default}
+update: ten=12 name=bli state=add service=none cap={can_admin_unsplit:true}
+update: ten=50 name=blax state=add service=none cap={default}
 
 flush-state
 ----
-ten=11 cap={default}
-ten=12 cap={can_admin_unsplit:true}
-ten=50 cap={default}
+ten=11 name=bar state=add service=none cap={default}
+ten=12 name=bli state=add service=none cap={can_admin_unsplit:true}
+ten=50 name=blax state=add service=none cap={default}
 
 get-capabilities ten=50
 ----
-{default}
+ten=50 name=blax state=add service=none cap={default}
 
 get-capabilities ten=12
 ----
-{can_admin_unsplit:true}
+ten=12 name=bli state=add service=none cap={can_admin_unsplit:true}
 
 get-capabilities ten=10
 ----
