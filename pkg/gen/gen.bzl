@@ -31,6 +31,7 @@ load(":parser.bzl", "PARSER_SRCS")
 load(":schemachanger.bzl", "SCHEMACHANGER_SRCS")
 load(":diagrams.bzl", "DIAGRAMS_SRCS")
 load(":bnf.bzl", "BNF_SRCS")
+load(":ui.bzl", "UI_SRCS")
 
 # GeneratedFileInfo provides two pieces of information to the _hoist_files
 # rule. It provides the set of files to be hoisted via the generated_files
@@ -317,6 +318,12 @@ def bnf():
     _hoist_no_prefix(
         name = "bnf",
         srcs = BNF_SRCS,
+    )
+
+def ui():
+    _hoist_no_prefix(
+        name = "ui",
+        srcs = UI_SRCS,
     )
 
 def gen(name, srcs):
