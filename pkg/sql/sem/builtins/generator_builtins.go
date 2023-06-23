@@ -1760,10 +1760,12 @@ func (j *jsonPopulateRecordGenerator) Next(ctx context.Context) (bool, error) {
 
 // Values is part of the tree.ValueGenerator interface.
 func (j jsonPopulateRecordGenerator) Values() (tree.Datums, error) {
-	if err := eval.PopulateRecordWithJSON(j.ctx, j.evalCtx, j.target, j.input.ResolvedType(), j.input); err != nil {
+	output := tree.NewDTupleWithLen(j.input.ResolvedType(), j.input.D.Len())
+	copy(output.D, j.input.D)
+	if err := eval.PopulateRecordWithJSON(j.ctx, j.evalCtx, j.target, j.input.ResolvedType(), output); err != nil {
 		return nil, err
 	}
-	return j.input.D, nil
+	return output.D, nil
 }
 
 func makeJSONPopulateRecordSetGenerator(
