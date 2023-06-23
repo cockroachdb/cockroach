@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,7 +46,8 @@ type Watcher struct {
 	mu struct {
 		syncutil.RWMutex
 
-		store map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities
+		store  map[roachpb.TenantID]*tenantcapabilities.Entry
+		byName map[roachpb.TenantName]roachpb.TenantID
 	}
 }
 
@@ -75,8 +77,27 @@ func New(
 		bufferMemLimit:   bufferMemLimit,
 		knobs:            watcherKnobs,
 	}
-	w.mu.store = make(map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities)
+	w.mu.store = make(map[roachpb.TenantID]*tenantcapabilities.Entry)
+	w.mu.byName = make(map[roachpb.TenantName]roachpb.TenantID)
 	return w
+}
+
+// GetInfo reads the non-capability fields from the tenant entry.
+// TODO(knz): GetInfo and GetCapabilities should probably be combined.
+func (w *Watcher) GetInfo(id roachpb.TenantID) (mtinfopb.SQLInfo, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	cp, found := w.mu.store[id]
+	if found {
+		return mtinfopb.SQLInfo{
+			ID:          id.ToUint64(),
+			Name:        cp.Name,
+			ServiceMode: cp.ServiceMode,
+			DataState:   cp.DataState,
+		}, true
+	}
+	return mtinfopb.SQLInfo{}, false
 }
 
 // GetCapabilities implements the tenantcapabilities.Reader interface.
@@ -87,7 +108,10 @@ func (w *Watcher) GetCapabilities(
 	defer w.mu.RUnlock()
 
 	cp, found := w.mu.store[id]
-	return cp, found
+	if found {
+		return cp.TenantCapabilities, true
+	}
+	return nil, false
 }
 
 // GetGlobalCapabilityState implements the tenantcapabilities.Reader interface.
@@ -97,7 +121,7 @@ func (w *Watcher) GetGlobalCapabilityState() map[roachpb.TenantID]*tenantcapabil
 
 	result := make(map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities, len(w.mu.store))
 	for tenID, cp := range w.mu.store {
-		result[tenID] = cp
+		result[tenID] = cp.TenantCapabilities
 	}
 	return result
 }
@@ -106,7 +130,7 @@ func (w *Watcher) GetGlobalCapabilityState() map[roachpb.TenantID]*tenantcapabil
 // rangefeed buffer tracks. This is extremely conservative for now, given we
 // don't have too many capabilities in the system. We should re-evaluate this
 // constant as that changes.
-const capabilityEntrySize = 50 // bytes
+const capabilityEntrySize = 200 // bytes
 
 // Start implements the tenantcapabilities.Watcher interface.
 // Start asycnhronously establishes a rangefeed over the global tenant
@@ -125,7 +149,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 		rfcTestingKnobs = w.knobs.WatcherRangeFeedKnobs.(*rangefeedcache.TestingKnobs)
 	}
 	rfc := rangefeedcache.NewWatcher(
-		"tenant-capability-watcher",
+		"tenant-entry-watcher",
 		w.clock,
 		w.rangeFeedFactory,
 		int(w.bufferMemLimit/capabilityEntrySize), /* bufferSize */
@@ -152,40 +176,65 @@ func (w *Watcher) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
 	switch u.Type {
 	case rangefeedcache.CompleteUpdate:
 		log.Info(ctx, "received results of a full table scan for tenant capabilities")
-		w.handleCompleteUpdate(updates)
+		w.handleCompleteUpdate(ctx, updates)
 	case rangefeedcache.IncrementalUpdate:
-		w.handleIncrementalUpdate(updates)
+		w.handleIncrementalUpdate(ctx, updates)
 	default:
 		logcrash.ReportOrPanic(ctx, &w.st.SV, "unknown update type: %v", u.Type)
 		log.Warningf(ctx, "unknown update type: %v", u.Type)
 	}
 }
 
-func (w *Watcher) handleCompleteUpdate(updates []tenantcapabilities.Update) {
+func (w *Watcher) handleCompleteUpdate(ctx context.Context, updates []tenantcapabilities.Update) {
 	// Populate a fresh store with the supplied updates.
 	// A Complete update indicates that the initial table scan is complete. This
 	// happens when the rangefeed is first established, or if it's restarted for
 	// some reason. Either way, we want to throw away any accumulated state so
 	// far, and reconstruct it using the result of the scan.
-	freshStore := make(map[roachpb.TenantID]*tenantcapabilitiespb.TenantCapabilities)
-	for _, up := range updates {
-		freshStore[up.TenantID] = up.TenantCapabilities
+	freshStore := make(map[roachpb.TenantID]*tenantcapabilities.Entry)
+	byName := make(map[roachpb.TenantName]roachpb.TenantID)
+	for i := range updates {
+		up := &updates[i]
+		if log.V(2) {
+			log.Infof(ctx, "adding initial tenant entry to cache: %+v", up.Entry)
+		}
+		freshStore[up.TenantID] = &up.Entry
+		if up.Entry.Name != "" {
+			byName[up.Entry.Name] = up.TenantID
+		}
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.mu.store = freshStore
+	w.mu.byName = byName
 }
 
-func (w *Watcher) handleIncrementalUpdate(updates []tenantcapabilities.Update) {
+func (w *Watcher) handleIncrementalUpdate(
+	ctx context.Context, updates []tenantcapabilities.Update,
+) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	for _, update := range updates {
+	for i := range updates {
+		update := &updates[i]
 		if update.Deleted {
-			delete(w.mu.store, update.TenantID)
+			if log.V(2) {
+				log.Infof(ctx, "removing tenant entry from cache: %+v", update.Entry)
+			}
+			tid := update.TenantID
+			if entry := w.mu.store[tid]; entry != nil {
+				delete(w.mu.byName, entry.Name)
+			}
+			delete(w.mu.store, tid)
 		} else {
-			w.mu.store[update.TenantID] = update.TenantCapabilities
+			if log.V(2) {
+				log.Infof(ctx, "adding tenant entry to cache: %+v", update.Entry)
+			}
+			w.mu.store[update.TenantID] = &update.Entry
+			if update.Entry.Name != "" {
+				w.mu.byName[update.Entry.Name] = update.TenantID
+			}
 		}
 	}
 }
@@ -196,11 +245,8 @@ func (w *Watcher) TestingFlushCapabilitiesState() (entries []tenantcapabilities.
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	for id, capability := range w.mu.store {
-		entries = append(entries, tenantcapabilities.Entry{
-			TenantID:           id,
-			TenantCapabilities: capability,
-		})
+	for _, entry := range w.mu.store {
+		entries = append(entries, *entry)
 	}
 
 	// Sort entries by tenant ID before returning, to ensure the return value of

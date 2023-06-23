@@ -88,9 +88,39 @@ func (d *decoder) decode(kv roachpb.KeyValue) (tenantcapabilities.Entry, error) 
 		}
 	}
 
+	var name roachpb.TenantName
+	if len(datums) > 3 {
+		if i := datums[3]; i != tree.DNull {
+			name = roachpb.TenantName(tree.MustBeDString(i))
+		}
+	}
+
+	var dataState mtinfopb.TenantDataState
+	if len(datums) > 4 {
+		if i := datums[4]; i != tree.DNull {
+			rawDataState := tree.MustBeDInt(i)
+			if rawDataState >= 0 && rawDataState <= tree.DInt(mtinfopb.MaxDataState) {
+				dataState = mtinfopb.TenantDataState(rawDataState)
+			}
+		}
+	}
+
+	var serviceMode mtinfopb.TenantServiceMode
+	if len(datums) > 5 {
+		if i := datums[5]; i != tree.DNull {
+			rawServiceMode := tree.MustBeDInt(i)
+			if rawServiceMode >= 0 && rawServiceMode <= tree.DInt(mtinfopb.MaxServiceMode) {
+				serviceMode = mtinfopb.TenantServiceMode(rawServiceMode)
+			}
+		}
+	}
+
 	return tenantcapabilities.Entry{
 		TenantID:           tenID,
 		TenantCapabilities: &tenantInfo.Capabilities,
+		Name:               name,
+		DataState:          dataState,
+		ServiceMode:        serviceMode,
 	}, nil
 }
 

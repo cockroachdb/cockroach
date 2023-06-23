@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
 
@@ -200,13 +201,21 @@ func TestDataDriven(t *testing.T) {
 					if receivedUpdates[i].Deleted {
 						output.WriteString(fmt.Sprintf("delete: ten=%v\n", receivedUpdates[i].TenantID))
 					} else {
-						output.WriteString(fmt.Sprintf("update: ten=%v cap=%v\n", receivedUpdates[i].TenantID, tenantcapabilitiestestutils.AlteredCapabilitiesString(receivedUpdates[i].TenantCapabilities)))
+						output.WriteString(fmt.Sprintf("update: ten=%v name=%v service=%v state=%v cap=%v\n",
+							receivedUpdates[i].TenantID,
+							receivedUpdates[i].Name,
+							receivedUpdates[i].ServiceMode,
+							receivedUpdates[i].DataState,
+							tenantcapabilitiestestutils.AlteredCapabilitiesString(receivedUpdates[i].TenantCapabilities)))
 					}
 				}
 				return output.String()
 
 			case "upsert":
+				t.Logf("%v: processing upsert", d.Pos)
 				tenID, caps, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
+				require.NoError(t, err)
+				name, serviceMode, dataState, err := tenantcapabilitiestestutils.ParseTenantInfo(t, d)
 				require.NoError(t, err)
 				info := mtinfopb.ProtoInfo{
 					Capabilities: *caps,
@@ -215,12 +224,14 @@ func TestDataDriven(t *testing.T) {
 				require.NoError(t, err)
 				tdb.Exec(
 					t,
-					fmt.Sprintf("UPSERT INTO %s (id, active, info) VALUES ($1, $2, $3)", dummyTableName),
+					fmt.Sprintf("UPSERT INTO %s (id, active, info, name, service_mode, data_state) VALUES ($1, $2, $3, $4, $5, $6)", dummyTableName),
 					tenID.ToUint64(),
 					true, /* active */
 					buf,
+					name, serviceMode, dataState,
 				)
 				lastUpdateTS = ts.Clock().Now()
+
 			case "delete":
 				delete := tenantcapabilitiestestutils.ParseTenantCapabilityDelete(t, d)
 				tdb.Exec(
@@ -236,15 +247,23 @@ func TestDataDriven(t *testing.T) {
 				if !found {
 					return "not-found"
 				}
-				return fmt.Sprintf("%v", tenantcapabilitiestestutils.AlteredCapabilitiesString(cp))
+				info, _ := watcher.GetInfo(tID)
+				var buf strings.Builder
+				fmt.Fprintf(&buf, "%+v\n", pretty.Formatter(info))
+				buf.WriteString(tenantcapabilitiestestutils.AlteredCapabilitiesString(cp))
+				return buf.String()
 
 			case "flush-state":
 				var output strings.Builder
 				entries := watcher.TestingFlushCapabilitiesState()
 				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf("ten=%v cap=%v\n", entry.TenantID, tenantcapabilitiestestutils.AlteredCapabilitiesString(entry.TenantCapabilities)))
+					output.WriteString(
+						fmt.Sprintf("ten=%v name=%v service=%v state=%v cap=%v\n",
+							entry.TenantID, entry.Name, entry.ServiceMode, entry.DataState,
+							tenantcapabilitiestestutils.AlteredCapabilitiesString(entry.TenantCapabilities)))
 				}
 				return output.String()
+
 			case "inject-error":
 				err := errors.New("big-yikes")
 				errorInjectionCh <- err
