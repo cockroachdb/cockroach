@@ -287,8 +287,7 @@ func (fr *FlowRegistry) RegisterFlow(
 
 	if draining {
 		return &flowRetryableError{cause: errors.Errorf(
-			"could not register flowID %s because the registry is draining",
-			id,
+			"could not register flow because the registry is draining",
 		)}
 	}
 	entry := fr.getEntryLocked(id)
