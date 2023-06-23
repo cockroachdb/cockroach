@@ -1418,14 +1418,12 @@ func (ex *connExecutor) rollbackSQLTransaction(
 func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, planner *planner, res RestrictedCommandResult,
 ) (retErr error) {
-	getPausablePortalInfo := func() *portalPauseInfo {
-		if planner != nil && planner.pausablePortal != nil {
-			return planner.pausablePortal.pauseInfo
-		}
-		return nil
+	var ppInfo *portalPauseInfo
+	if planner != nil && planner.pausablePortal != nil {
+		ppInfo = planner.pausablePortal.pauseInfo
 	}
 	defer func() {
-		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		if ppInfo != nil {
 			if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 				ppInfo.dispatchToExecutionEngine.cleanup.isComplete = true
 			}
@@ -1467,7 +1465,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	var err error
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+	if ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			err = ex.makeExecPlan(ctx, planner)
 			ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
@@ -1501,7 +1499,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	var stats topLevelQueryStats
 	defer func() {
 		var bulkJobId uint64
-		if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
+		if ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
 				fName: "log statement",
 				f: func() {
@@ -1656,7 +1654,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	stats, err = ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic,
 	)
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+	if ppInfo != nil {
 		// For pausable portals, we log the stats when closing the portal, so we need
 		// to aggregate the stats for all executions.
 		ppInfo.dispatchToExecutionEngine.queryStats.add(&stats)
@@ -1684,7 +1682,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
+	if ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
 		curPlanner := *planner
