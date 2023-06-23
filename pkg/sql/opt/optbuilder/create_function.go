@@ -162,7 +162,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 
 	targetVolatility := tree.GetFuncVolatility(cf.Options)
 	// Validate each statement and collect the dependencies.
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
 	for i, stmt := range stmts {
 		var stmtScope *scope
 		// We need to disable stable function folding because we want to catch the
@@ -192,6 +192,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		typeDeps.UnionWith(b.schemaTypeDeps)
 		// Add statement ast into CreateFunction node for logging purpose.
 		cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
+		ann := tree.MakeAnnotations(stmt.NumAnnotations)
+		cf.BodyAnnotations = append(cf.BodyAnnotations, &ann)
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
@@ -209,7 +211,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	// Override the function body so that references are fully qualified.
 	for i, option := range cf.Options {
 		if _, ok := option.(tree.FunctionBodyStr); ok {
-			cf.Options[i] = tree.FunctionBodyStr(fmtCtx.String())
+			cf.Options[i] = tree.FunctionBodyStr(fmtCtx.CloseAndGetString())
 			break
 		}
 	}

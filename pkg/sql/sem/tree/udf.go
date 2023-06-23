@@ -93,7 +93,8 @@ type CreateFunction struct {
 	// all parsed AST nodes of body statements with all expression in original
 	// format. That is sequence names and type name in expressions are not
 	// rewritten with OIDs.
-	BodyStatements Statements
+	BodyStatements  Statements
+	BodyAnnotations []*Annotations
 }
 
 // Format implements the NodeFormatter interface.
@@ -131,15 +132,21 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteString(" ")
 			}
+			oldAnn := ctx.ann
+			ctx.ann = node.BodyAnnotations[i]
 			ctx.FormatNode(stmt)
 			ctx.WriteString(";")
+			ctx.ann = oldAnn
 		}
 		ctx.WriteString("$$")
 	} else if node.RoutineBody != nil {
 		ctx.WriteString("BEGIN ATOMIC ")
-		for _, stmt := range node.RoutineBody.Stmts {
+		for i, stmt := range node.RoutineBody.Stmts {
+			oldAnn := ctx.ann
+			ctx.ann = node.RoutineBody.Annotations[i]
 			ctx.FormatNode(stmt)
 			ctx.WriteString("; ")
+			ctx.ann = oldAnn
 		}
 		ctx.WriteString("END")
 	} else {
@@ -149,7 +156,8 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 
 // RoutineBody represent a list of statements in a UDF body.
 type RoutineBody struct {
-	Stmts Statements
+	Stmts       Statements
+	Annotations []*Annotations
 }
 
 // RoutineReturn represent a RETURN statement in a UDF body.
