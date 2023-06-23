@@ -968,7 +968,7 @@ func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessSta
 // liveness of the Node with ID NodeID.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
-	return func(nid roachpb.NodeID, now hlc.Timestamp, timeUntilNodeDead time.Duration) livenesspb.NodeLivenessStatus {
+	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
 		return s.quickLivenessMap[NodeID(nid)]
 	}
 }
