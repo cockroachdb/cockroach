@@ -1232,6 +1232,7 @@ var zipSystemTables = DebugZipTableRegistry{
 			"min_execution_latency",
 			"expires_at",
 			"sampling_probability",
+			"plan_gist",
 		},
 	},
 	"system.table_statistics": {
