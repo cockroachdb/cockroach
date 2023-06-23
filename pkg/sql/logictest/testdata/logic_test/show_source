@@ -178,23 +178,23 @@ SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 sql.defaults.distsql
 off
 
-query TTTBT colnames
+query TTTBTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
 ----
-variable              value  setting_type  public  description
-cluster.organization  ·      s             true    organization name
+variable              value  setting_type  public  description        default_value  origin
+cluster.organization  ·      s             true    organization name  ·              default
 
-query TTTT colnames
+query TTTTTT colnames
 SELECT * FROM [SHOW CLUSTER SETTINGS] WHERE variable LIKE '%organization'
 ----
-variable              value  setting_type  description
-cluster.organization  ·      s             organization name
+variable              value  setting_type  description        default_value  origin
+cluster.organization  ·      s             organization name  ·              default
 
-query TTTT colnames
+query TTTTTT colnames
 SELECT * FROM [SHOW PUBLIC CLUSTER SETTINGS] WHERE variable LIKE '%organization'
 ----
-variable              value  setting_type  description
-cluster.organization  ·      s             organization name
+variable              value  setting_type  description        default_value  origin
+cluster.organization  ·      s             organization name  ·              default
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
