@@ -1164,6 +1164,7 @@ func MakeSystemTables() []SystemTable {
 		RangeEventTable,
 		UITable,
 		JobsTable,
+		SystemJobInfoTable,
 		WebSessionsTable,
 		TableStatisticsTable,
 		LocationsTable,
