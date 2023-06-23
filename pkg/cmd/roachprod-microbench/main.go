@@ -15,6 +15,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/spf13/cobra"
 )
 
@@ -46,6 +47,7 @@ Typical usage:
 	// Add subcommands.
 	command.AddCommand(makeCompareCommand())
 	command.AddCommand(makeRunCommand())
+	command.AddCommand(makeExportCommand())
 
 	return command
 }
@@ -109,11 +111,11 @@ func makeCompareCommand() *cobra.Command {
 			return err
 		}
 
-		tableResults, err := c.compareBenchmarks()
+		metricMaps, err := c.readMetrics()
 		if err != nil {
 			return err
 		}
-		return c.publishToGoogleSheets(tableResults)
+		return c.publishToGoogleSheets(metricMaps)
 	}
 
 	cmd := &cobra.Command{
@@ -124,6 +126,28 @@ func makeCompareCommand() *cobra.Command {
 		RunE:  runCmdFunc,
 	}
 	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", "", "append a description to the sheet title when doing a comparison")
+	return cmd
+}
+
+func makeExportCommand() *cobra.Command {
+	var (
+		labels map[string]string
+		ts     int64
+	)
+	runCmdFunc := func(cmd *cobra.Command, commandLine []string) error {
+		args, _ := splitArgsAtDash(cmd, commandLine)
+		return exportMetrics(args[0], os.Stdout, timeutil.Unix(ts, 0), labels)
+	}
+
+	cmd := &cobra.Command{
+		Use:   "export <dir>",
+		Short: "Export microbenchmark results to an open metrics format.",
+		Long:  `Export microbenchmark results to an open metrics format.`,
+		Args:  cobra.ExactArgs(1),
+		RunE:  runCmdFunc,
+	}
+	cmd.Flags().StringToStringVar(&labels, "labels", nil, "comma-separated list of key=value pair labels to add to the metrics")
+	cmd.Flags().Int64Var(&ts, "timestamp", timeutil.Now().Unix(), "unix timestamp to use for the metrics, defaults to now")
 	return cmd
 }
 
