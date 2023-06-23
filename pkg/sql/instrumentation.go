@@ -124,8 +124,10 @@ type instrumentationHelper struct {
 	// shouldFinishSpan determines whether sp needs to be finished in
 	// instrumentationHelper.Finish.
 	shouldFinishSpan bool
-	origCtx          context.Context
-	evalCtx          *eval.Context
+	// needFinish determines whether Finish must be called.
+	needFinish bool
+	origCtx    context.Context
+	evalCtx    *eval.Context
 
 	queryLevelStatsWithErr *execstats.QueryLevelStatsWithErr
 
@@ -255,7 +257,7 @@ func (ih *instrumentationHelper) Setup(
 	fingerprint string,
 	implicitTxn bool,
 	collectTxnExecStats bool,
-) (newCtx context.Context, needFinish bool) {
+) (newCtx context.Context) {
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
 	ih.codec = cfg.Codec
@@ -278,7 +280,7 @@ func (ih *instrumentationHelper) Setup(
 
 	default:
 		ih.collectBundle, ih.diagRequestID, ih.diagRequest =
-			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint)
+			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint, "" /* planGist */)
 	}
 
 	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
@@ -308,7 +310,8 @@ func (ih *instrumentationHelper) Setup(
 			// span in order to fetch the trace from it, but the span won't be
 			// finished.
 			ih.sp = sp
-			return ctx, true /* needFinish */
+			ih.needFinish = true
+			return ctx
 		}
 	} else {
 		if buildutil.CrdbTestBuild {
@@ -335,9 +338,10 @@ func (ih *instrumentationHelper) Setup(
 			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement",
 				tracing.WithRecording(tracingpb.RecordingStructured))
 			ih.shouldFinishSpan = true
-			return newCtx, true
+			ih.needFinish = true
+			return newCtx
 		}
-		return ctx, false
+		return ctx
 	}
 
 	ih.collectExecStats = true
@@ -353,7 +357,8 @@ func (ih *instrumentationHelper) Setup(
 	}
 	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
 	ih.shouldFinishSpan = true
-	return newCtx, true
+	ih.needFinish = true
+	return newCtx
 }
 
 func (ih *instrumentationHelper) Finish(

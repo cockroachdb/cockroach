@@ -538,6 +538,10 @@ const (
 	// that (optionally) embed below-raft admission data.
 	V23_2_UseACRaftEntryEntryEncodings
 
+	// V23_2_StmtDiagForPlanGist enables statement diagnostic feature to collect
+	// the bundle for particular plan gist.
+	V23_2_StmtDiagForPlanGist
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -934,6 +938,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_UseACRaftEntryEntryEncodings,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 10},
+	},
+	{
+		Key:     V23_2_StmtDiagForPlanGist,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 12},
 	},
 
 	// *************************************************
