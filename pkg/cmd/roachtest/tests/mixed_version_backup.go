@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -811,7 +812,7 @@ func (sc *systemTableContents) loadShowResults(
 
 	query := fmt.Sprintf("SELECT * FROM [%s]%s", showStmt, aostFor(timestamp))
 	showCmd := roachtestutil.NewCommand("%s sql", mixedversion.CurrentCockroachPath).
-		Option("insecure").
+		Flag("certs-dir", "certs").
 		Flag("e", fmt.Sprintf("%q", query)).
 		String()
 
@@ -1963,14 +1964,15 @@ func (mvb *mixedVersionBackup) verifyBackupCollection(
 func (mvb *mixedVersionBackup) resetCluster(
 	ctx context.Context, l *logger.Logger, version string,
 ) error {
-	l.Printf("resetting cluster using version %s", version)
+	l.Printf("resetting cluster using version %q", clusterupgrade.VersionMsg(version))
 	if err := mvb.cluster.WipeE(ctx, l, true /* preserveCerts */, mvb.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
 
 	cockroachPath := clusterupgrade.BinaryPathFromVersion(version)
-	return clusterupgrade.StartWithBinary(
-		ctx, l, mvb.cluster, mvb.roachNodes, cockroachPath, option.DefaultStartOptsNoBackups(),
+	return clusterupgrade.StartWithSettings(
+		ctx, l, mvb.cluster, mvb.roachNodes, option.DefaultStartOptsNoBackups(),
+		install.BinaryOption(cockroachPath), install.SecureOption(true),
 	)
 }
 

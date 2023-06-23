@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -135,10 +136,10 @@ func (bd *backupDriver) prepareCluster(ctx context.Context) {
 		bd.sp.hardware.getCRDBNodes(), version)
 	require.NoError(bd.t, err)
 
-	require.NoError(bd.t, clusterupgrade.StartWithBinary(ctx, bd.t.L(), bd.c,
+	require.NoError(bd.t, clusterupgrade.StartWithSettings(ctx, bd.t.L(), bd.c,
 		bd.sp.hardware.getCRDBNodes(),
-		binaryPath,
-		option.DefaultStartOptsNoBackups()))
+		option.DefaultStartOptsNoBackups(),
+		install.BinaryOption(binaryPath)))
 
 	bd.assertCorrectCockroachBinary(ctx)
 	if !bd.sp.backup.ignoreExistingBackups {
