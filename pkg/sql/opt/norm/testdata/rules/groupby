@@ -597,6 +597,465 @@ project
       └── xy.y:9 [as=y:12, outer=(9)]
 
 # --------------------------------------------------
+# EliminateUpsertDistinct
+# --------------------------------------------------
+
+# Case with non-null conflict column.
+norm expect=EliminateUpsertDistinct
+INSERT INTO xy VALUES (1, 2) ON CONFLICT (x) DO UPDATE SET x = 100
+----
+upsert xy
+ ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
+ ├── canary column: xy.x:7
+ ├── fetch columns: xy.x:7 y:8
+ ├── insert-mapping:
+ │    ├── column1:5 => xy.x:1
+ │    └── column2:6 => y:2
+ ├── update-mapping:
+ │    └── upsert_x:12 => xy.x:1
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: upsert_x:12!null column1:5!null column2:6!null xy.x:7 y:8
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(5-8,12)
+ │    ├── left-join (cross)
+ │    │    ├── columns: column1:5!null column2:6!null xy.x:7 y:8
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(5-8)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:5!null column2:6!null
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(5,6)
+ │    │    │    └── (1, 2)
+ │    │    ├── select
+ │    │    │    ├── columns: xy.x:7!null y:8
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(7,8)
+ │    │    │    ├── scan xy
+ │    │    │    │    ├── columns: xy.x:7!null y:8
+ │    │    │    │    ├── key: (7)
+ │    │    │    │    └── fd: (7)-->(8)
+ │    │    │    └── filters
+ │    │    │         └── xy.x:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ │    │    └── filters (true)
+ │    └── projections
+ │         └── CASE WHEN xy.x:7 IS NULL THEN column1:5 ELSE 100 END [as=upsert_x:12, outer=(5,7)]
+ └── f-k-checks
+      ├── f-k-checks-item: fks(r1) -> xy(x)
+      │    └── semi-join (hash)
+      │         ├── columns: x:14
+      │         ├── cardinality: [0 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(14)
+      │         ├── except-all
+      │         │    ├── columns: x:14
+      │         │    ├── left columns: x:14
+      │         │    ├── right columns: x:15
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    ├── fd: ()-->(14)
+      │         │    ├── with-scan &1
+      │         │    │    ├── columns: x:14
+      │         │    │    ├── mapping:
+      │         │    │    │    └──  xy.x:7 => x:14
+      │         │    │    ├── cardinality: [1 - 1]
+      │         │    │    ├── key: ()
+      │         │    │    └── fd: ()-->(14)
+      │         │    └── with-scan &1
+      │         │         ├── columns: x:15!null
+      │         │         ├── mapping:
+      │         │         │    └──  upsert_x:12 => x:15
+      │         │         ├── cardinality: [1 - 1]
+      │         │         ├── key: ()
+      │         │         └── fd: ()-->(15)
+      │         ├── scan fks
+      │         │    └── columns: r1:18!null
+      │         └── filters
+      │              └── x:14 = r1:18 [outer=(14,18), constraints=(/14: (/NULL - ]; /18: (/NULL - ]), fd=(14)==(18), (18)==(14)]
+      └── f-k-checks-item: fks(r2) -> xy(x)
+           └── semi-join (hash)
+                ├── columns: x:22
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(22)
+                ├── except-all
+                │    ├── columns: x:22
+                │    ├── left columns: x:22
+                │    ├── right columns: x:23
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(22)
+                │    ├── with-scan &1
+                │    │    ├── columns: x:22
+                │    │    ├── mapping:
+                │    │    │    └──  xy.x:7 => x:22
+                │    │    ├── cardinality: [1 - 1]
+                │    │    ├── key: ()
+                │    │    └── fd: ()-->(22)
+                │    └── with-scan &1
+                │         ├── columns: x:23!null
+                │         ├── mapping:
+                │         │    └──  upsert_x:12 => x:23
+                │         ├── cardinality: [1 - 1]
+                │         ├── key: ()
+                │         └── fd: ()-->(23)
+                ├── scan fks
+                │    └── columns: r2:27
+                └── filters
+                     └── x:22 = r2:27 [outer=(22,27), constraints=(/22: (/NULL - ]; /27: (/NULL - ]), fd=(22)==(27), (27)==(22)]
+
+# Case with DO NOTHING.
+norm expect=EliminateUpsertDistinct
+INSERT INTO xy VALUES (1, 2) ON CONFLICT (x) DO NOTHING
+----
+insert xy
+ ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── anti-join (cross)
+      ├── columns: column1:5!null column2:6!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(5,6)
+      ├── values
+      │    ├── columns: column1:5!null column2:6!null
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(5,6)
+      │    └── (1, 2)
+      ├── select
+      │    ├── columns: x:7!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7)
+      │    ├── scan xy
+      │    │    ├── columns: x:7!null
+      │    │    └── key: (7)
+      │    └── filters
+      │         └── x:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      └── filters (true)
+
+# Case with UPSERT.
+norm expect=EliminateUpsertDistinct
+UPSERT INTO nullablecols VALUES (1, 2, 2)
+----
+upsert nullablecols
+ ├── arbiter indexes: nullablecols_pkey
+ ├── columns: <none>
+ ├── canary column: rowid:14
+ ├── fetch columns: c1:11 c2:12 c3:13 rowid:14
+ ├── insert-mapping:
+ │    ├── column1:7 => c1:1
+ │    ├── column2:8 => c2:2
+ │    ├── column3:9 => c3:3
+ │    └── rowid_default:10 => rowid:4
+ ├── update-mapping:
+ │    ├── column1:7 => c1:1
+ │    ├── column2:8 => c2:2
+ │    └── column3:9 => c3:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── left-join (hash)
+      ├── columns: column1:7!null column2:8!null column3:9!null rowid_default:10 c1:11 c2:12 c3:13 rowid:14
+      ├── cardinality: [1 - 1]
+      ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      ├── volatile
+      ├── key: ()
+      ├── fd: ()-->(7-14)
+      ├── values
+      │    ├── columns: column1:7!null column2:8!null column3:9!null rowid_default:10
+      │    ├── cardinality: [1 - 1]
+      │    ├── volatile
+      │    ├── key: ()
+      │    ├── fd: ()-->(7-10)
+      │    └── (1, 2, 2, unique_rowid())
+      ├── scan nullablecols
+      │    ├── columns: c1:11 c2:12 c3:13 rowid:14!null
+      │    ├── key: (14)
+      │    └── fd: (14)-->(11-13), (11)~~>(12-14), (12,13)~~>(11,14)
+      └── filters
+           └── rowid_default:10 = rowid:14 [outer=(10,14), constraints=(/10: (/NULL - ]; /14: (/NULL - ]), fd=(10)==(14), (14)==(10)]
+
+# Case with a multi-row data source with a strict key.
+norm expect=EliminateUpsertDistinct
+INSERT INTO xy SELECT k, i FROM a ON CONFLICT (x) DO UPDATE SET x = xy.x + 100
+----
+upsert xy
+ ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
+ ├── canary column: xy.x:12
+ ├── fetch columns: xy.x:12 y:13
+ ├── insert-mapping:
+ │    ├── a.k:5 => xy.x:1
+ │    └── i:6 => y:2
+ ├── update-mapping:
+ │    └── upsert_x:17 => xy.x:1
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: upsert_x:17 a.k:5!null i:6!null xy.x:12 y:13
+ │    ├── immutable
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6,12,13,17), (12)-->(13)
+ │    ├── left-join (hash)
+ │    │    ├── columns: a.k:5!null i:6!null xy.x:12 y:13
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6,12,13), (12)-->(13)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:5!null i:6!null
+ │    │    │    ├── key: (5)
+ │    │    │    └── fd: (5)-->(6)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: xy.x:12!null y:13
+ │    │    │    ├── key: (12)
+ │    │    │    └── fd: (12)-->(13)
+ │    │    └── filters
+ │    │         └── a.k:5 = xy.x:12 [outer=(5,12), constraints=(/5: (/NULL - ]; /12: (/NULL - ]), fd=(5)==(12), (12)==(5)]
+ │    └── projections
+ │         └── CASE WHEN xy.x:12 IS NULL THEN a.k:5 ELSE xy.x:12 + 100 END [as=upsert_x:17, outer=(5,12), immutable]
+ └── f-k-checks
+      ├── f-k-checks-item: fks(r1) -> xy(x)
+      │    └── semi-join (hash)
+      │         ├── columns: x:19
+      │         ├── key: (19)
+      │         ├── except
+      │         │    ├── columns: x:19
+      │         │    ├── left columns: x:19
+      │         │    ├── right columns: x:20
+      │         │    ├── key: (19)
+      │         │    ├── with-scan &1
+      │         │    │    ├── columns: x:19
+      │         │    │    └── mapping:
+      │         │    │         └──  xy.x:12 => x:19
+      │         │    └── with-scan &1
+      │         │         ├── columns: x:20
+      │         │         └── mapping:
+      │         │              └──  upsert_x:17 => x:20
+      │         ├── scan fks
+      │         │    └── columns: r1:23!null
+      │         └── filters
+      │              └── x:19 = r1:23 [outer=(19,23), constraints=(/19: (/NULL - ]; /23: (/NULL - ]), fd=(19)==(23), (23)==(19)]
+      └── f-k-checks-item: fks(r2) -> xy(x)
+           └── semi-join (hash)
+                ├── columns: x:27
+                ├── key: (27)
+                ├── except
+                │    ├── columns: x:27
+                │    ├── left columns: x:27
+                │    ├── right columns: x:28
+                │    ├── key: (27)
+                │    ├── with-scan &1
+                │    │    ├── columns: x:27
+                │    │    └── mapping:
+                │    │         └──  xy.x:12 => x:27
+                │    └── with-scan &1
+                │         ├── columns: x:28
+                │         └── mapping:
+                │              └──  upsert_x:17 => x:28
+                ├── scan fks
+                │    └── columns: r2:32
+                └── filters
+                     └── x:27 = r2:32 [outer=(27,32), constraints=(/27: (/NULL - ]; /32: (/NULL - ]), fd=(27)==(32), (32)==(27)]
+
+# Case with a multi-row data source with a lax key.
+# TODO(drewk): the UpsertDistinctOn isn't removed in this case because the lax
+# key for nullablecols isn't fully simplified.
+norm
+INSERT INTO xy SELECT c1, c2 FROM nullablecols ON CONFLICT (x) DO UPDATE SET x = xy.x + 100
+----
+upsert xy
+ ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
+ ├── canary column: xy.x:11
+ ├── fetch columns: xy.x:11 y:12
+ ├── insert-mapping:
+ │    ├── c1:5 => xy.x:1
+ │    └── c2:6 => y:2
+ ├── update-mapping:
+ │    └── upsert_x:16 => xy.x:1
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: upsert_x:16 c1:5 c2:6 xy.x:11 y:12
+ │    ├── immutable
+ │    ├── lax-key: (5,11)
+ │    ├── fd: (5)~~>(6), (11)-->(12), (5,11)-->(16)
+ │    ├── left-join (hash)
+ │    │    ├── columns: c1:5 c2:6 xy.x:11 y:12
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    │    ├── lax-key: (5,11)
+ │    │    ├── fd: (5)~~>(6), (11)-->(12)
+ │    │    ├── ensure-upsert-distinct-on
+ │    │    │    ├── columns: c1:5 c2:6
+ │    │    │    ├── grouping columns: c1:5
+ │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+ │    │    │    ├── lax-key: (5)
+ │    │    │    ├── fd: (5)~~>(6)
+ │    │    │    ├── scan nullablecols
+ │    │    │    │    ├── columns: c1:5 c2:6
+ │    │    │    │    ├── lax-key: (5,6)
+ │    │    │    │    └── fd: (5)~~>(6)
+ │    │    │    └── aggregations
+ │    │    │         └── first-agg [as=c2:6, outer=(6)]
+ │    │    │              └── c2:6
+ │    │    ├── scan xy
+ │    │    │    ├── columns: xy.x:11!null y:12
+ │    │    │    ├── key: (11)
+ │    │    │    └── fd: (11)-->(12)
+ │    │    └── filters
+ │    │         └── c1:5 = xy.x:11 [outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
+ │    └── projections
+ │         └── CASE WHEN xy.x:11 IS NULL THEN c1:5 ELSE xy.x:11 + 100 END [as=upsert_x:16, outer=(5,11), immutable]
+ └── f-k-checks
+      ├── f-k-checks-item: fks(r1) -> xy(x)
+      │    └── semi-join (hash)
+      │         ├── columns: x:18
+      │         ├── key: (18)
+      │         ├── except
+      │         │    ├── columns: x:18
+      │         │    ├── left columns: x:18
+      │         │    ├── right columns: x:19
+      │         │    ├── key: (18)
+      │         │    ├── with-scan &1
+      │         │    │    ├── columns: x:18
+      │         │    │    └── mapping:
+      │         │    │         └──  xy.x:11 => x:18
+      │         │    └── with-scan &1
+      │         │         ├── columns: x:19
+      │         │         └── mapping:
+      │         │              └──  upsert_x:16 => x:19
+      │         ├── scan fks
+      │         │    └── columns: r1:22!null
+      │         └── filters
+      │              └── x:18 = r1:22 [outer=(18,22), constraints=(/18: (/NULL - ]; /22: (/NULL - ]), fd=(18)==(22), (22)==(18)]
+      └── f-k-checks-item: fks(r2) -> xy(x)
+           └── semi-join (hash)
+                ├── columns: x:26
+                ├── key: (26)
+                ├── except
+                │    ├── columns: x:26
+                │    ├── left columns: x:26
+                │    ├── right columns: x:27
+                │    ├── key: (26)
+                │    ├── with-scan &1
+                │    │    ├── columns: x:26
+                │    │    └── mapping:
+                │    │         └──  xy.x:11 => x:26
+                │    └── with-scan &1
+                │         ├── columns: x:27
+                │         └── mapping:
+                │              └──  upsert_x:16 => x:27
+                ├── scan fks
+                │    └── columns: r2:31
+                └── filters
+                     └── x:26 = r2:31 [outer=(26,31), constraints=(/26: (/NULL - ]; /31: (/NULL - ]), fd=(26)==(31), (31)==(26)]
+
+# No-op because a, b is not a lax key over abc.
+norm expect-not=EliminateUpsertDistinct
+INSERT INTO xy SELECT a, b FROM abc ON CONFLICT (x) DO UPDATE SET x = xy.x + 100
+----
+upsert xy
+ ├── arbiter indexes: xy_pkey
+ ├── columns: <none>
+ ├── canary column: xy.x:10
+ ├── fetch columns: xy.x:10 y:11
+ ├── insert-mapping:
+ │    ├── a:5 => xy.x:1
+ │    └── b:6 => y:2
+ ├── update-mapping:
+ │    └── upsert_x:15 => xy.x:1
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: upsert_x:15 a:5!null b:6!null xy.x:10 y:11
+ │    ├── immutable
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6,10,11,15), (10)-->(11)
+ │    ├── left-join (hash)
+ │    │    ├── columns: a:5!null b:6!null xy.x:10 y:11
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    │    ├── key: (5)
+ │    │    ├── fd: (5)-->(6,10,11), (10)-->(11)
+ │    │    ├── ensure-upsert-distinct-on
+ │    │    │    ├── columns: a:5!null b:6!null
+ │    │    │    ├── grouping columns: a:5!null
+ │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+ │    │    │    ├── key: (5)
+ │    │    │    ├── fd: (5)-->(6)
+ │    │    │    ├── scan abc
+ │    │    │    │    └── columns: a:5!null b:6!null
+ │    │    │    └── aggregations
+ │    │    │         └── first-agg [as=b:6, outer=(6)]
+ │    │    │              └── b:6
+ │    │    ├── scan xy
+ │    │    │    ├── columns: xy.x:10!null y:11
+ │    │    │    ├── key: (10)
+ │    │    │    └── fd: (10)-->(11)
+ │    │    └── filters
+ │    │         └── a:5 = xy.x:10 [outer=(5,10), constraints=(/5: (/NULL - ]; /10: (/NULL - ]), fd=(5)==(10), (10)==(5)]
+ │    └── projections
+ │         └── CASE WHEN xy.x:10 IS NULL THEN a:5 ELSE xy.x:10 + 100 END [as=upsert_x:15, outer=(5,10), immutable]
+ └── f-k-checks
+      ├── f-k-checks-item: fks(r1) -> xy(x)
+      │    └── semi-join (hash)
+      │         ├── columns: x:17
+      │         ├── key: (17)
+      │         ├── except
+      │         │    ├── columns: x:17
+      │         │    ├── left columns: x:17
+      │         │    ├── right columns: x:18
+      │         │    ├── key: (17)
+      │         │    ├── with-scan &1
+      │         │    │    ├── columns: x:17
+      │         │    │    └── mapping:
+      │         │    │         └──  xy.x:10 => x:17
+      │         │    └── with-scan &1
+      │         │         ├── columns: x:18
+      │         │         └── mapping:
+      │         │              └──  upsert_x:15 => x:18
+      │         ├── scan fks
+      │         │    └── columns: r1:21!null
+      │         └── filters
+      │              └── x:17 = r1:21 [outer=(17,21), constraints=(/17: (/NULL - ]; /21: (/NULL - ]), fd=(17)==(21), (21)==(17)]
+      └── f-k-checks-item: fks(r2) -> xy(x)
+           └── semi-join (hash)
+                ├── columns: x:25
+                ├── key: (25)
+                ├── except
+                │    ├── columns: x:25
+                │    ├── left columns: x:25
+                │    ├── right columns: x:26
+                │    ├── key: (25)
+                │    ├── with-scan &1
+                │    │    ├── columns: x:25
+                │    │    └── mapping:
+                │    │         └──  xy.x:10 => x:25
+                │    └── with-scan &1
+                │         ├── columns: x:26
+                │         └── mapping:
+                │              └──  upsert_x:15 => x:26
+                ├── scan fks
+                │    └── columns: r2:30
+                └── filters
+                     └── x:25 = r2:30 [outer=(25,30), constraints=(/25: (/NULL - ]; /30: (/NULL - ]), fd=(25)==(30), (30)==(25)]
+
+# --------------------------------------------------
 # EliminateGroupByProject
 # --------------------------------------------------
 norm expect=EliminateGroupByProject disable=ConvertUnionToDistinctUnionAll

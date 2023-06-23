@@ -2238,21 +2238,15 @@ sort
       │         │    ├── cardinality: [0 - 2]
       │         │    ├── key: (6-8)
       │         │    ├── fd: (6-8)-->(11-13)
-      │         │    ├── ensure-upsert-distinct-on
+      │         │    ├── top-k
       │         │    │    ├── columns: x:6!null y:7!null z:8!null
-      │         │    │    ├── grouping columns: x:6!null y:7!null z:8!null
-      │         │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
+      │         │    │    ├── internal-ordering: +7,+8
+      │         │    │    ├── k: 2
       │         │    │    ├── cardinality: [0 - 2]
       │         │    │    ├── key: (6-8)
-      │         │    │    └── top-k
+      │         │    │    └── scan xyz
       │         │    │         ├── columns: x:6!null y:7!null z:8!null
-      │         │    │         ├── internal-ordering: +7,+8
-      │         │    │         ├── k: 2
-      │         │    │         ├── cardinality: [0 - 2]
-      │         │    │         ├── key: (6-8)
-      │         │    │         └── scan xyz
-      │         │    │              ├── columns: x:6!null y:7!null z:8!null
-      │         │    │              └── key: (6-8)
+      │         │    │         └── key: (6-8)
       │         │    └── filters (true)
       │         └── projections
       │              ├── CASE WHEN abc.a:11 IS NULL THEN x:6 ELSE 10 END [as=upsert_a:17, outer=(6,11)]
