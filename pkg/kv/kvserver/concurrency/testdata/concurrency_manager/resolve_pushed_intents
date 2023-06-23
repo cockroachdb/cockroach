@@ -40,25 +40,25 @@ debug-lock-table
 ----
 num=10
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "d"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "e"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "f"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "i"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "j"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
 
 # Before re-scanning and pushing, add a waiter on a single key to demonstrate
 # that uncontended, replicated keys are released when pushed, while contended,
@@ -168,9 +168,9 @@ debug-lock-table
 ----
 num=2
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
 
 new-request name=req2 txn=txn2 ts=10,1
   put key=g value=v1
@@ -200,13 +200,13 @@ debug-lock-table
 ----
 num=4
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 sequence req=req1
 ----
@@ -235,9 +235,9 @@ debug-lock-table
 ----
 num=2
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,2, info: unrepl seqs: [0]
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,2, info: unrepl seqs: [0]
 
 reset namespace
 ----
@@ -276,11 +276,11 @@ debug-lock-table
 ----
 num=3
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
 
 sequence req=req1
 ----
@@ -366,25 +366,25 @@ debug-lock-table
 ----
 num=10
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "d"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "e"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "f"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "i"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
  lock: "j"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
 
 # Before re-scanning and pushing, add a waiter on a single key to demonstrate
 # that uncontended, replicated keys are released when pushed, while contended,
