@@ -936,7 +936,7 @@ type unreplicatedLockHolderInfo struct {
 }
 
 func (ulh *unreplicatedLockHolderInfo) isEmpty() bool {
-	return ulh.txn == nil && ulh.seqs == nil && ulh.ts.IsEmpty()
+	return ulh.seqs == nil && ulh.ts.IsEmpty()
 }
 
 func (ulh *unreplicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
@@ -1308,7 +1308,7 @@ func (l *lockState) lockStateInfo(now time.Time) roachpb.LockStateInfo {
 	var txnHolder *enginepb.TxnMeta
 
 	durability := lock.Unreplicated
-	if l.holder.locked {
+	if l.isHeld() {
 		switch {
 		case l.isHeldReplicated():
 			durability = lock.Replicated
@@ -1370,7 +1370,7 @@ func (l *lockState) addToMetrics(m *LockTableMetrics, now time.Time) {
 	totalWaitDuration, maxWaitDuration := l.totalAndMaxWaitDuration(now)
 	lm := LockMetrics{
 		Key:                  l.key,
-		Held:                 l.holder.locked,
+		Held:                 l.isHeld(),
 		HoldDurationNanos:    l.lockHeldDuration(now).Nanoseconds(),
 		WaitingReaders:       int64(l.waitingReaders.Len()),
 		WaitingWriters:       int64(l.queuedWriters.Len()),
@@ -1423,7 +1423,7 @@ func (l *lockState) informActiveWaiters() {
 		// all waiters on the lock are waiting on the (old) distinguished waiter,
 		// the lock is not held.
 		assert(
-			l.distinguishedWaiter == nil || !l.holder.locked, fmt.Sprintf(
+			l.distinguishedWaiter == nil || !l.isHeld(), fmt.Sprintf(
 				"distinguished waiter waiting from txn %s waiting on itself with un-held lock",
 				waitForState.txn,
 			))
@@ -1578,7 +1578,7 @@ func (l *lockState) tryMakeNewDistinguished() {
 //
 // REQUIRES: l.mu is locked.
 func (l *lockState) isEmptyLock() bool {
-	if l.holder.locked {
+	if l.isHeld() {
 		return false // lock is held
 	}
 	// The lock isn't held. Sanity check the lock state is sane:
@@ -1614,7 +1614,7 @@ func (l *lockState) assertEmptyLockUnlocked() {
 // Returns the duration of time the lock has been tracked as held in the lock table.
 // REQUIRES: l.mu is locked.
 func (l *lockState) lockHeldDuration(now time.Time) time.Duration {
-	if !l.holder.locked {
+	if !l.isHeld() {
 		return time.Duration(0)
 	}
 
@@ -1655,7 +1655,7 @@ func (l *lockState) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.
 // given id.
 // REQUIRES: l.mu is locked.
 func (l *lockState) isLockedBy(id uuid.UUID) bool {
-	if l.holder.locked {
+	if l.isHeld() {
 		holderTxn, _ := l.getLockHolder()
 		return id == holderTxn.ID
 	}
@@ -1666,7 +1666,7 @@ func (l *lockState) isLockedBy(id uuid.UUID) bool {
 // returns nil.
 // REQUIRES: l.mu is locked.
 func (l *lockState) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
-	if !l.holder.locked {
+	if !l.isHeld() {
 		return nil, hlc.Timestamp{}
 	}
 
@@ -2242,7 +2242,7 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, str lock.Strengt
 func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.holder.locked {
+	if l.isHeld() {
 		// Already held.
 		beforeTxn, beforeTs := l.getLockHolder()
 		if acq.Txn.ID != beforeTxn.ID {
@@ -2470,7 +2470,7 @@ func (l *lockState) discoveredLock(
 	if notRemovable {
 		l.notRemovable++
 	}
-	if l.holder.locked {
+	if l.isHeld() {
 		if !l.isLockedBy(txn.ID) {
 			return errors.AssertionFailedf(
 				"discovered lock by different transaction (%s) than existing lock (see issue #63592): %s",
@@ -2837,7 +2837,7 @@ func (l *lockState) requestDone(g *lockTableGuardImpl) (gc bool) {
 		}
 	}
 
-	if !l.holder.locked && doneRemoval {
+	if !l.isHeld() && doneRemoval {
 		// The head of the list of waiting writers should always be an inactive,
 		// transactional writer if the lock isn't held. That may no longer be true
 		// if the guy we removed above was serving this purpose; the call to
@@ -2890,7 +2890,7 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 	defer l.mu.Unlock()
 
 	// Bail if not locked with only the Unreplicated durability.
-	if !l.holder.locked || !l.holder.replicatedInfo.isEmpty() {
+	if !l.isHeld() || !l.holder.replicatedInfo.isEmpty() {
 		return false
 	}
 
@@ -2915,7 +2915,7 @@ func (l *lockState) tryFreeLockOnReplicatedAcquire() bool {
 // TODO(arul): rename this + improve comment here to better reflect the state
 // transitions this function performs.
 func (l *lockState) lockIsFree() (gc bool) {
-	if l.holder.locked {
+	if l.isHeld() {
 		panic("called lockIsFree on lock with holder")
 	}
 
@@ -2956,7 +2956,7 @@ func (l *lockState) lockIsFree() (gc bool) {
 // REQUIRES: the (receiver) lock must not be held.
 // REQUIRES: there should not be any waitingReaders in the lock's wait queues.
 func (l *lockState) maybeReleaseFirstTransactionalWriter() {
-	if l.holder.locked {
+	if l.isHeld() {
 		panic("maybeReleaseFirstTransactionalWriter called when lock is held")
 	}
 	if l.waitingReaders.Len() != 0 {
@@ -3003,15 +3003,21 @@ func (l *lockState) maybeReleaseFirstTransactionalWriter() {
 	l.informActiveWaiters()
 }
 
+// isHeld returns true if the receiver is held. If held, it may be held durably,
+// non-durably, or both.
+func (l *lockState) isHeld() bool {
+	return l.holder.locked
+}
+
 // isHeldReplicated returns true if the receiver is held as a replicated lock.
 func (l *lockState) isHeldReplicated() bool {
-	return l.holder.locked && l.holder.replicatedInfo.txn != nil
+	return l.isHeld() && l.holder.replicatedInfo.txn != nil
 }
 
 // isheldUnreplicated returns true if the receiver is held as a unreplicated
 // lock.
 func (l *lockState) isHeldUnreplicated() bool {
-	return l.holder.locked && l.holder.unreplicatedInfo.txn != nil
+	return l.isHeld() && l.holder.unreplicatedInfo.txn != nil
 }
 
 // Delete removes the specified lock from the tree.
