@@ -12,10 +12,8 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -136,25 +134,20 @@ func (s *statusServer) StatementDiagnosticsRequests(
 
 	var err error
 
-	// TODO(irfansharif): Remove this version gating in 23.1.
-	var extraColumns string
-	if s.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SampledStmtDiagReqs) {
-		extraColumns = `,
-			sampling_probability`
-	}
 	// TODO(davidh): Add pagination to this request.
 	it, err := s.internalExecutor.QueryIteratorEx(ctx, "stmt-diag-get-all", nil, /* txn */
 		sessiondata.RootUserSessionDataOverride,
-		fmt.Sprintf(`SELECT
+		`SELECT
 			id,
 			statement_fingerprint,
 			completed,
 			statement_diagnostics_id,
 			requested_at,
 			min_execution_latency,
-			expires_at%s
+			expires_at,
+			sampling_probability
 		FROM
-			system.statement_diagnostics_requests`, extraColumns))
+			system.statement_diagnostics_requests`)
 	if err != nil {
 		return nil, err
 	}
@@ -178,10 +171,8 @@ func (s *statusServer) StatementDiagnosticsRequests(
 		if requestedAt, ok := row[4].(*tree.DTimestampTZ); ok {
 			req.RequestedAt = requestedAt.Time
 		}
-		if extraColumns != "" {
-			if samplingProbability, ok := row[7].(*tree.DFloat); ok {
-				req.SamplingProbability = float64(*samplingProbability)
-			}
+		if samplingProbability, ok := row[7].(*tree.DFloat); ok {
+			req.SamplingProbability = float64(*samplingProbability)
 		}
 
 		if minExecutionLatency, ok := row[5].(*tree.DInterval); ok {
