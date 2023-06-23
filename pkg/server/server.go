@@ -714,6 +714,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	tenantCapabilitiesWatcher := tenantcapabilitieswatcher.New(
 		clock,
+		cfg.Settings,
 		rangeFeedFactory,
 		keys.TenantsTableID,
 		stopper,
