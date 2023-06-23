@@ -37,6 +37,7 @@ func MakeTS(metrics [][]StoreMetrics) map[string][][]float64 {
 	ret["replica_b_rcvd"] = make([][]float64, stores)
 	ret["replica_b_sent"] = make([][]float64, stores)
 	ret["range_splits"] = make([][]float64, stores)
+	ret["disk_fraction_used"] = make([][]float64, stores)
 
 	for _, sms := range metrics {
 		for i, sm := range sms {
@@ -52,6 +53,7 @@ func MakeTS(metrics [][]StoreMetrics) map[string][][]float64 {
 			ret["replica_b_rcvd"][i] = append(ret["replica_b_rcvd"][i], float64(sm.RebalanceRcvdBytes))
 			ret["replica_b_sent"][i] = append(ret["replica_b_sent"][i], float64(sm.RebalanceSentBytes))
 			ret["range_splits"][i] = append(ret["range_splits"][i], float64(sm.RangeSplits))
+			ret["disk_fraction_used"][i] = append(ret["disk_fraction_used"][i], sm.DiskFractionUsed)
 		}
 	}
 	return ret

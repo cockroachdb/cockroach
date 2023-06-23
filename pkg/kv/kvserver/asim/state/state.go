@@ -127,6 +127,10 @@ type State interface {
 	// SetRangeBytes sets the size of the range with ID RangeID to be equal to
 	// the bytes given.
 	SetRangeBytes(RangeID, int64)
+	// SetCapacityOverride updates the capacity for the store with ID StoreID to
+	// always return the overriden value given for any set fields in
+	// CapacityOverride.
+	SetCapacityOverride(StoreID, CapacityOverride)
 	// ValidTransfer returns whether transferring the lease for the Range with ID
 	// RangeID, to the Store with ID StoreID is valid.
 	ValidTransfer(RangeID, StoreID) bool
@@ -180,6 +184,8 @@ type State interface {
 	// RaftStatus returns the current raft status for the replica of the Range
 	// with ID RangeID, on the store with ID StoreID.
 	RaftStatus(RangeID, StoreID) *raft.Status
+	// Report returns the span config conformance report for every range.
+	Report() roachpb.SpanConfigConformanceReport
 	// RegisterCapacityChangeListener registers a listener which will be
 	// notified on events where there is a lease or replica addition or
 	// removal, for a specific store.
@@ -188,6 +194,9 @@ type State interface {
 	// a new store capacity has been generated from scratch, for a specific
 	// store.
 	RegisterCapacityListener(NewCapacityListener)
+	// RegisterConfigChangeListener registers a listener which will be called
+	// when a cluster configuration change occurs such as a store being added.
+	RegisterConfigChangeListener(ConfigChangeListener)
 }
 
 // Node is a container for stores and is part of a cluster.

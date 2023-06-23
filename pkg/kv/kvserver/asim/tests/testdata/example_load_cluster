@@ -1,0 +1,49 @@
+# This test shows how configurations may be loaded from the existing catalog.
+# This test also demonstrates how to use conformance assertions to check
+# replication meet expectations.
+load_cluster config=complex
+----
+
+# Load just a single range into state, with a RF=5.
+gen_ranges ranges=1 repl_factor=5
+----
+
+# Set the span config so that there are only voters, with 3 voters in US_East
+# and 1 voter each in US_West and EU.
+set_span_config
+[0,10000): num_replicas=5 num_voters=5 constraints={'+region=US_East':3,'+region=US_West':1,'+region=EU':1} voter_constraints={'+region=US_East':3,'+region=US_West':1,'+region=EU':1}
+----
+
+# This assertion will fail if there are more than 0 unavailable, under
+# replicated, over replicated or constraint violating ranges, once the
+# simulation evaluation ends.
+assertion type=conformance unavailable=0 under=0 over=0  violating=0
+----
+
+eval duration=2m samples=1 seed=42
+----
+OK
+
+topology
+----
+EU
+  EU_1
+  │ └── [19 20 21]
+  EU_2
+  │ └── [22 23 24]
+  EU_3
+  │ └── [25 26 27 28]
+US_East
+  US_East_1
+  │ └── [1]
+  US_East_2
+  │ └── [2 3]
+  US_East_3
+  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+US_West
+  US_West_1
+    └── [17 18]
+
+
+
+# vim:ft=sh

@@ -12,6 +12,7 @@ package state
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"sort"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/google/btree"
 	"go.etcd.io/raft/v3"
@@ -42,6 +45,8 @@ type state struct {
 	quickLivenessMap        map[NodeID]livenesspb.NodeLivenessStatus
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
+	configChangeListeners   []ConfigChangeListener
+	capacityOverrides       map[StoreID]CapacityOverride
 	ranges                  *rmap
 	clusterinfo             ClusterInfo
 	usageInfo               *ClusterUsageInfo
@@ -63,14 +68,15 @@ func NewState(settings *config.SimulationSettings) State {
 
 func newState(settings *config.SimulationSettings) *state {
 	s := &state{
-		nodes:            make(map[NodeID]*node),
-		stores:           make(map[StoreID]*store),
-		loadsplits:       make(map[StoreID]LoadSplitter),
-		quickLivenessMap: make(map[NodeID]livenesspb.NodeLivenessStatus),
-		clock:            &ManualSimClock{nanos: settings.StartTime.UnixNano()},
-		ranges:           newRMap(),
-		usageInfo:        newClusterUsageInfo(),
-		settings:         settings,
+		nodes:             make(map[NodeID]*node),
+		stores:            make(map[StoreID]*store),
+		loadsplits:        make(map[StoreID]LoadSplitter),
+		quickLivenessMap:  make(map[NodeID]livenesspb.NodeLivenessStatus),
+		capacityOverrides: make(map[StoreID]CapacityOverride),
+		clock:             &ManualSimClock{nanos: settings.StartTime.UnixNano()},
+		ranges:            newRMap(),
+		usageInfo:         newClusterUsageInfo(),
+		settings:          settings,
 	}
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
 	return s
@@ -197,10 +203,59 @@ func (s *state) StoreDescriptors(cached bool, storeIDs ...StoreID) []roachpb.Sto
 
 func (s *state) updateStoreCapacity(storeID StoreID) {
 	if store, ok := s.stores[storeID]; ok {
-		capacity := Capacity(s, storeID)
+		capacity := s.capacity(storeID)
+		if override, ok := s.capacityOverrides[storeID]; ok {
+			capacity = mergeOverride(capacity, override)
+		}
 		store.desc.Capacity = capacity
 		s.publishNewCapacityEvent(capacity, storeID)
 	}
+}
+
+func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
+	// TODO(kvoli,lidorcarmel): Store capacity will need to be populated with
+	// the following missing fields: l0sublevels, bytesperreplica, writesperreplica.
+	store, ok := s.stores[storeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: store (%d) doesn't exist", storeID))
+	}
+
+	// We re-use the existing store capacity and selectively zero out the fields
+	// we intend to change.
+	capacity := store.desc.Capacity
+	capacity.QueriesPerSecond = 0
+	capacity.WritesPerSecond = 0
+	capacity.LogicalBytes = 0
+	capacity.LeaseCount = 0
+	capacity.RangeCount = 0
+	capacity.Used = 0
+	capacity.Available = 0
+
+	for _, repl := range s.Replicas(storeID) {
+		rangeID := repl.Range()
+		replicaID := repl.ReplicaID()
+		rng, _ := s.Range(rangeID)
+		if rng.Leaseholder() == replicaID {
+			// TODO(kvoli): We currently only consider load on the leaseholder
+			// replica for a range. The other replicas have an estimate that is
+			// calculated within the allocation algorithm. Adapt this to
+			// support follower reads, when added to the workload generator.
+			usage := s.RangeUsageInfo(rng.RangeID(), storeID)
+			capacity.QueriesPerSecond += usage.QueriesPerSecond
+			capacity.WritesPerSecond += usage.WritesPerSecond
+			capacity.LogicalBytes += usage.LogicalBytes
+			capacity.LeaseCount++
+		}
+		capacity.RangeCount++
+	}
+
+	// TODO(kvoli): parameterize the logical to actual used storage bytes. At the
+	// moment we use 1.25 as a rough estimate.
+	used := int64(float64(capacity.LogicalBytes) * 1.25)
+	available := capacity.Capacity - used
+	capacity.Used = used
+	capacity.Available = available
+	return capacity
 }
 
 // Store returns the Store with ID StoreID. This fails if no Store exists
@@ -429,6 +484,10 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	// Add a usage info struct.
 	_ = s.usageInfo.storeRef(storeID)
 
+	for _, listener := range s.configChangeListeners {
+		listener.StoreAddNotify(storeID, s)
+	}
+
 	return store, true
 }
 
@@ -645,6 +704,23 @@ func (s *state) SetRangeBytes(rangeID RangeID, bytes int64) {
 		panic(fmt.Sprintf("programming error: no range with with ID %d", rangeID))
 	}
 	rng.size = bytes
+}
+
+// SetCapacityOverride updates the capacity for the store with ID StoreID to
+// always return the overriden value given for any set fields in
+// CapacityOverride.
+func (s *state) SetCapacityOverride(storeID StoreID, override CapacityOverride) {
+	if _, ok := s.stores[storeID]; !ok {
+		panic(fmt.Sprintf("programming error: no store exist with ID %d", storeID))
+	}
+
+	existing, ok := s.capacityOverrides[storeID]
+	if !ok {
+		s.capacityOverrides[storeID] = override
+		return
+	}
+
+	s.capacityOverrides[storeID] = CapacityOverride(mergeOverride(roachpb.StoreCapacity(existing), override))
 }
 
 // SplitRange splits the Range which contains Key in [StartKey, EndKey).
@@ -1076,6 +1152,124 @@ func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
 	return status
 }
 
+func (s *state) GetIsLiveMap() livenesspb.IsLiveMap {
+	isLiveMap := livenesspb.IsLiveMap{}
+
+	for nodeID, status := range s.quickLivenessMap {
+		nid := roachpb.NodeID(nodeID)
+		entry := livenesspb.IsLiveMapEntry{
+			Liveness: livenesspb.Liveness{
+				NodeID:     nid,
+				Expiration: hlc.LegacyTimestamp{WallTime: math.MaxInt64},
+				Draining:   false,
+				Membership: livenesspb.MembershipStatus_ACTIVE,
+			},
+			IsLive: true,
+		}
+
+		switch status {
+		case livenesspb.NodeLivenessStatus_UNKNOWN:
+			continue
+		case livenesspb.NodeLivenessStatus_DEAD:
+			// Set liveness expiration to be greater than
+			// server.time_until_store_dead in the past - so that the store is
+			// considered dead.
+			entry.Liveness.Expiration.WallTime = int64(0)
+			entry.IsLive = false
+		case livenesspb.NodeLivenessStatus_UNAVAILABLE:
+			// Set liveness expiration to be just recently expired. This needs to be
+			// within now - server.time_until_store_dead and now, otherwise the store
+			// will be considered dead, not unavailable.
+			entry.Liveness.Expiration.WallTime = s.clock.Now().Add(-time.Second).UnixNano()
+			entry.IsLive = false
+		case livenesspb.NodeLivenessStatus_LIVE:
+		case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
+			entry.Membership = livenesspb.MembershipStatus_DECOMMISSIONING
+		case livenesspb.NodeLivenessStatus_DECOMMISSIONED:
+			// Similar to DEAD, set the expiration in the past. A decommissioned
+			// store should not have a valid liveness expiration.
+			entry.Membership = livenesspb.MembershipStatus_DECOMMISSIONED
+			entry.Liveness.Expiration.WallTime = int64(0)
+			entry.IsLive = false
+		case livenesspb.NodeLivenessStatus_DRAINING:
+			entry.Draining = true
+		}
+		isLiveMap[nid] = entry
+	}
+
+	return isLiveMap
+}
+
+func (s *state) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
+	if descs := s.StoreDescriptors(false, StoreID(storeID)); len(descs) == 0 {
+		return roachpb.StoreDescriptor{}, false
+	} else {
+		return descs[0], true
+	}
+}
+
+// NeedsSplit is added for the spanconfig.StoreReader interface, required for
+// SpanConfigConformanceReport.
+func (s *state) NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error) {
+	// We don't need to implement this method for conformance reports.
+	panic("not implemented")
+}
+
+// ComputeSplitKey is added for the spanconfig.StoreReader interface, required for
+// SpanConfigConformanceReport.
+func (s *state) ComputeSplitKey(
+	ctx context.Context, start, end roachpb.RKey,
+) (roachpb.RKey, error) {
+	// We don't need to implement this method for conformance reports.
+	panic("not implemented")
+}
+
+// GetSpanConfigForKey is added for the spanconfig.StoreReader interface, required for
+// SpanConfigConformanceReport.
+func (s *state) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	rng := s.rangeFor(ToKey(key.AsRawKey()))
+	if rng == nil {
+		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
+	}
+	return rng.config, nil
+}
+
+// Scan is added for the rangedesc.Scanner interface, required for
+// SpanConfigConformanceReport. We ignore the span passed in and return every
+// descriptor available.
+func (s *state) Scan(
+	ctx context.Context,
+	pageSize int,
+	init func(),
+	span roachpb.Span,
+	fn func(descriptors ...roachpb.RangeDescriptor) error,
+) error {
+	// NB: we ignore the span passed in, we pass the fn every range descriptor
+	// available.
+	rngs := s.Ranges()
+	descriptors := make([]roachpb.RangeDescriptor, len(rngs))
+	for i, rng := range rngs {
+		descriptors[i] = *rng.Descriptor()
+	}
+	return fn(descriptors...)
+}
+
+// Report returns the span config conformance report for every range in the
+// simulated cluster. This may be used to assert on the current conformance
+// state of ranges.
+func (s *state) Report() roachpb.SpanConfigConformanceReport {
+	reporter := spanconfigreporter.New(
+		s, s, s, s,
+		cluster.MakeClusterSettings(), &spanconfig.TestingKnobs{})
+	report, err := reporter.SpanConfigConformance(context.Background(), []roachpb.Span{{}})
+	if err != nil {
+		panic(fmt.Sprintf("programming error: error getting span config report %s", err.Error()))
+	}
+	return report
+}
+
 // RegisterCapacityChangeListener registers a listener which will be called
 // on events where there is a capacity change (lease or replica) in the
 // cluster state.
@@ -1100,6 +1294,13 @@ func (s *state) publishNewCapacityEvent(capacity roachpb.StoreCapacity, storeID 
 	for _, listener := range s.newCapacityListeners {
 		listener.NewCapacityNotify(capacity, storeID)
 	}
+}
+
+// RegisterCapacityListener registers a listener which will be called when
+// a new store capacity has been generated from scratch, for a specific
+// store.
+func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
+	s.configChangeListeners = append(s.configChangeListeners, listener)
 }
 
 // node is an implementation of the Node interface.
