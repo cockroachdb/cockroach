@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -50,7 +51,9 @@ func newDecoder(st *cluster.Settings) *decoder {
 	}
 }
 
-func (d *decoder) decode(kv roachpb.KeyValue) (tenantcapabilities.Entry, error) {
+func (d *decoder) decode(
+	ctx context.Context, kv roachpb.KeyValue,
+) (tenantcapabilities.Entry, error) {
 	// First we decode the tenantID from the key.
 	var tenID roachpb.TenantID
 	types := []*types.T{d.columns[0].GetType()}
@@ -91,9 +94,47 @@ func (d *decoder) decode(kv roachpb.KeyValue) (tenantcapabilities.Entry, error) 
 		}
 	}
 
+	// The name, data state and service mode columns only exist after the
+	// V23_1TenantNamesStateAndServiceMode migration has run. We need to
+	// keep it optional here until we're not supporting running against
+	// v23.1 versions any more.
+	var name roachpb.TenantName
+	// Compatibility with rows prior to the
+	// V23_1TenantNamesStateAndServiceMode migration.
+	dataState := mtinfopb.DataStateReady
+	serviceMode := mtinfopb.ServiceModeExternal
+	if len(datums) >= 6 {
+		if i := datums[3]; i != tree.DNull {
+			name = roachpb.TenantName(tree.MustBeDString(i))
+		}
+		if i := datums[4]; i != tree.DNull {
+			rawDataState := tree.MustBeDInt(i)
+			if rawDataState >= 0 && rawDataState <= tree.DInt(mtinfopb.MaxDataState) {
+				dataState = mtinfopb.TenantDataState(rawDataState)
+			} else {
+				// This can happen if e.g. an invalid value was added into the
+				// table manually.
+				log.Warningf(ctx, "invalid data state %d for tenant %d", rawDataState, tenID)
+			}
+		}
+		if i := datums[5]; i != tree.DNull {
+			rawServiceMode := tree.MustBeDInt(i)
+			if rawServiceMode >= 0 && rawServiceMode <= tree.DInt(mtinfopb.MaxServiceMode) {
+				serviceMode = mtinfopb.TenantServiceMode(rawServiceMode)
+			} else {
+				// This can happen if e.g. an invalid value was added into the
+				// table manually.
+				log.Warningf(ctx, "invalid service mode %d for tenant %d", rawServiceMode, tenID)
+			}
+		}
+	}
+
 	return tenantcapabilities.Entry{
 		TenantID:           tenID,
 		TenantCapabilities: &tenantInfo.Capabilities,
+		Name:               name,
+		DataState:          dataState,
+		ServiceMode:        serviceMode,
 	}, nil
 }
 
@@ -117,7 +158,7 @@ func (d *decoder) translateEvent(
 		value = ev.Value
 	}
 
-	entry, err := d.decode(roachpb.KeyValue{
+	entry, err := d.decode(ctx, roachpb.KeyValue{
 		Key:   ev.Key,
 		Value: value,
 	})
@@ -140,6 +181,6 @@ func (d *decoder) translateEvent(
 // TestingDecoderFn exports the decoding routine for testing purposes.
 func TestingDecoderFn(
 	st *cluster.Settings,
-) func(roachpb.KeyValue) (tenantcapabilities.Entry, error) {
+) func(context.Context, roachpb.KeyValue) (tenantcapabilities.Entry, error) {
 	return newDecoder(st).decode
 }

@@ -2,15 +2,15 @@
 # We also ensure that initial scans see the most recent state when they're
 # started.
 
-upsert ten=10 can_admin_unsplit=true
+upsert ten=10 name=foo data=ready can_admin_unsplit=true
 ----
 ok
 
-upsert ten=11 can_admin_unsplit=false
+upsert ten=11 name=bar service=external can_admin_unsplit=false
 ----
 ok
 
-upsert ten=15 can_admin_unsplit=false
+upsert ten=15 name=baz service=shared can_admin_unsplit=false
 ----
 ok
 
@@ -18,7 +18,7 @@ delete ten=10
 ----
 ok
 
-upsert ten=15 can_admin_unsplit=true
+upsert ten=15 name=woo can_admin_unsplit=true
 ----
 ok
 
@@ -38,13 +38,13 @@ ok
 updates
 ----
 Complete Update
-update: ten=11 cap={default}
-update: ten=15 cap={can_admin_unsplit:true}
+update: ten=11 name=bar state=add service=external cap={default}
+update: ten=15 name=woo state=add service=none cap={can_admin_unsplit:true}
 
 flush-state
 ----
-ten=11 cap={default}
-ten=15 cap={can_admin_unsplit:true}
+ten=11 name=bar state=add service=external cap={default}
+ten=15 name=woo state=add service=none cap={can_admin_unsplit:true}
 
 get-capabilities ten=10
 ----
@@ -52,7 +52,7 @@ not-found
 
 get-capabilities ten=15
 ----
-{can_admin_unsplit:true}
+ten=15 name=woo state=add service=none cap={can_admin_unsplit:true}
 
 upsert ten=15 span_config_bounds={}
 ----
