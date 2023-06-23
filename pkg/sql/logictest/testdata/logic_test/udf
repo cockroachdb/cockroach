@@ -627,7 +627,7 @@ CREATE FUNCTION public.test_vf_f()
   CALLED ON NULL INPUT
   LANGUAGE SQL
   AS $$
-  SELECT lower('hello');
+  SELECT lower('hello':::STRING);
 $$
 
 
@@ -3096,7 +3096,7 @@ ORDER BY oid;
 ----
 100273  f_93314         105  1546506610  14  false  false  false  v  0  100272  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
 100275  f_93314_alias   105  1546506610  14  false  false  false  v  0  100274  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100279  f_93314_comp    105  1546506610  14  false  false  false  v  0  100276  ·  {}  NULL  SELECT (1, 2);
+100279  f_93314_comp    105  1546506610  14  false  false  false  v  0  100276  ·  {}  NULL  SELECT (1:::INT8, 2:::INT8);
 100280  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100278  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
@@ -3574,3 +3574,54 @@ query T
 SELECT f104927()
 ----
 [{"i": 1, "s": "foo"}]
+
+subtest end
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/104242.
+# Verify that statements that use UDFs with unresolved names that require
+# AST annotations work correctly.
+subtest udf_with_unresolved_names
+
+statement ok
+CREATE TABLE tab104242 (a INT);
+
+statement ok
+CREATE TYPE typ104242 AS ENUM ('foo');
+
+statement ok
+CREATE FUNCTION func104242() RETURNS INT LANGUAGE SQL AS $$
+  SELECT 1 FROM tab104242 WHERE NULL::typ104242 IN ()
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION func104242]
+----
+CREATE FUNCTION public.func104242()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1 FROM test.public.tab104242 WHERE NULL IN ();
+$$
+
+statement ok
+CREATE FUNCTION func104242_not_null() RETURNS INT LANGUAGE SQL AS $$
+  SELECT 1 FROM tab104242 WHERE 'foo'::typ104242 IN ()
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION func104242_not_null]
+----
+CREATE FUNCTION public.func104242_not_null()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 1 FROM test.public.tab104242 WHERE 'foo':::test.public.typ104242 IN ();
+$$
+
+subtest end

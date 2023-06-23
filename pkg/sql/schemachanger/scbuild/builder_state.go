@@ -1539,8 +1539,6 @@ func (b *builderState) serializeUserDefinedTypes(queryStr string) string {
 		default:
 			return true, expr, nil
 		}
-		// semaCtx may be nil if this is a virtual view being created at
-		// init time.
 		var typ *types.T
 		typ, err = tree.ResolveType(b.ctx, typRef, b.semaCtx.TypeResolver)
 		if err != nil {
