@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,6 +50,42 @@ func ParseBatchRequests(t *testing.T, d *datadriven.TestData) (ba kvpb.BatchRequ
 	return ba
 }
 
+// ParseTenantInfo collects the name, service mode and data state from the test input.
+func ParseTenantInfo(
+	t *testing.T, d *datadriven.TestData,
+) (
+	name *roachpb.TenantName,
+	dataState mtinfopb.TenantDataState,
+	serviceMode mtinfopb.TenantServiceMode,
+	err error,
+) {
+	if d.HasArg("name") {
+		var tenantName string
+		d.ScanArgs(t, "name", &tenantName)
+		tname := roachpb.TenantName(tenantName)
+		name = &tname
+	}
+	if d.HasArg("service") {
+		var mode string
+		d.ScanArgs(t, "service", &mode)
+		var ok bool
+		serviceMode, ok = mtinfopb.TenantServiceModeValues[mode]
+		if !ok {
+			return nil, 0, 0, errors.Newf("unknown service mode %s", mode)
+		}
+	}
+	if d.HasArg("data") {
+		var data string
+		d.ScanArgs(t, "data", &data)
+		var ok bool
+		dataState, ok = mtinfopb.TenantDataStateValues[data]
+		if !ok {
+			return nil, 0, 0, errors.Newf("unknown data state %s", data)
+		}
+	}
+	return name, dataState, serviceMode, nil
+}
+
 // ParseTenantCapabilityUpsert parses all args which have a key that is a
 // capability key and sets it on top of the default tenant capabilities.
 func ParseTenantCapabilityUpsert(
@@ -67,6 +105,7 @@ func ParseTenantCapabilityUpsert(
 				return roachpb.TenantID{}, nil, err
 			}
 			c.Value(&caps).Set(b)
+
 		case tenantcapabilities.SpanConfigBoundsCapability:
 			jsonD, err := json.ParseJSON(arg.Vals[0])
 			if err != nil {
@@ -77,6 +116,7 @@ func ParseTenantCapabilityUpsert(
 				return roachpb.TenantID{}, nil, err
 			}
 			c.Value(&caps).Set(spanconfigbounds.New(&v))
+
 		default:
 			t.Fatalf("unknown capability type %T for capability %s", c, arg.Key)
 		}
