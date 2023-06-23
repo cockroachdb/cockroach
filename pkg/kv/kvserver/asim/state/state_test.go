@@ -13,6 +13,7 @@ package state
 import (
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -685,4 +686,34 @@ US_West
     └── [17 18]
 `, complexTopology.String())
 
+}
+
+func TestCapacityOverride(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
+	tick := settings.StartTime
+	s := LoadClusterInfo(ClusterInfoWithStoreCount(1, 1), settings)
+	storeID, rangeID := StoreID(1), RangeID(1)
+	_, ok := s.AddReplica(rangeID, storeID, roachpb.VOTER_FULL)
+	require.True(t, ok)
+
+	override := NewCapacityOverride()
+	override.QueriesPerSecond = 42
+
+	// Overwrite the QPS store capacity field.
+	s.SetCapacityOverride(storeID, override)
+
+	// Record 100 QPS of load, this should not change the store capacity QPS as
+	// we set it above, however it should change the written keys field.
+	s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{
+		Key:    1,
+		Writes: 500,
+	}})
+	s.TickClock(tick.Add(5 * time.Second))
+
+	capacity := s.StoreDescriptors(false /* cached */, storeID)[0].Capacity
+	require.Equal(t, 42.0, capacity.QueriesPerSecond)
+	// NB: Writes per second isn't used and is currently returned as the sum of
+	// writes to the store - we expect it to be 500 instead of 100 for that
+	// reason.
+	require.Equal(t, 500.0, capacity.WritesPerSecond)
 }

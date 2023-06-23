@@ -153,14 +153,14 @@ func RangesInfoWithDistribution(
 // their weights, a best effort apporach is taken so that the total number of
 // aggregate matches numNodes.
 func ClusterInfoWithDistribution(
-	numNodes int, storesPerNode int, regions []string, regionNodeWeights []float64,
+	nodeCount int, storesPerNode int, regions []string, regionNodeWeights []float64,
 ) ClusterInfo {
 	ret := ClusterInfo{}
 
 	ret.Regions = make([]Region, len(regions))
-	availableNodes := numNodes
+	availableNodes := nodeCount
 	for i, name := range regions {
-		allocatedNodes := int(float64(numNodes) * (regionNodeWeights[i]))
+		allocatedNodes := int(float64(nodeCount) * (regionNodeWeights[i]))
 		if allocatedNodes > availableNodes {
 			allocatedNodes = availableNodes
 		}
@@ -174,11 +174,11 @@ func ClusterInfoWithDistribution(
 	return ret
 }
 
-// ClusterInfoWithStores returns a new ClusterInfo with the specified number of
-// stores. There will be only one store per node and a single region and zone.
-func ClusterInfoWithStoreCount(stores int, storesPerNode int) ClusterInfo {
+// ClusterInfoWithStoreCount returns a new ClusterInfo with the specified number of
+// stores. There will be storesPerNode stores per node and a single region and zone.
+func ClusterInfoWithStoreCount(nodeCount int, storesPerNode int) ClusterInfo {
 	return ClusterInfoWithDistribution(
-		stores,
+		nodeCount,
 		storesPerNode,
 		[]string{"AU_EAST"}, /* regions */
 		[]float64{1},        /* regionNodeWeights */
