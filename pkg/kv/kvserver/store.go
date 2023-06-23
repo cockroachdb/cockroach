@@ -2876,7 +2876,7 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // the provided stream and returns a future with an optional error when the rangefeed is
 // complete.
 func (s *Store) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
+	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink, ioSched *sched.ClientScheduler,
 ) *future.ErrorFuture {
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
 		if pErr := filter(args, stream); pErr != nil {
@@ -2904,7 +2904,7 @@ func (s *Store) RangeFeed(
 
 	tenID, _ := repl.TenantID()
 	pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args)
-	return repl.RangeFeed(args, stream, pacer)
+	return repl.RangeFeed(args, stream, pacer, ioSched)
 }
 
 // updateReplicationGauges counts a number of simple replication statistics for

@@ -40,6 +40,24 @@ func newFilterFromRegistry(reg *registry) *Filter {
 	return f
 }
 
+// TODO(oleg): maybe merge with one above if difference between
+// registries can be extracted into some callbacks etc.
+func newFilterFromRegistry2(reg *registry2) *Filter {
+	f := &Filter{
+		needPrevVals: interval.NewRangeList(),
+		needVals:     interval.NewRangeList(),
+	}
+	reg.tree.Do(func(i interval.Interface) (done bool) {
+		r := i.(*registration2)
+		if r.withDiff {
+			f.needPrevVals.Add(r.Range())
+		}
+		f.needVals.Add(r.Range())
+		return false
+	})
+	return f
+}
+
 // NeedPrevVal returns whether the Processor requires MVCCWriteValueOp and
 // MVCCCommitIntentOp operations over the specified key span to contain
 // populated PrevValue fields.

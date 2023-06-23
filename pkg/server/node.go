@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	sched2 "github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1625,7 +1626,7 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	_, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 	defer restore()
 
-	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream))); err != nil {
+	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream, nil))); err != nil {
 		// Got stream context error, probably won't be able to propagate it to the stream,
 		// but give it a try anyway.
 		var event kvpb.RangeFeedEvent
@@ -1760,6 +1761,10 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	}
 	defer cleanup()
 
+	feedSched := sched2.NewScheduler(sched2.SchedConfig{Name: "mux-feed-scheduler", Workers: 1})
+	_ = feedSched.Start(n.stopper)
+	defer feedSched.Close(10 * time.Second)
+
 	for {
 		req, err := stream.Recv()
 		if err != nil {
@@ -1777,8 +1782,9 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			wrapped:  muxStream,
 		}
 
+		cs := sched2.NewClientScheduler(req.StreamID, feedSched)
 		// TODO(yevgeniy): Add observability into actively running rangefeeds.
-		f := n.stores.RangeFeed(req, &sink)
+		f := n.stores.RangeFeed(req, &sink, &cs)
 		f.WhenReady(func(err error) {
 			if err == nil {
 				cause := kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED

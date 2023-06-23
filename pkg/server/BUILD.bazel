@@ -316,6 +316,7 @@ go_library(
         "//pkg/util/quotapool",
         "//pkg/util/rangedesc",
         "//pkg/util/retry",
+        "//pkg/util/sched",
         "//pkg/util/schedulerlatency",
         "//pkg/util/startup",
         "//pkg/util/stop",

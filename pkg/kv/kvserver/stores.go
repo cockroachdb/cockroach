@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -210,7 +211,7 @@ func (ls *Stores) SendWithWriteBytes(
 // updates to the provided stream and returns a future with an optional error
 // when the rangefeed is complete.
 func (ls *Stores) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink,
+	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink, ioSched *sched.ClientScheduler,
 ) *future.ErrorFuture {
 	ctx := stream.Context()
 	if args.RangeID == 0 {
@@ -224,7 +225,7 @@ func (ls *Stores) RangeFeed(
 		return future.MakeCompletedErrorFuture(err)
 	}
 
-	return store.RangeFeed(args, stream)
+	return store.RangeFeed(args, stream, ioSched)
 }
 
 // ReadBootstrapInfo implements the gossip.Storage interface. Read

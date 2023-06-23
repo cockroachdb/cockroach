@@ -36,6 +36,7 @@ type config struct {
 	// opposed to the timestamp at which the scan occurred. Both behaviors can
 	// be sane depending on your use case.
 	useRowTimestampInInitialScan bool
+	useMuxRangeFeed              bool
 
 	withDiff             bool
 	onUnrecoverableError OnUnrecoverableError
@@ -219,6 +220,12 @@ type OnFrontierAdvance func(ctx context.Context, timestamp hlc.Timestamp)
 func WithOnFrontierAdvance(f OnFrontierAdvance) Option {
 	return optionFunc(func(c *config) {
 		c.onFrontierAdvance = f
+	})
+}
+
+func WithMuxRangeFeed() Option {
+	return optionFunc(func(c *config) {
+		c.useMuxRangeFeed = true
 	})
 }
 

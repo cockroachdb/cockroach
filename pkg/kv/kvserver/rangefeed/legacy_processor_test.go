@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/sched"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +46,7 @@ func TestNilProcessor(t *testing.T) {
 	require.Panics(t, func() {
 		var done future.ErrorFuture
 		p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, false, nil,
-			func() {}, &done,
+			sched.NewClientScheduler(0, nil), func() {}, &done,
 		)
 	})
 }

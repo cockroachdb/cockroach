@@ -212,6 +212,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
         "//pkg/util/retry",
+        "//pkg/util/sched",
         "//pkg/util/shuffle",
         "//pkg/util/slidingwindow",
         "//pkg/util/stop",

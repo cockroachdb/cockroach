@@ -117,12 +117,19 @@ type Processor interface {
 
 	// Lifecycle of registrations.
 
+	// Register will add new registration to processor.
+	// NB: disconnectFn must not be called from work loop as it will currently
+	// call back to processor to check len, filter to update replica state and
+	// possibly remove this processor from replica. We can't make a local
+	// decision before callback because we can have a concurrent request pending
+	// in processor's work queue.
 	Register(
 		span roachpb.RSpan,
 		startTS hlc.Timestamp,
 		catchUpIterConstructor CatchUpIteratorConstructor,
 		withDiff bool,
 		stream Stream,
+		sched sched.ClientScheduler,
 		disconnectFn func(),
 		done *future.ErrorFuture,
 	) (bool, *Filter)
@@ -132,10 +139,16 @@ type Processor interface {
 
 	// Data flow.
 
+	// ConsumeLogicalOps returns false if logical ops were not consumed and
+	// processor terminated. Caller must unset this processor as defunct.
 	ConsumeLogicalOps(ctx context.Context, ops ...enginepb.MVCCLogicalOp) bool
+	// ConsumeSSTable returns false if logical ops were not consumed and
+	// processor terminated. Caller must unset this processor as defunct.
 	ConsumeSSTable(
 		ctx context.Context, sst []byte, sstSpan roachpb.Span, writeTS hlc.Timestamp,
 	) bool
+	// ForwardClosedTS returns false if logical ops were not consumed and
+	// processor terminated. Caller must unset this processor as defunct.
 	ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp) bool
 }
 

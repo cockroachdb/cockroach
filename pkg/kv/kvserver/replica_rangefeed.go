@@ -158,6 +158,7 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
 	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink, pacer *admission.Pacer,
+	ioSched *sched.ClientScheduler,
 ) *future.ErrorFuture {
 	ctx := r.AnnotateCtx(stream.Context())
 
@@ -238,7 +239,7 @@ func (r *Replica) RangeFeed(
 	}
 	var done future.ErrorFuture
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, &done,
+		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, ioSched, &done,
 	)
 	r.raftMu.Unlock()
 
@@ -292,6 +293,8 @@ func (r *Replica) setRangefeedFilterLocked(f *rangefeed.Filter) {
 }
 
 func (r *Replica) updateRangefeedFilterLocked() bool {
+	// Filter is nil only if processor is nil which is not the case. Consider
+	// replacing that with nil if we have no registrations.
 	f := r.rangefeedMu.proc.Filter()
 	// Return whether the update to the filter was successful or not. If
 	// the processor was already stopped then we can't update the filter.
@@ -340,6 +343,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	catchUpIter rangefeed.CatchUpIteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
+	ioSched *sched.ClientScheduler,
 	done *future.ErrorFuture,
 ) rangefeed.Processor {
 	defer logSlowRangefeedRegistration(ctx)()
@@ -350,7 +354,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
+		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, *ioSched,
+			func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -369,7 +374,13 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey)
 
+	// This will blow up in our face if caller doesn't provide us with client scheduler.
 	useNewProcessor := RangeFeedUseScheduler.Get(&r.ClusterSettings().SV)
+	if useNewProcessor && ioSched == nil {
+		useNewProcessor = false
+		// We should create a dedicated per registration scheduler.
+		log.Infof(ctx, "creating single thread scheduler for non mux range feed (not)")
+	}
 
 	// Create a new rangefeed.
 	desc := r.Desc()
@@ -427,7 +438,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
+	reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, *ioSched,
+		func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
@@ -459,6 +471,11 @@ func (r *Replica) maybeDisconnectEmptyRangefeed(p rangefeed.Processor) {
 		// The processor has already been removed or replaced.
 		return
 	}
+	// TODO(oleg): following operations are not fast and go through processor's
+	// work loop if it is not cancelled (e.g. other registrations exist), we will
+	// block sending logical ops while we are checking if processor is still
+	// active. Maybe we can do async check first without holding a lock and then
+	// repeat it under lock atomically if we think processor is not used.
 	if p.Len() == 0 || !r.updateRangefeedFilterLocked() {
 		// Stop the rangefeed processor if it has no registrations or if we are
 		// unable to update the operation filter.

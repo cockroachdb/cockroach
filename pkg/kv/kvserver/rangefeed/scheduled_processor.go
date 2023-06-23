@@ -66,11 +66,11 @@ func (e schedulerEvent) String() string {
 // scheduler to use processing.
 type ScheduledProcessor struct {
 	Config
-	reg registry
+	reg registry2
 	rts resolvedTimestamp
 
-	regC       chan registration
-	unregC     chan *registration
+	regC       chan registration2
+	unregC     chan *registration2
 	lenReqC    chan struct{}
 	lenResC    chan int
 	filterReqC chan struct{}
@@ -89,11 +89,11 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
 	p := &ScheduledProcessor{
 		Config: cfg,
-		reg:    makeRegistry(cfg.Metrics),
+		reg:    makeRegistry2(cfg.Metrics),
 		rts:    makeResolvedTimestamp(),
 
-		regC:       make(chan registration, 1),
-		unregC:     make(chan *registration, 1),
+		regC:       make(chan registration2, 1),
+		unregC:     make(chan *registration2, 1),
 		lenReqC:    make(chan struct{}, 1),
 		lenResC:    make(chan int),
 		filterReqC: make(chan struct{}, 1),
@@ -180,7 +180,7 @@ func (p *ScheduledProcessor) process(e int) int {
 	if se&newReg != 0 {
 		r := <-p.regC
 		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
-			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+			log.Fatalf(ctx, "registration %s not in Processor's key range %v", &r, p.Span)
 		}
 
 		// Construct the catchUpIter before notifying the registration that it
@@ -201,11 +201,14 @@ func (p *ScheduledProcessor) process(e int) int {
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
-		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) {
-			r.runOutputLoop(ctx, p.RangeID)
+		// Register with scheduler.
+		if err := r.registerCallback(); err != nil {
+			r.disconnect(kvpb.NewError(err))
+			p.reg.Unregister(ctx, &r)
+		}
+		r.startEventProcessing(ctx, p.RangeID, func(r *registration2) {
 			select {
-			case p.unregC <- &r:
+			case p.unregC <- r:
 				p.scheduleEvent(unreg)
 				// unreg callback is set by replica to tear down processors that have
 				// zero registrations left and to update event filters.
@@ -216,11 +219,7 @@ func (p *ScheduledProcessor) process(e int) int {
 				}
 			case <-p.stoppedC:
 			}
-		}
-		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-			r.disconnect(kvpb.NewError(err))
-			p.reg.Unregister(ctx, &r)
-		}
+		})
 	}
 	if se&unreg != 0 {
 		r := <-p.unregC
@@ -357,6 +356,7 @@ func (p *ScheduledProcessor) Register(
 	catchUpIterConstructor CatchUpIteratorConstructor,
 	withDiff bool,
 	stream Stream,
+	sched sched.ClientScheduler,
 	disconnectFn func(),
 	done *future.ErrorFuture,
 ) (bool, *Filter) {
@@ -365,9 +365,9 @@ func (p *ScheduledProcessor) Register(
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
-	r := newRegistration(
+	r := newRegistration2(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, p.Metrics, stream, disconnectFn, done,
+		p.Config.EventChanCap, p.Metrics, stream, sched, disconnectFn, done,
 	)
 	select {
 	case p.regC <- r:

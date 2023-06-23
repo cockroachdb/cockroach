@@ -294,6 +294,15 @@ func newTestProcessor(t tHelper, opts ...option) (Processor, *processorTestHelpe
 	return s, &h, stopper
 }
 
+// Create client scheduler backed by new scheduler and using id 1
+func registrationScheduler(st *stop.Stopper) (sched.ClientScheduler, func()) {
+	sch := sched.NewScheduler(sched.SchedConfig{Name: "test-reg-sched", Workers: 1})
+	_ = sch.Start(st)
+	return sched.NewClientScheduler(1, sch), func() {
+		_ = sch.Close(testutils.DefaultSucceedsSoonDuration)
+	}
+}
+
 func waitErrorFuture(f *future.ErrorFuture) error {
 	resultErr, _ := future.Wait(context.Background(), f)
 	return resultErr
@@ -305,6 +314,8 @@ func TestProcessorBasic(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
+		cs, stopSched := registrationScheduler(stopper)
+		defer stopSched()
 
 		// Test processor without registrations.
 		require.Equal(t, 0, p.Len())
@@ -334,6 +345,7 @@ func TestProcessorBasic(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			r1Stream,
+			cs,
 			func() {},
 			&r1Done,
 		)
@@ -467,6 +479,7 @@ func TestProcessorBasic(t *testing.T) {
 			nil,  /* catchUpIter */
 			true, /* withDiff */
 			r2Stream,
+			cs,
 			func() {},
 			&r2Done,
 		)
@@ -563,6 +576,7 @@ func TestProcessorBasic(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			r3Stream,
+			cs,
 			func() {},
 			&r3Done,
 		)
@@ -576,6 +590,8 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
+		cs, stopSched := registrationScheduler(stopper)
+		defer stopSched()
 
 		// Add a registration.
 		r1Stream := newTestStream()
@@ -586,6 +602,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			r1Stream,
+			cs,
 			func() {},
 			&r1Done,
 		)
@@ -597,6 +614,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			r2Stream,
+			cs,
 			func() {},
 			&r2Done,
 		)
@@ -683,6 +701,8 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 			withMetrics(m), withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
+		cs, stopSched := registrationScheduler(stopper)
+		defer stopSched()
 
 		// Add a registration.
 		r1Stream := newTestStream()
@@ -693,6 +713,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			r1Stream,
+			cs,
 			func() {},
 			&r1Done,
 		)
@@ -738,6 +759,8 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
+		cs, stopSched := registrationScheduler(stopper)
+		defer stopSched()
 
 		// Add a registration.
 		r1Stream := newTestStream()
@@ -748,6 +771,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			r1Stream,
+			cs,
 			func() {},
 			&r1Done,
 		)
@@ -811,6 +835,8 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withRtsIter(rtsIter), withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
+		cs, stopSched := registrationScheduler(stopper)
+		defer stopSched()
 
 		// The resolved timestamp should not be initialized.
 		require.False(t, h.rts.IsInit())
@@ -825,6 +851,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			r1Stream,
+			cs,
 			func() {},
 			&r1Done,
 		)
@@ -1069,6 +1096,8 @@ func TestProcessorConcurrentStop(t *testing.T) {
 		const trials = 10
 		for i := 0; i < trials; i++ {
 			p, h, stopper := newTestProcessor(t, withProcType(pt))
+			cs, stopSched := registrationScheduler(stopper)
+			defer stopSched()
 
 			var wg sync.WaitGroup
 			wg.Add(6)
@@ -1077,8 +1106,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 				runtime.Gosched()
 				s := newTestStream()
 				var done future.ErrorFuture
-				p.Register(h.span, hlc.Timestamp{}, nil, false, s,
-					func() {}, &done)
+				p.Register(h.span, hlc.Timestamp{}, nil, false, s, cs, func() {}, &done)
 			}()
 			go func() {
 				defer wg.Done()
@@ -1120,6 +1148,8 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
+	cs, stopSched := registrationScheduler(stopper)
+	defer stopSched()
 
 		firstC := make(chan int64)
 		regDone := make(chan struct{})
@@ -1150,8 +1180,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 				s := newTestStream()
 				regs[s] = firstIdx
 				var done future.ErrorFuture
-				p.Register(h.span, hlc.Timestamp{}, nil, false,
-					s, func() {}, &done)
+				p.Register(h.span, hlc.Timestamp{}, nil, false, s, cs, func() {}, &done)
 				regDone <- struct{}{}
 			}
 		}()
@@ -1202,6 +1231,8 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 			withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
+		cs, stopSched := registrationScheduler(stopper)
+		defer stopSched()
 
 		// Add a registration.
 		rStream := newConsumer(50)
@@ -1213,6 +1244,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			rStream,
+			cs,
 			func() {},
 			&done,
 		)
@@ -1283,6 +1315,8 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 			withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
+		cs, stopSched := registrationScheduler(stopper)
+		defer stopSched()
 
 		// Add a registration.
 		rStream := newConsumer(90)
@@ -1294,6 +1328,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			rStream,
+			cs,
 			func() {},
 			&done,
 		)
@@ -1354,6 +1389,8 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			withProcType(pt))
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
+		cs, stopSched := registrationScheduler(stopper)
+		defer stopSched()
 
 		// Add a registration.
 		r1Stream := newConsumer(50)
@@ -1365,6 +1402,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			r1Stream,
+			cs,
 			func() {},
 			&r1Done,
 		)
@@ -1379,6 +1417,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			r2Stream,
+			cs,
 			func() {},
 			&r2Done,
 		)
@@ -1514,6 +1553,8 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 		withChanCap(benchmarkEvents*b.N) /*, withProcType(schedulerProcessor)*/)
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
+	cs, stopSched := registrationScheduler(stopper)
+	defer stopSched()
 
 	// Add a registration.
 	r1Stream := newTestStream()
@@ -1525,6 +1566,7 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 		nil,   /* catchUpIter */
 		false, /* withDiff */
 		r1Stream,
+		cs,
 		func() {},
 		&r1Done,
 	)
