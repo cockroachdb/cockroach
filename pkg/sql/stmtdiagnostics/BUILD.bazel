@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/multitenant",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -48,6 +49,7 @@ go_test(
         "//pkg/sql/sqlerrors",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",

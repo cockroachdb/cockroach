@@ -139,6 +139,7 @@ func buildStatementBundle(
 	stmtRawSQL string,
 	plan *planTop,
 	planString string,
+	planGistMatchingBundle bool,
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 	queryErr, payloadErr, commErr error,
@@ -151,7 +152,12 @@ func buildStatementBundle(
 
 	b.addStatement()
 	b.addOptPlans(ctx)
-	b.addExecPlan(planString)
+	if !planGistMatchingBundle {
+		// We don't have the plan string available since the stmt bundle
+		// collection was enabled _after_ the optimizer was done, so we'll skip
+		// adding plan.txt file to avoid possible confusion.
+		b.addExecPlan(planString)
+	}
 	b.addDistSQLDiagrams()
 	b.addExplainVec()
 	b.addTrace()
