@@ -459,15 +459,24 @@ begin transaction #7
 merge temporary indexes [4] into backfilled indexes [3] in table #104
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 3 MutationType ops
+## PostCommitPhase stage 6 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
          version: 4
        mutationId: 1
   -    state: MERGING
+  -  - direction: ADD
   +    state: WRITE_ONLY
-     - direction: ADD
+  +  - direction: DROP
        index:
+         constraintId: 3
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - column:
+         computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -507,15 +516,16 @@ upsert descriptor #104
        mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
-  +    state: DELETE_ONLY
-  +  - direction: DROP
-       index:
+  -    index:
   -      constraintId: 2
   -      createdExplicitly: true
   -      encodingType: 1
   -      foreignKey: {}
   -      geoConfig: {}
-  -      id: 3
+  +    state: DELETE_ONLY
+  +  - column:
+  +      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+         id: 3
   -      interleave: {}
   -      keyColumnDirections:
   -      - ASC
@@ -529,48 +539,61 @@ upsert descriptor #104
   -      storeColumnNames: []
   -      unique: true
   -      version: 4
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-  -  - direction: ADD
-  -    index:
-         constraintId: 3
-         createdExplicitly: true
-  ...
-         version: 4
+  +      inaccessible: true
+  +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +      virtual: true
+  +    direction: DROP
        mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
-     - column:
-         computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
-  ...
-       direction: DROP
-       mutationId: 1
-  +    state: DELETE_ONLY
-  +  - direction: DROP
-  +    index:
+     - direction: DROP
+       index:
+  -      constraintId: 3
+  -      createdExplicitly: true
   +      constraintId: 1
   +      createdAtNanos: "1640995200000000000"
-  +      encodingType: 1
-  +      foreignKey: {}
-  +      geoConfig: {}
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 4
   +      id: 1
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      keyColumnIds:
-  +      - 1
-  +      keyColumnNames:
-  +      - i
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - i
+  -      name: crdb_internal_index_4_name_placeholder
   +      name: crdb_internal_index_1_name_placeholder
-  +      partitioning: {}
-  +      sharded: {}
+         partitioning: {}
+         sharded: {}
+  -      storeColumnNames: []
   +      storeColumnIds:
   +      - 2
   +      storeColumnNames:
   +      - crdb_internal_column_2_name_placeholder
-  +      unique: true
-  +      version: 4
-  +    mutationId: 1
+         unique: true
+  -      useDeletePreservingEncoding: true
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  -  - column:
+  -      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
+  -      id: 3
+  -      inaccessible: true
+  -      name: crdb_internal_column_3_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -      virtual: true
+  -    direction: DROP
+  -    mutationId: 1
        state: WRITE_ONLY
      name: t
   ...
@@ -603,11 +626,11 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
 upsert descriptor #104
   ...
      - direction: DROP
@@ -629,30 +652,6 @@ upsert descriptor #104
   -      partitioning: {}
   -      sharded: {}
   -      version: 3
-  -    mutationId: 1
-  -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
-  -      constraintId: 3
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 4
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - i
-  -      name: crdb_internal_index_4_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnNames: []
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
   -  - column:

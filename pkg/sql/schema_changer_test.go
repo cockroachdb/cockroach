@@ -3035,12 +3035,15 @@ func TestPrimaryKeyChangeKVOps(t *testing.T) {
 	backfillNotification := make(chan struct{})
 	waitBeforeContinuing := make(chan struct{})
 
+	var doOnce sync.Once
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
-				backfillNotification <- struct{}{}
-				<-waitBeforeContinuing
+				doOnce.Do(func() {
+					backfillNotification <- struct{}{}
+					<-waitBeforeContinuing
+				})
 				return nil
 			},
 		},
@@ -3114,17 +3117,15 @@ CREATE TABLE t.test (
 		// Temporary index that exists during the
 		// backfill. This should have the same number of Puts
 		// as there are CPuts above.
-		fmt.Sprintf("Put /Table/%d/3/2/0 -> /BYTES/0x0a030a1302", tableID),
-		fmt.Sprintf("Put /Table/%d/3/2/2/1 -> /BYTES/0x0a030a3306", tableID),
-		fmt.Sprintf("Put /Table/%d/3/2/4/1 -> /BYTES/0x0a02010c", tableID),
+		fmt.Sprintf("Put /Table/%d/5/2/0 -> /BYTES/0x0a030a1302", tableID),
+		fmt.Sprintf("Put /Table/%d/5/2/2/1 -> /BYTES/0x0a030a3306", tableID),
+		fmt.Sprintf("Put /Table/%d/5/2/4/1 -> /BYTES/0x0a02010c", tableID),
 
-		// ALTER PRIMARY KEY makes an additional unique index
-		// based on the old primary key.
-		fmt.Sprintf("Put /Table/%d/5/1/0 -> /BYTES/0x0a02038a", tableID),
-
-		// Indexes 2 and 4 which are currently being added
-		// should have no writes because they are in the
-		// BACKFILLING state at this point.
+		// Index 4 is currently being added, and it should have no writes because
+		// it is in the BACKFILLING state at this point.
+		// Index 2 (an additional unique index on the old primary key) is not
+		// created yet.
+		// Index 3, index 2's temporary index, is not create yet.
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
@@ -3152,11 +3153,10 @@ CREATE TABLE t.test (
 
 		// The temporary indexes are delete-preserving -- they
 		// should see the delete and issue Puts.
-		fmt.Sprintf("Put (delete) /Table/%d/3/2/0", tableID),
-		fmt.Sprintf("Put (delete) /Table/%d/3/2/2/1", tableID),
-		fmt.Sprintf("Put (delete) /Table/%d/3/2/3/1", tableID),
-		fmt.Sprintf("Put (delete) /Table/%d/3/2/4/1", tableID),
-		fmt.Sprintf("Put (delete) /Table/%d/5/1/0", tableID),
+		fmt.Sprintf("Put (delete) /Table/%d/5/2/0", tableID),
+		fmt.Sprintf("Put (delete) /Table/%d/5/2/2/1", tableID),
+		fmt.Sprintf("Put (delete) /Table/%d/5/2/3/1", tableID),
+		fmt.Sprintf("Put (delete) /Table/%d/5/2/4/1", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
@@ -3179,12 +3179,9 @@ CREATE TABLE t.test (
 		fmt.Sprintf("Put /Table/%d/1/1/1/1 -> /INT/3", tableID),
 		// The temporary index for the newly added index sees
 		// a Put in all families.
-		fmt.Sprintf("Put /Table/%d/3/3/0 -> /BYTES/0x0a030a1302", tableID),
-		fmt.Sprintf("Put /Table/%d/3/3/2/1 -> /BYTES/0x0a030a3306", tableID),
-		fmt.Sprintf("Put /Table/%d/3/3/4/1 -> /BYTES/0x0a02010c", tableID),
-		// TODO(ssd): double-check that this trace makes
-		// sense.
-		fmt.Sprintf("Put /Table/%d/5/1/0 -> /BYTES/0x0a02038b", tableID),
+		fmt.Sprintf("Put /Table/%d/5/3/0 -> /BYTES/0x0a030a1302", tableID),
+		fmt.Sprintf("Put /Table/%d/5/3/2/1 -> /BYTES/0x0a030a3306", tableID),
+		fmt.Sprintf("Put /Table/%d/5/3/4/1 -> /BYTES/0x0a02010c", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
@@ -3208,8 +3205,8 @@ CREATE TABLE t.test (
 		fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
 		// The temporary index sees a Put in all families even though
 		// only some are changing. This is expected.
-		fmt.Sprintf("Put /Table/%d/3/3/0 -> /BYTES/0x0a030a1302", tableID),
-		fmt.Sprintf("Put /Table/%d/3/3/3/1 -> /BYTES/0x0a02010a", tableID),
+		fmt.Sprintf("Put /Table/%d/5/3/0 -> /BYTES/0x0a030a1302", tableID),
+		fmt.Sprintf("Put /Table/%d/5/3/3/1 -> /BYTES/0x0a02010a", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 

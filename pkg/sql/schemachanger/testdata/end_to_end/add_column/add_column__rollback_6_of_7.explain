@@ -19,10 +19,10 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
       │    │    ├── MERGE_ONLY → DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey-)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (k), IndexID: 2 (tbl_pkey-)}
-      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 3 (j-), IndexID: 2 (tbl_pkey-)}
       │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 3}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 2 (k), IndexID: 3}
+      │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 3 (j-), IndexID: 2 (tbl_pkey-)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 3 (j-), IndexID: 3}
       │    │    └── WRITE_ONLY → ABSENT      ColumnNotNull:{DescID: 106 (tbl), ColumnID: 3 (j-), IndexID: 2 (tbl_pkey-)}
       │    └── 13 Mutation operations

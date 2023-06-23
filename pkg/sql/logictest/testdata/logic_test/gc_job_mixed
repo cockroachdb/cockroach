@@ -34,6 +34,7 @@ skipif config local
 query T rowsort
 SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC'
 ----
+GC for removed temporary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
 GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
 GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
 GC for DROP TABLE db.public.kv

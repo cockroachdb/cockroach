@@ -1637,6 +1637,21 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: all adding indexes reached BACKFILL_ONLY before any of their columns disappear
+  from: index-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $column[Type] = '*scpb.Column'
+    - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
+    - joinOnColumnID($index-column, $column, $table-id, $column-id)
+    - $index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $index-Node[CurrentStatus] = BACKFILL_ONLY
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($index, $index-Target, $index-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
 - name: back-reference in parent descriptor is removed before parent descriptor is dropped
   from: back-reference-in-parent-descriptor-Node
   kind: Precedence
@@ -2579,6 +2594,22 @@ deprules
     - $dependent-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: index is MERGED before its temp index starts to disappear
+  from: index-Node
+  kind: Precedence
+  to: temp-Node
+  query:
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $temp[Type] = '*scpb.TemporaryIndex'
+    - joinOnDescID($index, $temp, $table-id)
+    - $index[TemporaryIndexID] = $temp-index-id
+    - $temp[IndexID] = $temp-index-id
+    - $index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $index-Node[CurrentStatus] = MERGED
+    - $temp-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $temp-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - joinTargetNode($index, $index-Target, $index-Node)
+    - joinTargetNode($temp, $temp-Target, $temp-Node)
 - name: index is ready to be validated before we validate constraint on it
   from: index-Node
   kind: Precedence
@@ -3450,6 +3481,22 @@ deprules
     - $temp-index-data-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($temp-index, $temp-index-Target, $temp-index-Node)
     - joinTargetNode($temp-index-data, $temp-index-data-Target, $temp-index-data-Node)
+- name: temp index disappeared before its master index reaches WRITE_ONLY
+  from: temp-Node
+  kind: Precedence
+  to: index-Node
+  query:
+    - $temp[Type] = '*scpb.TemporaryIndex'
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - joinOnDescID($temp, $index, $table-id)
+    - $temp[IndexID] = $temp-index-id
+    - $index[TemporaryIndexID] = $temp-index-id
+    - $temp-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $temp-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $index-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($temp, $temp-Target, $temp-Node)
+    - joinTargetNode($index, $index-Target, $index-Node)
 - name: temp index existence precedes index dependents
   from: index-Node
   kind: Precedence
@@ -5119,6 +5166,21 @@ deprules
     - descriptorIsNotBeingDropped-23.2($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: all adding indexes reached BACKFILL_ONLY before any of their columns disappear
+  from: index-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $column[Type] = '*scpb.Column'
+    - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
+    - joinOnColumnID($index-column, $column, $table-id, $column-id)
+    - $index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $index-Node[CurrentStatus] = BACKFILL_ONLY
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($index, $index-Target, $index-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
 - name: back-reference in parent descriptor is removed before parent descriptor is dropped
   from: back-reference-in-parent-descriptor-Node
   kind: Precedence
@@ -6061,6 +6123,22 @@ deprules
     - $dependent-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($index, $index-Target, $index-Node)
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: index is MERGED before its temp index starts to disappear
+  from: index-Node
+  kind: Precedence
+  to: temp-Node
+  query:
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $temp[Type] = '*scpb.TemporaryIndex'
+    - joinOnDescID($index, $temp, $table-id)
+    - $index[TemporaryIndexID] = $temp-index-id
+    - $temp[IndexID] = $temp-index-id
+    - $index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $index-Node[CurrentStatus] = MERGED
+    - $temp-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $temp-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - joinTargetNode($index, $index-Target, $index-Node)
+    - joinTargetNode($temp, $temp-Target, $temp-Node)
 - name: index is ready to be validated before we validate constraint on it
   from: index-Node
   kind: Precedence
@@ -6932,6 +7010,22 @@ deprules
     - $temp-index-data-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($temp-index, $temp-index-Target, $temp-index-Node)
     - joinTargetNode($temp-index-data, $temp-index-data-Target, $temp-index-data-Node)
+- name: temp index disappeared before its master index reaches WRITE_ONLY
+  from: temp-Node
+  kind: Precedence
+  to: index-Node
+  query:
+    - $temp[Type] = '*scpb.TemporaryIndex'
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - joinOnDescID($temp, $index, $table-id)
+    - $temp[IndexID] = $temp-index-id
+    - $index[TemporaryIndexID] = $temp-index-id
+    - $temp-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $temp-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - $index-Target[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $index-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($temp, $temp-Target, $temp-Node)
+    - joinTargetNode($index, $index-Target, $index-Node)
 - name: temp index existence precedes index dependents
   from: index-Node
   kind: Precedence

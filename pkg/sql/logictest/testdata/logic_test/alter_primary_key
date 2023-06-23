@@ -635,12 +635,12 @@ CREATE TABLE t (x INT NOT NULL);
 statement ok
 ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH (bucket_count=4)
 
+skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
    )
@@ -1059,11 +1059,13 @@ CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2));
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH (bucket_count=3)
 
+# old shard column isn't removed by legacy schema changer.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
 query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-     crdb_internal_x_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
      x INT8 NOT NULL,
      crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
@@ -1395,6 +1397,10 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 
+# Legacy schema changer and declarative schema changer will produce slightly
+# different secondary index ordering for alter primary key, hence we assert
+# separately with slightly different expected output.
+onlyif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1405,6 +1411,19 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
   UNIQUE INDEX t_a_key (a ASC),
   INDEX t_idx_b_k (b ASC, k ASC)
+)
+
+skipif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  k INT8 NOT NULL AS (a + b) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC)
 )
 
 query III colnames,rowsort
@@ -1431,6 +1450,10 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b, k);
 
+# Legacy schema changer and declarative schema changer will produce slightly
+# different secondary index ordering for alter primary key, hence we assert
+# separately with slightly different expected output.
+onlyif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1442,6 +1465,20 @@ CREATE TABLE public.t (
   UNIQUE INDEX t_k_key (k ASC),
   UNIQUE INDEX t_a_key (a ASC),
   INDEX t_idx_b_k (b ASC, k ASC)
+)
+
+skipif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  k INT8 NOT NULL AS (a + b) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC),
+  UNIQUE INDEX t_k_key (k ASC)
 )
 
 query III colnames,rowsort
@@ -1475,6 +1512,10 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 
+# Legacy schema changer and declarative schema changer will produce slightly
+# different secondary index ordering for alter primary key, hence we assert
+# separately with slightly different expected output.
+onlyif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1487,6 +1528,21 @@ CREATE TABLE public.t (
   UNIQUE INDEX t_k_key (k ASC),
   UNIQUE INDEX t_a_key (a ASC),
   INDEX t_idx_b_k (b ASC, k ASC)
+)
+
+skipif config local-legacy-schema-changer
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t];
+----
+CREATE TABLE public.t (
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  k INT8 NOT NULL AS (a + b) VIRTUAL,
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+  INDEX t_idx_b_k (b ASC, k ASC),
+  UNIQUE INDEX t_a_key (a ASC),
+  UNIQUE INDEX t_k_key (k ASC),
+  UNIQUE INDEX t_b_k_key (b ASC, k ASC)
 )
 
 query III colnames,rowsort
@@ -1596,10 +1652,10 @@ skipif config local-legacy-schema-changer
 query T
 SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
 ----
-COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
 COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
-COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const';
-COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3';
+COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const'
 
 subtest test-index-deduplication
 
@@ -1894,6 +1950,10 @@ CREATE TABLE t_99303 (i INT NOT NULL PRIMARY KEY, j INT NOT NULL, UNIQUE INDEX (
 statement ok
 ALTER TABLE t_99303 ALTER PRIMARY KEY USING COLUMNS (j);
 
+# Legacy schema changer and declarative schema changer will produce slightly
+# different secondary index ordering for alter primary key, hence we assert
+# separately with slightly different expected output.
+onlyif config local-legacy-schema-changer
 query TT
 SHOW CREATE t_99303
 ----
@@ -1903,4 +1963,16 @@ t_99303  CREATE TABLE public.t_99303 (
            CONSTRAINT t_99303_pkey PRIMARY KEY (j ASC),
            UNIQUE INDEX t_99303_i_key1 (i ASC),
            UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8
+         )
+
+skipif config local-legacy-schema-changer
+query TT
+SHOW CREATE t_99303
+----
+t_99303  CREATE TABLE public.t_99303 (
+           i INT8 NOT NULL,
+           j INT8 NOT NULL,
+           CONSTRAINT t_99303_pkey PRIMARY KEY (j ASC),
+           UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8,
+           UNIQUE INDEX t_99303_i_key1 (i ASC)
          )

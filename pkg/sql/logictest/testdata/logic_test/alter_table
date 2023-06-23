@@ -340,8 +340,6 @@ LIMIT 2
 SCHEMA CHANGE GC   GC for DROP INDEX test.public.t@t_f_idx  node  running    0  ·
 NEW SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx         root  succeeded  1  ·
 
-
-
 statement ok
 ALTER TABLE t DROP COLUMN f
 
@@ -3173,6 +3171,159 @@ SHOW CONSTRAINTS FROM t_96728
 table_name  constraint_name  constraint_type  details                              validated
 t_96728     t_96728_j_k_key  UNIQUE           UNIQUE (j ASC, k ASC) WHERE (i > 0)  true
 t_96728     t_96728_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)                  true
+
+# This subtest tests behavior when there are multiple commands (ADD COLUMN, DROP COLUMN,
+# ALTER PRIMARY KEY, ADD CONSTRAINT) in one ALTER TABLE statement.
+# 1). add column + drop column
+# 2). add column + alter primary key
+# 3). drop column + alter primary key
+# 4). add column + drop column + alter primary key
+# 5). add column(s) + drop column(s) + alter primary key
+# 6). add column(s) + drop column(s) + alter primary key + add check + add fk
+# This is only supported in declarative schema changer starting from V23_2.
+subtest alter_table_with_multiple_commands_99035
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), DROP COLUMN j;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  i INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+  UNIQUE INDEX t_99035_i_key (i ASC)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_99035 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement error validation of CHECK "j > 0:::INT8" failed on row: j=0, k=[0-9]+, p=30
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 30, ADD CHECK (j>0);
+
+query II
+SELECT * FROM t_99035
+----
+0 0
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 30, ADD CHECK (j>=0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  p INT8 NULL DEFAULT 30:::INT8,
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+)
+
+statement ok
+DROP TABLE IF EXISTS t_99035;
+CREATE TABLE t_99035 (i INT PRIMARY KEY, j INT NOT NULL, FAMILY "primary" (i, j));
+INSERT INTO t_99035 VALUES (0,0);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement ok
+ALTER TABLE t_99035 ADD COLUMN k INT DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i, ADD COLUMN p INT DEFAULT 0, ADD CHECK (j>=0), ADD FOREIGN KEY (p) REFERENCES t_99035(j);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
+----
+CREATE TABLE public.t_99035 (
+  j INT8 NOT NULL,
+  k INT8 NULL DEFAULT unique_rowid(),
+  p INT8 NULL DEFAULT 0:::INT8,
+  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+  CONSTRAINT t_99035_p_fkey FOREIGN KEY (p) REFERENCES public.t_99035(j),
+  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+)
 
 # This subtest disallows using builtin function `cluster_logical_timestamp()`
 # as the default expression when backfilling a column.

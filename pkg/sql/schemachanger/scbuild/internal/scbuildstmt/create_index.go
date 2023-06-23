@@ -250,7 +250,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 func nextRelationIndexID(b BuildCtx, relation scpb.Element) catid.IndexID {
 	switch t := relation.(type) {
 	case *scpb.Table:
-		return b.NextTableIndexID(t)
+		return b.NextTableIndexID(t.TableID)
 	case *scpb.View:
 		return b.NextViewIndexID(t)
 	default:
@@ -655,7 +655,7 @@ func addColumnsForSecondaryIndex(
 	// Set up sharding.
 	if n.Sharded != nil {
 		b.IncrementSchemaChangeIndexCounter("hash_sharded")
-		sharding, shardColID, _ := ensureShardColAndMakeShardDesc(b, relation.(*scpb.Table), keyColNames,
+		sharding, shardColID := ensureShardColAndMakeShardDesc(b, relation.(*scpb.Table), keyColNames,
 			n.Sharded.ShardBuckets, n.StorageParams, n)
 		idxSpec.secondary.Sharding = sharding
 		indexColumn := &scpb.IndexColumn{
@@ -683,7 +683,7 @@ func addColumnsForSecondaryIndex(
 // buckets.
 func maybeCreateAndAddShardCol(
 	b BuildCtx, shardBuckets int, tbl *scpb.Table, colNames []string, n tree.NodeFormatter,
-) (shardColName string, shardColID catid.ColumnID, shardColCkConstraintID catid.ConstraintID) {
+) (shardColName string, shardColID catid.ColumnID) {
 	shardColName = tabledesc.GetShardColumnName(colNames, int32(shardBuckets))
 	elts := b.QueryByID(tbl.TableID)
 	// TODO(ajwerner): In what ways is the column referenced by
@@ -704,12 +704,7 @@ func maybeCreateAndAddShardCol(
 		}
 	})
 	if existingShardColID != 0 {
-		scpb.ForEachCheckConstraint(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.CheckConstraint) {
-			if e.FromHashShardedColumn && e.ColumnIDs[0] == existingShardColID {
-				shardColCkConstraintID = e.ConstraintID
-			}
-		})
-		return shardColName, existingShardColID, shardColCkConstraintID
+		return shardColName, existingShardColID
 	}
 	expr := schemaexpr.MakeHashShardComputeExpr(colNames, shardBuckets)
 	parsedExpr, err := parser.ParseExpr(*expr)
@@ -740,7 +735,7 @@ func maybeCreateAndAddShardCol(
 		},
 		notNull: true,
 	}
-	addColumn(b, spec, n)
+	backing := addColumn(b, spec, n)
 	// Create a new check constraint for the hash sharded index column.
 	checkConstraintBucketValues := strings.Builder{}
 	checkConstraintBucketValues.WriteString(fmt.Sprintf("%q IN (", shardColName))
@@ -758,7 +753,7 @@ func maybeCreateAndAddShardCol(
 				checkConstraintBucketValues.String()),
 			err))
 	}
-	shardColCkConstraintID = b.NextTableConstraintID(tbl.TableID)
+	shardColCkConstraintID := b.NextTableConstraintID(tbl.TableID)
 	shardCheckConstraint := &scpb.CheckConstraint{
 		TableID:      tbl.TableID,
 		ConstraintID: shardColCkConstraintID,
@@ -767,6 +762,7 @@ func maybeCreateAndAddShardCol(
 			ReferencedColumnIDs: []catid.ColumnID{shardColID},
 		},
 		FromHashShardedColumn: true,
+		IndexIDForValidation:  backing.IndexID,
 	}
 	b.Add(shardCheckConstraint)
 	shardCheckConstraintName := &scpb.ConstraintWithoutIndexName{
@@ -776,7 +772,7 @@ func maybeCreateAndAddShardCol(
 	}
 	b.Add(shardCheckConstraintName)
 
-	return shardColName, shardColID, shardColCkConstraintID
+	return shardColName, shardColID
 }
 
 func maybeCreateVirtualColumnForIndex(
