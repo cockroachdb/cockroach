@@ -80,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -113,6 +114,13 @@ var (
 	// concurrent steps
 	possibleDelaysMs = []int{
 		0, 50, 100, 200, 500,
+	}
+
+	// defaultClusterSettings is the set of cluster settings always
+	// passed to `clusterupgrade.StartWithSettings` when (re)starting
+	// nodes in a cluster.
+	defaultClusterSettings = []install.ClusterSettingOption{
+		install.SecureOption(true),
 	}
 )
 
@@ -483,7 +491,11 @@ func (s startFromCheckpointStep) Run(
 
 	startOpts := option.DefaultStartOptsNoBackups()
 	startOpts.RoachprodOpts.Sequential = false
-	return clusterupgrade.StartWithBinary(ctx, l, c, s.crdbNodes, binaryPath, startOpts)
+	clusterSettings := append(
+		append([]install.ClusterSettingOption{}, defaultClusterSettings...),
+		install.BinaryOption(binaryPath),
+	)
+	return clusterupgrade.StartWithSettings(ctx, l, c, s.crdbNodes, startOpts, clusterSettings...)
 }
 
 // uploadCurrentVersionStep uploads the current cockroach binary to
@@ -606,6 +618,7 @@ func (s restartWithNewBinaryStep) Run(
 		// scheduled backup if necessary.
 		option.DefaultStartOptsNoBackups(),
 		s.version,
+		defaultClusterSettings...,
 	)
 }
 

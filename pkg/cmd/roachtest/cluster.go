@@ -1499,10 +1499,13 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest 
 			// Ignore the files in the the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
 			excludeFiles := "*.log,*.txt,*.pprof"
-			cmd := fmt.Sprintf(
-				"%s debug zip --include-range-info --exclude-files='%s' --url {pgurl:%d} %s",
-				defaultCockroachPath, excludeFiles, i, zipName,
-			)
+			cmd := roachtestutil.NewCommand("%s debug zip", defaultCockroachPath).
+				Option("include-range-info").
+				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
+				Flag("url", fmt.Sprintf("{pgurl:%d}", i)).
+				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
+				Arg(zipName).
+				String()
 			if err := c.RunE(ctx, c.Node(i), cmd); err != nil {
 				l.Printf("%s debug zip failed on node %d: %v", defaultCockroachPath, i, err)
 				if i < c.spec.NodeCount {
