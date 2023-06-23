@@ -2064,10 +2064,6 @@ func (c *clusterImpl) StartE(
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.StartE")
 	}
-	// If the test failed (indicated by a canceled ctx), short-circuit.
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
 	c.setStatusForClusterOpt("starting", startOpts.RoachtestOpts.Worker, opts...)
 	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
 
@@ -2102,7 +2098,9 @@ func (c *clusterImpl) StartE(
 		return err
 	}
 
-	if settings.Secure {
+	// Do not refetch certs if that step already happened once (i.e., we
+	// are restarting a node).
+	if settings.Secure && c.localCertsDir == "" {
 		if err := c.RefetchCertsFromNode(ctx, 1); err != nil {
 			return err
 		}

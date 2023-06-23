@@ -513,14 +513,16 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 				cmd += fmt.Sprintf(`rm -fr %s/%s ;`, c.localVMDir(c.Nodes[i]), dir)
 			}
 		} else {
-			cmd = `sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \; &&
-sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data} &&
-sudo rm -fr logs &&
-`
-			if !preserveCerts {
-				cmd += "sudo rm -fr certs* ;\n"
-				cmd += "sudo rm -fr tenant-certs* ;\n"
+			rmCmds := []string{
+				`sudo find /mnt/data* -maxdepth 1 -type f -exec rm -f {} \;`,
+				`sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data}`,
+				`sudo rm -fr logs`,
 			}
+			if !preserveCerts {
+				rmCmds = append(rmCmds, "sudo rm -fr certs*", "sudo rm -fr tenant-certs*")
+			}
+
+			cmd = strings.Join(rmCmds, " && ")
 		}
 		sess := c.newSession(l, node, cmd, withDebugName("node-wipe"))
 		defer sess.Close()
@@ -1527,19 +1529,11 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	ctx context.Context, l *logger.Logger, path string,
 ) (bool, error) {
 	l.Printf("%s: checking %s", c.Name, path)
-	testCmd := `$(test -e ` + path + `);`
-	// Do not log output to stdout/stderr because in some cases this call will be expected to exit 1.
-	result, err := c.runCmdOnSingleNode(ctx, l, c.Nodes[0], testCmd, true, nil, nil)
-	if (result.RemoteExitStatus != 0 && result.RemoteExitStatus != 1) || err != nil {
-		// Unexpected exit status (neither 0 nor 1) or non-nil error. Return combined output along with err returned
-		// from the call if it's not nil.
-		if err != nil {
-			return false, errors.Wrapf(err, "running '%s' failed with exit code=%d: got %s", testCmd, result.RemoteExitStatus, string(result.CombinedOut))
-		} else {
-			return false, errors.Newf("running '%s' failed with exit code=%d: got %s", testCmd, result.RemoteExitStatus, string(result.CombinedOut))
-		}
-	}
-	return result.RemoteExitStatus == 0, nil
+	// We use `echo -n` below stop echo from including a newline
+	// character in the output, allowing us to compare it directly with
+	// "0".
+	result, err := c.runCmdOnSingleNode(ctx, l, 1, `$(test -e `+path+`); echo -n $?`, false, l.Stdout, l.Stderr)
+	return result.Stdout == "0", err
 }
 
 // createNodeCertArguments returns a list of strings appropriate for use as
