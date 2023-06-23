@@ -680,6 +680,7 @@ type IndexUsageStatsController interface {
 type StmtDiagnosticsRequestInsertFunc func(
 	ctx context.Context,
 	stmtFingerprint string,
+	planGist string,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,

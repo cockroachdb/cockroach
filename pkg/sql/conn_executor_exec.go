@@ -621,11 +621,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		ast = stmt.Statement.AST
 	}
 
-	var needFinish bool
-	// For pausable portal, the instrumentation helper needs to be set up only when
-	// the portal is executed for the first time.
+	// For pausable portal, the instrumentation helper needs to be set up only
+	// when the portal is executed for the first time.
 	if !isPausablePortal() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
-		ctx, needFinish = ih.Setup(
+		ctx = ih.Setup(
 			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
 			stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.state.priority,
 			ex.extraTxnState.shouldCollectTxnExecutionStats,
@@ -652,35 +651,37 @@ func (ex *connExecutor) execStmtInOpenState(
 			p.instrumentation = portal.pauseInfo.execStmtInOpenState.ihWrapper.ih
 		}
 	}
-	if needFinish {
-		sql := stmt.SQL
-		defer func() {
-			processCleanupFunc("finish instrumentation helper", func() {
-				// We need this weird thing because we need to make sure we're closing
-				// the correct instrumentation helper for the paused portal.
-				ihToFinish := ih
-				curRes := res
-				if isPausablePortal() {
-					ihToFinish = &portal.pauseInfo.execStmtInOpenState.ihWrapper.ih
-					curRes = portal.pauseInfo.curRes
-					retErr = portal.pauseInfo.execStmtInOpenState.retErr
-					retPayload = portal.pauseInfo.execStmtInOpenState.retPayload
-				}
-				retErr = ihToFinish.Finish(
-					ex.server.cfg,
-					ex.statsCollector,
-					&ex.extraTxnState.accumulatedStats,
-					ihToFinish.collectExecStats,
-					p,
-					ast,
-					sql,
-					curRes,
-					retPayload,
-					retErr,
-				)
-			})
-		}()
-	}
+
+	// Note that here we always unconditionally defer a function that takes care
+	// of finishing the instrumentation helper. This is needed since in order to
+	// support plan-gist-matching of the statement diagnostics we might not know
+	// right now whether Finish needs to happen.
+	defer processCleanupFunc("finish instrumentation helper", func() {
+		// We need this weird thing because we need to make sure we're
+		// closing the correct instrumentation helper for the paused portal.
+		ihToFinish := ih
+		curRes := res
+		if isPausablePortal() {
+			ihToFinish = &portal.pauseInfo.execStmtInOpenState.ihWrapper.ih
+			curRes = portal.pauseInfo.curRes
+			retErr = portal.pauseInfo.execStmtInOpenState.retErr
+			retPayload = portal.pauseInfo.execStmtInOpenState.retPayload
+		}
+		if ihToFinish.needFinish {
+			retErr = ihToFinish.Finish(
+				ex.server.cfg,
+				ex.statsCollector,
+				&ex.extraTxnState.accumulatedStats,
+				ihToFinish.collectExecStats,
+				p,
+				ast,
+				stmt.SQL,
+				curRes,
+				retPayload,
+				retErr,
+			)
+		}
+	})
 
 	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() && ex.executorType != executorTypeInternal {
 		timerDuration :=
@@ -1487,7 +1488,17 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	// Include gist in error reports.
-	ctx = withPlanGist(ctx, planner.instrumentation.planGist.String())
+	planGist := planner.instrumentation.planGist.String()
+	ctx = withPlanGist(ctx, planGist)
+	if ppInfo := getPausablePortalInfo(); ppInfo == nil || !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
+		// If we're not using pausable portals, or it's the first execution of
+		// the pausable portal, and we're not collecting a bundle yet, check
+		// whether we should get a bundle for this particular plan gist.
+		if ih := &planner.instrumentation; !ih.collectBundle && ih.outputMode == unmodifiedOutput {
+			ctx = ih.setupWithPlanGist(ctx, ex.server.cfg, stmt.StmtNoConstants, planGist, &planner.curPlan)
+		}
+	}
+
 	if planner.extendedEvalCtx.TxnImplicit {
 		planner.curPlan.flags.Set(planFlagImplicitTxn)
 	}
