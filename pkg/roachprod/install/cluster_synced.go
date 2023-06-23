@@ -130,8 +130,20 @@ func newRunRetryOpts(
 
 var DefaultSSHRetryOpts = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDetails) bool { return errors.Is(res.Err, rperrors.ErrSSH255) })
 
-// defaultSCPRetry assumes any error is retryable
-var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDetails) bool { return true })
+// defaultSCPRetry won't retry if the error output contains any of the following
+// substrings, in which cases retries are unlikely to help.
+var noScpRetrySubstrings = []string{"no such file or directory", "permission denied", "connection timed out"}
+var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
+	func(res *RunResultDetails) bool {
+		out := strings.ToLower(res.Stderr)
+		for _, s := range noScpRetrySubstrings {
+			if strings.Contains(out, s) {
+				return false
+			}
+		}
+		return true
+	},
+)
 
 // runWithMaybeRetry will run the specified function `f` at least once, or only
 // once if `runRetryOpts` is nil
@@ -2369,6 +2381,7 @@ func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 		// Enable recursive copies, compression.
 		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
+		"-o", "ConnectTimeout=10",
 	}
 	if runtime.GOOS == "darwin" {
 		// SSH to src node and excute SCP there using agent-forwarding,
