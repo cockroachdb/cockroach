@@ -77,12 +77,12 @@ func (d *delegator) delegateShowClusterSettingList(
 
 	if stmt.All {
 		return d.parse(
-			`SELECT variable, value, type AS setting_type, public, description
+			`SELECT variable, value, type AS setting_type, public, description, default_value, origin
        FROM   crdb_internal.cluster_settings`,
 		)
 	}
 	return d.parse(
-		`SELECT variable, value, type AS setting_type, description
+		`SELECT variable, value, type AS setting_type, description, default_value, origin
      FROM   crdb_internal.cluster_settings
      WHERE  public IS TRUE`,
 	)
