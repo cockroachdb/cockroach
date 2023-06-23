@@ -13,6 +13,7 @@ package clisqlclient
 import (
 	"context"
 	"database/sql/driver"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -101,7 +102,9 @@ func stmtDiagListBundlesInternal(ctx context.Context, conn Conn) ([]StmtDiagBund
 type StmtDiagActivationRequest struct {
 	ID int64
 	// Statement is the SQL statement fingerprint.
-	Statement   string
+	Statement string
+	// If empty then any plan will do.
+	PlanGist    string
 	RequestedAt time.Time
 	// Zero value indicates that there is no sampling probability set on the
 	// request.
@@ -126,9 +129,38 @@ func StmtDiagListOutstandingRequests(
 	return result, nil
 }
 
+func isAtLeast23dot2ClusterVersion(ctx context.Context, conn Conn) (bool, error) {
+	// Check whether the upgrade to add the plan_gist column to the
+	// statement_diagnostics_requests system table has already been run.
+	row, err := conn.QueryRow(ctx, `
+ SELECT
+   count(*)
+ FROM
+   [SHOW COLUMNS FROM system.statement_diagnostics_requests]
+ WHERE
+   column_name = 'plan_gist';`)
+	if err != nil {
+		return false, err
+	}
+	c, ok := row[0].(int64)
+	if !ok {
+		return false, nil
+	}
+	return c == 1, nil
+}
+
 func stmtDiagListOutstandingRequestsInternal(
 	ctx context.Context, conn Conn,
 ) ([]StmtDiagActivationRequest, error) {
+	var extraColumns string
+	atLeast23dot2, err := isAtLeast23dot2ClusterVersion(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	if atLeast23dot2 {
+		extraColumns = ", plan_gist"
+	}
+
 	// Converting an INTERVAL to a number of milliseconds within that interval
 	// is a pain - we extract the number of seconds and multiply it by 1000,
 	// then we extract the number of milliseconds and add that up to the
@@ -138,16 +170,16 @@ func stmtDiagListOutstandingRequestsInternal(
                         EXTRACT(millisecond FROM min_execution_latency)::INT8 -
                         EXTRACT(second FROM min_execution_latency)::INT8 * 1000`
 	rows, err := conn.Query(ctx,
-		"SELECT id, statement_fingerprint, requested_at, "+getMilliseconds+`, expires_at, sampling_probability
+		fmt.Sprintf("SELECT id, statement_fingerprint, requested_at, "+getMilliseconds+`, expires_at, sampling_probability%s
 			FROM system.statement_diagnostics_requests
 			WHERE NOT completed
-			ORDER BY requested_at DESC`,
+			ORDER BY requested_at DESC`, extraColumns),
 	)
 	if err != nil {
 		return nil, err
 	}
 	var result []StmtDiagActivationRequest
-	vals := make([]driver.Value, 6)
+	vals := make([]driver.Value, 7)
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
@@ -157,6 +189,7 @@ func stmtDiagListOutstandingRequestsInternal(
 		var minExecutionLatency time.Duration
 		var expiresAt time.Time
 		var samplingProbability float64
+		var planGist string
 
 		if ms, ok := vals[3].(int64); ok {
 			minExecutionLatency = time.Millisecond * time.Duration(ms)
@@ -167,9 +200,15 @@ func stmtDiagListOutstandingRequestsInternal(
 		if sp, ok := vals[5].(float64); ok {
 			samplingProbability = sp
 		}
+		if atLeast23dot2 {
+			if gist, ok := vals[6].(string); ok {
+				planGist = gist
+			}
+		}
 		info := StmtDiagActivationRequest{
 			ID:                  vals[0].(int64),
 			Statement:           vals[1].(string),
+			PlanGist:            planGist,
 			RequestedAt:         vals[2].(time.Time),
 			SamplingProbability: samplingProbability,
 			MinExecutionLatency: minExecutionLatency,

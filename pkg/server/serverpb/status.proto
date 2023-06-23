@@ -1757,6 +1757,14 @@ message StatementDiagnosticsReport {
 
 message CreateStatementDiagnosticsReportRequest {
   string statement_fingerprint = 1;
+  // PlanGist, when set, indicates a particular plan that we want collect
+  // diagnostics for. This can be useful when a single fingerprint can result in
+  // multiple plans.
+  //
+  // There is a caveat to using this filtering: since the plan gist for a
+  // running query is only available after the optimizer has done its part, the
+  // trace will only include things after the optimizer is done.
+  string plan_gist = 5;
   // MinExecutionLatency, when non-zero, indicates the minimum execution latency
   // of a query for which to collect the diagnostics report. In other words, if
   // a query executes faster than this threshold, then the diagnostics report is

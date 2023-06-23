@@ -519,9 +519,15 @@ type StmtDiagnosticsRequester interface {
 	// tracing a query with the given fingerprint. Once this returns, calling
 	// stmtdiagnostics.ShouldCollectDiagnostics() on the current node will
 	// return true depending on the parameters below.
+	// - planGist, when set, indicates a particular plan that we want collect
+	//   diagnostics for. This can be useful when a single fingerprint can result
+	//   in multiple plans.
+	//  - There is a caveat to using this filtering: since the plan gist for a
+	//    running query is only available after the optimizer has done its part,
+	//    the trace will only include things after the optimizer is done.
 	// - samplingProbability controls how likely we are to try and collect a
-	//  diagnostics report for a given execution. The semantics with
-	//  minExecutionLatency are as follows:
+	//   diagnostics report for a given execution. The semantics with
+	//   minExecutionLatency are as follows:
 	//  - If samplingProbability is zero, we're always sampling. This is for
 	//    compatibility with pre-22.2 versions where this parameter was not
 	//    available.
@@ -539,6 +545,7 @@ type StmtDiagnosticsRequester interface {
 	InsertRequest(
 		ctx context.Context,
 		stmtFingerprint string,
+		planGist string,
 		samplingProbability float64,
 		minExecutionLatency time.Duration,
 		expiresAfter time.Duration,
