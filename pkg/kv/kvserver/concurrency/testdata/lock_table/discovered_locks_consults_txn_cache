@@ -40,7 +40,7 @@ add-discovered r=req1 k=a txn=txn2 consult-txn-status-cache=false
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl [holder finalized: aborted] epoch: 0
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,0, info: repl epoch: 0 [holder finalized: aborted]
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 

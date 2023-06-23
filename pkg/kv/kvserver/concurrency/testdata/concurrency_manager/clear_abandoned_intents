@@ -204,7 +204,7 @@ num=2
    queued writers:
     active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl [holder finalized: committed] epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0 [holder finalized: committed]
    queued writers:
     active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
 
@@ -236,7 +236,7 @@ num=3
    queued writers:
     active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl [holder finalized: committed] epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0 [holder finalized: committed]
    queued writers:
     active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
 
@@ -621,7 +621,7 @@ num=4
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0 [holder finalized: aborted]
    queued writers:
     active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
