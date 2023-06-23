@@ -939,26 +939,11 @@ func (ulh *unreplicatedLockHolderInfo) isEmpty() bool {
 	return ulh.txn == nil && ulh.seqs == nil && ulh.ts.IsEmpty()
 }
 
-func (ulh *unreplicatedLockHolderInfo) safeFormat(
-	sb *redact.StringBuilder, txnStatusCache *txnStatusCache,
-) {
+func (ulh *unreplicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 	if ulh.isEmpty() {
 		return
 	}
 	sb.SafeString("unrepl ")
-	if txnStatusCache != nil {
-		finalizedTxn, ok := txnStatusCache.finalizedTxns.get(ulh.txn.ID)
-		if ok {
-			var statusStr string
-			switch finalizedTxn.Status {
-			case roachpb.COMMITTED:
-				statusStr = "committed"
-			case roachpb.ABORTED:
-				statusStr = "aborted"
-			}
-			sb.Printf("[holder finalized: %s] ", redact.Safe(statusStr))
-		}
-	}
 	sb.Printf("epoch: %d, seqs: [%d", redact.Safe(ulh.txn.Epoch), redact.Safe(ulh.seqs[0]))
 	for j := 1; j < len(ulh.seqs); j++ {
 		sb.Printf(", %d", redact.Safe(ulh.seqs[j]))
@@ -989,26 +974,11 @@ func (rlh *replicatedLockHolderInfo) isEmpty() bool {
 	return rlh.txn == nil && rlh.ts.IsEmpty()
 }
 
-func (rlh *replicatedLockHolderInfo) safeFormat(
-	sb *redact.StringBuilder, txnStatusCache *txnStatusCache,
-) {
+func (rlh *replicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 	if rlh.isEmpty() {
 		return
 	}
 	sb.SafeString("repl ")
-	if txnStatusCache != nil {
-		finalizedTxn, ok := txnStatusCache.finalizedTxns.get(rlh.txn.ID)
-		if ok {
-			var statusStr string
-			switch finalizedTxn.Status {
-			case roachpb.COMMITTED:
-				statusStr = "committed"
-			case roachpb.ABORTED:
-				statusStr = "aborted"
-			}
-			sb.Printf("[holder finalized: %s] ", redact.Safe(statusStr))
-		}
-	}
 	sb.Printf("epoch: %d", redact.Safe(rlh.txn.Epoch))
 }
 
@@ -1245,13 +1215,26 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 	if txn != nil { // lock is held
 		sb.Printf("  holder: txn: %v, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(ts))
 		if !l.holder.replicatedInfo.isEmpty() {
-			l.holder.replicatedInfo.safeFormat(sb, txnStatusCache)
+			l.holder.replicatedInfo.safeFormat(sb)
 			if !l.holder.unreplicatedInfo.isEmpty() {
 				sb.Printf(", ")
 			}
 		}
 		if !l.holder.unreplicatedInfo.isEmpty() {
-			l.holder.unreplicatedInfo.safeFormat(sb, txnStatusCache)
+			l.holder.unreplicatedInfo.safeFormat(sb)
+		}
+		if txnStatusCache != nil {
+			finalizedTxn, ok := txnStatusCache.finalizedTxns.get(txn.ID)
+			if ok {
+				var statusStr string
+				switch finalizedTxn.Status {
+				case roachpb.COMMITTED:
+					statusStr = "committed"
+				case roachpb.ABORTED:
+					statusStr = "aborted"
+				}
+				sb.Printf(" [holder finalized: %s]", redact.Safe(statusStr))
+			}
 		}
 		sb.SafeString("\n")
 	}
