@@ -19,13 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -36,14 +37,16 @@ type decoder struct {
 	alloc   tree.DatumAlloc
 	columns []catalog.Column
 	decoder valueside.Decoder
+	st      *cluster.Settings
 }
 
 // newDecoder constructs and returns a decoder.
-func newDecoder() *decoder {
+func newDecoder(st *cluster.Settings) *decoder {
 	columns := systemschema.TenantsTable.PublicColumns()
 	return &decoder{
 		columns: columns,
 		decoder: valueside.MakeDecoder(columns),
+		st:      st,
 	}
 }
 
@@ -119,7 +122,10 @@ func (d *decoder) translateEvent(
 		Value: value,
 	})
 	if err != nil {
-		log.Fatalf(ctx, "failed to decode row: %v", err)
+		// This should never happen: the rangefeed should only ever deliver valid SQL rows.
+		err = errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode row %v", ev.Key)
+		logcrash.ReportOrPanic(ctx, &d.st.SV, "%w", err)
+		return nil
 	}
 
 	return &bufferEvent{
@@ -132,6 +138,8 @@ func (d *decoder) translateEvent(
 }
 
 // TestingDecoderFn exports the decoding routine for testing purposes.
-func TestingDecoderFn() func(roachpb.KeyValue) (tenantcapabilities.Entry, error) {
-	return newDecoder().decode
+func TestingDecoderFn(
+	st *cluster.Settings,
+) func(roachpb.KeyValue) (tenantcapabilities.Entry, error) {
+	return newDecoder(st).decode
 }
