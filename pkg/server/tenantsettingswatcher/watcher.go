@@ -84,8 +84,8 @@ func New(
 // canceled or the stopper is stopped prior to the initial data being retrieved.
 func (w *Watcher) Start(ctx context.Context, sysTableResolver catalog.SystemTableIDResolver) error {
 	w.startCh = make(chan struct{})
+	defer func() { close(w.startCh) }()
 	w.startErr = w.startRangeFeed(ctx, sysTableResolver)
-	close(w.startCh)
 	return w.startErr
 }
 

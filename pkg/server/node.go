@@ -39,6 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -351,6 +354,7 @@ type Node struct {
 	tenantUsage multitenant.TenantUsageServer
 
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher
+	tenantInfoWatcher     *tenantcapabilitieswatcher.Watcher
 
 	spanConfigAccessor spanconfig.KVAccessor // powers the span configuration RPCs
 
@@ -510,6 +514,7 @@ func NewNode(
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
+	tenantInfoWatcher *tenantcapabilitieswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 	spanConfigReporter spanconfig.Reporter,
 ) *Node {
@@ -524,6 +529,7 @@ func NewNode(
 		clusterID:             clusterID,
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
+		tenantInfoWatcher:     tenantInfoWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
 		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
@@ -2086,7 +2092,14 @@ func (n *Node) TenantSettings(
 		})
 	}
 
-	send := func(precedence kvpb.TenantSettingsPrecedence, overrides []kvpb.TenantSetting) error {
+	w2 := n.tenantInfoWatcher
+	if err := w2.WaitForStart(ctx); err != nil {
+		return stream.Send(&kvpb.TenantSettingsEvent{
+			Error: errors.EncodeError(ctx, err),
+		})
+	}
+
+	sendSettings := func(precedence kvpb.TenantSettingsPrecedence, overrides []kvpb.TenantSetting) error {
 		log.VInfof(ctx, 1, "sending precedence %d: %v", precedence, overrides)
 		return stream.Send(&kvpb.TenantSettingsEvent{
 			Precedence:  precedence,
@@ -2095,29 +2108,70 @@ func (n *Node) TenantSettings(
 		})
 	}
 
+	sendTenantInfo := func(tInfo mtinfopb.SQLInfo, caps *tenantcapabilitiespb.TenantCapabilities) error {
+		log.VInfof(ctx, 1, "sending tenant info: %+v / %+v", tInfo, caps)
+		// Note: we are piggy-backing on the TenantSetting streaming RPC
+		// to send non-setting data. This must be careful to work on
+		// SQL servers running previous versions of the CockroachDB code.
+		// To that end, we make the TenantSettingEvent "look like"
+		// a no-op setting change.
+		return stream.Send(&kvpb.TenantSettingsEvent{
+			// IMPORTANT: setting Incremental to true ensures existing
+			// settings are preserved client-side.
+			Incremental: true,
+			// An empty Overrides slice results in no-op client-side.
+			Overrides:  nil,
+			Precedence: kvpb.SpecificTenantOverrides, // not important.
+
+			// These are the actual fields for our update.
+			Name:         tInfo.Name,
+			Capabilities: caps,
+			// TODO(knz): remove the cast after we fix the dependency cycle
+			// between the protobufs.
+			ServiceMode: uint32(tInfo.ServiceMode),
+			DataState:   uint32(tInfo.DataState),
+		})
+	}
+
 	allOverrides, allCh := w.GetAllTenantOverrides()
-	if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
+	if err := sendSettings(kvpb.AllTenantsOverrides, allOverrides); err != nil {
 		return err
 	}
 
 	tenantOverrides, tenantCh := w.GetTenantOverrides(args.TenantID)
-	if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+	if err := sendSettings(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
 		return err
 	}
 
+	tInfo, tCaps, infoCh, _ := w2.GetInfo(args.TenantID)
+	if err := sendTenantInfo(tInfo, tCaps); err != nil {
+		return err
+	}
+
+	// TODO(knz, yahor): This is the point at which we should send
+	// a sentinel value to the tenant server.
+	// See: https://github.com/cockroachdb/cockroach/issues/96512
+
 	for {
 		select {
+		case <-infoCh:
+			// Tenant metadata has changed, send it again.
+			tInfo, tCaps, infoCh, _ = w2.GetInfo(args.TenantID)
+			if err := sendTenantInfo(tInfo, tCaps); err != nil {
+				return err
+			}
+
 		case <-allCh:
 			// All-tenant overrides have changed, send them again.
 			allOverrides, allCh = w.GetAllTenantOverrides()
-			if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
+			if err := sendSettings(kvpb.AllTenantsOverrides, allOverrides); err != nil {
 				return err
 			}
 
 		case <-tenantCh:
 			// Tenant-specific overrides have changed, send them again.
 			tenantOverrides, tenantCh = w.GetTenantOverrides(args.TenantID)
-			if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+			if err := sendSettings(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
 				return err
 			}
 

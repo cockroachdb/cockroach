@@ -28,6 +28,7 @@ import "util/tracing/tracingpb/recorded_span.proto";
 import "util/tracing/tracingpb/tracing.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
+import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -3076,15 +3077,26 @@ message TenantSettingsRequest {
   TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
 }
 
-// TenantSettingsEvent is used to report changes to setting overrides for a
-// particular tenant.
+// TenantSettingsEvent is used to report changes to setting overrides and
+// other metadata for a particular tenant.
 //
-// Each event pertains to a certain precedence value (see
+// TODO(knz): The name of the message should be updated to reflect
+// its more general purpose.
+//
+// Each setting update event pertains to a certain precedence value (see
 // TenantSettingsPrecedence).
 //
 // Note: this API is designed to allow flexibility of implementation on the
 // server side (e.g. to make it maintain very little state per tenant).
 message TenantSettingsEvent {
+  // If non-nil, the other fields will be empty and this will be the final event
+  // sent on the stream before it is terminated.
+  errorspb.EncodedError error = 4 [(gogoproto.nullable) = false];
+
+  //
+  // Fields that pertain to cluster setting updates.
+  //
+
   // Precedence must be a valid TenantSettingsPrecedence value.
   uint32 precedence = 1 [(gogoproto.casttype) = "TenantSettingsPrecedence"];
 
@@ -3106,9 +3118,30 @@ message TenantSettingsEvent {
   //    fields).
   repeated TenantSetting overrides = 3 [(gogoproto.nullable) = false];
 
-  // If non-nil, the other fields will be empty and this will be the final event
-  // sent on the stream before it is terminated.
-  errorspb.EncodedError error = 4 [(gogoproto.nullable) = false];
+  //
+  // Fields that pertain to other tenant metadata updates.
+  //
+
+  // Name is the tenant's current name.
+  string name = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  // Capabilities is the tenant's current capabilities.
+  // Note that this field is advisory: the server may know of a more
+  // recent (and different) set of capabilities, and server-side
+  // capabilities check always prevail.
+  cockroach.multitenant.tenantcapabilitiespb.TenantCapabilities capabilities = 6;
+
+  // DataState is the tenant's current data state.
+  // TODO(knz): This should really be casted to go type mtinfopb.TenantDataState but we
+  // can't do that yet due to a dependency cycle. We should break the cycle.
+  uint32 data_state = 7;
+
+  // ServiceMode is the tenant's current service mode.
+  // TODO(knz): This should really be casted to go type mtinfopb.TenantServicemode but we
+  // can't do that yet due to a dependency cycle. We should break the cycle.
+  uint32 service_mode = 8;
+
+  // NEXT ID: 9
 }
 
 // TenantSetting contains the name and value of a tenant setting.

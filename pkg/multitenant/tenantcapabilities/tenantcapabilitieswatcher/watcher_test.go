@@ -243,11 +243,10 @@ func TestDataDriven(t *testing.T) {
 
 			case "get-capabilities":
 				tID := tenantcapabilitiestestutils.GetTenantID(t, d)
-				cp, found := watcher.GetCapabilities(tID)
+				info, cp, _, found := watcher.GetInfo(tID)
 				if !found {
 					return "not-found"
 				}
-				info, _ := watcher.GetInfo(tID)
 				var buf strings.Builder
 				fmt.Fprintf(&buf, "%+v\n", pretty.Formatter(info))
 				buf.WriteString(tenantcapabilitiestestutils.AlteredCapabilitiesString(cp))
