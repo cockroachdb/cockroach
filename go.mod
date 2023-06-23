@@ -303,7 +303,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/safehtml v0.0.2 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
