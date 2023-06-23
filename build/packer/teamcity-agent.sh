@@ -74,7 +74,7 @@ EOF
     tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
     # Explicitly symlink the pinned version to /usr/bin.
     for f in /usr/local/go/bin/*; do
-        ln -s "/usr/local/go/bin/$f" /usr/bin
+        ln -s "$f" /usr/bin
     done
 fi
 
