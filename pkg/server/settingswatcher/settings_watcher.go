@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -251,7 +252,9 @@ func (s *SettingsWatcher) handleKV(
 		Value: kv.Value,
 	}, &alloc)
 	if err != nil {
-		log.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
+		// This should never happen: the rangefeed should only ever deliver valid SQL rows.
+		err = errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode settings row %v", kv.Key)
+		logcrash.ReportOrPanic(ctx, &s.settings.SV, "%w", err)
 		return nil
 	}
 

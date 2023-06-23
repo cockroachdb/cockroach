@@ -105,6 +105,7 @@ func TestDataDriven(t *testing.T) {
 
 		watcher := tenantcapabilitieswatcher.New(
 			ts.Clock(),
+			ts.ClusterSettings(),
 			ts.RangeFeedFactory().(*rangefeed.Factory),
 			dummyTableID,
 			ts.Stopper(),
