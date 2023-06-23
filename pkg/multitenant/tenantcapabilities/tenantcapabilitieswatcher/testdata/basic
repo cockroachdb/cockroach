@@ -7,24 +7,24 @@ ok
 updates
 ----
 
-upsert ten=10 can_admin_unsplit=true
+upsert ten=10 name=foo service=shared can_admin_unsplit=true
 ----
 ok
 
-upsert ten=11 can_admin_unsplit=false
+upsert ten=11 name=bar data=ready can_admin_unsplit=false
 ----
 ok
 
 updates
 ----
 Incremental Update
-update: ten=10 cap={can_admin_unsplit:true}
-update: ten=11 cap={default}
+update: ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
+update: ten=11 name=bar state=ready service=none cap={default}
 
 flush-state
 ----
-ten=10 cap={can_admin_unsplit:true}
-ten=11 cap={default}
+ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
+ten=11 name=bar state=ready service=none cap={default}
 
 upsert ten=11 can_admin_unsplit=true
 ----
@@ -33,11 +33,11 @@ ok
 updates
 ----
 Incremental Update
-update: ten=11 cap={can_admin_unsplit:true}
+update: ten=11 name= state=add service=none cap={can_admin_unsplit:true}
 
 get-capabilities ten=11
 ----
-{can_admin_unsplit:true}
+ten=11 name= state=add service=none cap={can_admin_unsplit:true}
 
 delete ten=10
 ----
@@ -64,24 +64,24 @@ updates
 # what we'd expect.
 flush-state
 ----
-ten=11 cap={can_admin_unsplit:true}
+ten=11 name= state=add service=none cap={can_admin_unsplit:true}
 
-upsert ten=15 can_admin_unsplit=true
+upsert ten=15 name=bli service=external can_admin_unsplit=true
 ----
 ok
 
 updates
 ----
 Incremental Update
-update: ten=15 cap={can_admin_unsplit:true}
+update: ten=15 name=bli state=add service=external cap={can_admin_unsplit:true}
 
 # Ensure only the last update is applied, even when there are multiple updates
 # to a single key.
-upsert ten=11 can_admin_unsplit=false
+upsert ten=11 name=woo mode=none data=ready can_admin_unsplit=false
 ----
 ok
 
-upsert ten=11 can_admin_unsplit=true
+upsert ten=11 name=waa service=external data=dropping can_admin_unsplit=true
 ----
 ok
 
@@ -100,30 +100,30 @@ not-found
 
 flush-state
 ----
-ten=15 cap={can_admin_unsplit:true}
+ten=15 name=bli state=add service=external cap={can_admin_unsplit:true}
 
 # Same thing, but this time instead of deleting the key, leave it behind.
 delete ten=15
 ----
 ok
 
-upsert ten=15 can_admin_unsplit=true
+upsert ten=15 name=blix can_admin_unsplit=true
 ----
 ok
 
-upsert ten=15 can_admin_unsplit=false
+upsert ten=15 name=blax data=ready can_admin_unsplit=false
 ----
 ok
 
 updates
 ----
 Incremental Update
-update: ten=15 cap={default}
+update: ten=15 name=blax state=ready service=none cap={default}
 
 flush-state
 ----
-ten=15 cap={default}
+ten=15 name=blax state=ready service=none cap={default}
 
 get-capabilities ten=15
 ----
-{default}
+ten=15 name=blax state=ready service=none cap={default}
