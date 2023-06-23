@@ -2762,6 +2762,47 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	// PostgreSQL does not use the "replication" session variable (it is only a
+	// parameter on the connection string). Instead, it is represented by a
+	// `am_walsender` / `am_db_walsender` bool on the connection.
+	`replication`: {
+		// We are hiding this for now as it is only meant for internal observability.
+		// It should only be set at connection time.
+		Hidden: true,
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			if strings.ToLower(s) == "database" {
+				m.SetReplicationMode(sessiondatapb.ReplicationMode_REPLICATION_MODE_DATABASE)
+				return nil
+			}
+			b, err := paramparse.ParseBoolVar("replication", s)
+			if err != nil {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`parameter "replication" requires a boolean value or "database"`,
+				)
+			}
+			if b {
+				m.SetReplicationMode(sessiondatapb.ReplicationMode_REPLICATION_MODE_ENABLED)
+			} else {
+				m.SetReplicationMode(sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED)
+			}
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			switch evalCtx.SessionData().ReplicationMode {
+			case sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED:
+				return formatBoolAsPostgresSetting(false), nil
+			case sessiondatapb.ReplicationMode_REPLICATION_MODE_ENABLED:
+				return formatBoolAsPostgresSetting(true), nil
+			case sessiondatapb.ReplicationMode_REPLICATION_MODE_DATABASE:
+				return "database", nil
+			}
+			return "", errors.AssertionFailedf("unknown replication mode: %v", evalCtx.SessionData().ReplicationMode)
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 // We want test coverage for this on and off so make it metamorphic.
