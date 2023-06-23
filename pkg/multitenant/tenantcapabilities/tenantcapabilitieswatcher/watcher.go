@@ -21,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -31,6 +33,7 @@ import (
 // interface.
 type Watcher struct {
 	clock            *hlc.Clock
+	st               *cluster.Settings
 	rangeFeedFactory *rangefeed.Factory
 	stopper          *stop.Stopper
 	decoder          *decoder
@@ -51,6 +54,7 @@ var _ tenantcapabilities.Reader = &Watcher{}
 // New constructs a new Watcher.
 func New(
 	clock *hlc.Clock,
+	st *cluster.Settings,
 	rangeFeedFactory *rangefeed.Factory,
 	tenantsTableID uint32,
 	stopper *stop.Stopper,
@@ -63,9 +67,10 @@ func New(
 	}
 	w := &Watcher{
 		clock:            clock,
+		st:               st,
 		rangeFeedFactory: rangeFeedFactory,
 		stopper:          stopper,
-		decoder:          newDecoder(),
+		decoder:          newDecoder(st),
 		tenantsTableID:   tenantsTableID,
 		bufferMemLimit:   bufferMemLimit,
 		knobs:            watcherKnobs,
@@ -151,7 +156,9 @@ func (w *Watcher) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
 	case rangefeedcache.IncrementalUpdate:
 		w.handleIncrementalUpdate(updates)
 	default:
-		log.Fatalf(ctx, "unknown update type: %v", u.Type)
+		err := errors.AssertionFailedf("unknown update type: %v", u.Type)
+		logcrash.ReportOrPanic(ctx, &w.st.SV, "%w", err)
+		log.Warningf(ctx, "%v", err)
 	}
 }
 
