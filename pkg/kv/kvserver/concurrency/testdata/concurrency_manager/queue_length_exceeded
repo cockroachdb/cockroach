@@ -89,7 +89,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
@@ -169,7 +169,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 11.000000000,0, info: unrepl seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
     active: true req: 4, txn: 00000004-0000-0000-0000-000000000000

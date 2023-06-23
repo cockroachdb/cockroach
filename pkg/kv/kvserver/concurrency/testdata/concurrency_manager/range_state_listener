@@ -79,9 +79,9 @@ debug-lock-table
 ----
 num=2
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
  lock: "k2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 # --------------------------------
 # Setup complete, test starts here
@@ -101,12 +101,12 @@ debug-lock-table
 ----
 num=2
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 2
  lock: "k2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 # Replica loses lease.
 on-lease-updated leaseholder=false lease-seq=2
@@ -164,7 +164,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 3, txn: 00000002-0000-0000-0000-000000000000
 
@@ -223,7 +223,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 finish req=req2
 ----
@@ -279,7 +279,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 4, txn: 00000003-0000-0000-0000-000000000000
 
@@ -333,7 +333,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 finish req=req3
 ----
@@ -390,7 +390,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 # --------------------------------
 # Setup complete, test starts here
@@ -410,7 +410,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
    queued writers:
     active: true req: 6, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 6
@@ -437,7 +437,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 6, txn: 00000002-0000-0000-0000-000000000000
 
@@ -491,7 +491,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 finish req=req2
 ----
@@ -562,7 +562,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 # --------------------------------
 # Setup complete, test starts here
@@ -589,7 +589,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
    queued writers:
     active: true req: 8, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 8
@@ -657,7 +657,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 10, txn: 00000002-0000-0000-0000-000000000000
 
@@ -711,7 +711,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 finish req=req2
 ----
@@ -768,7 +768,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 # --------------------------------
 # Setup complete, test starts here
@@ -788,7 +788,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
    queued writers:
     active: true req: 12, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 12
@@ -815,7 +815,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
    queued writers:
     active: false req: 12, txn: 00000002-0000-0000-0000-000000000000
 
@@ -869,7 +869,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
 finish req=req2
 ----

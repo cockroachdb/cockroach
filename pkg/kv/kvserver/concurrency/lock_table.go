@@ -944,7 +944,7 @@ func (ulh *unreplicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 		return
 	}
 	sb.SafeString("unrepl ")
-	sb.Printf("epoch: %d, seqs: [%d", redact.Safe(ulh.txn.Epoch), redact.Safe(ulh.seqs[0]))
+	sb.Printf("seqs: [%d", redact.Safe(ulh.seqs[0]))
 	for j := 1; j < len(ulh.seqs); j++ {
 		sb.Printf(", %d", redact.Safe(ulh.seqs[j]))
 	}
@@ -978,8 +978,7 @@ func (rlh *replicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 	if rlh.isEmpty() {
 		return
 	}
-	sb.SafeString("repl ")
-	sb.Printf("epoch: %d", redact.Safe(rlh.txn.Epoch))
+	sb.SafeString("repl")
 }
 
 // Per lock state in lockTableImpl.
@@ -1213,7 +1212,7 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 	}
 	txn, ts := l.getLockHolder()
 	if txn != nil { // lock is held
-		sb.Printf("  holder: txn: %v, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(ts))
+		sb.Printf("  holder: txn: %v epoch: %d, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(txn.Epoch), redact.Safe(ts))
 		if !l.holder.replicatedInfo.isEmpty() {
 			l.holder.replicatedInfo.safeFormat(sb)
 			if !l.holder.unreplicatedInfo.isEmpty() {
@@ -1676,14 +1675,19 @@ func (l *lockState) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 		"lock held, but no replicated or unreplicated lock holder info",
 	)
 
-	// If the lock is held as both replicated and unreplicated we want to
-	// provide the lower of the two timestamps, since the lower timestamp
-	// contends with more transactions. Else we provide whichever one it is held
-	// at.
-	if !l.isHeldReplicated() || (l.isHeldUnreplicated() &&
-		// If we are evaluating the following clause we are sure that it is held
-		// as both replicated and unreplicated.
-		l.holder.unreplicatedInfo.ts.Less(l.holder.replicatedInfo.ts)) {
+	// If the lock is held as both replicated and unreplicated, we want to prefer
+	// the lower of the two timestamps, since the lower timestamp contends with
+	// more transactions. We always prefer to return the txn meta associated with
+	// the unreplicated lock.
+	if l.isHeldReplicated() && l.isHeldUnreplicated() {
+		if l.holder.unreplicatedInfo.ts.Less(l.holder.replicatedInfo.ts) {
+			return l.holder.unreplicatedInfo.txn, l.holder.unreplicatedInfo.ts
+		}
+		return l.holder.unreplicatedInfo.txn, l.holder.replicatedInfo.ts
+	}
+
+	// Else, we return whichever one the lock is held at.
+	if l.isHeldUnreplicated() {
 		return l.holder.unreplicatedInfo.txn, l.holder.unreplicatedInfo.ts
 	}
 	return l.holder.replicatedInfo.txn, l.holder.replicatedInfo.ts

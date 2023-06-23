@@ -31,7 +31,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 10.000000000,1, info: repl
 
 sequence req=req1
 ----
@@ -97,7 +97,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 100.000000000,1, info: repl epoch: 0
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 100.000000000,1, info: repl
 
 sequence req=req1
 ----
@@ -166,7 +166,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 100.000000000,1, info: repl epoch: 0
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 100.000000000,1, info: repl
 
 sequence req=req1
 ----
@@ -241,7 +241,7 @@ debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 14.000000000,1, info: repl epoch: 0
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, ts: 14.000000000,1, info: repl
 
 sequence req=req1
 ----

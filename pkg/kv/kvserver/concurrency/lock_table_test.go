@@ -1836,10 +1836,10 @@ func TestLockStateSafeFormat(t *testing.T) {
 		seqs: []enginepb.TxnSeq{1},
 	}
 	require.EqualValues(t,
-		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8, ts: 0.000000123,7, info: unrepl epoch: 0, seqs: [1]\n",
+		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, ts: 0.000000123,7, info: unrepl seqs: [1]\n",
 		redact.Sprint(l))
 	require.EqualValues(t,
-		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8, ts: 0.000000123,7, info: unrepl epoch: 0, seqs: [1]\n",
+		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, ts: 0.000000123,7, info: unrepl seqs: [1]\n",
 		redact.Sprint(l).Redact())
 }
 
