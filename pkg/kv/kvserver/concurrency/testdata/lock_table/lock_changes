@@ -81,7 +81,7 @@ num=1
 # Lock is reacquired at a different epoch. The old sequence numbers are discarded.
 # ---------------------------------------------------------------------------------
 
-new-txn txn=txn1 ts=10 epoch=1 seq=0
+new-txn txn=txn1 ts=10 epoch=1 seq=1
 ----
 
 new-request r=req3 txn=txn1 ts=10 spans=intent@a
@@ -91,7 +91,7 @@ acquire r=req3 k=a durability=u
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, unrepl epoch: 1, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, unrepl epoch: 1, seqs: [1]
 
 # ---------------------------------------------------------------------------------
 # Lock is reacquired at a different epoch with lower timestamp. This is allowed,
