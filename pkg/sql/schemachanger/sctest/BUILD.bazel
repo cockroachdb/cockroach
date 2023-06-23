@@ -29,6 +29,7 @@ go_library(
         "//pkg/sql/schemachanger/scdecomp",
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
+        "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",

@@ -415,15 +415,24 @@ begin transaction #7
 merge temporary indexes [4] into backfilled indexes [3] in table #104
 commit transaction #7
 begin transaction #8
-## PostCommitPhase stage 6 of 7 with 3 MutationType ops
+## PostCommitPhase stage 6 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
          version: 4
        mutationId: 1
   -    state: MERGING
+  -  - direction: ADD
   +    state: WRITE_ONLY
-     - direction: ADD
+  +  - direction: DROP
        index:
+         constraintId: 3
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - column:
+         id: 2
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -457,33 +466,26 @@ upsert descriptor #104
        mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
-  +    state: DELETE_ONLY
-  +  - direction: DROP
-       index:
+  -    index:
   -      constraintId: 2
-  +      constraintId: 3
-         createdExplicitly: true
-         encodingType: 1
-         foreignKey: {}
-         geoConfig: {}
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
   -      id: 3
-  +      id: 4
-         interleave: {}
-         keyColumnDirections:
-  ...
-         keyColumnNames:
-         - i
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
   -      name: crdb_internal_index_3_name_placeholder
-  +      name: crdb_internal_index_4_name_placeholder
-         partitioning: {}
-         sharded: {}
-         storeColumnNames: []
-         unique: true
-  +      useDeletePreservingEncoding: true
-         version: 4
-       mutationId: 1
-  -    state: WRITE_ONLY
-  -  - direction: ADD
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      version: 4
   +    state: DELETE_ONLY
   +  - column:
   +      id: 2
@@ -494,9 +496,10 @@ upsert descriptor #104
   +        oid: 20
   +        width: 64
   +    direction: DROP
-  +    mutationId: 1
+       mutationId: 1
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
-  +  - direction: DROP
+     - direction: DROP
        index:
   -      constraintId: 3
   -      createdExplicitly: true
@@ -525,7 +528,7 @@ upsert descriptor #104
   -      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-       state: WRITE_ONLY
+  -    state: DELETE_ONLY
   -  - column:
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
@@ -536,9 +539,8 @@ upsert descriptor #104
   -        width: 64
   -    direction: DROP
   -    mutationId: 1
-  -    state: WRITE_ONLY
+       state: WRITE_ONLY
      name: t
-     nextColumnId: 3
   ...
      parentId: 100
      primaryIndex:
@@ -569,11 +571,11 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
 upsert descriptor #104
   ...
      modificationTime: {}
@@ -597,30 +599,6 @@ upsert descriptor #104
   -      partitioning: {}
   -      sharded: {}
   -      version: 3
-  -    mutationId: 1
-  -    state: DELETE_ONLY
-  -  - direction: DROP
-  -    index:
-  -      constraintId: 3
-  -      createdExplicitly: true
-  -      encodingType: 1
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 4
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 1
-  -      keyColumnNames:
-  -      - i
-  -      name: crdb_internal_index_4_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnNames: []
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
      - column:

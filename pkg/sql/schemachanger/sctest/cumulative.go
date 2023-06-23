@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -1515,7 +1516,7 @@ func processPlanInPhase(
 	var processOnce sync.Once
 	_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 		BeforeStage: func(p scplan.Plan, _ int) error {
-			if p.Params.ExecutionPhase == phaseToProcess {
+			if p.Params.ExecutionPhase == phaseToProcess && processFunc != nil {
 				processOnce.Do(func() { processFunc(p) })
 			}
 			return nil
@@ -1668,36 +1669,34 @@ func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixed
 			skip.IgnoreLint(t, "skipping due to randomness")
 		}
 	}
+
 	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
-		if !t.Run("Starting",
+		// Skip this test if any of the stmts is not fully supported.
+		if err := areStmtsFullySupportedAtClusterVersion(t, setup, stmts, downlevelClusterFunc); err != nil {
+			skip.IgnoreLint(t, "test is skipped because", err.Error())
+		}
+
+		if !t.Run("pause upgrade and resume at each stage",
 			func(t *testing.T) { testValidateMixedVersionElements(t, setup, stmts) },
 		) {
 			return
 		}
 	}
+
 	testValidateMixedVersionElements = func(t *testing.T, setup, stmts []statements.Statement[tree.Statement]) {
-		// If any of the statements are not supported, then skip over this
-		// file for the corpus.
-		for _, stmt := range stmts {
-			if !scbuild.IsFullySupportedWithFalsePositive(stmt.AST, clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.V22_2)}) {
-				return
-			}
-		}
 		postCommitCount, postCommitNonRevertibleCount := countPostCommitStages(t, setup, stmts)
 		stageCounts := []int{postCommitCount, postCommitNonRevertibleCount}
 		stageTypes := []scop.Phase{scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase}
 
-		jobPauseResumeChannel := make(chan jobspb.JobID)
-		waitForPause := make(chan struct{})
 		for stageTypIdx := range stageCounts {
 			stageType := stageTypes[stageTypIdx]
-			for stageOrdinal := 1; stageOrdinal < stageCounts[stageTypIdx]+1; stageOrdinal++ {
-				t.Run(fmt.Sprintf("%s_%d_of_%d", stageType, stageType, stageCounts[stageTypIdx]+1), func(t *testing.T) {
+			for stageOrdinal := 1; stageOrdinal <= stageCounts[stageTypIdx]; stageOrdinal++ {
+				t.Run(fmt.Sprintf("%s_%d_of_%d", stageType, stageOrdinal, stageCounts[stageTypIdx]), func(t *testing.T) {
 					maybeRandomlySkip(t)
+					jobPauseResumeChannel := make(chan jobspb.JobID)
+					waitForPause := make(chan struct{})
 					pauseComplete := false
-					var db *gosql.DB
-					var cleanup func()
-					_, db, cleanup = newCluster(t, &scexec.TestingKnobs{
+					_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 						BeforeStage: func(p scplan.Plan, stageIdx int) error {
 							if stageOrdinal == p.Stages[stageIdx].Ordinal &&
 								p.Stages[stageIdx].Phase == stageType && !pauseComplete {
@@ -1709,18 +1708,21 @@ func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixed
 							return nil
 						},
 					}, true /*down level*/)
+					tdb := sqlutils.MakeSQLRunner(db)
 
+					// Wait for the schema changer job to hit desired stage, pause the job,
+					// perform a cluster upgrade, and resume the job.
 					go func() {
 						jobID := <-jobPauseResumeChannel
 						_, err := db.Exec("PAUSE JOB $1", jobID)
 						require.NoError(t, err)
-						waitForPause <- struct{}{}
+						tdb.CheckQueryResultsRetry(t, fmt.Sprintf(
+							`SELECT status FROM [SHOW JOBS] WHERE job_id = %d`, jobID,
+						), [][]string{{"paused"}})
+						close(waitForPause)
 						_, err = db.Exec("SET CLUSTER SETTING VERSION=$1", clusterversion.TestingBinaryVersion.String())
 						require.NoError(t, err)
-						testutils.SucceedsSoon(t, func() error {
-							_, err = db.Exec("RESUME JOB $1", jobID)
-							return err
-						})
+						tdb.Exec(t, `RESUME JOB $1`, jobID)
 					}()
 
 					defer cleanup()
@@ -1730,25 +1732,13 @@ func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixed
 						},
 					))
 
-					// All schema change jobs should succeed after migration.
-					detectJobsComplete := fmt.Sprintf(`
-SELECT
-    count(*)
-FROM
-    [SHOW JOBS]
-WHERE
-    job_type = 'NEW SCHEMA CHANGE'
-    AND status NOT IN ('%s')
-`,
-						string(jobs.StatusSucceeded))
+					// The resumed job should eventually succeed after upgrade.
+					query := `SELECT statement, status FROM [SHOW JOBS] WHERE job_type = 'NEW SCHEMA CHANGE' AND status != 'succeeded'`
 					testutils.SucceedsSoon(t, func() error {
-						var count int64
-						row := db.QueryRow(detectJobsComplete)
-						if err := row.Scan(&count); err != nil {
-							return err
-						}
-						if count > 0 {
-							return errors.AssertionFailedf("unexpected count of %d", count)
+						row := tdb.QueryStr(t, query)
+						if len(row) > 0 {
+							return errors.AssertionFailedf("expected 0 unsuccessful schema change jobs;"+
+								" get %d: %v", len(row), row[0])
 						}
 						return nil
 					})
@@ -1756,13 +1746,40 @@ WHERE
 			}
 		}
 	}
+
 	cumulativeTest(t, "ValidateMixedVersionElements", path, testFunc)
 }
 
-func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedClusterFunc) {
-	testVersion := clusterversion.ClusterVersion{
-		Version: clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates - 1),
+// areStmtsFullySupportedAtClusterVersion determines if `stmts` are fully supported
+// by running `stmts` in a transaction with declarative schema changer.
+// It returns any error it encounters.
+func areStmtsFullySupportedAtClusterVersion(
+	t *testing.T,
+	setup []statements.Statement[tree.Statement],
+	stmts []statements.Statement[tree.Statement],
+	clusterFunc func(t *testing.T, knobs *scexec.TestingKnobs) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func()),
+) error {
+	ctx := context.Background()
+	s, db, cleanup := clusterFunc(t, nil /* knobs */)
+	defer cleanup()
+	cv := s.ClusterSettings().Version
+
+	// Sieve 1: check whether the statements are even implemented and the schema
+	// changer mode.
+	for _, stmt := range stmts {
+		if !scbuild.IsFullySupportedWithFalsePositive(stmt.AST, cv.ActiveVersion(ctx)) {
+			return scerrors.NotImplementedError(stmt.AST)
+		}
 	}
+	// Sieve 2: false positives might fall through sieve 1 and we need to actually run
+	// it to account for version gates in the builder.
+	return executeSchemaChangeTxn(ctx, t, setup, stmts, db, nil, nil, nil)
+}
+
+func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedClusterFunc) {
+	//testVersion := clusterversion.ClusterVersion{
+	//	Version: clusterversion.ByKey(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates - 1),
+	//}
 	var after [][]string // CREATE_STATEMENT for all descriptors after finishing `stmts` in each test case.
 	var dbName string
 	r, _ := randutil.NewTestRand()
@@ -2093,12 +2110,11 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 	}
 
 	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []statements.Statement[tree.Statement], _ *stageExecStmtMap) {
-		for _, stmt := range stmts {
-			supported := scbuild.IsFullySupportedWithFalsePositive(stmt.AST, testVersion)
-			if !supported {
-				skip.IgnoreLint(t, "statement not supported in current release")
-			}
+		// Skip this test if any of the stmts is not fully supported.
+		if err := areStmtsFullySupportedAtClusterVersion(t, setup, stmts, downlevelClusterFunc); err != nil {
+			skip.IgnoreLint(t, "test is skipped because", err.Error())
 		}
+
 		postCommit, nonRevertible := countStages(t, setup, stmts)
 		n := postCommit + nonRevertible
 		t.Logf(
