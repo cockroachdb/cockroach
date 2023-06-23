@@ -16,7 +16,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -292,12 +291,6 @@ func (r *Registry) insertRequestInternal(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (RequestID, error) {
-	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SampledStmtDiagReqs)
-	if !isSamplingProbabilitySupported && samplingProbability != 0 {
-		return 0, errors.New(
-			"sampling probability only supported after 22.2 version migrations have completed",
-		)
-	}
 	if samplingProbability != 0 {
 		if samplingProbability < 0 || samplingProbability > 1 {
 			return 0, errors.Newf(
@@ -641,7 +634,6 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
-	isSamplingProbabilitySupported := r.st.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SampledStmtDiagReqs)
 
 	// Loop until we run the query without straddling an epoch increment.
 	for {
@@ -649,15 +641,11 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
-		var extraColumns string
-		if isSamplingProbabilitySupported {
-			extraColumns = ", sampling_probability"
-		}
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.RootUserSessionDataOverride,
-			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at%s
+			`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability
 				FROM system.statement_diagnostics_requests
-				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`, extraColumns),
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
 		)
 		if err != nil {
 			return err
@@ -698,14 +686,12 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		if e, ok := row[3].(*tree.DTimestampTZ); ok {
 			expiresAt = e.Time
 		}
-		if isSamplingProbabilitySupported {
-			if prob, ok := row[4].(*tree.DFloat); ok {
-				samplingProbability = float64(*prob)
-				if samplingProbability < 0 || samplingProbability > 1 {
-					log.Warningf(ctx, "malformed sampling probability for request %d: %f (expected in range [0, 1]), resetting to 1.0",
-						id, samplingProbability)
-					samplingProbability = 1.0
-				}
+		if prob, ok := row[4].(*tree.DFloat); ok {
+			samplingProbability = float64(*prob)
+			if samplingProbability < 0 || samplingProbability > 1 {
+				log.Warningf(ctx, "malformed sampling probability for request %d: %f (expected in range [0, 1]), resetting to 1.0",
+					id, samplingProbability)
+				samplingProbability = 1.0
 			}
 		}
 		ids.Add(int(id))

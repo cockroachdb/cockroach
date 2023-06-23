@@ -93,12 +93,6 @@ var upgrades = []upgradebase.Upgrade{
 		"create default databases", // v22_2StartupMigrationName
 	),
 	upgrade.NewTenantUpgrade(
-		"update system.statement_diagnostics_requests to support sampling probabilities",
-		toCV(clusterversion.TODODelete_V22_2SampledStmtDiagReqs),
-		upgrade.NoPrecondition,
-		sampledStmtDiagReqsMigration,
-	),
-	upgrade.NewTenantUpgrade(
 		"add the system.external_connections table",
 		toCV(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable),
 		upgrade.NoPrecondition,
