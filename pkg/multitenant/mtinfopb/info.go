@@ -36,6 +36,8 @@ const (
 	// This mode causes KV nodes to spontaneously start the SQL service
 	// for the tenant.
 	ServiceModeShared TenantServiceMode = 2
+	// MaxServiceMode is a sentinel value.
+	MaxServiceMode TenantServiceMode = ServiceModeShared
 )
 
 // String implements fmt.Stringer.
@@ -72,6 +74,8 @@ const (
 	// DataStateDrop indicates tenant data is being deleted. Not
 	// available for SQL sessions.
 	DataStateDrop TenantDataState = 2
+	// MaxDataState is a sentinel value.
+	MaxDataState TenantDataState = DataStateDrop
 )
 
 // String implements fmt.Stringer.
