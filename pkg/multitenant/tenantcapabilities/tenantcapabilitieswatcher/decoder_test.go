@@ -73,7 +73,7 @@ func TestDecodeCapabilities(t *testing.T) {
 
 	// Decode and verify.
 	row := rows[0]
-	got, err := tenantcapabilitieswatcher.TestingDecoderFn()(roachpb.KeyValue{
+	got, err := tenantcapabilitieswatcher.TestingDecoderFn()(ctx, roachpb.KeyValue{
 		Key:   row.Key,
 		Value: *row.Value,
 	})
