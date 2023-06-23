@@ -134,6 +134,19 @@
 =>
 (Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
 
+# EliminateUpsertDistinct is similar to EliminateDistinct, but it only checks if
+# the grouping columns are a lax key because UpsertDistinctOn considers NULL
+# values to be distinct from one another for the purposes of grouping.
+[EliminateUpsertDistinct, Normalize]
+(UpsertDistinctOn | EnsureUpsertDistinctOn
+    $input:*
+    $aggs:*
+    $groupingPrivate:* &
+        (ColsAreLaxKey (GroupingCols $groupingPrivate) $input)
+)
+=>
+(Project $input [] (GroupingOutputCols $groupingPrivate $aggs))
+
 # ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
 # operator and replaces them by ConstAgg aggregate functions. A grouping
 # column is redundant if it is functionally determined by the other grouping
