@@ -72,9 +72,10 @@ type VM struct {
 	CreatedAt time.Time `json:"created_at"`
 	// If non-empty, indicates that some or all of the data in the VM instance
 	// is not present or otherwise invalid.
-	Errors   []error           `json:"errors"`
-	Lifetime time.Duration     `json:"lifetime"`
-	Labels   map[string]string `json:"labels"`
+	Errors      []error           `json:"errors"`
+	Lifetime    time.Duration     `json:"lifetime"`
+	Preemptible bool              `json:"preemptible"`
+	Labels      map[string]string `json:"labels"`
 	// The provider-internal DNS name for the VM instance
 	DNS string `json:"dns"`
 	// The name of the cloud provider that hosts the VM instance
@@ -118,9 +119,10 @@ func Name(cluster string, idx int) string {
 
 // Error values for VM.Error
 var (
-	ErrBadNetwork   = errors.New("could not determine network information")
-	ErrInvalidName  = errors.New("invalid VM name")
-	ErrNoExpiration = errors.New("could not determine expiration")
+	ErrBadNetwork    = errors.New("could not determine network information")
+	ErrBadScheduling = errors.New("could not determine scheduling information")
+	ErrInvalidName   = errors.New("invalid VM name")
+	ErrNoExpiration  = errors.New("could not determine expiration")
 )
 
 var regionRE = regexp.MustCompile(`(.*[^-])-?[a-z]$`)
