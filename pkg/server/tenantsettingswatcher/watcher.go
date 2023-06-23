@@ -84,8 +84,8 @@ func New(
 // canceled or the stopper is stopped prior to the initial data being retrieved.
 func (w *Watcher) Start(ctx context.Context, sysTableResolver catalog.SystemTableIDResolver) error {
 	w.startCh = make(chan struct{})
+	defer close(w.startCh)
 	w.startErr = w.startRangeFeed(ctx, sysTableResolver)
-	close(w.startCh)
 	return w.startErr
 }
 
@@ -204,12 +204,6 @@ func (w *Watcher) startRangeFeed(
 // WaitForStart waits until the rangefeed is set up. Returns an error if the
 // rangefeed setup failed.
 func (w *Watcher) WaitForStart(ctx context.Context) error {
-	// Fast path check.
-	select {
-	case <-w.startCh:
-		return w.startErr
-	default:
-	}
 	if w.startCh == nil {
 		return errors.AssertionFailedf("Start() was not yet called")
 	}
