@@ -94,6 +94,9 @@ type CreateFunction struct {
 	// format. That is sequence names and type name in expressions are not
 	// rewritten with OIDs.
 	BodyStatements Statements
+	// BodyAnnotations is not assigned during initial parsing of user input. It's
+	// assigned by the opt builder when the optimizer parses the body statements.
+	BodyAnnotations []*Annotations
 }
 
 // Format implements the NodeFormatter interface.
@@ -131,8 +134,11 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteString(" ")
 			}
+			oldAnn := ctx.ann
+			ctx.ann = node.BodyAnnotations[i]
 			ctx.FormatNode(stmt)
 			ctx.WriteString(";")
+			ctx.ann = oldAnn
 		}
 		ctx.WriteString("$$")
 	} else if node.RoutineBody != nil {
@@ -149,6 +155,8 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 
 // RoutineBody represent a list of statements in a UDF body.
 type RoutineBody struct {
+	// Stmts is populated during parsing. Unlike BodyStatements, we don't need
+	// to create separate Annotations for each statement.
 	Stmts Statements
 }
 
