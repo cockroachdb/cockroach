@@ -38,13 +38,13 @@ ok
 updates
 ----
 Complete Update
-update: ten=11 name=bar service=external state=add cap={default}
-update: ten=15 name=woo service=none state=add cap={can_admin_unsplit:true}
+update: ten=11 name=bar state=add service=external cap={default}
+update: ten=15 name=woo state=add service=none cap={can_admin_unsplit:true}
 
 flush-state
 ----
-ten=11 name=bar service=external state=add cap={default}
-ten=15 name=woo service=none state=add cap={can_admin_unsplit:true}
+ten=11 name=bar state=add service=external cap={default}
+ten=15 name=woo state=add service=none cap={can_admin_unsplit:true}
 
 get-capabilities ten=10
 ----

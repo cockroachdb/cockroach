@@ -18,13 +18,13 @@ ok
 updates
 ----
 Incremental Update
-update: ten=10 name=foo service=shared state=add cap={can_admin_unsplit:true}
-update: ten=11 name=bar service=none state=ready cap={default}
+update: ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
+update: ten=11 name=bar state=ready service=none cap={default}
 
 flush-state
 ----
-ten=10 name=foo service=shared state=add cap={can_admin_unsplit:true}
-ten=11 name=bar service=none state=ready cap={default}
+ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
+ten=11 name=bar state=ready service=none cap={default}
 
 upsert ten=11 can_admin_unsplit=true
 ----
@@ -33,7 +33,7 @@ ok
 updates
 ----
 Incremental Update
-update: ten=11 name= service=none state=add cap={can_admin_unsplit:true}
+update: ten=11 name= state=add service=none cap={can_admin_unsplit:true}
 
 get-capabilities ten=11
 ----
@@ -65,7 +65,7 @@ updates
 # what we'd expect.
 flush-state
 ----
-ten=11 name= service=none state=add cap={can_admin_unsplit:true}
+ten=11 name= state=add service=none cap={can_admin_unsplit:true}
 
 upsert ten=15 name=bli service=external can_admin_unsplit=true
 ----
@@ -74,7 +74,7 @@ ok
 updates
 ----
 Incremental Update
-update: ten=15 name=bli service=external state=add cap={can_admin_unsplit:true}
+update: ten=15 name=bli state=add service=external cap={can_admin_unsplit:true}
 
 # Ensure only the last update is applied, even when there are multiple updates
 # to a single key.
@@ -101,7 +101,7 @@ not-found
 
 flush-state
 ----
-ten=15 name=bli service=external state=add cap={can_admin_unsplit:true}
+ten=15 name=bli state=add service=external cap={can_admin_unsplit:true}
 
 # Same thing, but this time instead of deleting the key, leave it behind.
 delete ten=15
@@ -119,11 +119,11 @@ ok
 updates
 ----
 Incremental Update
-update: ten=15 name=blax service=none state=ready cap={default}
+update: ten=15 name=blax state=ready service=none cap={default}
 
 flush-state
 ----
-ten=15 name=blax service=none state=ready cap={default}
+ten=15 name=blax state=ready service=none cap={default}
 
 get-capabilities ten=15
 ----

@@ -39,6 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -352,6 +355,7 @@ type Node struct {
 	tenantUsage multitenant.TenantUsageServer
 
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher
+	tenantInfoWatcher     *tenantcapabilitieswatcher.Watcher
 
 	spanConfigAccessor spanconfig.KVAccessor // powers the span configuration RPCs
 
@@ -511,6 +515,7 @@ func NewNode(
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
+	tenantInfoWatcher *tenantcapabilitieswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 	spanConfigReporter spanconfig.Reporter,
 ) *Node {
@@ -525,6 +530,7 @@ func NewNode(
 		clusterID:             clusterID,
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
+		tenantInfoWatcher:     tenantInfoWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
 		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
@@ -2087,12 +2093,47 @@ func (n *Node) TenantSettings(
 		})
 	}
 
-	send := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting) error {
+	w2 := n.tenantInfoWatcher
+	if err := w2.WaitForStart(ctx); err != nil {
+		return stream.Send(&kvpb.TenantSettingsEvent{
+			Error: errors.EncodeError(ctx, err),
+		})
+	}
+
+	sendSettings := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting) error {
 		log.VInfof(ctx, 1, "sending precedence %d: %v", precedence, overrides)
 		return stream.Send(&kvpb.TenantSettingsEvent{
+			EventType:   kvpb.TenantSettingsEvent_SETTING_EVENT,
 			Precedence:  precedence,
 			Incremental: false,
 			Overrides:   overrides,
+		})
+	}
+
+	sendTenantInfo := func(tInfo mtinfopb.SQLInfo, caps *tenantcapabilitiespb.TenantCapabilities) error {
+		log.VInfof(ctx, 1, "sending tenant info: %+v / %+v", tInfo, caps)
+		// Note: we are piggy-backing on the TenantSetting streaming RPC
+		// to send non-setting data. This must be careful to work on
+		// SQL servers running previous versions of the CockroachDB code.
+		// To that end, we make the TenantSettingEvent "look like"
+		// a no-op setting change.
+		return stream.Send(&kvpb.TenantSettingsEvent{
+			EventType: kvpb.TenantSettingsEvent_METADATA_EVENT,
+			// IMPORTANT: setting Incremental to true ensures existing
+			// settings are preserved client-side in previous-version
+			// clients that do not know about the EventType field.
+			Incremental: true,
+			// An empty Overrides slice results in no-op client-side.
+			Overrides:  nil,
+			Precedence: kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, // not important.
+
+			// These are the actual fields for our update.
+			Name:         tInfo.Name,
+			Capabilities: caps,
+			// TODO(knz): remove the cast after we fix the dependency cycle
+			// between the protobufs.
+			ServiceMode: uint32(tInfo.ServiceMode),
+			DataState:   uint32(tInfo.DataState),
 		})
 	}
 
@@ -2105,30 +2146,53 @@ func (n *Node) TenantSettings(
 	}
 
 	// Send the initial state.
-	//
+
+	// Send the initial tenant metadata. It is important to do this before
+	// the settings, for compatibility with pre-v23.2 SQL servers. In those
+	// versions, the SQL server must support connecting to a v23.1 KV node
+	// which does not send the tenant metadata. In that case, the SQL server
+	// merely waits until it receives the cluster setting overrides to know
+	// that it can proceed with startup.
+	tInfo, tCaps, infoCh, _ := w2.GetInfo(args.TenantID)
+	if err := sendTenantInfo(tInfo, tCaps); err != nil {
+		return err
+	}
+
+	// Send the settings.
 	// The protocol defines that there is one initial response per
 	// precedence value, with Incremental set to false. This is important:
 	// the client waits for at least one non-incremental message
 	// for each predecende before continuing.
 
 	allOverrides, allCh := w.GetAllTenantOverrides()
-	if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
+	if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
 		return err
 	}
 
 	tenantOverrides, tenantCh := w.GetTenantOverrides(args.TenantID)
-	if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
+	if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
 		return err
 	}
 
+	// TODO(knz, yahor): This is the point at which we should send
+	// a sentinel value to the tenant server.
+	// See: https://github.com/cockroachdb/cockroach/issues/96512
+
 	for {
 		select {
+		case <-infoCh:
+			// Tenant metadata has changed, send it again.
+			tInfo, tCaps, infoCh, _ = w2.GetInfo(args.TenantID)
+			if err := sendTenantInfo(tInfo, tCaps); err != nil {
+				return err
+			}
+
 		case <-allCh:
 			// All-tenant overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
 			allOverrides, allCh = w.GetAllTenantOverrides()
-			if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
+			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
 				return err
 			}
 
@@ -2137,7 +2201,7 @@ func (n *Node) TenantSettings(
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
 			tenantOverrides, tenantCh = w.GetTenantOverrides(args.TenantID)
-			if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
+			if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
 				return err
 			}
 

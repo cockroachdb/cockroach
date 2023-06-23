@@ -55,8 +55,8 @@ func ParseTenantInfo(
 	t *testing.T, d *datadriven.TestData,
 ) (
 	name *roachpb.TenantName,
-	serviceMode mtinfopb.TenantServiceMode,
 	dataState mtinfopb.TenantDataState,
+	serviceMode mtinfopb.TenantServiceMode,
 	err error,
 ) {
 	if d.HasArg("name") {
@@ -83,7 +83,7 @@ func ParseTenantInfo(
 			return nil, 0, 0, errors.Newf("unknown data state %s", data)
 		}
 	}
-	return name, serviceMode, dataState, nil
+	return name, dataState, serviceMode, nil
 }
 
 // ParseTenantCapabilityUpsert parses all args which have a key that is a

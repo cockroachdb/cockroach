@@ -201,11 +201,11 @@ func TestDataDriven(t *testing.T) {
 					if receivedUpdates[i].Deleted {
 						output.WriteString(fmt.Sprintf("delete: ten=%v\n", receivedUpdates[i].TenantID))
 					} else {
-						output.WriteString(fmt.Sprintf("update: ten=%v name=%v service=%v state=%v cap=%v\n",
+						output.WriteString(fmt.Sprintf("update: ten=%v name=%v state=%v service=%v cap=%v\n",
 							receivedUpdates[i].TenantID,
 							receivedUpdates[i].Name,
-							receivedUpdates[i].ServiceMode,
 							receivedUpdates[i].DataState,
+							receivedUpdates[i].ServiceMode,
 							tenantcapabilitiestestutils.AlteredCapabilitiesString(receivedUpdates[i].TenantCapabilities)))
 					}
 				}
@@ -215,7 +215,7 @@ func TestDataDriven(t *testing.T) {
 				t.Logf("%v: processing upsert", d.Pos)
 				tenID, caps, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
 				require.NoError(t, err)
-				name, serviceMode, dataState, err := tenantcapabilitiestestutils.ParseTenantInfo(t, d)
+				name, dataState, serviceMode, err := tenantcapabilitiestestutils.ParseTenantInfo(t, d)
 				require.NoError(t, err)
 				info := mtinfopb.ProtoInfo{
 					Capabilities: *caps,
@@ -224,11 +224,11 @@ func TestDataDriven(t *testing.T) {
 				require.NoError(t, err)
 				tdb.Exec(
 					t,
-					fmt.Sprintf("UPSERT INTO %s (id, active, info, name, service_mode, data_state) VALUES ($1, $2, $3, $4, $5, $6)", dummyTableName),
+					fmt.Sprintf("UPSERT INTO %s (id, active, info, name, data_state, service_mode) VALUES ($1, $2, $3, $4, $5, $6)", dummyTableName),
 					tenID.ToUint64(),
 					true, /* active */
 					buf,
-					name, serviceMode, dataState,
+					name, dataState, serviceMode,
 				)
 				lastUpdateTS = ts.Clock().Now()
 
@@ -243,11 +243,10 @@ func TestDataDriven(t *testing.T) {
 
 			case "get-capabilities":
 				tID := tenantcapabilitiestestutils.GetTenantID(t, d)
-				cp, found := watcher.GetCapabilities(tID)
+				info, cp, _, found := watcher.GetInfo(tID)
 				if !found {
 					return "not-found"
 				}
-				info, _ := watcher.GetInfo(tID)
 				var buf strings.Builder
 				fmt.Fprintf(&buf, "%+v\n", pretty.Formatter(info))
 				buf.WriteString(tenantcapabilitiestestutils.AlteredCapabilitiesString(cp))
@@ -258,8 +257,8 @@ func TestDataDriven(t *testing.T) {
 				entries := watcher.TestingFlushCapabilitiesState()
 				for _, entry := range entries {
 					output.WriteString(
-						fmt.Sprintf("ten=%v name=%v service=%v state=%v cap=%v\n",
-							entry.TenantID, entry.Name, entry.ServiceMode, entry.DataState,
+						fmt.Sprintf("ten=%v name=%v state=%v service=%v cap=%v\n",
+							entry.TenantID, entry.Name, entry.DataState, entry.ServiceMode,
 							tenantcapabilitiestestutils.AlteredCapabilitiesString(entry.TenantCapabilities)))
 				}
 				return output.String()
