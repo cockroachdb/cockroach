@@ -1202,7 +1202,7 @@ func attachToExistingCluster(
 		}
 		if !opt.skipWipe {
 			if clusterWipe {
-				if err := c.WipeE(ctx, l, c.All()); err != nil {
+				if err := c.WipeE(ctx, l, false /* preserveCerts */, c.All()); err != nil {
 					return nil, err
 				}
 			} else {
@@ -2214,7 +2214,9 @@ func (c *clusterImpl) Signal(
 
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
-func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, nodes ...option.Option) error {
+func (c *clusterImpl) WipeE(
+	ctx context.Context, l *logger.Logger, preserveCerts bool, nodes ...option.Option,
+) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.WipeE")
 	}
@@ -2224,16 +2226,16 @@ func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, nodes ...opti
 	}
 	c.setStatusForClusterOpt("wiping", false, nodes...)
 	defer c.clearStatusForClusterOpt(false)
-	return roachprod.Wipe(ctx, l, c.MakeNodes(nodes...), false /* preserveCerts */)
+	return roachprod.Wipe(ctx, l, c.MakeNodes(nodes...), preserveCerts)
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *clusterImpl) Wipe(ctx context.Context, nodes ...option.Option) {
+func (c *clusterImpl) Wipe(ctx context.Context, preserveCerts bool, nodes ...option.Option) {
 	if ctx.Err() != nil {
 		return
 	}
-	if err := c.WipeE(ctx, c.l, nodes...); err != nil {
+	if err := c.WipeE(ctx, c.l, preserveCerts, nodes...); err != nil {
 		c.t.Fatal(err)
 	}
 }

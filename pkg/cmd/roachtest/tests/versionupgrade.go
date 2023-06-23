@@ -279,7 +279,9 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
 		startOpts.RoachprodOpts.Sequential = false
-		if err := clusterupgrade.StartWithBinary(ctx, t.L(), u.c, nodes, binary, startOpts); err != nil {
+		if err := clusterupgrade.StartWithSettings(
+			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -291,7 +293,9 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
 		startOpts.RoachprodOpts.Sequential = false
-		if err := clusterupgrade.StartWithBinary(ctx, t.L(), u.c, nodes, binary, startOpts); err != nil {
+		if err := clusterupgrade.StartWithSettings(
+			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -362,7 +366,7 @@ func makeVersionFixtureAndFatal(
 			ctx,
 			`select regexp_extract(value, '^v([0-9]+\.[0-9]+\.[0-9]+)') from crdb_internal.node_build_info where field = 'Version';`,
 		).Scan(&makeFixtureVersion))
-		c.Wipe(ctx, c.Node(1))
+		c.Wipe(ctx, false /* preserveCerts */, c.Node(1))
 		useLocalBinary = true
 	}
 

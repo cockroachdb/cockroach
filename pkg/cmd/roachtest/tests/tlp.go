@@ -82,7 +82,7 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return
 		}
 		c.Stop(ctx, t.L(), option.DefaultStopOpts())
-		c.Wipe(ctx)
+		c.Wipe(ctx, false /* preserveCerts */)
 	}
 }
 
