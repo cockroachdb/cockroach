@@ -85,11 +85,9 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [2, 5, 8]
 
 # ------------------------------------------------------------------------------
-# Ensure sequence numbers are only pruned when acquiring unreplicated locks.
-# The interesting case here is when a replicated lock is being acquired and the
-# acquisition struct says a sequence number at which an unreplicated lock is
-# held is considered ignored -- nothing gets pruned in such cases (even though
-# it technically could).
+# Ensure sequence numbers get pruned when acquiring replicated locks, and the
+# the lock acquisition struct says a sequence number at which an unreplicated
+# lock is held is considered ignored.
 # ------------------------------------------------------------------------------
 
 # First, add a waiting writer on this lock so that it counts as contended.
@@ -152,6 +150,28 @@ acquire r=req8 k=a durability=u ignored-seqs=2-5,9
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: repl, unrepl seqs: [11]
+   queued writers:
+    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 3
+
+# ------------------------------------------------------------------------------
+# Ensure acquiring a replicated lock at a higher epoch than the one with which
+# an unreplicated lock is held with clears out the sequence numbers being
+# tracked for the prior epoch. Moreover, the epoch associated with the txn
+# meta should also be updated.
+# ------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=11,1 epoch=1 seq=12
+----
+
+new-request r=req9 txn=txn1 ts=11,1 spans=intent@a
+----
+
+acquire r=req9 k=a durability=r
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, ts: 11.000000000,1, info: repl
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
