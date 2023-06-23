@@ -16,6 +16,7 @@ go_library(
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/cmd/roachtest/test",
         "//pkg/roachpb",
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/util/ctxgroup",
         "//pkg/util/randutil",
