@@ -545,6 +545,7 @@ type DistSender struct {
 	transportFactory   TransportFactory
 	rpcRetryOptions    retry.Options
 	asyncSenderSem     *quotapool.IntPool
+	leaseMonitor       *LeaseMonitor
 
 	// batchInterceptor is set for tenants; when set, information about all
 	// BatchRequests and BatchResponses are passed through this interceptor, which
@@ -622,6 +623,8 @@ type DistSenderConfig struct {
 	FirstRangeProvider FirstRangeProvider
 	RangeDescriptorDB  rangecache.RangeDescriptorDB
 
+	LeaseMonitor *LeaseMonitor
+
 	// Locality is the description of the topography of the server on which the
 	// DistSender is running.
 	Locality roachpb.Locality
@@ -660,6 +663,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		clock:         cfg.Clock,
 		nodeDescs:     cfg.NodeDescs,
 		nodeIDGetter:  nodeIDGetter,
+		leaseMonitor:  cfg.LeaseMonitor,
 		metrics:       makeDistSenderMetrics(),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
@@ -2450,8 +2454,11 @@ func (ds *DistSender) sendToReplicas(
 		comparisonResult := ds.getLocalityComparison(ctx, ds.nodeIDGetter(), ba.Replica.NodeID)
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(comparisonResult, int64(ba.Size()))
 
+		sendCtx, cancelTracking := ds.leaseMonitor.Track(ctx, *desc, ba)
 		tBegin := timeutil.Now() // for slow log message
-		br, err = transport.SendNext(ctx, ba)
+		br, err = transport.SendNext(sendCtx, ba)
+		cancelTracking()
+
 		if dur := timeutil.Since(tBegin); dur > slowDistSenderReplicaThreshold {
 			var s redact.StringBuilder
 			slowReplicaRPCWarningStr(&s, ba, dur, attempts, err, br)

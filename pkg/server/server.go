@@ -447,6 +447,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		retryOpts = base.DefaultRetryOptions()
 	}
 	retryOpts.Closer = stopper.ShouldQuiesce()
+	transportFactory := kvcoord.GRPCTransportFactory(kvNodeDialer)
+	leaseMonitor := kvcoord.NewLeaseMonitor(stopper, clock, transportFactory, g)
 	distSenderCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:         cfg.AmbientCtx,
 		Settings:           st,
@@ -455,8 +457,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		Stopper:            stopper,
 		LatencyFunc:        rpcContext.RemoteClocks.Latency,
 		RPCRetryOptions:    &retryOpts,
-		TransportFactory:   kvcoord.GRPCTransportFactory(kvNodeDialer),
+		TransportFactory:   transportFactory,
 		FirstRangeProvider: g,
+		LeaseMonitor:       leaseMonitor,
 		Locality:           cfg.Locality,
 		TestingKnobs:       clientTestingKnobs,
 		HealthFunc: func(id roachpb.NodeID) bool {
@@ -572,6 +575,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		nodeLivenessFn,
 		/* deterministic */ false,
 	)
+
+	err = leaseMonitor.Start(
+		ctx, nodeLiveness, distSender.RangeDescriptorCache(), distSender.Metrics())
+	if err != nil {
+		return nil, err
+	}
 
 	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
 	kvflowTokenDispatch := kvflowdispatch.New(nodeRegistry, storesForFlowControl, nodeIDContainer)

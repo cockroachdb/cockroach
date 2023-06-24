@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -4662,4 +4663,59 @@ func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
 			}
 		})
 	})
+}
+
+// TestDistSenderReplicaStall tests that the DistSender will detect a stalled
+// replica and redirect read requests when the lease moves elsewhere.
+func TestDistSenderReplicaStall(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// The lease won't move unless we use expiration-based leases.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+			Settings:          st,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Server(0).ApplicationLayer().DB()
+
+	// Create a range and upreplicate it.
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	t.Logf("created %s", desc)
+
+	// Move the lease to n3, and make sure everyone has applied it by
+	// replicating a write.
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+
+	_, err := db.Inc(ctx, key, 1)
+	require.NoError(t, err)
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+	t.Logf("moved lease to n3")
+
+	// Deadlock n3.
+	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	mu := repl3.GetMutex()
+	mu.Lock()
+	defer mu.Unlock()
+	t.Logf("deadlocked n3")
+
+	// Perform a read from n1, which will stall. Eventually, the lease will be
+	// picked up by a different node. The DistSender should detect this and retry
+	// the read there.
+	t.Logf("sending Get request")
+	kv, err := db.Get(ctx, key)
+	require.NoError(t, err)
+	t.Logf("Get returned %s", kv)
 }

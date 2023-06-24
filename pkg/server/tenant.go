@@ -1187,6 +1187,7 @@ func makeTenantSQLServerArgs(
 	}
 	registry.AddMetricStruct(costController.Metrics())
 
+	// TODO: needs to provide LeaseMonitor
 	dsCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:        baseCfg.AmbientCtx,
 		Settings:          st,
