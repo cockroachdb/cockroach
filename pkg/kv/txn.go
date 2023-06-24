@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1196,17 +1195,28 @@ func (txn *Txn) NegotiateAndSend(
 		return nil, pErr
 	}
 
-	// The read spans ranges, so bounded-staleness orchestration will need to be
-	// performed in two distinct phases - negotiation and execution. First we'll
-	// use the BoundedStalenessNegotiator to determines the timestamp to perform
-	// the read at and fix the transaction's timestamp to this result. Then we'll
-	// issue the request through the transaction, which will use the negotiated
-	// read timestamp from the previous phase to execute the read.
+	// The read spans ranges, so bounded-staleness orchestration will need to
+	// be performed in two distinct phases - negotiation and execution.
 	//
-	// TODO(nvanbenschoten): implement this. #67554.
+	// First we'll use the BoundedStalenessNegotiator to determine the
+	// timestamp to perform the read at and fix the transaction's timestamp to
+	// this result.
+	negotiatedTimestamp, pErr := txn.db.Negotiator().LocalResolvedTimestamp(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
+	}
 
-	return nil, kvpb.NewError(unimplemented.NewWithIssue(67554,
-		"cross-range bounded staleness reads not yet implemented"))
+	// Then we'll issue the request through the transaction, which will use the
+	// negotiated read timestamp from the previous phase to execute the read.
+	if err := txn.SetFixedTimestamp(ctx, negotiatedTimestamp); err != nil {
+		return nil, kvpb.NewError(err)
+	}
+	ba.BoundedStaleness = nil
+	br, pErr = txn.Send(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
+	}
+	return br, nil
 }
 
 // checks preconditions on BatchRequest and Txn for NegotiateAndSend.

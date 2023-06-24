@@ -4,6 +4,7 @@ go_library(
     name = "kv",
     srcs = [
         "batch.go",
+        "bounded_staleness_negotiator.go",
         "db.go",
         "doc.go",
         "mock_transactional_sender.go",
@@ -30,7 +31,6 @@ go_library(
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/duration",
-        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
@@ -82,7 +82,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/kvclientutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",

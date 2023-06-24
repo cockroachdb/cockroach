@@ -550,9 +550,30 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 		ts10 := hlc.Timestamp{WallTime: 10}
 		ts20 := hlc.Timestamp{WallTime: 20}
 		clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 1)))
-		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
+		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(func(
+			_ context.Context, txn *roachpb.Transaction, ba *kvpb.BatchRequest,
+		) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Nil(t, ba.BoundedStaleness)
+			br := ba.CreateReply()
+			br.Timestamp = txn.ReadTimestamp
+			return br, nil
+		}, func(
 			_ context.Context, ba *kvpb.BatchRequest,
 		) (*kvpb.BatchResponse, *kvpb.Error) {
+			br := ba.CreateReply()
+			isQueryResolvedTimestampRequest := false
+			for _, resp := range br.Responses {
+				switch r := resp.GetInner().(type) {
+				case *kvpb.QueryResolvedTimestampResponse:
+					isQueryResolvedTimestampRequest = true
+					r.ResolvedTS = ts20
+				}
+			}
+
+			if isQueryResolvedTimestampRequest {
+				return br, nil
+			}
+
 			require.NotNil(t, ba.BoundedStaleness)
 			require.Equal(t, ts10, ba.BoundedStaleness.MinTimestampBound)
 			require.False(t, ba.BoundedStaleness.MinTimestampBoundStrict)
@@ -561,7 +582,7 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 			if !fastPath {
 				return nil, kvpb.NewError(&kvpb.OpRequiresTxnError{})
 			}
-			br := ba.CreateReply()
+
 			br.Timestamp = ts20
 			return br, nil
 		})
@@ -576,18 +597,11 @@ func TestTxnNegotiateAndSend(t *testing.T) {
 		ba.Add(kvpb.NewGet(roachpb.Key("a"), false))
 		br, pErr := txn.NegotiateAndSend(ctx, ba)
 
-		if fastPath {
-			require.Nil(t, pErr)
-			require.NotNil(t, br)
-			require.Equal(t, ts20, br.Timestamp)
-			require.True(t, txn.CommitTimestampFixed())
-			require.Equal(t, ts20, txn.CommitTimestamp())
-		} else {
-			require.Nil(t, br)
-			require.NotNil(t, pErr)
-			require.Regexp(t, "unimplemented: cross-range bounded staleness reads not yet implemented", pErr)
-			require.False(t, txn.CommitTimestampFixed())
-		}
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Equal(t, ts20, br.Timestamp)
+		require.True(t, txn.CommitTimestampFixed())
+		require.Equal(t, ts20, txn.CommitTimestamp())
 	})
 }
 
@@ -660,17 +674,41 @@ func TestTxnNegotiateAndSendWithDeadline(t *testing.T) {
 			expErr:      "max_timestamp_bound, if set, must be greater than min_timestamp_bound",
 		},
 	} {
-		t.Run(test.name, func(t *testing.T) {
+		testutils.RunTrueAndFalse(t, "fast-path", func(t *testing.T, fastPath bool) {
 			clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 1)))
-			txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
+			txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(func(
+				_ context.Context, txn *roachpb.Transaction, ba *kvpb.BatchRequest,
+			) (*kvpb.BatchResponse, *kvpb.Error) {
+				require.Nil(t, ba.BoundedStaleness)
+				br := ba.CreateReply()
+				br.Timestamp = txn.ReadTimestamp
+				return br, nil
+			}, func(
 				_ context.Context, ba *kvpb.BatchRequest,
 			) (*kvpb.BatchResponse, *kvpb.Error) {
+				br := ba.CreateReply()
+				isQueryResolvedTimestampRequest := false
+				for _, resp := range br.Responses {
+					switch r := resp.GetInner().(type) {
+					case *kvpb.QueryResolvedTimestampResponse:
+						isQueryResolvedTimestampRequest = true
+						r.ResolvedTS = minTSBound
+					}
+				}
+
+				if isQueryResolvedTimestampRequest {
+					return br, nil
+				}
+
 				require.NotNil(t, ba.BoundedStaleness)
 				require.Equal(t, minTSBound, ba.BoundedStaleness.MinTimestampBound)
 				require.False(t, ba.BoundedStaleness.MinTimestampBoundStrict)
 				require.Equal(t, test.expMaxTS, ba.BoundedStaleness.MaxTimestampBound)
 
-				br := ba.CreateReply()
+				if !fastPath {
+					return nil, kvpb.NewError(&kvpb.OpRequiresTxnError{})
+				}
+
 				br.Timestamp = minTSBound
 				return br, nil
 			})
@@ -719,9 +757,41 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 		ts10 := hlc.Timestamp{WallTime: 10}
 		ts20 := hlc.Timestamp{WallTime: 20}
 		clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 1)))
-		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(nil /* senderFunc */, func(
+
+		txnSender := MakeMockTxnSenderFactoryWithNonTxnSender(func(
+			_ context.Context, txn *roachpb.Transaction, ba *kvpb.BatchRequest,
+		) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Nil(t, ba.BoundedStaleness)
+			br := ba.CreateReply()
+			br.Timestamp = txn.ReadTimestamp
+			scanResp := br.Responses[0].GetScan()
+			scanResp.Rows = []roachpb.KeyValue{
+				{Key: roachpb.Key("a")},
+				{Key: roachpb.Key("b")},
+			}
+			scanResp.ResumeSpan = &roachpb.Span{
+				Key:    roachpb.Key("c"),
+				EndKey: roachpb.Key("d"),
+			}
+			scanResp.ResumeReason = kvpb.RESUME_KEY_LIMIT
+			return br, nil
+		}, func(
 			_ context.Context, ba *kvpb.BatchRequest,
 		) (*kvpb.BatchResponse, *kvpb.Error) {
+			br := ba.CreateReply()
+			isQueryResolvedTimestampRequest := false
+			for _, resp := range br.Responses {
+				switch r := resp.GetInner().(type) {
+				case *kvpb.QueryResolvedTimestampResponse:
+					isQueryResolvedTimestampRequest = true
+					r.ResolvedTS = ts20
+				}
+			}
+
+			if isQueryResolvedTimestampRequest {
+				return br, nil
+			}
+
 			require.NotNil(t, ba.BoundedStaleness)
 			require.Equal(t, ts10, ba.BoundedStaleness.MinTimestampBound)
 			require.False(t, ba.BoundedStaleness.MinTimestampBoundStrict)
@@ -731,7 +801,6 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 			if !fastPath {
 				return nil, kvpb.NewError(&kvpb.OpRequiresTxnError{})
 			}
-			br := ba.CreateReply()
 			br.Timestamp = ts20
 			scanResp := br.Responses[0].GetScan()
 			scanResp.Rows = []roachpb.KeyValue{
@@ -757,27 +826,20 @@ func TestTxnNegotiateAndSendWithResumeSpan(t *testing.T) {
 		ba.Add(kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false /* forUpdate */))
 		br, pErr := txn.NegotiateAndSend(ctx, ba)
 
-		if fastPath {
-			require.Nil(t, pErr)
-			require.NotNil(t, br)
-			// The negotiated timestamp should be returned and fixed.
-			require.Equal(t, ts20, br.Timestamp)
-			require.True(t, txn.CommitTimestampFixed())
-			require.Equal(t, ts20, txn.CommitTimestamp())
-			// Even though the response is paginated and carries a resume span.
-			require.Len(t, br.Responses, 1)
-			scanResp := br.Responses[0].GetScan()
-			require.Len(t, scanResp.Rows, 2)
-			require.NotNil(t, scanResp.ResumeSpan)
-			require.Equal(t, roachpb.Key("c"), scanResp.ResumeSpan.Key)
-			require.Equal(t, roachpb.Key("d"), scanResp.ResumeSpan.EndKey)
-			require.Equal(t, kvpb.RESUME_KEY_LIMIT, scanResp.ResumeReason)
-		} else {
-			require.Nil(t, br)
-			require.NotNil(t, pErr)
-			require.Regexp(t, "unimplemented: cross-range bounded staleness reads not yet implemented", pErr)
-			require.False(t, txn.CommitTimestampFixed())
-		}
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		// The negotiated timestamp should be returned and fixed.
+		require.Equal(t, ts20, br.Timestamp)
+		require.True(t, txn.CommitTimestampFixed())
+		require.Equal(t, ts20, txn.CommitTimestamp())
+		// Even though the response is paginated and carries a resume span.
+		require.Len(t, br.Responses, 1)
+		scanResp := br.Responses[0].GetScan()
+		require.Len(t, scanResp.Rows, 2)
+		require.NotNil(t, scanResp.ResumeSpan)
+		require.Equal(t, roachpb.Key("c"), scanResp.ResumeSpan.Key)
+		require.Equal(t, roachpb.Key("d"), scanResp.ResumeSpan.EndKey)
+		require.Equal(t, kvpb.RESUME_KEY_LIMIT, scanResp.ResumeReason)
 	})
 }
 

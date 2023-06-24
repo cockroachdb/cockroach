@@ -22,6 +22,12 @@ import (
 // OnlyFollowerReads looks through all the RPCs and asserts that every single
 // one resulted in a follower read. Returns false if no RPCs are found.
 func OnlyFollowerReads(rec tracingpb.Recording) bool {
+	return OnlyFollowerReadsOrAllowedRequestType(rec, "")
+}
+
+func OnlyFollowerReadsOrAllowedRequestType(
+	rec tracingpb.Recording, allowedRequestType string,
+) bool {
 	foundFollowerRead := false
 	for _, sp := range rec {
 		if sp.Operation != "/cockroach.roachpb.Internal/Batch" {
@@ -39,6 +45,8 @@ func OnlyFollowerReads(rec tracingpb.Recording) bool {
 			continue
 		}
 		if tracing.LogsContainMsg(sp, kvbase.FollowerReadServingMsg) {
+			foundFollowerRead = true
+		} else if val, ok := anonTagGroup.FindTag("request"); allowedRequestType != "" && ok && strings.Contains(val, allowedRequestType) {
 			foundFollowerRead = true
 		} else {
 			return false
