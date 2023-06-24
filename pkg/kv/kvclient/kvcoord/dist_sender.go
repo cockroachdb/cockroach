@@ -2404,7 +2404,14 @@ func (ds *DistSender) sendToReplicas(
 		comparisonResult := ds.getLocalityComparison(ctx, ds.nodeIDGetter(), ba.Replica.NodeID)
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(comparisonResult, int64(ba.Size()))
 
-		br, err = transport.SendNext(ctx, ba)
+		sendCtx, cancelSend := context.WithCancel(ctx)
+		cancelProbe := ds.probeNewLeaseHolder(curReplica, desc, func(context.Context, roachpb.Lease) {
+			// We could update the cache with the new lease, but for now just cancel
+			// the request -- we'll find the new leaseholder soon enough.
+			cancelSend()
+		})
+		br, err = transport.SendNext(sendCtx, ba)
+		cancelProbe()
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchResponse(comparisonResult, int64(br.Size()))
 		ds.maybeIncrementErrCounters(br, err)
 
@@ -2654,6 +2661,100 @@ func (ds *DistSender) sendToReplicas(
 			log.Eventf(ctx, "%v", err)
 			return nil, err
 		}
+	}
+}
+
+// probeNewLeaseHolder will, after some time, asynchronously scan the range
+// replicas looking for a new leaseholder. When a different leaseholder is
+// found, it calls the given onNewLease() function. Returns a function that
+// cancels the probe.
+func (ds *DistSender) probeNewLeaseHolder(
+	replica roachpb.ReplicaDescriptor,
+	desc *roachpb.RangeDescriptor,
+	onNewLease func(context.Context, roachpb.Lease),
+) func() {
+
+	// findLease scans the replicas for a valid lease.
+	findLease := func(ctx context.Context) (roachpb.Lease, bool, error) {
+		replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, &replica, AllExtantReplicas)
+		if err != nil {
+			return roachpb.Lease{}, false, err
+		}
+		opts := SendOptions{
+			class:   rpc.SystemClass,
+			metrics: &ds.metrics,
+		}
+		transport, err := ds.transportFactory(opts, replicas)
+		if err != nil {
+			return roachpb.Lease{}, false, err
+		}
+		defer transport.Release()
+
+		if !transport.MoveToFront(replica) {
+			return roachpb.Lease{}, false, errors.Errorf("couldn't move replica %s to front", replica)
+		}
+		for !transport.IsExhausted() {
+			var ba kvpb.BatchRequest
+			ba.Replica = transport.NextReplica()
+			ba.RangeID = desc.RangeID
+			ba.Add(&kvpb.LeaseInfoRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key: desc.StartKey.AsRawKey(),
+				},
+			})
+			log.Infof(ctx, "XXX probing lease on %s", ba.Replica)
+			sendCtx, cancel := context.WithTimeout(ctx, time.Second)
+			br, err := transport.SendNext(sendCtx, &ba)
+			cancel()
+			if ctx.Err() != nil {
+				return roachpb.Lease{}, false, nil
+			}
+			if err == nil && br.Error != nil {
+				err = br.Error.GoError()
+			}
+			if err != nil {
+				log.Errorf(ctx, "XXX failed to probe lease on %s: %s", ba.Replica, err)
+				continue
+			}
+			resp := br.Responses[0].GetLeaseInfo()
+			lease := resp.Lease
+			if resp.CurrentLease != nil {
+				lease = *resp.CurrentLease
+			}
+			return lease, true, nil
+		}
+		return roachpb.Lease{}, false, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// After the request has run for a while without a response, start probing for
+	// a new leaseholder. We'd typically use the lease expiration time here.
+	timer := time.AfterFunc(time.Second, func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if lease, ok, err := findLease(ctx); err != nil {
+					log.Errorf(ctx, "XXX failed to find lease: %s", err)
+				} else if !ok {
+					log.Errorf(ctx, "XXX no lease found")
+				} else if lease.Replica.ReplicaID == replica.ReplicaID {
+					log.Infof(ctx, "XXX %s still leaseholder", replica)
+				} else {
+					log.Infof(ctx, "XXX found new lease held by %s", lease.Replica)
+					onNewLease(ctx, lease)
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+	return func() {
+		timer.Stop()
+		cancel()
 	}
 }
 

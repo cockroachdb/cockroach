@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -4662,4 +4663,56 @@ func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestDistSenderReplicaStall(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Server(0).ApplicationLayer().DB()
+
+	// Create a range, upreplicate it, and replicate a write.
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	rangeID := desc.RangeID
+	t.Logf("rangeID=%d", rangeID)
+
+	_, err := db.Inc(ctx, key, 1)
+	require.NoError(t, err)
+	tc.WaitForValues(t, key, []int64{1, 1, 1})
+
+	repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(rangeID)
+	require.NoError(t, err)
+
+	// Move the lease to n3, and make sure everyone has applied it.
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+	_, err = db.Inc(ctx, key, 1)
+	require.NoError(t, err)
+	tc.WaitForValues(t, key, []int64{2, 2, 2})
+	t.Logf("n3 has lease")
+
+	// Deadlock n3, and perform a read from n1.
+	mu := repl3.GetMutex()
+	mu.Lock()
+	defer mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	t.Logf("sending Get request")
+	kv, err := db.Get(ctx, key)
+	require.NoError(t, err)
+	t.Logf("result=%s", kv)
 }
