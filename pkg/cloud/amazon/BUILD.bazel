@@ -46,11 +46,12 @@ go_library(
 
 go_test(
     name = "amazon_test",
+    size = "small",
     srcs = [
         "aws_kms_test.go",
         "s3_storage_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=55s"],
     embed = [":amazon"],
     deps = [
         "//pkg/base",
@@ -63,8 +64,10 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
+        "@com_github_aws_aws_sdk_go//aws/awserr",
         "@com_github_aws_aws_sdk_go//aws/credentials",
         "@com_github_aws_aws_sdk_go//aws/session",
+        "@com_github_aws_aws_sdk_go//service/s3",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
