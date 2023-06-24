@@ -408,7 +408,7 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 		et = et.ShallowCopy().(*kvpb.EndTxnRequest)
 		et.LockSpans, _ = mergeIntoSpans(et.LockSpans, et.InFlightWrites)
 		et.InFlightWrites = nil
-		baSuffix.Requests[0].Value.(*kvpb.RequestUnion_EndTxn).EndTxn = et
+		baSuffix.Requests[0].MustSetInner(et)
 	}
 	brSuffix, pErr := sr.SendLocked(ctx, baSuffix)
 	if pErr != nil {
