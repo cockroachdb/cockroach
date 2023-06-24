@@ -201,6 +201,10 @@ type instrumentationHelper struct {
 
 	// indexesUsed list the indexes used in the query with format tableID@indexID.
 	indexesUsed []string
+
+	// schemachangerMode indicates which schema changer mode was used to execute
+	// the query.
+	schemaChangerMode schemaChangerMode
 }
 
 // outputMode indicates how the statement output needs to be populated (for

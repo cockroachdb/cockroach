@@ -195,3 +195,11 @@ func SetTableStorageParameter(param string) telemetry.Counter {
 func ResetTableStorageParameter(param string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.table_storage_parameter." + param + ".reset")
 }
+
+// DeclarativeSchemaChangerCounter is incremented whenever the declarative
+// schema changer is used.
+var DeclarativeSchemaChangerCounter = telemetry.GetCounterOnce("sql.schema.schema_changer_mode.declarative")
+
+// LegacySchemaChangerCounter is incremented whenever the legacy schema changer
+// is used.
+var LegacySchemaChangerCounter = telemetry.GetCounterOnce("sql.schema.schema_changer_mode.legacy")

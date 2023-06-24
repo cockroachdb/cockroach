@@ -1088,7 +1088,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'alter_database_drop_region'
 ----
-1  {"DatabaseName": "drop_region_db", "EventType": "alter_database_drop_region", "RegionName": "\"us-east-1\"", "Statement": "ALTER DATABASE drop_region_db DROP REGION IF EXISTS \"us-east-1\"", "Tag": "ALTER DATABASE DROP REGION", "User": "root"}
+1  {"DatabaseName": "drop_region_db", "EventType": "alter_database_drop_region", "RegionName": "\"us-east-1\"", "Statement": "ALTER DATABASE drop_region_db DROP REGION IF EXISTS \"us-east-1\"", "Tag": "ALTER DATABASE", "User": "root"}
 
 query T noticetrace
 ALTER DATABASE drop_region_db DROP REGION IF EXISTS "us-east-1"

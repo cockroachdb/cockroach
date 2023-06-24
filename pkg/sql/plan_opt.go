@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -683,6 +685,15 @@ func (opc *optPlanningCtx) runExecBuilder(
 	planTop.flags = opc.flags
 	if bld.IsDDL {
 		planTop.flags.Set(planFlagIsDDL)
+
+		// The declarative schema changer mode would have already been set here,
+		// since all declarative schema changes are built opaquely. However, some
+		// DDLs (e.g. CREATE TABLE) are built non-opaquely, so we need to set the
+		// mode here if it wasn't already set.
+		if planTop.instrumentation.schemaChangerMode == schemaChangerModeNone {
+			telemetry.Inc(sqltelemetry.LegacySchemaChangerCounter)
+			planTop.instrumentation.schemaChangerMode = schemaChangerModeLegacy
+		}
 	}
 	if bld.ContainsFullTableScan {
 		planTop.flags.Set(planFlagContainsFullTableScan)
