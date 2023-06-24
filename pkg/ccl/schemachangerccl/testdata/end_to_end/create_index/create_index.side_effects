@@ -13,6 +13,7 @@ CREATE INDEX id1
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
+increment telemetry for sql.schema.create_index
 write *eventpb.CreateIndex to event log:
   indexName: id1
   mutationId: 1

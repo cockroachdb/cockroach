@@ -11,6 +11,7 @@ CREATE UNIQUE INDEX idx ON t(b);
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE FUNCTION
+increment telemetry for sql.schema.create_function
 write *eventpb.CreateFunction to event log:
   functionName: defaultdb.public.t
   sql:
@@ -68,6 +69,7 @@ upsert descriptor #101
   -  version: "1"
   +  version: "2"
 checking for feature: CREATE INDEX
+increment telemetry for sql.schema.create_index
 write *eventpb.CreateIndex to event log:
   indexName: idx
   mutationId: 1

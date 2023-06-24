@@ -148,6 +148,10 @@ type TreeAnnotator interface {
 // Telemetry allows incrementing schema change telemetry counters.
 type Telemetry interface {
 
+	// IncrementSchemaChangeCreateCounter increments the selected CREATE telemetry
+	// counter.
+	IncrementSchemaChangeCreateCounter(counterType string)
+
 	// IncrementSchemaChangeAlterCounter increments the selected ALTER telemetry
 	// counter.
 	IncrementSchemaChangeAlterCounter(counterType string, extra ...string)

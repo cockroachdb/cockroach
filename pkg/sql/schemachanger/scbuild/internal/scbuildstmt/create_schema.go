@@ -40,6 +40,7 @@ func CreateSchema(b BuildCtx, n *tree.CreateSchema) {
 		}
 	}
 
+	b.IncrementSchemaChangeCreateCounter("schema")
 	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaCreate)
 	dbElts := b.ResolveDatabase(n.Schema.CatalogName, ResolveParams{
 		IsExistenceOptional: false,
