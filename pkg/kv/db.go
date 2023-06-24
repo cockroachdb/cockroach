@@ -265,6 +265,10 @@ type DB struct {
 	// SQL code that all uses kv.DB.
 	// TODO(sumeer): find a home for this in the SQL layer.
 	SQLKVResponseAdmissionQ *admission.WorkQueue
+
+	// bsn is the negotiator that determines the local resolved timestamp for
+	// cross-range bounded staleness reads.
+	bsn BoundedStalenessNegotiatorWithoutCaching
 }
 
 // NonTransactionalSender returns a Sender that can be used for sending
@@ -297,6 +301,11 @@ func (db *DB) NewBatch() *Batch {
 	return &Batch{}
 }
 
+// Negotiator provides access to the DB's BoundedStalenessNegotiator.
+func (db *DB) Negotiator() BoundedStalenessNegotiator {
+	return db.bsn
+}
+
 // NewDB returns a new DB.
 func NewDB(
 	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, stopper *stop.Stopper,
@@ -319,8 +328,10 @@ func NewDBWithContext(
 		crs: CrossRangeTxnWrapperSender{
 			wrapped: factory.NonTransactionalSender(),
 		},
+		bsn: BoundedStalenessNegotiatorWithoutCaching{},
 	}
 	db.crs.db = db
+	db.bsn.db = db
 	return db
 }
 
@@ -1016,6 +1027,95 @@ func (db *DB) sendUsingSender(
 		return nil, pErr
 	}
 	return br, nil
+}
+
+// BoundedStalenessNegotiateResolvedTimestamp determines the local resolved
+// timestamp for the specified spans. If the local resolved timestamp is less
+// than the minimum timestamp bound, then a MinTimestampBoundUnsatisfiableError
+// is returned if the minimum timestamp bound is strict or the minimum
+// timestamp bound is returned if not strict. If the local resolved timestamp
+// is greater than the maximum timestamp bound, then the maximum timestamp
+// bound is returned.
+func BoundedStalenessNegotiateResolvedTimestamp(
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	sendFunc func(ctx context.Context, ba *kvpb.BatchRequest) (br *kvpb.BatchResponse, pErr *kvpb.Error),
+) (hlc.Timestamp, *kvpb.Error) {
+	cfg := ba.BoundedStaleness
+	if cfg.MinTimestampBound.IsEmpty() {
+		return hlc.Timestamp{}, kvpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound must be set in batch"))
+	}
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(cfg.MinTimestampBound) {
+		return hlc.Timestamp{}, kvpb.NewError(errors.AssertionFailedf(
+			"MaxTimestampBound, if set in batch, must be greater than MinTimestampBound"))
+	}
+	if !ba.Timestamp.IsEmpty() {
+		return hlc.Timestamp{}, kvpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound and Timestamp cannot both be set in batch"))
+	}
+	if ba.Txn != nil {
+		return hlc.Timestamp{}, kvpb.NewError(errors.AssertionFailedf(
+			"MinTimestampBound and Txn cannot both be set in batch"))
+	}
+
+	// Use one or more QueryResolvedTimestampRequests to compute a resolved
+	// timestamp over the read spans on the local replica.
+	queryResBa := &kvpb.BatchRequest{}
+	queryResBa.RangeID = ba.RangeID
+	queryResBa.Replica = ba.Replica
+	queryResBa.ClientRangeInfo = ba.ClientRangeInfo
+	queryResBa.ReadConsistency = kvpb.INCONSISTENT
+	for _, ru := range ba.Requests {
+		span := ru.GetInner().Header().Span()
+		if len(span.EndKey) == 0 {
+			// QueryResolvedTimestamp is a ranged operation.
+			span.EndKey = span.Key.Next()
+		}
+		queryResBa.Add(&kvpb.QueryResolvedTimestampRequest{
+			RequestHeader: kvpb.RequestHeaderFromSpan(span),
+		})
+	}
+
+	br, pErr := sendFunc(ctx, queryResBa)
+	if pErr != nil {
+		return hlc.Timestamp{}, pErr
+	}
+
+	// Merge the resolved timestamps together and verify that the bounded
+	// staleness read can be satisfied by the local replica, according to
+	// its minimum timestamp bound.
+	var resTS hlc.Timestamp
+	for _, ru := range br.Responses {
+		ts := ru.GetQueryResolvedTimestamp().ResolvedTS
+		if resTS.IsEmpty() {
+			resTS = ts
+		} else {
+			resTS.Backward(ts)
+		}
+	}
+	if resTS.Less(cfg.MinTimestampBound) {
+		// The local resolved timestamp was below the request's minimum timestamp
+		// bound. If the minimum timestamp bound should be strictly obeyed, reject
+		// the batch. Otherwise, consider the minimum timestamp bound to be the
+		// request timestamp and let the request proceed. On follower replicas, this
+		// may result in the request being redirected (with a NotLeaseholderError)
+		// to the current leaseholder. On the leaseholder, this may result in the
+		// request blocking on conflicting transactions.
+		if cfg.MinTimestampBoundStrict {
+			return hlc.Timestamp{}, kvpb.NewError(kvpb.NewMinTimestampBoundUnsatisfiableError(
+				cfg.MinTimestampBound, resTS,
+			))
+		}
+		resTS = cfg.MinTimestampBound
+	}
+	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(resTS) {
+		// The local resolved timestamp was above the request's maximum timestamp
+		// bound. Drop the request timestamp to the maximum timestamp bound.
+		resTS = cfg.MaxTimestampBound.Prev()
+	}
+
+	return resTS, nil
 }
 
 // getOneErr returns the error for a single-request Batch that was run.

@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -410,80 +410,10 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 	if ba.BoundedStaleness == nil {
 		log.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
 	}
-	cfg := ba.BoundedStaleness
-	if cfg.MinTimestampBound.IsEmpty() {
-		return ba, kvpb.NewError(errors.AssertionFailedf(
-			"MinTimestampBound must be set in batch"))
-	}
-	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(cfg.MinTimestampBound) {
-		return ba, kvpb.NewError(errors.AssertionFailedf(
-			"MaxTimestampBound, if set in batch, must be greater than MinTimestampBound"))
-	}
-	if !ba.Timestamp.IsEmpty() {
-		return ba, kvpb.NewError(errors.AssertionFailedf(
-			"MinTimestampBound and Timestamp cannot both be set in batch"))
-	}
-	if ba.Txn != nil {
-		return ba, kvpb.NewError(errors.AssertionFailedf(
-			"MinTimestampBound and Txn cannot both be set in batch"))
-	}
-
-	// Use one or more QueryResolvedTimestampRequests to compute a resolved
-	// timestamp over the read spans on the local replica.
-	queryResBa := &kvpb.BatchRequest{}
-	queryResBa.RangeID = ba.RangeID
-	queryResBa.Replica = ba.Replica
-	queryResBa.ClientRangeInfo = ba.ClientRangeInfo
-	queryResBa.ReadConsistency = kvpb.INCONSISTENT
-	for _, ru := range ba.Requests {
-		span := ru.GetInner().Header().Span()
-		if len(span.EndKey) == 0 {
-			// QueryResolvedTimestamp is a ranged operation.
-			span.EndKey = span.Key.Next()
-		}
-		queryResBa.Add(&kvpb.QueryResolvedTimestampRequest{
-			RequestHeader: kvpb.RequestHeaderFromSpan(span),
-		})
-	}
-
-	br, pErr := s.Send(ctx, queryResBa)
+	resTS, pErr := kv.BoundedStalenessNegotiateResolvedTimestamp(ctx, ba, s.Send)
 	if pErr != nil {
 		return ba, pErr
 	}
-
-	// Merge the resolved timestamps together and verify that the bounded
-	// staleness read can be satisfied by the local replica, according to
-	// its minimum timestamp bound.
-	var resTS hlc.Timestamp
-	for _, ru := range br.Responses {
-		ts := ru.GetQueryResolvedTimestamp().ResolvedTS
-		if resTS.IsEmpty() {
-			resTS = ts
-		} else {
-			resTS.Backward(ts)
-		}
-	}
-	if resTS.Less(cfg.MinTimestampBound) {
-		// The local resolved timestamp was below the request's minimum timestamp
-		// bound. If the minimum timestamp bound should be strictly obeyed, reject
-		// the batch. Otherwise, consider the minimum timestamp bound to be the
-		// request timestamp and let the request proceed. On follower replicas, this
-		// may result in the request being redirected (with a NotLeaseholderError)
-		// to the current leaseholder. On the leaseholder, this may result in the
-		// request blocking on conflicting transactions.
-		if cfg.MinTimestampBoundStrict {
-			return ba, kvpb.NewError(kvpb.NewMinTimestampBoundUnsatisfiableError(
-				cfg.MinTimestampBound, resTS,
-			))
-		}
-		resTS = cfg.MinTimestampBound
-	}
-	if !cfg.MaxTimestampBound.IsEmpty() && cfg.MaxTimestampBound.LessEq(resTS) {
-		// The local resolved timestamp was above the request's maximum timestamp
-		// bound. Drop the request timestamp to the maximum timestamp bound.
-		resTS = cfg.MaxTimestampBound.Prev()
-	}
-
 	ba = ba.ShallowCopy()
 	ba.Timestamp = resTS
 	ba.BoundedStaleness = nil
