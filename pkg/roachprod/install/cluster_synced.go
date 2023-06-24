@@ -1524,8 +1524,19 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	ctx context.Context, l *logger.Logger, path string,
 ) (bool, error) {
 	l.Printf("%s: checking %s", c.Name, path)
-	result, err := c.runCmdOnSingleNode(ctx, l, c.Nodes[0], `$(test -e `+path+`); echo $?`, false, l.Stdout, l.Stderr)
-	return result.Stdout == "0", err
+	testCmd := `$(test -e ` + path + `);`
+	// Do not log output to stdout/stderr because in some cases this call will be expected to exit 1.
+	result, err := c.runCmdOnSingleNode(ctx, l, c.Nodes[0], testCmd, true, nil, nil)
+	if (result.RemoteExitStatus != 0 && result.RemoteExitStatus != 1) || err != nil {
+		// Unexpected exit status (neither 0 nor 1) or non-nil error. Return combined output along with err returned
+		// from the call if it's not nil.
+		if err != nil {
+			return false, errors.Wrapf(err, "running '%s' failed with exit code=%d: got %s", testCmd, result.RemoteExitStatus, string(result.CombinedOut))
+		} else {
+			return false, errors.Newf("running '%s' failed with exit code=%d: got %s", testCmd, result.RemoteExitStatus, string(result.CombinedOut))
+		}
+	}
+	return result.RemoteExitStatus == 0, nil
 }
 
 // createNodeCertArguments returns a list of strings appropriate for use as
