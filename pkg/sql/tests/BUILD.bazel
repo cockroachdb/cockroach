@@ -20,6 +20,8 @@ go_library(
         "//pkg/roachpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlstats",
+        "//pkg/storage",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/storageutils",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
