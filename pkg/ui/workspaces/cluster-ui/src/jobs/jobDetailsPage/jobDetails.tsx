@@ -43,6 +43,12 @@ import { RequestState } from "../../api";
 import moment from "moment-timezone";
 import { CockroachCloudContext } from "src/contexts";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import { BundleView } from "./bundleView";
+import {
+  GetJobProfilerBundleResponse,
+  InsertJobProfilerBundleRequest,
+  JobProfilerBundle,
+} from "src/api/jobProfilerBundleApi";
 
 const { TabPane } = Tabs;
 
@@ -56,10 +62,19 @@ enum TabKeysEnum {
 
 export interface JobDetailsStateProps {
   jobRequest: RequestState<JobResponse>;
+  bundles: JobProfilerBundle[];
+  downloadBundle: (
+    jobID: string,
+    bundleID: string,
+  ) => Promise<GetJobProfilerBundleResponse>;
 }
 
 export interface JobDetailsDispatchProps {
   refreshJob: (req: JobRequest) => void;
+  refreshJobProfilerBundles: () => void;
+  onCollectJobProfilerBundle: (
+    insertJobProfilerBundleRequest: InsertJobProfilerBundleRequest,
+  ) => void;
 }
 
 export interface JobDetailsState {
@@ -101,6 +116,7 @@ export class JobDetails extends React.Component<
     if (!this.props.jobRequest.data) {
       this.refresh();
     }
+    this.props.refreshJobProfilerBundles();
     // Refresh every 10s.
     this.refreshDataInterval = setInterval(() => this.refresh(), 10 * 1000);
   }
@@ -113,29 +129,53 @@ export class JobDetails extends React.Component<
 
   prevPage = (): void => this.props.history.goBack();
 
+  renderBundleContent = (
+    job: cockroach.server.serverpb.JobResponse,
+  ): React.ReactElement => {
+    return (
+      <BundleView
+        jobID={job?.id.toString(10)}
+        bundles={this.props.bundles}
+        downloadBundle={this.props.downloadBundle}
+        onCollectJobProfilerBundle={this.props.onCollectJobProfilerBundle}
+      />
+    );
+  };
+
   renderProfilerTabContent = (
     job: cockroach.server.serverpb.JobResponse,
   ): React.ReactElement => {
     const id = job?.id;
+    const summaryCardStylesCx = classNames.bind(summaryCardStyles);
     // This URL results in a cluster-wide CPU profile to be collected for 5
     // seconds. We set `tagfocus` (tf) to only view the samples corresponding to
     // this job's execution.
     const url = `debug/pprof/ui/cpu?node=all&seconds=5&labels=true&tf=job.*${id}`;
     return (
-      <Row gutter={24}>
-        <Col className="gutter-row" span={24}>
-          <SummaryCard className={cardCx("summary-card")}>
-            <SummaryCardItem
-              label="Cluster-wide CPU Profile"
-              value={<a href={url}>Profile</a>}
-            />
-            <InlineAlert
-              intent="warning"
-              title="This operation buffers profiles in memory for all the nodes in the cluster and can result in increased memory usage."
-            />
-          </SummaryCard>
-        </Col>
-      </Row>
+      <>
+        <Row gutter={24}>
+          <Col className="gutter-row" span={24}>
+            <SummaryCard className={cardCx("summary-card")}>
+              <SummaryCardItem
+                label="Cluster-wide CPU Profile"
+                value={<a href={url}>Profile</a>}
+              />
+              <InlineAlert
+                intent="warning"
+                title="This operation buffers profiles in memory for all the nodes in the cluster and can result in increased memory usage."
+              />
+            </SummaryCard>
+          </Col>
+        </Row>
+        <>
+          <p className={summaryCardStylesCx("summary--card__divider--large")} />
+          <Row gutter={24}>
+            <Col className="gutter-row" span={24}>
+              {this.renderBundleContent(job)}
+            </Col>
+          </Row>
+        </>
+      </>
     );
   };
 

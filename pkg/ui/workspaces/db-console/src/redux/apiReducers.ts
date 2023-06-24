@@ -378,6 +378,16 @@ export const refreshStatementDiagnosticsRequests =
 export const invalidateStatementDiagnosticsRequests =
   statementDiagnosticsReportsReducerObj.invalidateData;
 
+const jobProfilerBundlesReducerObj = new CachedDataReducer(
+  clusterUiApi.getJobProfilerBundles,
+  "jobProfilerBundles",
+  moment.duration(5, "m"),
+  moment.duration(1, "m"),
+);
+export const refreshJobProfilerBundles = jobProfilerBundlesReducerObj.refresh;
+export const invalidateJobProfilerBundles =
+  jobProfilerBundlesReducerObj.invalidateData;
+
 const dataDistributionReducerObj = new CachedDataReducer(
   api.getDataDistribution,
   "dataDistribution",
@@ -551,6 +561,7 @@ export interface APIReducersState {
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
   job: KeyedCachedDataReducerState<api.JobResponseMessage>;
+  jobProfilerBundles: CachedDataReducerState<clusterUiApi.JobProfilerBundleResponse>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
   problemRanges: KeyedCachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: KeyedCachedDataReducerState<api.CertificatesResponseMessage>;
@@ -612,6 +623,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
   [jobReducerObj.actionNamespace]: jobReducerObj.reducer,
+  [jobProfilerBundlesReducerObj.actionNamespace]:
+    jobProfilerBundlesReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,

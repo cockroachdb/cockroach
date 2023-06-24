@@ -17,8 +17,12 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   createSelectorForKeyedCachedDataField,
   refreshJob,
+  refreshJobProfilerBundles,
 } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
+import { selectJobProfilerBundlesByJobID } from "src/redux/jobs/jobsSelectors";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import { createJobProfilerBundleAction } from "src/redux/jobs/jobsActions";
 
 const selectJob = createSelectorForKeyedCachedDataField("job", selectID);
 
@@ -26,13 +30,24 @@ const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
 ): JobDetailsStateProps => {
+  const jobID = selectID(state, props);
   return {
     jobRequest: selectJob(state, props),
+    bundles: selectJobProfilerBundlesByJobID(state, jobID),
+    downloadBundle: clusterUiApi.getJobProfilerBundle,
   };
 };
 
 const mapDispatchToProps = {
   refreshJob,
+  refreshJobProfilerBundles,
+  onCollectJobProfilerBundle: (
+    insertJobProfilerBundleRequest: clusterUiApi.InsertJobProfilerBundleRequest,
+  ) => {
+    return (dispatch: AppDispatch) => {
+      dispatch(createJobProfilerBundleAction(insertJobProfilerBundleRequest));
+    };
+  },
 };
 
 export default withRouter(

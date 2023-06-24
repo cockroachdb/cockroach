@@ -35,6 +35,7 @@ import { txnStatsSaga } from "./transactionStats";
 import { clusterSettingsSaga } from "./clusterSettings/clusterSettings.saga";
 import { databaseDetailsSaga } from "./databaseDetails";
 import { tableDetailsSaga } from "./databaseTableDetails";
+import { jobProfilerBundlesSaga } from "./jobProfilerBundles/jobProfilerBundles.sagas";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
   yield all([
@@ -47,6 +48,7 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(statementInsightsSaga),
     fork(jobsSaga),
     fork(jobSaga),
+    fork(jobProfilerBundlesSaga),
     fork(databasesListSaga),
     fork(databaseDetailsSaga),
     fork(tableDetailsSaga),

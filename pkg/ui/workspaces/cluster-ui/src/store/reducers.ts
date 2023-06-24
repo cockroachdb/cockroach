@@ -76,6 +76,10 @@ import {
   KeyedTableDetailsState,
   reducer as tableDetails,
 } from "./databaseTableDetails/tableDetails.reducer";
+import {
+  reducer as jobProfilerBundles,
+  JobProfilerBundleState,
+} from "./jobProfilerBundles/jobProfilerBundles.reducer";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -91,6 +95,7 @@ export type AdminUiState = {
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
   job: JobDetailsReducerState;
+  jobProfilerBundles: JobProfilerBundleState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
   databaseDetails: KeyedDatabaseDetailsState;
@@ -124,6 +129,7 @@ export const reducers = combineReducers<AdminUiState>({
   indexStats,
   jobs,
   job,
+  jobProfilerBundles,
   clusterLocks,
   databasesList,
   databaseDetails,

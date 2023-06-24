@@ -208,6 +208,10 @@ export type ListTenantsRequestMessage =
 export type ListTenantsResponseMessage =
   protos.cockroach.server.serverpb.ListTenantsResponse;
 
+export type GetJobProfilerBundleRequestMessage =
+  protos.cockroach.server.serverpb.GetJobProfilerBundleRequest;
+export type GetJobProfilerBundleResponseMessage =
+  protos.cockroach.server.serverpb.GetJobProfilerBundleResponse;
 // API constants
 
 export const API_PREFIX = "_admin/v1";

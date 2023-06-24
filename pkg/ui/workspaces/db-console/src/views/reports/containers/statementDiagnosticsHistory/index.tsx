@@ -36,8 +36,6 @@ import { summarize } from "src/util/sql/summarize";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
 import {
-  DownloadFile,
-  DownloadFileRef,
   EmptyTable,
   shortStatement,
   getDiagnosticsStatus,
@@ -61,7 +59,7 @@ interface StatementDiagnosticsHistoryViewState {
   };
 }
 
-class StatementDiagnosticsHistoryTable extends SortedTable<{}> {}
+class StatementDiagnosticsHistoryTable extends SortedTable<{}> { }
 
 const StatementColumn: React.FC<{ fingerprint: string }> = ({
   fingerprint,
@@ -191,8 +189,6 @@ class StatementDiagnosticsHistoryView extends React.Component<
 
   tablePageSize = 16;
 
-  downloadRef = React.createRef<DownloadFileRef>();
-
   constructor(props: StatementDiagnosticsHistoryViewProps) {
     super(props);
     (this.state = {
@@ -272,7 +268,6 @@ class StatementDiagnosticsHistoryView extends React.Component<
           sortSetting={this.state.sortSetting}
           onChangeSortSetting={this.changeSortSetting}
         />
-        <DownloadFile ref={this.downloadRef} />
       </section>
     );
   }
