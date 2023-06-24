@@ -106,17 +106,6 @@ func (v MVCCValue) LocalTimestampNeeded(keyTS hlc.Timestamp) bool {
 // provided key version timestamp and returned.
 func (v MVCCValue) GetLocalTimestamp(keyTS hlc.Timestamp) hlc.ClockTimestamp {
 	if v.LocalTimestamp.IsEmpty() {
-		if keyTS.Synthetic {
-			// A synthetic version timestamp means that the version timestamp is
-			// disconnected from real time and did not come from an HLC clock on the
-			// leaseholder that wrote the value or from somewhere else in the system.
-			// As a result, the version timestamp cannot be cast to a clock timestamp,
-			// so we return min_clock_timestamp instead. The effect of this is that
-			// observed timestamps can not be used to avoid uncertainty retries for
-			// values without a local timestamp and with a synthetic version
-			// timestamp.
-			return hlc.MinClockTimestamp
-		}
 		return hlc.ClockTimestamp(keyTS)
 	}
 	return v.LocalTimestamp

@@ -132,12 +132,14 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 
 // TestMVCCAndEngineKeyDecodeSyntheticTimestamp tests decoding an MVCC key with
 // a synthetic timestamp. The synthetic timestamp bit is now ignored during key
-// encoding, but synthetic timestamps may still be present in the wild, so they
-// must be decoded.
+// encoding and decoding, but synthetic timestamps may still be present in the
+// wild, so they must not confuse decoding.
 func TestMVCCAndEngineKeyDecodeSyntheticTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	key := MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}
+	keyNoSynthetic := key
+	keyNoSynthetic.Timestamp.Synthetic = false
 
 	// encodedStr was computed from key using a previous version of the code that
 	// that included synthetic timestamps in the MVCC key encoding.
@@ -153,7 +155,7 @@ func TestMVCCAndEngineKeyDecodeSyntheticTimestamp(t *testing.T) {
 	require.NoError(t, eKeyDecoded.Validate())
 	keyDecoded, err := eKeyDecoded.ToMVCCKey()
 	require.NoError(t, err)
-	require.Equal(t, key, keyDecoded)
+	require.Equal(t, keyNoSynthetic, keyDecoded)
 }
 
 func TestEngineKeyValidate(t *testing.T) {
