@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -80,6 +81,7 @@ func (p *planner) CreateType(ctx context.Context, n *tree.CreateType) (planNode,
 }
 
 func (n *createTypeNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("type"))
 	// Check if a type with the same name exists already.
 	g := params.p.Descriptors().ByName(params.p.Txn()).MaybeGet()
 	_, typ, err := descs.PrefixAndType(params.ctx, g, n.typeName)

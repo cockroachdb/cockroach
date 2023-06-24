@@ -10,6 +10,7 @@ CREATE SCHEMA sc;
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE SCHEMA
+increment telemetry for sql.schema.create_schema
 write *eventpb.CreateSchema to event log:
   owner: root
   schemaName: defaultdb.sc
@@ -74,6 +75,7 @@ upsert descriptor #104
   +  state: DROP
      version: "1"
 checking for feature: CREATE SCHEMA
+increment telemetry for sql.schema.create_schema
 write *eventpb.CreateSchema to event log:
   owner: root
   schemaName: defaultdb.sc

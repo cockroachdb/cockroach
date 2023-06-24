@@ -13,6 +13,7 @@ CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
+increment telemetry for sql.schema.create_index
 increment telemetry for sql.schema.partial_index
 write *eventpb.CreateIndex to event log:
   indexName: idx1
