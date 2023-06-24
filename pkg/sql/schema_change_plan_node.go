@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -51,7 +53,10 @@ func (p *planner) FormatAstAsRedactableString(
 
 // SchemaChange provides the planNode for the new schema changer.
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, error) {
-	// TODO(ajwerner): Call featureflag.CheckEnabled appropriately.
+	err := checkSchemaChangeEnabled(ctx, p.ExecCfg(), p.stmt.AST.StatementTag())
+	if err != nil {
+		return nil, err
+	}
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
 	// When new schema changer is on we will not support it for explicit
 	// transaction, since we don't know if subsequent statements don't
@@ -78,6 +83,12 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		}
 		return nil, err
 	}
+
+	// If we successfully planned a schema change here, then update telemetry
+	// to indicate that we used the new schema changer.
+	telemetry.Inc(sqltelemetry.DeclarativeSchemaChangerCounter)
+	p.curPlan.instrumentation.schemaChangerMode = schemaChangerModeDeclarative
+
 	return &schemaChangePlanNode{
 		stmt:         stmt,
 		sql:          p.stmt.SQL,

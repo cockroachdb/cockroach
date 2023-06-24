@@ -395,6 +395,7 @@ func (p *planner) maybeLogStatementInternal(
 				MvccStepCountInternal:                 queryLevelStats.MvccStepsInternal,
 				MvccStepCount:                         queryLevelStats.MvccSteps,
 				MvccValueBytes:                        queryLevelStats.MvccValueBytes,
+				SchemaChangerMode:                     p.curPlan.instrumentation.schemaChangerMode.String(),
 			}
 
 			p.logOperationalEventsOnlyExternally(ctx, isCopy, &sampledQuery)
