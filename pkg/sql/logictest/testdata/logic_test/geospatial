@@ -5992,3 +5992,19 @@ SELECT ST_AsText(ST_BdPolyFromText('LINESTRING(0 0, 1 0, 1 1, 0 1, 0 0)', 4326))
 
 statement error pq: st_bdpolyfromtext\(\): argument must be MULTILINESTRING geometry
 SELECT ST_AsText(ST_BdPolyFromText('POINT(0 0)', 4326))
+
+subtest st_asmvtgeom
+
+query T
+SELECT ST_AsText(ST_AsMVTGeom(
+    ST_GeomFromText('LINESTRING (0 0, 10.6 0.4, 10.6 5.4, 0 -5, 0 0)'),
+    ST_MakeBox2D(ST_Point(0, 0), ST_Point(20, 20)),
+    20, 0, false))
+----
+LINESTRING (0 20, 11 20, 11 15, 0 25, 0 20)
+
+statement error buffer value cannot be negative
+SELECT ST_AsText(ST_AsMVTGeom(
+    ST_GeomFromText('LINESTRING (0 0, 10.6 0.4, 10.6 5.4, 0 -5, 0 0)'),
+    ST_MakeBox2D(ST_Point(0, 0), ST_Point(20, 20)),
+    20, -1, false))
