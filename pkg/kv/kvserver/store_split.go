@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -274,7 +273,7 @@ func prepareRightReplicaForSplit(
 		nil,                      /* priorReadSum */
 		assertNoLeaseJump)
 
-	// We need to explicitly wake up the Raft group on the right-hand range or
+	// We need to explicitly unquiesce the Raft group on the right-hand range or
 	// else the range could be underreplicated for an indefinite period of time.
 	//
 	// Specifically, suppose one of the replicas of the left-hand range never
@@ -283,11 +282,7 @@ func prepareRightReplicaForSplit(
 	// until it receives a Raft message addressed to the right-hand range. But
 	// since new replicas start out quiesced, unless we explicitly awaken the
 	// Raft group, there might not be any Raft traffic for quite a while.
-	if err := rightRepl.withRaftGroupLocked(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
-		return true, nil
-	}); err != nil {
-		log.Fatalf(ctx, "unable to create raft group for right-hand range in split: %+v", err)
-	}
+	rightRepl.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
 
 	return rightRepl
 }
