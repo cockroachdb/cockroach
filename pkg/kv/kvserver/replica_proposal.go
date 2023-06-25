@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -427,13 +428,6 @@ func (r *Replica) leasePostApplyLocked(
 
 	now := r.store.Clock().NowAsClockTimestamp()
 
-	// NB: ProposedTS is non-nil in practice, but we never fully migrated it
-	// in so we need to assume that it can be nil.
-	const slowLeaseWarningEnabled = false // see https://github.com/cockroachdb/cockroach/issues/97209
-	if slowLeaseWarningEnabled && iAmTheLeaseHolder && leaseChangingHands && newLease.ProposedTS != nil {
-		maybeLogSlowLeaseApplyWarning(ctx, time.Duration(now.WallTime-newLease.ProposedTS.WallTime), prevLease, newLease)
-	}
-
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
 	// lease request and attempt to gossip the first range.
@@ -441,15 +435,19 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
-	// Log acquisition of meta and liveness range leases. These are critical to
-	// cluster health, so it's useful to know their location over time.
-	if leaseChangingHands && iAmTheLeaseHolder &&
-		r.descRLocked().StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
-		if r.ownsValidLeaseRLocked(ctx, now) {
-			log.Health.Infof(ctx, "acquired system range lease: %s", newLease)
-		} else {
-			log.Health.Warningf(ctx, "applied system range lease after it expired: %s", newLease)
+	if leaseChangingHands && iAmTheLeaseHolder {
+		// Log acquisition of meta and liveness range leases. These are critical to
+		// cluster health, so it's useful to know their location over time.
+		if r.descRLocked().StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
+			if r.ownsValidLeaseRLocked(ctx, now) {
+				log.Health.Infof(ctx, "acquired system range lease: %s", newLease)
+			} else {
+				log.Health.Warningf(ctx, "applied system range lease after it expired: %s", newLease)
+			}
 		}
+
+		// Log slow lease application.
+		maybeLogSlowLeaseApplyWarning(ctx, now, prevLease, newLease)
 	}
 
 	st := r.leaseStatusAtRLocked(ctx, now)
@@ -532,9 +530,16 @@ func (r *Replica) leasePostApplyLocked(
 // became visible on the leaseholder (indicating replication lag) or if the
 // previous lease looks like we transferred a lease to a behind/offline replica.
 func maybeLogSlowLeaseApplyWarning(
-	ctx context.Context, newLeaseAppDelay time.Duration, prevLease, newLease *roachpb.Lease,
+	ctx context.Context, now hlc.ClockTimestamp, prevLease, newLease *roachpb.Lease,
 ) {
-	const slowLeaseApplyWarnThreshold = 500 * time.Millisecond
+	// NB: ProposedTS is non-nil in practice, but we never fully migrated it
+	// in so we need to assume that it can be nil.
+	if newLease.ProposedTS == nil {
+		return
+	}
+
+	const slowLeaseApplyWarnThreshold = time.Second
+	newLeaseAppDelay := time.Duration(now.WallTime - newLease.ProposedTS.WallTime)
 	if newLeaseAppDelay > slowLeaseApplyWarnThreshold {
 		// If we hold the lease now and the lease was proposed "earlier", there
 		// must have been replication lag, and possibly reads and/or writes were
@@ -551,22 +556,21 @@ func maybeLogSlowLeaseApplyWarning(
 		//
 		// [^1]: https://github.com/cockroachdb/cockroach/pull/82758
 		log.Warningf(ctx,
-			"lease %v active after replication lag of ~%.2fs; foreground traffic may have been impacted [prev=%v]",
-			newLease, newLeaseAppDelay.Seconds(), prevLease,
-		)
+			"applied lease after ~%.2fs replication lag, client traffic may have been delayed [lease=%v prev=%v]",
+			newLeaseAppDelay.Seconds(), newLease, prevLease)
 	} else if prevLease.Type() == roachpb.LeaseExpiration &&
 		newLease.Type() == roachpb.LeaseEpoch &&
-		newLease.AcquisitionType == roachpb.LeaseAcquisitionType_Request {
+		prevLease.Expiration != nil && // nil when there is no previous lease
+		prevLease.Expiration.LessEq(newLease.Start.ToTimestamp()) {
 		// If the previous lease is expiration-based, but the new lease is not and
-		// the acquisition was non-cooperative, it is likely that a lease transfer
-		// (which is expiration-based) went to a follower that then couldn't hold
-		// the lease alive (for example, didn't apply it in time for it to
+		// starts at or after its expiration, it is likely that a lease transfer
+		// (which is expiration-based) went to a follower that then couldn't upgrade
+		// it to an epoch lease (for example, didn't apply it in time for it to
 		// actually serve any traffic). The result was likely an outage which
 		// resolves right now, so log to point this out.
 		log.Warningf(ctx,
-			"lease %v expired before being followed by lease %s; foreground traffic may have been impacted",
-			prevLease, newLease,
-		)
+			"lease expired before epoch lease upgrade, client traffic may have been delayed [lease=%v prev=%v]",
+			newLease, prevLease)
 	}
 }
 
