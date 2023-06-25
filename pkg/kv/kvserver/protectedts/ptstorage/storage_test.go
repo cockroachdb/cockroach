@@ -490,7 +490,7 @@ func (test testCase) run(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	s := tc.Server(0)
-	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
+	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs, protectedts.MakeMetrics().(*protectedts.ProtectedTSMetrics))
 	tCtx := testContext{
 		pts:                    ptm,
 		db:                     s.InternalDB().(isql.DB),
@@ -754,7 +754,7 @@ func TestErrorsFromSQL(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	s := tc.Server(0)
-	pts := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{})
+	pts := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{}, protectedts.MakeMetrics().(*protectedts.ProtectedTSMetrics))
 	db := s.InternalDB().(isql.DB)
 	errFunc := func(string) error { return errors.New("boom") }
 	rec := newRecord(&testContext{}, s.Clock().Now(), "foo", []byte("bar"), tableTarget(42), tableSpan(42))

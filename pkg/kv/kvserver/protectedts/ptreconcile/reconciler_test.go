@@ -73,7 +73,7 @@ func TestReconciler(t *testing.T) {
 					_, shouldRemove = state.toRemove[string(meta)]
 					return shouldRemove, nil
 				},
-			})
+			}, ptp.Metrics().(*protectedts.ProtectedTSMetrics))
 		require.NoError(t, r.StartReconciler(ctx, s0.Stopper()))
 		recMeta := "a"
 		rec1 := ptpb.Record{
