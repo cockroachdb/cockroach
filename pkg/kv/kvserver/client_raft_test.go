@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -4380,81 +4379,6 @@ func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 			return nil
 		})
 	}
-}
-
-// TestInitRaftGroupOnRequest verifies that an uninitialized Raft group
-// is initialized if a request is received, even if the current range
-// lease points to a different replica.
-func TestInitRaftGroupOnRequest(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
-	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
-	lisReg := listenerutil.NewListenerRegistry()
-	defer lisReg.Close()
-
-	const numServers int = 2
-	stickyServerArgs := make(map[int]base.TestServerArgs)
-	for i := 0; i < numServers; i++ {
-		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
-				},
-			},
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
-				},
-			},
-		}
-	}
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, numServers,
-		base.TestClusterArgs{
-			ReplicationMode:     base.ReplicationManual,
-			ReusableListenerReg: lisReg,
-			ServerArgsPerNode:   stickyServerArgs,
-		})
-	defer tc.Stopper().Stop(ctx)
-
-	// Split so we can rely on RHS range being quiescent after a restart.
-	// We use UserTableDataMin to avoid having the range activated to
-	// gossip system table data.
-	splitKey := bootstrap.TestingUserTableDataMin()
-	tc.SplitRangeOrFatal(t, splitKey)
-	tc.AddVotersOrFatal(t, splitKey, tc.Target(1))
-	desc := tc.LookupRangeOrFatal(t, splitKey)
-	leaseHolder, err := tc.FindRangeLeaseHolder(desc, nil)
-	require.NoError(t, err)
-
-	require.NoError(t, tc.Restart())
-
-	followerIdx := int(leaseHolder.StoreID) % numServers
-	followerStore := tc.GetFirstStoreFromServer(t, followerIdx)
-
-	repl := followerStore.LookupReplica(roachpb.RKey(splitKey))
-	require.NotNil(t, repl)
-
-	// TODO(spencer): Raft messages seem to turn up
-	// occasionally on restart, which initialize the replica, so
-	// this is not a test failure. Not sure how to work around this
-	// problem.
-	// Verify the raft group isn't initialized yet.
-	if repl.IsRaftGroupInitialized() {
-		log.Errorf(ctx, "expected raft group to be uninitialized")
-	}
-	// Send an increment and verify that initializes the Raft group.
-	//
-	// NB: We don't know who has the lease, so we ignore any errors (i.e.
-	// NotLeaseHolderError). We only care that it initializes the Raft group.
-	_, pErr := kv.SendWrapped(ctx, followerStore.TestSender(), incrementArgs(splitKey, 1))
-	_ = pErr // appease returncheck linter
-
-	require.True(t, repl.IsRaftGroupInitialized(), "expected raft group to be initialized")
 }
 
 // TestFailedConfChange verifies correct behavior after a configuration change
