@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -26,9 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -659,4 +662,118 @@ func findStat(
 		)
 	}
 	return nil
+}
+
+// TestStatsAreDeletedForDroppedTables ensures that statistics for dropped
+// tables are automatically deleted.
+func TestStatsAreDeletedForDroppedTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var params base.TestServerArgs
+	params.ScanMaxIdleTime = time.Millisecond // speed up MVCC GC queue scans
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Disable auto stats so that it doesn't interfere.
+	runner.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
+	// Poll for MVCC GC more frequently.
+	runner.Exec(t, "SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';")
+	// Cached protected timestamp state delays MVCC GC, update it every second.
+	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';")
+
+	// This subtest verifies that the statistic for a single dropped table is
+	// deleted promptly.
+	t.Run("basic", func(t *testing.T) {
+		// Lower the garbage collection interval to speed up the test.
+		runner.Exec(t, "SET CLUSTER SETTING sql.stats.garbage_collection_interval = '1s';")
+		// Create a table with short TTL and collect stats on it.
+		runner.Exec(t, "CREATE TABLE t (k PRIMARY KEY) AS SELECT 1;")
+		runner.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		runner.Exec(t, "ANALYZE t;")
+
+		r := runner.QueryRow(t, "SELECT 't'::regclass::oid")
+		var tableID int
+		r.Scan(&tableID)
+
+		// Ensure that we see a single statistic for the table.
+		var count int
+		runner.QueryRow(t, `SELECT count(*) FROM system.table_statistics WHERE "tableID" = $1;`, tableID).Scan(&count)
+		if count != 1 {
+			t.Fatalf("expected a single statistic for table 't', found %d", count)
+		}
+
+		// Now drop the table and make sure that the table statistic is deleted
+		// promptly.
+		runner.Exec(t, "DROP TABLE t;")
+		testutils.SucceedsSoon(t, func() error {
+			runner.QueryRow(t, `SELECT count(*) FROM system.table_statistics WHERE "tableID" = $1;`, tableID).Scan(&count)
+			if count != 0 {
+				return errors.Newf("expected no stats for the dropped table, found %d statistics", count)
+			}
+			return nil
+		})
+	})
+
+	// This subtest verifies that the stats garbage collector respects the limit
+	// on the number of dropped tables processed at once.
+	t.Run("limit", func(t *testing.T) {
+		// Disable the stats garbage collector for now.
+		runner.Exec(t, "SET CLUSTER SETTING sql.stats.garbage_collection_interval = '0s';")
+
+		// Create 5 tables with short TTL and collect stats on them.
+		const numTables = 5
+		countStatisticsQuery := `SELECT count(*) FROM system.table_statistics WHERE "tableID"  IN (`
+		for i := 1; i <= numTables; i++ {
+			runner.Exec(t, fmt.Sprintf("CREATE TABLE t%d (k PRIMARY KEY) AS SELECT 1;", i))
+			runner.Exec(t, fmt.Sprintf("ALTER TABLE t%d CONFIGURE ZONE USING gc.ttlseconds = 1;", i))
+			runner.Exec(t, fmt.Sprintf("ANALYZE t%d;", i))
+			r := runner.QueryRow(t, fmt.Sprintf("SELECT 't%d'::regclass::oid", i))
+			var tableID int
+			r.Scan(&tableID)
+			if i > 1 {
+				countStatisticsQuery += ", "
+			}
+			countStatisticsQuery += strconv.Itoa(tableID)
+		}
+		countStatisticsQuery += ");"
+
+		// Ensure that we see a single statistic for each table.
+		var count int
+		runner.QueryRow(t, countStatisticsQuery).Scan(&count)
+		if count != numTables {
+			t.Fatalf("expected a single statistic for each table, found %d total", count)
+		}
+
+		// Drop all tables. The stats garbage collector is currently disabled.
+		for i := 1; i <= numTables; i++ {
+			runner.Exec(t, fmt.Sprintf("DROP TABLE t%d;", i))
+		}
+
+		// Lower the limit so that not all statistics are GCed in a single
+		// sweep.
+		runner.Exec(t, "SET CLUSTER SETTING sql.stats.garbage_collection_limit = 1;")
+		// Enable the stats garbage collector and observe that the garbage is
+		// being cleaned up in "stages".
+		runner.Exec(t, "SET CLUSTER SETTING sql.stats.garbage_collection_interval = '1s';")
+
+		for numRemaining := numTables; numRemaining > 0; {
+			var remainingCount int
+			// Block via SucceedsSoon until at least one more statistic for
+			// dropped tables is deleted.
+			testutils.SucceedsSoon(t, func() error {
+				runner.QueryRow(t, countStatisticsQuery).Scan(&remainingCount)
+				if numRemaining == remainingCount {
+					return errors.New("expected more stats for dropped tables to be GCed")
+				}
+				return nil
+			})
+			if numRemaining == numTables && remainingCount == 0 {
+				// This condition ensures that at least two sweeps happened.
+				t.Fatal("expected multiple sweeps to occur")
+			}
+			numRemaining = remainingCount
+		}
+	})
 }
