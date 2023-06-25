@@ -582,7 +582,12 @@ func (r *Refresher) Start(
 	r.startedTasksWG.Add(1)
 	if err := stopper.RunAsyncTask(bgCtx, "stats-garbage-collector", func(ctx context.Context) {
 		defer r.startedTasksWG.Done()
-		intervalChangedCh := make(chan struct{}, 1)
+		// This is a buffered channel because we will be sending on it from the
+		// callback when the corresponding setting changes. The buffer size of 1
+		// should be sufficient, but we use a larger buffer out of caution (in
+		// case the cluster setting is updated rapidly) - in order to not block
+		// the goroutine that is updating the settings.
+		intervalChangedCh := make(chan struct{}, 4)
 		// The stats-garbage-collector task is started only once globally, so
 		// we'll only add a single OnChange callback.
 		statsGarbageCollectionInterval.SetOnChange(&r.st.SV, func(ctx context.Context) {
