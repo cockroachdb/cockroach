@@ -1996,15 +1996,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
 	//
-	// Note that we do not create raft groups at this time; they will be created
-	// on-demand the first time they are needed. This helps reduce the amount of
-	// election-related traffic in a cold start.
-	// Raft initialization occurs when we propose a command on this range or
-	// receive a raft message addressed to it.
-	// TODO(bdarnell): Also initialize raft groups when read leases are needed.
-	// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
-	// and initialize those groups.
-	//
 	// TODO(peter): While we have to iterate to find the replica descriptors
 	// serially, we can perform the migrations and replica creation
 	// concurrently. Note that while we can perform this initialization
@@ -2055,17 +2046,16 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			return errors.AssertionFailedf("no tenantID for initialized replica %s", rep)
 		}
 
-		// For replicas that use expiration-based leases, eagerly initialize the
-		// Raft group and unquiesce it. We don't quiesce ranges with expiration
-		// leases, and we want to eagerly acquire leases for them, which happens
-		// during Raft ticks. We rely on Raft pre-vote to avoid disturbing
-		// established Raft leaders.
+		// Eagerly unquiesce replicas that use expiration-based leases. We don't
+		// quiesce ranges with expiration leases, and we want to eagerly acquire
+		// leases for them, which happens during Raft ticks. We rely on Raft
+		// pre-vote to avoid disturbing established Raft leaders.
 		//
 		// NB: cluster settings haven't propagated yet, so we have to check the last
 		// known lease instead of relying on shouldUseExpirationLeaseRLocked(). We
 		// also check Sequence > 0 to omit ranges that haven't seen a lease yet.
 		if l, _ := rep.GetLease(); l.Type() == roachpb.LeaseExpiration && l.Sequence > 0 {
-			rep.maybeInitializeRaftGroup(ctx)
+			rep.maybeUnquiesce(true /* wakeLeader */, true /* mayCampaign */)
 		}
 	}
 

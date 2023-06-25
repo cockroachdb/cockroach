@@ -100,7 +100,6 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 		queueConfig{
 			maxSize:                  defaultQueueMaxSize,
 			needsLease:               false,
-			needsRaftInitialized:     true,
 			needsSpanConfigs:         false,
 			acceptsUnsplitRanges:     true,
 			processDestroyedReplicas: true,

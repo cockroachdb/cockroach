@@ -217,7 +217,10 @@ func (s *Store) tryGetOrCreateReplica(
 	}
 
 	// Create a new uninitialized replica and lock it for raft processing.
-	repl := newUninitializedReplica(s, rangeID, replicaID)
+	repl, err := newUninitializedReplica(s, rangeID, replicaID)
+	if err != nil {
+		return nil, false, err
+	}
 	repl.raftMu.Lock() // not unlocked
 
 	// Install the replica in the store's replica map.
