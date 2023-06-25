@@ -119,20 +119,22 @@ const (
 // rounded up such that all stores have the same number of workers (10 workers
 // across 3 stores yields 4 workers per store or 12 in total).
 //
-// For small machines, we scale the scheduler concurrency by the number of
-// CPUs. 8*NumCPU was determined in 9a68241 (April 2017) as the optimal
-// concurrency level on 8 CPU machines. For larger machines, we've seen
-// (#56851) that this scaling curve can be too aggressive and lead to too much
-// contention in the Raft scheduler, so we cap the concurrency level at 96.
-//
-// As of November 2020, this default value could be re-tuned.
+// For small machines, we scale the scheduler concurrency by the number of CPUs.
+// 8*NumCPU was determined in 9a68241 (April 2017) as the optimal concurrency
+// level on 8 CPU machines. For larger machines, we've seen (#56851) that this
+// scaling curve can be too aggressive and lead to too much contention in the
+// Raft scheduler, so we cap the concurrency level at 128. This was revisited in
+// #99063 (June 2023) with Raft scheduler sharding and multi-store worker
+// distribution, and both the scaling and cap were found to still be reasonable,
+// but the cap was increased from 96 to 128 to reduce chance of starvation
+// within shards or on multi-store nodes.
 var defaultRaftSchedulerConcurrency = envutil.EnvOrDefaultInt(
-	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 96))
+	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 128))
 
 // defaultRaftSchedulerShardSize specifies the default maximum number of
 // scheduler worker goroutines per mutex shard. By default, we spin up 8 workers
-// per CPU core, capped at 96, so 16 is equivalent to 2 CPUs per shard, or a
-// maximum of 6 shards. This significantly relieves contention at high core
+// per CPU core, capped at 128, so 16 is equivalent to 2 CPUs per shard, or a
+// maximum of 8 shards. This significantly relieves contention at high core
 // counts, while also avoiding starvation by excessive sharding.
 var defaultRaftSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
 
