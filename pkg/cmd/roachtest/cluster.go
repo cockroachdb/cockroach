@@ -255,7 +255,7 @@ func findBinaryOrLibrary(
 	for _, dir := range dirs {
 		var path string
 
-		if path, err = exec.LookPath(filepath.Join(dir, name)); err == nil {
+		if path, err = exec.LookPath(filepath.Join(dir, name+nameSuffix)); err == nil {
 			return validateBinaryFormat(path, arch, checkEA)
 		}
 		for _, archSuffix := range archSuffixes {
