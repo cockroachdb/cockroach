@@ -1736,6 +1736,11 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 <tr><td><a name="st_askml"></a><code>st_askml(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the KML representation of a given Geometry.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d, extent: <a href="int.html">int</a>, buffer: <a href="int.html">int</a>, clip: <a href="bool.html">bool</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds if required.</p>
+<p>The geometry must be in the coordinate system of the target map.
+The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
+The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry can be transformed, and clipped if required.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. A default of 15 decimal digits is used.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geography: geography, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geography. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>

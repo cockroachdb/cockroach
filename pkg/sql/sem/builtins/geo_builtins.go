@@ -4550,6 +4550,39 @@ The paths themselves are given in the direction of the first geometry.`,
 	//
 	// Transformations
 	//
+	"st_asmvtgeom": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "bbox", Typ: types.Box2D},
+				{Name: "extent", Typ: types.Int},
+				{Name: "buffer", Typ: types.Int},
+				{Name: "clip", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0]).Geometry
+				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
+				extent := int(tree.MustBeDInt(args[2]))
+				buffer := int(tree.MustBeDInt(args[3]))
+				clip := bool(tree.MustBeDBool(args[4]))
+				newGeom, err := geomfn.AsMVTGeometry(g, bbox, extent, buffer, clip)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: newGeom}, nil
+			},
+			Info: infoBuilder{
+				info: `Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds if required.
+
+The geometry must be in the coordinate system of the target map.
+The function attempts to preserve geometry validity, and corrects it if needed. This may cause the result geometry to collapse to a lower dimension.
+The rectangular bounds of the tile in the target map coordinate space must be provided, so the geometry can be transformed, and clipped if required.`,
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
 	"st_setsrid": makeBuiltin(
 		defProps(),
 		tree.Overload{
