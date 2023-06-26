@@ -876,8 +876,9 @@ func TestConsumption(t *testing.T) {
 	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer hostServer.Stopper().Stop(context.Background())
 
+	const targetPeriod = time.Millisecond
 	st := cluster.MakeTestingClusterSettings()
-	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, time.Millisecond)
+	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, targetPeriod)
 	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, 0)
 
 	testProvider := newTestProvider()
@@ -905,19 +906,40 @@ func TestConsumption(t *testing.T) {
 		r.Exec(t, "INSERT INTO t (v) SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
 		const expectedBytes = 10 * 10 * 1024
 
-		afterWrite := testProvider.waitForConsumption(t)
-		delta := afterWrite
-		delta.Sub(&beforeWrite)
-		if delta.WriteBatches < 1 || delta.WriteRequests < 2 || delta.WriteBytes < expectedBytes*2 {
+		// Try a few times because background activity can trigger bucket requests
+		// before the test query does.
+		var ok bool
+		var delta kvpb.TenantConsumption
+		for i := 0; i < 3; i++ {
+			afterWrite := testProvider.waitForConsumption(t)
+			delta = afterWrite
+			delta.Sub(&beforeWrite)
+			if delta.WriteBatches >= 1 && delta.WriteRequests >= 2 &&
+				delta.WriteBytes >= expectedBytes*2 {
+				ok = true
+				break
+			}
+		}
+		if !ok {
 			t.Errorf("usage after write: %s", delta.String())
 		}
 
+		beforeRead := testProvider.waitForConsumption(t)
 		r.QueryStr(t, "SELECT min(v) FROM t")
 
-		afterRead := testProvider.waitForConsumption(t)
-		delta = afterRead
-		delta.Sub(&afterWrite)
-		if delta.ReadBatches < 1 || delta.ReadRequests < 1 || delta.ReadBytes < expectedBytes {
+		// Try a few times because background activity can trigger bucket requests
+		// before the test query does.
+		for i := 0; i < 3; i++ {
+			afterRead := testProvider.waitForConsumption(t)
+			delta = afterRead
+			delta.Sub(&beforeRead)
+			if delta.ReadBatches >= 1 && delta.ReadRequests >= 1 &&
+				delta.ReadBytes >= expectedBytes {
+				ok = true
+				break
+			}
+		}
+		if !ok {
 			t.Errorf("usage after read: %s", delta.String())
 		}
 		r.Exec(t, "DELETE FROM t WHERE true")
