@@ -21,7 +21,7 @@ import {
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
 
-import LoadingError from "../sqlActivity/errorComponent";
+import LoadingError, { mergeErrors } from "../sqlActivity/errorComponent";
 import { Pagination } from "src/pagination";
 import {
   SortSetting,
@@ -459,6 +459,7 @@ export class SessionsPage extends React.Component<
           renderError={() =>
             LoadingError({
               statsType: "sessions",
+              error: mergeErrors(this.props.sessionsError),
             })
           }
         />

@@ -216,6 +216,7 @@ export const RecentTransactionsView: React.FC<RecentTransactionsViewProps> = ({
           renderError={() =>
             LoadingError({
               statsType: "transactions",
+              error: sessionsError,
             })
           }
         >
