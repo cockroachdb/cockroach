@@ -73,11 +73,12 @@ func registerCancel(r registry.Registry) {
 				errCh := make(chan error, 1)
 				go func(queryNum int) {
 					defer close(errCh)
+					runnerConn := c.Conn(ctx, t.L(), 1)
+					defer runnerConn.Close()
 					query := tpch.QueriesByNumber[queryNum]
 					t.L().Printf("executing q%d\n", queryNum)
-					sem <- struct{}{}
 					close(sem)
-					_, err := conn.Exec(queryPrefix + query)
+					_, err := runnerConn.Exec(queryPrefix + query)
 					if err == nil {
 						errCh <- errors.New("query completed before it could be canceled")
 					} else {
@@ -93,15 +94,36 @@ func registerCancel(r registry.Registry) {
 				// Wait for the query-runner goroutine to start.
 				<-sem
 
-				// The cancel query races with the execution of the query it's trying to
-				// cancel, which may result in attempting to cancel the query before it
-				// has started.  To be more confident that the query is executing, wait
-				// a bit before attempting to cancel it.
-				time.Sleep(250 * time.Millisecond)
+				// Continuously poll until we get the queryID that we want to
+				// cancel. We expect it to show up within 10 seconds.
+				var queryID string
+				timeoutCh := time.After(10 * time.Second)
+				for {
+					rows, err := conn.Query(`SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query NOT LIKE '%SHOW CLUSTER QUERIES%'`)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if rows.Next() {
+						if err = rows.Scan(&queryID); err != nil {
+							t.Fatal(err)
+						}
+						break
+					}
+					if err = rows.Close(); err != nil {
+						t.Fatal(err)
+					}
+					time.Sleep(10 * time.Millisecond)
+					select {
+					case <-timeoutCh:
+						t.Fatal(errors.New("didn't see the query to cancel within 10 seconds"))
+					default:
+					}
+				}
 
-				const cancelQuery = `CANCEL QUERIES
-	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%'`
-				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "`+cancelQuery+`"`)
+				_, err := conn.Exec(`CANCEL QUERY $1`, queryID)
+				if err != nil {
+					t.Fatal(err)
+				}
 				cancelStartTime := timeutil.Now()
 
 				select {
