@@ -207,6 +207,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
+
+		// Reset the annotations to the original values
+		b.evalCtx.Annotations = oldEvalCtxAnn
+		b.semaCtx.Annotations = oldSemaCtxAnn
 	}
 
 	if targetVolatility == tree.FunctionImmutable && len(deps) > 0 {
