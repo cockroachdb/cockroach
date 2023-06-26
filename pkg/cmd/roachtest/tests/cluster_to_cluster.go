@@ -634,18 +634,23 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	}
 
 	rd.t.L().Printf("begin workload on src cluster")
-	m := rd.newMonitor(ctx)
-	// The roachtest driver can use the workloadCtx to cancel the workload.
+
+	// Pass a cancellable context to the workload monitor so the driver can cleanly cancel the
+	// workload goroutine.
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	defer workloadCancel()
+	workloadMonitor := rd.newMonitor(workloadCtx)
+	defer func() {
+		workloadCancel()
+		workloadMonitor.Wait()
+	}()
 
 	workloadDoneCh := make(chan struct{})
-	m.Go(func(ctx context.Context) error {
+	workloadMonitor.Go(func(ctx context.Context) error {
 		defer close(workloadDoneCh)
-		err := rd.runWorkload(workloadCtx)
+		err := rd.runWorkload(ctx)
 		// The workload should only return an error if the roachtest driver cancels the
-		// workloadCtx after rd.additionalDuration has elapsed after the initial scan completes.
-		if err != nil && workloadCtx.Err() == nil {
+		// ctx after the rd.additionalDuration has elapsed after the initial scan completes.
+		if err != nil && ctx.Err() == nil {
 			// Implies the workload context was not cancelled and the workload cmd returned a
 			// different error.
 			return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
@@ -669,9 +674,11 @@ func (rd *replicationDriver) main(ctx context.Context) {
 		getStreamIngestionJobInfo, rd.t.Status, rd.rs.expectedNodeDeaths > 0)
 	defer lv.maybeLogLatencyHist()
 
-	m.Go(func(ctx context.Context) error {
+	latencyMonitor := rd.newMonitor(ctx)
+	latencyMonitor.Go(func(ctx context.Context) error {
 		return lv.pollLatency(ctx, rd.setup.dst.db, ingestionJobID, time.Second, workloadDoneCh)
 	})
+	defer latencyMonitor.Wait()
 
 	rd.t.L().Printf("waiting for replication stream to finish ingesting initial scan")
 	rd.waitForReplicatedTime(ingestionJobID, rd.rs.timeout/2)
@@ -684,7 +691,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 		rd.t.L().Printf("workload finished on its own")
 	case <-time.After(rd.getWorkloadTimeout()):
 		workloadCancel()
-		rd.t.L().Printf("workload has cancelled after %s", rd.rs.additionalDuration)
+		rd.t.L().Printf("workload was cancelled after %s", rd.rs.additionalDuration)
 	case <-ctx.Done():
 		rd.t.L().Printf(`roachtest context cancelled while waiting for workload duration to complete`)
 		return
@@ -848,6 +855,7 @@ func registerClusterToCluster(r registry.Registry) {
 				defer hc.Done()
 
 				rd.main(ctx)
+				m.Wait()
 			})
 	}
 }
@@ -1123,6 +1131,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 					rrd.main(ctx)
 					return nil
 				})
+				defer m.Wait()
 
 				// Don't begin shutdown process until c2c job is set up.
 				<-shutdownSetupDone
@@ -1193,6 +1202,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 			rd.main(ctx)
 			return nil
 		})
+		defer m.Wait()
 
 		// Dont begin node disconnecion until c2c job is setup.
 		<-shutdownSetupDone
@@ -1224,7 +1234,6 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		getSrcDestNodePairs(rd, ingestionProgressUpdate)
 		blackholeFailer.Cleanup(ctx)
 		rd.t.L().Printf("Nodes reconnected. C2C Job should eventually complete")
-		m.Wait()
 	})
 }
 
