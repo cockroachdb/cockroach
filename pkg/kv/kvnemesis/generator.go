@@ -934,11 +934,11 @@ func fk(k string) uint64 {
 
 // fkE is like fk, but returns an error instead of panicking.
 func fkE(k string) (uint64, error) {
-	l := len(GeneratorDataSpan().Key)
-	if len(k) < l {
+	span := GeneratorDataSpan()
+	if !span.ContainsKey(roachpb.Key(k)) {
 		return 0, errors.New("key too short")
 	}
-	k = k[len(GeneratorDataSpan().Key):]
+	k = k[len(span.Key):]
 	_, s, err := encoding.DecodeUnsafeStringAscendingDeepCopy([]byte(k), nil)
 	if err != nil {
 		return 0, err
