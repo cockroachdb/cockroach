@@ -452,7 +452,7 @@ func (tc *txnCommitter) retryTxnCommitAfterFailedParallelCommit(
 		et := baSuffix.Requests[0].GetEndTxn().ShallowCopy().(*kvpb.EndTxnRequest)
 		et.LockSpans, _ = mergeIntoSpans(et.LockSpans, et.InFlightWrites)
 		et.InFlightWrites = nil
-		baSuffix.Requests[0].Value.(*kvpb.RequestUnion_EndTxn).EndTxn = et
+		baSuffix.Requests[0].MustSetInner(et)
 	}
 	brSuffix, pErr := tc.wrapped.SendLocked(ctx, baSuffix)
 	if pErr != nil {

@@ -191,10 +191,13 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 	}
 
-	const expectedNumberOfSystemTables = bootstrap.NumSystemTablesForSystemTenant
+	// Add one for the system.span_count table, which is currently the only
+	// non-system tenant table.
+	const expectedNumberOfSystemTables = bootstrap.NumSystemTablesForSystemTenant + 1
 	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
 
-	runTest := func(name string, test testcase) {
+	runTest := func(t *testing.T, name string, test testcase) {
+		t.Helper()
 		privs := *test.pkg.GetPrivileges()
 		desc := test.pkg
 		// Allocate an ID to dynamically allocated system tables.
@@ -247,7 +250,7 @@ func TestSystemTableLiterals(t *testing.T) {
 
 	for name, test := range testcases {
 		t.Run(name, func(t *testing.T) {
-			runTest(name, test)
+			runTest(t, name, test)
 		})
 	}
 }
