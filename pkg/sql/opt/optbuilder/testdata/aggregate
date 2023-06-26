@@ -3633,17 +3633,7 @@ scalar-group-by
 build
 SELECT array_agg(generate_series(1, 2))
 ----
-scalar-group-by
- ├── columns: array_agg:2
- ├── project-set
- │    ├── columns: generate_series:1
- │    ├── values
- │    │    └── ()
- │    └── zip
- │         └── generate_series(1, 2)
- └── aggregations
-      └── array-agg [as=array_agg:2]
-           └── generate_series:1
+error (0A000): array_agg(): set-returning functions are not allowed in aggregate
 
 # Regression test for #37317: duplicate column in GROUP BY
 build format=show-all
@@ -4024,7 +4014,7 @@ scalar-group-by
 build
 SELECT * FROM ROWS FROM (count(json_each('[]')))
 ----
-error (0A000): count(): json_each(): generator functions are not allowed in aggregate
+error (0A000): count(): json_each(): set-returning functions are not allowed in aggregate
 
 # Tests for projecting non-grouping columns when we group by a PK.
 build

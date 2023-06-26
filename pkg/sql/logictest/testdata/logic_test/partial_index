@@ -49,7 +49,7 @@ statement error pgcode 42P20 window functions are not allowed in INDEX PREDICATE
 CREATE TABLE error (a INT, INDEX (a) WHERE row_number() OVER () > 1)
 
 # Don't allow set-returning functions.
-statement error pgcode 0A000 generator functions are not allowed in INDEX PREDICATE
+statement error pgcode 0A000 set-returning functions are not allowed in INDEX PREDICATE
 CREATE TABLE error (a INT, INDEX (a) WHERE generate_series(1, 1))
 
 # Fail on bad types.

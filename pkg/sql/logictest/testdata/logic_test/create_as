@@ -105,7 +105,7 @@ CREATE TABLE foo2 (x) AS (VALUES(ROW()))
 statement error pq: nested array unsupported as column type: int\[\]\[\]
 CREATE TABLE foo2 (x) AS (VALUES(ARRAY[ARRAY[1]]))
 
-statement error generator functions are not allowed in VALUES
+statement error pq: generate_series\(\): set-returning functions are not allowed in VALUES
 CREATE TABLE foo2 (x) AS (VALUES(generate_series(1,3)))
 
 statement error pq: value type unknown cannot be used for table columns

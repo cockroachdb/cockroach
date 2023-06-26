@@ -550,7 +550,7 @@ UPDATE t32477 SET x = count(x)
 statement error window functions are not allowed in UPDATE SET
 UPDATE t32477 SET x = rank() OVER ()
 
-statement error generator functions are not allowed in UPDATE SET
+statement error pq: generate_series\(\): set-returning functions are not allowed in UPDATE SET
 UPDATE t32477 SET x = generate_series(1,2)
 
 #regression test for #32054
