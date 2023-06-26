@@ -919,8 +919,8 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	log.Infof(ctx, "test: installing unreliable Raft transports")
 	for _, s := range []int{0, 1, 2} {
 		h := &unreliableRaftHandler{
-			rangeID:            partRepl.RangeID,
-			RaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
+			rangeID:                    partRepl.RangeID,
+			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 		}
 		if s != partStore {
 			// Only filter messages from the partitioned store on the other
@@ -932,7 +932,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
-		tc.Servers[s].RaftTransport().Listen(tc.Target(s).StoreID, h)
+		tc.Servers[s].RaftTransport().ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
 	}
 
 	// Perform a series of writes on the partitioned replica. The writes will
@@ -1028,9 +1028,9 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// Remove the partition. Snapshot should follow.
 	log.Infof(ctx, "test: removing the partition")
 	for _, s := range []int{0, 1, 2} {
-		tc.Servers[s].RaftTransport().Listen(tc.Target(s).StoreID, &unreliableRaftHandler{
-			rangeID:            partRepl.RangeID,
-			RaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
+		tc.Servers[s].RaftTransport().ListenIncomingRaftMessages(tc.Target(s).StoreID, &unreliableRaftHandler{
+			rangeID:                    partRepl.RangeID,
+			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
@@ -1149,9 +1149,9 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	for _, i := range []int{0, 1, 2} {
 		store := tc.GetFirstStoreFromServer(t, i)
 		h := &unreliableRaftHandler{
-			name:               fmt.Sprintf("store %d", i),
-			rangeID:            rngDesc.RangeID,
-			RaftMessageHandler: store,
+			name:                       fmt.Sprintf("store %d", i),
+			rangeID:                    rngDesc.RangeID,
+			IncomingRaftMessageHandler: store,
 		}
 		if i != partitionNodeIdx {
 			// Only filter messages from the partitioned store on the other two
@@ -1163,7 +1163,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
-		store.Transport().Listen(store.Ident.StoreID, h)
+		store.Transport().ListenIncomingRaftMessages(store.Ident.StoreID, h)
 	}
 
 	// Stop the heartbeats so that n1's lease can expire.
@@ -1262,12 +1262,12 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	// believing that it is the leader, and lease acquisition requests block.
 	log.Infof(ctx, "test: removing partition")
 	slowSnapHandler := &slowSnapRaftHandler{
-		rangeID:            rngDesc.RangeID,
-		waitCh:             make(chan struct{}),
-		RaftMessageHandler: partitionStore,
+		rangeID:                    rngDesc.RangeID,
+		waitCh:                     make(chan struct{}),
+		IncomingRaftMessageHandler: partitionStore,
 	}
 	defer slowSnapHandler.unblock()
-	partitionStore.Transport().Listen(partitionStore.Ident.StoreID, slowSnapHandler)
+	partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, slowSnapHandler)
 	// Remove the unreliable transport from the other stores, so that messages
 	// sent by the partitioned store can reach them.
 	for _, i := range []int{0, 1, 2} {
@@ -1276,7 +1276,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 			continue
 		}
 		store := tc.GetFirstStoreFromServer(t, i)
-		store.Transport().Listen(store.Ident.StoreID, store)
+		store.Transport().ListenIncomingRaftMessages(store.Ident.StoreID, store)
 	}
 
 	// Now we're going to send a request to the behind replica, and we expect it
@@ -3038,7 +3038,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 
 type noConfChangeTestHandler struct {
 	rangeID roachpb.RangeID
-	kvserver.RaftMessageHandler
+	kvserver.IncomingRaftMessageHandler
 }
 
 func (ncc *noConfChangeTestHandler) HandleRaftRequest(
@@ -3069,7 +3069,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 			}
 		}
 	}
-	return ncc.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+	return ncc.IncomingRaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }
 
 func (ncc *noConfChangeTestHandler) HandleRaftResponse(
@@ -3083,7 +3083,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftResponse(
 			return nil
 		}
 	}
-	return ncc.RaftMessageHandler.HandleRaftResponse(ctx, resp)
+	return ncc.IncomingRaftMessageHandler.HandleRaftResponse(ctx, resp)
 }
 
 func TestReplicaGCRace(t *testing.T) {
@@ -3106,10 +3106,10 @@ func TestReplicaGCRace(t *testing.T) {
 	toStore := tc.GetFirstStoreFromServer(t, 2)
 
 	// Prevent the victim replica from processing configuration changes.
-	tc.Servers[2].RaftTransport().Stop(toStore.Ident.StoreID)
-	tc.Servers[2].RaftTransport().Listen(toStore.Ident.StoreID, &noConfChangeTestHandler{
-		rangeID:            desc.RangeID,
-		RaftMessageHandler: toStore,
+	tc.Servers[2].RaftTransport().StopIncomingRaftMessages(toStore.Ident.StoreID)
+	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(toStore.Ident.StoreID, &noConfChangeTestHandler{
+		rangeID:                    desc.RangeID,
+		IncomingRaftMessageHandler: toStore,
 	})
 
 	repl, err := leaderStore.GetReplica(desc.RangeID)
@@ -3206,7 +3206,7 @@ func TestReplicaGCRace(t *testing.T) {
 		nil, /* knobs */
 	)
 	errChan := errorChannelTestHandler(make(chan *kvpb.Error, 1))
-	fromTransport.Listen(fromStore.StoreID(), errChan)
+	fromTransport.ListenIncomingRaftMessages(fromStore.StoreID(), errChan)
 
 	// Send the heartbeat. Boom. See #11591.
 	// We have to send this multiple times to protect against
@@ -3709,7 +3709,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		nil, /* knobs */
 	)
 	errChan := errorChannelTestHandler(make(chan *kvpb.Error, 1))
-	transport0.Listen(target0.StoreID, errChan)
+	transport0.ListenIncomingRaftMessages(target0.StoreID, errChan)
 
 	// Simulate the removed node asking to trigger an election. Try and try again
 	// until we're reasonably sure the message was sent.
@@ -4240,9 +4240,9 @@ func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 	}
 	s2, err := tc.Server(1).GetStores().(*kvserver.Stores).GetStore(tc.Server(1).GetFirstStoreID())
 	require.NoError(t, err)
-	tc.Servers[1].RaftTransport().Listen(s2.StoreID(), &unreliableRaftHandler{
+	tc.Servers[1].RaftTransport().ListenIncomingRaftMessages(s2.StoreID(), &unreliableRaftHandler{
 		rangeID:                    desc.RangeID,
-		RaftMessageHandler:         s2,
+		IncomingRaftMessageHandler: s2,
 		unreliableRaftHandlerFuncs: handlerFuncs,
 	})
 
@@ -4731,9 +4731,9 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 	require.Nil(t, err)
 
 	for i := 0; i < 3; i++ {
-		tc.Servers[i].RaftTransport().Listen(tc.Target(i).StoreID, &unreliableRaftHandler{
-			rangeID:            ri.Desc.RangeID,
-			RaftMessageHandler: tc.GetFirstStoreFromServer(t, i),
+		tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(tc.Target(i).StoreID, &unreliableRaftHandler{
+			rangeID:                    ri.Desc.RangeID,
+			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, i),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					return rand.Intn(2) == 0

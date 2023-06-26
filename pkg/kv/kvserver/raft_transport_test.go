@@ -220,7 +220,7 @@ func (rttc *raftTransportTestContext) ListenStore(
 	nodeID roachpb.NodeID, storeID roachpb.StoreID,
 ) channelServer {
 	ch := newChannelServer(100, 10*time.Millisecond)
-	rttc.transports[nodeID].Listen(storeID, ch)
+	rttc.transports[nodeID].ListenIncomingRaftMessages(storeID, ch)
 	return ch
 }
 
@@ -530,7 +530,7 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 	const numMessages = 50
 	channelServer := newChannelServer(numMessages*2, 10*time.Millisecond)
 	channelServer.brokenRange = 13
-	serverTransport.Listen(server.StoreID, channelServer)
+	serverTransport.ListenIncomingRaftMessages(server.StoreID, channelServer)
 
 	for i := 0; i < numMessages; i++ {
 		for _, rangeID := range []roachpb.RangeID{1, 13} {
@@ -591,7 +591,7 @@ func TestReopenConnection(t *testing.T) {
 	rttc.ListenStore(clientReplica.NodeID, clientReplica.StoreID)
 
 	// Take down the old server and start a new one at the same address.
-	serverTransport.Stop(serverReplica.StoreID)
+	serverTransport.StopIncomingRaftMessages(serverReplica.StoreID)
 	serverStopper.Stop(context.Background())
 
 	// With the old server down, nothing is listening no the address right now
