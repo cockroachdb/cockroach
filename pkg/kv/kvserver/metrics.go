@@ -483,7 +483,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRdbBloomFilterPrefixUseful = metric.Metadata{
-		Name:        "rocksdb.bloom.filter.prefix.useful",
+		Name:        "storage.wal.bytes_written",
 		Help:        "Number of times the bloom filter helped avoid iterator creation",
 		Measurement: "Bloom Filter Ops",
 		Unit:        metric.Unit_COUNT,
@@ -2034,7 +2034,7 @@ Note that the measurement does not include the duration for replicating the eval
 		Unit:        metric.Unit_PERCENT,
 	}
 	metaWALBytesWritten = metric.Metadata{
-		Name:        "storage.wal.bytes_written",
+		Name:        "rocksdb.wal-bytes-written",
 		Help:        "The number of bytes the storage engine has written to the WAL",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
