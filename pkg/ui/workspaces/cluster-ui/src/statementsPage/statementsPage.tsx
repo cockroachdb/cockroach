@@ -745,9 +745,7 @@ export class StatementsPage extends React.Component<
             renderError={() =>
               LoadingError({
                 statsType: "statements",
-                timeout: this.props.statementsResponse?.error?.name
-                  ?.toLowerCase()
-                  .includes("timeout"),
+                error: this.props.statementsResponse?.error,
               })
             }
           />

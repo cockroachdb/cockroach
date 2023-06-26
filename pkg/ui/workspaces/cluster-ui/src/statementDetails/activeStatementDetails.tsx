@@ -174,9 +174,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
                   renderError={() =>
                     LoadingError({
                       statsType: "explain plan",
-                      timeout: explainPlanState.error?.name
-                        ?.toLowerCase()
-                        .includes("timeout"),
+                      error: explainPlanState.error,
                     })
                   }
                 >
