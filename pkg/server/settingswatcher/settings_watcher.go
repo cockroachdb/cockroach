@@ -141,18 +141,27 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	s.mu.values = make(map[string]settingsValue)
 
 	if s.overridesMonitor != nil {
-		s.mu.overrides = make(map[string]settings.EncodedValue) // Initialize the overrides. We want to do this before processing the
-		// settings table, otherwise we could see temporary transitions to the value
-		// in the table.
-		s.updateOverrides(ctx)
+		// Initialize the overrides. We want to do this before processing
+		// the settings table, otherwise we could see temporary
+		// transitions to the value in the table.
+		s.mu.overrides = make(map[string]settings.EncodedValue)
+		// Wait for the overrides monitor to be ready, which also ensures
+		// it has received initial data from the KV layer.
+		if err := s.overridesMonitor.WaitForStart(ctx); err != nil {
+			return err
+		}
+		// Fetch the overrides once initially, synchronously with the
+		// `Start` call. This ensures that all the overrides have been
+		// applied by the time the `Start` call completes.
+		overridesCh := s.updateOverrides(ctx)
+		log.Infof(ctx, "applied initial setting overrides")
 
-		// Set up a worker to watch the monitor.
+		// Set up a worker to watch the monitor asynchronously.
 		if err := s.stopper.RunAsyncTask(ctx, "setting-overrides", func(ctx context.Context) {
-			overridesCh := s.overridesMonitor.RegisterOverridesChannel()
 			for {
 				select {
 				case <-overridesCh:
-					s.updateOverrides(ctx)
+					overridesCh = s.updateOverrides(ctx)
 
 				case <-s.stopper.ShouldQuiesce():
 					return
@@ -356,8 +365,9 @@ func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key string) {
 
 // updateOverrides updates the overrides map and updates any settings
 // accordingly.
-func (s *SettingsWatcher) updateOverrides(ctx context.Context) {
-	newOverrides := s.overridesMonitor.Overrides()
+func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan struct{}) {
+	var newOverrides map[string]settings.EncodedValue
+	newOverrides, updateCh = s.overridesMonitor.Overrides()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -404,6 +414,8 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) {
 			}
 		}
 	}
+
+	return updateCh
 }
 
 func (s *SettingsWatcher) resetUpdater() {
