@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -149,6 +151,10 @@ type Registry struct {
 		// passively polling for these jobs to complete. If they complete locally,
 		// the waitingSet will be updated appropriately.
 		waiting jobWaitingSets
+
+		// ingestingJobs is a map of jobs which are actively ingesting on this node
+		// including via a processor.
+		ingestingJobs map[jobspb.JobID]struct{}
 	}
 
 	// withSessionEvery ensures that logging when failing to get a live session
@@ -1212,13 +1218,17 @@ func (r *Registry) stepThroughStateMachine(
 	payload := job.Payload()
 	jobType := payload.Type()
 	if jobErr != nil {
-		log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
+		if pgerror.HasCandidateCode(jobErr) {
+			log.Infof(ctx, "%s job %d: stepping through state %s with error: %v", jobType, job.ID(), status, jobErr)
+		} else {
+			log.Errorf(ctx, "%s job %d: stepping through state %s with unexpected error: %+v", jobType, job.ID(), status, jobErr)
+		}
 	} else {
 		log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)
 	}
 	jm := r.metrics.JobMetrics[jobType]
 	onExecutionFailed := func(cause error) error {
-		log.InfofDepth(
+		log.ErrorfDepth(
 			ctx, 1,
 			"job %d: %s execution encountered retriable error: %+v",
 			job.ID(), status, cause,
@@ -1573,4 +1583,33 @@ func (r *Registry) TestingIsJobIdle(jobID jobspb.JobID) bool {
 	defer r.mu.Unlock()
 	adoptedJob := r.mu.adoptedJobs[jobID]
 	return adoptedJob != nil && adoptedJob.isIdle
+}
+
+// MarkAsIngesting records a given jobID as actively ingesting data on the node
+// in which this Registry resides, either directly or via a processor running on
+// behalf of a job being run by a different registry. The returned function is
+// to be called when this node is no longer ingesting for that jobID, typically
+// by deferring it when calling this method. See IsIngesting.
+func (r *Registry) MarkAsIngesting(jobID catpb.JobID) func() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.mu.ingestingJobs == nil {
+		r.mu.ingestingJobs = make(map[catpb.JobID]struct{})
+	}
+	r.mu.ingestingJobs[jobID] = struct{}{}
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		delete(r.mu.ingestingJobs, jobID)
+	}
+}
+
+// IsIngesting returns true if a given job has indicated it is ingesting at this
+// time on this node. See MarkAsIngesting.
+func (r *Registry) IsIngesting(jobID catpb.JobID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.mu.ingestingJobs[jobID]
+	return ok
 }

@@ -115,6 +115,11 @@ type diagnosticsBundle struct {
 	// Stores any error in the collection, building, or insertion of the bundle.
 	collectionErr error
 
+	// errorStrings are all non-critical errors that we ran into when collecting
+	// the bundle. "Non-critical" in this context means that most of the bundle
+	// was still collected to be useful, but some parts might be missing.
+	errorStrings []string
+
 	// diagID is the diagnostics instance ID, populated by insert().
 	diagID stmtdiagnostics.CollectedInstanceID
 }
@@ -150,9 +155,9 @@ func buildStatementBundle(
 
 	buf, err := b.finalize()
 	if err != nil {
-		return diagnosticsBundle{collectionErr: err}
+		return diagnosticsBundle{collectionErr: err, errorStrings: b.errorStrings}
 	}
-	return diagnosticsBundle{zip: buf.Bytes()}
+	return diagnosticsBundle{zip: buf.Bytes(), errorStrings: b.errorStrings}
 }
 
 // insert the bundle in statement diagnostics. Sets bundle.diagID and (in error
@@ -196,6 +201,9 @@ type stmtBundleBuilder struct {
 	trace        tracingpb.Recording
 	placeholders *tree.PlaceholderInfo
 	sv           *settings.Values
+
+	// errorStrings are non-critical errors encountered so far.
+	errorStrings []string
 
 	z memzipper.Zipper
 }
@@ -351,10 +359,19 @@ Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16
 The UI can then be accessed at http://localhost:16686/search`, b.stmt)
 	jaegerJSON, err := b.trace.ToJaegerJSON(b.stmt, comment, "")
 	if err != nil {
+		b.errorStrings = append(b.errorStrings, fmt.Sprintf("error getting jaeger trace: %v", err))
 		b.z.AddFile("trace-jaeger.txt", err.Error())
 	} else {
 		b.z.AddFile("trace-jaeger.json", jaegerJSON)
 	}
+}
+
+// printError writes the given error string into buf (with a newline appended)
+// as well as accumulates the string into b.errorStrings. The method should only
+// be used for non-critical errors.
+func (b *stmtBundleBuilder) printError(errString string, buf *bytes.Buffer) {
+	fmt.Fprintf(buf, errString+"\n")
+	b.errorStrings = append(b.errorStrings, errString)
 }
 
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
@@ -362,19 +379,19 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 
 	var buf bytes.Buffer
 	if err := c.PrintVersion(&buf); err != nil {
-		fmt.Fprintf(&buf, "-- error getting version: %v\n", err)
+		b.printError(fmt.Sprintf("-- error getting version: %v", err), &buf)
 	}
 	fmt.Fprintf(&buf, "\n")
 
 	// Show the values of session variables that can impact planning decisions.
 	if err := c.PrintSessionSettings(&buf, b.sv); err != nil {
-		fmt.Fprintf(&buf, "-- error getting session settings: %v\n", err)
+		b.printError(fmt.Sprintf("-- error getting session settings: %v", err), &buf)
 	}
 
 	fmt.Fprintf(&buf, "\n")
 
 	if err := c.PrintClusterSettings(&buf); err != nil {
-		fmt.Fprintf(&buf, "-- error getting cluster settings: %v\n", err)
+		b.printError(fmt.Sprintf("-- error getting cluster settings: %v", err), &buf)
 	}
 
 	b.z.AddFile("env.sql", buf.String())
@@ -398,7 +415,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		return err
 	})
 	if err != nil {
-		b.z.AddFile("schema.sql", fmt.Sprintf("-- error getting data source names: %v\n", err))
+		errString := fmt.Sprintf("-- error getting data source names: %v", err)
+		b.errorStrings = append(b.errorStrings, errString)
+		b.z.AddFile("schema.sql", errString+"\n")
 		return
 	}
 
@@ -414,24 +433,24 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	blankLine()
 	if err := c.printCreateAllSchemas(&buf); err != nil {
-		fmt.Fprintf(&buf, "-- error getting all schemas: %v\n", err)
+		b.printError(fmt.Sprintf("-- error getting all schemas: %v", err), &buf)
 	}
 	for i := range sequences {
 		blankLine()
 		if err := c.PrintCreateSequence(&buf, &sequences[i]); err != nil {
-			fmt.Fprintf(&buf, "-- error getting schema for sequence %s: %v\n", sequences[i].String(), err)
+			b.printError(fmt.Sprintf("-- error getting schema for sequence %s: %v", sequences[i].String(), err), &buf)
 		}
 	}
 	for i := range tables {
 		blankLine()
 		if err := c.PrintCreateTable(&buf, &tables[i]); err != nil {
-			fmt.Fprintf(&buf, "-- error getting schema for table %s: %v\n", tables[i].String(), err)
+			b.printError(fmt.Sprintf("-- error getting schema for table %s: %v", tables[i].String(), err), &buf)
 		}
 	}
 	for i := range views {
 		blankLine()
 		if err := c.PrintCreateView(&buf, &views[i]); err != nil {
-			fmt.Fprintf(&buf, "-- error getting schema for view %s: %v\n", views[i].String(), err)
+			b.printError(fmt.Sprintf("-- error getting schema for view %s: %v", views[i].String(), err), &buf)
 		}
 	}
 	if buf.Len() == 0 {
@@ -441,20 +460,23 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	for i := range tables {
 		buf.Reset()
 		if err := c.PrintTableStats(&buf, &tables[i], false /* hideHistograms */); err != nil {
-			fmt.Fprintf(&buf, "-- error getting statistics for table %s: %v\n", tables[i].String(), err)
+			b.printError(fmt.Sprintf("-- error getting statistics for table %s: %v", tables[i].String(), err), &buf)
 		}
 		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
 	}
 }
 
 func (b *stmtBundleBuilder) addErrors(queryErr, payloadErr, commErr error) {
-	if queryErr == nil && payloadErr == nil && commErr == nil {
+	if queryErr == nil && payloadErr == nil && commErr == nil && len(b.errorStrings) == 0 {
 		return
 	}
 	output := fmt.Sprintf(
-		"query error:\n%v\n\npayload error:\n%v\n\ncomm error:\n%v\n",
+		"query error:\n%v\n\npayload error:\n%v\n\ncomm error:\n%v\n\n",
 		queryErr, payloadErr, commErr,
 	)
+	for _, errString := range b.errorStrings {
+		output += errString + "\n"
+	}
 	b.z.AddFile("errors.txt", output)
 }
 

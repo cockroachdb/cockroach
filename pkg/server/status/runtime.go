@@ -13,12 +13,14 @@ package status
 import (
 	"context"
 	"os"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -234,6 +236,13 @@ var (
 		Help:        "Packets sent on all network interfaces since this process started",
 	}
 )
+
+// diskMetricsIgnoredDevices is a regex that matches any block devices that must be
+// ignored for disk metrics (eg. sys.host.disk.write.bytes), as those devices
+// have likely been counted elsewhere. This prevents us from double-counting,
+// for instance, RAID volumes under both the logical volume and under the
+// physical volume(s).
+var diskMetricsIgnoredDevices = envutil.EnvOrDefaultString("COCKROACH_DISK_METRICS_IGNORED_DEVICES", getDefaultIgnoredDevices())
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
 // We will not necessarily have implementations for all builds, so check for nil first.
@@ -457,8 +466,10 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
 	}
-	cgroupCPU, _ := cgroups.GetCgroupCPU()
-	cpuShare := cgroupCPU.CPUShares()
+	cpuCapacity, err := getCPUCapacity()
+	if err != nil {
+		log.Ops.Errorf(ctx, "unable to get CPU capacity: %v", err)
+	}
 
 	fds := gosigar.ProcFDUsage{}
 	if err := fds.Get(pid); err != nil {
@@ -519,7 +530,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	stime := sysTimeMillis * 1e6
 	urate := float64(utime-rsr.last.utime) / dur
 	srate := float64(stime-rsr.last.stime) / dur
-	combinedNormalizedPerc := (srate + urate) / cpuShare
+	combinedNormalizedPerc := (srate + urate) / cpuCapacity
 	gcPauseRatio := float64(uint64(gc.PauseTotal)-rsr.last.gcPauseTime) / dur
 	runnableSum := goschedstats.CumulativeNormalizedRunnableGoroutines()
 	// The number of runnable goroutines per CPU is a count, but it can vary
@@ -633,7 +644,7 @@ func getSummedDiskCounters(ctx context.Context) (DiskStats, error) {
 		return DiskStats{}, err
 	}
 
-	return sumDiskCounters(diskCounters), nil
+	return sumAndFilterDiskCounters(diskCounters)
 }
 
 func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
@@ -645,11 +656,26 @@ func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
 	return sumNetworkCounters(netCounters), nil
 }
 
-// sumDiskCounters returns a new disk.IOCountersStat whose values are the sum of the
-// values in the slice of disk.IOCountersStats passed in.
-func sumDiskCounters(disksStats []DiskStats) DiskStats {
+// sumAndFilterDiskCounters returns a new disk.IOCountersStat whose values are
+// the sum of the values in the slice of disk.IOCountersStats passed in. It
+// filters out any disk counters that are likely reflecting values already
+// counted elsewhere, eg. md* logical volumes that are created out of RAIDing
+// underlying drives. The filtering regex defaults to a platform-dependent one.
+func sumAndFilterDiskCounters(disksStats []DiskStats) (DiskStats, error) {
 	output := DiskStats{}
+	var ignored *regexp.Regexp
+	if diskMetricsIgnoredDevices != "" {
+		var err error
+		ignored, err = regexp.Compile(diskMetricsIgnoredDevices)
+		if err != nil {
+			return output, err
+		}
+	}
+
 	for _, stats := range disksStats {
+		if ignored != nil && ignored.MatchString(stats.Name) {
+			continue
+		}
 		output.ReadBytes += stats.ReadBytes
 		output.readCount += stats.readCount
 		output.readTime += stats.readTime
@@ -663,7 +689,7 @@ func sumDiskCounters(disksStats []DiskStats) DiskStats {
 
 		output.iopsInProgress += stats.iopsInProgress
 	}
-	return output
+	return output, nil
 }
 
 // subtractDiskCounters subtracts the counters in `sub` from the counters in `from`,
@@ -711,4 +737,24 @@ func GetCPUTime(ctx context.Context) (userTimeMillis, sysTimeMillis int64, err e
 		return 0, 0, err
 	}
 	return int64(cpuTime.User), int64(cpuTime.Sys), nil
+}
+
+// getCPUCapacity returns the number of logical CPU processors available for
+// use by the process. The capacity accounts for cgroup constraints, GOMAXPROCS
+// and the number of host processors.
+func getCPUCapacity() (float64, error) {
+	numProcs := float64(runtime.GOMAXPROCS(0 /* read only */))
+	cgroupCPU, err := cgroups.GetCgroupCPU()
+	if err != nil {
+		// Return the GOMAXPROCS value if unable to read the cgroup settings, in
+		// practice this is not likely to occur.
+		return numProcs, err
+	}
+	cpuShare := cgroupCPU.CPUShares()
+	// Take the minimum of the CPU shares and the GOMAXPROCS value. The most CPU
+	// the process could use is the lesser of the two.
+	if cpuShare > numProcs {
+		return numProcs, nil
+	}
+	return cpuShare, nil
 }

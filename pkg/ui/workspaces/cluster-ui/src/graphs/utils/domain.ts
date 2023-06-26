@@ -307,10 +307,7 @@ export function calculateYAxisDomain(
   data: number[],
 ): AxisDomain {
   const allDatapoints = data.concat([0, 1]);
-  const yExtent = [
-    Math.min(...allDatapoints),
-    Math.max(...allDatapoints),
-  ] as Extent;
+  const yExtent = [_.min(allDatapoints), _.max(allDatapoints)] as Extent;
 
   switch (axisUnits) {
     case AxisUnits.Bytes:

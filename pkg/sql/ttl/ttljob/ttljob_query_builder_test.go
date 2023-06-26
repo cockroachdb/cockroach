@@ -8,365 +8,371 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package ttljob
+package ttljob_test
 
 import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	relationName = "defaultdb.relation_name"
+	ttlColName   = "expire_at"
+)
+
+var (
+	cutoff   = time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+	expireAt = cutoff.AddDate(-1, 0, 0)
+)
+
+func genCreateTableStatement(pkColNames []string, pkColDirs []catpb.IndexColumn_Direction) string {
+	numPKCols := len(pkColNames)
+	colDefs := make([]string, 0, numPKCols+1)
+	for i := range pkColNames {
+		colDefs = append(colDefs, pkColNames[i]+" int")
+	}
+	colDefs = append(colDefs, ttlColName+" timestamptz")
+	pkColDefs := make([]string, 0, numPKCols)
+	for i := range pkColNames {
+		var pkColDir catpb.IndexColumn_Direction
+		if pkColDirs != nil {
+			pkColDir = pkColDirs[i]
+		}
+		pkColDefs = append(pkColDefs, pkColNames[i]+" "+pkColDir.String())
+	}
+	return fmt.Sprintf(
+		"CREATE TABLE %s (%s, PRIMARY KEY(%s))",
+		relationName, strings.Join(colDefs, ", "), strings.Join(pkColDefs, ", "),
+	)
+}
+
+func genInsertStatement(values []string) string {
+	return fmt.Sprintf(
+		"INSERT INTO %s VALUES %s",
+		relationName, strings.Join(values, ", "),
+	)
+}
+
 func TestSelectQueryBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	mockTime := time.Date(2000, 1, 1, 13, 30, 45, 0, time.UTC)
-	mockDuration := -10 * time.Second
-
-	type iteration struct {
-		expectedQuery string
-		expectedArgs  []interface{}
-		rows          []tree.Datums
+	intsToDatums := func(ints ...int) tree.Datums {
+		datums := make(tree.Datums, 0, len(ints))
+		for _, i := range ints {
+			datums = append(datums, tree.NewDInt(tree.DInt(i)))
+		}
+		return datums
 	}
+
 	testCases := []struct {
-		desc       string
-		b          selectQueryBuilder
-		iterations []iteration
+		desc      string
+		pkColDirs []catpb.IndexColumn_Direction
+		numRows   int
+		bounds    ttljob.QueryBounds
+		// [iteration][row][val]
+		iterations [][][]int
 	}{
 		{
-			desc: "middle range",
-			b: makeSelectQueryBuilder(
-				1,
-				mockTime,
-				[]string{"col1", "col2"},
-				"relation_name",
-				spanToProcess{
-					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
-					endPK:   tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
-				},
-				mockDuration,
-				2,
-				colinfo.TTLDefaultExpirationColumnName,
-			),
-			iterations: []iteration{
+			desc: "ASC",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_ASC,
+			},
+			iterations: [][][]int{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) >= ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(200), tree.NewDInt(15),
-						tree.NewDInt(100), tree.NewDInt(5),
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(100), tree.NewDInt(12)},
-						{tree.NewDInt(105), tree.NewDInt(12)},
-					},
+					{0},
+					{1},
 				},
+				{},
+			},
+		},
+		{
+			desc: "DESC",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_DESC,
+			},
+			iterations: [][][]int{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(200), tree.NewDInt(15),
-						tree.NewDInt(105), tree.NewDInt(12),
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(112), tree.NewDInt(19)},
-						{tree.NewDInt(180), tree.NewDInt(132)},
-					},
+					{1},
+					{0},
 				},
+				{},
+			},
+		},
+		{
+			desc: "ASC partial last result",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_ASC,
+			},
+			numRows: 1,
+			iterations: [][][]int{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(200), tree.NewDInt(15),
-						tree.NewDInt(180), tree.NewDInt(132),
-					},
-					rows: []tree.Datums{},
+					{0},
 				},
 			},
 		},
 		{
-			desc: "only one range",
-			b: makeSelectQueryBuilder(
-				1,
-				mockTime,
-				[]string{"col1", "col2"},
-				"table_name",
-				spanToProcess{},
-				mockDuration,
-				2,
-				colinfo.TTLDefaultExpirationColumnName,
-			),
-			iterations: []iteration{
+			desc: "DESC partial last result",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_DESC,
+			},
+			numRows: 1,
+			iterations: [][][]int{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(100), tree.NewDInt(12)},
-						{tree.NewDInt(105), tree.NewDInt(12)},
-					},
-				},
-				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(105), tree.NewDInt(12),
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(112), tree.NewDInt(19)},
-						{tree.NewDInt(180), tree.NewDInt(132)},
-					},
-				},
-				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(180), tree.NewDInt(132),
-					},
-					rows: []tree.Datums{},
+					{0},
 				},
 			},
 		},
 		{
-			desc: "one range, but a partial startPK and endPK split",
-			b: makeSelectQueryBuilder(
-				1,
-				mockTime,
-				[]string{"col1", "col2"},
-				"table_name",
-				spanToProcess{
-					startPK: tree.Datums{tree.NewDInt(100)},
-					endPK:   tree.Datums{tree.NewDInt(181)},
-				},
-				mockDuration,
-				2,
-				colinfo.TTLDefaultExpirationColumnName,
-			),
-			iterations: []iteration{
+			desc: "ASC start bounds",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_ASC,
+			},
+			bounds: ttljob.QueryBounds{
+				Start: intsToDatums(1),
+			},
+			iterations: [][][]int{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1) >= ($3) AND (col1) < ($2)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(181),
-						tree.NewDInt(100),
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(100), tree.NewDInt(12)},
-						{tree.NewDInt(105), tree.NewDInt(12)},
-					},
-				},
-				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($3, $4) AND (col1) < ($2)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(181),
-						tree.NewDInt(105), tree.NewDInt(12),
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(112), tree.NewDInt(19)},
-						{tree.NewDInt(180), tree.NewDInt(132)},
-					},
-				},
-				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($3, $4) AND (col1) < ($2)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(181),
-						tree.NewDInt(180), tree.NewDInt(132),
-					},
-					rows: []tree.Datums{},
+					{1},
 				},
 			},
 		},
 		{
-			desc: "first range",
-			b: makeSelectQueryBuilder(
-				1,
-				mockTime,
-				[]string{"col1", "col2"},
-				"table_name",
-				spanToProcess{
-					endPK: tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
-				},
-				mockDuration,
-				2,
-				colinfo.TTLDefaultExpirationColumnName,
-			),
-			iterations: []iteration{
+			desc: "ASC end bounds",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_ASC,
+			},
+			bounds: ttljob.QueryBounds{
+				End: intsToDatums(0),
+			},
+			iterations: [][][]int{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
- AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(200), tree.NewDInt(15),
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(100), tree.NewDInt(12)},
-						{tree.NewDInt(105), tree.NewDInt(12)},
-					},
-				},
-				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(200), tree.NewDInt(15),
-						tree.NewDInt(105), tree.NewDInt(12),
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(112), tree.NewDInt(19)},
-						{tree.NewDInt(180), tree.NewDInt(132)},
-					},
-				},
-				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(200), tree.NewDInt(15),
-						tree.NewDInt(180), tree.NewDInt(132),
-					},
-					rows: []tree.Datums{},
+					{0},
 				},
 			},
 		},
 		{
-			desc: "last range",
-			b: makeSelectQueryBuilder(
-				1,
-				mockTime,
-				[]string{"col1", "col2"},
-				"table_name",
-				spanToProcess{
-					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
-				},
-				mockDuration,
-				2,
-				colinfo.TTLDefaultExpirationColumnName,
-			),
-			iterations: []iteration{
+			desc: "DESC start bounds",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_DESC,
+			},
+			bounds: ttljob.QueryBounds{
+				Start: intsToDatums(0),
+			},
+			iterations: [][][]int{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) >= ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(100), tree.NewDInt(5),
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(100), tree.NewDInt(12)},
-						{tree.NewDInt(105), tree.NewDInt(12)},
-					},
+					{0},
 				},
+			},
+		},
+		{
+			desc: "DESC end bounds",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_DESC,
+			},
+			bounds: ttljob.QueryBounds{
+				End: intsToDatums(1),
+			},
+			iterations: [][][]int{
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(105), tree.NewDInt(12),
-					},
-					rows: []tree.Datums{
-						{tree.NewDInt(112), tree.NewDInt(19)},
-						{tree.NewDInt(180), tree.NewDInt(132)},
-					},
+					{1},
+				},
+			},
+		},
+		{
+			desc: "ASC ASC",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_ASC,
+				catpb.IndexColumn_ASC,
+			},
+			iterations: [][][]int{
+				{
+					{0, 0},
+					{0, 1},
 				},
 				{
-					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '-10 seconds'
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) > ($2, $3)
-ORDER BY col1, col2
-LIMIT 2`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(180), tree.NewDInt(132),
-					},
-					rows: []tree.Datums{},
+					{1, 0},
+					{1, 1},
 				},
+				{},
+			},
+		},
+		{
+			desc: "DESC DESC",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_DESC,
+				catpb.IndexColumn_DESC,
+			},
+			iterations: [][][]int{
+				{
+					{1, 1},
+					{1, 0},
+				},
+				{
+					{0, 1},
+					{0, 0},
+				},
+				{},
+			},
+		},
+		{
+			desc: "ASC DESC ASC",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_ASC,
+				catpb.IndexColumn_DESC,
+				catpb.IndexColumn_ASC,
+			},
+			iterations: [][][]int{
+				{
+					{0, 1, 0},
+					{0, 1, 1},
+				},
+				{
+					{0, 0, 0},
+					{0, 0, 1},
+				},
+				{
+					{1, 1, 0},
+					{1, 1, 1},
+				},
+				{
+					{1, 0, 0},
+					{1, 0, 1},
+				},
+				{},
+			},
+		},
+		{
+			desc: "DESC ASC DESC",
+			pkColDirs: []catpb.IndexColumn_Direction{
+				catpb.IndexColumn_DESC,
+				catpb.IndexColumn_ASC,
+				catpb.IndexColumn_DESC,
+			},
+			iterations: [][][]int{
+				{
+					{1, 0, 1},
+					{1, 0, 0},
+				},
+				{
+					{1, 1, 1},
+					{1, 1, 0},
+				},
+				{
+					{0, 0, 1},
+					{0, 0, 0},
+				},
+				{
+					{0, 1, 1},
+					{0, 1, 0},
+				},
+				{},
 			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			for i, it := range tc.iterations {
-				q, args := tc.b.nextQuery()
-				require.Equal(t, it.expectedQuery, q)
-				require.Equal(t, it.expectedArgs, args)
-				require.NoError(t, tc.b.moveCursor(it.rows))
-				if i >= 1 {
-					require.NotEmpty(t, tc.b.cachedQuery)
+			ctx := context.Background()
+			testCluster := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+			defer testCluster.Stopper().Stop(ctx)
+
+			testServer := testCluster.Server(0)
+			ie := testServer.InternalExecutor().(*sql.InternalExecutor)
+
+			// Generate pkColNames.
+			pkColDirs := tc.pkColDirs
+			numPKCols := len(pkColDirs)
+			pkColNames := ttlbase.GenPKColNames(numPKCols)
+
+			// Run CREATE TABLE statement.
+			createTableStatement := genCreateTableStatement(pkColNames, pkColDirs)
+			_, err := ie.Exec(ctx, "create ttl table", nil, createTableStatement)
+			require.NoError(t, err)
+
+			// Run INSERT statement.
+			numRows := tc.numRows
+			maxNumRows := 2 << (numPKCols - 1)
+			if numRows == 0 {
+				numRows = maxNumRows
+			} else if numRows > maxNumRows {
+				panic("numRows must be less than maxNumRows")
+			}
+			values := make([]string, 0, numRows)
+			for i := 0; i < numRows; i++ {
+				format := fmt.Sprintf("%%0%db", numPKCols)
+				number := fmt.Sprintf(format, i)
+				value := make([]string, 0, numPKCols+1)
+				for j := 0; j < numPKCols; j++ {
+					value = append(value, string(number[j]))
+				}
+				value = append(value, "'"+expireAt.Format(time.RFC3339)+"'")
+				values = append(values, "("+strings.Join(value, ", ")+")")
+			}
+			insertStatement := genInsertStatement(values)
+			_, err = ie.Exec(ctx, "insert ttl table", nil, insertStatement)
+			require.NoError(t, err)
+
+			// Setup SelectQueryBuilder.
+			queryBuilder := ttljob.MakeSelectQueryBuilder(
+				cutoff,
+				pkColNames,
+				pkColDirs,
+				relationName,
+				tc.bounds,
+				0,
+				2,
+				ttlColName,
+			)
+
+			// Verify queryBuilder iterations.
+			i := 0
+			expectedIterations := tc.iterations
+			actualIterations := make([][][]int, 0, len(expectedIterations))
+			for ; ; i++ {
+				const msg = "i=%d"
+				result, hasNext, err := queryBuilder.Run(ctx, ie)
+				require.NoErrorf(t, err, msg, i)
+				actualIteration := make([][]int, 0, len(result))
+				for _, datums := range result {
+					row := make([]int, 0, len(datums))
+					for _, datum := range datums {
+						val := int(*datum.(*tree.DInt))
+						row = append(row, val)
+					}
+					actualIteration = append(actualIteration, row)
+				}
+				actualIterations = append(actualIterations, actualIteration)
+				require.Greaterf(t, len(expectedIterations), i, msg, i)
+				require.Equalf(t, expectedIterations[i], actualIteration, msg, i)
+				if !hasNext {
+					break
+				}
+			}
+			require.Len(t, expectedIterations, i+1)
+
+			// Verify all selected rows are unique.
+			for i := range actualIterations {
+				for j := range actualIterations {
+					if i != j {
+						require.NotEqualf(t, actualIterations[i], actualIterations[j], "i=%d j=%d", i, j)
+					}
 				}
 			}
 		})
@@ -377,119 +383,84 @@ func TestDeleteQueryBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	mockTime := time.Date(2000, 1, 1, 13, 30, 45, 0, time.UTC)
-
-	type iteration struct {
-		rows []tree.Datums
-
-		expectedQuery string
-		expectedArgs  []interface{}
-	}
 	testCases := []struct {
-		desc       string
-		b          deleteQueryBuilder
-		iterations []iteration
+		desc      string
+		numPKCols int
+		numRows   int
 	}{
 		{
-			desc: "single delete less than batch size",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, colinfo.TTLDefaultExpirationColumnName),
-			iterations: []iteration{
-				{
-					rows: []tree.Datums{
-						{tree.NewDInt(10), tree.NewDInt(15)},
-						{tree.NewDInt(12), tree.NewDInt(16)},
-					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name]
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) IN (($2, $3), ($4, $5))`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(10), tree.NewDInt(15),
-						tree.NewDInt(12), tree.NewDInt(16),
-					},
-				},
-			},
+			desc:      "1 PK col - 0 rows",
+			numPKCols: 1,
+			numRows:   0,
 		},
 		{
-			desc: "multiple deletes",
-			b:    makeDeleteQueryBuilder(1, mockTime, []string{"col1", "col2"}, "table_name", 3, colinfo.TTLDefaultExpirationColumnName),
-			iterations: []iteration{
-				{
-					rows: []tree.Datums{
-						{tree.NewDInt(10), tree.NewDInt(15)},
-						{tree.NewDInt(12), tree.NewDInt(16)},
-						{tree.NewDInt(12), tree.NewDInt(18)},
-					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name]
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(10), tree.NewDInt(15),
-						tree.NewDInt(12), tree.NewDInt(16),
-						tree.NewDInt(12), tree.NewDInt(18),
-					},
-				},
-				{
-					rows: []tree.Datums{
-						{tree.NewDInt(110), tree.NewDInt(115)},
-						{tree.NewDInt(112), tree.NewDInt(116)},
-						{tree.NewDInt(112), tree.NewDInt(118)},
-					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name]
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) IN (($2, $3), ($4, $5), ($6, $7))`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(110), tree.NewDInt(115),
-						tree.NewDInt(112), tree.NewDInt(116),
-						tree.NewDInt(112), tree.NewDInt(118),
-					},
-				},
-				{
-					rows: []tree.Datums{
-						{tree.NewDInt(1210), tree.NewDInt(1215)},
-					},
-					expectedQuery: `DELETE FROM [1 AS tbl_name]
-WHERE crdb_internal_expiration <= $1
-AND (col1, col2) IN (($2, $3))`,
-					expectedArgs: []interface{}{
-						mockTime,
-						tree.NewDInt(1210), tree.NewDInt(1215),
-					},
-				},
-			},
+			desc:      "1 PK col - 1 row",
+			numPKCols: 1,
+			numRows:   1,
+		},
+		{
+			desc:      "3 PK cols - 3 rows",
+			numPKCols: 3,
+			numRows:   3,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			for _, it := range tc.iterations {
-				q, args := tc.b.buildQueryAndArgs(it.rows)
-				require.Equal(t, it.expectedQuery, q)
-				require.Equal(t, it.expectedArgs, args)
+			ctx := context.Background()
+
+			testCluster := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+			defer testCluster.Stopper().Stop(ctx)
+
+			testServer := testCluster.Server(0)
+			ie := testServer.InternalExecutor().(*sql.InternalExecutor)
+
+			// Generate pkColNames.
+			numPKCols := tc.numPKCols
+			pkColNames := ttlbase.GenPKColNames(numPKCols)
+
+			// Run CREATE TABLE statement.
+			createTableStatement := genCreateTableStatement(pkColNames, nil)
+			_, err := ie.Exec(ctx, "create ttl table", nil, createTableStatement)
+			require.NoError(t, err)
+
+			// Run INSERT statement.
+			expectedNumRows := tc.numRows
+			if expectedNumRows > 0 {
+				values := make([]string, 0, expectedNumRows)
+				for i := 0; i < expectedNumRows; i++ {
+					value := make([]string, 0, numPKCols+1)
+					for j := 0; j < numPKCols; j++ {
+						value = append(value, strconv.Itoa(i))
+					}
+					value = append(value, "'"+expireAt.Format(time.RFC3339)+"'")
+					values = append(values, "("+strings.Join(value, ", ")+")")
+				}
+				insertStatement := genInsertStatement(values)
+				_, err = ie.Exec(ctx, "insert ttl table", nil, insertStatement)
+				require.NoError(t, err)
 			}
-		})
-	}
-}
 
-func TestMakeColumnNamesSQL(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+			// Setup DeleteQueryBuilder.
+			queryBuilder := ttljob.MakeDeleteQueryBuilder(
+				cutoff,
+				pkColNames,
+				relationName,
+				2, /* deleteBatchSize */
+				ttlColName,
+			)
 
-	testCases := []struct {
-		cols     []string
-		expected string
-	}{
-		{[]string{"a"}, "a"},
-		{[]string{"index"}, `"index"`},
-		{[]string{"a", "b"}, "a, b"},
-		{[]string{"escape-me", "index", "c"}, `"escape-me", "index", c`},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.expected, func(t *testing.T) {
-			require.Equal(t, tc.expected, ttlbase.MakeColumnNamesSQL(tc.cols))
+			// Verify rows are deleted.
+			err = testServer.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				rows := make([]tree.Datums, 0, expectedNumRows)
+				actualNumRows, err := queryBuilder.Run(ctx, ie, txn, rows)
+				if err != nil {
+					return err
+				}
+				require.Equal(t, int64(expectedNumRows), actualNumRows)
+				return nil
+			})
+			require.NoError(t, err)
 		})
 	}
 }

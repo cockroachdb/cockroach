@@ -447,7 +447,11 @@ func (c *conn) serveImpl(
 				// If this is a simple query, we have to send the sync message back as
 				// well.
 				if isSimpleQuery {
-					if err := c.stmtBuf.Push(ctx, sql.Sync{}); err != nil {
+					if err := c.stmtBuf.Push(ctx, sql.Sync{
+						// CRDB is implicitly generating this Sync during the simple
+						// protocol.
+						ExplicitFromClient: false,
+					}); err != nil {
 						return false, isSimpleQuery, errors.New("pgwire: error writing sync to the client whilst message is too big")
 					}
 				}
@@ -506,7 +510,11 @@ func (c *conn) serveImpl(
 				); err != nil {
 					return false, isSimpleQuery, err
 				}
-				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{})
+				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{
+					// CRDB is implicitly generating this Sync during the simple
+					// protocol.
+					ExplicitFromClient: false,
+				})
 
 			case pgwirebase.ClientMsgExecute:
 				// To support the 1PC txn fast path, we peek at the next command to
@@ -543,8 +551,11 @@ func (c *conn) serveImpl(
 				// protocol and encounters an error, everything until the next sync
 				// message has to be skipped. See:
 				// https://www.postgresql.org/docs/current/10/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
-
-				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{})
+				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{
+					// The client explicitly sent this Sync as part of the extended
+					// protocol.
+					ExplicitFromClient: true,
+				})
 
 			case pgwirebase.ClientMsgFlush:
 				return false, isSimpleQuery, c.handleFlush(ctx)
@@ -1376,6 +1387,9 @@ func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult)
 	for i, col := range row {
 		fmtCode := pgwirebase.FormatText
 		if r.formatCodes != nil {
+			if i >= len(r.formatCodes) {
+				return errors.AssertionFailedf("could not find format code for column %d in %v", i, r.formatCodes)
+			}
 			fmtCode = r.formatCodes[i]
 		}
 		switch fmtCode {
@@ -1414,6 +1428,9 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 			for vecIdx := 0; vecIdx < len(c.vecsScratch.Vecs); vecIdx++ {
 				fmtCode := pgwirebase.FormatText
 				if r.formatCodes != nil {
+					if vecIdx >= len(r.formatCodes) {
+						return errors.AssertionFailedf("could not find format code for column %d in %v", vecIdx, r.formatCodes)
+					}
 					fmtCode = r.formatCodes[vecIdx]
 				}
 				switch fmtCode {

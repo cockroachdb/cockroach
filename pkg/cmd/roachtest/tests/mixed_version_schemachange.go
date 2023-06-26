@@ -24,7 +24,7 @@ import (
 func registerSchemaChangeMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "schemachange/mixed-versions",
-		Owner: registry.OwnerSQLSchema,
+		Owner: registry.OwnerSQLFoundations,
 		// This tests the work done for 20.1 that made schema changes jobs and in
 		// addition prevented making any new schema changes on a mixed cluster in
 		// order to prevent bugs during upgrades.
@@ -34,6 +34,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 			if runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
+
 			maxOps := 100
 			concurrency := 5
 			if c.IsLocal() {

@@ -370,7 +370,7 @@ func valuesSpecToEncDatum(
 	res = make([]rowenc.EncDatum, len(valuesSpec.Columns))
 	rem := valuesSpec.RawBytes[0]
 	for i, colInfo := range valuesSpec.Columns {
-		res[i], rem, err = rowenc.EncDatumFromBuffer(colInfo.Type, colInfo.Encoding, rem)
+		res[i], rem, err = rowenc.EncDatumFromBuffer(colInfo.Encoding, rem)
 		if err != nil {
 			return nil, err
 		}

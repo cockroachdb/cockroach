@@ -189,6 +189,8 @@ func (t *topKSorter) Reset(ctx context.Context) {
 	t.firstUnprocessedTupleIdx = 0
 	t.topK.ResetInternalBatch()
 	t.emitted = 0
+	t.exportedFromTopK = 0
+	t.exportedFromBatch = 0
 	if t.hasPartialOrder {
 		t.orderState.distincter.(colexecop.Resetter).Reset(t.Ctx)
 	}

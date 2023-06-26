@@ -137,12 +137,17 @@ func GetUserSessionInitInfo(
 		return execCfg.InternalExecutorFactory.DescsTxn(ctx, execCfg.DB, func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
+			var sessionData *sessiondata.SessionData
+			if ie.sessionDataStack != nil {
+				sessionData = ie.sessionDataStack.Top()
+			}
 			memberships, err := MemberOfWithAdminOption(
 				ctx,
 				execCfg,
 				ie,
 				descsCol,
 				txn,
+				sessionData,
 				user,
 			)
 			if err != nil {

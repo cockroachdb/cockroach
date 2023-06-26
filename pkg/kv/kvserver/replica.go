@@ -86,8 +86,9 @@ var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIES
 var disableSyncRaftLog = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.raft_log.disable_synchronization_unsafe",
-	"set to true to disable synchronization on Raft log writes to persistent storage. "+
-		"Setting to true risks data loss or data corruption on server crashes. "+
+	"disables synchronization of Raft log writes to persistent storage. "+
+		"Setting to true risks data loss or data corruption on process or OS crashes. "+
+		"This not only disables fsync, but also disables flushing writes to the OS buffer. "+
 		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
 	false,
 )
@@ -1150,8 +1151,8 @@ func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
 // works when the load based splitting cluster setting is enabled.
 //
 // Use QueriesPerSecond() for current QPS stats for all other purposes.
-func (r *Replica) GetMaxSplitQPS() (float64, bool) {
-	return r.loadBasedSplitter.MaxQPS(r.Clock().PhysicalTime())
+func (r *Replica) GetMaxSplitQPS(ctx context.Context) (float64, bool) {
+	return r.loadBasedSplitter.MaxQPS(ctx, r.Clock().PhysicalTime())
 }
 
 // GetLastSplitQPS returns the Replica's most recent queries/s request rate.
@@ -1160,8 +1161,8 @@ func (r *Replica) GetMaxSplitQPS() (float64, bool) {
 // works when the load based splitting cluster setting is enabled.
 //
 // Use QueriesPerSecond() for current QPS stats for all other purposes.
-func (r *Replica) GetLastSplitQPS() float64 {
-	return r.loadBasedSplitter.LastQPS(r.Clock().PhysicalTime())
+func (r *Replica) GetLastSplitQPS(ctx context.Context) float64 {
+	return r.loadBasedSplitter.LastQPS(ctx, r.Clock().PhysicalTime())
 }
 
 // ContainsKey returns whether this range contains the specified key.

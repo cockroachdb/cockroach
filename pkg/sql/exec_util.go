@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1237,6 +1238,9 @@ type ExecutorConfig struct {
 
 	// Role membership cache.
 	RoleMemberCache *MembershipCache
+
+	// Client cert expiration cache.
+	ClientCertExpirationCache *security.ClientCertExpirationCache
 
 	// SessionInitCache cache; contains information used during authentication
 	// and per-role default settings.
@@ -3394,6 +3398,14 @@ func (m *sessionDataMutator) SetOptimizerAlwaysUseHistograms(val bool) {
 	m.data.OptimizerAlwaysUseHistograms = val
 }
 
+func (m *sessionDataMutator) SetOptimizerHoistUncorrelatedEqualitySubqueries(val bool) {
+	m.data.OptimizerHoistUncorrelatedEqualitySubqueries = val
+}
+
+func (m *sessionDataMutator) SetOptimizerUseImprovedComputedColumnFiltersDerivation(val bool) {
+	m.data.OptimizerUseImprovedComputedColumnFiltersDerivation = val
+}
+
 func (m *sessionDataMutator) SetPreparedStatementsCacheSize(val int64) {
 	m.data.PreparedStatementsCacheSize = val
 }
@@ -3404,6 +3416,10 @@ func (m *sessionDataMutator) SetStreamerEnabled(val bool) {
 
 func (m *sessionDataMutator) SetUnboundedParallelScans(val bool) {
 	m.data.UnboundedParallelScans = val
+}
+
+func (m *sessionDataMutator) SetAllowRoleMembershipsToChangeDuringTransaction(val bool) {
+	m.data.AllowRoleMembershipsToChangeDuringTransaction = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

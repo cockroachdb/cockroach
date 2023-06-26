@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -742,7 +743,7 @@ func (s *Server) SetupConn(
 	memMetrics MemoryMetrics,
 	onDefaultIntSizeChange func(newSize int32),
 ) (ConnectionHandler, error) {
-	sd := s.newSessionData(args)
+	sd := s.newSessionData(args, &s.cfg.Settings.SV)
 	sds := sessiondata.NewStack(sd)
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
@@ -887,7 +888,7 @@ func (s *Server) GetLocalIndexStatistics() *idxusage.LocalIndexUsageStats {
 }
 
 // newSessionData a SessionData that can be passed to newConnExecutor.
-func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
+func (s *Server) newSessionData(args SessionArgs, sv *settings.Values) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
 		SessionData: sessiondatapb.SessionData{
 			UserProto: args.User.EncodeProto(),
@@ -896,8 +897,9 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 			RemoteAddr: args.RemoteAddr,
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-			ResultsBufferSize: args.ConnResultsBufferSize,
-			IsSuperuser:       args.IsSuperuser,
+			ResultsBufferSize:        args.ConnResultsBufferSize,
+			IsSuperuser:              args.IsSuperuser,
+			OptimizerFKCascadesLimit: optDrivenFKCascadesClusterLimit.Get(sv),
 		},
 	}
 	if len(args.CustomOptionSessionDefaults) > 0 {
@@ -1358,6 +1360,9 @@ type connExecutor struct {
 		// transaction. This is simply the summation of number of rows observed by
 		// comprising statements.
 		numRows int
+
+		// validateDbZoneConfig should the DB zone config on commit.
+		validateDbZoneConfig bool
 
 		// txnCounter keeps track of how many SQL txns have been open since
 		// the start of the session. This is used for logging, to
@@ -1883,6 +1888,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 			delete(ex.extraTxnState.schemaChangeJobRecords, k)
 		}
 		ex.extraTxnState.jobs.reset()
+		ex.extraTxnState.validateDbZoneConfig = false
 		ex.extraTxnState.schemaChangerState = &SchemaChangerState{
 			mode: ex.sessionData().NewSchemaChangerMode,
 		}
@@ -2373,7 +2379,8 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		if err := ex.clientComm.Flush(pos); err != nil {
 			return err
 		}
-		if err := ex.stmtBuf.seekToNextBatch(); err != nil {
+		requireSyncFromClient := cmd.isExtendedProtocolCmd()
+		if err := ex.stmtBuf.seekToNextBatch(requireSyncFromClient); err != nil {
 			return err
 		}
 	case rewind:
@@ -2979,9 +2986,9 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		TxnModesSetter:         ex,
 		Jobs:                   ex.extraTxnState.jobs,
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
-		statsProvider:          ex.server.sqlStats,
-		indexUsageStats:        ex.indexUsageStats,
-		statementPreparer:      ex,
+		validateDbZoneConfig:   &ex.extraTxnState.validateDbZoneConfig, statsProvider: ex.server.sqlStats,
+		indexUsageStats:   ex.indexUsageStats,
+		statementPreparer: ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }

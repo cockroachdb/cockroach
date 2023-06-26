@@ -169,6 +169,13 @@ func (mq *mergeQueue) shouldQueue(
 // indicate that the error should send the range to purgatory.
 type rangeMergePurgatoryError struct{ error }
 
+var _ errors.SafeFormatter = decommissionPurgatoryError{}
+
+func (e rangeMergePurgatoryError) SafeFormatError(p errors.Printer) (next error) {
+	p.Print(e.error)
+	return nil
+}
+
 func (rangeMergePurgatoryError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = rangeMergePurgatoryError{}
@@ -210,7 +217,7 @@ func (mq *mergeQueue) process(
 
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
-	lhsQPS, lhsQPSOK := lhsRepl.GetMaxSplitQPS()
+	lhsQPS, lhsQPSOK := lhsRepl.GetMaxSplitQPS(ctx)
 	minBytes := lhsRepl.GetMinBytes()
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",

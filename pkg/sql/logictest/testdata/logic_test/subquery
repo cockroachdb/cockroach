@@ -675,3 +675,21 @@ query B
 select lower((select session_id from [show session_id])) = lower('$session_id')
 ----
 true
+
+# Regression test for #100561.
+statement ok
+CREATE TABLE t100561a (a INT);
+CREATE TABLE t100561bc (b INT, c INT);
+INSERT INTO t100561bc (b) VALUES(1)
+
+# The query below should return a single row. Prior to the fix for #100561, no
+# rows were returned because the optimizer synthesized an incorrect
+# null-rejecting filter for column c.
+query IIII
+SELECT * FROM (
+  SELECT bc.c + 1 AS y, bc.b + 1 AS x
+  FROM t100561a a FULL OUTER JOIN t100561bc bc ON true
+) tmp, t100561bc bc
+WHERE tmp.x = bc.b + 1;
+----
+NULL  2  1  NULL

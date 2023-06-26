@@ -212,7 +212,7 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 		},
 		{
 			opName: fmt.Sprintf("ttl num expired rows stats %s", relationName),
-			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE ` + string(ttlExpr) + ` < $1`,
+			query:  `SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE (` + string(ttlExpr) + `) < $1`,
 			args:   []interface{}{details.Cutoff},
 			gauge:  m.TotalExpiredRows,
 		},

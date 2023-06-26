@@ -19,7 +19,7 @@ import { CaretRight } from "src/icon/caretRight";
 import { DatabaseIcon } from "src/icon/databaseIcon";
 import { StackIcon } from "src/icon/stackIcon";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
-import { Pagination, ResultsPerPageLabel } from "src/pagination";
+import { Pagination } from "src/pagination";
 import {
   ColumnDescriptor,
   ISortedTablePagination,
@@ -27,20 +27,30 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import * as format from "src/util/format";
-import { DATE_FORMAT } from "src/util/format";
-import { mvccGarbage, syncHistory } from "../util";
+import {
+  DATE_FORMAT,
+  EncodeDatabaseTableUri,
+  EncodeDatabaseUri,
+} from "src/util/format";
+import { mvccGarbage, syncHistory, unique } from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import {
-  baseHeadingClasses,
-  statisticsClasses,
-} from "src/transactionsPage/transactionsPageClasses";
+import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment";
 import { Caution } from "@cockroachlabs/icons";
 import { Anchor } from "../anchor";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
+import { Search } from "../search";
+import {
+  calculateActiveFilters,
+  defaultFilters,
+  Filter,
+  Filters,
+} from "src/queryFilter";
+import { UIConfigState } from "src/store";
+import { TableStatistics } from "src/tableStatistics";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -61,6 +71,10 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //     name: string;
 //     sortSettingTables: SortSetting;
 //     sortSettingGrants: SortSetting;
+//     search: string;
+//     filters: Filters;
+//     nodeRegions: { [nodeId: string]: string };
+//     isTenant: boolean;
 //     viewMode: ViewMode;
 //     tables: { // DatabaseDetailsPageDataTable[]
 //       name: string;
@@ -80,6 +94,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //         lastError: Error;
 //         replicationSizeInBytes: number;
 //         rangeCount: number;
+//         nodes: number[];
 //         nodesByRegionString: string;
 //       };
 //     }[];
@@ -92,6 +107,10 @@ export interface DatabaseDetailsPageData {
   tables: DatabaseDetailsPageDataTable[];
   sortSettingTables: SortSetting;
   sortSettingGrants: SortSetting;
+  search: string;
+  filters: Filters;
+  nodeRegions: { [nodeId: string]: string };
+  isTenant?: UIConfigState["isTenant"];
   viewMode: ViewMode;
   showNodeRegionsColumn?: boolean;
 }
@@ -124,6 +143,11 @@ export interface DatabaseDetailsPageDataTableStats {
   lastError: Error;
   replicationSizeInBytes: number;
   rangeCount: number;
+  // Array of node IDs used to unambiguously filter by node and region.
+  nodes?: number[];
+  // String of nodes grouped by region in alphabetical order, e.g.
+  // regionA(n1,n2), regionB(n3). Used for display in the table's
+  // "Regions/Nodes" column.
   nodesByRegionString?: string;
 }
 
@@ -131,6 +155,8 @@ export interface DatabaseDetailsPageActions {
   refreshDatabaseDetails: (database: string) => void;
   refreshTableDetails: (database: string, table: string) => void;
   refreshTableStats: (database: string, table: string) => void;
+  onFilterChange?: (value: Filters) => void;
+  onSearchComplete?: (query: string) => void;
   onSortingTablesChange?: (columnTitle: string, ascending: boolean) => void;
   onSortingGrantsChange?: (columnTitle: string, ascending: boolean) => void;
   onViewModeChange?: (viewMode: ViewMode) => void;
@@ -147,11 +173,37 @@ export enum ViewMode {
 
 interface DatabaseDetailsPageState {
   pagination: ISortedTablePagination;
+  filters?: Filters;
+  activeFilters?: number;
   lastStatsError: Error;
   lastDetailsError: Error;
 }
 
+const tablePageSize = 20;
+const disableTableSortSize = tablePageSize * 2;
+
 class DatabaseSortedTable extends SortedTable<DatabaseDetailsPageDataTable> {}
+
+// filterBySearchQuery returns true if the search query matches the database name.
+function filterBySearchQuery(
+  table: DatabaseDetailsPageDataTable,
+  search: string,
+): boolean {
+  const matchString = table.name.toLowerCase();
+
+  if (search.startsWith('"') && search.endsWith('"')) {
+    search = search.substring(1, search.length - 1);
+
+    return matchString.includes(search);
+  }
+
+  const res = search
+    .toLowerCase()
+    .split(" ")
+    .every(val => matchString.includes(val));
+
+  return res;
+}
 
 export class DatabaseDetailsPage extends React.Component<
   DatabaseDetailsPageProps,
@@ -208,25 +260,92 @@ export class DatabaseDetailsPage extends React.Component<
   }
 
   componentDidMount(): void {
-    this.refresh();
+    if (!this.props.loaded && !this.props.loading && !this.props.lastError) {
+      this.props.refreshDatabaseDetails(this.props.name);
+    } else {
+      // If the props are already loaded then componentDidUpdate
+      // will not get called so call refresh to make sure details
+      // are loaded
+      this.refresh();
+    }
   }
 
-  componentDidUpdate(): void {
-    this.refresh();
+  componentDidUpdate(
+    prevProps: Readonly<DatabaseDetailsPageProps>,
+    prevState: Readonly<DatabaseDetailsPageState>,
+  ): void {
+    if (this.shouldRefreshTableInformation(prevState, prevProps)) {
+      this.refresh();
+    }
+  }
+
+  private shouldRefreshTableInformation(
+    prevState: Readonly<DatabaseDetailsPageState>,
+    prevProps: Readonly<DatabaseDetailsPageProps>,
+  ): boolean {
+    // No new tables to update
+    if (
+      !this.props.tables ||
+      this.props.tables.length == 0 ||
+      this.props.tables.every(x => x.details.loaded || x.details.loading)
+    ) {
+      return false;
+    }
+
+    if (this.state.pagination.current != prevState.pagination.current) {
+      return true;
+    }
+
+    if (prevProps && this.props.search != prevProps.search) {
+      return true;
+    }
+
+    const filteredTables = this.filteredDatabaseTables();
+    for (
+      let i = 0;
+      i < filteredTables.length && i < disableTableSortSize;
+      i++
+    ) {
+      const table = filteredTables[i];
+      if (
+        !table.details.loaded &&
+        !table.details.loading &&
+        table.details.lastError == undefined
+      ) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private refresh(): void {
-    if (
-      !this.props.loaded &&
-      !this.props.loading &&
-      this.props.lastError === undefined
-    ) {
-      return this.props.refreshDatabaseDetails(this.props.name);
+    let lastDetailsError: Error;
+    // Load everything by default
+    let filteredTables = this.props.tables;
+
+    // Loading only the first page. If more than 2 page of tables
+    // exists the sort will be disabled.
+    if (this.props.tables.length > disableTableSortSize) {
+      const startIndex =
+        this.state.pagination.pageSize * (this.state.pagination.current - 1);
+      // Result maybe filtered so get db names from filtered results
+      if (this.props.search && this.props.search.length > 0) {
+        filteredTables = this.filteredDatabaseTables();
+      }
+
+      if (!filteredTables || filteredTables.length === 0) {
+        return;
+      }
+
+      // Only load the first page
+      filteredTables = filteredTables.slice(
+        startIndex,
+        startIndex + disableTableSortSize,
+      );
     }
 
-    let lastDetailsError: Error;
-    let lastStatsError: Error;
-    this.props.tables.forEach(table => {
+    filteredTables.forEach(table => {
       if (table.details.lastError !== undefined) {
         lastDetailsError = table.details.lastError;
       }
@@ -240,26 +359,10 @@ export class DatabaseDetailsPage extends React.Component<
       if (
         !table.details.loaded &&
         !table.details.loading &&
-        table.details.lastError === undefined
+        (table.details.lastError === undefined ||
+          table.details.lastError?.name === "GetDatabaseInfoError")
       ) {
-        return this.props.refreshTableDetails(this.props.name, table.name);
-      }
-
-      if (table.stats.lastError !== undefined) {
-        lastStatsError = table.stats.lastError;
-      }
-      if (
-        lastStatsError &&
-        this.state.lastStatsError?.name != lastStatsError?.name
-      ) {
-        this.setState({ lastStatsError: lastStatsError });
-      }
-      if (
-        !table.stats.loaded &&
-        !table.stats.loading &&
-        table.stats.lastError === undefined
-      ) {
-        return this.props.refreshTableStats(this.props.name, table.name);
+        this.props.refreshTableDetails(this.props.name, table.name);
       }
     });
   }
@@ -284,6 +387,129 @@ export class DatabaseDetailsPage extends React.Component<
     if (onSortingChange) {
       onSortingChange(ss.columnTitle, ss.ascending);
     }
+  };
+
+  onClearSearchField = (): void => {
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete("");
+    }
+
+    syncHistory(
+      {
+        q: undefined,
+      },
+      this.props.history,
+    );
+  };
+
+  onClearFilters = (): void => {
+    if (this.props.onFilterChange) {
+      this.props.onFilterChange(defaultFilters);
+    }
+
+    this.setState({
+      filters: defaultFilters,
+      activeFilters: 0,
+    });
+
+    this.resetPagination();
+    syncHistory(
+      {
+        regions: undefined,
+        nodes: undefined,
+      },
+      this.props.history,
+    );
+  };
+
+  onSubmitSearchField = (search: string): void => {
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete(search);
+    }
+
+    this.resetPagination();
+    syncHistory(
+      {
+        q: search,
+      },
+      this.props.history,
+    );
+  };
+
+  onSubmitFilters = (filters: Filters): void => {
+    if (this.props.onFilterChange) {
+      this.props.onFilterChange(filters);
+    }
+
+    this.setState({
+      filters: filters,
+      activeFilters: calculateActiveFilters(filters),
+    });
+
+    this.resetPagination();
+    syncHistory(
+      {
+        regions: filters.regions,
+        nodes: filters.nodes,
+      },
+      this.props.history,
+    );
+  };
+
+  resetPagination = (): void => {
+    this.setState(prevState => {
+      return {
+        pagination: {
+          current: 1,
+          pageSize: prevState.pagination.pageSize,
+        },
+      };
+    });
+  };
+
+  // Returns a list of database tables to the display based on input from the
+  // search box and the applied filters.
+  filteredDatabaseTables = (): DatabaseDetailsPageDataTable[] => {
+    const { search, tables, filters, nodeRegions } = this.props;
+
+    const regionsSelected =
+      filters.regions?.length > 0 ? filters.regions.split(",") : [];
+    const nodesSelected =
+      filters.nodes?.length > 0 ? filters.nodes.split(",") : [];
+
+    // Avoid the loop if no filters/search are applied
+    if (
+      (!search || search.length == 0) &&
+      regionsSelected.length == 0 &&
+      nodesSelected.length == 0
+    ) {
+      return tables;
+    }
+
+    return tables
+      .filter(table => (search ? filterBySearchQuery(table, search) : true))
+      .filter(table => {
+        if (regionsSelected.length == 0 && nodesSelected.length == 0)
+          return true;
+
+        let foundRegion = regionsSelected.length == 0;
+        let foundNode = nodesSelected.length == 0;
+
+        table.stats.nodes?.forEach(node => {
+          if (
+            foundRegion ||
+            regionsSelected.includes(nodeRegions[node.toString()])
+          ) {
+            foundRegion = true;
+          }
+          if (foundNode || nodesSelected.includes("n" + node.toString())) {
+            foundNode = true;
+          }
+          if (foundNode && foundRegion) return true;
+        });
+
+        return foundRegion && foundNode;
+      });
   };
 
   private changeViewMode(viewMode: ViewMode) {
@@ -347,7 +573,7 @@ export class DatabaseDetailsPage extends React.Component<
         ),
         cell: table => (
           <Link
-            to={`/database/${this.props.name}/table/${table.name}`}
+            to={EncodeDatabaseTableUri(this.props.name, table.name)}
             className={cx("icon__container")}
           >
             <DatabaseIcon className={cx("icon--s", "icon--primary")} />
@@ -521,7 +747,10 @@ export class DatabaseDetailsPage extends React.Component<
         ),
         cell: table => (
           <Link
-            to={`/database/${this.props.name}/table/${table.name}?tab=grants`}
+            to={
+              EncodeDatabaseTableUri(this.props.name, table.name) +
+              `?tab=grants`
+            }
             className={cx("icon__container")}
           >
             <DatabaseIcon className={cx("icon--s")} />
@@ -594,10 +823,45 @@ export class DatabaseDetailsPage extends React.Component<
   }
 
   render(): React.ReactElement {
+    const { search, filters, isTenant, nodeRegions } = this.props;
+
+    const tablesToDisplay = this.filteredDatabaseTables();
+    const activeFilters = calculateActiveFilters(filters);
+
+    const nodes = Object.keys(nodeRegions)
+      .map(n => Number(n))
+      .sort();
+
+    const regions = unique(Object.values(nodeRegions));
+
     const sortSetting =
       this.props.viewMode == ViewMode.Tables
         ? this.props.sortSettingTables
         : this.props.sortSettingGrants;
+
+    const showNodes = !isTenant && nodes.length > 1;
+    const showRegions = regions.length > 1;
+
+    // Only show the filter component when the viewMode is Tables and if at
+    // least one of drop-down is shown.
+    const filterComponent =
+      this.props.viewMode == ViewMode.Tables && (showNodes || showRegions) ? (
+        <PageConfigItem>
+          <Filter
+            hideAppNames={true}
+            regions={regions}
+            hideTimeLabel={true}
+            nodes={nodes.map(n => "n" + n?.toString())}
+            activeFilters={activeFilters}
+            filters={defaultFilters}
+            onSubmitFilters={this.onSubmitFilters}
+            showNodes={showNodes}
+            showRegions={showRegions}
+          />
+        </PageConfigItem>
+      ) : (
+        <></>
+      );
 
     return (
       <div className="root table-area">
@@ -605,7 +869,10 @@ export class DatabaseDetailsPage extends React.Component<
           <Breadcrumbs
             items={[
               { link: "/databases", name: "Databases" },
-              { link: `/database/${this.props.name}`, name: "Tables" },
+              {
+                link: EncodeDatabaseUri(this.props.name),
+                name: "Tables",
+              },
             ]}
             divider={
               <CaretRight className={cx("icon--xxs", "icon--primary")} />
@@ -631,20 +898,25 @@ export class DatabaseDetailsPage extends React.Component<
               View: {this.props.viewMode}
             </Dropdown>
           </PageConfigItem>
+          <PageConfigItem>
+            <Search
+              onSubmit={this.onSubmitSearchField}
+              onClear={this.onClearSearchField}
+              defaultValue={search}
+              placeholder={"Search Tables"}
+            />
+          </PageConfigItem>
+          {filterComponent}
         </PageConfig>
 
         <section className={sortableTableCx("cl-table-container")}>
-          <div className={statisticsClasses.statistic}>
-            <h4 className={statisticsClasses.countTitle}>
-              <ResultsPerPageLabel
-                pagination={{
-                  ...this.state.pagination,
-                  total: this.props.tables.length,
-                }}
-                pageName={this.props.tables.length == 1 ? "table" : "tables"}
-              />
-            </h4>
-          </div>
+          <TableStatistics
+            pagination={this.state.pagination}
+            totalCount={tablesToDisplay.length}
+            arrayItemName="tables"
+            activeFilters={activeFilters}
+            onClearFilters={this.onClearFilters}
+          />
           <Loading
             loading={this.props.loading}
             page={"databases"}
@@ -652,12 +924,13 @@ export class DatabaseDetailsPage extends React.Component<
             render={() => (
               <DatabaseSortedTable
                 className={cx("database-table")}
-                data={this.props.tables}
+                data={tablesToDisplay}
                 columns={this.columns()}
                 sortSetting={sortSetting}
                 onChangeSortSetting={this.changeSortSetting}
                 pagination={this.state.pagination}
                 loading={this.props.loading}
+                disableSortSizeLimit={disableTableSortSize}
                 renderNoResult={
                   <div
                     className={cx(
@@ -689,13 +962,10 @@ export class DatabaseDetailsPage extends React.Component<
               renderError={() =>
                 LoadingError({
                   statsType: "part of the information",
-                  timeout:
-                    this.state.lastDetailsError?.name
-                      ?.toLowerCase()
-                      .includes("timeout") ||
-                    this.state.lastStatsError?.name
-                      ?.toLowerCase()
-                      .includes("timeout"),
+                  timeout: this.state.lastDetailsError?.name
+                    ?.toLowerCase()
+                    .includes("timeout"),
+                  error: this.state.lastDetailsError,
                 })
               }
             />
@@ -705,7 +975,7 @@ export class DatabaseDetailsPage extends React.Component<
         <Pagination
           pageSize={this.state.pagination.pageSize}
           current={this.state.pagination.current}
-          total={this.props.tables.length}
+          total={tablesToDisplay.length}
           onChange={this.changePage.bind(this)}
         />
       </div>

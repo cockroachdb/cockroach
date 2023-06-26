@@ -40,7 +40,7 @@ describe("<LineGraph>", function () {
       subtitle: "Test Subtitle",
       legend: false,
       xAxis: true,
-      data: { results: [], toJSON: jest.fn() },
+      data: { results: [] },
       timeInfo: {
         start: new Long(12345),
         end: new Long(2346),
@@ -106,7 +106,7 @@ describe("<LineGraph>", function () {
     // test setup
     const wrapper = linegraph({
       ...mockProps,
-      data: { results: [{}], toJSON: jest.fn() },
+      data: { results: [{}] },
     });
     const instance = wrapper.instance() as unknown as LineGraph;
     const mockFn = jest.fn();

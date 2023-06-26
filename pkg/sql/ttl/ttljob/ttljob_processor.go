@@ -11,6 +11,7 @@
 package ttljob
 
 import (
+	"bytes"
 	"context"
 	"runtime"
 	"sync/atomic"
@@ -21,11 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -101,6 +107,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	ttlSpec := t.ttlSpec
 	descsCol, db, codec, jobRegistry, sqlInstanceID := t.getWorkFields()
 	details := ttlSpec.RowLevelTTLDetails
+	tableID := details.TableID
 
 	deleteRateLimit := ttlSpec.DeleteRateLimit
 	deleteRateLimiter := quotapool.NewRateLimiter(
@@ -111,10 +118,13 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 	processorRowCount := int64(0)
 
-	var relationName string
-	var pkColumns []string
-	var pkTypes []*types.T
-	var labelMetrics bool
+	var (
+		relationName string
+		pkColNames   []string
+		pkColTypes   []*types.T
+		pkColDirs    []catpb.IndexColumn_Direction
+		labelMetrics bool
+	)
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := descsCol.GetImmutableTableByID(
 			ctx,
@@ -126,15 +136,19 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			return err
 		}
 
+		var buf bytes.Buffer
 		primaryIndexDesc := desc.GetPrimaryIndex().IndexDesc()
-		pkColumns = primaryIndexDesc.KeyColumnNames
-		for _, id := range primaryIndexDesc.KeyColumnIDs {
-			col, err := desc.FindColumnWithID(id)
-			if err != nil {
-				return err
-			}
-			pkTypes = append(pkTypes, col.GetType())
+		pkColNames = make([]string, 0, len(primaryIndexDesc.KeyColumnNames))
+		for _, name := range primaryIndexDesc.KeyColumnNames {
+			lexbase.EncodeRestrictedSQLIdent(&buf, name, lexbase.EncNoFlags)
+			pkColNames = append(pkColNames, buf.String())
+			buf.Reset()
 		}
+		pkColTypes, err = GetPKColumnTypes(desc, primaryIndexDesc)
+		if err != nil {
+			return err
+		}
+		pkColDirs = primaryIndexDesc.KeyColumnDirections
 
 		if !desc.HasRowLevelTTL() {
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
@@ -166,17 +180,18 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		processorConcurrency = processorSpanCount
 	}
 	err := func() error {
-		spanChan := make(chan spanToProcess, processorConcurrency)
-		defer close(spanChan)
+		boundsChan := make(chan QueryBounds, processorConcurrency)
+		defer close(boundsChan)
 		for i := int64(0); i < processorConcurrency; i++ {
 			group.GoCtx(func(ctx context.Context) error {
-				for spanToProcess := range spanChan {
+				for bounds := range boundsChan {
 					start := timeutil.Now()
-					spanRowCount, err := t.runTTLOnSpan(
+					spanRowCount, err := t.runTTLOnQueryBounds(
 						ctx,
 						metrics,
-						spanToProcess,
-						pkColumns,
+						bounds,
+						pkColNames,
+						pkColDirs,
 						relationName,
 						deleteRateLimiter,
 					)
@@ -186,7 +201,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
-						for spanToProcess = range spanChan {
+						for bounds = range boundsChan {
 						}
 						return err
 					}
@@ -197,18 +212,20 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 		// Iterate over every span to feed work for the goroutine processors.
 		var alloc tree.DatumAlloc
-		for _, span := range ttlSpec.Spans {
-			startPK, err := keyToDatums(span.Key, codec, pkTypes, &alloc)
-			if err != nil {
-				return err
-			}
-			endPK, err := keyToDatums(span.EndKey, codec, pkTypes, &alloc)
-			if err != nil {
-				return err
-			}
-			spanChan <- spanToProcess{
-				startPK: startPK,
-				endPK:   endPK,
+		for i, span := range ttlSpec.Spans {
+			if bounds, hasRows, err := SpanToQueryBounds(
+				ctx,
+				db,
+				codec,
+				pkColTypes,
+				pkColDirs,
+				span,
+				&alloc,
+			); err != nil {
+				return errors.Wrapf(err, "SpanToQueryBounds error index=%d span=%s", i, span)
+			} else if hasRows {
+				// Only process bounds from spans with rows inside them.
+				boundsChan <- bounds
 			}
 		}
 		return nil
@@ -244,7 +261,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				ctx,
 				2, /* level */
 				"TTL processorRowCount updated jobID=%d processorID=%d sqlInstanceID=%d tableID=%d jobRowCount=%d processorRowCount=%d",
-				jobID, processorID, sqlInstanceID, details.TableID, rowLevelTTL.JobRowCount, processorRowCount,
+				jobID, processorID, sqlInstanceID, tableID, rowLevelTTL.JobRowCount, processorRowCount,
 			)
 			return nil
 		},
@@ -252,11 +269,12 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 }
 
 // spanRowCount should be checked even if the function returns an error because it may have partially succeeded
-func (t *ttlProcessor) runTTLOnSpan(
+func (t *ttlProcessor) runTTLOnQueryBounds(
 	ctx context.Context,
 	metrics rowLevelTTLMetrics,
-	spanToProcess spanToProcess,
-	pkColumns []string,
+	bounds QueryBounds,
+	pkColNames []string,
+	pkColDirs []catpb.IndexColumn_Direction,
 	relationName string,
 	deleteRateLimiter *quotapool.RateLimiter,
 ) (spanRowCount int64, err error) {
@@ -267,7 +285,6 @@ func (t *ttlProcessor) runTTLOnSpan(
 
 	ttlSpec := t.ttlSpec
 	details := ttlSpec.RowLevelTTLDetails
-	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
 	settingsValues, ie, db, descsCol := t.getSpanFields()
@@ -284,21 +301,20 @@ func (t *ttlProcessor) runTTLOnSpan(
 		}
 	}
 
-	selectBuilder := makeSelectQueryBuilder(
-		tableID,
+	selectBuilder := MakeSelectQueryBuilder(
 		cutoff,
-		pkColumns,
+		pkColNames,
+		pkColDirs,
 		relationName,
-		spanToProcess,
+		bounds,
 		aostDuration,
 		selectBatchSize,
 		ttlExpr,
 	)
 	deleteBatchSize := ttlSpec.DeleteBatchSize
-	deleteBuilder := makeDeleteQueryBuilder(
-		tableID,
+	deleteBuilder := MakeDeleteQueryBuilder(
 		cutoff,
-		pkColumns,
+		pkColNames,
 		relationName,
 		deleteBatchSize,
 		ttlExpr,
@@ -328,7 +344,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 		// Step 1. Fetch some rows we want to delete using a historical
 		// SELECT query.
 		start := timeutil.Now()
-		expiredRowsPKs, err := selectBuilder.run(ctx, ie)
+		expiredRowsPKs, hasNext, err := selectBuilder.Run(ctx, ie)
 		metrics.SelectDuration.RecordValue(int64(timeutil.Since(start)))
 		if err != nil {
 			return spanRowCount, errors.Wrapf(err, "error selecting rows to delete")
@@ -368,7 +384,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 				defer tokens.Consume()
 
 				start := timeutil.Now()
-				batchRowCount, err := deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				batchRowCount, err := deleteBuilder.Run(ctx, ie, txn, deleteBatch)
 				if err != nil {
 					return err
 				}
@@ -386,7 +402,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 
 		// If we selected less than the select batch size, we have selected every
 		// row and so we end it here.
-		if numExpiredRows < selectBatchSize {
+		if !hasNext {
 			break
 		}
 	}
@@ -420,6 +436,66 @@ func newTTLProcessor(
 		return nil, err
 	}
 	return ttlProcessor, nil
+}
+
+// SpanToQueryBounds converts the span output of the DistSQL planner to
+// QueryBounds to generate SELECT statements.
+func SpanToQueryBounds(
+	ctx context.Context,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	pkColTypes []*types.T,
+	pkColDirs []catpb.IndexColumn_Direction,
+	span roachpb.Span,
+	alloc *tree.DatumAlloc,
+) (bounds QueryBounds, hasRows bool, _ error) {
+	const maxRows = 1
+	partialStartKey := span.Key
+	partialEndKey := span.EndKey
+	startKeyValues, err := kvDB.Scan(ctx, partialStartKey, partialEndKey, maxRows)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
+	}
+	// If span has 0 rows then return early - it will not be processed.
+	if len(startKeyValues) == 0 {
+		return bounds, false, nil
+	}
+	endKeyValues, err := kvDB.ReverseScan(ctx, partialStartKey, partialEndKey, maxRows)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "reverse scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
+	}
+	// If span has 0 rows then return early - it will not be processed. This is
+	// checked again here because the calls to Scan and ReverseScan are
+	// non-transactional so the row could have been deleted between the calls.
+	if len(endKeyValues) == 0 {
+		return bounds, false, nil
+	}
+	startKey := startKeyValues[0].Key
+	bounds.Start, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, startKey, alloc)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "decode startKey error key=%x", []byte(startKey))
+	}
+	endKey := endKeyValues[0].Key
+	bounds.End, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, endKey, alloc)
+	if err != nil {
+		return bounds, false, errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
+	}
+	return bounds, true, nil
+}
+
+// GetPKColumnTypes returns tableDesc's primary key column types.
+func GetPKColumnTypes(
+	tableDesc catalog.TableDescriptor, indexDesc *descpb.IndexDescriptor,
+) ([]*types.T, error) {
+	pkColTypes := make([]*types.T, 0, len(indexDesc.KeyColumnIDs))
+	for i, id := range indexDesc.KeyColumnIDs {
+		col, err := tableDesc.FindColumnWithID(id)
+		if err != nil {
+			return nil, errors.Wrapf(err, "column index=%d", i)
+		}
+		pkColTypes = append(pkColTypes, col.GetType())
+	}
+	return pkColTypes, nil
 }
 
 func init() {

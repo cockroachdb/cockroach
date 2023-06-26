@@ -38,7 +38,7 @@ func registerDrain(r registry.Registry) {
 	{
 		r.Add(registry.TestSpec{
 			Name:    "drain/early-exit-conn-wait",
-			Owner:   registry.OwnerSQLExperience,
+			Owner:   registry.OwnerSQLFoundations,
 			Cluster: r.MakeClusterSpec(1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEarlyExitInConnectionWait(ctx, t, c)
@@ -47,7 +47,7 @@ func registerDrain(r registry.Registry) {
 
 		r.Add(registry.TestSpec{
 			Name:    "drain/warn-conn-wait-timeout",
-			Owner:   registry.OwnerSQLExperience,
+			Owner:   registry.OwnerSQLFoundations,
 			Cluster: r.MakeClusterSpec(1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runWarningForConnWait(ctx, t, c)
@@ -56,7 +56,7 @@ func registerDrain(r registry.Registry) {
 
 		r.Add(registry.TestSpec{
 			Name:    "drain/not-at-quorum",
-			Owner:   registry.OwnerSQLExperience,
+			Owner:   registry.OwnerSQLFoundations,
 			Cluster: r.MakeClusterSpec(3),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runClusterNotAtQuorum(ctx, t, c)

@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -75,9 +77,13 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 			}
 
 			v := p.newContainerValuesNode(showHistogramColumns, 0)
+			resolver := descs.NewDistSQLTypeResolver(p.descCollection, p.Txn())
+			if err := typedesc.EnsureTypeIsHydrated(ctx, histogram.ColumnType, &resolver); err != nil {
+				return nil, err
+			}
 			for _, b := range histogram.Buckets {
 				ed, _, err := rowenc.EncDatumFromBuffer(
-					histogram.ColumnType, descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					v.Close(ctx)

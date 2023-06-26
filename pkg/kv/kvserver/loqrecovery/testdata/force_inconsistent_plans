@@ -40,7 +40,7 @@ ok
 make-plan
 ----
 ERROR: loss of quorum recovery error
-range has unapplied descriptor change that removes current replica
+range has unapplied descriptor change
   r2: /{Table/1-Max}
 
 make-plan force=true

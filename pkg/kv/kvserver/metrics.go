@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -124,6 +125,12 @@ var (
 		Measurement: "Lease Requests",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLeaseRequestLatency = metric.Metadata{
+		Name:        "leases.requests.latency",
+		Help:        "Lease request latency (all types and outcomes, coalesced)",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaLeaseTransferSuccessCount = metric.Metadata{
 		Name:        "leases.transfers.success",
 		Help:        "Number of successful lease transfers",
@@ -145,6 +152,12 @@ var (
 	metaLeaseEpochCount = metric.Metadata{
 		Name:        "leases.epoch",
 		Help:        "Number of replica leaseholders using epoch-based leases",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLeaseLivenessCount = metric.Metadata{
+		Name:        "leases.liveness",
+		Help:        "Number of replica leaseholders for the liveness range(s)",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1632,6 +1645,20 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+
+	metaPopularKeyCount = metric.Metadata{
+		Name:        "kv.loadsplitter.popularkey",
+		Help:        "Load-based splitter could not find a split key and the most popular sampled split key occurs in >= 25% of the samples.",
+		Measurement: "Occurrences",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaNoSplitKeyCount = metric.Metadata{
+		Name:        "kv.loadsplitter.nosplitkey",
+		Help:        "Load-based splitter could not find a split key.",
+		Measurement: "Occurrences",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1641,6 +1668,9 @@ type StoreMetrics struct {
 	// TenantStorageMetrics stores aggregate metrics for storage usage on a per
 	// tenant basis.
 	*TenantsStorageMetrics
+
+	// LoadSplitterMetrics stores metrics for load-based splitter split key.
+	*split.LoadSplitterMetrics
 
 	// Replica metrics.
 	ReplicaCount                  *metric.Gauge // Does not include uninitialized or reserved replicas.
@@ -1663,10 +1693,12 @@ type StoreMetrics struct {
 	// lease).
 	LeaseRequestSuccessCount  *metric.Counter
 	LeaseRequestErrorCount    *metric.Counter
+	LeaseRequestLatency       metric.IHistogram
 	LeaseTransferSuccessCount *metric.Counter
 	LeaseTransferErrorCount   *metric.Counter
 	LeaseExpirationCount      *metric.Gauge
 	LeaseEpochCount           *metric.Gauge
+	LeaseLivenessCount        *metric.Gauge
 
 	// Storage metrics.
 	ResolveCommitCount *metric.Counter
@@ -2171,6 +2203,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	sm := &StoreMetrics{
 		registry:              storeRegistry,
 		TenantsStorageMetrics: newTenantsStorageMetrics(),
+		LoadSplitterMetrics: &split.LoadSplitterMetrics{
+			PopularKeyCount: metric.NewCounter(metaPopularKeyCount),
+			NoSplitKeyCount: metric.NewCounter(metaNoSplitKeyCount),
+		},
 
 		// Replica metrics.
 		ReplicaCount:                  metric.NewGauge(metaReplicaCount),
@@ -2189,12 +2225,19 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
 
 		// Lease request metrics.
-		LeaseRequestSuccessCount:  metric.NewCounter(metaLeaseRequestSuccessCount),
-		LeaseRequestErrorCount:    metric.NewCounter(metaLeaseRequestErrorCount),
+		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
+		LeaseRequestErrorCount:   metric.NewCounter(metaLeaseRequestErrorCount),
+		LeaseRequestLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: metaLeaseRequestLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.NetworkLatencyBuckets,
+		}),
 		LeaseTransferSuccessCount: metric.NewCounter(metaLeaseTransferSuccessCount),
 		LeaseTransferErrorCount:   metric.NewCounter(metaLeaseTransferErrorCount),
 		LeaseExpirationCount:      metric.NewGauge(metaLeaseExpirationCount),
 		LeaseEpochCount:           metric.NewGauge(metaLeaseEpochCount),
+		LeaseLivenessCount:        metric.NewGauge(metaLeaseLivenessCount),
 
 		// Intent resolution metrics.
 		ResolveCommitCount: metric.NewCounter(metaResolveCommit),
@@ -2495,6 +2538,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	}
 
 	storeRegistry.AddMetricStruct(sm)
+	storeRegistry.AddMetricStruct(sm.LoadSplitterMetrics)
 	return sm
 }
 

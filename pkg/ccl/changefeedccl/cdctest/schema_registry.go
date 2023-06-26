@@ -9,6 +9,7 @@
 package cdctest
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro/v2"
@@ -116,6 +118,13 @@ func (r *SchemaRegistry) registerSchema(subject string, schema string) int32 {
 	return id
 }
 
+// RegistrationCount returns the number of Registration requests received.
+func (r *SchemaRegistry) RegistrationCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return int(r.mu.idAlloc)
+}
+
 var (
 	// We are slightly stricter than confluent here as they allow
 	// a trailing slash.
@@ -196,7 +205,7 @@ func (r *SchemaRegistry) EncodedAvroToNative(b []byte) (interface{}, error) {
 		return ``, errors.Errorf(`missing registry id`)
 	}
 	id := int32(binary.BigEndian.Uint32(b[:4]))
-	b = b[4:]
+	remaining := b[4:]
 
 	r.mu.Lock()
 	jsonSchema := r.mu.schemas[id]
@@ -205,7 +214,11 @@ func (r *SchemaRegistry) EncodedAvroToNative(b []byte) (interface{}, error) {
 	if err != nil {
 		return ``, err
 	}
-	native, _, err := codec.NativeFromBinary(b)
+	native, _, err := codec.NativeFromBinary(remaining)
+	if err != nil {
+		// TODO (#105405): we can remove this log line once the bug is fixed.
+		log.Errorf(context.TODO(), `error decoding native from binary: with registry id: %X, without registry id: %X, schema: %s, registry id: %d`, b, remaining, jsonSchema, id)
+	}
 	return native, err
 }
 

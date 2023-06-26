@@ -203,6 +203,9 @@ message LocalOnlySessionData {
   // InjectRetryErrorsEnabled causes statements inside an explicit
   // transaction to return a transaction retry error. It is intended for
   // developers to test their app's retry logic.
+  //
+  // Note that this session variable is **not** propagated to the internal
+  // executors - use InternalExecutorOverride for that.
   bool inject_retry_errors_enabled = 54;
   // NullOrderedLast controls whether NULL is ordered last. We default to
   // NULLS FIRST for ascending order by default, whereas postgres defaults
@@ -321,6 +324,14 @@ message LocalOnlySessionData {
   // OptimizerAlwaysUseHistograms, when true, ensures that the optimizer
   // always uses histograms to calculate statistics if available.
   bool optimizer_always_use_histograms = 94;
+  // AllowRoleMembershipsToChangeDuringTransaction, when true, means that
+  // operations which consult the role membership cache do not retain their
+  // lease on that version of the cache throughout the transaction. The
+  // consequence of this is that the transaction may not experience a singular
+  // view of role membership, and it may be able to commit after the revocation
+  // of a role membership which the transaction relied on has successfully been
+  // committed and acknowledged to the user.
+  bool allow_role_memberships_to_change_during_transaction = 96;
   // PreparedStatementsCacheSize, when not equal to 0, causes the LRU prepared
   // statements in a session to be automatically deallocated when total prepared
   // statement memory usage for that session is more than the cache size.
@@ -334,6 +345,17 @@ message LocalOnlySessionData {
   // parallelization will still be disabled for queries with LIMITs, and it can
   // lead to increased likelihood of OOMs.
   bool unbounded_parallel_scans = 101;
+  // OptimizerHoistUncorrelatedEqualitySubqueries, when true, causes the
+  // optimizer to hoist uncorrelated subqueries that are part of an equality
+  // expression with a column reference, which can produce more efficient query
+  // plans.
+  bool optimizer_hoist_uncorrelated_equality_subqueries = 102;
+  // OptimizerUseImprovedComputedColumnFiltersDerivation, when true, causes the
+  // optimizer to derive filters on computed columns in more cases. Previously,
+  // filters could only be derived when the expression defining the computed
+  // column involved a single column and that column was equated with a single
+  // constant value in a WHERE clause filter.
+  bool optimizer_use_improved_computed_column_filters_derivation = 104;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -35,6 +35,7 @@ go_test(
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/partition",
+        "//pkg/sql/opt/props",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/parser",
         "//pkg/sql/sem/eval",

@@ -124,7 +124,7 @@ func (p *planner) ConstrainPrimaryIndexSpanByExpr(
 	var ic idxconstraint.Instance
 
 	ic.Init(
-		fe, nil, indexCols, notNullIndexCols, nil,
+		fe, nil, indexCols, notNullIndexCols, nil, opt.ColSet{},
 		consolidate, evalCtx, &nf, partition.PrefixSorter{},
 	)
 

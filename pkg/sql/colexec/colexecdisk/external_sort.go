@@ -191,6 +191,7 @@ type externalSorter struct {
 		acquiredFDs int
 	}
 
+	merger  colexecop.ClosableOperator
 	emitter colexecop.Operator
 
 	testingKnobs struct {
@@ -419,13 +420,19 @@ func (s *externalSorter) Next() coldata.Batch {
 				}
 				n++
 			}
-			merger := s.createMergerForPartitions(n)
-			merger.Init(s.Ctx)
+			// Store the merger in the external sort to make sure it's always
+			// closed correctly. In the happy path, it'll be closed after being
+			// exhausted in the loop below, but in case a panic is thrown (e.g.
+			// due to context cancellation), the merger will be cleaned up in
+			// Close. (In the happy path Close will be called twice on the last
+			// created merger, and that's ok because the interface allows it.)
+			s.merger = s.createMergerForPartitions(n)
+			s.merger.Init(s.Ctx)
 			s.numPartitions -= n
-			for b := merger.Next(); ; b = merger.Next() {
+			for b := s.merger.Next(); ; b = s.merger.Next() {
 				partitionDone := s.enqueue(b)
 				if b.Length() == 0 || partitionDone {
-					if err := merger.Close(s.Ctx); err != nil {
+					if err := s.merger.Close(s.Ctx); err != nil {
 						colexecerror.InternalError(err)
 					}
 					break
@@ -628,6 +635,11 @@ func (s *externalSorter) Close(ctx context.Context) error {
 	if s.partitioner != nil {
 		lastErr = s.partitioner.Close(ctx)
 		s.partitioner = nil
+	}
+	if s.merger != nil {
+		if err := s.merger.Close(ctx); err != nil {
+			lastErr = err
+		}
 	}
 	if c, ok := s.emitter.(colexecop.Closer); ok {
 		if err := c.Close(ctx); err != nil {

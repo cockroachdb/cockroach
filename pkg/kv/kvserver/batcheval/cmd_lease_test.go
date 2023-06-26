@@ -150,13 +150,13 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	// Learners are not allowed to become leaseholders for now, see the comments
 	// in TransferLease and RequestLease.
 	_, err := TransferLease(ctx, nil, cArgs, nil)
-	require.EqualError(t, err, `replica cannot hold lease`)
+	require.EqualError(t, err, `lease target replica cannot hold lease`)
 
 	cArgs.Args = &roachpb.RequestLeaseRequest{}
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
 	const expForUnknown = `cannot replace lease <empty> with <empty>: ` +
-		`replica not found in RangeDescriptor`
+		`lease target replica not found in RangeDescriptor`
 	require.EqualError(t, err, expForUnknown)
 
 	cArgs.Args = &roachpb.RequestLeaseRequest{
@@ -168,7 +168,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 
 	const expForLearner = `cannot replace lease <empty> ` +
 		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil>: ` +
-		`replica cannot hold lease`
+		`lease target replica cannot hold lease`
 	require.EqualError(t, err, expForLearner)
 }
 

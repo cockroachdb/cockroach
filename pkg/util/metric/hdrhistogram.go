@@ -18,14 +18,9 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-const (
-	// HdrHistogramMaxLatency is the maximum value tracked in latency histograms. Higher
-	// values will be recorded as this value instead.
-	HdrHistogramMaxLatency = 10 * time.Second
-
-	// The number of histograms to keep in rolling window.
-	hdrHistogramHistWrapNum = 2 // TestSampleInterval is passed to histograms during tests which don't
-)
+// HdrHistogramMaxLatency is the maximum value tracked in latency histograms. Higher
+// values will be recorded as this value instead.
+const HdrHistogramMaxLatency = 10 * time.Second
 
 // A HdrHistogram collects observed values by keeping bucketed counts. For
 // convenience, internally two sets of buckets are kept: A cumulative set (i.e.
@@ -64,12 +59,12 @@ func NewHdrHistogram(
 		Metadata: metadata,
 		maxVal:   maxVal,
 	}
-	wHist := hdrhistogram.NewWindowed(hdrHistogramHistWrapNum, 0, maxVal, sigFigs)
+	wHist := hdrhistogram.NewWindowed(WindowedHistogramWrapNum, 0, maxVal, sigFigs)
 	h.mu.cumulative = hdrhistogram.New(0, maxVal, sigFigs)
 	h.mu.sliding = wHist
 	h.mu.tickHelper = &tickHelper{
 		nextT:        now(),
-		tickInterval: duration / hdrHistogramHistWrapNum,
+		tickInterval: duration / WindowedHistogramWrapNum,
 		onTick: func() {
 			wHist.Rotate()
 		},
@@ -105,11 +100,12 @@ func (h *HdrHistogram) RecordValue(v int64) {
 	}
 }
 
-// TotalCount returns the (cumulative) number of samples.
-func (h *HdrHistogram) TotalCount() int64 {
+// Total returns the (cumulative) number of samples and sum of samples.
+func (h *HdrHistogram) Total() (int64, float64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.mu.cumulative.TotalCount()
+	totalSum := float64(h.mu.cumulative.TotalCount()) * h.mu.cumulative.Mean()
+	return h.mu.cumulative.TotalCount(), totalSum
 }
 
 // Min returns the minimum.
@@ -168,21 +164,21 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 }
 
-// TotalCountWindowed implements the WindowedHistogram interface.
-func (h *HdrHistogram) TotalCountWindowed() int64 {
-	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount())
-}
-
-// TotalSumWindowed implements the WindowedHistogram interface.
-func (h *HdrHistogram) TotalSumWindowed() float64 {
-	return h.ToPrometheusMetricWindowed().Histogram.GetSampleSum()
+// TotalWindowed implements the WindowedHistogram interface.
+func (h *HdrHistogram) TotalWindowed() (int64, float64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	hist := h.mu.sliding.Merge()
+	totalSum := float64(hist.TotalCount()) * hist.Mean()
+	return hist.TotalCount(), totalSum
 }
 
 func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
 	hist := &prometheusgo.Histogram{}
 
 	maybeTick(h.mu.tickHelper)
-	bars := h.mu.sliding.Current.Distribution()
+	mergedHist := h.mu.sliding.Merge()
+	bars := mergedHist.Distribution()
 	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
 
 	var cumCount uint64
@@ -205,7 +201,6 @@ func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
 	}
 	hist.SampleCount = &cumCount
 	hist.SampleSum = &sum // can do better here; we approximate in the loop
-
 	return &prometheusgo.Metric{
 		Histogram: hist,
 	}
@@ -239,14 +234,12 @@ func (h *HdrHistogram) ValueAtQuantileWindowed(q float64) float64 {
 func (h *HdrHistogram) Mean() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
 	return h.mu.cumulative.Mean()
 }
 
-// TotalSum calculates the cumulative sample sum value for this HdrHistogram.
-func (h *HdrHistogram) TotalSum() float64 {
+func (h *HdrHistogram) MeanWindowed() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
-	return h.ToPrometheusMetric().GetSummary().GetSampleSum()
+	hist := h.mu.sliding.Merge()
+	return hist.Mean()
 }

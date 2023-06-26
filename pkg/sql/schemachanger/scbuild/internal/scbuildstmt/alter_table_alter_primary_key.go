@@ -388,17 +388,6 @@ func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t al
 			panic(scerrors.NotImplementedErrorf(t.n, "non-ascending ordering on PRIMARY KEYs are not supported"))
 		}
 	}
-
-	_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
-	// Panic if there is any inbound/outbound FK constraints.
-	if _, _, inboundFKElem := scpb.FindForeignKeyConstraint(b.BackReferences(tableID)); inboundFKElem != nil {
-		panic(scerrors.NotImplementedErrorf(t.n,
-			`foreign keys to table with TTL %q are not permitted`, ns.Name))
-	}
-	if _, _, outboundFKElem := scpb.FindForeignKeyConstraint(b.QueryByID(tableID)); outboundFKElem != nil {
-		panic(scerrors.NotImplementedErrorf(t.n,
-			`foreign keys from table with TTL %q are not permitted`, ns.Name))
-	}
 }
 
 func mustRetrievePrimaryIndexElement(b BuildCtx, tableID catid.DescID) (res *scpb.PrimaryIndex) {

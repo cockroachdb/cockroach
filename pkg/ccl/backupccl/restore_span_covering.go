@@ -56,8 +56,14 @@ var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
 // makeSimpleImportSpans partitions the spans of requiredSpans into a covering
 // of RestoreSpanEntry's which each have all overlapping files from the passed
 // backups assigned to them. The spans of requiredSpans are trimmed/removed
-// based on the lowWaterMark before the covering for them is generated. Consider
-// a chain of backups with files f1, f2… which cover spans as follows:
+// based on the lowWaterMark before the covering for them is generated.
+//
+// Note that because of https://github.com/cockroachdb/cockroach/issues/101963,
+// the spans of files are end key _inclusive_. Because the current definition
+// of spans are all end key _exclusive_, we work around this by assuming that
+// the end key of each file span is actually the next key of the end key.
+//
+// Consider a chain of backups with files f1, f2… which cover spans as follows:
 //
 //	backup
 //	0|     a___1___c c__2__e          h__3__i
@@ -70,9 +76,9 @@ var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
 //
 // The cover for those spans would look like:
 //
-//	[a, c): 1, 4, 6
-//	[c, e): 2, 4, 6
-//	[e, f): 6
+//	[a, c\x00): 1, 2, 4, 6
+//	[c\x00, e\x00): 2, 4, 6
+//	[e\x00, f): 6
 //	[f, i): 3, 5, 6, 8
 //	[l, m): 9
 //
@@ -142,7 +148,8 @@ func makeSimpleImportSpans(
 
 			// TODO(dt): binary search to the first file in required span?
 			for _, f := range backups[layer].Files {
-				if sp := span.Intersect(f.Span); sp.Valid() {
+				fspan := endKeyInclusiveSpan(f.Span)
+				if sp := span.Intersect(fspan); sp.Valid() {
 					fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir}
 					if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
 						fileSpec = execinfrapb.RestoreFileSpec{Path: f.Path, Dir: dir}
@@ -200,7 +207,7 @@ func makeSimpleImportSpans(
 							}
 						}
 					}
-				} else if span.EndKey.Compare(f.Span.Key) <= 0 {
+				} else if span.EndKey.Compare(fspan.Key) <= 0 {
 					// If this file starts after the needed span ends, then all the files
 					// remaining do too so we're done checking files for this span.
 					break
@@ -242,4 +249,19 @@ func makeEntry(start, end roachpb.Key, f execinfrapb.RestoreFileSpec) execinfrap
 		Span:  roachpb.Span{Key: start, EndKey: end},
 		Files: []execinfrapb.RestoreFileSpec{f},
 	}
+}
+
+// endKeyInclusiveSpan returns a span with the same start key as the input span
+// but with its end key as the next key of the input's end key.
+//
+// NB: a backup file can currently have keys equal to its span's EndKey due to
+// the bug: https://github.com/cockroachdb/cockroach/issues/101963, effectively
+// meaning that we have to treat the span as end key inclusive. Because
+// roachpb.Span and its associated operations are end key exclusive, we work
+// around this by replacing the end key with its next value in order to include
+// the end key.
+func endKeyInclusiveSpan(sp roachpb.Span) roachpb.Span {
+	isp := sp.Clone()
+	isp.EndKey = isp.EndKey.Next()
+	return isp
 }

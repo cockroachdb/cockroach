@@ -257,6 +257,7 @@ func (r *Replica) evalAndPropose(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
+	log.VEventf(proposal.ctx, 2, "acquiring proposal quota (%d bytes)", quotaSize)
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
 	if err != nil {
@@ -406,11 +407,13 @@ func (r *Replica) propose(
 		if err := roachpb.CheckCanReceiveLease(
 			lhDesc, proposedDesc.Replicas(), true, /* wasLastLeaseholder */
 		); err != nil {
-			e := errors.Mark(errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
+			err = errors.Handled(err)
+			err = errors.Mark(err, errMarkInvalidReplicationChange)
+			err = errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
 				"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
-				lhDesc, crt, true /* lhRemovalAllowed */, r.Desc(), proposedDesc), errMarkInvalidReplicationChange)
-			log.Errorf(p.ctx, "%v", e)
-			return roachpb.NewError(e)
+				lhDesc, crt, true /* lhRemovalAllowed */, r.Desc(), proposedDesc)
+			log.Errorf(p.ctx, "%v", err)
+			return roachpb.NewError(err)
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
@@ -474,6 +477,7 @@ func (r *Replica) propose(
 	//
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
+	log.VEvent(p.ctx, 2, "submitting proposal to proposal buffer")
 	err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx))
 	if err != nil {
 		return roachpb.NewError(err)

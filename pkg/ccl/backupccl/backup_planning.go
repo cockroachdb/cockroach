@@ -746,16 +746,16 @@ func backupPlanHook(
 		if !initialDetails.FullCluster {
 			descriptorProtos := make([]descpb.Descriptor, 0, len(targetDescs))
 			for _, desc := range targetDescs {
-				descriptorProtos = append(descriptorProtos, *desc.DescriptorProto())
+				descriptorProtos = append(descriptorProtos, *getDescriptorProtoForLogging(desc))
 			}
 			initialDetails.ResolvedTargets = descriptorProtos
 
 			for _, desc := range descsByTablePattern {
-				initialDetails.RequestedTargets = append(initialDetails.RequestedTargets, *desc.DescriptorProto())
+				initialDetails.RequestedTargets = append(initialDetails.RequestedTargets, *getDescriptorProtoForLogging(desc))
 			}
 
 			for _, desc := range requestedDBs {
-				initialDetails.RequestedTargets = append(initialDetails.RequestedTargets, *desc.DescriptorProto())
+				initialDetails.RequestedTargets = append(initialDetails.RequestedTargets, *getDescriptorProtoForLogging(desc))
 			}
 		}
 

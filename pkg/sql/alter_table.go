@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -487,7 +486,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			tableDesc := n.tableDesc
-			if t.Column == colinfo.TTLDefaultExpirationColumnName &&
+			if t.Column == catpb.TTLDefaultExpirationColumnName &&
 				tableDesc.HasRowLevelTTL() &&
 				tableDesc.GetRowLevelTTL().HasDurationExpr() {
 				return errors.WithHintf(
@@ -646,8 +645,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
+			// Block modification on system columns.
+			if col.IsSystemColumn() {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot alter system column %q", col.GetName())
+			}
 			columnName := col.GetName()
-			if columnName == colinfo.TTLDefaultExpirationColumnName &&
+			if columnName == catpb.TTLDefaultExpirationColumnName &&
 				tableDesc.HasRowLevelTTL() &&
 				tableDesc.GetRowLevelTTL().HasDurationExpr() {
 				return pgerror.Newf(
@@ -791,7 +796,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableRenameColumn:
 			tableDesc := n.tableDesc
 			columnName := t.Column
-			if columnName == colinfo.TTLDefaultExpirationColumnName &&
+			if columnName == catpb.TTLDefaultExpirationColumnName &&
 				tableDesc.HasRowLevelTTL() &&
 				tableDesc.GetRowLevelTTL().HasDurationExpr() {
 				return pgerror.Newf(
@@ -1608,6 +1613,13 @@ func dropColumnImpl(
 		return nil, nil
 	}
 
+	// Block modification on system columns.
+	if colToDrop.IsSystemColumn() {
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot alter system column %q", colToDrop.GetName())
+	}
+
 	if colToDrop.IsInaccessible() {
 		return nil, pgerror.Newf(
 			pgcode.InvalidColumnReference,
@@ -1906,7 +1918,7 @@ func handleTTLStorageParamChange(
 
 		// Update default expression on automated column if required.
 		if before.HasDurationExpr() && after.HasDurationExpr() && before.DurationExpr != after.DurationExpr {
-			col, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
+			col, err := tableDesc.FindColumnWithName(catpb.TTLDefaultExpirationColumnName)
 			if err != nil {
 				return false, err
 			}
@@ -1948,11 +1960,11 @@ func handleTTLStorageParamChange(
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
 		addTTLMutation = true
-		if _, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err == nil {
+		if _, err := tableDesc.FindColumnWithName(catpb.TTLDefaultExpirationColumnName); err == nil {
 			return false, pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot add TTL to table with the %s column already defined",
-				colinfo.TTLDefaultExpirationColumnName,
+				catpb.TTLDefaultExpirationColumnName,
 			)
 		}
 		col, err := rowLevelTTLAutomaticColumnDef(after)
@@ -1998,7 +2010,7 @@ func handleTTLStorageParamChange(
 		// Create the DROP COLUMN job and the associated mutation.
 		dropTTLMutation = true
 		droppedViews, err := dropColumnImpl(params, tn, tableDesc, after, &tree.AlterTableDropColumn{
-			Column: colinfo.TTLDefaultExpirationColumnName,
+			Column: catpb.TTLDefaultExpirationColumnName,
 		})
 		if err != nil {
 			return false, err

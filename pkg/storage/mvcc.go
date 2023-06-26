@@ -2852,6 +2852,31 @@ func MVCCDeleteRange(
 	txn *roachpb.Transaction,
 	returnKeys bool,
 ) ([]roachpb.Key, *roachpb.Span, int64, error) {
+	// Scan to find the keys to delete.
+	//
+	// For a versioned delete range, scan at the request timestamp and with the
+	// FailOnMoreRecent option set to true. Doing so returns all non-tombstoned
+	// keys at or below the request timestamp and throws a WriteTooOld error on
+	// any key (mvcc tombstone or otherwise) above the request timestamp. This is
+	// different from scanning at MaxTimestamp and deferring write-write conflict
+	// checking to mvccPutInternal below. That approach ignores mvcc tombstones
+	// above the request timestamp, which could lead to serializability anomalies
+	// (see #56458).
+	//
+	// For an inline delete range, scan at MaxTimestamp. Doing so is not needed to
+	// retrieve inline values, but it ensures that all non-inline values are also
+	// returned. It is incompatible to mix an inline delete range with mvcc
+	// versions, so we want to pass these incompatible keys to mvccPutInternal to
+	// detect the condition and return an error. We also scan with the
+	// FailOnMoreRecent set to false. This is not strictly necessary (nothing is
+	// more recent than MaxTimestamp), but it provides added protection against
+	// the scan returning a WriteTooOld error.
+	scanTs := timestamp
+	failOnMoreRecent := true
+	if timestamp.IsEmpty() /* inline */ {
+		scanTs = hlc.MaxTimestamp
+		failOnMoreRecent = false
+	}
 	// In order for this operation to be idempotent when run transactionally, we
 	// need to perform the initial scan at the previous sequence number so that
 	// we don't see the result from equal or later sequences.
@@ -2861,8 +2886,8 @@ func MVCCDeleteRange(
 		prevSeqTxn.Sequence--
 		scanTxn = prevSeqTxn
 	}
-	res, err := MVCCScan(ctx, rw, key, endKey, timestamp, MVCCScanOptions{
-		FailOnMoreRecent: true, Txn: scanTxn, MaxKeys: max,
+	res, err := MVCCScan(ctx, rw, key, endKey, scanTs, MVCCScanOptions{
+		FailOnMoreRecent: failOnMoreRecent, Txn: scanTxn, MaxKeys: max,
 	})
 	if err != nil {
 		return nil, nil, 0, err
@@ -5411,7 +5436,27 @@ func MVCCFindSplitKey(
 	// was dangerous because partitioning can split off ranges that do not start
 	// at valid row keys. The keys that are present in the range, by contrast, are
 	// necessarily valid row keys.
-	it.SeekGE(MakeMVCCMetadataKey(key.AsRawKey()))
+	minSplitKey, err := mvccMinSplitKey(it, key.AsRawKey())
+	if err != nil {
+		return nil, err
+	} else if minSplitKey == nil {
+		return nil, nil
+	}
+
+	splitKey, err := it.FindSplitKey(key.AsRawKey(), endKey.AsRawKey(), minSplitKey, targetSize)
+	if err != nil {
+		return nil, err
+	}
+	// Ensure the key is a valid split point that does not fall in the middle of a
+	// SQL row by removing the column family ID, if any, from the end of the key.
+	return keys.EnsureSafeSplitKey(splitKey.Key)
+}
+
+// mvccMinSplitKey returns the minimum key that a range may be split at. The
+// caller is responsible for setting the iterator upper bound to the range end
+// key. The caller is also responsible for closing the iterator.
+func mvccMinSplitKey(it MVCCIterator, startKey roachpb.Key) (roachpb.Key, error) {
+	it.SeekGE(MakeMVCCMetadataKey(startKey))
 	if ok, err := it.Valid(); err != nil {
 		return nil, err
 	} else if !ok {
@@ -5435,14 +5480,60 @@ func MVCCFindSplitKey(
 		// Allow a split at any key that sorts after it.
 		minSplitKey = it.Key().Key.Next()
 	}
+	return minSplitKey, nil
+}
 
-	splitKey, err := it.FindSplitKey(key.AsRawKey(), endKey.AsRawKey(), minSplitKey, targetSize)
+// MVCCFirstSplitKey returns the first key which is safe to split at and no
+// less than desiredSplitKey in the range which spans [startKey,endKey). If a
+// non-nil key is returned, it is safe to split at. If a nil key is returned, no
+// safe split key could be determined. The safe split key returned is
+// guaranteed to be:
+//
+//  1. Within [startKey,endKey).
+//  2. No less than desiredSplitKey.
+//  3. Greater than the first key in [startKey,endKey]; or greater than all the
+//     first row's keys if a table range. .
+//  4. Not in between the start and end of a row for table ranges.
+//
+// The returned split key is NOT guaranteed to be outside a no-split span, such
+// as Meta2Max or Node Liveness.
+func MVCCFirstSplitKey(
+	_ context.Context, reader Reader, desiredSplitKey, startKey, endKey roachpb.RKey,
+) (roachpb.Key, error) {
+	// If the start key of the range is within the meta1 key space, the range
+	// cannot be split.
+	if startKey.Less(roachpb.RKey(keys.LocalMax)) {
+		return nil, nil
+	}
+
+	it := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: endKey.AsRawKey()})
+	defer it.Close()
+
+	// If the caller has provided a desiredSplitKey less than the minimum split
+	// key, we update the desired split key to be the minimum split key. This
+	// prevents splitting before the first row in a Table range, which would
+	// result in the LHS having now rows.
+	minSplitKey, err := mvccMinSplitKey(it, startKey.AsRawKey())
 	if err != nil {
 		return nil, err
+	} else if minSplitKey == nil {
+		return nil, nil
 	}
-	// Ensure the key is a valid split point that does not fall in the middle of a
-	// SQL row by removing the column family ID, if any, from the end of the key.
-	return keys.EnsureSafeSplitKey(splitKey.Key)
+	var seekKey roachpb.Key
+	if minSplitKey.Compare(desiredSplitKey.AsRawKey()) > 0 {
+		seekKey = minSplitKey
+	} else {
+		seekKey = desiredSplitKey.AsRawKey()
+	}
+
+	it.SeekGE(MakeMVCCMetadataKey(seekKey))
+	if ok, err := it.Valid(); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, nil
+	}
+
+	return keys.EnsureSafeSplitKey(it.UnsafeKey().Key.Clone())
 }
 
 // willOverflow returns true iff adding both inputs would under- or overflow
@@ -5840,6 +5931,16 @@ func MVCCExportToSST(
 	}
 
 	elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
+	// NB: StartTimer is used to denote that we're just starting to do
+	// the actual on-CPU work we acquired CPU tokens for. We've seen that before
+	// hitting his code path, we may have already used up our allotted CPU slice
+	// resolving intents or doing conflict resolution. The effect was that
+	// OverLimit() below is immediately true, and we exported just a single key
+	// for the entire request, making for extremely inefficient backups. By
+	// starting the timer here we guarantee that our allotted CPU slice is spent
+	// actually doing the backup work.
+	elasticCPUHandle.StartTimer()
+
 	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		StartKey:             opts.StartKey.Key,

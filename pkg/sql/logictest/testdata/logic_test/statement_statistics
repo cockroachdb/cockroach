@@ -175,31 +175,6 @@ SET distsql = "on"                                                ·
 SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           ·
 SHOW application_name                                             ·
 
-# Check that names are anonymized properly:
-# - virtual table names are preserved, but not the db prefix (#22700)
-# - function names are preserved
-query T
-SELECT anonymized
-  FROM test.crdb_internal.node_statement_statistics
- WHERE application_name = 'valuetest' ORDER BY key
-----
-INSERT INTO _ VALUES (_, _, __more1_10__), (__more1_10__)
-SELECT (_, _, __more1_10__) FROM _ WHERE _
-SELECT _ FROM _.crdb_internal.node_statement_statistics
-SELECT sin(_)
-SELECT sqrt(_)
-SELECT _ FROM (VALUES (_, _, __more1_10__), (__more1_10__)) AS _ (_)
-SELECT _ FROM _ WHERE _ = (_ / _)
-SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)
-SELECT _ FROM _ WHERE _ IN (_, _, __more1_10__)
-SELECT _ FROM _ WHERE _ NOT IN (_, _, __more1_10__)
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT
-SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _
-SET application_name = '_'
-SET distsql = _
-SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"
-SHOW application_name
-
 # Check that the latency measurements looks reasonable, protecting
 # against failure to measure (#22877).
 

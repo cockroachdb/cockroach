@@ -20,6 +20,8 @@ import {
   StatementDenialsClusterSettingsTooltip,
   TransactionRestartsToolTip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodeSources, tooltipSelection, nodeDisplayNameByID } = props;
@@ -38,6 +40,25 @@ export default function (props: GraphDashboardProps) {
             title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="SQL Connection Rate"
+      sources={nodeSources}
+      tooltip={`Rate of SQL connection attempts ${tooltipSelection}`}
+    >
+      <Axis label="connections per second">
+        {_.map(nodeIDs, node => (
+          <Metric
+            key={node}
+            name="cr.node.sql.new_conns"
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
+            sources={[node]}
+            downsampler={TimeSeriesQueryAggregator.SUM}
+            nonNegativeRate
           />
         ))}
       </Axis>

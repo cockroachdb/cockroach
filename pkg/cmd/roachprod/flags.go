@@ -40,6 +40,7 @@ var (
 	extendLifetime        time.Duration
 	wipePreserveCerts     bool
 	grafanaConfig         string
+	grafanaArch           string
 	grafanaurlOpen        bool
 	grafanaDumpDir        string
 	listDetails           bool
@@ -62,6 +63,7 @@ var (
 	createVMOpts          = vm.DefaultCreateOpts()
 	startOpts             = roachprod.DefaultStartOpts()
 	stageOS               string
+	stageArch             string
 	stageDir              string
 	logsDir               string
 	logsFilter            string
@@ -106,6 +108,9 @@ func initFlags() {
 			vm.AllProviderNames()))
 	createCmd.Flags().BoolVar(&createVMOpts.GeoDistributed,
 		"geo", false, "Create geo-distributed cluster")
+	createCmd.Flags().StringVar(&createVMOpts.Arch, "arch", "",
+		"architecture override for VM [amd64, arm64, fips]; N.B. fips implies amd64 with openssl")
+
 	// N.B. We set "usage=roachprod" as the default, custom label for billing tracking.
 	createCmd.Flags().StringToStringVar(&createVMOpts.CustomLabels,
 		"label", map[string]string{"usage": "roachprod"},
@@ -206,9 +211,14 @@ func initFlags() {
 	putCmd.Flags().BoolVar(&useTreeDist, "treedist", useTreeDist, "use treedist copy algorithm")
 
 	stageCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
-	stageCmd.Flags().StringVar(&stageDir, "dir", "", "destination for staged binaries")
+	stageCmd.Flags().StringVar(&stageArch, "arch", "",
+		"architecture override for staged binaries [amd64, arm64, fips]; N.B. fips implies amd64 with openssl")
 
+	stageCmd.Flags().StringVar(&stageDir, "dir", "", "destination for staged binaries")
+	// N.B. stageURLCmd just prints the URL that stageCmd would use.
 	stageURLCmd.Flags().StringVar(&stageOS, "os", "", "operating system override for staged binaries")
+	stageURLCmd.Flags().StringVar(&stageArch, "arch", "",
+		"architecture override for staged binaries [amd64, arm64, fips]; N.B. fips implies amd64 with openssl")
 
 	logsCmd.Flags().StringVar(&logsFilter,
 		"filter", "", "re to filter log messages")
@@ -240,6 +250,9 @@ func initFlags() {
 	// the repo, not some random URL.
 	grafanaStartCmd.Flags().StringVar(&grafanaConfig,
 		"grafana-config", "", "URL to grafana json config")
+
+	grafanaStartCmd.Flags().StringVar(&grafanaArch, "arch", "",
+		"binary architecture override [amd64, arm64]")
 
 	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,
 		"open", false, "open the grafana dashboard url on the browser")

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -112,6 +113,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -768,41 +770,43 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.sqlStatusServer.TxnIDResolution,
 		&contentionMetrics,
 	)
-	contentionRegistry.Start(ctx, cfg.stopper)
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.nodeDialer)
 
 	*execCfg = sql.ExecutorConfig{
-		Settings:                  cfg.Settings,
-		NodeInfo:                  nodeInfo,
-		Codec:                     codec,
-		DefaultZoneConfig:         &cfg.DefaultZoneConfig,
-		Locality:                  cfg.Locality,
-		AmbientCtx:                cfg.AmbientCtx,
-		DB:                        cfg.db,
-		Gossip:                    cfg.gossip,
-		NodeLiveness:              cfg.nodeLiveness,
-		SystemConfig:              cfg.systemConfigWatcher,
-		MetricsRecorder:           cfg.recorder,
-		DistSender:                cfg.distSender,
-		RPCContext:                cfg.rpcContext,
-		LeaseManager:              leaseMgr,
-		TenantStatusServer:        cfg.tenantStatusServer,
-		Clock:                     cfg.clock,
-		DistSQLSrv:                distSQLServer,
-		NodesStatusServer:         cfg.nodesStatusServer,
-		SQLStatusServer:           cfg.sqlStatusServer,
-		RegionsServer:             cfg.regionsServer,
-		SessionRegistry:           cfg.sessionRegistry,
-		ClosedSessionCache:        cfg.closedSessionCache,
-		ContentionRegistry:        contentionRegistry,
-		SQLLiveness:               cfg.sqlLivenessProvider,
-		JobRegistry:               jobRegistry,
-		VirtualSchemas:            virtualSchemas,
-		HistogramWindowInterval:   cfg.HistogramWindowInterval(),
-		RangeDescriptorCache:      cfg.distSender.RangeDescriptorCache(),
-		RoleMemberCache:           sql.NewMembershipCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
-		SessionInitCache:          sessioninit.NewCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
+		Settings:                cfg.Settings,
+		NodeInfo:                nodeInfo,
+		Codec:                   codec,
+		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
+		Locality:                cfg.Locality,
+		AmbientCtx:              cfg.AmbientCtx,
+		DB:                      cfg.db,
+		Gossip:                  cfg.gossip,
+		NodeLiveness:            cfg.nodeLiveness,
+		SystemConfig:            cfg.systemConfigWatcher,
+		MetricsRecorder:         cfg.recorder,
+		DistSender:              cfg.distSender,
+		RPCContext:              cfg.rpcContext,
+		LeaseManager:            leaseMgr,
+		TenantStatusServer:      cfg.tenantStatusServer,
+		Clock:                   cfg.clock,
+		DistSQLSrv:              distSQLServer,
+		NodesStatusServer:       cfg.nodesStatusServer,
+		SQLStatusServer:         cfg.sqlStatusServer,
+		RegionsServer:           cfg.regionsServer,
+		SessionRegistry:         cfg.sessionRegistry,
+		ClosedSessionCache:      cfg.closedSessionCache,
+		ContentionRegistry:      contentionRegistry,
+		SQLLiveness:             cfg.sqlLivenessProvider,
+		JobRegistry:             jobRegistry,
+		VirtualSchemas:          virtualSchemas,
+		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
+		RoleMemberCache:         sql.NewMembershipCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
+		SessionInitCache:        sessioninit.NewCache(serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper),
+		ClientCertExpirationCache: security.NewClientCertExpirationCache(
+			ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
+		),
 		RootMemoryMonitor:         rootSQLMemoryMonitor,
 		TestingKnobs:              sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:     storageEngineClient.CompactEngineSpan,
@@ -1285,6 +1289,7 @@ func (s *SQLServer) preStart(
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
+	s.execCfg.ContentionRegistry.Start(ctx, stopper)
 	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
@@ -1347,9 +1352,13 @@ func (s *SQLServer) preStart(
 
 	var bootstrapVersion roachpb.Version
 	if s.execCfg.Codec.ForSystemTenant() {
-		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
-		}); err != nil {
+		if err := startup.RunIdempotentWithRetry(ctx,
+			s.stopper.ShouldQuiesce(),
+			"sql get cluster version", func(ctx context.Context) error {
+				return s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
+				})
+			}); err != nil {
 			return err
 		}
 	} else {

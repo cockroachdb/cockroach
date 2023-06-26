@@ -24,6 +24,39 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// lockedSource is a thread safe math/rand.Source. See math/rand/rand.go.
+type lockedSource struct {
+	mu  syncutil.Mutex
+	src rand.Source64
+}
+
+// NewLockedSource creates random source protected by mutex.
+func NewLockedSource(seed int64) rand.Source {
+	return &lockedSource{
+		src: rand.NewSource(seed).(rand.Source64),
+	}
+}
+
+func (rng *lockedSource) Int63() (n int64) {
+	rng.mu.Lock()
+	n = rng.src.Int63()
+	rng.mu.Unlock()
+	return
+}
+
+func (rng *lockedSource) Uint64() (n uint64) {
+	rng.mu.Lock()
+	n = rng.src.Uint64()
+	rng.mu.Unlock()
+	return
+}
+
+func (rng *lockedSource) Seed(seed int64) {
+	rng.mu.Lock()
+	rng.src.Seed(seed)
+	rng.mu.Unlock()
+}
+
 // globalSeed contains a pseudo random seed that should only be used in tests.
 var globalSeed int64
 
@@ -64,12 +97,28 @@ func NewPseudoRand() (*rand.Rand, int64) {
 	return rand.New(rand.NewSource(seed)), seed
 }
 
+// Same as NewPseudoRand, but the returned Rand is using thread safe underlying source.
+func NewLockedPseudoRand() (*rand.Rand, int64) {
+	seed := envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
+	return rand.New(NewLockedSource(seed)), seed
+}
+
 // NewTestRand returns an instance of math/rand.Rand seeded from rng, which is
 // seeded with the global seed. If the caller is a test with a different
 // path-qualified name than the previous caller, rng is reseeded from the global
 // seed. This rand.Rand is useful in testing to produce deterministic,
 // reproducible behavior.
 func NewTestRand() (*rand.Rand, int64) {
+	return newTestRandImpl(rand.NewSource)
+}
+
+// NewLockedTestRand is identical to NewTestRand but returned rand.Rand is using
+// thread safe underlying source.
+func NewLockedTestRand() (*rand.Rand, int64) {
+	return newTestRandImpl(NewLockedSource)
+}
+
+func newTestRandImpl(f func(int64) rand.Source) (*rand.Rand, int64) {
 	mtx.Lock()
 	defer mtx.Unlock()
 	fxn := getTestName()
@@ -78,10 +127,10 @@ func NewTestRand() (*rand.Rand, int64) {
 		// the global seed so that individual tests are reproducible using the
 		// random seed.
 		lastTestName = fxn
-		rng = rand.New(rand.NewSource(globalSeed))
+		rng = rand.New(f(globalSeed))
 	}
 	seed := rng.Int63()
-	return rand.New(rand.NewSource(seed)), seed
+	return rand.New(f(seed)), seed
 }
 
 // NewTestRandWithSeed returns an instance of math/rand.Rand, similar to

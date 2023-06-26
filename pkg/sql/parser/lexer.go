@@ -272,41 +272,49 @@ func (l *lexer) Error(e string) {
 	l.populateErrorDetails()
 }
 
-func (l *lexer) populateErrorDetails() {
-	lastTok := l.lastToken()
+// PopulateErrorDetails properly wraps the "last error" field in the lexer.
+func PopulateErrorDetails(
+	tokID int32, lastTokStr string, lastTokPos int32, lastErr error, lIn string,
+) error {
+	var retErr error
 
-	if lastTok.id == ERROR {
+	if tokID == ERROR {
 		// This is a tokenizer (lexical) error: the scanner
 		// will have stored the error message in the string field.
-		err := pgerror.WithCandidateCode(errors.Newf("lexical error: %s", lastTok.str), pgcode.Syntax)
-		l.lastError = errors.WithSecondaryError(err, l.lastError)
+		err := pgerror.WithCandidateCode(errors.Newf("lexical error: %s", lastTokStr), pgcode.Syntax)
+		retErr = errors.WithSecondaryError(err, lastErr)
 	} else {
 		// This is a contextual error. Print the provided error message
 		// and the error context.
-		if !strings.Contains(l.lastError.Error(), "syntax error") {
+		if !strings.Contains(lastErr.Error(), "syntax error") {
 			// "syntax error" is already prepended when the yacc-generated
 			// parser encounters a parsing error.
-			l.lastError = errors.Wrap(l.lastError, "syntax error")
+			lastErr = errors.Wrap(lastErr, "syntax error")
 		}
-		l.lastError = errors.Wrapf(l.lastError, "at or near \"%s\"", lastTok.str)
+		retErr = errors.Wrapf(lastErr, "at or near \"%s\"", lastTokStr)
 	}
 
 	// Find the end of the line containing the last token.
-	i := strings.IndexByte(l.in[lastTok.pos:], '\n')
+	i := strings.IndexByte(lIn[lastTokPos:], '\n')
 	if i == -1 {
-		i = len(l.in)
+		i = len(lIn)
 	} else {
-		i += int(lastTok.pos)
+		i += int(lastTokPos)
 	}
 	// Find the beginning of the line containing the last token. Note that
 	// LastIndexByte returns -1 if '\n' could not be found.
-	j := strings.LastIndexByte(l.in[:lastTok.pos], '\n') + 1
+	j := strings.LastIndexByte(lIn[:lastTokPos], '\n') + 1
 	// Output everything up to and including the line containing the last token.
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "source SQL:\n%s\n", l.in[:i])
+	fmt.Fprintf(&buf, "source SQL:\n%s\n", lIn[:i])
 	// Output a caret indicating where the last token starts.
-	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", int(lastTok.pos)-j))
-	l.lastError = errors.WithDetail(l.lastError, buf.String())
+	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", int(lastTokPos)-j))
+	return errors.WithDetail(retErr, buf.String())
+}
+
+func (l *lexer) populateErrorDetails() {
+	lastTok := l.lastToken()
+	l.lastError = PopulateErrorDetails(lastTok.id, lastTok.str, lastTok.pos, l.lastError, l.in)
 }
 
 // SetHelp marks the "last error" field in the lexer to become a

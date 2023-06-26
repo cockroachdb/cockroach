@@ -23,6 +23,7 @@ go_library(
     deps = [
         "//pkg/settings",
         "//pkg/util",
+        "//pkg/util/allstacks",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/iterutil",

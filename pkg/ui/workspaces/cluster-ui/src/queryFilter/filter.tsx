@@ -46,6 +46,7 @@ interface QueryFilter {
   regions?: string[];
   nodes?: string[];
   hideAppNames?: boolean;
+  hideTimeLabel?: boolean;
   showDB?: boolean;
   showUsername?: boolean;
   showSessionStatus?: boolean;
@@ -377,8 +378,8 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
   };
 
   isOptionSelected = (option: string, field: string): boolean => {
-    const selection = field.split(",");
-    return selection.length > 0 && selection.includes(option);
+    const selection = field?.split(",");
+    return selection?.length > 0 && selection?.includes(option);
   };
 
   render(): React.ReactElement {
@@ -399,6 +400,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       showRegions,
       showNodes,
       timeLabel,
+      hideTimeLabel,
       showUsername,
       showSessionStatus,
       showSchemaInsightTypes,
@@ -419,7 +421,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         }))
       : [];
     const appValue = appsOptions.filter(option => {
-      return filters.app.split(",").includes(option.label);
+      return filters.app?.split(",").includes(option.label);
     });
     const appFilter = (
       <div>
@@ -608,7 +610,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       : [];
 
     const sqlTypeValue = sqlTypes.filter(option => {
-      return filters.sqlType.split(",").includes(option.label);
+      return filters.sqlType?.split(",").includes(option.label);
     });
     const sqlTypeFilter = (
       <div>
@@ -655,32 +657,34 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
             {showSqlType ? sqlTypeFilter : ""}
             {showRegions ? regionsFilter : ""}
             {showNodes ? nodesFilter : ""}
-            {filters.timeUnit && (
-              <>
-                <div className={filterLabel.margin}>
-                  {timeLabel
-                    ? `${timeLabel} runs longer than`
-                    : "Statement fingerprint runs longer than"}
-                </div>
-                <section className={timePair.wrapper}>
-                  <Input
-                    value={filters.timeNumber}
-                    onChange={e => this.handleChange(e, "timeNumber")}
-                    onFocus={this.clearInput}
-                    className={timePair.timeNumber}
-                  />
-                  <Select
-                    options={timeUnit}
-                    value={timeUnit.filter(
-                      unit => unit.label == filters.timeUnit,
-                    )}
-                    onChange={e => this.handleSelectChange(e, "timeUnit")}
-                    className={timePair.timeUnit}
-                    styles={customStylesSmall}
-                  />
-                </section>
-              </>
-            )}
+            {hideTimeLabel
+              ? ""
+              : filters.timeUnit && (
+                  <>
+                    <div className={filterLabel.margin}>
+                      {timeLabel
+                        ? `${timeLabel} runs longer than`
+                        : "Statement fingerprint runs longer than"}
+                    </div>
+                    <section className={timePair.wrapper}>
+                      <Input
+                        value={filters.timeNumber}
+                        onChange={e => this.handleChange(e, "timeNumber")}
+                        onFocus={this.clearInput}
+                        className={timePair.timeNumber}
+                      />
+                      <Select
+                        options={timeUnit}
+                        value={timeUnit.filter(
+                          unit => unit.label == filters.timeUnit,
+                        )}
+                        onChange={e => this.handleSelectChange(e, "timeUnit")}
+                        className={timePair.timeUnit}
+                        styles={customStylesSmall}
+                      />
+                    </section>
+                  </>
+                )}
             {showScan ? fullScanFilter : ""}
             <div className={applyBtn.wrapper}>
               <Button
@@ -769,7 +773,7 @@ function FilterBadge(props: FilterBadgeProps): React.ReactElement {
       {value}
       <Cancel
         className={badge.closeArea}
-        onClick={() => removeFilter(filters, name, onRemoveFilter)}
+        onClick={() => removeFilter({ ...filters }, name, onRemoveFilter)}
       />
     </div>
   );

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 // Cluster is the interface through which a given roachtest interacts with the
@@ -72,7 +73,7 @@ type Cluster interface {
 	// SQL clients to nodes.
 
 	Conn(ctx context.Context, l *logger.Logger, node int) *gosql.DB
-	ConnE(ctx context.Context, l *logger.Logger, node int) (*gosql.DB, error)
+	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) (*gosql.DB, error)
 	ConnEAsUser(ctx context.Context, l *logger.Logger, node int, user string) (*gosql.DB, error)
 
 	// URLs for the Admin UI.
@@ -107,7 +108,10 @@ type Cluster interface {
 	Spec() spec.ClusterSpec
 	Name() string
 	IsLocal() bool
+	// IsSecure returns true iff the cluster uses TLS.
 	IsSecure() bool
+	// Returns CPU architecture of the nodes.
+	Architecture() vm.CPUArch
 
 	// Deleting CockroachDB data and logs on nodes.
 

@@ -25,6 +25,7 @@ go_library(
         "uncommitted_descriptors.go",
         "validate.go",
         "virtual_descriptors.go",
+        "zone_config_validator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descs",
     visibility = ["//visibility:public"],

@@ -181,6 +181,11 @@ message ReadImportDataSpec {
   // NEXTID: 20.
 }
 
+message IngestStoppedSpec {
+  optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID",
+  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"];
+}
+
 // StreamIngestionPartitionSpec contains information about a partition and how
 // to connect to it.
 message StreamIngestionPartitionSpec {

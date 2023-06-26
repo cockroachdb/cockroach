@@ -76,10 +76,10 @@ import { isSelectedColumn } from "../columnsSelector/utils";
 import moment from "moment";
 import {
   STATS_LONG_LOADING_DURATION,
-  txnRequestSortOptions,
   getSortLabel,
   getSortColumn,
   getSubsetWarning,
+  getReqSortColumn,
 } from "src/util/sqlActivityConstants";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
@@ -425,6 +425,17 @@ export class TransactionsPage extends React.Component<
     this.onChangeSortSetting(ss);
   };
 
+  onUpdateSortSettingAndApply = (): void => {
+    this.setState(
+      {
+        reqSortSetting: getReqSortColumn(this.props.sortSetting.columnTitle),
+      },
+      () => {
+        this.updateRequestParams();
+      },
+    );
+  };
+
   hasReqSortOption = (): boolean => {
     return Object.values(SqlStatsSortOptions).some(
       (option: SqlStatsSortType) =>
@@ -517,6 +528,10 @@ export class TransactionsPage extends React.Component<
       this.props.reqSortSetting,
       "Transaction",
     );
+    const showSortWarning =
+      !this.isSortSettingSameAsReqSort() &&
+      this.hasReqSortOption() &&
+      transactionsToDisplay.length == this.props.limit;
 
     return (
       <>
@@ -563,7 +578,7 @@ export class TransactionsPage extends React.Component<
                     ...pagination,
                     total: transactionsToDisplay.length,
                   }}
-                  pageName={"Statements"}
+                  pageName={"Transactions"}
                   search={search}
                 />
               </p>
@@ -576,7 +591,7 @@ export class TransactionsPage extends React.Component<
               >
                 <ClearStats
                   resetSQLStats={this.resetSQLStats}
-                  tooltipType="statement"
+                  tooltipType="transaction"
                 />
               </PageConfigItem>
             )}
@@ -588,15 +603,15 @@ export class TransactionsPage extends React.Component<
             onRemoveFilter={this.onSubmitFilters}
             onClearFilters={this.onClearFilters}
           />
-          {!this.isSortSettingSameAsReqSort() && (
+          {showSortWarning && (
             <InlineAlert
               intent="warning"
               title={getSubsetWarning(
                 "transaction",
                 this.props.limit,
                 sortSettingLabel,
-                this.hasReqSortOption(),
                 this.props.sortSetting.columnTitle as StatisticTableColumnKeys,
+                this.onUpdateSortSettingAndApply,
               )}
               className={cx("margin-bottom")}
             />
@@ -638,7 +653,7 @@ export class TransactionsPage extends React.Component<
     return (
       <>
         <SearchCriteria
-          sortOptions={txnRequestSortOptions}
+          searchType="Transaction"
           topValue={this.state.limit}
           byValue={this.state.reqSortSetting}
           currentScale={this.state.timeScale}

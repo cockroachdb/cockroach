@@ -21,5 +21,10 @@ func init() {
 							ALTER TABLE audit_table EXPERIMENTAL_AUDIT SET READ WRITE;`,
 			Stmt: "SELECT * from audit_table",
 		},
+		{
+			Name:  "select from a non-audit table",
+			Setup: `CREATE TABLE audit_table(a INT);`,
+			Stmt:  "SELECT * from audit_table",
+		},
 	})
 }

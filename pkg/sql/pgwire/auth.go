@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -387,6 +388,8 @@ type AuthConn interface {
 	LogAuthFailed(ctx context.Context, reason eventpb.AuthFailReason, err error)
 	// LogAuthOK logs when the authentication handshake has completed.
 	LogAuthOK(ctx context.Context)
+	// GetTenantSpecificMetrics returns the tenant-specific metrics for the connection.
+	GetTenantSpecificMetrics() *ServerMetrics
 }
 
 // authPipe is the implementation for the authenticator and AuthConn interfaces.
@@ -401,8 +404,11 @@ type authPipe struct {
 	authMethod  string
 
 	ch chan []byte
+
+	// closeWriterDoneOnce wraps close(writerDone) to prevent a panic if
+	// noMorePwdData is called multiple times.
+	closeWriterDoneOnce sync.Once
 	// writerDone is a channel closed by noMorePwdData().
-	// Nil if noMorePwdData().
 	writerDone chan struct{}
 	readerDone chan authRes
 }
@@ -442,13 +448,13 @@ func (p *authPipe) sendPwdData(data []byte) error {
 }
 
 func (p *authPipe) noMorePwdData() {
-	if p.writerDone == nil {
-		return
-	}
-	// A reader blocked in GetPwdData() gets unblocked with an error.
-	close(p.writerDone)
-	p.writerDone = nil
+	p.closeWriterDoneOnce.Do(func() {
+		// A reader blocked in GetPwdData() gets unblocked with an error.
+		close(p.writerDone)
+	})
 }
+
+const writerDoneError = "client didn't send required auth data"
 
 // GetPwdData is part of the AuthConn interface.
 func (p *authPipe) GetPwdData() ([]byte, error) {
@@ -456,7 +462,7 @@ func (p *authPipe) GetPwdData() ([]byte, error) {
 	case data := <-p.ch:
 		return data, nil
 	case <-p.writerDone:
-		return nil, pgwirebase.NewProtocolViolationErrorf("client didn't send required auth data")
+		return nil, pgwirebase.NewProtocolViolationErrorf(writerDoneError)
 	}
 }
 
@@ -537,4 +543,9 @@ func (p *authPipe) SendAuthRequest(authType int32, data []byte) error {
 	c.msgBuilder.putInt32(authType)
 	c.msgBuilder.write(data)
 	return c.msgBuilder.finishMsg(c.conn)
+}
+
+// GetTenantSpecificMetrics is part of the AuthConn interface.
+func (p *authPipe) GetTenantSpecificMetrics() *ServerMetrics {
+	return p.c.metrics
 }

@@ -79,10 +79,10 @@ import { StatementViewType } from "./statementPageTypes";
 import moment from "moment";
 import {
   STATS_LONG_LOADING_DURATION,
-  stmtRequestSortOptions,
   getSortLabel,
   getSortColumn,
   getSubsetWarning,
+  getReqSortColumn,
 } from "src/util/sqlActivityConstants";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
@@ -319,6 +319,17 @@ export class StatementsPage extends React.Component<
     this.changeSortSetting(ss);
   };
 
+  onUpdateSortSettingAndApply = (): void => {
+    this.setState(
+      {
+        reqSortSetting: getReqSortColumn(this.props.sortSetting.columnTitle),
+      },
+      () => {
+        this.updateRequestParams();
+      },
+    );
+  };
+
   resetPagination = (): void => {
     this.setState(prevState => {
       return {
@@ -415,7 +426,9 @@ export class StatementsPage extends React.Component<
       ...prevState,
       pagination: { ...pagination, current },
     }));
-    this.props.onPageChanged(current);
+    if (this.props.onPageChanged) {
+      this.props.onPageChanged(current);
+    }
   };
 
   onSubmitSearchField = (search: string): void => {
@@ -655,6 +668,10 @@ export class StatementsPage extends React.Component<
       this.props.reqSortSetting,
       "Statement",
     );
+    const showSortWarning =
+      !this.isSortSettingSameAsReqSort() &&
+      this.hasReqSortOption() &&
+      data.length == this.props.limit;
 
     return (
       <>
@@ -726,15 +743,15 @@ export class StatementsPage extends React.Component<
             onRemoveFilter={this.onSubmitFilters}
             onClearFilters={this.onClearFilters}
           />
-          {!this.isSortSettingSameAsReqSort() && (
+          {showSortWarning && (
             <InlineAlert
               intent="warning"
               title={getSubsetWarning(
                 "statement",
                 this.props.limit,
                 sortSettingLabel,
-                this.hasReqSortOption(),
                 this.props.sortSetting.columnTitle as StatisticTableColumnKeys,
+                this.onUpdateSortSettingAndApply,
               )}
               className={cx("margin-bottom")}
             />
@@ -783,7 +800,7 @@ export class StatementsPage extends React.Component<
     return (
       <div className={cx("root")}>
         <SearchCriteria
-          sortOptions={stmtRequestSortOptions}
+          searchType="Statement"
           topValue={this.state.limit}
           byValue={this.state.reqSortSetting}
           currentScale={this.state.timeScale}

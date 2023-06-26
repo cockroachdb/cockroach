@@ -49,9 +49,11 @@ crdb_internal  index_columns                     table  admin  NULL  NULL
 crdb_internal  index_usage_statistics            table  admin  NULL  NULL
 crdb_internal  invalid_objects                   table  admin  NULL  NULL
 crdb_internal  jobs                              table  admin  NULL  NULL
+crdb_internal  kv_inherited_role_members         table  admin  NULL  NULL
 crdb_internal  kv_node_liveness                  table  admin  NULL  NULL
 crdb_internal  kv_node_status                    table  admin  NULL  NULL
 crdb_internal  kv_store_status                   table  admin  NULL  NULL
+crdb_internal  kv_system_privileges              view   admin  NULL  NULL
 crdb_internal  leases                            table  admin  NULL  NULL
 crdb_internal  lost_descriptors_with_data        table  admin  NULL  NULL
 crdb_internal  node_build_info                   table  admin  NULL  NULL
@@ -370,6 +372,59 @@ query TITTTTIIIT colnames
 SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
 id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+
+# Accessing the tables should error for a user without a privilege.
+user testuser
+
+statement error user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
+
+statement error user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+# Now testuser can query transactions since it has the VIEWACTIVITY privilege.
+user testuser
+
+query TITTTTIIIT colnames
+SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+
+query TITTTTIIIT colnames
+SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+# testuser can query transactions since it has the VIEWACTIVITYREDACTED privilege.
+user testuser
+
+query TITTTTIIIT colnames
+SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+
+query TITTTTIIIT colnames
+SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
+----
+id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
 
 query ITTTTTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
@@ -1162,7 +1217,7 @@ SELECT crdb_internal.unsafe_clear_gossip_info('unknown key')
 ----
 false
 
-# Verify users with VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING can view non sql.defaults cluster settings.
+# Verify users with VIEWCLUSTERSETTING can view non sql.defaults cluster settings.
 
 user root
 
@@ -1184,6 +1239,30 @@ REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
 statement ok
 GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
 
+# Verify users with MODIFYCLUSTERSETTING can view non sql.defaults cluster setting only if sql.full_modify_cluster_setting.enabled is true.
+user testuser
+
+query T
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
+true
+
+user root
+
+statement ok
+SET CLUSTER SETTING sql.auth.modify_cluster_setting_applies_to_all.enabled = false
+
+user testuser
+
+query T
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING TO testuser
+
 user testuser
 
 query T
@@ -1195,6 +1274,9 @@ user root
 
 statement ok
 REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+statement ok
+REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
 
 query TT
 SELECT crdb_internal.humanize_bytes(NULL), crdb_internal.humanize_bytes(102400)
@@ -1231,4 +1313,63 @@ user testuser
 
 awaitstatement sleepQuery
 
+# test privileges/roles for contention related tables
+user testuser
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.node_contention_events
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.transaction_contention_events
+
+statement error pq: user testuser does not have VIEWACTIVITY or VIEWACTIVITYREDACTED privilege
+SELECT * FROM crdb_internal.cluster_locks
+
 user root
+
+statement ok
+GRANT SYSTEM VIEWACTIVITYREDACTED TO testuser
+
+user testuser
+
+query T
+SELECT key::STRING FROM crdb_internal.node_contention_events LIMIT 1
+----
+\x
+
+statement ok
+SELECT * FROM crdb_internal.transaction_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.cluster_locks
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITYREDACTED FROM testuser
+
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+user testuser
+
+statement ok
+SELECT * FROM crdb_internal.node_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.transaction_contention_events
+
+statement ok
+SELECT * FROM crdb_internal.cluster_locks
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+# Regression tests for not setting SQL stats provider in the backfill (#76710).
+statement ok
+CREATE TABLE t76710_1 AS SELECT * FROM crdb_internal.statement_statistics;
+
+statement ok
+CREATE MATERIALIZED VIEW t76710_2 AS SELECT fingerprint_id FROM crdb_internal.cluster_statement_statistics;

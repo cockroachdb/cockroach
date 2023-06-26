@@ -626,6 +626,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 func TestReplicateQueueTracingOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := log.ScopeWithoutShowLogs(t)
+	_ = log.SetVModule("replicate_queue=2")
 	defer s.Close(t)
 
 	// NB: This test injects a fake failure during replica rebalancing, and we use

@@ -251,50 +251,90 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	_, port, err := net.SplitHostPort(addr)
 	require.NoError(t, err)
 
-	url := fmt.Sprintf("postgres://bob:wrong@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
-	_ = te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
-
-	url = fmt.Sprintf("postgres://bob@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
-	_ = te.TestConnectErr(ctx, t, url, 0, "failed SASL auth")
-
-	// SNI provides tenant ID.
-	url = fmt.Sprintf("postgres://bob:builder@tenant-cluster-28.blah:%s/defaultdb?sslmode=require", port)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-		require.NoError(t, runTestQuery(ctx, conn))
-	})
-
-	// SNI tried but doesn't parse to valid tenant ID and DB/Options not provided
-	url = fmt.Sprintf("postgres://bob:builder@tenant_cluster_28.blah:%s/defaultdb?sslmode=require", port)
-	_ = te.TestConnectErr(ctx, t, url, codeParamsRoutingFailed, "missing cluster identifier")
-
-	// Database provides valid ID
-	url = fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require", addr)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-		require.NoError(t, runTestQuery(ctx, conn))
-	})
-
-	// SNI and database provide tenant IDs that match.
-	url = fmt.Sprintf(
-		"postgres://bob:builder@tenant-cluster-28.blah:%s/tenant-cluster-28.defaultdb?sslmode=require", port,
-	)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-		require.NoError(t, runTestQuery(ctx, conn))
-	})
-
-	// SNI and database provide tenant IDs that don't match. SNI is ignored.
-	url = fmt.Sprintf(
-		"postgres://bob:builder@tick-data-28.blah:%s/tenant-cluster-29.defaultdb?sslmode=require", port,
-	)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-		require.NoError(t, runTestQuery(ctx, conn))
-	})
-
+	for _, tc := range []struct {
+		name    string
+		url     string
+		expCode errorCode
+		expErr  string
+	}{
+		{
+			name: "failed_SASL_auth_1",
+			url: fmt.Sprintf(
+				"postgres://bob:wrong@%s/tenant-cluster-28.defaultdb?sslmode=require",
+				addr,
+			),
+			expErr: "failed SASL auth",
+		},
+		{
+			name: "failed_SASL_auth_2",
+			url: fmt.Sprintf(
+				"postgres://bob@%s/tenant-cluster-28.defaultdb?sslmode=require",
+				addr,
+			),
+			expErr: "failed SASL auth",
+		},
+		{
+			// SNI tried but doesn't parse to valid tenant ID and DB/Options not provided.
+			name: "invalid_SNI",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@tenant_cluster_28.blah:%s/defaultdb?sslmode=require",
+				port,
+			),
+			expCode: codeParamsRoutingFailed,
+			expErr:  "missing cluster identifier",
+		},
+		{
+			name: "SNI_provides_tenant_ID",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@tenant-cluster-28.blah:%s/defaultdb?sslmode=require",
+				port,
+			),
+		},
+		{
+			name: "database_provides_tenant_ID",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@%s/tenant-cluster-28.defaultdb?sslmode=require",
+				addr,
+			),
+		},
+		{
+			name: "SNI_and_database_provide_tenant_ID",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@tenant-cluster-28.blah:%s/tenant-cluster-28.defaultdb?sslmode=require",
+				port,
+			),
+		},
+		{
+			// SNI and database provide tenant IDs that don't match. SNI is ignored.
+			name: "SNI_and_database_provided_but_SNI_ignored",
+			url: fmt.Sprintf(
+				"postgres://bob:builder@tick-data-28.blah:%s/tenant-cluster-29.defaultdb?sslmode=require",
+				port,
+			),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Ensure that CurConnCount is 0 before proceeding.
+			testutils.SucceedsSoon(t, func() error {
+				val := s.metrics.CurConnCount.Value()
+				if val != 0 {
+					return errors.Newf("CurConnCount is not 0, got %d", val)
+				}
+				return nil
+			})
+			if tc.expErr == "" {
+				te.TestConnect(ctx, t, tc.url, func(conn *pgx.Conn) {
+					require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+					require.NoError(t, runTestQuery(ctx, conn))
+				})
+			} else {
+				_ = te.TestConnectErr(ctx, t, tc.url, tc.expCode, tc.expErr)
+			}
+		})
+	}
 	require.Equal(t, int64(4), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(4), s.metrics.ConnectionLatency.TotalCount())
+	count, _ := s.metrics.ConnectionLatency.Total()
+	require.Equal(t, int64(4), count)
 	require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
 	require.Equal(t, int64(1), s.metrics.RoutingErrCount.Count())
 }
@@ -435,7 +475,8 @@ func TestProxyTLSClose(t *testing.T) {
 	_ = conn.Close(ctx)
 
 	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(1), s.metrics.ConnectionLatency.TotalCount())
+	count, _ := s.metrics.ConnectionLatency.Total()
+	require.Equal(t, int64(1), count)
 	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 }
 
@@ -542,7 +583,8 @@ func TestInsecureProxy(t *testing.T) {
 	})
 	require.Equal(t, int64(1), s.metrics.AuthFailedCount.Count())
 	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(1), s.metrics.ConnectionLatency.TotalCount())
+	count, _ := s.metrics.ConnectionLatency.Total()
+	require.Equal(t, int64(1), count)
 }
 
 func TestErroneousFrontend(t *testing.T) {
@@ -651,7 +693,8 @@ func TestProxyRefuseConn(t *testing.T) {
 	_ = te.TestConnectErr(ctx, t, url, codeProxyRefusedConnection, "too many attempts")
 	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
 	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
-	require.Equal(t, int64(0), s.metrics.ConnectionLatency.TotalCount())
+	count, _ := s.metrics.ConnectionLatency.Total()
+	require.Equal(t, int64(0), count)
 	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 }
 
@@ -680,10 +723,15 @@ func TestDenylistUpdate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	te := newTester()
-	defer te.Close()
 
+	// Create an empty denylist file.
 	denyList, err := os.CreateTemp("", "*_denylist.yml")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(denyList.Name()) }()
+	dlf := denylist.File{Seq: 0}
+	bytes, err := dlf.Serialize()
+	require.NoError(t, err)
+	_, err = denyList.Write(bytes)
 	require.NoError(t, err)
 
 	sql, sqlDB, _ := serverutils.StartServer(t,
@@ -707,52 +755,77 @@ func TestDenylistUpdate(t *testing.T) {
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
 
-	// We wish the proxy to work even without providing a valid TLS client cert to the SQL server.
+	// We wish the proxy to work even without providing a valid TLS client cert
+	// to the SQL server.
 	proxyOutgoingTLSConfig.Certificates = nil
+
+	// Register one SQL pod in the directory server.
+	tenantID := serverutils.TestTenantID()
+	tds := tenantdirsvr.NewTestStaticDirectoryServer(sql.Stopper(), nil /* timeSource */)
+	tds.CreateTenant(tenantID, "tenant-cluster")
+	tds.AddPod(tenantID, &tenant.Pod{
+		TenantID:       tenantID.ToUint64(),
+		Addr:           sql.ServingSQLAddr(),
+		State:          tenant.RUNNING,
+		StateTimestamp: timeutil.Now(),
+	})
+	require.NoError(t, tds.Start(ctx))
 
 	originalBackendDial := BackendDial
 	defer testutils.TestingHook(&BackendDial, func(
 		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
-		time.AfterFunc(100*time.Millisecond, func() {
-			dlf := denylist.File{
-				Denylist: []*denylist.DenyEntry{
-					{
-						Entity:     denylist.DenyEntity{Type: denylist.IPAddrType, Item: "127.0.0.1"},
-						Expiration: timeutil.Now().Add(time.Minute),
-						Reason:     "test-denied",
-					},
-				},
-			}
-
-			bytes, err := dlf.Serialize()
-			require.NoError(t, err)
-			_, err = denyList.Write(bytes)
-			require.NoError(t, err)
-		})
 		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
-	s, addr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{
+	opts := &ProxyOptions{
 		Denylist:           denyList.Name(),
 		PollConfigInterval: 10 * time.Millisecond,
-	})
-	defer func() { _ = os.Remove(denyList.Name()) }()
+	}
+	opts.testingKnobs.directoryServer = tds
+	s, addr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), opts)
 
-	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb_29?sslmode=require&options=--cluster=tenant-cluster-28&sslmode=require", addr)
-	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
-		require.Eventuallyf(
-			t,
-			func() bool {
-				_, err = conn.Exec(context.Background(), "SELECT 1")
-				return err != nil
-			},
-			time.Second, 5*time.Millisecond,
-			"Expected the connection to eventually fail",
-		)
-		require.Regexp(t, "unexpected EOF|connection reset by peer", err.Error())
-		require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
-	})
+	// Establish a connection.
+	url := fmt.Sprintf("postgres://testuser:foo123@%s/defaultdb?sslmode=require&options=--cluster=tenant-cluster-%s&sslmode=require", addr, tenantID)
+	db, err := gosql.Open("postgres", url)
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+	require.NoError(t, err)
+
+	// Use a single connection so that we don't reopen when the connection
+	// is closed.
+	conn, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+
+	// Once connection has been established, attempt to update denylist.
+	dlf.Seq++
+	dlf.Denylist = []*denylist.DenyEntry{
+		{
+			Entity:     denylist.DenyEntity{Type: denylist.IPAddrType, Item: "127.0.0.1"},
+			Expiration: timeutil.Now().Add(time.Minute),
+			Reason:     "test-denied",
+		},
+	}
+	bytes, err = dlf.Serialize()
+	require.NoError(t, err)
+	_, err = denyList.Write(bytes)
+	require.NoError(t, err)
+
+	// Subsequent Exec calls will eventually fail.
+	require.Eventuallyf(
+		t,
+		func() bool {
+			_, err = conn.ExecContext(ctx, "SELECT 1")
+			return err != nil
+		},
+		time.Second, 5*time.Millisecond,
+		"Expected the connection to eventually fail",
+	)
+	require.Regexp(t, "closed|bad connection", err.Error())
+	require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 }
 
 func TestDirectoryConnect(t *testing.T) {
@@ -1444,10 +1517,10 @@ func TestConnectionMigration(t *testing.T) {
 			proxy.metrics.ConnMigrationErrorRecoverableCount.Count() +
 			proxy.metrics.ConnMigrationErrorFatalCount.Count()
 		require.Equal(t, totalAttempts, proxy.metrics.ConnMigrationAttemptedCount.Count())
-		require.Equal(t, totalAttempts,
-			proxy.metrics.ConnMigrationAttemptedLatency.TotalCount())
-		require.Equal(t, totalAttempts,
-			proxy.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
+		count, _ := proxy.metrics.ConnMigrationAttemptedLatency.Total()
+		require.Equal(t, totalAttempts, count)
+		count, _ = proxy.metrics.ConnMigrationTransferResponseMessageSize.Total()
+		require.Equal(t, totalAttempts, count)
 	}
 
 	transferConnWithRetries := func(t *testing.T, f *forwarder) error {
@@ -1767,12 +1840,12 @@ func TestConnectionMigration(t *testing.T) {
 			f.metrics.ConnMigrationErrorRecoverableCount.Count() +
 			f.metrics.ConnMigrationErrorFatalCount.Count()
 		require.Equal(t, totalAttempts, f.metrics.ConnMigrationAttemptedCount.Count())
-		require.Equal(t, totalAttempts,
-			f.metrics.ConnMigrationAttemptedLatency.TotalCount())
+		count, _ := f.metrics.ConnMigrationAttemptedLatency.Total()
+		require.Equal(t, totalAttempts, count)
 		// Here, we get a transfer timeout in response, so the message size
 		// should not be recorded.
-		require.Equal(t, totalAttempts-1,
-			f.metrics.ConnMigrationTransferResponseMessageSize.TotalCount())
+		count, _ = f.metrics.ConnMigrationTransferResponseMessageSize.Total()
+		require.Equal(t, totalAttempts-1, count)
 	})
 
 	// All connections should eventually be terminated.

@@ -117,8 +117,9 @@ func registerConnectionLatencyTest(r registry.Registry) {
 	// Single region test.
 	numNodes := 3
 	r.Add(registry.TestSpec{
-		Name:  fmt.Sprintf("connection_latency/nodes=%d/certs", numNodes),
-		Owner: registry.OwnerSQLExperience,
+		Name:      fmt.Sprintf("connection_latency/nodes=%d/certs", numNodes),
+		Owner:     registry.OwnerSQLFoundations,
+		Benchmark: true,
 		// Add one more node for load node.
 		Cluster: r.MakeClusterSpec(numNodes+1, spec.Zones(regionUsCentral)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -133,18 +134,20 @@ func registerConnectionLatencyTest(r registry.Registry) {
 	loadNodes := numZones
 
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("connection_latency/nodes=%d/multiregion/certs", numMultiRegionNodes),
-		Owner:   registry.OwnerSQLExperience,
-		Cluster: r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
+		Name:      fmt.Sprintf("connection_latency/nodes=%d/multiregion/certs", numMultiRegionNodes),
+		Owner:     registry.OwnerSQLFoundations,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, false /*password*/)
 		},
 	})
 
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("connection_latency/nodes=%d/multiregion/password", numMultiRegionNodes),
-		Owner:   registry.OwnerSQLExperience,
-		Cluster: r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
+		Name:      fmt.Sprintf("connection_latency/nodes=%d/multiregion/password", numMultiRegionNodes),
+		Owner:     registry.OwnerSQLFoundations,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(numMultiRegionNodes+loadNodes, spec.Geo(), spec.Zones(geoZonesStr)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runConnectionLatencyTest(ctx, t, c, numMultiRegionNodes, numZones, true /*password*/)
 		},

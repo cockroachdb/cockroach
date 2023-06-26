@@ -321,10 +321,10 @@ func (r *commandResult) SetPortalOutput(
 	_ /* err */ = r.conn.writeRowDescription(ctx, cols, formatCodes, &r.conn.writerState.buf)
 }
 
-// IncrementRowsAffected is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) IncrementRowsAffected(ctx context.Context, n int) {
+// SetRowsAffected is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SetRowsAffected(ctx context.Context, n int) {
 	r.assertNotReleased()
-	r.rowsAffected += n
+	r.rowsAffected = n
 }
 
 // RowsAffected is part of the sql.RestrictedCommandResult interface.

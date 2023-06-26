@@ -78,6 +78,10 @@ def protobufjs_library(name, out_name, protos, **kwargs):
             "--wrap=es6",
             "--strict-long",  # Force usage of Long type with int64 fields
             "--keep-case",
+            "--no-create",
+            "--no-convert",
+            "--no-verify",
+            "--no-delimited",
             "--out=$@",
             "$(execpaths %s)" % proto_target,
         ],

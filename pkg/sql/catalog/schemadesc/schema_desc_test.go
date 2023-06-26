@@ -98,7 +98,7 @@ func TestValidateSchemaSelf(t *testing.T) {
 			},
 		},
 		{ // 3
-			err: `user testuser must not have SELECT privileges on schema "schema1"`,
+			err: `user testuser must not have [SELECT] privileges on schema "schema1"`,
 			desc: descpb.SchemaDescriptor{
 				ID:         52,
 				ParentID:   51,

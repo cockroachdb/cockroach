@@ -118,6 +118,32 @@ function makeCommonColumns(
       sort: (stmt: AggregateStatistics) => stmt.applicationName,
     },
     {
+      name: "time",
+      title: statisticsTableTitles.time(statType),
+      className: cx("statements-table__col-latency"),
+      cell: latencyBar,
+      sort: (stmt: AggregateStatistics) => stmt.stats.service_lat.mean,
+    },
+    {
+      name: "workloadPct",
+      title: statisticsTableTitles.workloadPct(statType),
+      cell: workloadPctBarChart(
+        statements,
+        defaultBarChartOptions,
+        totalWorkload,
+      ),
+      sort: (stmt: AggregateStatistics) =>
+        (stmt.stats.service_lat.mean * longToInt(stmt.stats.count)) /
+        totalWorkload,
+    },
+    {
+      name: "contention",
+      title: statisticsTableTitles.contention(statType),
+      cell: contentionBar,
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.exec_stats.contention_time.mean)),
+    },
+    {
       name: "rowsProcessed",
       title: statisticsTableTitles.rowsProcessed(statType),
       className: cx("statements-table__col-rows-read"),
@@ -137,20 +163,6 @@ function makeCommonColumns(
       cell: bytesReadBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.bytes_read.mean)),
-    },
-    {
-      name: "time",
-      title: statisticsTableTitles.time(statType),
-      className: cx("statements-table__col-latency"),
-      cell: latencyBar,
-      sort: (stmt: AggregateStatistics) => stmt.stats.service_lat.mean,
-    },
-    {
-      name: "contention",
-      title: statisticsTableTitles.contention(statType),
-      cell: contentionBar,
-      sort: (stmt: AggregateStatistics) =>
-        FixLong(Number(stmt.stats.exec_stats.contention_time.mean)),
     },
     {
       name: "maxMemUsage",
@@ -173,18 +185,6 @@ function makeCommonColumns(
       cell: retryBar,
       sort: (stmt: AggregateStatistics) =>
         longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count),
-    },
-    {
-      name: "workloadPct",
-      title: statisticsTableTitles.workloadPct(statType),
-      cell: workloadPctBarChart(
-        statements,
-        defaultBarChartOptions,
-        totalWorkload,
-      ),
-      sort: (stmt: AggregateStatistics) =>
-        (stmt.stats.service_lat.mean * longToInt(stmt.stats.count)) /
-        totalWorkload,
     },
     {
       name: "regionNodes",

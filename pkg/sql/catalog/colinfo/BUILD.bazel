@@ -13,7 +13,6 @@ go_library(
         "ordering.go",
         "result_columns.go",
         "system_columns.go",
-        "ttl.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo",
     visibility = ["//visibility:public"],

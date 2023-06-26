@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,7 +35,12 @@ import (
 const (
 	defaultProject = "cockroach-ephemeral"
 	// ProviderName is gce.
-	ProviderName = "gce"
+	ProviderName        = "gce"
+	DefaultImage        = "ubuntu-2004-focal-v20210603"
+	ARM64Image          = "ubuntu-2004-focal-arm64-v20230523"
+	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230302"
+	defaultImageProject = "ubuntu-os-cloud"
+	FIPSImageProject    = "ubuntu-os-pro-cloud"
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
@@ -190,10 +196,10 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// projects needs space for one project, which is set by the flags for
 		// commands that accept a single project.
-		MachineType:          "n1-standard-4",
+		MachineType:          "n2-standard-4",
 		MinCPUPlatform:       "",
 		Zones:                nil,
-		Image:                "ubuntu-2004-focal-v20210603",
+		Image:                DefaultImage,
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
@@ -296,7 +302,7 @@ func (p *Provider) GetProjects() []string {
 
 // ConfigureCreateFlags implements vm.ProviderOptions.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
-	flags.StringVar(&o.MachineType, "machine-type", "n1-standard-4", "DEPRECATED")
+	flags.StringVar(&o.MachineType, "machine-type", "n2-standard-4", "DEPRECATED")
 	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
 	flags.StringSliceVar(&o.Zones, "zones", nil, "DEPRECATED")
 	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
@@ -304,13 +310,14 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&providerInstance.ServiceAccount, ProviderName+"-service-account",
 		providerInstance.ServiceAccount, "Service account to use")
 
-	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n1-standard-4",
+	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
-	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-2004-focal-v20210603",
+	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
 		"Image to use to create the vm, "+
-			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images")
+			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images. "+
+			"Note: this option is ignored if --fips is passed.")
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
@@ -414,12 +421,43 @@ func (p *Provider) Create(
 	}
 
 	// Fixed args.
+	image := providerOpts.Image
+	imageProject := defaultImageProject
+	useArmAMI := strings.HasPrefix(strings.ToLower(providerOpts.MachineType), "t2a-")
+	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
+		return errors.Errorf("machine type %s is arm64, but requested arch is %s", providerOpts.MachineType, opts.Arch)
+	}
+	if useArmAMI && opts.SSDOpts.UseLocalSSD {
+		return errors.New("local SSDs are not supported with T2A instances, use --local-ssd=false")
+	}
+	if useArmAMI {
+		if len(providerOpts.Zones) == 0 {
+			zones = []string{"us-central1-a"}
+		} else {
+			for _, zone := range providerOpts.Zones {
+				if !strings.HasPrefix(zone, "us-central1-") {
+					return errors.New("T2A instances are not supported outside of us-central1")
+				}
+			}
+		}
+	}
+	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
+	if useArmAMI {
+		image = ARM64Image
+		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)
+	}
+	if opts.Arch == string(vm.ArchFIPS) {
+		// NB: if FIPS is enabled, it overrides the image passed via CLI (--gce-image)
+		image = FIPSImage
+		imageProject = FIPSImageProject
+		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", image, providerOpts.MachineType)
+	}
 	args := []string{
 		"compute", "instances", "create",
 		"--subnet", "default",
 		"--scopes", "cloud-platform",
-		"--image", providerOpts.Image,
-		"--image-project", "ubuntu-os-cloud",
+		"--image", image,
+		"--image-project", imageProject,
 		"--boot-disk-type", "pd-ssd",
 	}
 
@@ -454,15 +492,15 @@ func (p *Provider) Create(
 	extraMountOpts := ""
 	// Dynamic args.
 	if opts.SSDOpts.UseLocalSSD {
-		// n2-class and c2-class GCP machines cannot be requested with only 1
-		// SSD; minimum number of actual SSDs is 2.
-		// TODO(pbardea): This is more general for machine types that
-		// come in different sizes.
-		// See: https://cloud.google.com/compute/docs/disks/
-		n2MachineTypes := regexp.MustCompile("^[cn]2-.+-16")
-		if n2MachineTypes.MatchString(providerOpts.MachineType) && providerOpts.SSDCount == 1 {
-			fmt.Fprint(os.Stderr, "WARNING: SSD count must be at least 2 for n2 and c2 machine types with 16vCPU. Setting --gce-local-ssd-count to 2.\n")
-			providerOpts.SSDCount = 2
+		if counts, err := AllowedLocalSSDCount(providerOpts.MachineType); err != nil {
+			return err
+		} else {
+			// Make sure the minimum number of local SSDs is met.
+			minCount := counts[0]
+			if providerOpts.SSDCount < minCount {
+				l.Printf("WARNING: SSD count must be at least %d for %q. Setting --gce-local-ssd-count to %d", minCount, providerOpts.MachineType, minCount)
+				providerOpts.SSDCount = minCount
+			}
 		}
 		for i := 0; i < providerOpts.SSDCount; i++ {
 			args = append(args, "--local-ssd", "interface=NVME")
@@ -483,7 +521,7 @@ func (p *Provider) Create(
 	}
 
 	// Create GCE startup script file.
-	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks)
+	filename, err := writeStartupScript(extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
 	if err != nil {
 		return errors.Wrapf(err, "could not write GCE startup script to temp file")
 	}
@@ -502,18 +540,23 @@ func (p *Provider) Create(
 	time = strings.ToLower(strings.ReplaceAll(time, ":", "_"))
 	m[vm.TagCreated] = time
 
-	var sb strings.Builder
+	var labelPairs []string
+	addLabel := func(key, value string) {
+		labelPairs = append(labelPairs, fmt.Sprintf("%s=%s", key, value))
+	}
+
 	for key, value := range opts.CustomLabels {
-		_, ok := m[key]
+		_, ok := m[strings.ToLower(key)]
 		if ok {
 			return fmt.Errorf("duplicate label name defined: %s", key)
 		}
-		fmt.Fprintf(&sb, "%s=%s,", key, value)
+		addLabel(key, value)
 	}
 	for key, value := range m {
-		fmt.Fprintf(&sb, "%s=%s,", key, value)
+		addLabel(key, value)
 	}
-	labels := sb.String()
+	labels := strings.Join(labelPairs, ",")
+
 	args = append(args, "--labels", labels)
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
 	args = append(args, "--project", project)
@@ -551,6 +594,57 @@ func (p *Provider) Create(
 	return propagateDiskLabels(l, project, labels, zoneToHostNames, &opts)
 }
 
+// Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
+// N.B. Only n1, n2 and c2 instances are supported since we don't typically use other instance types.
+// Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
+func AllowedLocalSSDCount(machineType string) ([]int, error) {
+	machineTypes := regexp.MustCompile(`^([cn])(\d+)-.+-(\d+)$`)
+	matches := machineTypes.FindStringSubmatch(machineType)
+
+	if len(matches) >= 3 {
+		family := matches[1] + matches[2]
+		numCpus, err := strconv.Atoi(matches[3])
+		if err != nil {
+			return nil, err
+		}
+		if family == "n1" {
+			return []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, nil
+		}
+		switch family {
+		case "n2":
+			if numCpus <= 10 {
+				return []int{1, 2, 4, 8, 16, 24}, nil
+			}
+			if numCpus <= 20 {
+				return []int{2, 4, 8, 16, 24}, nil
+			}
+			if numCpus <= 40 {
+				return []int{4, 8, 16, 24}, nil
+			}
+			if numCpus <= 80 {
+				return []int{8, 16, 24}, nil
+			}
+			if numCpus <= 128 {
+				return []int{16, 24}, nil
+			}
+		case "c2":
+			if numCpus <= 8 {
+				return []int{1, 2, 4, 8}, nil
+			}
+			if numCpus <= 16 {
+				return []int{2, 4, 8}, nil
+			}
+			if numCpus <= 30 {
+				return []int{4, 8}, nil
+			}
+			if numCpus <= 60 {
+				return []int{8}, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("unsupported machine type: %q", machineType)
+}
+
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
 // Hence, we must propagate them. See: https://cloud.google.com/compute/docs/labeling-resources#labeling_boot_disks
 func propagateDiskLabels(
@@ -563,20 +657,21 @@ func propagateDiskLabels(
 	var g errgroup.Group
 
 	l.Printf("Propagating labels across all disks")
+	argsPrefix := []string{"compute", "disks", "update"}
+	argsPrefix = append(argsPrefix, "--update-labels", labels)
+	argsPrefix = append(argsPrefix, "--project", project)
 
 	for zone, zoneHosts := range zoneToHostNames {
 		zoneArg := []string{"--zone", zone}
 
 		for _, host := range zoneHosts {
-			args := []string{"compute", "disks", "update"}
-			args = append(args, "--update-labels", labels[:len(labels)-1])
-			args = append(args, "--project", project)
-			args = append(args, zoneArg...)
-			host := host
+			hostName := host
 
 			g.Go(func() error {
+				bootDiskArgs := append([]string(nil), argsPrefix...)
+				bootDiskArgs = append(bootDiskArgs, zoneArg...)
 				// N.B. boot disk has the same name as the host.
-				bootDiskArgs := append(args, host)
+				bootDiskArgs = append(bootDiskArgs, hostName)
 				cmd := exec.Command("gcloud", bootDiskArgs...)
 
 				output, err := cmd.CombinedOutput()
@@ -588,8 +683,10 @@ func propagateDiskLabels(
 
 			if !opts.SSDOpts.UseLocalSSD {
 				g.Go(func() error {
+					persistentDiskArgs := append([]string(nil), argsPrefix...)
+					persistentDiskArgs = append(persistentDiskArgs, zoneArg...)
 					// N.B. additional persistent disks are suffixed with the offset, starting at 1.
-					persistentDiskArgs := append(args, fmt.Sprintf("%s-1", host))
+					persistentDiskArgs = append(persistentDiskArgs, fmt.Sprintf("%s-1", hostName))
 					cmd := exec.Command("gcloud", persistentDiskArgs...)
 
 					output, err := cmd.CombinedOutput()

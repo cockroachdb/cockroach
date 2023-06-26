@@ -193,7 +193,7 @@ func (sr *schemaResolver) getQualifiedTableName(
 			Required:       true,
 			IncludeOffline: true,
 			IncludeDropped: true,
-			AvoidLeased:    true,
+			AvoidLeased:    sr.skipDescriptorCache,
 		})
 	switch {
 	case scDesc != nil:

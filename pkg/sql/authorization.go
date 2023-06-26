@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -437,6 +437,7 @@ func (p *planner) MemberOfWithAdminOption(
 		p.ExecCfg().InternalExecutor,
 		p.Descriptors(),
 		p.Txn(),
+		p.SessionData(),
 		member,
 	)
 }
@@ -451,8 +452,9 @@ func MemberOfWithAdminOption(
 	ie sqlutil.InternalExecutor,
 	descsCol *descs.Collection,
 	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
 	member username.SQLUsername,
-) (map[username.SQLUsername]bool, error) {
+) (_ map[username.SQLUsername]bool, retErr error) {
 	if txn == nil {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
 	}
@@ -473,6 +475,20 @@ func MemberOfWithAdminOption(
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
 		return resolveMemberOfWithAdminOption(ctx, member, ie, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+	}
+	if sessionData != nil && sessionData.AllowRoleMembershipsToChangeDuringTransaction {
+		defer func() {
+			if retErr != nil {
+				return
+			}
+			descsCol.ReleaseSpecifiedLeases(ctx, []lease.IDVersion{
+				{
+					Name:    tableDesc.GetName(),
+					ID:      tableDesc.GetID(),
+					Version: tableVersion,
+				},
+			})
+		}()
 	}
 
 	// Check version and maybe clear cache while holding the mutex.
@@ -887,29 +903,37 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 	hasAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return hasAdmin, err
+	} else if hasAdmin {
+		return true, nil
 	}
-	if !hasAdmin {
-		hasView := false
-		hasViewRedacted := false
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-			hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
-			hasViewRedacted = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
-		}
-		if !hasView && !hasViewRedacted {
-			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
-			if err != nil {
-				return hasView, err
-			}
-			hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
-			if err != nil {
-				return hasViewRedacted, err
-			}
-			if !hasView && !hasViewRedacted {
-				return false, nil
-			}
-		}
+	hasView := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
+	if hasView {
+		return true, nil
 	}
+	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
+	}
+	if hasViewRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+		return false, err
+	} else if hasViewRedacted {
+		return true, nil
+	}
+	return false, nil
+}
 
+func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
+	hasViewRedacted := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
+	if !hasViewRedacted {
+		hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return true, err
+		}
+		if !hasViewRedacted {
+			return false, nil
+		}
+	}
 	return true, nil
 }
 

@@ -10,15 +10,31 @@
 
 package spec
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+)
 
 // AWSMachineType selects a machine type given the desired number of CPUs.
-func AWSMachineType(cpus int, highmem bool) string {
+// Also returns the architecture of the selected machine type.
+func AWSMachineType(cpus int, highmem bool, arch vm.CPUArch) (string, vm.CPUArch) {
 	// TODO(erikgrinaker): These have significantly less RAM than
 	// their GCE counterparts. Consider harmonizing them.
-	family := "c5d" // 2 GB RAM per CPU
+	family := "c6id" // 2 GB RAM per CPU
+	selectedArch := vm.ArchAMD64
+	if arch == vm.ArchFIPS {
+		selectedArch = vm.ArchFIPS
+	} else if arch == vm.ArchARM64 {
+		family = "c7g" // 2 GB RAM per CPU (graviton3)
+		selectedArch = vm.ArchARM64
+	}
+
 	if highmem {
-		family = "m5d" // 4 GB RAM per CPU
+		family = "m6i" // 4 GB RAM per CPU
+		if arch == vm.ArchARM64 {
+			family = "m7g" // 4 GB RAM per CPU (graviton3)
+		}
 	}
 
 	var size string
@@ -31,38 +47,60 @@ func AWSMachineType(cpus int, highmem bool) string {
 		size = "2xlarge"
 	case cpus <= 16:
 		size = "4xlarge"
-	case cpus <= 36:
-		size = "9xlarge"
-	case cpus <= 72:
-		size = "18xlarge"
+	case cpus <= 32:
+		size = "8xlarge"
+	case cpus <= 48:
+		size = "12xlarge"
+	case cpus <= 64:
+		size = "16xlarge"
 	case cpus <= 96:
 		size = "24xlarge"
 	default:
 		panic(fmt.Sprintf("no aws machine type with %d cpus", cpus))
 	}
 
-	// There is no c5d.24xlarge.
-	if family == "c5d" && size == "24xlarge" {
-		family = "m5d"
+	// There is no m7g.24xlarge, fall back to m6i.24xlarge.
+	if family == "m7g" && size == "24xlarge" {
+		family = "m6i"
+		selectedArch = vm.ArchAMD64
+	}
+	// There is no c7g.24xlarge, fall back to c6id.24xlarge.
+	if family == "c7g" && size == "24xlarge" {
+		family = "c6id"
+		selectedArch = vm.ArchAMD64
 	}
 
-	return fmt.Sprintf("%s.%s", family, size)
+	return fmt.Sprintf("%s.%s", family, size), selectedArch
 }
 
 // GCEMachineType selects a machine type given the desired number of CPUs.
-func GCEMachineType(cpus int, highmem bool) string {
+// Also returns the architecture of the selected machine type.
+func GCEMachineType(cpus int, highmem bool, arch vm.CPUArch) (string, vm.CPUArch) {
 	// TODO(peter): This is awkward: at or below 16 cpus, use n1-standard so that
 	// the machines have a decent amount of RAM. We could use custom machine
 	// configurations, but the rules for the amount of RAM per CPU need to be
 	// determined (you can't request any arbitrary amount of RAM).
-	series := "n1"
+	series := "n2"
+	selectedArch := vm.ArchAMD64
+	if arch == vm.ArchFIPS {
+		selectedArch = vm.ArchFIPS
+	}
 	kind := "standard" // 3.75 GB RAM per CPU
 	if highmem {
 		kind = "highmem" // 6.5 GB RAM per CPU
 	} else if cpus > 16 {
 		kind = "highcpu" // 0.9 GB RAM per CPU
 	}
-	return fmt.Sprintf("%s-%s-%d", series, kind, cpus)
+	if arch == vm.ArchARM64 && !highmem && cpus <= 48 {
+		series = "t2a"
+		kind = "standard"
+		selectedArch = vm.ArchARM64
+	}
+	// N.B. n2 family does not support single CPU machines.
+	if series == "n2" && cpus == 1 {
+		cpus = 2
+	}
+	return fmt.Sprintf("%s-%s-%d", series, kind, cpus), selectedArch
 }
 
 // AzureMachineType selects a machine type given the desired number of CPUs.

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/errors"
 )
@@ -734,6 +735,405 @@ func (c *CustomFuncs) ExtractUnboundConditions(
 		}
 	}
 	return newFilters
+}
+
+// ComputedColFilters generates all filters that can be derived from the list of
+// computed column expressions from the given table. A computed column can be
+// used as a filter when it has a constant value. That is true when:
+//
+//  1. All other columns it references are constant, because other filters in
+//     the query constrain them to be so.
+//  2. All functions in the computed column expression can be folded into
+//     constants (i.e. they do not have problematic side effects).
+//
+// Note that computed columns can depend on other computed columns; in general
+// the dependencies form an acyclic directed graph. ComputedColFilters will
+// return filters for all constant computed columns, regardless of the order of
+// their dependencies.
+//
+// As with checkConstraintFilters, ComputedColFilters do not really filter any
+// rows, they are rather facts or guarantees about the data. Treating them as
+// filters may allow some indexes to be constrained and used. Consider the
+// following example:
+//
+//	CREATE TABLE t (
+//	  k INT NOT NULL,
+//	  hash INT AS (k % 4) STORED,
+//	  PRIMARY KEY (hash, k)
+//	)
+//
+//	SELECT * FROM t WHERE k = 5
+//
+// Notice that the filter provided explicitly wouldn't allow the optimizer to
+// seek using the primary index (it would have to fall back to a table scan).
+// However, column "hash" can be proven to have the constant value of 1, since
+// it's dependent on column "k", which has the constant value of 5. This enables
+// usage of the primary index:
+//
+//	scan t
+//	 ├── columns: k:1(int!null) hash:2(int!null)
+//	 ├── constraint: /2/1: [/1/5 - /1/5]
+//	 ├── key: (2)
+//	 └── fd: ()-->(1)
+//
+// The values of both columns in that index are known, enabling a single value
+// constraint to be generated.
+func (c *CustomFuncs) ComputedColFilters(
+	scanPrivate *memo.ScanPrivate, requiredFilters, optionalFilters memo.FiltersExpr,
+) memo.FiltersExpr {
+	tabMeta := c.mem.Metadata().TableMeta(scanPrivate.Table)
+	if len(tabMeta.ComputedCols) == 0 {
+		return nil
+	}
+
+	// Start with set of constant columns, as derived from the list of filter
+	// conditions.
+	constCols := make(constColsMap)
+	c.findConstantFilterCols(constCols, scanPrivate, requiredFilters)
+	c.findConstantFilterCols(constCols, scanPrivate, optionalFilters)
+	if len(constCols) == 0 {
+		// No constant values could be derived from filters, so assume that there
+		// are also no constant computed columns.
+		return nil
+	}
+
+	// Construct a new filter condition for each computed column that is
+	// constant (i.e. all of its variables are in the constCols set).
+	var computedColFilters memo.FiltersExpr
+	for colID := range tabMeta.ComputedCols {
+		if c.tryFoldComputedCol(tabMeta.ComputedCols, colID, constCols) {
+			constVal := constCols[colID]
+			// Note: Eq is not correct here because of NULLs.
+			eqOp := c.f.ConstructIs(c.f.ConstructVariable(colID), constVal)
+			computedColFilters = append(computedColFilters, c.f.ConstructFiltersItem(eqOp))
+		}
+	}
+	return computedColFilters
+}
+
+// constColsMap maps columns to constant values that we can infer from query
+// filters.
+//
+// Note that for composite types, the constant value is not interchangeable with
+// the column in all contexts. Composite types are types which can have
+// logically equal but not identical values, like the decimals 1.0 and 1.00.
+//
+// For example:
+//
+//	CREATE TABLE t (
+//	  d DECIMAL,
+//	  c DECIMAL AS (d*10) STORED
+//	);
+//	INSERT INTO t VALUES (1.0), (1.00), (1.000);
+//	SELECT c::STRING FROM t WHERE d=1;
+//	----
+//	  10.0
+//	  10.00
+//	  10.000
+//
+// We can infer that c has a constant value of 1 but we can't replace it with 1
+// in any expression.
+type constColsMap map[opt.ColumnID]opt.ScalarExpr
+
+// findConstantFilterCols adds to constFilterCols mappings from table column ID
+// to the constant value of that column. It does this by iterating over the
+// given lists of filters and finding expressions that constrain columns to a
+// single constant value. For example:
+//
+//	x = 5 AND y = 'foo'
+//
+// This would add a mapping from x => 5 and y => 'foo', which constants can
+// then be used to prove that dependent computed columns are also constant.
+func (c *CustomFuncs) findConstantFilterCols(
+	constFilterCols constColsMap, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+) {
+	tab := c.mem.Metadata().Table(scanPrivate.Table)
+	for i := range filters {
+		// If filter constraints are not tight, then no way to derive constant
+		// values.
+		props := filters[i].ScalarProps()
+		if !props.TightConstraints {
+			continue
+		}
+
+		// Iterate over constraint conjuncts with a single column and single
+		// span having a single key.
+		for i, n := 0, props.Constraints.Length(); i < n; i++ {
+			cons := props.Constraints.Constraint(i)
+			if cons.Columns.Count() != 1 || cons.Spans.Count() != 1 {
+				continue
+			}
+
+			// Skip columns that aren't in the scanned table.
+			colID := cons.Columns.Get(0).ID()
+			if !scanPrivate.Cols.Contains(colID) {
+				continue
+			}
+
+			colTyp := tab.Column(scanPrivate.Table.ColumnOrdinal(colID)).DatumType()
+
+			span := cons.Spans.Get(0)
+			if !span.HasSingleKey(c.f.evalCtx) {
+				continue
+			}
+
+			datum := span.StartKey().Value(0)
+			constFilterCols[colID] = c.f.ConstructConstVal(datum, colTyp)
+		}
+	}
+}
+
+// tryFoldComputedCol tries to reduce the computed column with the given column
+// ID into a constant value, by evaluating it with respect to a set of other
+// columns that are constant. If the computed column is constant, enter it into
+// the constCols map and return true. Otherwise, return false.
+func (c *CustomFuncs) tryFoldComputedCol(
+	ComputedCols map[opt.ColumnID]opt.ScalarExpr, computedColID opt.ColumnID, constCols constColsMap,
+) bool {
+	// Check whether computed column has already been folded.
+	if _, ok := constCols[computedColID]; ok {
+		return true
+	}
+
+	var replace func(e opt.Expr) opt.Expr
+	replace = func(e opt.Expr) opt.Expr {
+		if variable, ok := e.(*memo.VariableExpr); ok {
+			// Can variable be folded?
+			if constVal, ok := constCols[variable.Col]; ok {
+				// Yes, so replace it with its constant value.
+				return constVal
+			}
+
+			// No, but that may be because the variable refers to a dependent
+			// computed column. In that case, try to recursively fold that
+			// computed column. There are no infinite loops possible because the
+			// dependency graph is guaranteed to be acyclic.
+			if _, ok := ComputedCols[variable.Col]; ok {
+				if c.tryFoldComputedCol(ComputedCols, variable.Col, constCols) {
+					return constCols[variable.Col]
+				}
+			}
+
+			return e
+		}
+		return c.f.Replace(e, replace)
+	}
+
+	computedCol := ComputedCols[computedColID]
+	if memo.CanBeCompositeSensitive(c.f.mem.Metadata(), computedCol) {
+		// The computed column expression can return different values for logically
+		// equal outer columns (e.g. d::STRING where d is a DECIMAL).
+		return false
+	}
+	replaced := replace(computedCol).(opt.ScalarExpr)
+
+	// If the computed column is constant, enter it into the constCols map.
+	if opt.IsConstValueOp(replaced) {
+		constCols[computedColID] = replaced
+		return true
+	}
+	return false
+}
+
+// CombineComputedColFilters is a generalized version of ComputedColFilters,
+// which seeks to fold computed column expressions using values from single-key
+// constraint spans in order to build new predicates on those computed columns
+// and AND them with predicates built from the constraint span key used to
+// compute the computed column value.
+//
+// New derived keys cannot be saved for the filters as a whole, for later
+// processing, because a given combination of span key values is only applicable
+// with the scope of that predicate. For example:
+//
+// Example:
+//
+//	CREATE TABLE t1 (
+//	a INT,
+//	b INT,
+//	c INT AS (a+b) VIRTUAL,
+//	INDEX idx1 (c ASC, b ASC, a ASC));
+//
+// SELECT * FROM t1 WHERE (a,b) IN ((3,4), (5,6));
+//
+// Here we derive:
+//
+//	(a IS 3 AND b IS 4 AND c IS 7) OR
+//	(a IS 5 AND b IS 6 AND c IS 11)
+//
+// The `c IS 7` term is only applicable when a is 3 and b is 4, so those two
+// terms must be combined with the `c IS 7` term in the same conjunction for the
+// result to be semantically equivalent to the original query.
+// Here is the plan built in this case:
+//
+//	scan t1@idx1
+//	├── columns: a:1!null b:2!null c:3!null
+//	├── constraint: /3/2/1
+//	│    ├── [/7/4/3 - /7/4/3]
+//	│    └── [/11/6/5 - /11/6/5]
+//	├── cardinality: [0 - 2]
+//	├── key: (1,2)
+//	└── fd: (1,2)-->(3)
+//
+// Note that new predicates are derived from constraint spans, not predicates,
+// so a predicate such as (a,b) IN ((null,4), (5,6)) will not derive anything
+// because the null is not placed in a span, and also IN predicates with nulls
+// are not marked as tight, and this function does not process non-tight
+// constraints.
+//
+// Note that `ComputedColFilters` can't be replaced because it can handle cases
+// which `combineComputedColFilters` doesn't, for example a computed column
+// which is built from constants found in separate `FiltersItem`s.
+//
+// Also note that `CombineComputedColFilters` must only be called on a tight
+// constraint. It is up to the caller to test whether the constraint is tight
+// before calling this function.
+func CombineComputedColFilters(
+	computedCols map[opt.ColumnID]opt.ScalarExpr,
+	indexKeyCols opt.ColSet,
+	colsInComputedColsExpressions opt.ColSet,
+	cons *constraint.Constraint,
+	f *Factory,
+) memo.FiltersExpr {
+	if len(computedCols) == 0 {
+		return nil
+	}
+	if !f.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation {
+		return nil
+	}
+	var combinedComputedColFilters memo.FiltersExpr
+	var orOp opt.ScalarExpr
+	if !cons.Columns.ColSet().Intersects(colsInComputedColsExpressions) {
+		// If this constraint doesn't involve any columns used to construct a
+		// computed column value, no need to process it further.
+		return nil
+	}
+	for k := 0; k < cons.Spans.Count(); k++ {
+		filterAdded := false
+		span := cons.Spans.Get(k)
+		if !span.HasSingleKey(f.evalCtx) {
+			// If we don't have a single value, or combination of single values
+			// to use in folding the computed column expression, don't use this
+			// constraint.
+			return nil
+		}
+		// Build the initial conjunction and constColsMap from the constraint.
+		initialConjunction, constFilterCols, ok :=
+			buildConjunctionAndConstColsMapFromConstraint(cons, span, f)
+		if !ok {
+			return nil
+		}
+		var newOp opt.ScalarExpr
+		// Build a new ANDed predicate involving the computed column and columns in
+		// the computed column expression.
+		newOp, filterAdded =
+			buildConjunctionOfEqualityPredsOnComputedAndNonComputedCols(
+				initialConjunction, computedCols, constFilterCols, indexKeyCols, f)
+		// Only build a new disjunct if terms were derived for this span.
+		if filterAdded {
+			if orOp == nil {
+				// The case of the first span or only one span.
+				orOp = newOp
+			} else {
+				// The spans in a constraint represent a disjunction, so OR them
+				// together.
+				constructOr := func() {
+					orOp = f.ConstructOr(orOp, newOp)
+				}
+				var disabledRules util.FastIntSet
+				// Disable this rule as it disallows finding tight constraints in
+				// some cases when a conjunct can be factored out, e.g.,
+				// `(a=3 AND b=4) OR (a=3 AND b=6)` --> `a=3 AND (b=4 OR b=6)`
+				disabledRules.Add(int(opt.ExtractRedundantConjunct))
+				f.DisableOptimizationRulesTemporarily(disabledRules, constructOr)
+			}
+		} else {
+			// If we failed to build any of the disjuncts, we must give up.
+			return nil
+		}
+	}
+	if orOp != nil {
+		combinedComputedColFilters =
+			append(combinedComputedColFilters, f.ConstructFiltersItem(orOp))
+	}
+	return combinedComputedColFilters
+}
+
+// buildConstColsMapFromConstraint converts a constraint on one or more columns
+// into a scalar expression predicate in the form:
+// (constraint_col1 IS span1) AND (constraint_col2 IS span2) AND ...
+func buildConjunctionAndConstColsMapFromConstraint(
+	cons *constraint.Constraint, span *constraint.Span, f *Factory,
+) (conjunction opt.ScalarExpr, constFilterCols constColsMap, ok bool) {
+	for i := 0; i < cons.Columns.Count(); i++ {
+		colID := cons.Columns.Get(i).ID()
+		datum := span.StartKey().Value(i)
+		colTyp := datum.ResolvedType()
+		originalConstVal := f.ConstructConstVal(datum, colTyp)
+		// Mark the value in the map for use by `tryFoldComputedCol`.
+		if constFilterCols == nil {
+			constFilterCols = make(constColsMap)
+		}
+		constFilterCols[colID] = originalConstVal
+		// Note: Nulls could be handled here, but they are explicitly disallowed for
+		// now.
+		if _, isNullExpr := originalConstVal.(*memo.NullExpr); isNullExpr {
+			ok = false
+			break
+		}
+		// Use IS NOT DISTINCT FROM to handle nulls.
+		originalEqOp := f.ConstructIs(f.ConstructVariable(colID), originalConstVal)
+		if conjunction == nil {
+			conjunction = originalEqOp
+		} else {
+			// Build a conjunction representing this span.
+			conjunction = f.ConstructAnd(conjunction, originalEqOp)
+		}
+		ok = true
+	}
+	if !ok {
+		if len(constFilterCols) != 0 {
+			// Help the garbage collector.
+			for k := range constFilterCols {
+				delete(constFilterCols, k)
+			}
+		}
+		return nil, nil, false
+	}
+	return conjunction, constFilterCols, true
+}
+
+// buildConjunctionOfEqualityPredsOnComputedAndNonComputedCols takes an
+// initialConjunction of IS equality predicates on non-computed columns and
+// attempts to build a new conjunction of IS equality predicates on computed
+// columns which are part of the index key by folding the computed column
+// expressions using the constant values stored in the constFilterCols map. If
+// successful, ok=true is returned along with initialConjunction ANDed with the
+// predicates on computed columns.
+func buildConjunctionOfEqualityPredsOnComputedAndNonComputedCols(
+	initialConjunction opt.ScalarExpr,
+	computedCols map[opt.ColumnID]opt.ScalarExpr,
+	constFilterCols constColsMap,
+	indexKeyCols opt.ColSet,
+	f *Factory,
+) (computedColPlusOriginalColEqualityConjunction opt.ScalarExpr, ok bool) {
+	computedColPlusOriginalColEqualityConjunction = initialConjunction
+	for computedColID := range computedCols {
+		if !indexKeyCols.Contains(computedColID) {
+			continue
+		}
+		if f.CustomFuncs().tryFoldComputedCol(computedCols, computedColID, constFilterCols) {
+			constVal := constFilterCols[computedColID]
+			// Use IS NOT DISTINCT FROM to handle nulls.
+			eqOp := f.ConstructIs(f.ConstructVariable(computedColID), constVal)
+			computedColPlusOriginalColEqualityConjunction =
+				f.ConstructAnd(computedColPlusOriginalColEqualityConjunction, eqOp)
+			ok = true
+		}
+	}
+	if !ok {
+		return nil, false
+	}
+	return computedColPlusOriginalColEqualityConjunction, true
 }
 
 // ----------------------------------------------------------------------

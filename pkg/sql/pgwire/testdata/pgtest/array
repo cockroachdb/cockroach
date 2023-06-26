@@ -12,3 +12,21 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"ErrorResponse","Code":"08P01"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::TEXT[], $2::INT8[], $3::NAME[]"}
+Bind {"Parameters": [{"text": "{key1, subkey1}"}, {"text": "{11,  22}"}, {"text": "{UnQuoted,  \"Quoted\"}"}]}
+Describe {"ObjectType": "P"}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"text","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1009,"DataTypeSize":-1,"TypeModifier":-1,"Format":0},{"Name":"int8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1016,"DataTypeSize":-1,"TypeModifier":-1,"Format":0},{"Name":"name","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1003,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{key1,subkey1}"},{"text":"{11,22}"},{"text":"{UnQuoted,Quoted}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

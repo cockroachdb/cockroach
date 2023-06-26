@@ -67,7 +67,9 @@ type awsConfig struct {
 type awsRegion struct {
 	Name              string            `json:"region"`
 	SecurityGroup     string            `json:"security_group"`
-	AMI               string            `json:"ami_id"`
+	AMI_X86_64        string            `json:"ami_id"`
+	AMI_ARM64         string            `json:"ami_id_arm64"`
+	AMI_FIPS          string            `json:"ami_id_fips"`
 	AvailabilityZones availabilityZones `json:"subnets"`
 }
 

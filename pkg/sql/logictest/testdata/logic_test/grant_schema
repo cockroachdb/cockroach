@@ -53,7 +53,7 @@ let $temp_schema
 SELECT schema_name FROM [show schemas] WHERE schema_name LIKE '%pg_temp%'
 
 # Check pg_temp grants.
-query TT colnames
+query TT colnames,rowsort
 SELECT grantee, privilege_type FROM [SHOW GRANTS ON SCHEMA $temp_schema]
 ----
 grantee  privilege_type
@@ -172,3 +172,26 @@ test           owner_grant_option  admin                     ALL             tru
 test           owner_grant_option  other_owner               ALL             true
 test           owner_grant_option  owner_grant_option_child  USAGE           false
 test           owner_grant_option  root                      ALL             true
+
+# Regression test to cover checking schema-level privileges at role drop time
+subtest regression_102962
+
+statement ok
+CREATE SCHEMA sc102962
+
+statement ok
+CREATE ROLE r102962
+
+statement ok
+GRANT USAGE ON SCHEMA sc102962 TO r102962
+
+query TTTTB colnames
+SHOW GRANTS ON SCHEMA sc102962
+----
+database_name  schema_name  grantee  privilege_type  is_grantable
+test           sc102962     admin    ALL             true
+test           sc102962     r102962  USAGE           false
+test           sc102962     root     ALL             true
+
+statement error pgcode 2BP01 pq: cannot drop role/user r102962: grants still exist on test.sc102962
+DROP ROLE r102962

@@ -40,8 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
-	"github.com/jackc/pgtype"
 	"github.com/lib/pq/oid"
 )
 
@@ -71,6 +71,11 @@ var ReadBufferMaxMessageSizeClusterSetting = settings.RegisterByteSizeSetting(
 //
 //go:generate stringer -type=FormatCode
 type FormatCode uint16
+
+var _ redact.SafeValue = FormatCode(0)
+
+// SafeValue implements the redact.SafeValue interface.
+func (i FormatCode) SafeValue() {}
 
 const (
 	// FormatText is the default, text format.
@@ -442,60 +447,6 @@ func DecodeDatum(
 				return nil, tree.MakeParseError(string(b), typ, err)
 			}
 			return d, nil
-		case oid.T__int2, oid.T__int4, oid.T__int8:
-			var arr pgtype.Int8Array
-			if err := arr.DecodeText(nil, b); err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
-			}
-			if arr.Status != pgtype.Present {
-				return tree.DNull, nil
-			}
-			if err := validateArrayDimensions(len(arr.Dimensions), len(arr.Elements)); err != nil {
-				return nil, err
-			}
-			out := tree.NewDArray(types.Int)
-			var d tree.Datum
-			for _, v := range arr.Elements {
-				if v.Status != pgtype.Present {
-					d = tree.DNull
-				} else {
-					d = tree.NewDInt(tree.DInt(v.Int))
-				}
-				if err := out.Append(d); err != nil {
-					return nil, err
-				}
-			}
-			return out, nil
-		case oid.T__text, oid.T__name:
-			var arr pgtype.TextArray
-			if err := arr.DecodeText(nil, b); err != nil {
-				return nil, tree.MakeParseError(string(b), typ, err)
-			}
-			if arr.Status != pgtype.Present {
-				return tree.DNull, nil
-			}
-			if err := validateArrayDimensions(len(arr.Dimensions), len(arr.Elements)); err != nil {
-				return nil, err
-			}
-			out := tree.NewDArray(types.String)
-			if id == oid.T__name {
-				out.ParamTyp = types.Name
-			}
-			var d tree.Datum
-			for _, v := range arr.Elements {
-				if v.Status != pgtype.Present {
-					d = tree.DNull
-				} else {
-					d = tree.NewDString(v.String)
-					if id == oid.T__name {
-						d = tree.NewDNameFromDString(d.(*tree.DString))
-					}
-				}
-				if err := out.Append(d); err != nil {
-					return nil, err
-				}
-			}
-			return out, nil
 		case oid.T_jsonb, oid.T_json:
 			if err := validateStringBytes(b); err != nil {
 				return nil, err

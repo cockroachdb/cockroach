@@ -29,3 +29,175 @@ index-constraints vars=(j json, field int as ((j->'foo')::string::int) stored) i
 (j->'foo')::string::int = 10
 ----
 [/10 - /10]
+
+# ---------------------------------------------------
+# Unit tests for computed column predicate derivation
+# ---------------------------------------------------
+
+# Derivation works when the columns the computed column expression is based
+# on are not index columns.
+index-constraints vars=(a int, b int, c int as (a+5) stored) index=(c)
+(a=3) OR (a=5)
+----
+[/8 - /8]
+[/10 - /10]
+Remaining filter: (a = 3) OR (a = 5)
+
+# Derivation works when based on only a single conjunct in the conjunction.
+index-constraints vars=(a int, b int, c int as (a+5) stored) index=(c)
+(a=3 AND b=4) OR (a=5 AND b=8)
+----
+[/8 - /8]
+[/10 - /10]
+Remaining filter: ((a = 3) AND (b = 4)) OR ((a = 5) AND (b = 8))
+
+# A contradiction causes only span c=10 to be scanned.
+index-constraints vars=(a int, b int, c int as (a+5) stored) index=(c)
+(a=3 AND c=9) OR (a=5 AND b=8)
+----
+[/10 - /10]
+Remaining filter: ((a = 3) AND (c = 9)) OR ((a = 5) AND (b = 8))
+
+# Derived term c=8 is ANDed with c>=8 to result in a c=8 span.
+index-constraints vars=(a int, b int, c int as (a+5) stored) index=(c)
+(a=3 AND c>=8) OR (a=5 AND b=8)
+----
+[/8 - /8]
+[/10 - /10]
+Remaining filter: (a = 3) OR ((a = 5) AND (b = 8))
+
+# Derived term c=8 is ANDed with c IN (3,8,10) to result in a c=8 span.
+index-constraints vars=(a int, b int, c int as (a+5) stored) index=(c)
+(a=3 AND c IN (3,8,10)) OR (a=5 AND b=8)
+----
+[/8 - /8]
+[/10 - /10]
+Remaining filter: (a = 3) OR ((a = 5) AND (b = 8))
+
+# A computed column not in the 1st index position can derive a predicate.
+index-constraints vars=(a int, b int, c int as (a+5) stored) index=(a, c)
+(a=3) OR (a=5)
+----
+[/3/8 - /3/8]
+[/5/10 - /5/10]
+
+# We don't derive a predicate for non-single-key cases.
+index-constraints vars=(a int, b int, c int as (a+b) stored) index=(a, c)
+(a=3 AND b=4) OR (a >= 3 AND b=6)
+----
+[/3 - ]
+Remaining filter: ((a = 3) AND (b = 4)) OR (b = 6)
+
+# ORing a condition that generates spans and one that doesn't results in
+# no spans.
+index-constraints vars=(a int, b int, c int as (a+b) stored) index=(c, a, b)
+(a=3 AND b=4) OR (a=5 AND b>6)
+----
+[ - ]
+Remaining filter: ((a = 3) AND (b = 4)) OR ((a = 5) AND (b > 6))
+
+# An extra ANDed filter doesn't disallow predicate derivation.
+index-constraints vars=(a int, b int, c int as (a+b) stored, d int) index=(c, a, b)
+(a,b) IN ((3,4), (5,6)) AND a > 4
+----
+[/7/3/4 - /7/3/4]
+[/11/5/6 - /11/5/6]
+Remaining filter: a > 4
+
+# IS NULL conditions cannot currently derive predicates.
+# TODO(msirek): Derive predicates from IS NULL conditions.
+index-constraints vars=(a int, b int, c int as (a+5) stored) index=(c)
+(a=3) OR (a IS NULL)
+----
+[ - ]
+Remaining filter: (a = 3) OR (a IS NULL)
+
+# IS NULL conditions cannot currently derive predicates.
+# TODO(msirek): Derive predicates from IS NULL conditions.
+index-constraints vars=(a int, b int, c int as (CASE WHEN a IS NULL THEN a ELSE 1 END) stored) index=(c)
+(a=3 AND b=5) OR (a IS NULL AND b=7)
+----
+[ - ]
+Remaining filter: ((a = 3) AND (b = 5)) OR ((a IS NULL) AND (b = 7))
+
+# An IN clause with a common value for A.
+index-constraints vars=(a int, b int, c int as (a+b) stored) index=(c, a, b)
+(a,b) IN ((3,4), (3,6))
+----
+[/7/3/4 - /7/3/4]
+[/9/3/6 - /9/3/6]
+
+# ORed IN lists can derive predicates.
+index-constraints vars=(a int, b int, c int as (a+b) stored, d int) index=(c, a, b)
+(a,b) IN ((3,4), (5,6)) OR (b,a) IN ((4,3), (5,8))
+----
+[/7/3/4 - /7/3/4]
+[/11/5/6 - /11/5/6]
+[/13/8/5 - /13/8/5]
+
+# ORed IN lists can derive predicates.
+index-constraints vars=(a int, b int, c int as (a+b) stored, d int) index=(c, a, b)
+((a,b) IN ((3,4), (5,6)) OR (b,a) IN ((4,3), (5,8))) AND a IN (3,4)
+----
+[/7/3/4 - /7/3/4]
+[/11/5/6 - /11/5/6]
+[/13/8/5 - /13/8/5]
+Remaining filter: a IN (3, 4)
+
+# ANDed IN lists can derive predicates.
+index-constraints vars=(a int, b int, c int as (a+b) stored, d int) index=(c, a, b)
+(a,b) IN ((3,4), (5,6)) AND (b,a) IN ((4,3), (5,8))
+----
+[/7/3/4 - /7/3/4]
+
+# ANDed IN lists can derive predicates.
+index-constraints vars=(a int, b int, c int as (a+b) stored, d int) index=(c, a, b)
+((a,b) IN ((3,4), (5,6)) AND (b,a) IN ((4,3), (5,8))) OR c IN (8,9)
+----
+[/7/3/4 - /7/3/4]
+[/8 - /9]
+
+# A computed column not part of an index definition does not derive a term.
+index-constraints vars=(a bool, b int, c int as (CASE WHEN a THEN b+1 ELSE b-1 END) stored) index=(b)
+NOT a AND b=4
+----
+[/4 - /4]
+Remaining filter: NOT a
+
+# We don't derive predicates on non-index columns.
+index-constraints vars=(a int, b int, c int as (a) stored, d int as (b) stored) index=(d)
+a IN (1,2,3)
+----
+[ - ]
+Remaining filter: a IN (1, 2, 3)
+
+# We can derive predicates on computed cols which are based on other computed
+# columns.
+index-constraints vars=(a int, b int, c int as (a) stored, d int as (c) stored) index=(d)
+a IN (1,2,3)
+----
+[/1 - /3]
+Remaining filter: a IN (1, 2, 3)
+
+# We can derive predicates on computed cols which are based on other computed
+# columns and intersect the result with other constraints.
+index-constraints vars=(a int, b int, c int as (d) stored, d int as (a) stored) index=(c)
+a IN (1,2,3) AND d IN (2,4,5)
+----
+[/2 - /2]
+Remaining filter: a IN (1, 2, 3)
+
+# Negated conditions which convert `=` to `<>` are not currently handled.
+# TODO(msirek): Use De Morgan's law on conjunctions and disjunctions to
+# derive terms in more cases, e.g.
+# `A AND B AND C` --> `NOT ((NOT A) OR (NOT B) OR (NOT C))``, apply derivation
+# on the expression without the outer NOT, then apply the NOT at the end.
+index-constraints vars=(a int, b int, c int as (a+b) stored) index=(c)
+NOT((a = 3) AND (b = 4))
+----
+[ - ]
+Remaining filter: (a != 3) OR (b != 4)
+
+# -------------------------------------------------------
+# End unit tests for computed column predicate derivation
+# -------------------------------------------------------

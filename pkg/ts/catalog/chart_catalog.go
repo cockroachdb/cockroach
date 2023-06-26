@@ -92,6 +92,12 @@ var charts = []sectionDescription{
 				Aggregator:  DescribeAggregator_MAX,
 				Metrics:     []string{"security.certificate.expiration.client-tenant"},
 			},
+			{
+				Title:       "Client Cert Expiration",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_MAX,
+				Metrics:     []string{"security.certificate.expiration.client"},
+			},
 		},
 	},
 	{
@@ -731,6 +737,18 @@ var charts = []sectionDescription{
 					"kv.allocator.load_based_replica_rebalancing.delta_not_significant",
 					"kv.allocator.load_based_replica_rebalancing.existing_not_overfull",
 					"kv.allocator.load_based_replica_rebalancing.cannot_find_better_candidate",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{DistributionLayer, "Load", "Splitter"}},
+		Charts: []chartDescription{
+			{
+				Title: "Load Splitter",
+				Metrics: []string{
+					"kv.loadsplitter.popularkey",
+					"kv.loadsplitter.nosplitkey",
 				},
 			},
 		},
@@ -1671,6 +1689,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"requests.slow.lease"},
 			},
 			{
+				Title:   "Lease Request Latency",
+				Metrics: []string{"leases.requests.latency"},
+			},
+			{
 				Title: "Succcess Rate",
 				Metrics: []string{
 					"leases.error",
@@ -1682,6 +1704,7 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"leases.epoch",
 					"leases.expiration",
+					"leases.liveness",
 					"replicas.leaseholders",
 					"replicas.leaders_not_leaseholders",
 					"replicas.leaders_invalid_lease",
@@ -2609,6 +2632,12 @@ var charts = []sectionDescription{
 				Title: "New Connections",
 				Metrics: []string{
 					"sql.new_conns",
+				},
+			},
+			{
+				Title: "Connections Waiting to Compute Password Hash",
+				Metrics: []string{
+					"sql.conns_waiting_to_hash",
 				},
 			},
 			{
@@ -3658,6 +3687,25 @@ var charts = []sectionDescription{
 					"admission.elastic_cpu.acquired_nanos",
 					"admission.elastic_cpu.returned_nanos",
 					"admission.elastic_cpu.max_available_nanos",
+					"admission.elastic_cpu.pre_work_nanos",
+				},
+			},
+			{
+				Title: "Elastic CPU Available Tokens",
+				Metrics: []string{
+					"admission.elastic_cpu.available_nanos",
+				},
+			},
+			{
+				Title: "Elastic CPU Tokens Exhausted Duration Sum",
+				Metrics: []string{
+					"admission.elastic_cpu.nanos_exhausted_duration",
+				},
+			},
+			{
+				Title: "Elastic CPU Tokens Over Limit Duration",
+				Metrics: []string{
+					"admission.elastic_cpu.over_limit_durations",
 				},
 			},
 			{

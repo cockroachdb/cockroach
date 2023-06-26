@@ -35,6 +35,7 @@ import (
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1328,16 +1329,8 @@ func stacks(buf *[]byte) []byte {
 	if len(*buf) == 0 {
 		*buf = make([]byte, 1<<16)
 	}
-	var truncBuf []byte
-	for i := 0; ; i++ {
-		n := runtime.Stack(*buf, true /* all */)
-		if n < len(*buf) {
-			truncBuf = (*buf)[:n]
-			break
-		}
-		*buf = make([]byte, 2*len(*buf))
-	}
-	return truncBuf
+	*buf = allstacks.GetWithBuf(*buf)
+	return *buf
 }
 
 func firstNonStdlib(calls []stack.Call) stack.Call {

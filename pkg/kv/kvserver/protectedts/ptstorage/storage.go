@@ -75,7 +75,7 @@ func (p *storage) UpdateTimestamp(
 ) error {
 	row, err := p.ex.QueryRowEx(ctx, "protectedts-update", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
-		updateTimestampQuery, id.GetBytesMut(), timestamp.AsOfSystemTime())
+		updateTimestampQuery, id.GetBytesMut(), timestamp.WithSynthetic(false).AsOfSystemTime())
 	if err != nil {
 		return errors.Wrapf(err, "failed to update record %v", id)
 	}
@@ -97,7 +97,7 @@ func (p *storage) deprecatedProtect(
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		protectQueryWithoutTarget,
 		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
-		r.ID, r.Timestamp.AsOfSystemTime(),
+		r.ID, r.Timestamp.WithSynthetic(false).AsOfSystemTime(),
 		r.MetaType, meta,
 		len(r.DeprecatedSpans), encodedSpans)
 	if err != nil {
@@ -177,7 +177,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
-		r.ID, r.Timestamp.AsOfSystemTime(),
+		r.ID, r.Timestamp.WithSynthetic(false).AsOfSystemTime(),
 		r.MetaType, meta,
 		len(r.DeprecatedSpans), encodedTarget, encodedTarget)
 	if err != nil {

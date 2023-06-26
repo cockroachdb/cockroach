@@ -37,7 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft/v3"
+	"github.com/cockroachdb/redact"
+	raft "go.etcd.io/etcd/raft/v3"
 )
 
 const (
@@ -214,49 +215,49 @@ var (
 	}
 	metaReplicateQueueReplaceDeadReplicaSuccessCount = metric.Metadata{
 		Name:        "queue.replicate.replacedeadreplica.success",
-		Help:        "Number of successful dead replica replica replacements processed by the replicate queue",
+		Help:        "Number of successful dead replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueReplaceDeadReplicaErrorCount = metric.Metadata{
 		Name:        "queue.replicate.replacedeadreplica.error",
-		Help:        "Number of failed dead replica replica replacements processed by the replicate queue",
+		Help:        "Number of failed dead replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueReplaceDecommissioningReplicaSuccessCount = metric.Metadata{
 		Name:        "queue.replicate.replacedecommissioningreplica.success",
-		Help:        "Number of successful decommissioning replica replica replacements processed by the replicate queue",
+		Help:        "Number of successful decommissioning replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueReplaceDecommissioningReplicaErrorCount = metric.Metadata{
 		Name:        "queue.replicate.replacedecommissioningreplica.error",
-		Help:        "Number of failed decommissioning replica replica replacements processed by the replicate queue",
+		Help:        "Number of failed decommissioning replica replacements processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueRemoveDecommissioningReplicaSuccessCount = metric.Metadata{
 		Name:        "queue.replicate.removedecommissioningreplica.success",
-		Help:        "Number of successful decommissioning replica replica removals processed by the replicate queue",
+		Help:        "Number of successful decommissioning replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueRemoveDecommissioningReplicaErrorCount = metric.Metadata{
 		Name:        "queue.replicate.removedecommissioningreplica.error",
-		Help:        "Number of failed decommissioning replica replica removals processed by the replicate queue",
+		Help:        "Number of failed decommissioning replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueRemoveDeadReplicaSuccessCount = metric.Metadata{
 		Name:        "queue.replicate.removedeadreplica.success",
-		Help:        "Number of successful dead replica replica removals processed by the replicate queue",
+		Help:        "Number of successful dead replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicateQueueRemoveDeadReplicaErrorCount = metric.Metadata{
 		Name:        "queue.replicate.removedeadreplica.error",
-		Help:        "Number of failed dead replica replica removals processed by the replicate queue",
+		Help:        "Number of failed dead replica removals processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -764,6 +765,13 @@ func (rq *replicateQueue) process(
 // that the error should send the range to purgatory.
 type decommissionPurgatoryError struct{ error }
 
+var _ errors.SafeFormatter = decommissionPurgatoryError{}
+
+func (e decommissionPurgatoryError) SafeFormatError(p errors.Printer) (next error) {
+	p.Print(e.error)
+	return nil
+}
+
 func (decommissionPurgatoryError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = decommissionPurgatoryError{}
@@ -816,8 +824,8 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
 		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
 
-		var traceOutput string
-		traceLoggingNeeded := err != nil || exceededDuration
+		var traceOutput redact.RedactableString
+		traceLoggingNeeded := (err != nil || exceededDuration) && log.ExpensiveLogEnabled(ctx, 1)
 		if traceLoggingNeeded {
 			// If we have tracing spans from execChangeReplicasTxn, filter it from
 			// the recording so that we can render the traces to the log without it,
@@ -825,7 +833,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 			rec = filterTracingSpans(sp.GetConfiguredRecording(),
 				replicaChangeTxnGetDescOpName, replicaChangeTxnUpdateDescOpName,
 			)
-			traceOutput = fmt.Sprintf("\ntrace:\n%s", rec)
+			traceOutput = redact.Sprintf("\ntrace:\n%s", rec)
 		}
 
 		if err != nil {

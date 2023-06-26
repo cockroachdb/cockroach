@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -67,33 +66,6 @@ func registerDiskStalledDetection(r registry.Registry) {
 			// stall the process during a disk stall.
 			EncryptionSupport: registry.EncryptionMetamorphic,
 		})
-	}
-
-	for _, stallLogDir := range []bool{false, true} {
-		for _, stallDataDir := range []bool{false, true} {
-			// Grab copies of the args because we'll pass them into a closure.
-			// Everyone's favorite bug to write in Go.
-			stallLogDir := stallLogDir
-			stallDataDir := stallDataDir
-			r.Add(registry.TestSpec{
-				Name: fmt.Sprintf(
-					"disk-stalled/fuse/log=%t,data=%t",
-					stallLogDir, stallDataDir,
-				),
-				Owner:   registry.OwnerStorage,
-				Cluster: makeSpec(),
-				Timeout: 30 * time.Minute,
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runDiskStalledDetection(ctx, t, c, &fuseDiskStaller{
-						t:         t,
-						c:         c,
-						stallLogs: stallLogDir,
-						stallData: stallDataDir,
-					}, stallLogDir || stallDataDir /* doStall */)
-				},
-				EncryptionSupport: registry.EncryptionMetamorphic,
-			})
-		}
 	}
 }
 
@@ -399,60 +371,6 @@ func (s *cgroupDiskStaller) setThroughput(
 		bytesPerSecond,
 		readOrWrite,
 	))
-}
-
-// fuseDiskStaller uses a FUSE filesystem (charybdefs) to insert an artificial
-// delay on all I/O.
-type fuseDiskStaller struct {
-	t         test.Test
-	c         cluster.Cluster
-	stallLogs bool
-	stallData bool
-}
-
-var _ diskStaller = (*fuseDiskStaller)(nil)
-
-func (s *fuseDiskStaller) DataDir() string {
-	if s.stallData {
-		return "{store-dir}/faulty"
-	}
-	return "{store-dir}/real"
-}
-
-func (s *fuseDiskStaller) LogDir() string {
-	if s.stallLogs {
-		return "{store-dir}/faulty/logs"
-	}
-	return "{store-dir}/real/logs"
-}
-
-func (s *fuseDiskStaller) Setup(ctx context.Context) {
-	if s.c.IsLocal() && runtime.GOOS != "linux" {
-		s.t.Fatalf("must run on linux os, found %s", runtime.GOOS)
-	}
-	s.t.Status("setting up charybdefs")
-	require.NoError(s.t, s.c.Install(ctx, s.t.L(), s.c.All(), "charybdefs"))
-	s.c.Run(ctx, s.c.All(), "sudo umount -f {store-dir}/faulty || true")
-	s.c.Run(ctx, s.c.All(), "mkdir -p {store-dir}/{real,faulty} || true")
-	s.c.Run(ctx, s.c.All(), "rm -f logs && ln -s {store-dir}/real/logs logs || true")
-	s.c.Run(ctx, s.c.All(), "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real")
-	s.c.Run(ctx, s.c.All(), "sudo mkdir -p {store-dir}/real/logs")
-	s.c.Run(ctx, s.c.All(), "sudo chmod -R 777 {store-dir}/{real,faulty}")
-}
-
-func (s *fuseDiskStaller) Cleanup(ctx context.Context) {
-	s.c.Run(ctx, s.c.All(), "sudo umount -f {store-dir}/faulty || true")
-}
-
-func (s *fuseDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
-	// Stall for 2x the max sync duration. The tool expects an integer
-	// representing the delay time, in microseconds.
-	stallMicros := (2 * maxSyncDur).Microseconds()
-	s.c.Run(ctx, nodes, "charybdefs-nemesis", "--delay", strconv.FormatInt(stallMicros, 10))
-}
-
-func (s *fuseDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
-	s.c.Run(ctx, nodes, "charybdefs-nemesis --clear")
 }
 
 func getDevice(t test.Test, s spec.ClusterSpec) string {

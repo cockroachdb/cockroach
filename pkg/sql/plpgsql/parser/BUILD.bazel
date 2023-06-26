@@ -1,0 +1,76 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+sh_binary(
+    name = "plpgsql-gen",
+    srcs = ["//pkg/sql/lexbase:sql-gen.sh"],
+)
+
+# Define the target to auto-generate sql.go from the grammar file.
+genrule(
+    name = "plpgsql-goyacc",
+    srcs = [
+        "plpgsql.y",
+    ],
+    outs = ["plpgsql.go"],
+    cmd = """
+    export GOPATH=/nonexist-gopath
+      $(location :plpgsql-gen) $(location plpgsql.y) plpgsql ""\
+          $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc) \
+          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
+
+    """,
+    exec_tools = [
+        ":plpgsql-gen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+        "@org_golang_x_tools//cmd/goyacc",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "plpgparser",
+    srcs = [
+        "lexer.go",
+        "parse.go",
+        "plpgsql.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/plpgsql/parser/lexbase",  # keep
+        "//pkg/sql/scanner",
+        "//pkg/sql/sem/plpgsqltree",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",  # keep
+    ],
+)
+
+exports_files(
+    [
+        "plpgsql.y",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "parser_test",
+    srcs = ["parser_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":plpgparser",
+        "//pkg/sql/sem/plpgsqltree/utils",
+        "//pkg/testutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)
+
+get_x_data(name = "get_x_data")

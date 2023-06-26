@@ -64,6 +64,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	defer testHelper.Cleanup(ctx, t)
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
+		skip.UnderDeadlockWithIssue(t, 99559)
 		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
 	})
 
@@ -100,6 +101,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	})
 
 	t.Run("txn_id_resolution", func(t *testing.T) {
+		skip.UnderDeadlockWithIssue(t, 99770)
 		testTxnIDResolutionRPC(ctx, t, testHelper)
 	})
 
@@ -1167,6 +1169,7 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 	})
 
 	t.Run("test tenant ranges pagination", func(t *testing.T) {
+		skip.UnderStressWithIssue(t, 92382)
 		ctx := context.Background()
 		resp1, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
 			Limit: 1,

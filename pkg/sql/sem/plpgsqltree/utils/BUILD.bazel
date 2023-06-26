@@ -1,0 +1,19 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "utils",
+    srcs = ["plpg_visitor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/plpgsql/parser:plpgparser",
+        "//pkg/sql/sem/plpgsqltree",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",
+        "//pkg/util/errorutil/unimplemented",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+get_x_data(name = "get_x_data")

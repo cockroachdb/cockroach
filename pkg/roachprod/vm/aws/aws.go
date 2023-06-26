@@ -197,8 +197,8 @@ func DefaultProviderOpts() *ProviderOpts {
 	defaultEBSVolumeValue.Disk.VolumeSize = ebsDefaultVolumeSizeGB
 	defaultEBSVolumeValue.Disk.VolumeType = defaultEBSVolumeType
 	return &ProviderOpts{
-		MachineType:      "m5.xlarge",
-		SSDMachineType:   "m5d.xlarge",
+		MachineType:      defaultMachineType,
+		SSDMachineType:   defaultSSDMachineType,
 		RemoteUserName:   "ubuntu",
 		DefaultEBSVolume: defaultEBSVolumeValue,
 		CreateRateLimit:  2,
@@ -249,8 +249,8 @@ type Provider struct {
 }
 
 const (
-	defaultSSDMachineType = "m5d.xlarge"
-	defaultMachineType    = "m5.xlarge"
+	defaultSSDMachineType = "m6id.xlarge"
+	defaultMachineType    = "m6i.xlarge"
 )
 
 var defaultConfig = func() (cfg *awsConfig) {
@@ -265,9 +265,23 @@ var defaultConfig = func() (cfg *awsConfig) {
 // cluster creation. If the geo flag is specified, nodes are distributed between
 // zones.
 var defaultCreateZones = []string{
-	"us-east-2b",
+	// N.B. us-east-2a is the default zone for non-geo distributed clusters. It appears to have a higher on-demand
+	// capacity of c7g.8xlarge (graviton3) than us-east-2b.
+	"us-east-2a",
 	"us-west-2b",
 	"eu-west-2b",
+}
+
+// Overrides defaultCreateZones for specific machine types.
+// This is a workaround for,
+// "We currently do not have sufficient c6id.4xlarge capacity in the Availability Zone you requested (us-east-2a).
+// Our system will be working on provisioning additional capacity. You can currently get c6id.4xlarge capacity by
+// not specifying an Availability Zone in your request or choosing us-east-2b, us-east-2c."
+// N.B. we implicitly specify AZ to select an AMI in that zone, hence we fall back to instance-specific overrides.
+var overrideDefaultCreateZones = map[string][]string{
+	"c6id.4xlarge":  {"us-east-2c", "us-west-2b", "eu-west-2b"},
+	"c6id.8xlarge":  {"us-east-2c", "us-west-2b", "eu-west-2b"},
+	"c6id.24xlarge": {"us-east-2b", "us-west-2b", "eu-west-2b"},
 }
 
 // ConfigureCreateFlags is part of the vm.ProviderOpts interface.
@@ -387,6 +401,30 @@ func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
 ) error {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
+	// There exist different flags to control the machine type when ssd is true.
+	// This enables sane defaults for either setting but the behavior can be
+	// confusing when a user attempts to use `--aws-machine-type` and the command
+	// succeeds but the flag is ignored. Rather than permit this behavior we
+	// return an error instructing the user to use the other flag.
+	if opts.SSDOpts.UseLocalSSD &&
+		providerOpts.MachineType != defaultMachineType &&
+		providerOpts.SSDMachineType == defaultSSDMachineType {
+		return errors.Errorf("use the --aws-machine-type-ssd flag to set the " +
+			"machine type when --local-ssd=true")
+	} else if !opts.SSDOpts.UseLocalSSD &&
+		providerOpts.MachineType == defaultMachineType &&
+		providerOpts.SSDMachineType != defaultSSDMachineType {
+		return errors.Errorf("use the --aws-machine-type flag to set the " +
+			"machine type when --local-ssd=false")
+	}
+	var machineType string
+	if opts.SSDOpts.UseLocalSSD {
+		machineType = providerOpts.SSDMachineType
+	} else {
+		machineType = providerOpts.MachineType
+	}
+	machineType = strings.ToLower(machineType)
+
 	expandedZones, err := vm.ExpandZonesFlag(providerOpts.CreateZones)
 	if err != nil {
 		return err
@@ -395,6 +433,10 @@ func (p *Provider) Create(
 	useDefaultZones := len(expandedZones) == 0
 	if useDefaultZones {
 		expandedZones = defaultCreateZones
+		if defaultAZOverride, ok := overrideDefaultCreateZones[machineType]; ok {
+			expandedZones = defaultAZOverride
+			l.Printf("WARNING: using default zones override %q for machine type %q", strings.Join(expandedZones, ","), machineType)
+		}
 	}
 
 	// We need to make sure that the SSH keys have been distributed to all regions.
@@ -434,12 +476,13 @@ func (p *Provider) Create(
 	var g errgroup.Group
 	limiter := rate.NewLimiter(rate.Limit(providerOpts.CreateRateLimit), 2 /* buckets */)
 	for i := range names {
+		index := i
 		capName := names[i]
 		placement := zones[i]
 		res := limiter.Reserve()
 		g.Go(func() error {
 			time.Sleep(res.Delay())
-			return p.runInstance(capName, placement, opts, providerOpts)
+			return p.runInstance(l, capName, index, placement, machineType, opts, providerOpts)
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -797,25 +840,14 @@ func (p *Provider) listRegion(region string, opts ProviderOpts) (vm.List, error)
 // we need to do a bit of work to look up all of the various ids that
 // we need in order to actually allocate an instance.
 func (p *Provider) runInstance(
-	name string, zone string, opts vm.CreateOpts, providerOpts *ProviderOpts,
+	l *logger.Logger,
+	name string,
+	instanceIdx int,
+	zone string,
+	machineType string,
+	opts vm.CreateOpts,
+	providerOpts *ProviderOpts,
 ) error {
-	// There exist different flags to control the machine type when ssd is true.
-	// This enables sane defaults for either setting but the behavior can be
-	// confusing when a user attempts to use `--aws-machine-type` and the command
-	// succeeds but the flag is ignored. Rather than permit this behavior we
-	// return an error instructing the user to use the other flag.
-	if opts.SSDOpts.UseLocalSSD &&
-		providerOpts.MachineType != defaultMachineType &&
-		providerOpts.SSDMachineType == defaultSSDMachineType {
-		return errors.Errorf("use the --aws-machine-type-ssd flag to set the " +
-			"machine type when --local-ssd=true")
-	} else if !opts.SSDOpts.UseLocalSSD &&
-		providerOpts.MachineType == defaultMachineType &&
-		providerOpts.SSDMachineType != defaultSSDMachineType {
-		return errors.Errorf("use the --aws-machine-type flag to set the " +
-			"machine type when --local-ssd=false")
-	}
-
 	az, ok := p.Config.azByName[zone]
 	if !ok {
 		return fmt.Errorf("no region in %v corresponds to availability zone %v",
@@ -826,14 +858,6 @@ func (p *Provider) runInstance(
 	if err != nil {
 		return err
 	}
-
-	var machineType string
-	if opts.SSDOpts.UseLocalSSD {
-		machineType = providerOpts.SSDMachineType
-	} else {
-		machineType = providerOpts.MachineType
-	}
-
 	cpuOptions := providerOpts.CPUOptions
 
 	// We avoid the need to make a second call to set the tags by jamming
@@ -850,7 +874,10 @@ func (p *Provider) runInstance(
 
 	var labelPairs []string
 	addLabel := func(key, value string) {
-		labelPairs = append(labelPairs, fmt.Sprintf("{Key=%s,Value=%s}", key, value))
+		// N.B. AWS does not allow empty values.
+		if value != "" {
+			labelPairs = append(labelPairs, fmt.Sprintf("{Key=%s,Value=%s}", key, value))
+		}
 	}
 
 	for key, value := range opts.CustomLabels {
@@ -888,7 +915,8 @@ func (p *Provider) runInstance(
 			extraMountOpts = "nobarrier"
 		}
 	}
-	filename, err := writeStartupScript(extraMountOpts, providerOpts.UseMultipleDisks)
+	filename, err := writeStartupScript(extraMountOpts, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
+
 	if err != nil {
 		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
@@ -902,13 +930,31 @@ func (p *Provider) runInstance(
 		}
 		return *fl
 	}
-
+	imageID := withFlagOverride(az.region.AMI_X86_64, &providerOpts.ImageAMI)
+	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "7g.") == 1
+	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
+		return errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
+	}
+	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
+	if useArmAMI {
+		imageID = withFlagOverride(az.region.AMI_ARM64, &providerOpts.ImageAMI)
+		// N.B. use arbitrary instanceIdx to suppress the same info for every other instance being created.
+		if instanceIdx == 0 {
+			l.Printf("Using ARM64 AMI: %s for machine type: %s", imageID, machineType)
+		}
+	}
+	if opts.Arch == string(vm.ArchFIPS) {
+		imageID = withFlagOverride(az.region.AMI_FIPS, &providerOpts.ImageAMI)
+		if instanceIdx == 0 {
+			l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", imageID, machineType)
+		}
+	}
 	args := []string{
 		"ec2", "run-instances",
 		"--associate-public-ip-address",
 		"--count", "1",
 		"--instance-type", machineType,
-		"--image-id", withFlagOverride(az.region.AMI, &providerOpts.ImageAMI),
+		"--image-id", imageID,
 		"--key-name", keyName,
 		"--region", az.region.Name,
 		"--security-group-ids", az.region.SecurityGroup,

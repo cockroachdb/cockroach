@@ -297,10 +297,11 @@ func registerKV(r registry.Registry) {
 			skip = fmt.Sprintf("multi-store tests are not supported on cloud %s", cSpec.Cloud)
 		}
 		r.Add(registry.TestSpec{
-			Skip:    skip,
-			Name:    strings.Join(nameParts, "/"),
-			Owner:   owner,
-			Cluster: cSpec,
+			Skip:      skip,
+			Name:      strings.Join(nameParts, "/"),
+			Owner:     owner,
+			Benchmark: true,
+			Cluster:   cSpec,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKV(ctx, t, c, opts)
 			},
@@ -313,9 +314,11 @@ func registerKV(r registry.Registry) {
 func registerKVContention(r registry.Registry) {
 	const nodes = 4
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("kv/contention/nodes=%d", nodes),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(nodes + 1),
+		Name:      fmt.Sprintf("kv/contention/nodes=%d", nodes),
+		Owner:     registry.OwnerKV,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(nodes + 1),
+
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))

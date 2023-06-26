@@ -117,7 +117,7 @@ func (c *internalContext) addStatementWrapper(w statementWrapper) {
 func (c *internalContext) maybeWrapStatement(
 	ctx context.Context, statement string, state *cliState,
 ) (err error) {
-	var s scanner.Scanner
+	var s scanner.SQLScanner
 	for _, sw := range c.statementWrappers {
 		s.Init(statement)
 		if sw.Pattern.matches(s) {

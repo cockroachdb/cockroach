@@ -1,0 +1,21 @@
+# Test that backing up and restoring the public schema from the system database
+# does not panic.
+
+new-server name=s1 allow-implicit-access
+----
+
+exec-sql
+CREATE DATABASE restoredb;
+----
+
+exec-sql
+BACKUP system.public.* INTO 'userfile:///test';
+----
+
+# This particular restore should error out due to the fact that we don't
+# restore some system tables such as the leases table. The expected key
+# rewriter error is just the first error that we encounter.
+exec-sql expect-error-regex=(no rewrite for span)
+RESTORE system.public.* FROM latest IN 'userfile:///test' WITH into_db='restoredb';
+----
+regex matches error

@@ -1575,9 +1575,19 @@ enum StatsSortOptions {
   SERVICE_LAT = 0;
   reserved 1; // This is for  CPU Time in 23.1
   EXECUTION_COUNT = 2;
-  reserved 3; // This is for P99 in 23.1
+  reserved 3; // This is for Latency Info P99 in 23.1
   CONTENTION_TIME = 4;
   PCT_RUNTIME = 5;
+  // Sort options only available on default stats tables.
+  reserved 6; // This is for Latency Info P50 in 23.1
+  reserved 7; // This is for Latency Info P90 in 23.1
+  reserved 8; // This is for Latency Info Min in 23.1
+  reserved 9; // This is for Latency Info Max in 23.1
+  ROWS_PROCESSED = 10;
+  MAX_MEMORY = 11;
+  NETWORK = 12;
+  RETRIES = 13;
+  LAST_EXEC = 14;
 }
 message CombinedStatementsStatsRequest {
   enum StatsType {

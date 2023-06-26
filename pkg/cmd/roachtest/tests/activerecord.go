@@ -164,15 +164,9 @@ func registerActiveRecord(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailures, ignorelistName, ignorelist := activeRecordBlocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No activerecord blocklist defined for cockroach version %s", version)
-		}
-		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s", version, blocklistName)
-		if ignorelist != nil {
-			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
-				version, blocklistName, ignorelistName)
-		}
+		blocklistName, ignorelistName := "activeRecordBlocklist", "activeRecordIgnoreList"
+		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+			version, blocklistName, ignorelistName)
 		t.L().Printf("%s", status)
 
 		t.Status("running activerecord test suite")
@@ -207,8 +201,8 @@ func registerActiveRecord(r registry.Registry) {
 			skipped := result == "S"
 			results.allTests = append(results.allTests, test)
 
-			ignoredIssue, expectedIgnored := ignorelist[test]
-			issue, expectedFailure := expectedFailures[test]
+			ignoredIssue, expectedIgnored := activeRecordIgnoreList[test]
+			issue, expectedFailure := activeRecordBlocklist[test]
 			switch {
 			case expectedIgnored:
 				results.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
@@ -242,13 +236,13 @@ func registerActiveRecord(r registry.Registry) {
 		}
 
 		results.summarizeAll(
-			t, "activerecord" /* ormName */, blocklistName, expectedFailures, version, supportedRailsVersion,
+			t, "activerecord" /* ormName */, blocklistName, activeRecordBlocklist, version, supportedRailsVersion,
 		)
 	}
 
 	r.Add(registry.TestSpec{
 		Name:       "activerecord",
-		Owner:      registry.OwnerSQLExperience,
+		Owner:      registry.OwnerSQLFoundations,
 		Cluster:    r.MakeClusterSpec(1),
 		NativeLibs: registry.LibGEOS,
 		Tags:       []string{`default`, `orm`},

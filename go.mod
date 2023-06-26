@@ -48,7 +48,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f
-	github.com/cockroachdb/pebble v0.0.0-20230206180212-744ea7cc8f90
+	github.com/cockroachdb/pebble v0.0.0-20230622174350-4be80f44cae0
 	github.com/cockroachdb/redact v1.1.3
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -147,7 +147,7 @@ require (
 	github.com/spf13/afero v1.6.0
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.4
 	github.com/twpayne/go-geom v1.4.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg-go/pbkdf2 v1.0.0
@@ -383,6 +383,10 @@ replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.
 //
 // While this is necessary, make sure that the require block above does not diverge.
 replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560
+
+// Use the CRDB fork of etcd/raft, at crdb-release-22.2 branch which includes
+// cherry-picked fixes for this release.
+replace go.etcd.io/etcd/raft/v3 => github.com/cockroachdb/etcd/raft/v3 v3.0.0-20230615105354-88bbb1d5f3a3
 
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 

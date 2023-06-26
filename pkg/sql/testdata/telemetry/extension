@@ -28,4 +28,4 @@ unimplemented.#54516.CREATE EXTENSION xml2
 feature-usage
 CREATE EXTENSION asdf
 ----
-error: pq: unknown extension: "asdf"
+error: pq: unknown extension: asdf

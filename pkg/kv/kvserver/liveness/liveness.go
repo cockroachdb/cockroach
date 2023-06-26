@@ -67,6 +67,24 @@ var (
 	ErrEpochAlreadyIncremented = errors.New("epoch already incremented")
 )
 
+type ErrEpochCondFailed struct {
+	expected, actual livenesspb.Liveness
+}
+
+// SafeFormatError implements errors.SafeFormatter.
+func (e *ErrEpochCondFailed) SafeFormatError(p errors.Printer) error {
+	p.Printf(
+		"liveness record changed while incrementing epoch for %+v; actual is %+v; is the node still live?",
+		redact.Safe(e.expected), redact.Safe(e.actual))
+	return nil
+}
+
+func (e *ErrEpochCondFailed) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
+
+func (e *ErrEpochCondFailed) Error() string {
+	return fmt.Sprint(e)
+}
+
 type errRetryLiveness struct {
 	error
 }
@@ -1223,7 +1241,10 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.
 		} else if actual.Epoch < liveness.Epoch {
 			return errors.Errorf("unexpected liveness epoch %d; expected >= %d", actual.Epoch, liveness.Epoch)
 		}
-		return errors.Errorf("mismatch incrementing epoch for %+v; actual is %+v", liveness, actual)
+		return &ErrEpochCondFailed{
+			expected: liveness,
+			actual:   actual.Liveness,
+		}
 	})
 	if err != nil {
 		return err
@@ -1555,4 +1576,10 @@ func (nl *NodeLiveness) TestingSetDecommissioningInternal(
 	ctx context.Context, oldLivenessRec Record, targetStatus livenesspb.MembershipStatus,
 ) (changeCommitted bool, err error) {
 	return nl.setMembershipStatusInternal(ctx, oldLivenessRec, targetStatus)
+}
+
+// TestingMaybeUpdate replaces the liveness (if it appears newer) and invokes
+// the registered callbacks if the node became live in the process. For testing.
+func (nl *NodeLiveness) TestingMaybeUpdate(ctx context.Context, newRec Record) {
+	nl.maybeUpdate(ctx, newRec)
 }

@@ -11,6 +11,7 @@ go_library(
         "files.go",
         "hook.go",
         "keys.go",
+        "listener.go",
         "net.go",
         "pprof.go",
         "soon.go",

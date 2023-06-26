@@ -14,6 +14,7 @@ import { CircleFilled } from "src/icon";
 import { ExecutionStatus } from "./types";
 
 import styles from "./executionStatusIcon.module.scss";
+
 const cx = classNames.bind(styles);
 
 export type StatusIconProps = {
@@ -21,6 +22,6 @@ export type StatusIconProps = {
 };
 
 export const StatusIcon: React.FC<StatusIconProps> = ({ status }) => {
-  const statusClassName = status !== "Waiting" ? "executing" : "waiting";
+  const statusClassName = status === "Executing" ? "executing" : "waiting";
   return <CircleFilled className={cx("status-icon", statusClassName)} />;
 };

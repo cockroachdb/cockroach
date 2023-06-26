@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -195,7 +196,7 @@ func decodeTableStatisticsKV(
 	types := []*types.T{types.Int, types.Int}
 	dirs := []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC}
 	keyVals := make([]rowenc.EncDatum, 2)
-	if _, _, err := rowenc.DecodeIndexKey(codec, types, keyVals, dirs, kv.Key); err != nil {
+	if _, err := rowenc.DecodeIndexKey(codec, keyVals, dirs, kv.Key); err != nil {
 		return 0, err
 	}
 
@@ -751,7 +752,12 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 
 	if forecast {
 		forecasts := ForecastTableStatistics(ctx, statsList)
-		statsList = append(forecasts, statsList...)
+		statsList = append(statsList, forecasts...)
+		// Some forecasts could have a CreatedAt time before or after some collected
+		// stats, so make sure the list is sorted in descending CreatedAt order.
+		sort.SliceStable(statsList, func(i, j int) bool {
+			return statsList[i].CreatedAt.After(statsList[j].CreatedAt)
+		})
 	}
 
 	return statsList, nil

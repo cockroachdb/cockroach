@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bitmap"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -598,14 +599,20 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			}
 		}
 
+		var isScanStarted *bitmap.Bitmap
+		if numScansInReqs > 0 {
+			isScanStarted = bitmap.NewBitmap(len(reqs))
+		}
 		numGetsInReqs := int64(len(singleRangeReqs)) - numScansInReqs
 		overheadAccountedFor := requestUnionSliceOverhead + requestUnionOverhead*int64(cap(singleRangeReqs)) + // reqs
 			intSliceOverhead + intSize*int64(cap(positions)) + // positions
-			subRequestIdxOverhead // subRequestIdx
+			subRequestIdxOverhead + // subRequestIdx
+			isScanStarted.MemUsage() // isScanStarted
 		r := singleRangeBatch{
 			reqs:                 singleRangeReqs,
 			positions:            positions,
 			subRequestIdx:        subRequestIdx,
+			isScanStarted:        isScanStarted,
 			numGetsInReqs:        numGetsInReqs,
 			reqsReservedBytes:    requestsMemUsage(singleRangeReqs),
 			overheadAccountedFor: overheadAccountedFor,
@@ -711,10 +718,7 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 		if len(results) > 0 || allComplete || err != nil {
 			return results, err
 		}
-		s.results.wait()
-		// Check whether the Streamer has been canceled or closed while we were
-		// waiting for the results.
-		if err = ctx.Err(); err != nil {
+		if err = s.results.wait(ctx); err != nil {
 			s.results.setError(err)
 			return nil, err
 		}
@@ -732,11 +736,15 @@ func (s *Streamer) Close(ctx context.Context) {
 		s.mu.done = true
 		s.mu.Unlock()
 		s.requestsToServe.close()
-		s.results.close(ctx)
 		// Unblock the coordinator in case it is waiting for the budget.
 		s.budget.mu.waitForBudget.Signal()
 	}
 	s.waitGroup.Wait()
+	if s.results != nil {
+		// The results buffer can only be closed when all goroutines have
+		// exited.
+		s.results.close(ctx)
+	}
 	*s = Streamer{}
 }
 
@@ -1370,6 +1378,11 @@ type singleRangeBatchResponseFootprint struct {
 	// need to be created for Get and Scan responses, respectively.
 	numGetResults, numScanResults         int
 	numIncompleteGets, numIncompleteScans int
+	// numStartedScans indicates how many Scan requests were just started. If a
+	// Scan response was received due to a Scan request that was the "resume"
+	// request (i.e. the pagination of the previous request), it's not included
+	// in this number.
+	numStartedScans int
 }
 
 func (fp singleRangeBatchResponseFootprint) hasResults() bool {
@@ -1423,6 +1436,12 @@ func calculateFootprint(
 			if len(scan.BatchResponses) > 0 || scan.ResumeSpan == nil {
 				fp.responsesOverhead += scanResponseOverhead
 				fp.numScanResults++
+				if pos := req.positions[i]; !req.isScanStarted.IsSet(pos) {
+					// This is the first response to the enqueuedReqs[pos] Scan
+					// request.
+					fp.numStartedScans++
+					req.isScanStarted.Set(pos)
+				}
 			}
 			if scan.ResumeSpan != nil {
 				// This Scan wasn't completed.
@@ -1483,12 +1502,10 @@ func processSingleRangeResults(
 	defer s.budget.mu.Unlock()
 	s.mu.Lock()
 
-	// TODO(yuzefovich): some of the responses might be partial, yet the
-	// estimator doesn't distinguish the footprint of the full response vs
-	// the partial one. Think more about this.
-	s.mu.avgResponseEstimator.update(
-		fp.memoryFootprintBytes, int64(fp.numGetResults+fp.numScanResults),
-	)
+	// Gets cannot be resumed, so we include all of them here, but Scans can be
+	// resumed, so we only include Scans that were just started.
+	numRequestsStarted := fp.numGetResults + fp.numStartedScans
+	s.mu.avgResponseEstimator.update(fp.memoryFootprintBytes, numRequestsStarted)
 
 	// If we have any Scan results to create and the Scan requests can return
 	// multiple rows, we'll need to consult s.mu.numRangesPerScanRequest, so
@@ -1621,11 +1638,13 @@ func buildResumeSingleRangeBatch(
 	fp singleRangeBatchResponseFootprint,
 ) (resumeReq singleRangeBatch) {
 	numIncompleteRequests := fp.numIncompleteGets + fp.numIncompleteScans
-	// We have to allocate the new Get and Scan requests, but we can reuse the
-	// reqs and the positions slices.
+	// We have to allocate the new Get and Scan requests, but we can reuse reqs,
+	// positions, and subRequestIdx slices.
 	resumeReq.reqs = req.reqs[:numIncompleteRequests]
 	resumeReq.positions = req.positions[:0]
 	resumeReq.subRequestIdx = req.subRequestIdx[:0]
+	// isScanStarted actually needs to be preserved between singleRangeBatches.
+	resumeReq.isScanStarted = req.isScanStarted
 	resumeReq.numGetsInReqs = int64(fp.numIncompleteGets)
 	// We've already reconciled the budget with the actual reservation for the
 	// requests with the ResumeSpans.

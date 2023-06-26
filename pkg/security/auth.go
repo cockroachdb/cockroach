@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -153,7 +154,11 @@ func Contains(sl []string, s string) bool {
 // UserAuthCertHook builds an authentication hook based on the security
 // mode and client certificate.
 func UserAuthCertHook(
-	insecureMode bool, tlsState *tls.ConnectionState, tenantID roachpb.TenantID,
+	insecureMode bool,
+	tlsState *tls.ConnectionState,
+	tenantID roachpb.TenantID,
+	certManager *CertificateManager,
+	cache *ClientCertExpirationCache,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
@@ -179,14 +184,24 @@ func UserAuthCertHook(
 			return nil
 		}
 
+		peerCert := tlsState.PeerCertificates[0]
+
 		// The client certificate should not be a tenant client type. For now just
 		// check that it doesn't have OU=Tenants. It would make sense to add
 		// explicit OU=Users to all client certificates and to check for match.
-		if IsTenantCertificate(tlsState.PeerCertificates[0]) {
+		if IsTenantCertificate(peerCert) {
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
 		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID) {
+			if certManager != nil {
+				cache.MaybeUpsert(
+					ctx,
+					systemIdentity.Normalized(),
+					peerCert.NotAfter.Unix(),
+					certManager.certMetrics.ClientExpiration,
+				)
+			}
 			return nil
 		}
 		return errors.Errorf("requested user %s is not authorized for tenant %d", systemIdentity, tenantID)
@@ -202,7 +217,7 @@ func IsTenantCertificate(cert *x509.Certificate) bool {
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
 func UserAuthPasswordHook(
-	insecureMode bool, passwordStr string, hashedPassword password.PasswordHash,
+	insecureMode bool, passwordStr string, hashedPassword password.PasswordHash, gauge *metric.Gauge,
 ) UserAuthHook {
 	return func(ctx context.Context, systemIdentity username.SQLUsername, clientConnection bool) error {
 		if systemIdentity.Undefined() {
@@ -222,7 +237,7 @@ func UserAuthPasswordHook(
 			return NewErrPasswordUserAuthFailed(systemIdentity)
 		}
 		ok, err := password.CompareHashAndCleartextPassword(ctx,
-			hashedPassword, passwordStr, GetExpensiveHashComputeSem(ctx))
+			hashedPassword, passwordStr, GetExpensiveHashComputeSemWithGauge(ctx, gauge))
 		if err != nil {
 			return err
 		}

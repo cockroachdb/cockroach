@@ -15,12 +15,14 @@ import (
 	"encoding/json"
 	"math"
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/kr/pretty"
+	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
@@ -179,18 +181,167 @@ func TestNewHistogramRotate(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		// Windowed histogram is initially empty.
 		h.Inspect(func(interface{}) {}) // triggers ticking
-		require.Zero(t, h.TotalSumWindowed())
+		_, sum := h.TotalWindowed()
+		require.Zero(t, sum)
 		// But cumulative histogram has history (if i > 0).
-		require.EqualValues(t, i, h.TotalCount())
-
+		count, _ := h.Total()
+		require.EqualValues(t, i, count)
 		// Add a measurement and verify it's there.
 		{
 			h.RecordValue(12345)
-			f := float64(12345)
-			require.Equal(t, h.TotalSumWindowed(), f)
+			f := float64(12345) + sum
+			_, wSum := h.TotalWindowed()
+			require.Equal(t, wSum, f)
 		}
 		// Tick. This rotates the histogram.
 		setNow(time.Duration(i+1) * 10 * time.Second)
 		// Go to beginning.
+	}
+}
+
+func TestHistogramWindowed(t *testing.T) {
+	defer TestingSetNow(nil)()
+	setNow(0)
+
+	duration := 10 * time.Second
+
+	h := NewHistogram(HistogramOptions{
+		Mode:     HistogramModePrometheus,
+		Metadata: Metadata{},
+		Duration: duration,
+		Buckets:  IOLatencyBuckets,
+	})
+
+	measurements := []int64{200000000, 0, 4000000, 5000000, 10000000, 20000000,
+		25000000, 30000000, 40000000, 90000000}
+
+	// Sort the measurements so we can calculate the expected quantile values
+	// for the first windowed histogram after the measurements have been recorded.
+	sortedMeasurements := make([]int64, len(measurements))
+	copy(sortedMeasurements, measurements)
+	sort.Slice(sortedMeasurements, func(i, j int) bool {
+		return sortedMeasurements[i] < sortedMeasurements[j]
+	})
+
+	// Calculate the expected quantile values as the lowest bucket values that are
+	// greater than each measurement.
+	count := 0
+	j := 0
+	var expQuantileValues []float64
+	for i := range IOLatencyBuckets {
+		if j < len(sortedMeasurements) && IOLatencyBuckets[i] > float64(
+			sortedMeasurements[j]) {
+			count += 1
+			j += 1
+			expQuantileValues = append(expQuantileValues, IOLatencyBuckets[i])
+		}
+	}
+
+	w := 2
+	var expHist []prometheusgo.Histogram
+	var expSum float64
+	var expCount uint64
+	for i := 0; i < w; i++ {
+		h.Inspect(func(interface{}) {}) // trigger ticking
+		if i == 0 {
+			// If there is no previous window, we should be unable to calculate mean
+			// or quantile without any observations.
+			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(99.99))
+			if !math.IsNaN(h.MeanWindowed()) {
+				t.Fatalf("mean should be undefined with no observations")
+			}
+			// Record all measurements on first iteration.
+			for _, m := range measurements {
+				h.RecordValue(m)
+				expCount += 1
+				expSum += float64(m)
+			}
+			// Because we have 10 observations, we expect quantiles to correspond
+			// to observation indices (e.g., the 8th expected quantile value is equal
+			// to the value interpolated at the 80th percentile).
+			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+			require.Equal(t, expQuantileValues[0], h.ValueAtQuantileWindowed(10))
+			require.Equal(t, expQuantileValues[4], h.ValueAtQuantileWindowed(50))
+			require.Equal(t, expQuantileValues[7], h.ValueAtQuantileWindowed(80))
+			require.Equal(t, expQuantileValues[9], h.ValueAtQuantileWindowed(99.99))
+		} else {
+			// The SampleSum and SampleCount values in the current window before any
+			// observations should be equal to those of the previous window, after all
+			// observations (the quantile values will also be the same).
+			expSum = *expHist[i-1].SampleSum
+			expCount = *expHist[i-1].SampleCount
+
+			// After recording a few higher-value observations in the second window,
+			// the quantile values will shift in the direction of the observations.
+			for _, m := range sortedMeasurements[len(sortedMeasurements)-3 : len(
+				sortedMeasurements)-1] {
+				h.RecordValue(m)
+				expCount += 1
+				expSum += float64(m)
+			}
+			require.Less(t, expQuantileValues[4], h.ValueAtQuantileWindowed(50))
+			require.Less(t, expQuantileValues[7], h.ValueAtQuantileWindowed(80))
+			require.Equal(t, expQuantileValues[9], h.ValueAtQuantileWindowed(99.99))
+		}
+
+		// In all cases, the windowed mean should be equal to the expected sum/count
+		require.Equal(t, expSum/float64(expCount), h.MeanWindowed())
+
+		expHist = append(expHist, prometheusgo.Histogram{
+			SampleCount: &expCount,
+			SampleSum:   &expSum,
+		})
+
+		// Increment Now time to trigger tick on the following iteration.
+		setNow(time.Duration(i+1) * (duration / 2))
+	}
+}
+
+func TestMergeWindowedHistogram(t *testing.T) {
+	measurements := []int64{4000000, 90000000}
+	opts := prometheus.HistogramOpts{
+		Buckets: IOLatencyBuckets,
+	}
+
+	prevWindow := prometheus.NewHistogram(opts)
+	curWindow := prometheus.NewHistogram(opts)
+
+	cur := &prometheusgo.Metric{}
+	prev := &prometheusgo.Metric{}
+
+	prevWindow.Observe(float64(measurements[0]))
+	require.NoError(t, prevWindow.Write(prev))
+	require.NoError(t, curWindow.Write(cur))
+
+	MergeWindowedHistogram(cur.Histogram, prev.Histogram)
+	// Merging a non-empty previous histogram into an empty current histogram
+	// should result in the current histogram containing the same sample sum,
+	// sample count, and per-bucket cumulative count values as the previous
+	// histogram.
+	require.Equal(t, uint64(1), *cur.Histogram.SampleCount)
+	require.Equal(t, float64(measurements[0]), *cur.Histogram.SampleSum)
+	for _, bucket := range cur.Histogram.Bucket {
+		if *bucket.UpperBound > float64(measurements[0]) {
+			require.Equal(t, uint64(1), *bucket.CumulativeCount)
+		}
+	}
+
+	curWindow.Observe(float64(measurements[1]))
+	require.NoError(t, curWindow.Write(cur))
+
+	MergeWindowedHistogram(cur.Histogram, prev.Histogram)
+	// Merging a non-empty previous histogram with a non-empty current histogram
+	// should result in the current histogram containing its original sample sum,
+	// sample count, and per-bucket cumulative count values,
+	// plus those of the previous histogram.
+	require.Equal(t, uint64(2), *cur.Histogram.SampleCount)
+	require.Equal(t, float64(measurements[0]+measurements[1]),
+		*cur.Histogram.SampleSum)
+	for _, bucket := range cur.Histogram.Bucket {
+		if *bucket.UpperBound > float64(measurements[1]) {
+			require.Equal(t, uint64(2), *bucket.CumulativeCount)
+		} else if *bucket.UpperBound > float64(measurements[0]) {
+			require.Equal(t, uint64(1), *bucket.CumulativeCount)
+		}
 	}
 }

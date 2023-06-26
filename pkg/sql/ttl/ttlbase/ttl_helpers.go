@@ -12,42 +12,163 @@ package ttlbase
 
 import (
 	"bytes"
+	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 )
 
 // DefaultAOSTDuration is the default duration to use in the AS OF SYSTEM TIME
 // clause used in the SELECT query.
 const DefaultAOSTDuration = -time.Second * 30
 
-// SelectTemplate is the format string used to build SELECT queries for the
-// TTL job.
-const SelectTemplate = `SELECT %[1]s FROM [%[2]d AS tbl_name]
-AS OF SYSTEM TIME INTERVAL '%[3]d seconds'
-WHERE %[4]s <= $1
-%[5]s%[6]s
-ORDER BY %[1]s
-LIMIT %[7]v`
+var startKeyCompareOps = map[catpb.IndexColumn_Direction]string{
+	catpb.IndexColumn_ASC:  ">",
+	catpb.IndexColumn_DESC: "<",
+}
+var endKeyCompareOps = map[catpb.IndexColumn_Direction]string{
+	catpb.IndexColumn_ASC:  "<",
+	catpb.IndexColumn_DESC: ">",
+}
 
-// DeleteTemplate is the format string used to build DELETE queries for the
-// TTL job.
-const DeleteTemplate = `DELETE FROM [%d AS tbl_name]
-WHERE %s <= $1
-AND (%s) IN (%s)`
-
-// MakeColumnNamesSQL converts columns into an escape string
-// for an order by clause, e.g.:
-//
-//	{"a", "b"} => a, b
-//	{"escape-me", "b"} => "escape-me", b
-func MakeColumnNamesSQL(columns []string) string {
-	var b bytes.Buffer
-	for i, pkColumn := range columns {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		lexbase.EncodeRestrictedSQLIdent(&b, pkColumn, lexbase.EncNoFlags)
+func BuildSelectQuery(
+	relationName string,
+	pkColNames []string,
+	pkColDirs []catpb.IndexColumn_Direction,
+	aostDuration time.Duration,
+	ttlExpr catpb.Expression,
+	numStartQueryBounds, numEndQueryBounds int,
+	limit int64,
+	startIncl bool,
+) string {
+	numPkCols := len(pkColNames)
+	if numPkCols == 0 {
+		panic("pkColNames is empty")
 	}
-	return b.String()
+	if numPkCols != len(pkColDirs) {
+		panic("different number of pkColNames and pkColDirs")
+	}
+	var buf bytes.Buffer
+	// SELECT
+	buf.WriteString("SELECT ")
+	for i := range pkColNames {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(pkColNames[i])
+	}
+	// FROM
+	buf.WriteString("\nFROM ")
+	buf.WriteString(relationName)
+	// AS OF SYSTEM TIME
+	buf.WriteString("\nAS OF SYSTEM TIME INTERVAL '")
+	buf.WriteString(strconv.Itoa(int(aostDuration.Milliseconds()) / 1000))
+	buf.WriteString(" seconds'")
+	// WHERE
+	buf.WriteString("\nWHERE ((")
+	buf.WriteString(string(ttlExpr))
+	buf.WriteString(") <= $1)")
+	writeBounds := func(
+		numQueryBounds int,
+		placeholderOffset int,
+		compareOps map[catpb.IndexColumn_Direction]string,
+		inclusive bool,
+	) {
+		if numQueryBounds > 0 {
+			buf.WriteString("\nAND (")
+			for i := 0; i < numQueryBounds; i++ {
+				isLast := i == numQueryBounds-1
+				buf.WriteString("\n  (")
+				for j := 0; j < i; j++ {
+					buf.WriteString(pkColNames[j])
+					buf.WriteString(" = $")
+					buf.WriteString(strconv.Itoa(j + placeholderOffset))
+					buf.WriteString(" AND ")
+				}
+				buf.WriteString(pkColNames[i])
+				buf.WriteString(" ")
+				buf.WriteString(compareOps[pkColDirs[i]])
+				if isLast && inclusive {
+					buf.WriteString("=")
+				}
+				buf.WriteString(" $")
+				buf.WriteString(strconv.Itoa(i + placeholderOffset))
+				buf.WriteString(")")
+				if !isLast {
+					buf.WriteString(" OR")
+				}
+			}
+			buf.WriteString("\n)")
+		}
+	}
+	const endPlaceholderOffset = 2
+	writeBounds(
+		numStartQueryBounds,
+		endPlaceholderOffset+numEndQueryBounds,
+		startKeyCompareOps,
+		startIncl,
+	)
+	writeBounds(
+		numEndQueryBounds,
+		endPlaceholderOffset,
+		endKeyCompareOps,
+		true, /*inclusive*/
+	)
+
+	// ORDER BY
+	buf.WriteString("\nORDER BY ")
+	for i := range pkColNames {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(pkColNames[i])
+		buf.WriteString(" ")
+		buf.WriteString(pkColDirs[i].String())
+	}
+	// LIMIT
+	buf.WriteString("\nLIMIT ")
+	buf.WriteString(strconv.Itoa(int(limit)))
+	return buf.String()
+}
+
+func BuildDeleteQuery(
+	relationName string, pkColNames []string, ttlExpr catpb.Expression, numRows int,
+) string {
+	if len(pkColNames) == 0 {
+		panic("pkColNames is empty")
+	}
+	var buf bytes.Buffer
+	// DELETE
+	buf.WriteString("DELETE FROM ")
+	buf.WriteString(relationName)
+	// WHERE
+	buf.WriteString("\nWHERE ((")
+	buf.WriteString(string(ttlExpr))
+	buf.WriteString(") <= $1)")
+	if numRows > 0 {
+		buf.WriteString("\nAND (")
+		for i := range pkColNames {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(pkColNames[i])
+		}
+		buf.WriteString(") IN (")
+		for i := 0; i < numRows; i++ {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString("(")
+			for j := range pkColNames {
+				if j > 0 {
+					buf.WriteString(", ")
+				}
+				buf.WriteString("$")
+				buf.WriteString(strconv.Itoa(i*len(pkColNames) + j + 2))
+			}
+			buf.WriteString(")")
+		}
+		buf.WriteString(")")
+	}
+	return buf.String()
 }

@@ -393,10 +393,11 @@ func (md *Metadata) CheckDependencies(
 				return false, maybeSwallowMetadataResolveErr(err)
 			}
 		}
-		// Ensure that all required privileges for the data source are still valid.
-		if err := md.checkDataSourcePrivileges(ctx, optCatalog, toCheck); err != nil {
-			return false, err
-		}
+	}
+
+	// Ensure that all required privileges for the data sources are still valid.
+	if err := md.checkDataSourcePrivileges(ctx, optCatalog); err != nil {
+		return false, err
 	}
 
 	// Check that no referenced user defined types have changed.
@@ -483,27 +484,24 @@ func maybeSwallowMetadataResolveErr(err error) error {
 }
 
 // checkDataSourcePrivileges checks that none of the privileges required by the
-// query for the given data source have been revoked.
-func (md *Metadata) checkDataSourcePrivileges(
-	ctx context.Context, optCatalog cat.Catalog, dataSource cat.DataSource,
-) error {
-	if dataSource == nil {
-		panic(errors.AssertionFailedf("expected data source for privilege check to be non-nil"))
-	}
-	privileges := md.privileges[dataSource.ID()]
-	for privs := privileges; privs != 0; {
-		// Strip off each privilege bit and make call to CheckPrivilege for it.
-		// Note that priv == 0 can occur when a dependency was added with
-		// privilege.Kind = 0 (e.g. for a table within a view, where the table
-		// privileges do not need to be checked). Ignore the "zero privilege".
-		priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
-		if priv != 0 {
-			if err := optCatalog.CheckPrivilege(ctx, dataSource, priv); err != nil {
-				return err
+// query for the referenced data sources have been revoked.
+func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog cat.Catalog) error {
+	for _, dataSource := range md.dataSourceDeps {
+		privileges := md.privileges[dataSource.ID()]
+		for privs := privileges; privs != 0; {
+			// Strip off each privilege bit and make call to CheckPrivilege for it.
+			// Note that priv == 0 can occur when a dependency was added with
+			// privilege.Kind = 0 (e.g. for a table within a view, where the table
+			// privileges do not need to be checked). Ignore the "zero privilege".
+			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
+			if priv != 0 {
+				if err := optCatalog.CheckPrivilege(ctx, dataSource, priv); err != nil {
+					return err
+				}
 			}
+			// Set the just-handled privilege bit to zero and look for next.
+			privs &= ^(1 << priv)
 		}
-		// Set the just-handled privilege bit to zero and look for next.
-		privs &= ^(1 << priv)
 	}
 	return nil
 }
@@ -655,6 +653,7 @@ func (md *Metadata) DuplicateTable(
 	// Create new computed column expressions by remapping the column IDs in
 	// each ScalarExpr.
 	var computedCols map[ColumnID]ScalarExpr
+	var referencedColsInComputedExpressions ColSet
 	if len(tabMeta.ComputedCols) > 0 {
 		computedCols = make(map[ColumnID]ScalarExpr, len(tabMeta.ComputedCols))
 		for colID, e := range tabMeta.ComputedCols {
@@ -664,6 +663,9 @@ func (md *Metadata) DuplicateTable(
 			}
 			computedCols[ColumnID(newColID)] = remapColumnIDs(e, colMap)
 		}
+		// Add columns present in newScalarExpr to referencedColsInComputedExpressions.
+		referencedColsInComputedExpressions =
+			tabMeta.ColsInComputedColsExpressions.CopyAndMaybeRemap(colMap)
 	}
 
 	// Create new partial index predicate expressions by remapping the column
@@ -696,15 +698,16 @@ func (md *Metadata) DuplicateTable(
 	}
 
 	newTabMeta := TableMeta{
-		MetaID:                   newTabID,
-		Table:                    tabMeta.Table,
-		Alias:                    tabMeta.Alias,
-		IgnoreForeignKeys:        tabMeta.IgnoreForeignKeys,
-		Constraints:              constraints,
-		ComputedCols:             computedCols,
-		partialIndexPredicates:   partialIndexPredicates,
-		indexPartitionLocalities: tabMeta.indexPartitionLocalities,
-		checkConstraintsStats:    checkConstraintsStats,
+		MetaID:                        newTabID,
+		Table:                         tabMeta.Table,
+		Alias:                         tabMeta.Alias,
+		IgnoreForeignKeys:             tabMeta.IgnoreForeignKeys,
+		Constraints:                   constraints,
+		ComputedCols:                  computedCols,
+		ColsInComputedColsExpressions: referencedColsInComputedExpressions,
+		partialIndexPredicates:        partialIndexPredicates,
+		indexPartitionLocalities:      tabMeta.indexPartitionLocalities,
+		checkConstraintsStats:         checkConstraintsStats,
 	}
 	md.tables = append(md.tables, newTabMeta)
 	regionConfig, ok := md.TableAnnotation(tabID, regionConfigAnnID).(*multiregion.RegionConfig)

@@ -156,7 +156,9 @@ func ResolveMutableExistingTableObject(
 	if err != nil || desc == nil {
 		return prefix, nil, err
 	}
-	tn.ObjectNamePrefix = prefix.NamePrefix()
+	if tn.ObjectNamePrefix.SchemaName == "" || tn.ObjectNamePrefix.CatalogName == "" {
+		tn.ObjectNamePrefix = prefix.NamePrefix()
+	}
 	return prefix, desc.(*tabledesc.Mutable), nil
 }
 

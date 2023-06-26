@@ -4585,6 +4585,128 @@ project
                 │         └── 1
                 └── true_agg:17 IS NOT NULL
 
+# Hoist an uncorrelated equality subquery.
+norm expect=HoistSelectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
+SELECT * FROM a WHERE k = (SELECT max(x) FROM xy)
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (hash)
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 max:12!null
+      ├── cardinality: [0 - 1]
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── key: ()
+      ├── fd: ()-->(1-5,12), (12)==(1), (1)==(12)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-5)
+      ├── scalar-group-by
+      │    ├── columns: max:12
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(12)
+      │    ├── scan xy
+      │    │    ├── columns: x:8!null
+      │    │    └── key: (8)
+      │    └── aggregations
+      │         └── max [as=max:12, outer=(8)]
+      │              └── x:8
+      └── filters
+           └── k:1 = max:12 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
+
+# Hoist an uncorrelated equality subquery that could return multiple rows.
+norm expect=HoistSelectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
+SELECT * FROM a WHERE k = (SELECT x FROM xy)
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── inner-join (hash)
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8!null
+      ├── cardinality: [0 - 1]
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── key: ()
+      ├── fd: ()-->(1-5,8), (8)==(1), (1)==(8)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-5)
+      ├── max1-row
+      │    ├── columns: x:8!null
+      │    ├── error: "more than one row returned by a subquery used as an expression"
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(8)
+      │    └── scan xy
+      │         ├── columns: x:8!null
+      │         └── key: (8)
+      └── filters
+           └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# Do not hoist an uncorrelated equality subquery if the corresponding session
+# setting is disabled.
+norm expect-not=HoistSelectSubquery
+SELECT * FROM a WHERE k = (SELECT max(x) FROM xy)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── eq [outer=(1), subquery, constraints=(/1: (/NULL - ])]
+           ├── k:1
+           └── subquery
+                └── scalar-group-by
+                     ├── columns: max:12
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(12)
+                     ├── scan xy
+                     │    ├── columns: x:8!null
+                     │    └── key: (8)
+                     └── aggregations
+                          └── max [as=max:12, outer=(8)]
+                               └── x:8
+
+# Do not hoist an uncorrelated inequality subquery. We have not yet proven that
+# it will lead to a better plan.
+norm expect-not=HoistSelectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
+SELECT * FROM a WHERE k < (SELECT max(x) FROM xy)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── lt [outer=(1), subquery, constraints=(/1: (/NULL - ])]
+           ├── k:1
+           └── subquery
+                └── scalar-group-by
+                     ├── columns: max:12
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(12)
+                     ├── scan xy
+                     │    ├── columns: x:8!null
+                     │    └── key: (8)
+                     └── aggregations
+                          └── max [as=max:12, outer=(8)]
+                               └── x:8
+
 # --------------------------------------------------
 # HoistProjectSubquery
 # --------------------------------------------------
@@ -4896,19 +5018,114 @@ values
                 │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
                 └── 1
 
-# Don't hoist uncorrelated subquery.
-norm
-SELECT i < ANY(SELECT y FROM xy) AS r FROM a
+# Hoist an uncorrelated equality subquery.
+norm expect=HoistProjectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
+SELECT k = (SELECT max(x) FROM xy) FROM a
 ----
 project
- ├── columns: r:12
- ├── scan a
- │    └── columns: i:2
+ ├── columns: "?column?":13
+ ├── inner-join (cross)
+ │    ├── columns: k:1!null max:12
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(12)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    ├── scalar-group-by
+ │    │    ├── columns: max:12
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(12)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:8!null
+ │    │    │    └── key: (8)
+ │    │    └── aggregations
+ │    │         └── max [as=max:12, outer=(8)]
+ │    │              └── x:8
+ │    └── filters (true)
  └── projections
-      └── any: lt [as=r:12, outer=(2), correlated-subquery]
-           ├── scan xy
-           │    └── columns: y:9
-           └── i:2
+      └── k:1 = max:12 [as="?column?":13, outer=(1,12)]
+
+# Hoist an uncorrelated equality subquery that could return multiple rows.
+norm expect=HoistProjectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
+SELECT k = (SELECT x FROM xy) FROM a
+----
+project
+ ├── columns: "?column?":12
+ ├── left-join (cross)
+ │    ├── columns: k:1!null x:8
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(8)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null
+ │    │    └── key: (1)
+ │    ├── max1-row
+ │    │    ├── columns: x:8!null
+ │    │    ├── error: "more than one row returned by a subquery used as an expression"
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8)
+ │    │    └── scan xy
+ │    │         ├── columns: x:8!null
+ │    │         └── key: (8)
+ │    └── filters (true)
+ └── projections
+      └── k:1 = x:8 [as="?column?":12, outer=(1,8)]
+
+# Do not hoist an uncorrelated equality subquery if the corresponding session
+# setting is disabled.
+norm expect-not=HoistProjectSubquery
+SELECT k = (SELECT max(x) FROM xy) FROM a
+----
+project
+ ├── columns: "?column?":13
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── eq [as="?column?":13, outer=(1), subquery]
+           ├── k:1
+           └── subquery
+                └── scalar-group-by
+                     ├── columns: max:12
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(12)
+                     ├── scan xy
+                     │    ├── columns: x:8!null
+                     │    └── key: (8)
+                     └── aggregations
+                          └── max [as=max:12, outer=(8)]
+                               └── x:8
+
+# Do not hoist an uncorrelated inequality subquery. We have not yet proven that
+# it will lead to a better plan.
+norm expect-not=HoistProjectSubquery set=optimizer_hoist_uncorrelated_equality_subqueries=on
+SELECT k < (SELECT max(x) FROM xy) FROM a
+----
+project
+ ├── columns: "?column?":13
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── lt [as="?column?":13, outer=(1), subquery]
+           ├── k:1
+           └── subquery
+                └── scalar-group-by
+                     ├── columns: max:12
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(12)
+                     ├── scan xy
+                     │    ├── columns: x:8!null
+                     │    └── key: (8)
+                     └── aggregations
+                          └── max [as=max:12, outer=(8)]
+                               └── x:8
+
 
 # --------------------------------------------------
 # HoistJoinSubquery

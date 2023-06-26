@@ -19,15 +19,13 @@
 
 cockroachdb/docs:
   triage_column_id: 3971225
-cockroachdb/sql-sessions:
+cockroachdb/sql-foundations:
   aliases:
     cockroachdb/sql-syntax-prs: other
     cockroachdb/sqlproxy-prs: other
     cockroachdb/sql-api-prs: other
-  triage_column_id: 7259065
-  label: T-sql-sessions
-cockroachdb/sql-schema:
-  triage_column_id: 8946818
+  triage_column_id: 19467489
+  label: T-sql-foundations
 cockroachdb/sql-queries:
   aliases:
     cockroachdb/sql-optimizer: other
@@ -40,6 +38,7 @@ cockroachdb/kv:
     cockroachdb/kv-triage: roachtest
     cockroachdb/kv-prs: other
   triage_column_id: 14242655
+  label: T-kv
 cockroachdb/replication:
   aliases:
     cockroachdb/repl-prs: other

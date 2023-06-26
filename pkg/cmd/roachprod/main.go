@@ -54,7 +54,8 @@ The above commands will create a "local" 3 node cluster, start a cockroach
 cluster on these nodes, run a sql command on the 2nd node, stop, wipe and
 destroy the cluster.
 `,
-	Version: "details:\n" + build.GetInfo().Long(),
+	Version:          "details:\n" + build.GetInfo().Long(),
+	PersistentPreRun: validateAndConfigure,
 }
 
 // Provide `cobra.Command` functions with a standard return code handler.
@@ -272,6 +273,7 @@ hosts file.
 					c.PrintDetails(roachprodLibraryLogger)
 				} else {
 					fmt.Fprintf(tw, "%s\t%s\t%d", c.Name, c.Clouds(), len(c.VMs))
+
 					if !c.IsLocal() {
 						fmt.Fprintf(tw, "\t(%s)", c.LifetimeRemaining().Round(time.Second))
 					} else {
@@ -698,7 +700,8 @@ Currently available application options are:
 		if len(args) == 2 {
 			versionArg = args[1]
 		}
-		urls, err := roachprod.StageURL(roachprodLibraryLogger, args[0], versionArg, stageOS)
+		urls, err := roachprod.StageURL(roachprodLibraryLogger, args[0], versionArg, stageOS, stageArch)
+
 		if err != nil {
 			return err
 		}
@@ -737,7 +740,7 @@ Some examples of usage:
 		if len(args) == 3 {
 			versionArg = args[2]
 		}
-		return roachprod.Stage(context.Background(), roachprodLibraryLogger, args[0], stageOS, stageDir, args[1], versionArg)
+		return roachprod.Stage(context.Background(), roachprodLibraryLogger, args[0], stageOS, stageArch, stageDir, args[1], versionArg)
 	}),
 }
 
@@ -902,10 +905,14 @@ var grafanaStartCmd = &cobra.Command{
 	Use:   `grafana-start <cluster>`,
 	Short: `spins up a prometheus and grafana instances on the last node in the cluster`,
 	Long: `spins up a prometheus and grafana instances on the highest numbered node in the cluster
-and will scrape from all nodes in the cluster`,
+and will scrape from all nodes in the cluster; NOTE: for arm64 clusters, use --arch arm64`,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.StartGrafana(context.Background(), roachprodLibraryLogger, args[0],
+		arch := vm.ArchAMD64
+		if grafanaArch == "arm64" {
+			arch = vm.ArchARM64
+		}
+		return roachprod.StartGrafana(context.Background(), roachprodLibraryLogger, args[0], arch,
 			grafanaConfig, nil)
 	}),
 }
@@ -933,6 +940,35 @@ var grafanaURLCmd = &cobra.Command{
 		fmt.Println(url)
 		return nil
 	}),
+}
+
+// Before executing any command, validate and canonicalize args.
+func validateAndConfigure(cmd *cobra.Command, args []string) {
+	// Skip validation for commands that are self-sufficient.
+	switch cmd.Name() {
+	case "help", "version", "list":
+		return
+	}
+
+	printErrAndExit := func(err error) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// Validate architecture flag, if set.
+	if archOpt := cmd.Flags().Lookup("arch"); archOpt != nil && archOpt.Changed {
+		arch := vm.CPUArch(strings.ToLower(archOpt.Value.String()))
+
+		if arch != vm.ArchAMD64 && arch != vm.ArchARM64 && arch != vm.ArchFIPS {
+			printErrAndExit(fmt.Errorf("unsupported architecture %q", arch))
+		}
+		if string(arch) != archOpt.Value.String() {
+			// Set the canonical value.
+			_ = cmd.Flags().Set("arch", string(arch))
+		}
+	}
 }
 
 func main() {

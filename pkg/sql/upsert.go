@@ -104,7 +104,8 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Are we done yet with the current batch?
-		if n.run.tw.currentBatchSize >= n.run.tw.maxBatchSize {
+		if n.run.tw.currentBatchSize >= n.run.tw.maxBatchSize ||
+			n.run.tw.b.ApproximateMutationBytes() >= n.run.tw.maxBatchByteSize {
 			break
 		}
 	}

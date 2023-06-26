@@ -1862,10 +1862,11 @@ func doRestorePlan(
 		// compatability.
 		//
 		// TODO(msbutler): Delete in 23.1
-		RestoreSystemUsers: restoreStmt.DescriptorCoverage == tree.SystemUsers,
-		PreRewriteTenantId: oldTenantID,
-		SchemaOnly:         restoreStmt.Options.SchemaOnly,
-		VerifyData:         restoreStmt.Options.VerifyData,
+		RestoreSystemUsers:  restoreStmt.DescriptorCoverage == tree.SystemUsers,
+		PreRewriteTenantId:  oldTenantID,
+		SchemaOnly:          restoreStmt.Options.SchemaOnly,
+		VerifyData:          restoreStmt.Options.VerifyData,
+		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
 	}
 
 	jr := jobs.Record{

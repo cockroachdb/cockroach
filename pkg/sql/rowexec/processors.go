@@ -249,6 +249,15 @@ func NewProcessor(
 		}
 		return NewCloudStorageTestProcessor(ctx, flowCtx, processorID, *core.CloudStorageTest, post, outputs[0])
 	}
+	if core.IngestStopped != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewIngestStoppedProcessor == nil {
+			return nil, errors.New("IsIngestingImport processor unimplemented")
+		}
+		return NewIngestStoppedProcessor(ctx, flowCtx, processorID, *core.IngestStopped, post, outputs[0])
+	}
 	if core.BackupData != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
@@ -382,6 +391,9 @@ var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadI
 
 // NewCloudStorageTestProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewCloudStorageTestProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CloudStorageTestSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewIngestStoppedProcessor is implemented in pkg/job/ingeststopped injected here via runtime initialization.
+var NewIngestStoppedProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestStoppedSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewBackupDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)

@@ -70,12 +70,12 @@ SELECT a.username AS grantee,
        a.privilege
        IN (
           SELECT unnest(grant_options)
-            FROM system.privileges
+            FROM crdb_internal.kv_system_privileges
            WHERE username = a.username
         ) AS is_grantable
   FROM (
         SELECT username, unnest(privileges) AS privilege
-          FROM system.privileges
+          FROM crdb_internal.kv_system_privileges
        ) AS a
 `
 	const externalConnectionPrivilegeQuery = `
@@ -133,7 +133,7 @@ SELECT database_name,
 
 	var source bytes.Buffer
 	var cond bytes.Buffer
-	var orderBy string
+	var nameCols string
 
 	if n.Targets != nil && len(n.Targets.Databases) > 0 {
 		// Get grants of database from information_schema.schema_privileges
@@ -155,7 +155,7 @@ SELECT database_name,
 		}
 
 		fmt.Fprint(&source, dbPrivQuery)
-		orderBy = "1,2,3"
+		nameCols = "database_name,"
 		if len(params) == 0 {
 			// There are no rows, but we can't simply return emptyNode{} because
 			// the result columns must still be defined.
@@ -194,7 +194,7 @@ SELECT database_name,
 		}
 
 		fmt.Fprint(&source, schemaPrivQuery)
-		orderBy = "1,2,3,4"
+		nameCols = "database_name, schema_name,"
 
 		if len(params) != 0 {
 			fmt.Fprintf(
@@ -232,7 +232,7 @@ SELECT database_name,
 		}
 
 		fmt.Fprint(&source, typePrivQuery)
-		orderBy = "1,2,3,4,5"
+		nameCols = "database_name, schema_name, type_name,"
 		if len(params) == 0 {
 			dbNameClause := "true"
 			// If the current database is set, restrict the command to it.
@@ -249,7 +249,7 @@ SELECT database_name,
 		}
 	} else if n.Targets != nil && len(n.Targets.Functions) > 0 {
 		fmt.Fprint(&source, udfQuery)
-		orderBy = "1,2,3,4,5,6"
+		nameCols = "database_name, schema_name, function_id, function_signature,"
 		fnResolved := util.MakeFastIntSet()
 		for _, fn := range n.Targets.Functions {
 			un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
@@ -273,85 +273,84 @@ SELECT database_name,
 		}
 		fmt.Fprintf(&cond, `WHERE function_id IN (%s)`, strings.Join(params, ","))
 	} else if n.Targets != nil && n.Targets.System {
-		orderBy = "1,2,3"
 		fmt.Fprint(&source, systemPrivilegeQuery)
 		cond.WriteString(`WHERE true`)
 	} else if n.Targets != nil && len(n.Targets.ExternalConnections) > 0 {
-		orderBy = "1,2,3, 4"
+		nameCols = "connection_name,"
+
 		fmt.Fprint(&source, externalConnectionPrivilegeQuery)
 		cond.WriteString(`WHERE true`)
-	} else {
-		orderBy = "1,2,3,4,5"
+	} else if n.Targets != nil {
+		nameCols = "database_name, schema_name, table_name,"
+		fmt.Fprint(&source, tablePrivQuery)
+		// Get grants of table from information_schema.table_privileges
+		// if the type of target is table.
+		var allTables tree.TableNames
 
-		if n.Targets != nil {
-			fmt.Fprint(&source, tablePrivQuery)
-			// Get grants of table from information_schema.table_privileges
-			// if the type of target is table.
-			var allTables tree.TableNames
-
-			for _, tableTarget := range n.Targets.Tables.TablePatterns {
-				tableGlob, err := tableTarget.NormalizeTablePattern()
-				if err != nil {
-					return nil, err
-				}
-				// We avoid the cache so that we can observe the grants taking
-				// a lease, like other SHOW commands.
-				tables, _, err := cat.ExpandDataSourceGlob(
-					d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, tableGlob,
-				)
-				if err != nil {
-					return nil, err
-				}
-				allTables = append(allTables, tables...)
+		for _, tableTarget := range n.Targets.Tables.TablePatterns {
+			tableGlob, err := tableTarget.NormalizeTablePattern()
+			if err != nil {
+				return nil, err
 			}
-
-			for i := range allTables {
-				params = append(params, fmt.Sprintf("(%s,%s,%s)",
-					lexbase.EscapeSQLString(allTables[i].Catalog()),
-					lexbase.EscapeSQLString(allTables[i].Schema()),
-					lexbase.EscapeSQLString(allTables[i].Table())))
-			}
-
-			if len(params) == 0 {
-				// The glob pattern has expanded to zero matching tables.
-				// There are no rows, but we can't simply return emptyNode{} because
-				// the result columns must still be defined.
-				cond.WriteString(`WHERE false`)
-			} else {
-				fmt.Fprintf(&cond, `WHERE (database_name, schema_name, table_name) IN (%s)`, strings.Join(params, ","))
-			}
-		} else {
-			// No target: only look at types, tables and schemas in the current database.
-			source.WriteString(
-				`SELECT database_name, schema_name, table_name AS relation_name, grantee, privilege_type, is_grantable FROM (`,
+			// We avoid the cache so that we can observe the grants taking
+			// a lease, like other SHOW commands.
+			tables, _, err := cat.ExpandDataSourceGlob(
+				d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, tableGlob,
 			)
-			source.WriteString(tablePrivQuery)
-			source.WriteByte(')')
-			source.WriteString(` UNION ALL ` +
-				`SELECT database_name, schema_name, NULL::STRING AS relation_name, grantee, privilege_type, is_grantable FROM (`)
-			source.WriteString(schemaPrivQuery)
-			source.WriteByte(')')
-			source.WriteString(` UNION ALL ` +
-				`SELECT database_name, NULL::STRING AS schema_name, NULL::STRING AS relation_name, grantee, privilege_type, is_grantable FROM (`)
-			source.WriteString(dbPrivQuery)
-			source.WriteByte(')')
-			source.WriteString(` UNION ALL ` +
-				`SELECT database_name, schema_name, type_name AS relation_name, grantee, privilege_type, is_grantable FROM (`)
-			source.WriteString(typePrivQuery)
-			source.WriteByte(')')
-			source.WriteString(` UNION ALL ` +
-				`SELECT database_name, schema_name, function_signature AS relation_name, grantee, privilege_type, is_grantable FROM (`)
-			source.WriteString(udfQuery)
-			source.WriteByte(')')
-			// If the current database is set, restrict the command to it.
-			if currDB := d.evalCtx.SessionData().Database; currDB != "" {
-				fmt.Fprintf(&cond, ` WHERE database_name = %s`, lexbase.EscapeSQLString(currDB))
-			} else {
-				cond.WriteString(`WHERE true`)
+			if err != nil {
+				return nil, err
 			}
+			allTables = append(allTables, tables...)
+		}
+
+		for i := range allTables {
+			params = append(params, fmt.Sprintf("(%s,%s,%s)",
+				lexbase.EscapeSQLString(allTables[i].Catalog()),
+				lexbase.EscapeSQLString(allTables[i].Schema()),
+				lexbase.EscapeSQLString(allTables[i].Table())))
+		}
+
+		if len(params) == 0 {
+			// The glob pattern has expanded to zero matching tables.
+			// There are no rows, but we can't simply return emptyNode{} because
+			// the result columns must still be defined.
+			cond.WriteString(`WHERE false`)
+		} else {
+			fmt.Fprintf(&cond, `WHERE (database_name, schema_name, table_name) IN (%s)`, strings.Join(params, ","))
+		}
+	} else {
+		nameCols = "database_name, schema_name, relation_name,"
+		// No target: only look at types, tables and schemas in the current database.
+		source.WriteString(
+			`SELECT database_name, schema_name, table_name AS relation_name, grantee, privilege_type, is_grantable FROM (`,
+		)
+		source.WriteString(tablePrivQuery)
+		source.WriteByte(')')
+		source.WriteString(` UNION ALL ` +
+			`SELECT database_name, schema_name, NULL::STRING AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+		source.WriteString(schemaPrivQuery)
+		source.WriteByte(')')
+		source.WriteString(` UNION ALL ` +
+			`SELECT database_name, NULL::STRING AS schema_name, NULL::STRING AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+		source.WriteString(dbPrivQuery)
+		source.WriteByte(')')
+		source.WriteString(` UNION ALL ` +
+			`SELECT database_name, schema_name, type_name AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+		source.WriteString(typePrivQuery)
+		source.WriteByte(')')
+		source.WriteString(` UNION ALL ` +
+			`SELECT database_name, schema_name, function_signature AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+		source.WriteString(udfQuery)
+		source.WriteByte(')')
+		// If the current database is set, restrict the command to it.
+		if currDB := d.evalCtx.SessionData().Database; currDB != "" {
+			fmt.Fprintf(&cond, ` WHERE database_name = %s`, lexbase.EscapeSQLString(currDB))
+		} else {
+			cond.WriteString(`WHERE true`)
 		}
 	}
 
+	implicitGranteeIn := "true"
 	if n.Grantees != nil {
 		params = params[:0]
 		grantees, err := decodeusername.FromRoleSpecList(
@@ -363,11 +362,29 @@ SELECT database_name,
 		for _, grantee := range grantees {
 			params = append(params, lexbase.EscapeSQLString(grantee.Normalized()))
 		}
-		fmt.Fprintf(&cond, ` AND grantee IN (%s)`, strings.Join(params, ","))
+		implicitGranteeIn = fmt.Sprintf("implicit_grantee IN (%s)", strings.Join(params, ","))
 	}
 	query := fmt.Sprintf(`
-		SELECT * FROM (%s) %s ORDER BY %s
-	`, source.String(), cond.String(), orderBy)
+WITH
+	r AS (SELECT * FROM (%s) %s),
+	j
+		AS (
+			SELECT
+				r.*, i.inheriting_member AS implicit_grantee
+			FROM
+				r INNER JOIN "".crdb_internal.kv_inherited_role_members AS i ON r.grantee = i.role
+			UNION ALL
+				SELECT *, r.grantee AS implicit_grantee FROM r
+		)
+SELECT DISTINCT
+	%s grantee, privilege_type, is_grantable
+FROM
+	j
+WHERE
+	%s
+ORDER BY
+	%s grantee, privilege_type, is_grantable
+	`, source.String(), cond.String(), nameCols, implicitGranteeIn, nameCols)
 	// Terminate on invalid users.
 	for _, p := range n.Grantees {
 

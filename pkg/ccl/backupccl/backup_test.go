@@ -10104,6 +10104,71 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreJobEventType, expectedRestoreFailEvent)
 }
 
+// TestBackupRestoreTelemetryForPublicSchema tests that backup and restore
+// events are logged if the target is the public schema for the system database.
+func TestBackupRestoreTelemetryForPublicSchema(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.ScopeWithoutShowLogs(t).Close(t)
+
+	defer jobs.TestingSetProgressThresholds()()
+
+	baseDir := "testdata"
+	args := base.TestServerArgs{ExternalIODir: baseDir, Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	params := base.TestClusterArgs{ServerArgs: args}
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
+		InitManualReplication, params)
+	defer cleanupFn()
+
+	// Execute a BACKUP for the system.public schema and verify the telemetry
+	// event.
+	beforeBackup := timeutil.Now()
+	loc1 := "userfile:///eventlogging?COCKROACH_LOCALITY=default"
+	sqlDB.Exec(t, `BACKUP system.public.* INTO $1 AS OF SYSTEM TIME '-1ms' WITH revision_history`, loc1)
+
+	expectedBackupEvent := eventpb.RecoveryEvent{
+		CommonEventDetails: logpb.CommonEventDetails{
+			EventType: "recovery_event",
+		},
+		RecoveryType:            backupEventType,
+		TargetScope:             schemaScope.String(),
+		TargetCount:             1,
+		DestinationSubdirType:   standardSubdirType,
+		DestinationStorageTypes: []string{"userfile"},
+		DestinationAuthTypes:    []string{"specified"},
+		AsOfInterval:            -1 * time.Millisecond.Nanoseconds(),
+		WithRevisionHistory:     true,
+	}
+
+	requireRecoveryEvent(t, beforeBackup.UnixNano(), backupEventType, expectedBackupEvent)
+
+	sqlDB.Exec(t, "CREATE DATABASE restore_system")
+
+	// Execute a RESTORE of the system.public schema and verify the telemetry
+	// event.
+	beforeRestore := timeutil.Now()
+	restoreQuery := `RESTORE system.public.* FROM LATEST IN $1 WITH into_db=$2`
+
+	// This particular restore should error out due to the fact that we don't
+	// restore some system tables such as the leases table. The expected key
+	// rewriter error is just the first error that we encounter.
+	sqlDB.ExpectErr(t, "no rewrite for span", restoreQuery, loc1, "restore_system")
+
+	expectedRestoreEvent := eventpb.RecoveryEvent{
+		CommonEventDetails: logpb.CommonEventDetails{
+			EventType: "recovery_event",
+		},
+		RecoveryType:            restoreEventType,
+		TargetScope:             schemaScope.String(),
+		TargetCount:             1,
+		DestinationSubdirType:   latestSubdirType,
+		DestinationStorageTypes: []string{"userfile"},
+		DestinationAuthTypes:    []string{"specified"},
+		Options:                 []string{telemetryOptionIntoDB},
+	}
+
+	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreEventType, expectedRestoreEvent)
+}
+
 // This is a regression test ensuring that the spans represented by views are
 // not included in backups when their descriptors are included in descriptor
 // revisions.

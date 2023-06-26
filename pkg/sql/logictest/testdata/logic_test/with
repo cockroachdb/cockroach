@@ -1174,3 +1174,29 @@ WITH RECURSIVE
 1
 2
 3
+
+# Regression test for #100561.
+statement ok
+CREATE TABLE t100561a (a INT);
+CREATE TABLE t100561b (k INT PRIMARY KEY, b INT);
+INSERT INTO t100561b VALUES (1, NULL)
+
+# Control: a query with a subquery.
+query II
+SELECT t3.c2, t3.c1 FROM (
+  SELECT t2.b AS c1, t2.k AS c2 FROM t100561a t1 FULL OUTER JOIN t100561b t2 ON true
+) AS t3, t100561b t2
+WHERE t3.c2 = t2.k
+----
+1  NULL
+
+# A query like the one above, rewritten with a CTE, should produce the same
+# result.
+query II
+WITH t3(c1, c2) AS (
+  SELECT t2.b AS c1, t2.k AS c2 FROM t100561a t1 FULL OUTER JOIN t100561b t2 ON true
+)
+SELECT t3.c2, t3.c1 FROM t3, t100561b t2
+WHERE t3.c2 = t2.k
+----
+1  NULL

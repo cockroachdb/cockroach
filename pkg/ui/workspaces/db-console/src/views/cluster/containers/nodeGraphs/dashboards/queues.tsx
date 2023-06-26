@@ -43,6 +43,11 @@ export default function (props: GraphDashboardProps) {
           nonNegativeRate
         />
         <Metric
+          name="cr.store.queue.merge.process.failure"
+          title="Merge"
+          nonNegativeRate
+        />
+        <Metric
           name="cr.store.queue.consistency.process.failure"
           title="Consistency"
           nonNegativeRate
@@ -85,6 +90,11 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.store.queue.split.processingnanos"
           title="Split"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.store.queue.merge.processingnanos"
+          title="Merge"
           nonNegativeRate
         />
         <Metric

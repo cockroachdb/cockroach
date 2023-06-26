@@ -117,7 +117,9 @@ func maybeUpgradeSeqReferencesInTableOrView(
 	) error {
 		// Set up: retrieve table desc for `idToUpgrade` and a schema resolver
 		tableDesc, sc, cleanup, err := upgradeSetUpForTableOrView(ctx, d, txn, descriptors, idToUpgrade)
-		if err != nil {
+		// If the table descriptor that we looked up was dropped, then
+		// nothing needs to be done for this table.
+		if err != nil || tableDesc.Dropped() {
 			return err
 		}
 		defer cleanup()
@@ -149,9 +151,20 @@ func upgradeSetUpForTableOrView(
 	idToUpgrade descpb.ID,
 ) (*tabledesc.Mutable, resolver.SchemaResolver, func(), error) {
 	// Get the table descriptor that we are going to upgrade.
-	tableDesc, err := descriptors.GetMutableTableByID(ctx, txn, idToUpgrade, tree.ObjectLookupFlagsWithRequired())
+	tableDesc, err := descriptors.GetMutableTableByID(ctx, txn, idToUpgrade, tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{
+			Required:       true,
+			IncludeDropped: true,
+		},
+	})
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	// If the table descriptor is dropped, then nothing to do. Since, this
+	// transaction is separate from the on that selected this table, the descriptor
+	// could have dropped between now and then.
+	if tableDesc.Dropped() {
+		return tableDesc, nil, nil, nil
 	}
 
 	// Get the database of the table to pass to the planner constructor.

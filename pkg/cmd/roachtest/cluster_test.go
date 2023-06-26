@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -127,33 +128,38 @@ func TestClusterMachineType(t *testing.T) {
 		expectedCPUCount int
 	}{
 		// AWS machine types
-		{"m5.large", 2},
-		{"m5.xlarge", 4},
-		{"m5.2xlarge", 8},
-		{"m5.4xlarge", 16},
-		{"m5.12xlarge", 48},
-		{"m5.24xlarge", 96},
-		{"m5d.large", 2},
-		{"m5d.xlarge", 4},
-		{"m5d.2xlarge", 8},
-		{"m5d.4xlarge", 16},
-		{"m5d.12xlarge", 48},
-		{"m5d.24xlarge", 96},
-		{"c5d.large", 2},
-		{"c5d.xlarge", 4},
-		{"c5d.2xlarge", 8},
-		{"c5d.4xlarge", 16},
-		{"c5d.9xlarge", 36},
-		{"c5d.18xlarge", 72},
+		{"m6i.large", 2},
+		{"m6i.xlarge", 4},
+		{"m6i.2xlarge", 8},
+		{"m6i.4xlarge", 16},
+		{"m6id.8xlarge", 32},
+		{"m6id.12xlarge", 48},
+		{"m6id.16xlarge", 64},
+		{"m6i.24xlarge", 96},
+		{"m6id.large", 2},
+		{"m6id.xlarge", 4},
+		{"m6id.2xlarge", 8},
+		{"m6id.4xlarge", 16},
+		{"m6id.8xlarge", 32},
+		{"m6id.12xlarge", 48},
+		{"m6id.16xlarge", 64},
+		{"m6id.24xlarge", 96},
+		{"c6id.large", 2},
+		{"c6id.xlarge", 4},
+		{"c6id.2xlarge", 8},
+		{"c6id.4xlarge", 16},
+		{"c6id.8xlarge", 32},
+		{"c6id.12xlarge", 48},
+		{"c6id.16xlarge", 64},
+		{"c6id.24xlarge", 96},
 		// GCE machine types
-		{"n1-standard-1", 1},
-		{"n1-standard-2", 2},
-		{"n1-standard-4", 4},
-		{"n1-standard-8", 8},
-		{"n1-standard-16", 16},
-		{"n1-standard-32", 32},
-		{"n1-standard-64", 64},
-		{"n1-standard-96", 96},
+		{"n2-standard-2", 2},
+		{"n2-standard-4", 4},
+		{"n2-standard-8", 8},
+		{"n2-standard-16", 16},
+		{"n2-standard-32", 32},
+		{"n2-standard-64", 64},
+		{"n2-standard-96", 96},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.machineType, func(t *testing.T) {
@@ -199,14 +205,14 @@ func TestVerifyLibraries(t *testing.T) {
 			name:             "no match",
 			verifyLibs:       []string{"required_c"},
 			libraryFilePaths: []string{"/some/path/lib.so"},
-			expectedError: errors.Wrap(errors.Errorf("missing required library %s",
+			expectedError: errors.Wrap(errors.Errorf("missing required library %s (arch=\"amd64\")",
 				"required_c"), "cluster.VerifyLibraries"),
 		},
 		{
 			name:             "no match on nil libs",
 			verifyLibs:       []string{"required_b"},
 			libraryFilePaths: nil,
-			expectedError: errors.Wrap(errors.Errorf("missing required library %s",
+			expectedError: errors.Wrap(errors.Errorf("missing required library %s (arch=\"amd64\")",
 				"required_b"), "cluster.VerifyLibraries"),
 		},
 		{
@@ -216,16 +222,28 @@ func TestVerifyLibraries(t *testing.T) {
 			expectedError:    nil,
 		},
 		{
+			name:             "single match, multiple extensions",
+			verifyLibs:       []string{"geos"},
+			libraryFilePaths: []string{"/lib/geos.linux-amd.so"},
+			expectedError:    nil,
+		},
+		{
 			name:             "multiple matches",
 			verifyLibs:       []string{"lib", "ltwo", "geos"},
 			libraryFilePaths: []string{"ltwo.so", "a/geos.so", "/some/path/to/lib.so"},
 			expectedError:    nil,
 		},
+		{
+			name:             "multiple matches, multiple extensions",
+			verifyLibs:       []string{"lib", "ltwo", "geos"},
+			libraryFilePaths: []string{"ltwo.linux-arm64.so", "a/geos.linux-amd64.fips.so", "/some/path/to/lib.darwin-arm64.so"},
+			expectedError:    nil,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			libraryFilePaths = tc.libraryFilePaths
-			actualError := VerifyLibraries(tc.verifyLibs)
+			libraryFilePaths = map[vm.CPUArch][]string{vm.ArchAMD64: tc.libraryFilePaths}
+			actualError := VerifyLibraries(tc.verifyLibs, vm.ArchAMD64)
 			if tc.expectedError == nil {
 				require.NoError(t, actualError)
 			} else {

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/stretchr/testify/require"
@@ -97,7 +98,7 @@ func decodeIndex(
 	}
 	values := make([]EncDatum, index.NumKeyColumns())
 	colDirs := index.IndexDesc().KeyColumnDirections
-	if _, _, err := DecodeIndexKey(codec, types, values, colDirs, key); err != nil {
+	if _, err := DecodeIndexKey(codec, values, colDirs, key); err != nil {
 		return nil, err
 	}
 
@@ -669,7 +670,7 @@ func ExtractIndexKey(
 	}
 	values := make([]EncDatum, index.NumKeyColumns())
 	dirs := index.IndexDesc().KeyColumnDirections
-	key, _, err = DecodeKeyVals(indexTypes, values, dirs, key)
+	key, _, err = DecodeKeyVals(values, dirs, key)
 	if err != nil {
 		return nil, err
 	}
@@ -692,7 +693,7 @@ func ExtractIndexKey(
 			return nil, err
 		}
 	}
-	_, _, err = DecodeKeyVals(extraTypes, extraValues, dirs, extraKey)
+	_, _, err = DecodeKeyVals(extraValues, dirs, extraKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1122,5 +1123,47 @@ func TestEncodeTrigramInvertedIndexSpansError(t *testing.T) {
 		} else {
 			require.NoError(t, err)
 		}
+	}
+}
+
+func TestDecodeKeyVals(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		desc                 string
+		key                  []byte
+		vals                 []EncDatum
+		expectedRemainingKey []byte
+		expectedNumVals      int
+	}{
+		{
+			desc:                 "vals_eq_bytes",
+			key:                  []byte{1},
+			vals:                 make([]EncDatum, 1),
+			expectedRemainingKey: []byte{},
+			expectedNumVals:      1,
+		},
+		{
+			desc:                 "vals_lt_bytes",
+			key:                  []byte{1, 1},
+			vals:                 make([]EncDatum, 1),
+			expectedRemainingKey: []byte{1},
+			expectedNumVals:      1,
+		},
+		{
+			desc:                 "vals_gt_bytes",
+			key:                  []byte{1},
+			vals:                 make([]EncDatum, 2),
+			expectedRemainingKey: []byte{},
+			expectedNumVals:      1,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			actualRemainingKey, actualNumVals, err := DecodeKeyVals(tc.vals, nil, tc.key)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedRemainingKey, actualRemainingKey)
+			require.Equal(t, tc.expectedNumVals, actualNumVals)
+		})
 	}
 }

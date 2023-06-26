@@ -328,7 +328,7 @@ endif
 
 # Force vendor directory to rebuild.
 .PHONY: vendor_rebuild
-vendor_rebuild: bin/.submodules-initialized
+vendor_rebuild: bin/.submodules-initialized | fake-protobufs
 	$(GO_INSTALL) -v -mod=mod github.com/goware/modvendor
 	./build/vendor_rebuild.sh
 
@@ -367,6 +367,7 @@ CLUSTER_UI_JS := pkg/ui/cluster-ui/dist/main.js
 
 .SECONDARY: $(CLUSTER_UI_JS)
 $(CLUSTER_UI_JS): $(shell find pkg/ui/workspaces/cluster-ui/src -type f | sed 's/ /\\ /g') pkg/ui/yarn.installed pkg/ui/workspaces/db-console/src/js/protos.d.ts | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn install --ignore-optional --offline
 	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn build
 
 .SECONDARY: pkg/ui/yarn.installed
@@ -378,7 +379,7 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-in
 	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
 	touch $@
 
-vendor/modules.txt: | bin/.submodules-initialized
+vendor/modules.txt: | bin/.submodules-initialized fake-protobufs
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
@@ -790,9 +791,13 @@ SQLPARSER_TARGETS = \
 	pkg/sql/parser/help_messages.go \
 	pkg/sql/lexbase/tokens.go \
 	pkg/sql/lexbase/keywords.go \
-	pkg/sql/lexbase/reserved_keywords.go
+	pkg/sql/lexbase/reserved_keywords.go \
+	pkg/sql/plpgsql/parser/plpgsql.go \
+	pkg/sql/plpgsql/parser/lexbase/tokens.go \
+	pkg/sql/plpgsql/parser/lexbase/keywords.go \
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
+$(PROTOBUF_TARGETS): fake-protobufs
 
 SWAGGER_TARGETS :=
   #docs/generated/swagger/spec.json
@@ -1248,6 +1253,12 @@ protobuf: $(PROTOBUF_TARGETS)
 protobuf: ## Regenerate generated code for protobuf definitions.
 	$(info $(yellow)[WARNING] Use `dev generate protobuf` instead.$(term-reset))
 
+.PHONY: fake-protobufs
+fake-protobufs:
+	set -e; for dir in $(sort $(dir $(GO_PROTOS))); do \
+	    echo "package $$(basename $$dir)" > $$dir/empty.pb.go; \
+	done
+
 # pre-push locally runs most of the checks CI will run. Notably, it doesn't run
 # the acceptance tests.
 .PHONY: pre-push
@@ -1329,6 +1340,7 @@ PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/api/annotations.proto=google.golang.o
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Metcd/raft/v3/raftpb/raft.proto=go.etcd.io/etcd/raft/v3/raftpb,
 
 GW_SERVER_PROTOS := ./pkg/server/serverpb/admin.proto ./pkg/server/serverpb/status.proto ./pkg/server/serverpb/authentication.proto
 GW_TS_PROTOS := ./pkg/ts/tspb/timeseries.proto
@@ -1383,13 +1395,13 @@ bin/.gw_protobuf_sources: $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOG
 $(UI_JS_CCL): $(GW_PROTOS) $(GO_PROTOS) $(JS_PROTOS_CCL) pkg/ui/yarn.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(PROMETHEUS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS) $(JS_PROTOS_CCL)) >> $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --no-create --no-convert --no-delimited --no-verify --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(PROMETHEUS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS) $(JS_PROTOS_CCL)) >> $@
 
 .SECONDARY: $(UI_JS_OSS)
 $(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(PROMETHEUS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS)) >> $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --no-create --no-convert --no-delimited --no-verify --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(PROMETHEUS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS)) >> $@
 
 # End of PBJS-generated files.
 
@@ -1531,6 +1543,32 @@ pkg/sql/parser/sql.go: pkg/sql/parser/gen/sql.go.tmp | bin/.bootstrap
 	mv -f $@.tmp $@
 	goimports -w $@
 
+.SECONDARY: pkg/sql/plpgsql/parser/gen/plpgsql.go.tmp
+pkg/sql/plpgsql/parser/gen/plpgsql.go.tmp: pkg/sql/plpgsql/parser/gen/plpgsql-gen.y bin/.bootstrap
+	set -euo pipefail; \
+	  ret=$$(cd pkg/sql/plpgsql/parser/gen && goyacc -p plpgsql -o plpgsql.go.tmp plpgsql-gen.y); \
+	  if expr "$$ret" : ".*conflicts" >/dev/null; then \
+	    echo "$$ret"; exit 1; \
+	  fi
+
+pkg/sql/plpgsql/parser/lexbase/tokens.go: pkg/sql/plpgsql/parser/gen/plpgsql.go.tmp
+	(echo "// Code generated by make. DO NOT EDIT."; \
+	 echo "// GENERATED FILE DO NOT EDIT"; \
+	 echo; \
+	 echo "package lexbase"; \
+	 echo; \
+	 grep '^const [A-Z][_A-Z0-9]* ' $^) > $@.tmp || rm $@.tmp
+	mv -f $@.tmp $@
+
+
+pkg/sql/plpgsql/parser/plpgsql.go: pkg/sql/plpgsql/parser/gen/plpgsql.go.tmp | bin/.bootstrap
+	(echo "// Code generated by goyacc. DO NOT EDIT."; \
+	 echo "// GENERATED FILE DO NOT EDIT"; \
+	 cat $^ | \
+	 sed -E 's/^const ([A-Z][_A-Z0-9]*) =.*$$/const \1 = lexbase.\1/g') > $@.tmp || rm $@.tmp
+	mv -f $@.tmp $@
+	goimports -w $@
+
 # This modifies the grammar to:
 # - improve the types used by the generated parser for non-terminals
 # - expand the help rules.
@@ -1569,6 +1607,25 @@ pkg/sql/lexbase/keywords.go: pkg/sql/parser/sql.y pkg/sql/lexbase/allkeywords/ma
 	$(GO) run $(GOMODVENDORFLAGS) -tags all-keywords pkg/sql/lexbase/allkeywords/main.go < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
 	gofmt -s -w $@
+
+.SECONDARY: pkg/sql/plpgsql/parser/gen/plpgsql-gen.y
+pkg/sql/plpgsql/parser/gen/plpgsql-gen.y: pkg/sql/plpgsql/parser/plpgsql.y
+	mkdir -p pkg/sql/plpgsql/parser/gen
+	set -euo pipefail; \
+	awk '/func.*plpgsqlSymUnion/ {print $$(NF - 1)}' pkg/sql/plpgsql/parser/plpgsql.y | \
+	sed -e 's/[]\/$$*.^|[]/\\&/g' | \
+	sed -e "s/^/s_(type|token) <(/" | \
+	awk '{print $$0")>_\\1 <union> /* <\\2> */_"}' > pkg/sql/plpgsql/parser/gen/types_regex.tmp; \
+	sed -E -f pkg/sql/plpgsql/parser/gen/types_regex.tmp < pkg/sql/plpgsql/parser/plpgsql.y | \
+	sed -Ee 's,//.*$$,,g;s,/[*]([^*]|[*][^/])*[*]/, ,g;s/ +$$//g' > $@.tmp || rm $@.tmp
+	mv -f $@.tmp $@
+	rm pkg/sql/plpgsql/parser/gen/types_regex.tmp
+
+pkg/sql/plpgsql/parser/lexbase/keywords.go: pkg/sql/plpgsql/parser/plpgsql.y pkg/sql/lexbase/allkeywords/main.go | bin/.bootstrap
+	$(GO) run -tags all-keywords pkg/sql/lexbase/allkeywords/main.go < $< > $@.tmp || rm $@.tmp
+	mv -f $@.tmp $@
+	gofmt -s -w $@
+
 
 # This target will print unreserved_keywords which are not actually
 # used in the grammar.
@@ -1750,7 +1807,7 @@ cleanshort:
 	-$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f -name '*.test' -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
-	rm -rf $(ARCHIVE) pkg/sql/parser/gen
+	rm -rf $(ARCHIVE) pkg/sql/parser/gen pkg/sql/plpgsql/parser/gen
 
 .PHONY: clean
 clean: ## Like cleanshort, but also includes C++ artifacts, Bazel artifacts, and the go build cache.
@@ -1852,7 +1909,7 @@ $(has-build-info): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=$(TARGET_TRIPLE)" \
 	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)")
 
-$(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
+$(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized fake-protobufs
 	@echo go install -v $*
 	$(PREREQS) $(if $($*-package),$($*-package),./pkg/cmd/$*) > $@.d.tmp
 	mv -f $@.d.tmp $@.d

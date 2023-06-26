@@ -26,7 +26,7 @@ import (
 func registerUserLoginMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "user-login/mixed-version",
-		Owner:   registry.OwnerSQLExperience,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(1),
 		Run:     runUserLoginMixedVersion,
 		Timeout: 30 * time.Minute,

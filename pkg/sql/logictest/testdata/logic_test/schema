@@ -1169,3 +1169,68 @@ query I
 SELECT abs(1);
 ----
 1
+
+# Regression test for #102375 - check that all data sources resolve to the same
+# schema objects before checking access privileges.
+subtest privileges
+
+user root
+
+statement ok
+RESET search_path;
+CREATE DATABASE testdb1;
+USE testdb1;
+CREATE TABLE ab (a INT PRIMARY KEY, b INT);
+INSERT INTO ab VALUES (1, 1);
+CREATE TABLE xy (x INT, y INT, FOREIGN KEY (x) REFERENCES ab(a));
+GRANT ALL ON xy TO testuser;
+GRANT ALL ON ab TO testuser;
+
+statement ok
+CREATE DATABASE testdb2;
+USE testdb2;
+CREATE TABLE ab (a INT PRIMARY KEY, b INT);
+INSERT INTO ab VALUES (1, 1);
+CREATE TABLE xy (x INT, y INT, FOREIGN KEY (x) REFERENCES ab(a));
+CREATE USER testuser2;
+GRANT ALL ON xy TO testuser2;
+GRANT ALL ON ab TO testuser2;
+
+user testuser
+
+statement ok
+USE testdb1
+
+statement ok
+INSERT into xy VALUES(1, 1)
+
+user testuser2
+
+statement ok
+USE testdb2
+
+statement ok
+INSERT into xy VALUES(1, 1)
+
+statement ok
+INSERT into xy VALUES(1, 1)
+
+user testuser
+
+statement ok
+USE testdb1
+
+statement ok
+INSERT into xy VALUES(1, 1)
+
+user root
+
+statement ok
+USE test;
+REVOKE ALL ON testdb2.xy FROM testuser2;
+REVOKE ALL ON testdb2.ab FROM testuser2;
+DROP USER testuser2;
+DROP DATABASE testdb1 CASCADE;
+DROP DATABASE testdb2 CASCADE;
+
+subtest end

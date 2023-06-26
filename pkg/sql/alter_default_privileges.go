@@ -33,7 +33,7 @@ import (
 
 var targetObjectToPrivilegeObject = map[privilege.TargetObjectType]privilege.ObjectType{
 	privilege.Tables:    privilege.Table,
-	privilege.Sequences: privilege.Table,
+	privilege.Sequences: privilege.Sequence,
 	privilege.Types:     privilege.Type,
 	privilege.Schemas:   privilege.Schema,
 	privilege.Functions: privilege.Function,

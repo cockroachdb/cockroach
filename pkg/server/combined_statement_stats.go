@@ -244,13 +244,18 @@ FROM crdb_internal.%s_statistics%s
 	return stmtsRuntime, txnsRuntime, err
 }
 
-// Common stmt and txn columns to sort on.
 const (
 	sortSvcLatDesc         = `(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT DESC`
 	sortExecCountDesc      = `(statistics -> 'statistics' ->> 'cnt')::INT DESC`
 	sortContentionTimeDesc = `(statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC`
 	sortPCTRuntimeDesc     = `((statistics -> 'statistics' -> 'svcLat' ->> 'mean')::FLOAT *
                          (statistics -> 'statistics' ->> 'cnt')::FLOAT) DESC`
+	sortRowsProcessedDesc = `((statistics -> 'statistics' -> 'rowsRead' ->> 'mean')::FLOAT + 
+												 (statistics -> 'statistics' -> 'rowsWritten' ->> 'mean')::FLOAT) DESC`
+	sortMaxMemoryDesc = `(statistics -> 'execution_statistics' -> 'maxMemUsage' ->> 'mean')::FLOAT DESC`
+	sortNetworkDesc   = `(statistics -> 'execution_statistics' -> 'networkBytes' ->> 'mean')::FLOAT DESC`
+	sortRetriesDesc   = `(statistics -> 'statistics' ->> 'maxRetries')::INT DESC`
+	sortLastExecDesc  = `(statistics -> 'statistics' ->> 'lastExecAt') DESC`
 )
 
 func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
@@ -261,6 +266,16 @@ func getStmtColumnFromSortOption(sort serverpb.StatsSortOptions) string {
 		return sortExecCountDesc
 	case serverpb.StatsSortOptions_CONTENTION_TIME:
 		return sortContentionTimeDesc
+	case serverpb.StatsSortOptions_ROWS_PROCESSED:
+		return sortRowsProcessedDesc
+	case serverpb.StatsSortOptions_MAX_MEMORY:
+		return sortMaxMemoryDesc
+	case serverpb.StatsSortOptions_NETWORK:
+		return sortNetworkDesc
+	case serverpb.StatsSortOptions_RETRIES:
+		return sortRetriesDesc
+	case serverpb.StatsSortOptions_LAST_EXEC:
+		return sortLastExecDesc
 	default:
 		return sortSvcLatDesc
 	}

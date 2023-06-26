@@ -1634,7 +1634,7 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 
 	{
 		// An invalid target should result in an error.
-		const expected = "unable to find store .* in range"
+		const expected = "lease target replica not found in RangeDescriptor"
 		if err := l.replica0.AdminTransferLease(ctx, 1000, false /* bypassSafetyChecks */); !testutils.IsError(err, expected) {
 			t.Fatalf("expected %s, but found %v", expected, err)
 		}
@@ -2109,8 +2109,11 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	if a, e := metrics.LeaseTransferSuccessCount.Count(), int64(1); a != e {
 		t.Errorf("expected %d lease transfer successes; got %d", e, a)
 	}
-	if a, e := metrics.LeaseTransferErrorCount.Count(), int64(1); a != e {
-		t.Errorf("expected %d lease transfer errors; got %d", e, a)
+	// We mostly expect precisely one error, but there's a retry loop in
+	// `AdminTransferLease` that prevents transfers to followers who might need a
+	// snapshot. This can sometimes lead to additional errors being reported.
+	if a := metrics.LeaseTransferErrorCount.Count(); a == 0 {
+		t.Errorf("expected at least one lease transfer errors; got %d", a)
 	}
 
 	// Expire current leases and put a key to the epoch based scratch range to

@@ -856,6 +856,13 @@ func TestLogic_grant_schema(
 	runLogicTest(t, "grant_schema")
 }
 
+func TestLogic_guardrails(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "guardrails")
+}
+
 func TestLogic_hash_join(
 	t *testing.T,
 ) {
@@ -1981,6 +1988,13 @@ func TestLogic_upsert(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "upsert")
+}
+
+func TestLogic_upsert_non_metamorphic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "upsert_non_metamorphic")
 }
 
 func TestLogic_uuid(

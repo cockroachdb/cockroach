@@ -27,6 +27,7 @@ go_test(
     name = "tests_test",
     size = "large",
     srcs = [
+        "allow_role_memberships_to_change_during_transaction_test.go",
         "autocommit_extended_protocol_test.go",
         "bank_test.go",
         "copy_file_upload_test.go",
@@ -102,6 +103,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/allstacks",
         "//pkg/util/ctxgroup",
         "//pkg/util/ioctx",
         "//pkg/util/json",
@@ -111,7 +113,6 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
-        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_datadriven//:datadriven",

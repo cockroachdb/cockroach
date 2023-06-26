@@ -49,8 +49,7 @@ func (d *RowDecoder) DecodeRow(
 	// First we need to decode the setting name field from the index key.
 	keyTypes := []*types.T{d.columns[0].GetType(), d.columns[1].GetType()}
 	keyVals := make([]rowenc.EncDatum, 2)
-	_, _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, keyTypes, keyVals, nil, kv.Key)
-	if err != nil {
+	if _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, keyVals, nil, kv.Key); err != nil {
 		return roachpb.TenantID{}, roachpb.TenantSetting{}, false, errors.Wrap(err, "failed to decode key")
 	}
 	for i := range keyVals {

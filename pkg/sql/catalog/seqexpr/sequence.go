@@ -69,21 +69,20 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 
 	if hasSequenceArguments {
 		found := false
-		for i := range def.Overloads {
+		for _, overload := range def.Overloads {
 			// Find the overload that matches funcExpr.
-			if len(funcExpr.Exprs) == def.Overloads[i].Types.Length() {
-				found = true
-				argTypes, ok := def.Overloads[i].Types.(tree.ArgTypes)
+			if len(funcExpr.Exprs) == overload.Types.Length() {
+				paramTypes, ok := overload.Types.(tree.ArgTypes)
 				if !ok {
 					panic(pgerror.Newf(
 						pgcode.InvalidFunctionDefinition,
 						"%s has invalid argument types", funcExpr.Func.String(),
 					))
 				}
-				for i := 0; i < def.Overloads[i].Types.Length(); i++ {
-					// Find the sequence name arg.
-					argName := argTypes[i].Name
-					if argName == builtinconstants.SequenceNameArg {
+				found = true
+				for i := 0; i < paramTypes.Length(); i++ {
+					// Find the sequence name param.
+					if paramTypes[i].Name == builtinconstants.SequenceNameArg {
 						arg := funcExpr.Exprs[i]
 						if seqIdentifier := getSequenceIdentifier(arg); seqIdentifier != nil {
 							return seqIdentifier, nil

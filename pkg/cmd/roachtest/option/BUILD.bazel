@@ -1,9 +1,10 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "option",
     srcs = [
+        "connection_options.go",
         "node_list_option.go",
         "node_lister.go",
         "option_interface.go",
@@ -15,6 +16,14 @@ go_library(
         "//pkg/roachprod",
         "//pkg/roachprod/install",
     ],
+)
+
+go_test(
+    name = "option_test",
+    srcs = ["connection_options_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":option"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
 
 get_x_data(name = "get_x_data")

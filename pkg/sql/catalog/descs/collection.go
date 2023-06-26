@@ -352,6 +352,18 @@ func (tc *Collection) GetUncommittedTables() (tables []catalog.TableDescriptor) 
 	return tables
 }
 
+// GetUncommittedDatabases returns all the databases updated or created in the
+// transaction.
+func (tc *Collection) GetUncommittedDatabases() (databases []catalog.DatabaseDescriptor) {
+	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		if database, ok := desc.(catalog.DatabaseDescriptor); ok {
+			databases = append(databases, database)
+		}
+		return nil
+	})
+	return databases
+}
+
 func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 	return errors.AssertionFailedf("attempted mutable access of synthetic descriptor %d", id)
 }

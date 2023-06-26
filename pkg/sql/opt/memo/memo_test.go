@@ -268,6 +268,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().LargeFullScanRows = 0
 	notStale()
 
+	// Stale txn rows read error.
+	evalCtx.SessionData().TxnRowsReadErr = 1000
+	stale()
+	evalCtx.SessionData().TxnRowsReadErr = 0
+	notStale()
+
 	// Stale null ordered last.
 	evalCtx.SessionData().NullOrderedLast = true
 	stale()
@@ -340,6 +346,27 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerAlwaysUseHistograms = false
 	notStale()
 
+	// Stale optimizer_hoist_uncorrelated_equality_subqueries.
+	evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries = true
+	stale()
+	evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries = false
+	notStale()
+
+	// Stale optimizer_use_improved_computed_column_filters_derivation.
+	evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = false
+	notStale()
+
+	// User no longer has access to view.
+	catalog.View(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abcview")).Revoked = true
+	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
+	if exp := "user does not have privilege"; !testutils.IsError(err, exp) {
+		t.Fatalf("expected %q error, but got %+v", exp, err)
+	}
+	catalog.View(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abcview")).Revoked = false
+	notStale()
+
 	// Stale data sources and schema. Create new catalog so that data sources are
 	// recreated and can be modified independently.
 	catalog = testcat.New()
@@ -351,15 +378,6 @@ func TestMemoIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// User no longer has access to view.
-	catalog.View(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abcview")).Revoked = true
-	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
-	if exp := "user does not have privilege"; !testutils.IsError(err, exp) {
-		t.Fatalf("expected %q error, but got %+v", exp, err)
-	}
-	catalog.View(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abcview")).Revoked = false
-	notStale()
 
 	// Table ID changes.
 	catalog.Table(tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "abc")).TabID = 1

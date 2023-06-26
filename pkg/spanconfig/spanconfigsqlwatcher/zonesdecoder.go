@@ -44,10 +44,7 @@ func (zd *zonesDecoder) DecodePrimaryKey(key roachpb.Key) (descpb.ID, error) {
 	tbl := systemschema.ZonesTable
 	types := []*types.T{tbl.PublicColumns()[0].GetType()}
 	startKeyRow := make([]rowenc.EncDatum, 1)
-	_, _, err := rowenc.DecodeIndexKey(
-		zd.codec, types, startKeyRow, nil /* colDirs */, key,
-	)
-	if err != nil {
+	if _, err := rowenc.DecodeIndexKey(zd.codec, startKeyRow, nil /* colDirs */, key); err != nil {
 		return descpb.InvalidID, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode key in system.zones %v %v", key, string(debug.Stack()))
 	}
 	if err := startKeyRow[0].EnsureDecoded(types[0], &zd.alloc); err != nil {

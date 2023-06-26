@@ -27,7 +27,8 @@ exp,benchmark
 7,AlterTableUnsplit/alter_table_unsplit_at_1_value
 9,AlterTableUnsplit/alter_table_unsplit_at_2_values
 11,AlterTableUnsplit/alter_table_unsplit_at_3_values
-5,Audit/select_from_an_audit_table
+3,Audit/select_from_a_non-audit_table
+3,Audit/select_from_an_audit_table
 12,CreateRole/create_role_with_1_option
 15,CreateRole/create_role_with_2_options
 18,CreateRole/create_role_with_3_options
@@ -99,6 +100,9 @@ exp,benchmark
 13,Revoke/revoke_all_on_3_tables
 9,RevokeRole/revoke_1_role
 11,RevokeRole/revoke_2_roles
+5,ShowGrants/grant_2_roles
+5,ShowGrants/grant_3_roles
+5,ShowGrants/grant_4_roles
 1,SystemDatabaseQueries/select_system.users_with_empty_database_Name
 1,SystemDatabaseQueries/select_system.users_with_schema_Name
 2,SystemDatabaseQueries/select_system.users_without_schema_Name

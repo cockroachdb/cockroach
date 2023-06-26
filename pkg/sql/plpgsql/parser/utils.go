@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package catpb
+package parser
 
-// DeletionCronOrDefault returns the DeletionCron or the global default.
-func (m *RowLevelTTL) DeletionCronOrDefault() string {
-	if override := m.DeletionCron; override != "" {
-		return override
-	}
-	return "@hourly"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+
+type declareHeader struct {
+	label    string
+	initVars []plpgsqltree.PLpgSQLVariable
 }

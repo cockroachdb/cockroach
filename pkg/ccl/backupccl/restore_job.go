@@ -1031,6 +1031,7 @@ func createImportingDescriptors(
 								txn,
 								p.ExecCfg(),
 								descsCol,
+								!details.SkipLocalitiesCheck,
 							); err != nil {
 								return err
 							}

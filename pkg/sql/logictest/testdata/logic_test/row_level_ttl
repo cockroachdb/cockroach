@@ -1,49 +1,52 @@
 subtest ttl_expire_after_must_be_interval
 
 statement error value of "ttl_expire_after" must be an interval
-CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expire_after = ' xx invalid interval xx')
+CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expire_after = ' xx invalid interval xx')
 
 subtest end
 
 subtest ttl_expire_after_must_be_at_least_zero
 
 statement error value of "ttl_expire_after" must be at least zero
-CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expire_after = '-10 minutes')
+CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expire_after = '-10 minutes')
 
 subtest end
 
 subtest ttl_expiration_expression_must_be_string
 
 statement error parameter "ttl_expiration_expression" requires a string value
-CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression = 0)
+CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expiration_expression = 0)
 
 subtest end
 
 subtest ttl_expiration_expression_must_be_valid_expression
 
 statement error ttl_expiration_expression "; DROP DATABASE defaultdb" must be a valid expression: at or near "EOF": syntax error
-CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression = '; DROP DATABASE defaultdb')
+CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expiration_expression = '; DROP DATABASE defaultdb')
+
+statement error ttl_expiration_expression "now\(\), now\(\)" must be a single expression
+CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expiration_expression = 'now(), now()')
 
 subtest end
 
 subtest ttl_expiration_expression_must_be_timestamptz
 
-statement error expected ttl_expiration_expression expression to have type timestamptz, but 'text' has type string
-CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression = 'text')
+statement error expected ttl_expiration_expression expression to have type timestamptz, but 'id' has type int
+CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl_expiration_expression = 'id')
 
 subtest end
 
 subtest ttl_expire_after_or_ttl_expiration_expression_must_be_set
 
 statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
-CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl = 'on')
+CREATE TABLE tbl (id INT PRIMARY KEY) WITH (ttl = 'on')
 
 subtest end
 
 subtest ttl_automatic_column_notice
 
 query T noticetrace
-CREATE TABLE tbl_ttl_automatic_column (id INT PRIMARY KEY, text TEXT) WITH (ttl_automatic_column = 'on')
+CREATE TABLE tbl_ttl_automatic_column (id INT PRIMARY KEY) WITH (ttl_automatic_column = 'on')
 ----
 NOTICE: ttl_automatic_column is no longer used. Setting ttl_expire_after automatically creates a TTL column. Resetting ttl_expire_after removes the automatically created column.
 
@@ -57,7 +60,7 @@ subtest end
 subtest ttl_range_concurrency_notice
 
 query T noticetrace
-CREATE TABLE tbl_ttl_range_concurrency (id INT PRIMARY KEY, text TEXT) WITH (ttl_range_concurrency = 2)
+CREATE TABLE tbl_ttl_range_concurrency (id INT PRIMARY KEY) WITH (ttl_range_concurrency = 2)
 ----
 NOTICE: ttl_range_concurrency is no longer configurable.
 
@@ -73,9 +76,7 @@ subtest create_table_crdb_internal_expiration_incorrect_explicit_default
 statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
-  text TEXT,
-  crdb_internal_expiration TIMESTAMPTZ,
-  FAMILY (id, text)
+  crdb_internal_expiration TIMESTAMPTZ
 ) WITH (ttl_expire_after = '10 minutes')
 
 subtest end
@@ -85,9 +86,7 @@ subtest create_table_crdb_internal_expiration_incorrect_explicit_on_update
 statement error expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
-  text TEXT,
-  crdb_internal_expiration TIMESTAMPTZ DEFAULT current_timestamp() + '10 minutes'::interval,
-  FAMILY (id, text)
+  crdb_internal_expiration TIMESTAMPTZ DEFAULT current_timestamp() + '10 minutes'
 ) WITH (ttl_expire_after = '10 minutes')
 
 subtest end
@@ -96,9 +95,7 @@ subtest crdb_internal_functions
 
 statement ok
 CREATE TABLE crdb_internal_functions_tbl (
-  id INT PRIMARY KEY,
-  text TEXT,
-  FAMILY (id, text)
+  id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
 
 query T
@@ -106,10 +103,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE crdb_internal_functions_tbl]
 ----
 CREATE TABLE public.crdb_internal_functions_tbl (
   id INT8 NOT NULL,
-  text STRING NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT crdb_internal_functions_tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+  CONSTRAINT crdb_internal_functions_tbl_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
 
 statement ok
@@ -206,22 +201,29 @@ ALTER TABLE alter_column_crdb_internal_expiration_rename RENAME COLUMN crdb_inte
 
 subtest end
 
-subtest todo_add_subtests
+subtest reloptions
 
 statement ok
-CREATE TABLE tbl (
-  id INT PRIMARY KEY,
-  text TEXT,
-  FAMILY (id, text)
-) WITH (ttl_expire_after = '10 minutes')
+CREATE TABLE tbl_reloptions (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 10, ttl_delete_batch_size=20, ttl_delete_rate_limit = 30, ttl_pause = true, ttl_row_stats_poll_interval = '1 minute', ttl_label_metrics = true)
 
 query T
-SELECT reloptions FROM pg_class WHERE relname = 'tbl'
+SELECT reloptions FROM pg_class WHERE relname = 'tbl_reloptions'
 ----
-{ttl='on',ttl_expire_after='00:10:00':::INTERVAL,ttl_job_cron='@hourly'}
+{ttl='on',ttl_expire_after='00:10:00':::INTERVAL,ttl_job_cron='@hourly',ttl_select_batch_size=10,ttl_delete_batch_size=20,ttl_delete_rate_limit=30,ttl_pause=true,ttl_row_stats_poll_interval='1m0s',ttl_label_metrics=true}
+
+subtest end
+
+subtest schedules
+
+statement ok
+CREATE TABLE tbl_schedules (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')
 
 let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl'
+SELECT oid FROM pg_class WHERE relname = 'tbl_schedules'
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
@@ -232,65 +234,109 @@ WHERE label = 'row-level-ttl-$table_id'
 let $schedule_id
 SELECT id FROM [SHOW SCHEDULES] WHERE label = 'row-level-ttl-$table_id'
 
-statement error cannot drop a row level TTL schedule\nHINT: use ALTER TABLE test\.public\.tbl RESET \(ttl\) instead
+statement error cannot drop a row level TTL schedule\nHINT: use ALTER TABLE test\.public\.tbl_schedules RESET \(ttl\) instead
 DROP SCHEDULE $schedule_id
 
-statement ok
-ALTER TABLE tbl SET (ttl_expire_after = '10 days')
+subtest end
 
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
-----
-CREATE TABLE public.tbl (
-  id INT8 NOT NULL,
-  text STRING NULL,
-  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10 days':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10 days':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_expire_after = '10 days':::INTERVAL, ttl_job_cron = '@hourly')
+subtest existing_ttl_concurrent_schema_change
+
+statement ok
+CREATE TABLE tbl_existing_ttl_concurrent_schema_change (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
-ALTER TABLE tbl RESET (ttl), RESET (ttl_expire_after)
+ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl), RESET (ttl_expire_after)
 
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN;
-ALTER TABLE tbl RESET (ttl);
-ALTER TABLE tbl SET (ttl_select_batch_size = 200)
+ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
+ALTER TABLE tbl_existing_ttl_concurrent_schema_change SET (ttl_select_batch_size = 200)
 
 statement ok
 ROLLBACK
 
 statement error cannot perform other schema changes in the same transaction as a TTL mutation
 BEGIN;
-ALTER TABLE tbl RESET (ttl);
-CREATE INDEX tbl_idx ON tbl (text)
+ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
+CREATE INDEX tbl_idx ON tbl_existing_ttl_concurrent_schema_change (id)
 
 statement ok
 ROLLBACK
 
+subtest end
+
+subtest add_ttl_concurrent_schema_change
+
+statement ok
+CREATE TABLE tbl_add_ttl_concurrent_schema_change (
+   id INT PRIMARY KEY
+)
+
+statement error cannot modify TTL settings while another schema change on the table is being processed
+ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes'), SET (ttl_select_batch_size = 200)
+
+statement error cannot modify TTL settings while another schema change on the table is being processed
+BEGIN;
+ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
+ALTER TABLE tbl_add_ttl_concurrent_schema_change RESET (ttl_select_batch_size)
+
+statement ok
+ROLLBACK
+
+statement error cannot modify TTL settings while another schema change on the table is being processed
+BEGIN;
+CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id);
+ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
+
+statement ok
+ROLLBACK
+
+statement error cannot perform other schema changes in the same transaction as a TTL mutation
+BEGIN;
+ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
+CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id)
+
+statement ok
+ROLLBACK
+
+subtest end
+
+subtest reset_ttl
+
+statement ok
+CREATE TABLE tbl_reset_ttl (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl_reset_ttl'
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+1
+
 # Cannot reset TTL with SET (ttl = off)
 statement error setting "ttl = 'off'" is not permitted
-ALTER TABLE tbl SET (ttl = 'off')
+ALTER TABLE tbl_reset_ttl SET (ttl = 'off')
 
 # Test when we drop the TTL, ensure column is dropped and the scheduled job is removed.
 statement ok
-ALTER TABLE tbl RESET (ttl)
+ALTER TABLE tbl_reset_ttl RESET (ttl)
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_reset_ttl]
 ----
-CREATE TABLE public.tbl (
+CREATE TABLE public.tbl_reset_ttl (
   id INT8 NOT NULL,
-  text STRING NULL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text)
+  CONSTRAINT tbl_reset_ttl_pkey PRIMARY KEY (id ASC)
 )
 
 statement ok
 SELECT crdb_internal.validate_ttl_scheduled_jobs()
-
-let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl'
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
@@ -298,19 +344,18 @@ WHERE label = 'row-level-ttl-$table_id'
 ----
 0
 
+subtest end
+
+subtest drop_table
+
 # Ensure schedules are removed on DROP TABLE.
 statement ok
-DROP TABLE tbl;
-
-statement ok
-CREATE TABLE tbl (
-  id INT PRIMARY KEY,
-  text TEXT,
-  FAMILY (id, text)
+CREATE TABLE tbl_drop_table (
+  id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
 
 let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl'
+SELECT oid FROM pg_class WHERE relname = 'tbl_drop_table'
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
@@ -319,7 +364,7 @@ WHERE label = 'row-level-ttl-$table_id'
 1
 
 statement ok
-DROP TABLE tbl
+DROP TABLE tbl_drop_table
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
@@ -327,13 +372,17 @@ WHERE label = 'row-level-ttl-$table_id'
 ----
 0
 
+subtest end
+
+subtest drop_schema
+
 # Create TTL on a different schema and ensure schedules are removed when dropped.
 statement ok
-CREATE SCHEMA drop_me;
+CREATE SCHEMA drop_me
 
 statement ok
-CREATE TABLE drop_me.tbl () WITH (ttl_expire_after = '10 minutes'::interval);
-CREATE TABLE drop_me.tbl2 () WITH (ttl_expire_after = '10 minutes'::interval)
+CREATE TABLE drop_me.tbl () WITH (ttl_expire_after = '10 minutes');
+CREATE TABLE drop_me.tbl2 () WITH (ttl_expire_after = '10 minutes')
 
 let $table_id
 SELECT oid FROM pg_class WHERE relname = 'tbl'
@@ -356,16 +405,20 @@ WHERE label = 'row-level-ttl-$table_id'
 ----
 0
 
+subtest end
+
+subtest drop_database
+
 # Create TTL on a different database and ensure schedules are removed when dropped.
 statement ok
-CREATE DATABASE drop_me;
+CREATE DATABASE drop_me
 
 statement ok
-USE drop_me;
+USE drop_me
 
 statement ok
-CREATE TABLE tbl () WITH (ttl_expire_after = '10 minutes'::interval);
-CREATE TABLE tbl2 () WITH (ttl_expire_after = '10 minutes'::interval)
+CREATE TABLE tbl () WITH (ttl_expire_after = '10 minutes');
+CREATE TABLE tbl2 () WITH (ttl_expire_after = '10 minutes')
 
 let $table_id
 SELECT oid FROM pg_class WHERE relname = 'tbl'
@@ -389,49 +442,49 @@ WHERE label = 'row-level-ttl-$table_id'
 ----
 0
 
+subtest end
+
+subtest crdb_internal_expiration_invalid_type
+
 statement error table crdb_internal_expiration has TTL defined, but column crdb_internal_expiration is not a TIMESTAMPTZ
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
-  text TEXT,
-  crdb_internal_expiration INTERVAL,
-  FAMILY (id, text)
-) WITH (ttl_expire_after = '10 minutes'::interval)
+  crdb_internal_expiration INTERVAL
+) WITH (ttl_expire_after = '10 minutes')
+
+subtest end
+
+subtest ttl_on_noop
 
 statement ok
-CREATE TABLE tbl (
-  id INT PRIMARY KEY,
-  text TEXT,
-  FAMILY (id, text)
-) WITH (ttl_expire_after = '10 minutes'::interval)
+CREATE TABLE tbl_ttl_on_noop (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_on_noop]
 ----
-CREATE TABLE public.tbl (
+CREATE TABLE public.tbl_ttl_on_noop (
   id INT8 NOT NULL,
-  text STRING NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+  CONSTRAINT tbl_ttl_on_noop_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
 
 # Test no-ops.
 statement ok
-ALTER TABLE tbl SET (ttl = 'on');
+ALTER TABLE tbl_ttl_on_noop SET (ttl = 'on')
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_on_noop]
 ----
-CREATE TABLE public.tbl (
+CREATE TABLE public.tbl_ttl_on_noop (
   id INT8 NOT NULL,
-  text STRING NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+  CONSTRAINT tbl_ttl_on_noop_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
 
 let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl'
+SELECT oid FROM pg_class WHERE relname = 'tbl_ttl_on_noop'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
@@ -446,34 +499,31 @@ WHERE label = 'row-level-ttl-$table_id'
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
 ----
-ALTER TABLE test.public.tbl WITH (ttl = 'on', ...)
+ALTER TABLE test.public.tbl_ttl_on_noop WITH (ttl = 'on', ...)
 
-statement ok
-DROP TABLE tbl
+subtest end
+
+subtest ttl_job_cron
 
 statement error invalid cron expression for "ttl_job_cron"
 CREATE TABLE tbl () WITH (ttl_expire_after = '10 seconds', ttl_job_cron = 'bad expr')
 
 statement ok
-CREATE TABLE tbl (
-  id INT PRIMARY KEY,
-  text TEXT,
-  FAMILY (id, text)
-) WITH (ttl_expire_after = '10 minutes'::interval, ttl_job_cron = '@daily')
+CREATE TABLE tbl_ttl_job_cron (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes', ttl_job_cron = '@daily')
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_job_cron]
 ----
-CREATE TABLE public.tbl (
+CREATE TABLE public.tbl_ttl_job_cron (
   id INT8 NOT NULL,
-  text STRING NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+  CONSTRAINT tbl_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@daily')
 
 let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl'
+SELECT oid FROM pg_class WHERE relname = 'tbl_ttl_job_cron'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
@@ -482,17 +532,15 @@ WHERE label = 'row-level-ttl-$table_id'
 ACTIVE  @daily  root
 
 statement ok
-ALTER TABLE tbl SET (ttl_job_cron = '@weekly')
+ALTER TABLE tbl_ttl_job_cron SET (ttl_job_cron = '@weekly')
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_job_cron]
 ----
-CREATE TABLE public.tbl (
+CREATE TABLE public.tbl_ttl_job_cron (
   id INT8 NOT NULL,
-  text STRING NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+  CONSTRAINT tbl_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@weekly')
 
 
@@ -503,17 +551,15 @@ WHERE label = 'row-level-ttl-$table_id'
 ACTIVE  @weekly  root
 
 statement ok
-ALTER TABLE tbl RESET (ttl_job_cron)
+ALTER TABLE tbl_ttl_job_cron RESET (ttl_job_cron)
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_ttl_job_cron]
 ----
-CREATE TABLE public.tbl (
+CREATE TABLE public.tbl_ttl_job_cron (
   id INT8 NOT NULL,
-  text STRING NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+  CONSTRAINT tbl_ttl_job_cron_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
 
 query TTT
@@ -522,8 +568,12 @@ WHERE label = 'row-level-ttl-$table_id'
 ----
 ACTIVE  @hourly  root
 
+subtest end
+
+subtest ttl_must_be_set
+
 statement ok
-CREATE TABLE no_ttl_table ();
+CREATE TABLE no_ttl_table ()
 
 statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
 ALTER TABLE no_ttl_table SET (ttl_select_batch_size = 50)
@@ -540,70 +590,67 @@ ALTER TABLE no_ttl_table SET (ttl_pause = true)
 statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
 ALTER TABLE no_ttl_table SET (ttl_label_metrics = true)
 
-statement ok
-DROP TABLE tbl;
+subtest end
+
+subtest ttl_params_positive
 
 statement ok
-CREATE TABLE tbl (
-  id INT PRIMARY KEY,
-  text TEXT,
-  FAMILY (id, text)
-) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 50, ttl_delete_rate_limit = 100, ttl_pause = true, ttl_row_stats_poll_interval = '1 minute', ttl_label_metrics = true)
-
-query T
-SELECT reloptions FROM pg_class WHERE relname = 'tbl'
-----
-{ttl='on',ttl_expire_after='00:10:00':::INTERVAL,ttl_job_cron='@hourly',ttl_select_batch_size=50,ttl_delete_rate_limit=100,ttl_pause=true,ttl_row_stats_poll_interval='1m0s',ttl_label_metrics=true}
-
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
-----
-CREATE TABLE public.tbl (
-  id INT8 NOT NULL,
-  text STRING NULL,
-  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_select_batch_size = 50, ttl_delete_rate_limit = 100, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
-
-statement ok
-ALTER TABLE tbl SET (ttl_delete_batch_size = 100)
-
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
-----
-CREATE TABLE public.tbl (
-  id INT8 NOT NULL,
-  text STRING NULL,
-  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_select_batch_size = 50, ttl_delete_batch_size = 100, ttl_delete_rate_limit = 100, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
+CREATE TABLE tbl_ttl_params_positive (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')
 
 statement error "ttl_select_batch_size" must be at least 1
-ALTER TABLE tbl SET (ttl_select_batch_size = -1)
+ALTER TABLE tbl_ttl_params_positive SET (ttl_select_batch_size = -1)
 
 statement error "ttl_delete_batch_size" must be at least 1
-ALTER TABLE tbl SET (ttl_delete_batch_size = -1)
+ALTER TABLE tbl_ttl_params_positive SET (ttl_delete_batch_size = -1)
 
 statement error "ttl_delete_rate_limit" must be at least 1
-ALTER TABLE tbl SET (ttl_delete_rate_limit = -1)
+ALTER TABLE tbl_ttl_params_positive SET (ttl_delete_rate_limit = -1)
 
 statement error "ttl_row_stats_poll_interval" must be at least 1
-ALTER TABLE tbl SET (ttl_row_stats_poll_interval = '-1 second')
+ALTER TABLE tbl_ttl_params_positive SET (ttl_row_stats_poll_interval = '-1 second')
+
+subtest end
+
+subtest set_ttl_params
 
 statement ok
-ALTER TABLE tbl RESET (ttl_delete_batch_size, ttl_select_batch_size, ttl_delete_rate_limit, ttl_pause, ttl_row_stats_poll_interval)
+CREATE TABLE tbl_set_ttl_params (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 10, ttl_delete_batch_size=20, ttl_delete_rate_limit = 30, ttl_pause = true, ttl_row_stats_poll_interval = '1 minute', ttl_label_metrics = true)
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
 ----
-CREATE TABLE public.tbl (
+CREATE TABLE public.tbl_set_ttl_params (
   id INT8 NOT NULL,
-  text STRING NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+  CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_select_batch_size = 10, ttl_delete_batch_size = 20, ttl_delete_rate_limit = 30, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
+
+statement ok
+ALTER TABLE tbl_set_ttl_params SET (ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_delete_rate_limit = 130, ttl_row_stats_poll_interval = '2m0s')
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
+----
+CREATE TABLE public.tbl_set_ttl_params (
+  id INT8 NOT NULL,
+  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+  CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_delete_rate_limit = 130, ttl_pause = true, ttl_row_stats_poll_interval = '2m0s', ttl_label_metrics = true)
+
+statement ok
+ALTER TABLE tbl_set_ttl_params RESET (ttl_select_batch_size, ttl_delete_batch_size, ttl_delete_rate_limit, ttl_pause, ttl_row_stats_poll_interval)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_params]
+----
+CREATE TABLE public.tbl_set_ttl_params (
+  id INT8 NOT NULL,
+  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+  CONSTRAINT tbl_set_ttl_params_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_label_metrics = true)
 
 subtest end
@@ -661,7 +708,6 @@ CREATE TABLE public.tbl_create_table_ttl_expiration_expression_escape_sql (
   FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = e'IF(expire_at > parse_timestamp(\'2020-01-01 00:00:00\') AT TIME ZONE \'UTC\', expire_at, NULL)', ttl_job_cron = '@hourly')
 
-
 subtest end
 
 subtest alter_table_ttl_expiration_expression
@@ -669,13 +715,12 @@ subtest alter_table_ttl_expiration_expression
 statement ok
 CREATE TABLE tbl_alter_table_ttl_expiration_expression (
   id INT PRIMARY KEY,
-  text TEXT,
   expire_at TIMESTAMPTZ,
-  FAMILY (id, text, expire_at)
+  FAMILY (id, expire_at)
 )
 
-statement error expected ttl_expiration_expression expression to have type timestamptz, but 'text' has type string
-ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'text')
+statement error expected ttl_expiration_expression expression to have type timestamptz, but 'id' has type int
+ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'id')
 
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'expire_at')
@@ -708,10 +753,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_e
 ----
 CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
   id INT8 NOT NULL,
-  text STRING NULL,
   expire_at TIMESTAMPTZ NULL,
   CONSTRAINT tbl_alter_table_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_expire_at (id, text, expire_at)
+  FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')
 
 # try setting it again
@@ -723,10 +767,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_e
 ----
 CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
   id INT8 NOT NULL,
-  text STRING NULL,
   expire_at TIMESTAMPTZ NULL,
   CONSTRAINT tbl_alter_table_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_expire_at (id, text, expire_at)
+  FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = e'((expire_at AT TIME ZONE \'UTC\') + \'5 minutes\':::INTERVAL) AT TIME ZONE \'UTC\'', ttl_job_cron = '@hourly')
 
 statement ok
@@ -737,10 +780,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE tbl_alter_table_ttl_expiration_e
 ----
 CREATE TABLE public.tbl_alter_table_ttl_expiration_expression (
   id INT8 NOT NULL,
-  text STRING NULL,
   expire_at TIMESTAMPTZ NULL,
   CONSTRAINT tbl_alter_table_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_expire_at (id, text, expire_at)
+  FAMILY fam_0_id_expire_at (id, expire_at)
 )
 
 subtest end
@@ -907,112 +949,43 @@ CREATE TABLE public.tbl_ttl_expiration_expression_renamed (
 
 subtest end
 
-subtest todo_add_subtests2
-
-# Test adding to TTL table with crdb_internal_expiration already defined.
-statement ok
-DROP TABLE tbl;
+subtest crdb_internal_expiration_already_defined
 
 statement ok
-CREATE TABLE tbl (
+CREATE TABLE tbl_crdb_internal_expiration_already_defined (
   id INT PRIMARY KEY,
-  text TEXT,
-  crdb_internal_expiration TIMESTAMPTZ,
-  FAMILY (id, text)
+  crdb_internal_expiration TIMESTAMPTZ
 )
 
 statement error cannot add TTL to table with the crdb_internal_expiration column already defined
-ALTER TABLE tbl SET (ttl_expire_after = '10 minutes')
+ALTER TABLE tbl_crdb_internal_expiration_already_defined SET (ttl_expire_after = '10 minutes')
 
-# Test we cannot add FKs to a TTL table.
-statement ok
-CREATE TABLE ref_table (id INT PRIMARY KEY, ref INT)
+subtest end
 
-statement error foreign keys from table with TTL "ttl_table" are not permitted
-CREATE TABLE ttl_table (id INT PRIMARY KEY, ref INT REFERENCES ref_table(id)) WITH (ttl_expire_after = '10 mins')
-
-statement ok
-CREATE TABLE ttl_table (id INT PRIMARY KEY, ref INT) WITH (ttl_expire_after = '10 mins')
-
-statement error foreign keys to table with TTL "ttl_table" are not permitted
-CREATE TABLE new_ref_table (id INT PRIMARY KEY, ref INT REFERENCES ttl_table(id))
-
-statement error foreign keys to table with TTL "ttl_table" are not permitted
-ALTER TABLE ref_table ADD CONSTRAINT fk FOREIGN KEY (ref) REFERENCES ttl_table (id)
-
-statement error foreign keys from table with TTL "ttl_table" are not permitted
-ALTER TABLE ttl_table ADD CONSTRAINT fk FOREIGN KEY (ref) REFERENCES ttl_table (id)
-
-statement ok
-CREATE TABLE ttl_become_table (id INT PRIMARY KEY, ref INT REFERENCES ref_table (id))
-
-statement error foreign keys from table with TTL "ttl_become_table" are not permitted
-ALTER TABLE ttl_become_table SET (ttl_expire_after = '10 minutes')
-
-# Check non-ascending PKs are not permitted.
-
-statement ok
-DROP TABLE tbl
+subtest desc_pk_with_ttl
 
 statement error non-ascending ordering on PRIMARY KEYs are not supported
-CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text DESC)) WITH (ttl_expire_after = '10 minutes')
+CREATE TABLE tbl_desc_pk_with_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC)) WITH (ttl_expire_after = '10 minutes')
+
+subtest end
+
+subtest desc_pk_without_ttl_add_ttl
 
 statement ok
-CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text DESC))
+CREATE TABLE tbl_desc_pk_without_ttl_add_ttl (id INT, id2 INT, PRIMARY KEY (id, id2 DESC))
 
 statement error non-ascending ordering on PRIMARY KEYs are not supported
-ALTER TABLE tbl SET (ttl_expire_after = '10 minutes')
+ALTER TABLE tbl_desc_pk_without_ttl_add_ttl SET (ttl_expire_after = '10 minutes')
+
+subtest end
+
+subtest asc_pk_alter_desc_pk
 
 statement ok
-DROP TABLE tbl;
-
-statement ok
-CREATE TABLE tbl (id INT, text TEXT, PRIMARY KEY (id, text)) WITH (ttl_expire_after = '10 minutes')
+CREATE TABLE tbl_asc_pk_alter_desc_pk (id INT, id2 INT, PRIMARY KEY (id, id2)) WITH (ttl_expire_after = '10 minutes')
 
 statement error non-ascending ordering on PRIMARY KEYs are not supported
-ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (id, text DESC)
-
-# Create a table without a TTL. Add the TTL to the table and ensure
-# the schedule and TTL is setup correctly.
-statement ok
-DROP TABLE tbl;
-
-statement ok
-CREATE TABLE tbl (
-   id INT PRIMARY KEY,
-   text TEXT,
-   FAMILY (id, text)
-)
-
-statement error cannot modify TTL settings while another schema change on the table is being processed
-ALTER TABLE tbl SET (ttl_expire_after = '10 minutes'), SET (ttl_select_batch_size = 200)
-
-statement error cannot modify TTL settings while another schema change on the table is being processed
-BEGIN;
-ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
-ALTER TABLE tbl RESET (ttl_select_batch_size)
-
-statement ok
-ROLLBACK
-
-statement error cannot modify TTL settings while another schema change on the table is being processed
-BEGIN;
-CREATE INDEX tbl_idx ON tbl (text);
-ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
-
-statement ok
-ROLLBACK
-
-statement error cannot perform other schema changes in the same transaction as a TTL mutation
-BEGIN;
-ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
-CREATE INDEX tbl_idx ON tbl (text)
-
-statement ok
-ROLLBACK
-
-statement ok
-DROP TABLE tbl
+ALTER TABLE tbl_asc_pk_alter_desc_pk ALTER PRIMARY KEY USING COLUMNS (id, id2 DESC)
 
 subtest end
 
@@ -1020,9 +993,7 @@ subtest create_table_no_ttl_set_ttl_expire_after
 
 statement ok
 CREATE TABLE create_table_no_ttl_set_ttl_expire_after (
-   id INT PRIMARY KEY,
-   text TEXT,
-   FAMILY (id, text)
+   id INT PRIMARY KEY
 )
 
 statement ok
@@ -1033,10 +1004,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE create_table_no_ttl_set_ttl_expi
 ----
 CREATE TABLE public.create_table_no_ttl_set_ttl_expire_after (
   id INT8 NOT NULL,
-  text STRING NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT create_table_no_ttl_set_ttl_expire_after_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text (id, text, crdb_internal_expiration)
+  CONSTRAINT create_table_no_ttl_set_ttl_expire_after_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
 
 let $table_id
@@ -1063,9 +1032,8 @@ subtest create_table_no_ttl_set_ttl_expiration_expression
 statement ok
 CREATE TABLE create_table_no_ttl_set_ttl_expiration_expression (
    id INT PRIMARY KEY,
-   text TEXT,
    expire_at TIMESTAMPTZ,
-   FAMILY (id, text)
+   FAMILY (id, expire_at)
 )
 
 statement ok
@@ -1076,10 +1044,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE create_table_no_ttl_set_ttl_expi
 ----
 CREATE TABLE public.create_table_no_ttl_set_ttl_expiration_expression (
   id INT8 NOT NULL,
-  text STRING NULL,
   expire_at TIMESTAMPTZ NULL,
   CONSTRAINT create_table_no_ttl_set_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_expire_at (id, text, expire_at)
+  FAMILY fam_0_id_expire_at (id, expire_at)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')
 
 let $table_id

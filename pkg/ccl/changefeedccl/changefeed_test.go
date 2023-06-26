@@ -7562,3 +7562,43 @@ func TestPartitionSpans(t *testing.T) {
 		})
 	}
 }
+
+// Regression test for (#103855).
+func TestAlterChangefeedAddTargetTracksPTS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		f2 := feed(t, f, `CREATE CHANGEFEED FOR table foo with protect_data_from_gc_on_pause,
+			resolved='1s', min_checkpoint_frequency='1s'`)
+		defer closeFeed(t, f2)
+
+		getNumPTSRecords := func() int {
+			rows := sqlDB.Query(t, "SELECT * FROM system.protected_ts_records")
+			r, err := sqlutils.RowsToStrMatrix(rows)
+			if err != nil {
+				t.Fatalf("%v", err)
+			}
+			return len(r)
+		}
+
+		jobFeed := f2.(cdctest.EnterpriseTestFeed)
+
+		_, _ = expectResolvedTimestamp(t, f2)
+
+		require.Equal(t, 1, getNumPTSRecords())
+
+		require.NoError(t, jobFeed.Pause())
+		sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d ADD TABLE foo2 with initial_scan='yes'", jobFeed.JobID()))
+		require.NoError(t, jobFeed.Resume())
+
+		_, _ = expectResolvedTimestamp(t, f2)
+
+		require.Equal(t, 1, getNumPTSRecords())
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}

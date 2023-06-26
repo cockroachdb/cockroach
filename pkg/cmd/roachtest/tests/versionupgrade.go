@@ -102,6 +102,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// of #58489 is being addressed.
 	_ = schemaChangeStep
 	backupStep := func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+
 		// Verify that backups can be created in various configurations. This is
 		// important to test because changes in system tables might cause backups to
 		// fail in mixed-version clusters.

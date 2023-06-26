@@ -31,10 +31,11 @@ import (
 func registerImportCancellation(r registry.Registry) {
 	for _, rangeTombstones := range []bool{true, false} {
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf(`import-cancellation/rangeTs=%t`, rangeTombstones),
-			Owner:   registry.OwnerDisasterRecovery,
-			Timeout: 4 * time.Hour,
-			Cluster: r.MakeClusterSpec(6, spec.CPU(32)),
+			Name:      fmt.Sprintf(`import-cancellation/rangeTs=%t`, rangeTombstones),
+			Owner:     registry.OwnerDisasterRecovery,
+			Benchmark: true,
+			Timeout:   4 * time.Hour,
+			Cluster:   r.MakeClusterSpec(6, spec.CPU(32)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runImportCancellation(ctx, t, c, rangeTombstones)
 			},

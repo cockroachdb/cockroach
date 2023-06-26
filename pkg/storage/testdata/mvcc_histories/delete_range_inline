@@ -1,0 +1,51 @@
+# Mix inline and mvcc delete range requests with inline and mvcc key-values.
+
+run ok
+put k=inline-key v=inline-val ts=0
+----
+>> at end:
+meta: "inline-key"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline-val mergeTs=<nil> txnDidNotUpdateMeta=false
+
+run ok
+put k=mvcc-key v=mvcc-val ts=10
+----
+>> at end:
+meta: "inline-key"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline-val mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "mvcc-key"/10.000000000,0 -> /BYTES/mvcc-val
+
+
+# Incompatible requests.
+
+run error
+del_range k=inline-key end=inline-key-end ts=20
+----
+>> at end:
+meta: "inline-key"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline-val mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "mvcc-key"/10.000000000,0 -> /BYTES/mvcc-val
+error: (*withstack.withStack:) "inline-key"/0,0: put is inline=false, but existing value is inline=true
+
+run error
+del_range k=mvcc-key end=mvcc-key-end ts=0
+----
+>> at end:
+meta: "inline-key"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline-val mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "mvcc-key"/10.000000000,0 -> /BYTES/mvcc-val
+error: (*withstack.withStack:) "mvcc-key"/0,0: put is inline=true, but existing value is inline=false
+
+
+# Compatible requests.
+
+run ok
+del_range k=inline-key end=inline-key-end ts=0
+----
+del_range: "inline-key"-"inline-key-end" -> deleted 1 key(s)
+>> at end:
+data: "mvcc-key"/10.000000000,0 -> /BYTES/mvcc-val
+
+run ok
+del_range k=mvcc-key end=mvcc-key-end ts=20
+----
+del_range: "mvcc-key"-"mvcc-key-end" -> deleted 1 key(s)
+>> at end:
+data: "mvcc-key"/20.000000000,0 -> /<empty>
+data: "mvcc-key"/10.000000000,0 -> /BYTES/mvcc-val

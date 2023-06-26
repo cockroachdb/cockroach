@@ -229,6 +229,10 @@ func (r *Replica) leasePostApplyLocked(
 	// Everything we do before then doesn't need to worry about requests being
 	// evaluated under the new lease.
 
+	// maybeSplit is true if we may have been called during splitPostApply, where
+	// prevLease equals newLease and we're applying the RHS lease.
+	var maybeSplit bool
+
 	// Sanity check to make sure that the lease sequence is moving in the right
 	// direction.
 	if s1, s2 := prevLease.Sequence, newLease.Sequence; s1 != 0 {
@@ -246,6 +250,7 @@ func (r *Replica) leasePostApplyLocked(
 				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
 					redact.Safe(prevLease), redact.Safe(newLease))
 			}
+			maybeSplit = prevLease.Equal(newLease)
 		case s2 == s1+1:
 			// Lease sequence incremented by 1. Expected case.
 		case s2 > s1+1 && jumpOpt == assertNoLeaseJump:
@@ -363,7 +368,18 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
-	if leaseChangingHands && iAmTheLeaseHolder && hasExpirationBasedLease && r.ownsValidLeaseRLocked(ctx, now) {
+	// Log acquisition of meta and liveness range leases. These are critical to
+	// cluster health, so it's useful to know their location over time.
+	if leaseChangingHands && iAmTheLeaseHolder &&
+		r.descRLocked().StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
+		if r.ownsValidLeaseRLocked(ctx, now) {
+			log.Health.Infof(ctx, "acquired system range lease: %s", newLease)
+		} else {
+			log.Health.Warningf(ctx, "applied system range lease after it expired: %s", newLease)
+		}
+	}
+
+	if (leaseChangingHands || maybeSplit) && iAmTheLeaseHolder && hasExpirationBasedLease {
 		if requiresExpirationBasedLease {
 			// Whenever we first acquire an expiration-based lease for a range that
 			// requires it, notify the lease renewer worker that we want it to keep
@@ -373,7 +389,7 @@ func (r *Replica) leasePostApplyLocked(
 			case r.store.renewableLeasesSignal <- struct{}{}:
 			default:
 			}
-		} else {
+		} else if r.ownsValidLeaseRLocked(ctx, now) {
 			// We received an expiration lease for a range that doesn't require it,
 			// i.e. comes after the liveness keyspan. We've also applied it before
 			// it has expired. Upgrade this lease to the more efficient epoch-based

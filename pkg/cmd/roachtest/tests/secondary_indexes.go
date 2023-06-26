@@ -138,7 +138,7 @@ func verifyTableData(node int, expected [][]int) versionStep {
 func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "schemachange/secondary-index-multi-version",
-		Owner:   registry.OwnerSQLSchema,
+		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if runtime.GOARCH == "arm64" {

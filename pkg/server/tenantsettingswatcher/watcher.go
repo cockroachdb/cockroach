@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
@@ -93,7 +95,17 @@ func (w *Watcher) Start(ctx context.Context, sysTableResolver catalog.SystemTabl
 func (w *Watcher) startRangeFeed(
 	ctx context.Context, sysTableResolver catalog.SystemTableIDResolver,
 ) error {
-	tableID, err := sysTableResolver.LookupSystemTableID(ctx, systemschema.TenantSettingsTable.GetName())
+	// We need to retry unavailable replicas here. This is only meant to be called
+	// at server startup.
+	var tableID descpb.ID
+	err := startup.RunIdempotentWithRetry(ctx,
+		w.stopper.ShouldQuiesce(),
+		"tenant start setting rangefeed",
+		func(ctx context.Context) (err error) {
+			tableID, err = sysTableResolver.LookupSystemTableID(ctx,
+				systemschema.TenantSettingsTable.GetName())
+			return err
+		})
 	if err != nil {
 		return err
 	}

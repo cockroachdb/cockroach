@@ -52,8 +52,8 @@ type resultsBuffer interface {
 	get(context.Context) (_ []Result, allComplete bool, _ error)
 
 	// wait blocks until there is at least one Result available to be returned
-	// to the client.
-	wait()
+	// to the client or the passed-in context is canceled.
+	wait(context.Context) error
 
 	// releaseOne decrements the number of unreleased Results by one.
 	releaseOne()
@@ -64,6 +64,8 @@ type resultsBuffer interface {
 	clearOverhead(context.Context)
 
 	// close releases all of the resources associated with the buffer.
+	// NB: close can only be called when all other goroutines (the worker
+	// coordinator as well as any async request evaluators) have exited.
 	close(context.Context)
 
 	///////////////////////////////////////////////////////////////////////////
@@ -225,8 +227,13 @@ func (b *resultsBufferBase) signal() {
 	}
 }
 
-func (b *resultsBufferBase) wait() {
-	<-b.hasResults
+func (b *resultsBufferBase) wait(ctx context.Context) error {
+	select {
+	case <-b.hasResults:
+		return b.error()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (b *resultsBufferBase) numUnreleased() int {
@@ -336,12 +343,7 @@ func (b *outOfOrderResultsBuffer) numSpilledResults() int {
 	return 0
 }
 
-func (b *outOfOrderResultsBuffer) close(context.Context) {
-	// Note that only the client's goroutine can be blocked waiting for the
-	// results, and close() is called only by the same goroutine, so signaling
-	// isn't necessary. However, we choose to be safe and do it anyway.
-	b.signal()
-}
+func (b *outOfOrderResultsBuffer) close(context.Context) {}
 
 // ResultDiskBuffer encapsulates the logic for spilling Results to temporary
 // disk storage.
@@ -357,7 +359,8 @@ type ResultDiskBuffer interface {
 	Deserialize(_ context.Context, _ *Result, resultID int) error
 	// Reset reset the buffer for reuse.
 	Reset(context.Context) error
-	// Close closes the buffer and releases all of its resources.
+	// Close closes the buffer and releases all of its resources. Cannot be
+	// called concurrently with Serialize / Deserialize.
 	Close(context.Context)
 }
 
@@ -663,13 +666,7 @@ func (b *inOrderResultsBuffer) numSpilledResults() int {
 }
 
 func (b *inOrderResultsBuffer) close(ctx context.Context) {
-	b.Lock()
-	defer b.Unlock()
 	b.diskBuffer.Close(ctx)
-	// Note that only the client's goroutine can be blocked waiting for the
-	// results, and close() is called only by the same goroutine, so signaling
-	// isn't necessary. However, we choose to be safe and do it anyway.
-	b.signal()
 }
 
 // inOrderBufferedResult describes a single Result for InOrder mode, regardless

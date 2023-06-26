@@ -237,6 +237,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
+			JobRegistry:     &jobs.Registry{},
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
@@ -337,6 +338,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
+			JobRegistry:     &jobs.Registry{},
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
@@ -464,6 +466,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
+			JobRegistry:     &jobs.Registry{},
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(

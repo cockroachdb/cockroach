@@ -29,7 +29,7 @@ func TestLexer(t *testing.T) {
 		{`AS OF SYSTEM TIME`, []int{AS_LA, OF, SYSTEM, TIME}},
 	}
 	for i, d := range testData {
-		s := makeScanner(d.sql)
+		s := makeSQLScanner(d.sql)
 		var scanTokens []sqlSymType
 		for {
 			var lval sqlSymType
