@@ -93,7 +93,8 @@ func TestConn(t *testing.T) {
 	log.Infof(context.Background(), "started listener on %s", serverAddr)
 
 	var g errgroup.Group
-	ctx := context.Background()
+	ctx, cancelConn := context.WithCancel(context.Background())
+	defer cancelConn()
 
 	var clientWG sync.WaitGroup
 	clientWG.Add(1)
@@ -103,8 +104,6 @@ func TestConn(t *testing.T) {
 	})
 
 	server := newTestServer()
-	ctx, cancelConn := context.WithCancel(ctx)
-	defer cancelConn()
 	// Wait for the client to connect and perform the handshake.
 	netConn, err := waitForClientConn(ln)
 	if err != nil {
