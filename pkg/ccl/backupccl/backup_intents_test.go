@@ -31,7 +31,8 @@ func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer ccl.TestingEnableEnterprise()()
 
-	skip.UnderRace(t, "measures backup times not to regress, can't work under race")
+	skip.UnderRace(t, "measures backup times to ensure intent resolution does not regress, can't work under race")
+	skip.UnderDeadlock(t, "measures backup times to ensure intent resolution does not regress, can't work under deadlock")
 
 	// Time to create backup in presence of intents differs roughly 10x so some
 	// arbitrary number is picked which is 2x higher than current backup time on
