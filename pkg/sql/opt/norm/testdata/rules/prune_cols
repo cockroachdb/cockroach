@@ -5296,7 +5296,7 @@ CREATE TABLE c100478 (
 
 # A join which doesn't prune columns which could potentially appear in derived
 # ON clause conditions should not result in infinite rule recursion.
-norm expect=(EliminateGroupByProject,PruneJoinLeftCols,PruneJoinRightCols)
+norm expect=(EliminateGroupByProject,PruneJoinLeftCols,PruneJoinRightCols) disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight,EliminateJoinUnderGroupByLeft,EliminateJoinUnderGroupByRight)
 SELECT p.id FROM p100478 p JOIN c100478 ON p_id = p.id GROUP BY p.id
 ----
 distinct-on

@@ -141,7 +141,7 @@ ReadyForQuery
 
 # Regression test for not setting OIDs in some cases (#71891).
 send crdb_only
-Query {"String": "SELECT a, tab1_a FROM tab2 INNER MERGE JOIN tab1 ON a = tab1_a WHERE a = 1"}
+Query {"String": "SELECT a, tab1_a FROM tab2 RIGHT MERGE JOIN tab1 ON a = tab1_a WHERE a = 1"}
 ----
 
 until crdb_only
