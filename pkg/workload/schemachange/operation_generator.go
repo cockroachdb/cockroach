@@ -1360,6 +1360,14 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 		return false
 	}()
+	// PGLSN was added in 23.2.
+	pgLSNNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
 	// Forward indexes for arrays were added in 23.1, so check the index
 	// definitions for them in mixed version states.
 	forwardIndexesOnArraysNotSupported, err := isClusterVersionLessThan(
@@ -1460,6 +1468,8 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Syntax, condition: hasUnsupportedTSQuery},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
+		{code: pgcode.Syntax, condition: pgLSNNotSupported},
+		{code: pgcode.FeatureNotSupported, condition: pgLSNNotSupported},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedIdxQueries},
 		{code: pgcode.InvalidTableDefinition, condition: hasUnsupportedIdxQueries},
 	})
