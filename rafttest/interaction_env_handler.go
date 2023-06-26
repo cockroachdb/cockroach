@@ -142,6 +142,13 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		//
 		// transfer-leadership from=1 to=4
 		err = env.handleTransferLeadership(t, d)
+	case "forget-leader":
+		// Forgets the current leader of the given node.
+		//
+		// Example:
+		//
+		// forget-leader 1
+		err = env.handleForgetLeader(t, d)
 	case "propose":
 		// Propose an entry.
 		//
@@ -182,20 +189,17 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 	default:
 		err = fmt.Errorf("unknown command")
 	}
-	if err != nil {
-		env.Output.WriteString(err.Error())
-	}
 	// NB: the highest log level suppresses all output, including that of the
 	// handlers. This comes in useful during setup which can be chatty.
 	// However, errors are always logged.
-	if env.Output.Len() == 0 {
-		return "ok"
-	}
-	if env.Output.Lvl == len(lvlNames)-1 {
-		if err != nil {
+	if err != nil {
+		if env.Output.Quiet() {
 			return err.Error()
 		}
-		return "ok (quiet)"
+		env.Output.WriteString(err.Error())
+	}
+	if env.Output.Len() == 0 {
+		return "ok"
 	}
 	return env.Output.String()
 }
