@@ -19,12 +19,14 @@ import (
 	"crypto/x509/pkix"
 	gosql "database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
 	"math/rand"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -69,11 +71,12 @@ var kafkaCreateTopicRetryDuration = 1 * time.Minute
 type sinkType string
 
 const (
-	cloudStorageSink sinkType = "cloudstorage"
-	webhookSink      sinkType = "webhook"
-	pubsubSink       sinkType = "pubsub"
-	kafkaSink        sinkType = "kafka"
-	nullSink         sinkType = "null"
+	cloudStorageSink       sinkType = "cloudstorage"
+	webhookSink            sinkType = "webhook"
+	pubsubSink             sinkType = "pubsub"
+	kafkaSink              sinkType = "kafka"
+	azureEventHubKafkaSink sinkType = "azure-event-hub"
+	nullSink               sinkType = "null"
 )
 
 var envVars = []string{
@@ -148,6 +151,10 @@ func (ct *cdcTester) startStatsCollection() func() {
 			ct.t.Errorf("error exporting stats file: %s", err)
 		}
 	}
+}
+
+type AuthorizationRuleKeys struct {
+	PrimaryConnectionString string `json:"primaryConnectionString"`
 }
 
 func (ct *cdcTester) startCRDBChaos() {
@@ -245,6 +252,27 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		}
 
 		sinkURI = kafka.sinkURL(ct.ctx)
+	case azureEventHubKafkaSink:
+		kafkaNode := ct.kafkaSinkNode()
+		kafka := kafkaManager{
+			t:     ct.t,
+			c:     ct.cluster,
+			nodes: kafkaNode,
+			mon:   ct.mon,
+		}
+		kafka.install(ct.ctx)
+		kafka.start(ct.ctx, "kafka")
+		if err := kafka.installAzureCli(ct.ctx); err != nil {
+			kafka.t.Fatal(err)
+		}
+		connectionString, err := kafka.getConnectionString(ct.ctx)
+		if err != nil {
+			kafka.t.Fatal(err)
+		}
+		sinkURI = fmt.Sprintf(
+			`kafka://cdc-roachtest.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=%s&sasl_mechanism=PLAIN&topic_name=testing`,
+			url.QueryEscape(connectionString),
+		)
 	default:
 		ct.t.Fatalf("unknown sink provided: %s", args.sinkType)
 	}
@@ -1599,6 +1627,33 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-azure",
+		Owner:            `cdc`,
+		CompatibleClouds: registry.AllExceptAWS,
+		Cluster:          r.MakeClusterSpec(2, spec.GCEZones("us-east1-b")),
+		Leases:           registry.MetamorphicLeases,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+			// Just use 1 warehouse and no initial scan since this would involve
+			// cross-cloud traffic which is far more expensive.  The throughput also
+			// can't be too high to not hit the Throughput Unit (TU) limit of 1MBps/TU
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: azureEventHubKafkaSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'no'"},
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      10 * time.Minute,
+			})
+			ct.waitForWorkload()
+		},
+		RequiresLicense: true,
+	})
+	r.Add(registry.TestSpec{
 		Name:             "cdc/bank",
 		Owner:            `cdc`,
 		Cluster:          r.MakeClusterSpec(4),
@@ -1810,6 +1865,18 @@ export HYDRA_ADMIN_URL=http://localhost:4445
 export DSN=memory
 
 ./hydra serve all --dev
+`
+
+var installAzureCliScript = `
+sudo apt-get update && \
+sudo apt-get install -y ca-certificates curl apt-transport-https lsb-release gnupg && \
+sudo mkdir -p /etc/apt/keyrings && \
+curl -sLS https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor | sudo tee /etc/apt/keyrings/microsoft.gpg > /dev/null && \
+sudo chmod go+r /etc/apt/keyrings/microsoft.gpg && \
+AZ_DIST=$(lsb_release -cs) && \
+echo "deb [arch=\"dpkg --print-architecture\" signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $AZ_DIST main" | sudo tee /etc/apt/sources.list.d/azure-cli.list && \
+sudo apt-get update && \
+sudo apt-get install -y azure-cli
 `
 
 const (
@@ -2118,6 +2185,61 @@ func (k kafkaManager) installJRE(ctx context.Context) error {
 		}
 		return k.c.RunE(ctx, option.WithNodes(k.nodes), `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre maven 2>&1 > logs/apt-get-install.log`)
 	})
+}
+
+// installAzureCli installs azure cli on the kafka node which is necessary for
+// retrieving endpoint connection string for the roachtest azure event hub.
+func (k kafkaManager) installAzureCli(ctx context.Context) error {
+	k.t.Status("installing azure cli")
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Minute,
+		MaxBackoff:     5 * time.Minute,
+	}
+	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
+		return k.c.RunE(ctx, option.WithNodes(k.nodes), installAzureCliScript)
+	})
+}
+
+// getConnectionString retrieves the Azure Event Hub connection string for the
+// cdc-roachtest event hub set up in the CRL Azure account for roachtest
+// testing.
+func (k kafkaManager) getConnectionString(ctx context.Context) (string, error) {
+	// The necessary credential env vars have been added to TeamCity agents by
+	// dev-inf. Note that running this test on roachprod would not work due to
+	// lacking the required credentials env vars set up.
+	azureClientID := os.Getenv("AZURE_CLIENT_ID")
+	azureClientSecret := os.Getenv("AZURE_CLIENT_SECRET")
+	azureSubscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
+	azureTenantID := os.Getenv("AZURE_TENANT_ID")
+
+	k.t.Status("getting azure event hub connection string")
+	// az login --service-principal -t <Tenant-ID> -u <Client-ID> -p=<Client-secret>
+	cmdStr := fmt.Sprintf("az login --service-principal -t %s -u %s -p=%s", azureTenantID, azureClientID, azureClientSecret)
+	_, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
+	if err != nil {
+		return "", errors.Wrap(err, "error running `az login`")
+	}
+
+	cmdStr = fmt.Sprintf("az account set --subscription %s", azureSubscriptionID)
+	_, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
+	if err != nil {
+		return "", errors.Wrap(err, "error running `az account set` command")
+	}
+
+	cmdStr = "az eventhubs namespace authorization-rule keys list --name cdc-roachtest-auth-rule " +
+		"--namespace-name cdc-roachtest --resource-group e2e-infra-event-hub-rg"
+	results, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
+	if err != nil {
+		return "", errors.Wrap(err, "error running `az eventhubs` command")
+	}
+
+	var keys AuthorizationRuleKeys
+	err = json.Unmarshal([]byte(results.Stdout), &keys)
+	if err != nil {
+		return "", errors.Wrap(err, "error unmarshalling az eventhubs keys")
+	}
+
+	return keys.PrimaryConnectionString, nil
 }
 
 func (k kafkaManager) runWithRetry(ctx context.Context, cmd string) {
