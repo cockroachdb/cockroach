@@ -8659,10 +8659,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	close(blockBackfills)
 
 	var chunkCount int32
-	// Disable running within a tenant because expected index span is not received.
-	// More investigation is necessary.
-	// https://github.com/cockroachdb/cockroach/issues/88633F
-	serverArgs := base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled}
+	serverArgs := base.TestServerArgs{}
 	serverArgs.Knobs = base.TestingKnobs{
 		// Configure knobs to block the index backfills.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -8777,7 +8774,16 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
 	inc3Spans := getSpansFromManifest(ctx, t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
-	require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
+	// NB: When running in a tenant, we don't add a split point
+	// for an index. As a result, we end up issuing a single
+	// export request for /Table/*/1-3 and while /Table/*/1-2 has
+	// no data in it, the start key is based on the start key of
+	// our request.
+	if tc.StartedDefaultTestTenant() {
+		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{1-3}", dataBankTableID), inc3Spans[0].String())
+	} else {
+		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
+	}
 
 	// Drop the index.
 	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)
