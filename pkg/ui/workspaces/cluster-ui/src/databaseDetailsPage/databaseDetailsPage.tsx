@@ -947,9 +947,7 @@ export class DatabaseDetailsPage extends React.Component<
             renderError={() =>
               LoadingError({
                 statsType: "databases",
-                timeout: this.props.lastError?.name
-                  ?.toLowerCase()
-                  .includes("timeout"),
+                error: this.props.lastError,
               })
             }
           />
@@ -962,9 +960,6 @@ export class DatabaseDetailsPage extends React.Component<
               renderError={() =>
                 LoadingError({
                   statsType: "part of the information",
-                  timeout: this.state.lastDetailsError?.name
-                    ?.toLowerCase()
-                    .includes("timeout"),
                   error: this.state.lastDetailsError,
                 })
               }

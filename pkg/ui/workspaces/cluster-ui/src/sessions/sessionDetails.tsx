@@ -212,6 +212,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             renderError={() =>
               LoadingError({
                 statsType: "sessions",
+                error: this.props.sessionError,
               })
             }
           />

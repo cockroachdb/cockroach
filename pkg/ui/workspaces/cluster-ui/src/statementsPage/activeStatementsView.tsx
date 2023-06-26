@@ -202,6 +202,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
           renderError={() =>
             LoadingError({
               statsType: "statements",
+              error: sessionsError,
             })
           }
         >
