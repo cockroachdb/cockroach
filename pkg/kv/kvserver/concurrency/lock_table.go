@@ -1915,6 +1915,11 @@ func (l *lockState) tryActiveWait(
 			// non-transactional.
 			qg.active = false
 			wait = false
+			// If this request was previously designated as a distinguished waiter,
+			// and is now being marked inactive, clear out the designation.
+			if l.distinguishedWaiter == qg.guard {
+				l.distinguishedWaiter = nil
+			}
 		}
 	} else {
 		if replicatedLockFinalizedTxn != nil || unreplicatedLockFinalizedTxn != nil {
