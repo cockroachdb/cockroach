@@ -200,7 +200,7 @@ var (
 	CannotCoerce                       = MakeCode("42846")
 	Grouping                           = MakeCode("42803")
 	Windowing                          = MakeCode("42P20")
-	InvalidRecursion                   = MakeCode("42P19")
+	InvalidRecursion    ]               = MakeCode("42P19")
 	InvalidForeignKey                  = MakeCode("42830")
 	InvalidName                        = MakeCode("42602")
 	NameTooLong                        = MakeCode("42622")

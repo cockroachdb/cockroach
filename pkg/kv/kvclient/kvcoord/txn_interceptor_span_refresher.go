@@ -525,16 +525,18 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 	if txn.WriteTooOld {
 		reason = kvpb.RETRY_WRITE_TOO_OLD
 	}
+	var refreshFailedErr *kvpb.RefreshFailedError
 	msg := redact.StringBuilder{}
 	msg.SafeString("failed preemptive refresh")
 	if refreshErr != nil {
 		if refreshErr, ok := refreshErr.GetDetail().(*kvpb.RefreshFailedError); ok {
+			refreshFailedErr = refreshErr
 			msg.Printf(" due to a conflict: %s on key %s", refreshErr.FailureReason(), refreshErr.Key)
 		} else {
 			msg.Printf(" - unknown error: %s", refreshErr)
 		}
 	}
-	retryErr := kvpb.NewTransactionRetryError(reason, msg.RedactableString())
+	retryErr := kvpb.NewTransactionRetryError(reason, msg.RedactableString(), refreshFailedErr.ConflictingTxn)
 	return kvpb.NewErrorWithTxn(retryErr, txn)
 }
 
