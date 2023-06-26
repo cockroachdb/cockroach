@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	"github.com/cockroachdb/errors"
@@ -64,57 +66,104 @@ func registerCancel(r registry.Registry) {
 			}
 
 			t.Status("running queries to cancel")
+			successfullyCompletedErr := errors.New("query completed before it could be canceled")
+			queryNotFoundRE, err := regexp.Compile("could not cancel query.*query ID.*not found")
+			if err != nil {
+				t.Fatal(err)
+			}
+			rng, _ := randutil.NewTestRand()
 			for _, queryNum := range tpchQueriesToRun {
-				// sem is used to indicate that the query-runner goroutine has
-				// been spawned up.
-				sem := make(chan struct{})
-				// Any error regarding the cancellation (or of its absence) will
-				// be sent on errCh.
-				errCh := make(chan error, 1)
-				go func(queryNum int) {
-					defer close(errCh)
-					query := tpch.QueriesByNumber[queryNum]
-					t.L().Printf("executing q%d\n", queryNum)
-					sem <- struct{}{}
-					close(sem)
-					_, err := conn.Exec(queryPrefix + query)
-					if err == nil {
-						errCh <- errors.New("query completed before it could be canceled")
-					} else {
-						fmt.Printf("query failed with error: %s\n", err)
-						// Note that errors.Is() doesn't work here because
-						// lib/pq wraps the query canceled error.
-						if !strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error()) {
-							errCh <- errors.Wrap(err, "unexpected error")
+				const numRuns = 5
+				var numCanceled int
+				for run := 0; run < numRuns; run++ {
+					// sem is used to indicate that the query-runner goroutine
+					// has been spawned up.
+					sem := make(chan struct{})
+					// Any error regarding the cancellation (or of its absence)
+					// will be sent on errCh.
+					errCh := make(chan error, 1)
+					go func(queryNum int) {
+						runnerConn := c.Conn(ctx, t.L(), 1)
+						defer runnerConn.Close()
+						query := tpch.QueriesByNumber[queryNum]
+						t.L().Printf("executing q%d\n", queryNum)
+						close(sem)
+						_, err := runnerConn.Exec(queryPrefix + query)
+						if err == nil {
+							err = successfullyCompletedErr
+						}
+						errCh <- err
+					}(queryNum)
+
+					// Wait for the query-runner goroutine to start.
+					<-sem
+
+					// Continuously poll until we get the queryID that we want
+					// to cancel. We expect it to show up within 10 seconds.
+					var queryID string
+					timeoutCh := time.After(10 * time.Second)
+					for {
+						// Sleep for some random duration up to 200ms. This
+						// allows us to sometimes find the query when it's in
+						// the planning stage while in most cases it's in the
+						// execution stage already.
+						time.Sleep(time.Duration(rng.Intn(200)+1) * time.Millisecond)
+						rows, err := conn.Query(`SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query NOT LIKE '%SHOW CLUSTER QUERIES%'`)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if rows.Next() {
+							if err = rows.Scan(&queryID); err != nil {
+								t.Fatal(err)
+							}
+							break
+						}
+						if err = rows.Close(); err != nil {
+							t.Fatal(err)
+						}
+						select {
+						case <-timeoutCh:
+							t.Fatal(errors.New("didn't see the query to cancel within 10 seconds"))
+						default:
 						}
 					}
-				}(queryNum)
 
-				// Wait for the query-runner goroutine to start.
-				<-sem
-
-				// The cancel query races with the execution of the query it's trying to
-				// cancel, which may result in attempting to cancel the query before it
-				// has started.  To be more confident that the query is executing, wait
-				// a bit before attempting to cancel it.
-				time.Sleep(250 * time.Millisecond)
-
-				const cancelQuery = `CANCEL QUERIES
-	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%'`
-				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "`+cancelQuery+`"`)
-				cancelStartTime := timeutil.Now()
-
-				select {
-				case err, ok := <-errCh:
-					if ok {
-						t.Fatal(err)
+					_, err := conn.Exec(`CANCEL QUERY $1`, queryID)
+					if err != nil {
+						// We might have slept for too long so that the query
+						// successfully finished and the query ID was deleted
+						// from the query registry.
+						if !queryNotFoundRE.MatchString(err.Error()) {
+							t.Fatal(err)
+						}
+						t.Status(err)
+						continue
 					}
-					// If errCh is closed, then the cancellation was successful.
-					timeToCancel := timeutil.Since(cancelStartTime)
-					fmt.Printf("canceling q%d took %s\n", queryNum, timeToCancel)
+					cancelStartTime := timeutil.Now()
 
-				case <-time.After(5 * time.Second):
-					t.Fatal("query took too long to respond to cancellation")
+					select {
+					case err := <-errCh:
+						t.Status(err)
+						if errors.Is(err, successfullyCompletedErr) {
+							break
+						} else if !strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error()) {
+							// Note that errors.Is() doesn't work here because
+							// lib/pq wraps the query canceled error.
+							t.Fatal(errors.Wrap(err, "unexpected error"))
+						}
+						timeToCancel := timeutil.Since(cancelStartTime)
+						t.Status(fmt.Sprintf("canceling q%d took %s\n", queryNum, timeToCancel))
+						numCanceled++
+
+					case <-time.After(5 * time.Second):
+						t.Fatal("query took too long to respond to cancellation")
+					}
+				}
+				if minExpected := (numRuns + 1) / 2; numCanceled < minExpected {
+					t.Fatalf(
+						"expected at least %d successful cancellations out of %d runs, found only %d",
+						minExpected, numRuns, numCanceled,
+					)
 				}
 			}
 
