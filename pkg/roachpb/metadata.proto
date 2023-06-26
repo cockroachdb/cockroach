@@ -428,17 +428,17 @@ message Tier {
 // LocalityComparisonType represents different types of comparison results that
 // indicate the relationship between two localities.
 enum LocalityComparisonType {
-  // CROSS_REGION indicates that the two localities have different region tiers.
-  CROSS_REGION = 0;
-  // SAME_REGION_CROSS_ZONE indicates that the two localities have the same
-  // region tiers but different zone tiers.
-  SAME_REGION_CROSS_ZONE = 1;
-  // SAME_REGION_SAME_ZONE indicates that the two localities have same region
-  // and same zone tiers.
-  SAME_REGION_SAME_ZONE = 2;
   // UNDEFINED represents an undefined comparison result, indicating error
   // behavior.
-  UNDEFINED = 3;
+  UNDEFINED = 0;
+  // CROSS_REGION indicates that the two localities have different region tiers.
+  CROSS_REGION = 1;
+  // SAME_REGION_CROSS_ZONE indicates that the two localities have the same
+  // region tiers but different zone tiers.
+  SAME_REGION_CROSS_ZONE = 2;
+  // SAME_REGION_SAME_ZONE indicates that the two localities have same region
+  // and same zone tiers.
+  SAME_REGION_SAME_ZONE = 3;
 }
 
 message Version {

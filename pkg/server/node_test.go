@@ -759,19 +759,6 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[kvpb.Put].Count(), putCurr)
 }
 
-// getNodesMetricsDiff returns the difference between the values of
-// corresponding metrics in two maps.
-// Assumption: beforeMap and afterMap contain the same set of keys.
-func getNodesMetricsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[string]int64 {
-	diffMap := make(map[string]int64)
-	for metricName, beforeValue := range beforeMap {
-		if v, ok := afterMap[metricName]; ok {
-			diffMap[metricName] = v - beforeValue
-		}
-	}
-	return diffMap
-}
-
 // TestNodeCrossLocalityMetrics verifies that
 // updateCrossLocalityMetricsOnBatch{Request|Response} correctly updates
 // cross-region, cross-zone byte count metrics for batch requests sent and batch
@@ -834,7 +821,7 @@ func TestNodeCrossLocalityMetrics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			metricsDiff := getNodesMetricsDiff(beforeMetrics, afterMetrics)
+			metricsDiff := getMapsDiff(beforeMetrics, afterMetrics)
 			expectedDiff := make(map[string]int64, 6)
 			for i, inc := range tc.expectedMetricChange {
 				expectedDiff[metricsNames[i]] = inc
