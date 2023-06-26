@@ -382,3 +382,29 @@ query I
 SELECT * FROM tab_from_seq
 ----
 2
+
+# Regression test for #105393
+subtest regression_105393
+
+statement ok
+CREATE DATABASE db105393_1;
+CREATE DATABASE db105393_2;
+USE db105393_1;
+CREATE TYPE e105393 AS ENUM ('a');
+CREATE TABLE t105393 (a INT PRIMARY KEY, b e105393);
+USE db105393_2;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 AS TABLE db105393_1.public.t105393;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 AS SELECT * FROM db105393_1.public.t105393;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 AS SELECT b FROM db105393_1.public.t105393;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 (a PRIMARY KEY, b) AS TABLE db105393_1.public.t105393;
+
+statement error pq: cross database type references are not supported: db105393_1.public.e105393
+CREATE TABLE e105393 (b) AS SELECT b FROM db105393_1.public.t105393;

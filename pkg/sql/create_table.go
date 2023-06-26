@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1222,6 +1223,31 @@ func newTableDescIfAs(
 			}
 			d.Nullable.Nullability = tree.SilentNull
 			p.Defs = append(p.Defs, tableDef)
+		}
+	}
+
+	// Check if there is any reference to a user defined type that belongs to
+	// another database which is not allowed.
+	for _, def := range p.Defs {
+		if d, ok := def.(*tree.ColumnTableDef); ok {
+			// In CTAS, ColumnTableDef are generated from resultColumns which are
+			// resolved already. So we may cast it to *types.T directly without
+			// resolving it again.
+			typ := d.Type.(*types.T)
+			if typ.UserDefined() {
+				typID, err := typedesc.UserDefinedTypeOIDToID(typ.Oid())
+				if err != nil {
+					return nil, err
+				}
+				tn, typDesc, err := params.p.GetTypeDescriptor(params.ctx, typID)
+				if err != nil {
+					return nil, err
+				}
+				if typDesc.GetParentID() != db.GetID() {
+					return nil, pgerror.Newf(
+						pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
+				}
+			}
 		}
 	}
 
