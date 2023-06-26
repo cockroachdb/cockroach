@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/cache",
         "//pkg/util/encoding",
+        "//pkg/util/errorutil",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
