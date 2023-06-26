@@ -56,7 +56,7 @@ func (d *delegator) delegateShowFunctions(n *tree.ShowFunctions) (tree.Statement
 SELECT n.nspname as schema_name,
   p.proname as function_name,
   p.prorettype::REGTYPE::TEXT as result_data_type,
-	COALESCE((SELECT trim('{}' FROM replace(array_agg(unnest(proargtypes)::REGTYPE::TEXT)::TEXT, ',', ', '))), '') as argument_data_types,
+	COALESCE((SELECT trim('{}' FROM replace((SELECT array_agg(unnested::REGTYPE::TEXT) FROM unnest(proargtypes) AS unnested)::TEXT, ',', ', '))), '') as argument_data_types,
   CASE p.prokind
 	  WHEN 'a' THEN 'agg'
 	  WHEN 'w' THEN 'window'

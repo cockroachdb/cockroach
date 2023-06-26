@@ -805,7 +805,7 @@ error (42803): sum(): aggregate functions are not allowed in RETURNING
 build
 UPDATE abcde SET c=1 RETURNING generate_series(1, 10)
 ----
-error (0A000): generate_series(): generator functions are not allowed in RETURNING
+error (0A000): generate_series(): set-returning functions are not allowed in RETURNING
 
 # ------------------------------------------------------------------------------
 # Test DEFAULT values.
