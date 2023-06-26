@@ -876,8 +876,9 @@ func TestConsumption(t *testing.T) {
 	hostServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled})
 	defer hostServer.Stopper().Stop(context.Background())
 
+	const targetPeriod = time.Millisecond
 	st := cluster.MakeTestingClusterSettings()
-	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, time.Millisecond)
+	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, targetPeriod)
 	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, 0)
 
 	testProvider := newTestProvider()
@@ -905,6 +906,8 @@ func TestConsumption(t *testing.T) {
 		r.Exec(t, "INSERT INTO t (v) SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
 		const expectedBytes = 10 * 10 * 1024
 
+		// Wait out the target period duration.
+		time.Sleep(targetPeriod * 5)
 		afterWrite := testProvider.waitForConsumption(t)
 		delta := afterWrite
 		delta.Sub(&beforeWrite)
@@ -914,6 +917,7 @@ func TestConsumption(t *testing.T) {
 
 		r.QueryStr(t, "SELECT min(v) FROM t")
 
+		time.Sleep(targetPeriod * 5)
 		afterRead := testProvider.waitForConsumption(t)
 		delta = afterRead
 		delta.Sub(&afterWrite)
