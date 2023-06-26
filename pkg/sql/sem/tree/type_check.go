@@ -246,8 +246,14 @@ func unexpectedTypeError(expr Expr, want, got *types.T) error {
 }
 
 func decorateTypeCheckError(err error, format string, a ...interface{}) error {
-	if !errors.HasType(err, (*placeholderTypeAmbiguityErr)(nil)) {
-		return pgerror.Wrapf(err, pgcode.InvalidParameterValue, format, a...)
+	switch pgerror.GetPGCode(err) {
+	case pgcode.Grouping, pgcode.Windowing, pgcode.FeatureNotSupported:
+	// Error due to syntax, e.g. using generator function in a Case expr.
+	// Fall through.
+	default:
+		if !errors.HasType(err, (*placeholderTypeAmbiguityErr)(nil)) {
+			return pgerror.Wrapf(err, pgcode.InvalidParameterValue, format, a...)
+		}
 	}
 	return errors.WithStack(err)
 }
@@ -381,6 +387,13 @@ func (expr *BinaryExpr) TypeCheck(
 func (expr *CaseExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
+	if semaCtx != nil {
+		// We need to save and restore the previous value of the field in
+		// semaCtx in case we are recursively called within a subquery
+		// context.
+		defer semaCtx.Properties.Restore(semaCtx.Properties)
+		semaCtx.Properties.Require("CASE", RejectGenerators)
+	}
 	var err error
 	tmpExprs := make([]Expr, 0, len(expr.Whens)+1)
 	if expr.Expr != nil {
@@ -827,6 +840,13 @@ func (expr *ColumnAccessExpr) TypeCheck(
 func (expr *CoalesceExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
+	if semaCtx != nil {
+		// We need to save and restore the previous value of the field in
+		// semaCtx in case we are recursively called within a subquery
+		// context.
+		defer semaCtx.Properties.Restore(semaCtx.Properties)
+		semaCtx.Properties.Require("COALESCE", RejectGenerators)
+	}
 	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, semaCtx, desired, expr.Exprs...)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible %s expressions", redact.Safe(expr.Name))
@@ -919,7 +939,7 @@ func NewInvalidFunctionUsageError(class FunctionClass, context string) error {
 		cat = "window"
 		code = pgcode.Windowing
 	case GeneratorClass:
-		cat = "generator"
+		cat = "set-returning"
 		code = pgcode.FeatureNotSupported
 	}
 	return pgerror.Newf(code, "%s functions are not allowed in %s", cat, context)
@@ -987,6 +1007,12 @@ func NewContextDependentOpsNotAllowedError(context string) error {
 	return pgerror.Newf(pgcode.FeatureNotSupported,
 		"context-dependent operators are not allowed in %s", context,
 	)
+}
+
+// TypeCheckContext returns the semantic analysis context, for use in creating
+// error messages.
+func (sc *SemaContext) TypeCheckContext() string {
+	return sc.Properties.required.context
 }
 
 // checkVolatility checks whether an operator with the given Volatility is
@@ -1300,6 +1326,13 @@ func (expr *IfErrExpr) TypeCheck(
 func (expr *IfExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
+	if semaCtx != nil {
+		// We need to save and restore the previous value of the field in
+		// semaCtx in case we are recursively called within a subquery
+		// context.
+		defer semaCtx.Properties.Restore(semaCtx.Properties)
+		semaCtx.Properties.Require("IF", RejectGenerators)
+	}
 	typedCond, err := typeCheckAndRequireBoolean(ctx, semaCtx, expr.Cond, "IF condition")
 	if err != nil {
 		return nil, err

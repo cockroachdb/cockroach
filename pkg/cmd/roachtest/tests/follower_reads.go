@@ -530,9 +530,11 @@ func initFollowerReadsDB(
 			// parsing the replica_localities array using the same pattern as the
 			// one used by SHOW REGIONS.
 			const q2 = `
-			SELECT
-				count(distinct substring(unnest(replica_localities), 'region=([^,]*)'))
-			FROM [SHOW RANGES FROM TABLE test.test]`
+			SELECT count(DISTINCT substring(unnested, 'region=([^,]*)'))
+			FROM (
+				SELECT unnest(replica_localities) AS unnested
+				FROM [SHOW RANGES FROM TABLE test.test]
+			)`
 
 			var distinctRegions int
 			require.NoError(t, db.QueryRowContext(ctx, q2).Scan(&distinctRegions))
