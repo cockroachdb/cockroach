@@ -5,4 +5,5 @@ go_library(
     srcs = ["lsn.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_apd_v3//:apd"],
 )

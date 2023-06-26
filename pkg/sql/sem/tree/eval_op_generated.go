@@ -119,6 +119,8 @@ type BinaryOpEvaluator interface {
 	EvalMinusJsonbIntOp(context.Context, *MinusJsonbIntOp, Datum, Datum) (Datum, error)
 	EvalMinusJsonbStringArrayOp(context.Context, *MinusJsonbStringArrayOp, Datum, Datum) (Datum, error)
 	EvalMinusJsonbStringOp(context.Context, *MinusJsonbStringOp, Datum, Datum) (Datum, error)
+	EvalMinusPGLSNDecimalOp(context.Context, *MinusPGLSNDecimalOp, Datum, Datum) (Datum, error)
+	EvalMinusPGLSNOp(context.Context, *MinusPGLSNOp, Datum, Datum) (Datum, error)
 	EvalMinusTimeIntervalOp(context.Context, *MinusTimeIntervalOp, Datum, Datum) (Datum, error)
 	EvalMinusTimeOp(context.Context, *MinusTimeOp, Datum, Datum) (Datum, error)
 	EvalMinusTimeTZIntervalOp(context.Context, *MinusTimeTZIntervalOp, Datum, Datum) (Datum, error)
@@ -153,6 +155,7 @@ type BinaryOpEvaluator interface {
 	EvalPlusDateTimeTZOp(context.Context, *PlusDateTimeTZOp, Datum, Datum) (Datum, error)
 	EvalPlusDecimalIntOp(context.Context, *PlusDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalPlusDecimalOp(context.Context, *PlusDecimalOp, Datum, Datum) (Datum, error)
+	EvalPlusDecimalPGLSNOp(context.Context, *PlusDecimalPGLSNOp, Datum, Datum) (Datum, error)
 	EvalPlusFloatOp(context.Context, *PlusFloatOp, Datum, Datum) (Datum, error)
 	EvalPlusINetIntOp(context.Context, *PlusINetIntOp, Datum, Datum) (Datum, error)
 	EvalPlusIntDateOp(context.Context, *PlusIntDateOp, Datum, Datum) (Datum, error)
@@ -165,6 +168,7 @@ type BinaryOpEvaluator interface {
 	EvalPlusIntervalTimeTZOp(context.Context, *PlusIntervalTimeTZOp, Datum, Datum) (Datum, error)
 	EvalPlusIntervalTimestampOp(context.Context, *PlusIntervalTimestampOp, Datum, Datum) (Datum, error)
 	EvalPlusIntervalTimestampTZOp(context.Context, *PlusIntervalTimestampTZOp, Datum, Datum) (Datum, error)
+	EvalPlusPGLSNDecimalOp(context.Context, *PlusPGLSNDecimalOp, Datum, Datum) (Datum, error)
 	EvalPlusTimeDateOp(context.Context, *PlusTimeDateOp, Datum, Datum) (Datum, error)
 	EvalPlusTimeIntervalOp(context.Context, *PlusTimeIntervalOp, Datum, Datum) (Datum, error)
 	EvalPlusTimeTZDateOp(context.Context, *PlusTimeTZDateOp, Datum, Datum) (Datum, error)
@@ -562,6 +566,16 @@ func (op *MinusJsonbStringOp) Eval(ctx context.Context, e OpEvaluator, a, b Datu
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *MinusPGLSNDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalMinusPGLSNDecimalOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *MinusPGLSNOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalMinusPGLSNOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *MinusTimeIntervalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalMinusTimeIntervalOp(ctx, op, a, b)
 }
@@ -732,6 +746,11 @@ func (op *PlusDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (D
 }
 
 // Eval is part of the BinaryEvalOp interface.
+func (op *PlusDecimalPGLSNOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalPlusDecimalPGLSNOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
 func (op *PlusFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusFloatOp(ctx, op, a, b)
 }
@@ -789,6 +808,11 @@ func (op *PlusIntervalTimestampOp) Eval(ctx context.Context, e OpEvaluator, a, b
 // Eval is part of the BinaryEvalOp interface.
 func (op *PlusIntervalTimestampTZOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalPlusIntervalTimestampTZOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *PlusPGLSNDecimalOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalPlusPGLSNDecimalOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

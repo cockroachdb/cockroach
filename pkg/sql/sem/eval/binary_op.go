@@ -12,11 +12,13 @@ package eval
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1537,4 +1539,97 @@ func (e *evaluator) EvalSimilarToOp(
 ) (tree.Datum, error) {
 	key := similarToKey{s: string(tree.MustBeDString(right)), escape: '\\'}
 	return matchRegexpWithKey(e.ctx(), left, key)
+}
+
+var (
+	minLSNDecimal = apd.New(0, 0)
+	maxLSNDecimal *apd.Decimal
+	lsnMathCtx    = tree.ExactCtx
+)
+
+func init() {
+	var err error
+	maxLSNDecimal, _, err = apd.NewFromString(fmt.Sprintf("%d", uint64(math.MaxUint64)))
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (e *evaluator) EvalPlusDecimalPGLSNOp(
+	ctx context.Context, _ *tree.PlusDecimalPGLSNOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	return decimalPGLSNEval(left, right, lsnMathCtx.Add)
+}
+
+func (e *evaluator) EvalPlusPGLSNDecimalOp(
+	ctx context.Context, _ *tree.PlusPGLSNDecimalOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	return decimalPGLSNEval(right, left, lsnMathCtx.Add)
+}
+
+func (e *evaluator) EvalMinusPGLSNOp(
+	ctx context.Context, _ *tree.MinusPGLSNOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	lLSN := tree.MustBeDPGLSN(left)
+	rLSN := tree.MustBeDPGLSN(right)
+
+	lDecimal, err := lLSN.Decimal()
+	if err != nil {
+		return nil, err
+	}
+	rDecimal, err := rLSN.Decimal()
+	if err != nil {
+		return nil, err
+	}
+
+	var ret apd.Decimal
+	if _, err := lsnMathCtx.Sub(&ret, lDecimal, rDecimal); err != nil {
+		return nil, err
+	}
+	return &tree.DDecimal{Decimal: ret}, nil
+}
+
+func (e *evaluator) EvalMinusPGLSNDecimalOp(
+	ctx context.Context, _ *tree.MinusPGLSNDecimalOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	return decimalPGLSNEval(right, left, lsnMathCtx.Sub)
+}
+
+func decimalPGLSNEval(
+	decDatum tree.Datum, lsnDatum tree.Datum, op func(d, x, y *apd.Decimal) (apd.Condition, error),
+) (tree.Datum, error) {
+	n := tree.MustBeDDecimal(decDatum)
+	lsnVal := tree.MustBeDPGLSN(lsnDatum)
+
+	switch n.Form {
+	case apd.Infinite:
+		return nil, pgerror.New(pgcode.NumericValueOutOfRange, "cannot convert infinity to pg_lsn")
+	case apd.NaN, apd.NaNSignaling:
+		return nil, pgerror.New(pgcode.NumericValueOutOfRange, "cannot add NaN to pg_lsn")
+	case apd.Finite:
+		// ok
+	default:
+		return nil, errors.AssertionFailedf("unknown apd form: %d", n.Form)
+	}
+
+	lsnAsDecimal, err := lsnVal.Decimal()
+	if err != nil {
+		return nil, err
+	}
+	var resultDecimal apd.Decimal
+	if _, err := op(&resultDecimal, lsnAsDecimal, &n.Decimal); err != nil {
+		return nil, err
+	}
+	if resultDecimal.Cmp(maxLSNDecimal) > 0 || resultDecimal.Cmp(minLSNDecimal) < 0 {
+		return nil, pgerror.New(pgcode.NumericValueOutOfRange, "pg_lsn out of range")
+	}
+	var roundedDecimal apd.Decimal
+	if _, err := lsnMathCtx.RoundToIntegralExact(&roundedDecimal, &resultDecimal); err != nil {
+		return nil, err
+	}
+	resultLSN := lsn.LSN(roundedDecimal.Coeff.Uint64())
+	for i := int32(0); i < roundedDecimal.Exponent; i++ {
+		resultLSN *= 10
+	}
+	return tree.NewDPGLSN(resultLSN), nil
 }
