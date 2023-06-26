@@ -315,12 +315,11 @@ func (r *Replica) tryReproposeWithNewLeaseIndexV2(
 	}()
 
 	newCommand := kvserverpb.RaftCommand{
-		ProposerLeaseSequence:   origP.command.ProposerLeaseSequence,
-		DeprecatedProposerLease: origP.command.DeprecatedProposerLease,
-		ReplicatedEvalResult:    origP.command.ReplicatedEvalResult,
-		WriteBatch:              origP.command.WriteBatch,
-		LogicalOpLog:            origP.command.LogicalOpLog,
-		TraceData:               origP.command.TraceData,
+		ProposerLeaseSequence: origP.command.ProposerLeaseSequence,
+		ReplicatedEvalResult:  origP.command.ReplicatedEvalResult,
+		WriteBatch:            origP.command.WriteBatch,
+		LogicalOpLog:          origP.command.LogicalOpLog,
+		TraceData:             origP.command.TraceData,
 
 		MaxLeaseIndex:       0,   // assigned on flush
 		ClosedTimestamp:     nil, // assigned on flush
