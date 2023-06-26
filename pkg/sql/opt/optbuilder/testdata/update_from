@@ -23,17 +23,16 @@ update abc
  │    └── c_new:17 => abc.c:3
  └── project
       ├── columns: b_new:16 c_new:17 abc.a:6!null abc.b:7 abc.c:8 other.a:11!null other.b:12 other.c:13 other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
-      ├── inner-join (merge)
-      │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 other.a:11!null other.b:12 other.c:13 other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
-      │    ├── left ordering: +6
-      │    ├── right ordering: +11
+      ├── project
+      │    ├── columns: other.a:11!null other.b:12 other.c:13 other.crdb_internal_mvcc_timestamp:14 other.tableoid:15 abc.a:6!null abc.b:7 abc.c:8
       │    ├── scan abc
-      │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8
-      │    │    └── ordering: +6
-      │    ├── scan abc [as=other]
-      │    │    ├── columns: other.a:11!null other.b:12 other.c:13 other.crdb_internal_mvcc_timestamp:14 other.tableoid:15
-      │    │    └── ordering: +11
-      │    └── filters (true)
+      │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8 abc.crdb_internal_mvcc_timestamp:9 abc.tableoid:10
+      │    └── projections
+      │         ├── abc.a:6 [as=other.a:11]
+      │         ├── abc.b:7 [as=other.b:12]
+      │         ├── abc.c:8 [as=other.c:13]
+      │         ├── abc.crdb_internal_mvcc_timestamp:9 [as=other.crdb_internal_mvcc_timestamp:14]
+      │         └── abc.tableoid:10 [as=other.tableoid:15]
       └── projections
            ├── other.b:12 + 1 [as=b_new:16]
            └── other.c:13 + 1 [as=c_new:17]
@@ -103,17 +102,13 @@ update abc
  │    └── c_new:17 => abc.c:3
  └── project
       ├── columns: b_new:16 c_new:17 abc.a:6!null abc.b:7 abc.c:8 old.b:12 old.c:13
-      ├── inner-join (merge)
-      │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 old.a:11!null old.b:12 old.c:13
-      │    ├── left ordering: +6
-      │    ├── right ordering: +11
+      ├── project
+      │    ├── columns: old.b:12 old.c:13 abc.a:6!null abc.b:7 abc.c:8
       │    ├── scan abc
-      │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8
-      │    │    └── ordering: +6
-      │    ├── scan abc [as=old]
-      │    │    ├── columns: old.a:11!null old.b:12 old.c:13
-      │    │    └── ordering: +11
-      │    └── filters (true)
+      │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    └── projections
+      │         ├── abc.b:7 [as=old.b:12]
+      │         └── abc.c:8 [as=old.c:13]
       └── projections
            ├── old.b:12 + 1 [as=b_new:16]
            └── old.c:13 + 2 [as=c_new:17]
@@ -135,17 +130,14 @@ update abc
  │    └── c_new:17 => abc.c:3
  └── project
       ├── columns: b_new:16 c_new:17 abc.a:6!null abc.b:7 abc.c:8 old.a:11!null old.b:12 old.c:13
-      ├── inner-join (merge)
-      │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 old.a:11!null old.b:12 old.c:13
-      │    ├── left ordering: +6
-      │    ├── right ordering: +11
+      ├── project
+      │    ├── columns: old.a:11!null old.b:12 old.c:13 abc.a:6!null abc.b:7 abc.c:8
       │    ├── scan abc
-      │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8
-      │    │    └── ordering: +6
-      │    ├── scan abc [as=old]
-      │    │    ├── columns: old.a:11!null old.b:12 old.c:13
-      │    │    └── ordering: +11
-      │    └── filters (true)
+      │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    └── projections
+      │         ├── abc.a:6 [as=old.a:11]
+      │         ├── abc.b:7 [as=old.b:12]
+      │         └── abc.c:8 [as=old.c:13]
       └── projections
            ├── old.b:12 + 1 [as=b_new:16]
            └── old.c:13 + 2 [as=c_new:17]
