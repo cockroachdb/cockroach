@@ -102,6 +102,8 @@ type backupFixtureSpecs struct {
 
 	// If non-empty, the test will be skipped with the supplied reason.
 	skip string
+
+	ignoreCRDBVersionRequirement bool
 }
 
 func (bf *backupFixtureSpecs) initTestName() {
@@ -132,7 +134,9 @@ func (bd *backupDriver) prepareCluster(ctx context.Context) {
 
 	bd.c.Put(ctx, bd.t.Cockroach(), "./cockroach")
 	bd.c.Start(ctx, bd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), bd.sp.hardware.getCRDBNodes())
-	bd.assertCorrectCockroachBinary(ctx)
+	if !bd.sp.ignoreCRDBVersionRequirement {
+		bd.assertCorrectCockroachBinary(ctx)
+	}
 	if !bd.sp.backup.ignoreExistingBackups {
 		// This check allows the roachtest to fail fast, instead of when the
 		// scheduled backup cmd is issued.
@@ -247,9 +251,10 @@ func registerBackupFixtures(r registry.Registry) {
 					backupSpecs: backupSpecs{
 						backupsIncluded: 4,
 						workload:        tpceRestore{customers: 1000}}}),
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
-			timeout:             2 * time.Hour,
-			tags:                registry.Tags("weekly", "aws-weekly"),
+			initFromBackupSpecs:          backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+			timeout:                      2 * time.Hour,
+			ignoreCRDBVersionRequirement: true,
+			tags:                         registry.Tags("weekly", "aws-weekly"),
 		},
 		{
 			// 8TB Backup Fixture.
