@@ -1538,7 +1538,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
 %type <tree.IndexElem> index_elem index_elem_options create_as_param
-%type <tree.TableExpr> table_ref numeric_table_ref func_table
+%type <tree.TableExpr> table_ref numeric_table_ref func_table table_id_ref
 %type <tree.Exprs> rowsfrom_list
 %type <tree.Expr> rowsfrom_item
 %type <tree.TableExpr> joined_table
@@ -12983,6 +12983,16 @@ table_ref:
         As:         $4.aliasClause(),
     }
   }
+| table_id_ref opt_index_flags opt_ordinality opt_alias_clause
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AliasedTableExpr{
+        Expr:       $1.tblExpr(),
+        IndexFlags: $2.indexFlags(),
+        Ordinality: $3.bool(),
+        As:         $4.aliasClause(),
+    }
+  }
 | relation_expr opt_index_flags opt_ordinality opt_alias_clause
   {
     name := $1.unresolvedObjectName().ToTableName()
@@ -13066,6 +13076,15 @@ numeric_table_ref:
       TableID: $2.int64(),
       Columns: $3.tableRefCols(),
       As:      $4.aliasClause(),
+    }
+  }
+
+table_id_ref:
+  '{' TABLE ':' iconst64 '}'
+  {
+    /* SKIP DOC */
+    $$.val = &tree.TableIDRef{
+      ID: $4.int64(),
     }
   }
 
@@ -14497,6 +14516,14 @@ a_expr:
 | DEFAULT
   {
     $$.val = tree.DefaultVal{}
+  }
+| table_id_ref '.' name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ColumnNameRef{
+      Table: $1.tblExpr().(*tree.TableIDRef),
+      ColumnName: tree.Name($3),
+    }
   }
 // The UNIQUE predicate is a standard SQL feature but not yet implemented
 // in PostgreSQL (as of 10.5).

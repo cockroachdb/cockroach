@@ -42,7 +42,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS workday
  │   	LANGUAGE SQL
- │   	AS $$SELECT w FROM t.public.workdays;$$
+ │   	AS $$SELECT w FROM {TABLE:55};$$
  └── dependencies
       ├── workdays [columns: w]
       └── workday
@@ -65,7 +65,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS STRING
  │   	LANGUAGE SQL
- │   	AS $$SELECT w::STRING FROM t.public.workdays;$$
+ │   	AS $$SELECT w::STRING FROM {TABLE:55};$$
  └── dependencies
       └── workdays [columns: w]
 
@@ -76,7 +76,7 @@ create-function
  ├── CREATE FUNCTION f(IN a INT8)
  │   	RETURNS INT8
  │   	LANGUAGE SQL
- │   	AS $$SELECT a FROM t.public.ab;$$
+ │   	AS $$SELECT a FROM {TABLE:53};$$
  └── dependencies
       └── ab [columns: a]
 
@@ -87,7 +87,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS INT8
  │   	LANGUAGE SQL
- │   	AS $$SELECT b FROM t.public.ab@idx;$$
+ │   	AS $$SELECT b FROM {TABLE:53}@idx;$$
  └── dependencies
       └── ab@idx [columns: b]
 
@@ -101,7 +101,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS INT8
  │   	LANGUAGE SQL
- │   	AS $$SELECT a FROM t.public.ab;
+ │   	AS $$SELECT a FROM {TABLE:53};
  │   SELECT nextval('s');$$
  └── dependencies
       ├── ab [columns: a]
@@ -114,7 +114,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS ab
  │   	LANGUAGE SQL
- │   	AS $$SELECT ab.a, ab.b FROM t.public.ab;$$
+ │   	AS $$SELECT {TABLE:53}.a, {TABLE:53}.b FROM {TABLE:53};$$
  └── dependencies
       └── ab [columns: a b]
 
@@ -125,7 +125,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS ab
  │   	LANGUAGE SQL
- │   	AS $$SELECT "?subquery1?".a, "?subquery1?".b FROM (SELECT ab.a, ab.b FROM t.public.ab) AS "?subquery1?";$$
+ │   	AS $$SELECT "?subquery1?".a, "?subquery1?".b FROM (SELECT {TABLE:53}.a, {TABLE:53}.b FROM {TABLE:53}) AS "?subquery1?";$$
  └── dependencies
       └── ab [columns: a b]
 
