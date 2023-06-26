@@ -70,8 +70,15 @@ func (m *mockServer) TenantSettings(
 	req *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
 ) error {
 	if m.tenantSettingsFn == nil {
-		return stream.Send(&kvpb.TenantSettingsEvent{
+		if err := stream.Send(&kvpb.TenantSettingsEvent{
 			Precedence:  kvpb.SpecificTenantOverrides,
+			Incremental: false,
+			Overrides:   nil,
+		}); err != nil {
+			return err
+		}
+		return stream.Send(&kvpb.TenantSettingsEvent{
+			Precedence:  kvpb.AllTenantsOverrides,
 			Incremental: false,
 			Overrides:   nil,
 		})
@@ -263,7 +270,12 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	gossipSubC <- gossipEventForNodeDesc(node1)
 	gossipSubC <- gossipEventForNodeDesc(node2)
 	gossipSubC <- gossipEventForClusterID(clusterID)
-	require.NoError(t, <-startedC)
+	select {
+	case err := <-startedC:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatalf("failed to see start complete")
+	}
 
 	// Ensure that ClusterID was updated.
 	require.Equal(t, clusterID, rpcContext.StorageClusterID.Get())

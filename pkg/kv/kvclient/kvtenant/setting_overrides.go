@@ -38,7 +38,7 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			c.tryForgetClient(ctx, client)
 			continue
 		}
-		for firstEventInStream := true; ; firstEventInStream = false {
+		for {
 			e, err := stream.Recv()
 			if err != nil {
 				if err == io.EOF {
@@ -55,17 +55,22 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				continue
 			}
 
-			if err := c.processSettingsEvent(e, firstEventInStream); err != nil {
+			settingsReady, err := c.processSettingsEvent(e)
+			if err != nil {
 				log.Errorf(ctx, "error processing tenant settings event: %v", err)
 				_ = stream.CloseSend()
 				c.tryForgetClient(ctx, client)
 				break
 			}
 
-			// Signal that startup is complete once we receive an event.
-			if startupCh != nil {
-				close(startupCh)
-				startupCh = nil
+			// Signal that startup is complete once we have enough events to start.
+			if settingsReady {
+				log.Infof(ctx, "received initial tenant settings")
+
+				if startupCh != nil {
+					close(startupCh)
+					startupCh = nil
+				}
 			}
 		}
 	}
@@ -73,22 +78,25 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 
 // processSettingsEvent updates the setting overrides based on the event.
 func (c *connector) processSettingsEvent(
-	e *kvpb.TenantSettingsEvent, firstEventInStream bool,
-) error {
-	if firstEventInStream && e.Incremental {
-		return errors.Newf("first event must not be Incremental")
-	}
+	e *kvpb.TenantSettingsEvent,
+) (settingsReady bool, err error) {
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
+
+	if (!c.settingsMu.receivedFirstAllTenantOverrides || !c.settingsMu.receivedFirstSpecificOverrides) && e.Incremental {
+		return false, errors.Newf("need to receive non-incremental setting events first")
+	}
 
 	var m map[string]settings.EncodedValue
 	switch e.Precedence {
 	case kvpb.AllTenantsOverrides:
+		c.settingsMu.receivedFirstAllTenantOverrides = true
 		m = c.settingsMu.allTenantOverrides
 	case kvpb.SpecificTenantOverrides:
+		c.settingsMu.receivedFirstSpecificOverrides = true
 		m = c.settingsMu.specificOverrides
 	default:
-		return errors.Newf("unknown precedence value %d", e.Precedence)
+		return false, errors.Newf("unknown precedence value %d", e.Precedence)
 	}
 
 	// If the event is not incremental, clear the map.
@@ -115,7 +123,8 @@ func (c *connector) processSettingsEvent(
 	default:
 	}
 
-	return nil
+	settingsReady = c.settingsMu.receivedFirstAllTenantOverrides && c.settingsMu.receivedFirstSpecificOverrides
+	return settingsReady, nil
 }
 
 // RegisterOverridesChannel is part of the settingswatcher.OverridesMonitor

@@ -47,7 +47,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
 		return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 	}
-	eventCh := make(chan *kvpb.TenantSettingsEvent)
+	eventCh := make(chan *kvpb.TenantSettingsEvent, 2)
 	defer close(eventCh)
 	settingsFn := func(req *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer) error {
 		if req.TenantID != tenantID {
@@ -92,12 +92,30 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	waitForSettings(t, ch)
 
 	ev := &kvpb.TenantSettingsEvent{
-		Precedence:  1,
+		Precedence:  kvpb.SpecificTenantOverrides,
 		Incremental: false,
 		Overrides:   nil,
 	}
 	eventCh <- ev
-	require.NoError(t, <-startedC)
+
+	select {
+	case err := <-startedC:
+		t.Fatalf("Start unexpectedly completed with err=%v", err)
+	case <-time.After(10 * time.Millisecond):
+	}
+
+	ev = &kvpb.TenantSettingsEvent{
+		Precedence:  kvpb.AllTenantsOverrides,
+		Incremental: false,
+		Overrides:   nil,
+	}
+	eventCh <- ev
+	select {
+	case err := <-startedC:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatalf("failed to see start complete")
+	}
 
 	waitForSettings(t, ch)
 	expectSettings(t, c, "foo=default bar=default baz=default")
