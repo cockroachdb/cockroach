@@ -259,6 +259,7 @@
                         Upsert |
                         Delete |
                         CreateTable |
+                        PlaceholderScan |
                         OpName)\b</string>
 					<key>name</key>
 					<string>keyword.other.optgen</string>

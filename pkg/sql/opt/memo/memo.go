@@ -428,6 +428,15 @@ func (m *Memo) SetBestProps(
 	bp.cost = cost
 }
 
+// SetProps unconditionally sets the required and provided properties for the
+// given expression. It is called by fast path rules when setting the final
+// expression tree.
+func (m *Memo) SetProps(e RelExpr, required *physical.Required, provided *physical.Provided) {
+	bp := e.bestProps()
+	bp.required = required
+	bp.provided = provided
+}
+
 // ResetCost updates the cost of a relational expression's memo group. It
 // should *only* be called by Optimizer.RecomputeCost() for testing purposes.
 func (m *Memo) ResetCost(e RelExpr, cost Cost) {

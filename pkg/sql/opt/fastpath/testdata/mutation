@@ -1,0 +1,226 @@
+exec-ddl
+CREATE TABLE t (x INT PRIMARY KEY);
+----
+
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY key, y INT);
+----
+
+exec-ddl
+CREATE TABLE t_no_idx (x INT);
+----
+
+exec-ddl
+CREATE TABLE xy_idx(x INT PRIMARY KEY, y INT, INDEX (y));
+----
+
+# --------------------------------------------------
+# SimpleInsertFastPath, SimpleProjectInsertFastPath
+# --------------------------------------------------
+
+fast-path
+INSERT INTO t VALUES (1), (2);
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    └── column1:4 => x:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:4!null
+      ├── cardinality: [2 - 2]
+      ├── (1,)
+      └── (2,)
+
+fast-path
+INSERT INTO t VALUES (1), (2), (3);
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    └── column1:4 => x:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:4!null
+      ├── cardinality: [3 - 3]
+      ├── (1,)
+      ├── (2,)
+      └── (3,)
+
+# Constant-folding allows the fast-path to match.
+fast-path
+INSERT INTO t VALUES (1+1), (2-2), (3*3);
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    └── column1:4 => x:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:4!null
+      ├── cardinality: [3 - 3]
+      ├── (2,)
+      ├── (0,)
+      └── (9,)
+
+fast-path
+INSERT INTO t VALUES ($1), (2), ($3);
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    └── column1:4 => x:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── values
+      ├── columns: column1:4
+      ├── cardinality: [3 - 3]
+      ├── has-placeholder
+      ├── ($1,)
+      ├── (2,)
+      └── ($3,)
+
+fast-path
+INSERT INTO xy VALUES (1, 2), (3, 4);
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: column1:5!null column2:6!null
+      ├── cardinality: [2 - 2]
+      ├── (1, 2)
+      └── (3, 4)
+
+fast-path
+INSERT INTO xy VALUES ($1, 2), (3, $4);
+----
+insert xy
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── values
+      ├── columns: column1:5 column2:6
+      ├── cardinality: [2 - 2]
+      ├── has-placeholder
+      ├── ($1, 2)
+      └── (3, $4)
+
+# The table can have multiple indexes.
+fast-path
+INSERT INTO xy_idx VALUES ($1, 2), (3, $4);
+----
+insert xy_idx
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── values
+      ├── columns: column1:5 column2:6
+      ├── cardinality: [2 - 2]
+      ├── has-placeholder
+      ├── ($1, 2)
+      └── (3, $4)
+
+# RETURNING clause is allowed.
+fast-path
+INSERT INTO xy VALUES ($1, 2), (3, $4) RETURNING x, y;
+----
+insert xy
+ ├── columns: x:1!null y:2
+ ├── insert-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── return-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── cardinality: [2 - 2]
+ ├── volatile, mutations, has-placeholder
+ └── values
+      ├── columns: column1:5 column2:6
+      ├── cardinality: [2 - 2]
+      ├── has-placeholder
+      ├── ($1, 2)
+      └── (3, $4)
+
+fast-path
+INSERT INTO xy VALUES ($1, 2), (3, $4) RETURNING y, x;
+----
+insert xy
+ ├── columns: y:2 x:1!null
+ ├── insert-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── return-mapping:
+ │    ├── column1:5 => x:1
+ │    └── column2:6 => y:2
+ ├── cardinality: [2 - 2]
+ ├── volatile, mutations, has-placeholder
+ └── values
+      ├── columns: column1:5 column2:6
+      ├── cardinality: [2 - 2]
+      ├── has-placeholder
+      ├── ($1, 2)
+      └── (3, $4)
+
+# The project is necessary because mutations must return the primary key
+# columns.
+fast-path
+INSERT INTO xy VALUES ($1, 2), (3, $4) RETURNING y;
+----
+project
+ ├── columns: y:2
+ ├── cardinality: [2 - 2]
+ ├── volatile, mutations, has-placeholder
+ └── insert xy
+      ├── columns: x:1!null y:2
+      ├── insert-mapping:
+      │    ├── column1:5 => x:1
+      │    └── column2:6 => y:2
+      ├── return-mapping:
+      │    ├── column1:5 => x:1
+      │    └── column2:6 => y:2
+      ├── cardinality: [2 - 2]
+      ├── volatile, mutations, has-placeholder
+      └── values
+           ├── columns: column1:5 column2:6
+           ├── cardinality: [2 - 2]
+           ├── has-placeholder
+           ├── ($1, 2)
+           └── (3, $4)
+
+# No fast path because all values must be constants or placeholders.
+fast-path
+INSERT INTO xy VALUES ($1, 2), (random()::INT, $4);
+----
+no fast path
+
+# No fast path because the input must be a Values operator.
+fast-path
+INSERT INTO xy (SELECT 1, 2 FROM xy LIMIT 1);
+----
+no fast path
+
+# No fast path because of the unique rowid projection.
+fast-path
+INSERT INTO t_no_idx VALUES (1), (2);
+----
+no fast path
+
+# No fast path because of the projection.
+fast-path
+INSERT INTO xy VALUES ($1, 2), (3, $4) RETURNING x, y, 1;
+----
+no fast path

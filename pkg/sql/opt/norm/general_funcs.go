@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
@@ -25,7 +26,8 @@ import (
 )
 
 // CustomFuncs contains all the custom match and replace functions used by
-// the normalization rules. These are also imported and used by the explorer.
+// the normalization rules. These are also imported and used by the explorer and
+// fast path rules.
 type CustomFuncs struct {
 	f   *Factory
 	mem *memo.Memo
@@ -575,6 +577,12 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 	}
 }
 
+// RequiredOrdering returns the ordering that is specified by the given required
+// properties, if any.
+func (c *CustomFuncs) RequiredOrdering(required *physical.Required) *props.OrderingChoice {
+	return &required.Ordering
+}
+
 // ----------------------------------------------------------------------
 //
 // Ordering functions
@@ -613,6 +621,11 @@ func (c *CustomFuncs) PruneOrdering(
 // ordering.
 func (c *CustomFuncs) EmptyOrdering() props.OrderingChoice {
 	return props.OrderingChoice{}
+}
+
+// IsEmptyOrdering returns true if the ordering choice allows any ordering.
+func (c *CustomFuncs) IsEmptyOrdering(choice *props.OrderingChoice) bool {
+	return choice.Any()
 }
 
 // OrderingIntersects returns true if <ordering1> and <ordering2> have an

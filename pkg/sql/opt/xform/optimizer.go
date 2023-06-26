@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/fastpath"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
@@ -1163,4 +1164,78 @@ func (o *Optimizer) FormatExpr(e opt.Expr, flags memo.ExprFmtFlags, redactableVa
 // CustomFuncs exports the xform.CustomFuncs for testing purposes.
 func (o *Optimizer) CustomFuncs() *CustomFuncs {
 	return &o.explorer.funcs
+}
+
+// TryFastPath attempts to apply fast-path rules to the root expression. If any
+// match, the new expression is set as the fully-optimized root and ok=true is
+// returned. It is not necessary to wrap TryFastPath in a panic catcher.
+func (o *Optimizer) TryFastPath() (ok bool, err error) {
+	newRoot, ok, err := fastpath.TryOptimizerFastPath(o.ctx, o.evalCtx, &o.f)
+	if !ok || err != nil {
+		return ok, err
+	}
+	rootProps := o.mem.RootProps()
+	if !o.setProps(newRoot, rootProps) {
+		return false, nil
+	}
+	// Fast path success.
+	o.mem.SetRoot(newRoot, rootProps)
+	return true, nil
+}
+
+// setProps is similar to setLowestCost tree, but it applies in the case when
+// there is a single canonical expression tree. This is the case when a
+// fast-path rule matches. The cost of each expression is not checked, and the
+// tree is not modified in any way. If any of the required properties are not
+// supplied by the expression tree, setProps returns ok=false.
+func (o *Optimizer) setProps(parent opt.Expr, parentProps *physical.Required) (ok bool) {
+	var relParent memo.RelExpr
+	switch t := parent.(type) {
+	case memo.RelExpr:
+		if t.Op() != opt.SortOp && !ordering.CanProvide(t, &parentProps.Ordering) {
+			// This expression tree requires a sort enforcer.
+			return false
+		}
+		if t.Op() != opt.DistributeOp &&
+			!distribution.CanProvide(o.ctx, o.evalCtx, t, &parentProps.Distribution) {
+			// This expression tree requires a distribution enforcer.
+			return false
+		}
+		relParent = t
+
+	case memo.ScalarPropsExpr:
+		// Short-circuit traversal of scalar expressions with no nested subquery,
+		// since there's only one possible tree.
+		// TODO(mgartner): Think about whether we need to short-circuit in the
+		// presence or absence of UDFs.
+		if !t.ScalarProps().HasSubquery {
+			return true
+		}
+	}
+
+	// Iterate over the expression's children, replacing any that require an
+	// enforcer to be added.
+	var childProps *physical.Required
+	for i, n := 0, parent.ChildCount(); i < n; i++ {
+		if relParent != nil {
+			childProps = BuildChildPhysicalProps(o.mem, relParent, i, parentProps)
+		} else {
+			childProps = BuildChildPhysicalPropsScalar(o.mem, parent, i)
+		}
+		if !o.setProps(parent.Child(i), childProps) {
+			return false
+		}
+	}
+
+	if relParent != nil {
+		var provided physical.Provided
+		// BuildProvided relies on ProvidedPhysical() being set in the children, so
+		// it must run after the recursive calls on the children.
+		provided.Ordering = ordering.BuildProvided(relParent, &parentProps.Ordering)
+		provided.Distribution = distribution.BuildProvided(
+			o.ctx, o.evalCtx, relParent, &parentProps.Distribution,
+		)
+		o.mem.SetProps(relParent, parentProps, &provided)
+	}
+	return true
 }

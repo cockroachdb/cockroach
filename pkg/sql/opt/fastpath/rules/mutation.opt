@@ -1,0 +1,27 @@
+# =============================================================================
+# mutation.opt contains fast-path rules for mutation operators.
+# =============================================================================
+
+# SimpleInsertFastPath skips optimization for an Insert operator on top of a
+# Values operator with only constant and placeholder values inside it. There
+# are no rules that match these expressions, so optimality is maintained.
+[SimpleInsertFastPath, FastPath]
+(Insert
+    $input:(Values) & (IsValuesConstantsAndPlaceholders $input)
+)
+=>
+(Root)
+
+# SimpleProjectInsertFastPath is similar to SimpleInsertFastPath, but allows
+# a pass-through Project operator on top of the Insert.
+[SimpleProjectInsertFastPath, FastPath]
+(Project
+    $insert:(Insert
+        $input:(Values) &
+            (IsValuesConstantsAndPlaceholders $input)
+    )
+    []
+    *
+)
+=>
+(Root)
