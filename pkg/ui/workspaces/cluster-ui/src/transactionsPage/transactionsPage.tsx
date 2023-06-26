@@ -685,9 +685,7 @@ export class TransactionsPage extends React.Component<
             renderError={() =>
               LoadingError({
                 statsType: "transactions",
-                timeout: this.props.txnsResp?.error?.name
-                  ?.toLowerCase()
-                  .includes("timeout"),
+                error: this.props.txnsResp.error,
               })
             }
           />

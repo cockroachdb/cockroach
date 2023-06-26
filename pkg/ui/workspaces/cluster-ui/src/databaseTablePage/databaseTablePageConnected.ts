@@ -64,7 +64,6 @@ export const mapStateToProps = (
   );
   const nodeRegions = nodeRegionsByIDSelector(state);
   const isTenant = selectIsTenant(state);
-
   return {
     databaseName: database,
     name: table,
