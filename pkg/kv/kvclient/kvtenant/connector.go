@@ -172,8 +172,16 @@ type connector struct {
 	settingsMu struct {
 		syncutil.Mutex
 
-		allTenantOverrides map[string]settings.EncodedValue
-		specificOverrides  map[string]settings.EncodedValue
+		// receivedFirstAllTenantOverrides is set to true when the first batch of
+		// all-tenant overrides has been received.
+		receivedFirstAllTenantOverrides bool
+		allTenantOverrides              map[string]settings.EncodedValue
+
+		// receivedFirstSpecificOverrides is set to true when the first batch of
+		// tenant-specific overrides has been received.
+		receivedFirstSpecificOverrides bool
+		specificOverrides              map[string]settings.EncodedValue
+
 		// notifyCh receives an event when there are changes to overrides.
 		notifyCh chan struct{}
 	}
