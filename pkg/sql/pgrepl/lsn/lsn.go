@@ -11,7 +11,11 @@
 // Package lsn contains logic for handling the pg_lsn type.
 package lsn
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/apd/v3"
+)
 
 type LSN uint64
 
@@ -25,6 +29,11 @@ func ParseLSN(str string) (LSN, error) {
 		return 0, err
 	}
 	return (LSN(hi) << 32) | LSN(lo), nil
+}
+
+func (lsn LSN) Decimal() (*apd.Decimal, error) {
+	ret, _, err := apd.NewFromString(fmt.Sprintf("%d", lsn))
+	return ret, err
 }
 
 func (lsn LSN) Compare(other LSN) int {
