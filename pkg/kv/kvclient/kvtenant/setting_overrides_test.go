@@ -47,7 +47,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
 		return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 	}
-	eventCh := make(chan *kvpb.TenantSettingsEvent)
+	eventCh := make(chan *kvpb.TenantSettingsEvent, 2)
 	defer close(eventCh)
 	settingsFn := func(req *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer) error {
 		if req.TenantID != tenantID {
@@ -92,12 +92,30 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	waitForSettings(t, ch)
 
 	ev := &kvpb.TenantSettingsEvent{
-		Precedence:  1,
+		Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
 		Incremental: false,
 		Overrides:   nil,
 	}
 	eventCh <- ev
-	require.NoError(t, <-startedC)
+
+	select {
+	case err := <-startedC:
+		t.Fatalf("Start unexpectedly completed with err=%v", err)
+	case <-time.After(10 * time.Millisecond):
+	}
+
+	ev = &kvpb.TenantSettingsEvent{
+		Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
+		Incremental: false,
+		Overrides:   nil,
+	}
+	eventCh <- ev
+	select {
+	case err := <-startedC:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatalf("failed to see start complete")
+	}
 
 	waitForSettings(t, ch)
 	expectSettings(t, c, "foo=default bar=default baz=default")
@@ -111,7 +129,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 
 	// Set some all-tenant overrides.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.AllTenantsOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("foo", "all"), st("bar", "all")},
 	}
@@ -121,7 +139,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 
 	// Set some tenant-specific overrides, with all-tenant overlap.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.SpecificTenantOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("foo", "specific"), st("baz", "specific")},
 	}
@@ -131,7 +149,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 
 	// Remove an all-tenant override that has a specific override.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.AllTenantsOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("foo", "")},
 	}
@@ -141,7 +159,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 
 	// Remove a specific override.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.SpecificTenantOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("foo", "")},
 	}
@@ -151,7 +169,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 
 	// Non-incremental change to all-tenants override.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.AllTenantsOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("bar", "all")},
 	}
