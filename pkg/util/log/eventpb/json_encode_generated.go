@@ -4802,6 +4802,16 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = strconv.AppendInt(b, int64(m.MvccRangeKeySkippedPoints), 10)
 	}
 
+	if m.SchemaChangerMode != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SchemaChangerMode\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SchemaChangerMode)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 

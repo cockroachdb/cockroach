@@ -77,6 +77,32 @@ var schemaChangeJobMaxRetryBackoff = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+type schemaChangerMode int
+
+const (
+	// schemaChangerModeNone indicates that the schema changer was not used.
+	schemaChangerModeNone schemaChangerMode = iota
+	// schemaChangerModeLegacy indicates that the legacy schema changer was used.
+	schemaChangerModeLegacy
+	// schemaChangerModeDeclarative indicates that the declarative schema changer
+	// was used.
+	schemaChangerModeDeclarative
+)
+
+// String returns a string representation of the schema changer mode.
+func (m schemaChangerMode) String() string {
+	switch m {
+	case schemaChangerModeNone:
+		return "none"
+	case schemaChangerModeLegacy:
+		return "legacy"
+	case schemaChangerModeDeclarative:
+		return "declarative"
+	default:
+		return fmt.Sprintf("schemaChangerMode(%d)", m)
+	}
+}
+
 const (
 	// RunningStatusWaitingForMVCCGC is used for the GC job when it has cleared
 	// the data but is waiting for MVCC GC to remove the data.
