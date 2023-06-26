@@ -16,17 +16,18 @@ import (
 	"encoding/csv"
 	"encoding/gob"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -35,12 +36,14 @@ import (
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugTimeSeriesDumpOpts = struct {
-	format   tsDumpFormat
-	from, to timestampValue
+	format       tsDumpFormat
+	from, to     timestampValue
+	clusterLabel string
 }{
-	format: tsDumpText,
-	from:   timestampValue{},
-	to:     timestampValue(timeutil.Now().Add(24 * time.Hour)),
+	format:       tsDumpText,
+	from:         timestampValue{},
+	to:           timestampValue(timeutil.Now().Add(24 * time.Hour)),
+	clusterLabel: "",
 }
 
 var debugTimeSeriesDumpCmd = &cobra.Command{
@@ -82,7 +85,28 @@ will then convert it to the --format requested in the current invocation.
 		case tsDumpText:
 			w = defaultTSWriter{w: os.Stdout}
 		case tsDumpOpenMetrics:
-			w = &openMetricsWriter{out: os.Stdout}
+			// construct labels
+			labelMap := make(map[string]string)
+			// Hardcoded values
+			labelMap["cluster_type"] = "SELF_HOSTED"
+			labelMap["job"] = "cockroachdb"
+			labelMap["region"] = "local"
+			// Zero values
+			labelMap["instance"] = ""
+			labelMap["node"] = ""
+			labelMap["organization_id"] = ""
+			labelMap["organization_label"] = ""
+			labelMap["sla_type"] = ""
+			labelMap["tenant_id"] = ""
+			// Command values
+			if debugTimeSeriesDumpOpts.clusterLabel != "" {
+				labelMap["cluster"] = debugTimeSeriesDumpOpts.clusterLabel
+			} else if serverCfg.ClusterName != "" {
+				labelMap["cluster"] = serverCfg.ClusterName
+			} else {
+				labelMap["cluster"] = "cluster-debug-" + time.Now().String()
+			}
+			w = &openMetricsWriter{out: os.Stdout, labels: labelMap}
 		default:
 			return errors.Newf("unknown output format: %v", debugTimeSeriesDumpOpts.format)
 		}
@@ -193,7 +217,8 @@ type tsWriter interface {
 }
 
 type openMetricsWriter struct {
-	out io.Writer
+	out    io.Writer
+	labels map[string]string
 }
 
 var reCrStoreNode = regexp.MustCompile(`^cr\.([^\.]+)\.(.*)$`)
@@ -202,17 +227,30 @@ var rePromTSName = regexp.MustCompile(`[^a-z0-9]`)
 func (w *openMetricsWriter) Emit(data *tspb.TimeSeriesData) error {
 	name := data.Name
 	sl := reCrStoreNode.FindStringSubmatch(data.Name)
-	label := "node"
-	value := "0"
+	labelMap := w.labels
+	labelMap["node_id"] = "0"
 	if len(sl) != 0 {
-		label = sl[1]
+		storeNodeKey := sl[1]
+		if storeNodeKey == "node" {
+			storeNodeKey += "_id"
+		}
+		labelMap[storeNodeKey] = data.Source
 		name = sl[2]
-		value = data.Source
 	}
+	var l []string
+	for k, v := range labelMap {
+		l = append(l, fmt.Sprintf("%s=%q", k, v))
+	}
+	labels := "{" + strings.Join(l, ",") + "}"
 	name = rePromTSName.ReplaceAllLiteralString(name, `_`)
 	for _, pt := range data.Datapoints {
 		if _, err := fmt.Fprintf(
-			w.out, "%s{%s=%q} %f %d.%d\n", name, label, value, pt.Value, pt.TimestampNanos/1e9, pt.TimestampNanos%1e6,
+			w.out,
+			"%s%s %f %d.%d\n",
+			name,
+			labels,
+			pt.Value,
+			pt.TimestampNanos/1e9, pt.TimestampNanos%1e6,
 		); err != nil {
 			return err
 		}
