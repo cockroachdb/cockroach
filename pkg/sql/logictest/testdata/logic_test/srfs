@@ -1317,3 +1317,19 @@ SELECT 1,c1,c2 FROM t95315 JOIN ROWS FROM (CAST(c1 AS INT), CAST(c2 AS INT)) USI
 ----
 1  3  6
 1  4  7
+
+subtest generator-syntax
+
+# Regression test for #97119 and #94890 - return syntax error when CASE or
+# COALESCE is used with a set-generating function as argument.
+statement error pq: generator functions are not allowed in CASE
+SELECT CASE generate_series(1, 3) WHEN 3 THEN 0 ELSE 1 END;
+
+statement error pq: generator functions are not allowed in CASE
+SELECT CASE WHEN true THEN generate_series(1, 3) ELSE 1 END;
+
+statement error pq: generator functions are not allowed in CASE
+SELECT CASE WHEN false THEN 1 ELSE generate_series(1, 3) END;
+
+statement error pq: generate_series\(\): generator functions are not allowed in COALESCE
+SELECT * FROM ROWS FROM (COALESCE(generate_series(1, 10)));
