@@ -54,6 +54,15 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 				arg.Scan(t, i, &cfg.PreVote)
 			case "checkquorum":
 				arg.Scan(t, i, &cfg.CheckQuorum)
+			case "read-only":
+				switch arg.Vals[i] {
+				case "safe":
+					cfg.ReadOnlyOption = raft.ReadOnlySafe
+				case "lease-based":
+					cfg.ReadOnlyOption = raft.ReadOnlyLeaseBased
+				default:
+					return fmt.Errorf("invalid read-only option %q", arg.Vals[i])
+				}
 			}
 		}
 	}

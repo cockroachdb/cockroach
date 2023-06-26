@@ -17,7 +17,7 @@ ok
 
 stabilize
 ----
-ok (quiet)
+ok
 
 log-level debug
 ----

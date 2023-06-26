@@ -41,6 +41,9 @@ func (a *rawNodeAdapter) TransferLeadership(ctx context.Context, lead, transfere
 	a.RawNode.TransferLeader(transferee)
 }
 
+// ForgetLeader takes a context, RawNode doesn't need it.
+func (a *rawNodeAdapter) ForgetLeader(context.Context) error { return a.RawNode.ForgetLeader() }
+
 // Stop when node has a goroutine, RawNode doesn't need this.
 func (a *rawNodeAdapter) Stop() {}
 

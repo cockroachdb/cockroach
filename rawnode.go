@@ -544,6 +544,12 @@ func (rn *RawNode) TransferLeader(transferee uint64) {
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgTransferLeader, From: transferee})
 }
 
+// ForgetLeader forgets a follower's current leader, changing it to None.
+// See (Node).ForgetLeader for details.
+func (rn *RawNode) ForgetLeader() error {
+	return rn.raft.Step(pb.Message{Type: pb.MsgForgetLeader})
+}
+
 // ReadIndex requests a read state. The read state will be set in ready.
 // Read State has a read index. Once the application advances further than the read
 // index, any linearizable read requests issued before the read request can be

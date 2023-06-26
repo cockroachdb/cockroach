@@ -44,7 +44,7 @@ ok
 
 stabilize
 ----
-ok (quiet)
+ok
 
 propose 1 prop_1_12
 ----
@@ -56,7 +56,7 @@ ok
 
 stabilize
 ----
-ok (quiet)
+ok
 
 ## Create term 2 entries.
 campaign 2
@@ -65,15 +65,15 @@ ok
 
 stabilize 2
 ----
-ok (quiet)
+ok
 
 stabilize 6
 ----
-ok (quiet)
+ok
 
 stabilize 2 5 7
 ----
-ok (quiet)
+ok
 
 propose 2 prop_2_15
 ----
@@ -85,11 +85,11 @@ ok
 
 stabilize 2 7
 ----
-ok (quiet)
+ok
 
 deliver-msgs drop=(1,2,3,4,5,6,7)
 ----
-ok (quiet)
+ok
 
 ## Create term 3 entries.
 campaign 7
@@ -98,15 +98,15 @@ ok
 
 stabilize 7
 ----
-ok (quiet)
+ok
 
 stabilize 1 2 3 4 5 6
 ----
-ok (quiet)
+ok
 
 stabilize 7
 ----
-ok (quiet)
+ok
 
 propose 7 prop_3_18
 ----
@@ -126,11 +126,11 @@ ok
 
 stabilize 7
 ----
-ok (quiet)
+ok
 
 deliver-msgs drop=(1,2,3,4,5,6,7)
 ----
-ok (quiet)
+ok
 
 ## Create term 4 entries.
 campaign 6
@@ -139,7 +139,7 @@ ok
 
 stabilize 1 2 3 4 5 6
 ----
-ok (quiet)
+ok
 
 propose 6 prop_4_15
 ----
@@ -147,7 +147,7 @@ ok
 
 stabilize 1 2 4 5 6
 ----
-ok (quiet)
+ok
 
 propose 6 prop_4_16
 ----
@@ -159,11 +159,11 @@ ok
 
 stabilize 6
 ----
-ok (quiet)
+ok
 
 deliver-msgs drop=(1,2,3,4,5,6,7)
 ----
-ok (quiet)
+ok
 
 ## Create term 5 entries.
 campaign 5
@@ -172,7 +172,7 @@ ok
 
 stabilize 1 2 4 5
 ----
-ok (quiet)
+ok
 
 propose 5 prop_5_17
 ----
@@ -180,11 +180,11 @@ ok
 
 stabilize 1 2 4 5
 ----
-ok (quiet)
+ok
 
 deliver-msgs drop=(1,2,3,4,5,6,7)
 ----
-ok (quiet)
+ok
 
 ## Create term 6 entries.
 campaign 4
@@ -193,7 +193,7 @@ ok
 
 stabilize 1 2 4 5
 ----
-ok (quiet)
+ok
 
 propose 4 prop_6_19
 ----
@@ -201,7 +201,7 @@ ok
 
 stabilize 1 2 4
 ----
-ok (quiet)
+ok
 
 propose 4 prop_6_20
 ----
@@ -209,7 +209,7 @@ ok
 
 stabilize 1 4
 ----
-ok (quiet)
+ok
 
 propose 4 prop_6_21
 ----
@@ -217,11 +217,11 @@ ok
 
 stabilize 4
 ----
-ok (quiet)
+ok
 
 deliver-msgs drop=(1,2,3,4,5,6,7)
 ----
-ok (quiet)
+ok
 
 ## Create term 7 entries.
 campaign 5
@@ -230,15 +230,15 @@ ok
 
 stabilize 5
 ----
-ok (quiet)
+ok
 
 stabilize 1 3 6 7
 ----
-ok (quiet)
+ok
 
 stabilize 5
 ----
-ok (quiet)
+ok
 
 propose 5 prop_7_20
 ----
@@ -254,11 +254,11 @@ ok
 
 stabilize 5
 ----
-ok (quiet)
+ok
 
 deliver-msgs drop=(1,2,3,4,5,6,7)
 ----
-ok (quiet)
+ok
 
 
 # Show the Raft log from each node.

@@ -25,7 +25,7 @@ ok
 
 stabilize
 ----
-ok (quiet)
+ok
 
 # Propose a conf change on n1 that promotes n3 to voter.
 propose-conf-change 1
@@ -36,13 +36,13 @@ ok
 # Commit and fully apply said conf change. n1 and n2 now consider n3 a voter.
 stabilize 1 2
 ----
-ok (quiet)
+ok
 
 # Drop all inflight messages to 3. We don't want it to be caught up when it is
 # asked to vote.
 deliver-msgs drop=(3)
 ----
-ok (quiet)
+ok
 
 # We now pretend that n1 is dead, and n2 is trying to become leader.
 

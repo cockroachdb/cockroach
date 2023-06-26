@@ -23,16 +23,16 @@ ok
 # Fully replicate everything, including the leader's empty index.
 stabilize
 ----
-ok (quiet)
+ok
 
 compact 1 11
 ----
-ok (quiet)
+ok
 
 # Drop inflight messages to n3.
 deliver-msgs drop=(3)
 ----
-ok (quiet)
+ok
 
 # Show the Raft log messages from now on.
 log-level debug
