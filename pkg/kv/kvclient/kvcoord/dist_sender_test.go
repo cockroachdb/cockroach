@@ -5651,19 +5651,6 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 	require.Equal(t, ds.metrics.ErrCounts[kvpb.ConditionFailedErrType].Count(), int64(1))
 }
 
-// getMapsDiff returns the difference between the values of corresponding
-// metrics in two maps. Assumption: beforeMap and afterMap contain the same set
-// of keys.
-func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[string]int64 {
-	diffMap := make(map[string]int64)
-	for metricName, beforeValue := range beforeMap {
-		if v, ok := afterMap[metricName]; ok {
-			diffMap[metricName] = v - beforeValue
-		}
-	}
-	return diffMap
-}
-
 // TestDistSenderCrossLocalityMetrics verifies that
 // updateCrossLocalityMetricsOnReplicaAddressedBatch{Request|Response} correctly
 // updates cross-region, cross-zone byte count metrics for batch requests sent

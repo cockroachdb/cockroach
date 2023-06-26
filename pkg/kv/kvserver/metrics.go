@@ -3216,8 +3216,6 @@ func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotSent(
 		sm.RangeSnapShotCrossRegionSentBytes.Inc(inc)
 	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
 		sm.RangeSnapShotCrossZoneSentBytes.Inc(inc)
-	case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
-		// No metrics or error reporting.
 	}
 }
 
@@ -3235,8 +3233,6 @@ func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotRcvd(
 		sm.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
 	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
 		sm.RangeSnapShotCrossZoneRcvdBytes.Inc(inc)
-	case roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE:
-		// No metrics or error reporting.
 	}
 }
 
