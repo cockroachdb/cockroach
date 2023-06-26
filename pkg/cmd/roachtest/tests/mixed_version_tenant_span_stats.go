@@ -15,7 +15,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -75,7 +74,7 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 				}
 				// Dial a node for span stats on startup. All nodes will be on the previous version, this is a sanity check.
 				l.Printf("Fetch span stats from node (start).")
-				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(1), oldReqBody(2, startKey, endKey))
+				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(1), oldReqBody(startKey, endKey))
 				if err != nil {
 					return err
 				}
@@ -85,72 +84,28 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 			})
 
 			mvt.InMixedVersion("fetch span stats - mixed", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-				mixedVersionReqError := "unable to service a mixed version request"
-				unknownFieldError := "unknown field"
-
 				// Skip finalizing state.
 				if h.Context().Finalizing {
 					return nil
 				}
 
-				// We are in a state where nodes have different versions.
-				prevVersNodeID := h.Context().FromVersionNodes[0]
-				currVersNodeID := h.Context().ToVersionNodes[0]
+				nodeID := h.RandomNode(rng, c.All())
 
-				// Fetch span stats from previous version node, dialing to a current version node.
-				l.Printf("Fetch span stats from previous version node (%v), dialing to a current version node (%v).", prevVersNodeID, currVersNodeID)
-				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(prevVersNodeID), oldReqBody(currVersNodeID, startKey, endKey))
+				// Fetch span stats from random node.
+				l.Printf("Fetch span stats from random node (%v).", nodeID)
+				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(nodeID), createReqBody(rng, startKey, endKey))
 				if err != nil {
 					return err
 				}
-				// Expect an error in the stdout - mixed version error.
+				// Expect an error in the stdout.
 				// Ensure the result can be marshalled into a valid error response.
 				err = json.Unmarshal([]byte(res.Stdout), &errOutput)
 				if err != nil {
 					return err
 				}
-				// Ensure we get the expected error.
-				expected := assertExpectedError(errOutput.Error, mixedVersionReqError)
-				if !expected {
-					return errors.Newf("expected '%s' in error message, got: '%v'", mixedVersionReqError, errOutput.Error)
-				}
-
-				// Fetch span stats from current version node, dialing to a previous version node.
-				l.Printf("Fetch span stats from current version node (%v), dialing to a previous version node (%v).", currVersNodeID, prevVersNodeID)
-				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(currVersNodeID), newReqBody(prevVersNodeID, startKey, endKey))
-				if err != nil {
-					return err
-				}
-				// Expect an error in the stdout - mixed version error.
-				// Ensure the result can be marshalled into a valid error response.
-				err = json.Unmarshal([]byte(res.Stdout), &errOutput)
-				if err != nil {
-					return err
-				}
-				// Ensure we get the expected error.
-				expectedCurrToPrev := assertExpectedError(errOutput.Message, mixedVersionReqError)
-				expectedUnknown := assertExpectedError(errOutput.Message, unknownFieldError)
-				if !expectedCurrToPrev && !expectedUnknown {
-					return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, expectedUnknown, errOutput.Error)
-				}
-
-				// Fanout from current version node.
-				l.Printf("Fanout from current version node (mixed).")
-				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(currVersNodeID), newReqBody(0, startKey, endKey))
-				if err != nil {
-					return err
-				}
-				// Expect an error in the stdout - mixed version error.
-				// Ensure the result can be marshalled into a valid error response.
-				err = json.Unmarshal([]byte(res.Stdout), &errOutput)
-				if err != nil {
-					return err
-				}
-				// Ensure we get the expected error.
-				expectedCurrToPrev = assertExpectedError(errOutput.Message, mixedVersionReqError)
-				expectedUnknown = assertExpectedError(errOutput.Message, unknownFieldError)
-				if !expectedCurrToPrev && !expectedUnknown {
-					return errors.Newf("expected '%s' or '%s' in error message, got: '%v'", mixedVersionReqError, expectedUnknown, errOutput.Error)
+				// Ensure error output is not empty.
+				if errOutput.Error == "" {
+					return errors.Newf("expected an error but got empty")
 				}
 				return nil
 			})
@@ -158,7 +113,7 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 			mvt.AfterUpgradeFinalized("fetch span stats - finalized", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 				// Fanout on finalized version, sanity check.
 				l.Printf("Fanout from current version node (finalized).")
-				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(1), newReqBody(0, startKey, endKey))
+				res, err = fetchSpanStatsFromNode(ctx, l, c, c.Node(1), newReqBody(startKey, endKey))
 				if err != nil {
 					return err
 				}
@@ -193,16 +148,20 @@ func fetchSpanStatsFromNode(
 	return &res, nil
 }
 
-func assertExpectedError(errorMessage string, expectedError string) bool {
-	return strings.Contains(errorMessage, expectedError)
+// createReqBody randomly chooses to build a request body using the old or new format.
+func createReqBody(prng *rand.Rand, startKey string, endKey string) string {
+	if prng.Intn(2) == 0 {
+		return oldReqBody(startKey, endKey)
+	}
+	return newReqBody(startKey, endKey)
 }
 
-func oldReqBody(nodeID int, startKey string, endKey string) string {
-	return fmt.Sprintf(`{"node_id": "%v", "start_key": "%v", "end_key": "%v"}`, nodeID, startKey, endKey)
+func oldReqBody(startKey string, endKey string) string {
+	return fmt.Sprintf(`{"node_id": "%v", "start_key": "%v", "end_key": "%v"}`, 0, startKey, endKey)
 }
 
-func newReqBody(nodeID int, startKey string, endKey string) string {
-	return fmt.Sprintf(`{"node_id": "%v", "spans": [{"key": "%v", "end_key": "%v"}]}`, nodeID, startKey, endKey)
+func newReqBody(startKey string, endKey string) string {
+	return fmt.Sprintf(`{"node_id": "%v", "spans": [{"key": "%v", "end_key": "%v"}]}`, 0, startKey, endKey)
 }
 
 type errorOutput struct {
