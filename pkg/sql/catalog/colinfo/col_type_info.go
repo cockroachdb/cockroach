@@ -105,7 +105,7 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 		return ValidateColumnDefType(ctx, version, t.ArrayContents())
 
 	case types.BitFamily, types.IntFamily, types.FloatFamily, types.BoolFamily, types.BytesFamily, types.DateFamily,
-		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.PGLSNFamily, types.TimeFamily,
+		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily:
 	// These types are OK.
@@ -122,6 +122,14 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 		if !version.IsActive(ctx, clusterversion.V23_1) {
 			return pgerror.Newf(pgcode.FeatureNotSupported,
 				"TSVector/TSQuery not supported until version 23.1")
+		}
+
+	case types.PGLSNFamily:
+		if !version.IsActive(ctx, clusterversion.V23_2) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"pg_lsn not supported until version 23.2",
+			)
 		}
 
 	default:
