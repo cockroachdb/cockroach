@@ -367,6 +367,10 @@ var inputs = map[string][]string{
 		"epoch",
 	},
 
+	"'%s'::pg_lsn": {
+		"010011F/1ABCDEF0",
+	},
+
 	"'%s'::time": {
 		"00:00:00",
 		"12:00:00.000001",
