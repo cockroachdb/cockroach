@@ -19,12 +19,14 @@ import (
 	"crypto/x509/pkix"
 	gosql "database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
 	"math/rand"
 	"net"
 	"net/url"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -69,11 +71,12 @@ var kafkaCreateTopicRetryDuration = 1 * time.Minute
 type sinkType string
 
 const (
-	cloudStorageSink sinkType = "cloudstorage"
-	webhookSink      sinkType = "webhook"
-	pubsubSink       sinkType = "pubsub"
-	kafkaSink        sinkType = "kafka"
-	nullSink         sinkType = "null"
+	cloudStorageSink       sinkType = "cloudstorage"
+	webhookSink            sinkType = "webhook"
+	pubsubSink             sinkType = "pubsub"
+	kafkaSink              sinkType = "kafka"
+	azureEventHubKafkaSink sinkType = "azure-event-hub"
+	nullSink               sinkType = "null"
 )
 
 var envVars = []string{
@@ -145,6 +148,29 @@ func (ct *cdcTester) startStatsCollection() func() {
 			ct.t.Errorf("error exporting stats file: %s", err)
 		}
 	}
+}
+
+type AuthorizationRuleKeys struct {
+	PrimaryConnectionString string `json:"primaryConnectionString"`
+}
+
+func getEventHubConnectionString() (string, error) {
+	// These have all been configured via the Azure Portal.
+	cmdStr := "az eventhubs namespace authorization-rule keys list --resource-group cdc-testing --namespace-name roachtest-cdc --name roachtest"
+	cmdSplit := strings.Split(cmdStr, " ")
+	cmd := exec.Command(cmdSplit[0], cmdSplit[1:]...)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", errors.Wrapf(err, "error running `az eventhubs` command, ensure the Azure CLI is installed and you have logged in via `az login`")
+	}
+
+	var keys AuthorizationRuleKeys
+	err = json.Unmarshal(output, &keys)
+	if err != nil {
+		return "", err
+	}
+
+	return keys.PrimaryConnectionString, nil
 }
 
 func (ct *cdcTester) startCRDBChaos() {
@@ -242,6 +268,17 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		}
 
 		sinkURI = kafka.sinkURL(ct.ctx)
+	case azureEventHubKafkaSink:
+		connectionString, err := getEventHubConnectionString()
+		if err != nil {
+			ct.t.Fatal(err)
+		}
+
+		// EventHub does not auto-create the "topic" so we set a fixed topic_name
+		sinkURI = fmt.Sprintf(
+			`kafka://roachtest-cdc.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=%s&sasl_mechanism=PLAIN&topic_name=testing`,
+			url.QueryEscape(connectionString),
+		)
 	default:
 		ct.t.Fatalf("unknown sink provided: %s", args.sinkType)
 	}
@@ -1571,6 +1608,30 @@ func registerCDC(r registry.Registry) {
 					}
 				}
 			}
+		},
+	})
+r.Add(registry.TestSpec{
+		Name:            "cdc/kafka-azure",
+		Owner:           `cdc`,
+		Skip:            "nightly runs blocked on azure credentials access in CI (#105580)",
+		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64), spec.Zones("us-east1-b")),
+		Leases:          registry.MetamorphicLeases,
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			// Just use 1 warehouse and no initial scan since this would involve
+			// cross-cloud traffic which is far more expensive.  The throughput also
+			// can't be too high to not hit the Throughput Unit (TU) limit of 1MBps/TU
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
+			ct.newChangefeed(feedArgs{
+				sinkType: azureEventHubKafkaSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'no'"},
+			})
+
+			ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{
