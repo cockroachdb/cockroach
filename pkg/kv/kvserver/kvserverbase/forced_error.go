@@ -114,57 +114,46 @@ func CheckForcedErr(
 	// due to Raft delays / reorderings.
 	// To understand why this lease verification is necessary, see comments on the
 	// proposer_lease field in the proto.
-	leaseMismatch := false
-	if raftCmd.DeprecatedProposerLease != nil {
-		// VersionLeaseSequence must not have been active when this was proposed.
+	leaseMismatch := raftCmd.ProposerLeaseSequence != replicaState.Lease.Sequence
+	if !leaseMismatch && isLeaseRequest {
+		// Lease sequence numbers are a reflection of lease equivalency
+		// between subsequent leases. However, Lease.Equivalent is not fully
+		// symmetric, meaning that two leases may be Equivalent to a third
+		// lease but not Equivalent to each other. If these leases are
+		// proposed under that same third lease, neither will be able to
+		// detect whether the other has applied just by looking at the
+		// current lease sequence number because neither will increment
+		// the sequence number.
 		//
-		// This does not prevent the lease race condition described below. The
-		// reason we don't fix this here as well is because fixing the race
-		// requires a new cluster version which implies that we'll already be
-		// using lease sequence numbers and will fall into the case below.
-		leaseMismatch = !raftCmd.DeprecatedProposerLease.Equivalent(*replicaState.Lease)
-	} else {
-		leaseMismatch = raftCmd.ProposerLeaseSequence != replicaState.Lease.Sequence
-		if !leaseMismatch && isLeaseRequest {
-			// Lease sequence numbers are a reflection of lease equivalency
-			// between subsequent leases. However, Lease.Equivalent is not fully
-			// symmetric, meaning that two leases may be Equivalent to a third
-			// lease but not Equivalent to each other. If these leases are
-			// proposed under that same third lease, neither will be able to
-			// detect whether the other has applied just by looking at the
-			// current lease sequence number because neither will increment
-			// the sequence number.
-			//
-			// This can lead to inversions in lease expiration timestamps if
-			// we're not careful. To avoid this, if a lease request's proposer
-			// lease sequence matches the current lease sequence and the current
-			// lease sequence also matches the requested lease sequence, we make
-			// sure the requested lease is Equivalent to current lease.
-			if replicaState.Lease.Sequence == requestedLease.Sequence {
-				// It is only possible for this to fail when expiration-based
-				// lease extensions are proposed concurrently.
-				leaseMismatch = !replicaState.Lease.Equivalent(requestedLease)
-			}
+		// This can lead to inversions in lease expiration timestamps if
+		// we're not careful. To avoid this, if a lease request's proposer
+		// lease sequence matches the current lease sequence and the current
+		// lease sequence also matches the requested lease sequence, we make
+		// sure the requested lease is Equivalent to current lease.
+		if replicaState.Lease.Sequence == requestedLease.Sequence {
+			// It is only possible for this to fail when expiration-based
+			// lease extensions are proposed concurrently.
+			leaseMismatch = !replicaState.Lease.Equivalent(requestedLease)
+		}
 
-			// This is a check to see if the lease we proposed this lease request
-			// against is the same lease that we're trying to update. We need to check
-			// proposal timestamps because extensions don't increment sequence
-			// numbers. Without this check a lease could be extended and then another
-			// lease proposed against the original lease would be applied over the
-			// extension.
-			//
-			// This check also confers replay protection when the sequence number
-			// matches, as it ensures that only the first of duplicated proposal can
-			// apply, and the second will be rejected (since its PrevLeaseProposal
-			// refers to the original lease, and not itself).
-			//
-			// PrevLeaseProposal is always set. Its nullability dates back to the
-			// migration that introduced it.
-			if raftCmd.ReplicatedEvalResult.PrevLeaseProposal != nil &&
-				// NB: ProposedTS can be nil if the right-hand side is the Range's initial zero Lease.
-				(!raftCmd.ReplicatedEvalResult.PrevLeaseProposal.Equal(replicaState.Lease.ProposedTS)) {
-				leaseMismatch = true
-			}
+		// This is a check to see if the lease we proposed this lease request
+		// against is the same lease that we're trying to update. We need to check
+		// proposal timestamps because extensions don't increment sequence
+		// numbers. Without this check a lease could be extended and then another
+		// lease proposed against the original lease would be applied over the
+		// extension.
+		//
+		// This check also confers replay protection when the sequence number
+		// matches, as it ensures that only the first of duplicated proposal can
+		// apply, and the second will be rejected (since its PrevLeaseProposal
+		// refers to the original lease, and not itself).
+		//
+		// PrevLeaseProposal is always set. Its nullability dates back to the
+		// migration that introduced it.
+		if raftCmd.ReplicatedEvalResult.PrevLeaseProposal != nil &&
+			// NB: ProposedTS can be nil if the right-hand side is the Range's initial zero Lease.
+			(!raftCmd.ReplicatedEvalResult.PrevLeaseProposal.Equal(replicaState.Lease.ProposedTS)) {
+			leaseMismatch = true
 		}
 	}
 	if leaseMismatch {
