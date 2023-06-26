@@ -110,7 +110,7 @@ ALTER TENANT ALL SET CLUSTER SETTING sql.index_recommendation.drop_unused_durati
 user root
 
 onlyif config 3node-tenant-default-configs
-query TTTT
+query TTTT retry
 SELECT variable, value, default_value, origin FROM [SHOW ALL CLUSTER SETTINGS]
 WHERE variable IN ('sql.index_recommendation.drop_unused_duration')
 ----
