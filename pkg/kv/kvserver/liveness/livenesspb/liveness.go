@@ -214,9 +214,11 @@ const (
 	ReplicaProgress
 	Metrics
 	LeaseCampaign
+	LeaseCampaignWeak
 	RangeQuiesience
 	NetworkMap
 	LossOfQuorum
+	ReplicaGCQueue
 )
 
 func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
@@ -250,13 +252,31 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 				// of caution and don't campaign, so assume it is alive.
 				return true
 			}
-			return nv.isAlive()
+			return nv.isAliveAndConnected()
+		}
+	case LeaseCampaignWeak:
+		{
+			if !nv.isValid() {
+				// If we don't know about the leader in our liveness map, then we err on the side
+				// of caution and don't campaign, so assume it is alive.
+				return true
+			}
+			return nv.now.Less(nv.livenessExpiration)
 		}
 	case RangeQuiesience:
-		return nv.isAliveAndConnected()
+		{
+			if !nv.isValid() {
+				// If we don't know about the node, then we err on the side
+				// of caution and don't quiesce, so assume it is alive.
+				return true
+			}
+			return nv.isAliveAndConnected()
+		}
 	case NetworkMap:
 		return nv.connected
 	case LossOfQuorum:
+		return nv.isAlive()
+	case ReplicaGCQueue:
 		return nv.isAlive()
 	}
 

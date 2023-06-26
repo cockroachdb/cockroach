@@ -38,17 +38,13 @@ type TestNodeVitality map[roachpb.NodeID]TestNodeVitalityEntry
 func TestCreateNodeVitality(ids ...roachpb.NodeID) TestNodeVitality {
 	m := TestNodeVitality{}
 	for _, id := range ids {
-		m[id] = TestNodeVitalityEntry{
-			Liveness: Liveness{},
-			Alive:    true,
-		}
+		m.AddNode(id)
 	}
 	return m
 }
 
 func (e TestNodeVitalityEntry) convert() NodeVitality {
 	clock := hlc.NewClockForTesting(hlc.NewHybridManualClock())
-
 	now := clock.Now()
 	if e.Alive {
 		return e.Liveness.CreateNodeVitality(now, now, hlc.Timestamp{}, true, time.Second, time.Second)
@@ -79,16 +75,27 @@ func (tnv TestNodeVitality) ScanNodeVitalityFromCache() NodeVitalityMap {
 	return nvm
 }
 
-func (tnv TestNodeVitality) AddNode() {
-	maxNodeID := roachpb.NodeID(1)
+func (tnv TestNodeVitality) AddNextNode() {
+	maxNodeID := roachpb.NodeID(0)
 	for id := range tnv {
 		if id > maxNodeID {
 			maxNodeID = id
 		}
 	}
-	tnv[maxNodeID+1] = TestNodeVitalityEntry{
-		Liveness: Liveness{},
-		Alive:    true,
+	tnv.AddNode(maxNodeID + 1)
+}
+
+func (tnv TestNodeVitality) AddNode(id roachpb.NodeID) {
+	now := hlc.NewClockForTesting(hlc.NewHybridManualClock()).Now()
+	tnv[id] = TestNodeVitalityEntry{
+		Liveness: Liveness{
+			NodeID:     id,
+			Epoch:      1,
+			Expiration: now.AddDuration(time.Minute).ToLegacyTimestamp(),
+			Draining:   false,
+			Membership: MembershipStatus_ACTIVE,
+		},
+		Alive: true,
 	}
 }
 
@@ -110,6 +117,7 @@ func (tnv TestNodeVitality) DownNode(id roachpb.NodeID) {
 func (tnv TestNodeVitality) RestartNode(id roachpb.NodeID) {
 	entry := tnv[id]
 	entry.Alive = true
+	entry.Liveness.Epoch++
 	tnv[id] = entry
 }
 
@@ -128,8 +136,9 @@ func FakeNodeVitality(alive bool) NodeVitality {
 		}
 	} else {
 		return NodeVitality{
-			nodeID:    1,
-			connected: false,
+			nodeID:        1,
+			connected:     false,
+			livenessEpoch: 1,
 		}
 	}
 }
