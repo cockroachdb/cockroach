@@ -814,9 +814,9 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		})
 
 		// Partition the replica from the rest of its range.
-		partitionStore.Transport().Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:            rangeID,
-			RaftMessageHandler: partitionStore,
+		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:                    rangeID,
+			IncomingRaftMessageHandler: partitionStore,
 		})
 
 		// Perform a write on the range.
@@ -849,9 +849,9 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}
 
 		// Remove the partition. Snapshot should follow.
-		partitionStore.Transport().Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:            rangeID,
-			RaftMessageHandler: partitionStore,
+		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:                    rangeID,
+			IncomingRaftMessageHandler: partitionStore,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can

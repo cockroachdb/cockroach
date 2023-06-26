@@ -269,9 +269,9 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *kvpb.Error {
-	// NB: unlike the other two RaftMessageHandler methods implemented by Store,
-	// this one doesn't need to directly run through a Stopper task because it
-	// delegates all work through a raftScheduler, whose workers' lifetimes are
+	// NB: unlike the other two IncomingRaftMessageHandler methods implemented by
+	// Store, this one doesn't need to directly run through a Stopper task because
+	// it delegates all work through a raftScheduler, whose workers' lifetimes are
 	// already tied to the Store's Stopper.
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		if req.RangeID != 0 {
@@ -476,10 +476,10 @@ func (s *Store) processRaftSnapshotRequest(
 	})
 }
 
-// HandleRaftResponse implements the RaftMessageHandler interface. Per the
-// interface specification, an error is returned if and only if the underlying
-// Raft connection should be closed.
-// It requires that s.mu is not held.
+// HandleRaftResponse implements the IncomingRaftMessageHandler interface. Per
+// the interface specification, an error is returned if and only if the
+// underlying Raft connection should be closed. It requires that s.mu is not
+// held.
 func (s *Store) HandleRaftResponse(
 	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
@@ -720,7 +720,7 @@ func (s *Store) processRaft(ctx context.Context) {
 	_ = s.stopper.RunAsyncTask(ctx, "sched-tick-loop", s.raftTickLoop)
 	_ = s.stopper.RunAsyncTask(ctx, "coalesced-hb-loop", s.coalescedHeartbeatsLoop)
 	s.stopper.AddCloser(stop.CloserFn(func() {
-		s.cfg.Transport.Stop(s.StoreID())
+		s.cfg.Transport.StopIncomingRaftMessages(s.StoreID())
 	}))
 
 	s.syncWaiter.Start(ctx, s.stopper)

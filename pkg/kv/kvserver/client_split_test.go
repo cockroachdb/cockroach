@@ -868,12 +868,12 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.Equal(t, ms, msMerged, "post-merge stats differ from pre-split")
 }
 
-// RaftMessageHandlerInterceptor wraps a storage.RaftMessageHandler. It
-// delegates all methods to the underlying storage.RaftMessageHandler, except
-// that HandleSnapshot calls receiveSnapshotFilter with the snapshot request
-// header before delegating to the underlying HandleSnapshot method.
+// RaftMessageHandlerInterceptor wraps a storage.IncomingRaftMessageHandler. It
+// delegates all methods to the underlying storage.IncomingRaftMessageHandler,
+// except that HandleSnapshot calls receiveSnapshotFilter with the snapshot
+// request header before delegating to the underlying HandleSnapshot method.
 type RaftMessageHandlerInterceptor struct {
-	kvserver.RaftMessageHandler
+	kvserver.IncomingRaftMessageHandler
 	handleSnapshotFilter func(header *kvserverpb.SnapshotRequest_Header)
 }
 
@@ -883,7 +883,7 @@ func (mh RaftMessageHandlerInterceptor) HandleSnapshot(
 	respStream kvserver.SnapshotResponseStream,
 ) error {
 	mh.handleSnapshotFilter(header)
-	return mh.RaftMessageHandler.HandleSnapshot(ctx, header, respStream)
+	return mh.IncomingRaftMessageHandler.HandleSnapshot(ctx, header, respStream)
 }
 
 // TestStoreEmptyRangeSnapshotSize tests that the snapshot request header for a
@@ -923,7 +923,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 		headers []*kvserverpb.SnapshotRequest_Header
 	}{}
 	messageHandler := RaftMessageHandlerInterceptor{
-		RaftMessageHandler: tc.GetFirstStoreFromServer(t, 1),
+		IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, 1),
 		handleSnapshotFilter: func(header *kvserverpb.SnapshotRequest_Header) {
 			// Each snapshot request is handled in a new goroutine, so we need
 			// synchronization.
@@ -932,7 +932,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 			messageRecorder.headers = append(messageRecorder.headers, header)
 		},
 	}
-	tc.Servers[1].RaftTransport().Listen(tc.GetFirstStoreFromServer(t, 1).StoreID(), messageHandler)
+	tc.Servers[1].RaftTransport().ListenIncomingRaftMessages(tc.GetFirstStoreFromServer(t, 1).StoreID(), messageHandler)
 
 	// Replicate the newly-split range to trigger a snapshot request from store 0
 	// to store 1.
@@ -3383,9 +3383,9 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	})
 
 	store, _ := getFirstStoreReplica(t, tc.Server(1), k)
-	tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
-		rangeID:            desc.RangeID,
-		RaftMessageHandler: store,
+	tc.Servers[1].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
+		rangeID:                    desc.RangeID,
+		IncomingRaftMessageHandler: store,
 	})
 
 	_, kRHS := k, k.Next()
@@ -3461,7 +3461,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 
 	// Re-enable raft and wait for the lhs to catch up to the post-split
 	// descriptor. This used to panic with "raft group deleted".
-	tc.Servers[1].RaftTransport().Listen(store.StoreID(), store)
+	tc.Servers[1].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), store)
 	testutils.SucceedsSoon(t, func() error {
 		repl, err := store.GetReplica(descLHS.RangeID)
 		if err != nil {

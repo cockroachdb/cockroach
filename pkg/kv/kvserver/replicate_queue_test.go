@@ -1873,7 +1873,7 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 }
 
 type delayingRaftMessageHandler struct {
-	kvserver.RaftMessageHandler
+	kvserver.IncomingRaftMessageHandler
 	leaseHolderNodeID uint64
 	rangeID           roachpb.RangeID
 }
@@ -1889,11 +1889,11 @@ func (h delayingRaftMessageHandler) HandleRaftRequest(
 	respStream kvserver.RaftMessageResponseStream,
 ) *kvpb.Error {
 	if h.rangeID != req.RangeID {
-		return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+		return h.IncomingRaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 	}
 	go func() {
 		time.Sleep(raftDelay)
-		err := h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+		err := h.IncomingRaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 		if err != nil {
 			log.Infof(ctx, "HandleRaftRequest returned err %s", err)
 		}
@@ -1970,7 +1970,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remoteStore.Transport().Listen(
+	remoteStore.Transport().ListenIncomingRaftMessages(
 		remoteStoreID,
 		delayingRaftMessageHandler{remoteStore, leaseHolderNodeID, rangeID},
 	)
