@@ -212,61 +212,34 @@ func TestProxyProtocol(t *testing.T) {
 		}
 	}
 
-	t.Run("allow=true", func(t *testing.T) {
-		s, sqlAddr, httpAddr := withProxyProtocol(true)
+	s, sqlAddr, httpAddr := withProxyProtocol(true)
 
-		defer testutils.TestingHook(&validateFn, func(h *proxyproto.Header) error {
-			if h.SourceAddr.String() != "10.20.30.40:4242" {
-				return errors.Newf("got source addr %s, expected 10.20.30.40:4242", h.SourceAddr)
-			}
-			return nil
-		})()
+	defer testutils.TestingHook(&validateFn, func(h *proxyproto.Header) error {
+		if h.SourceAddr.String() != "10.20.30.40:4242" {
+			return errors.Newf("got source addr %s, expected 10.20.30.40:4242", h.SourceAddr)
+		}
+		return nil
+	})()
 
-		// Test SQL. Only request with PROXY should go through.
-		url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-42.defaultdb?sslmode=require", sqlAddr)
-		te.TestConnectWithPGConfig(
-			ctx, t, url,
-			func(c *pgx.ConnConfig) {
-				c.DialFunc = proxyDialer
-			},
-			func(conn *pgx.Conn) {
-				require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
-				require.NoError(t, runTestQuery(ctx, conn))
-			},
-		)
-		_ = te.TestConnectErr(ctx, t, url, codeClientReadFailed, "tls error")
-
-		// Test HTTP. Should support with or without PROXY.
-		client := http.Client{Timeout: timeout}
-		makeHttpReq(t, &client, httpAddr, true)
-		proxyClient := http.Client{Transport: &http.Transport{DialContext: proxyDialer}}
-		makeHttpReq(t, &proxyClient, httpAddr, true)
-	})
-
-	t.Run("allow=false", func(t *testing.T) {
-		s, sqlAddr, httpAddr := withProxyProtocol(false)
-
-		// Test SQL. Only request without PROXY should go through.
-		url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-42.defaultdb?sslmode=require", sqlAddr)
-		te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
+	// Test SQL. Only request with PROXY should go through.
+	url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-42.defaultdb?sslmode=require", sqlAddr)
+	te.TestConnectWithPGConfig(
+		ctx, t, url,
+		func(c *pgx.ConnConfig) {
+			c.DialFunc = proxyDialer
+		},
+		func(conn *pgx.Conn) {
 			require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 			require.NoError(t, runTestQuery(ctx, conn))
-		})
-		_ = te.TestConnectErrWithPGConfig(
-			ctx, t, url,
-			func(c *pgx.ConnConfig) {
-				c.DialFunc = proxyDialer
-			},
-			codeClientReadFailed,
-			"tls error",
-		)
+		},
+	)
+	_ = te.TestConnectErr(ctx, t, url, codeClientReadFailed, "tls error")
 
-		// Test HTTP.
-		client := http.Client{Timeout: timeout}
-		makeHttpReq(t, &client, httpAddr, true)
-		proxyClient := http.Client{Transport: &http.Transport{DialContext: proxyDialer}}
-		makeHttpReq(t, &proxyClient, httpAddr, false)
-	})
+	// Test HTTP. Should support with or without PROXY.
+	client := http.Client{Timeout: timeout}
+	makeHttpReq(t, &client, httpAddr, true)
+	proxyClient := http.Client{Transport: &http.Transport{DialContext: proxyDialer}}
+	makeHttpReq(t, &proxyClient, httpAddr, true)
 }
 
 func TestPrivateEndpointsACL(t *testing.T) {
