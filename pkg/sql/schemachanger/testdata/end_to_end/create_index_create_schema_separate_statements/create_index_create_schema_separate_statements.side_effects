@@ -12,6 +12,7 @@ CREATE SCHEMA sc;
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
+increment telemetry for sql.schema.create_index
 increment telemetry for sql.schema.partial_index
 write *eventpb.CreateIndex to event log:
   indexName: idx
@@ -95,6 +96,7 @@ upsert descriptor #104
   -  version: "1"
   +  version: "2"
 checking for feature: CREATE SCHEMA
+increment telemetry for sql.schema.create_schema
 write *eventpb.CreateSchema to event log:
   owner: root
   schemaName: defaultdb.sc

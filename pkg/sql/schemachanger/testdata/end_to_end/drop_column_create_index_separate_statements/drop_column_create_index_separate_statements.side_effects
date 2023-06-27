@@ -207,6 +207,7 @@ upsert descriptor #104
   -  version: "1"
   +  version: "2"
 checking for feature: CREATE INDEX
+increment telemetry for sql.schema.create_index
 write *eventpb.CreateIndex to event log:
   indexName: idx
   mutationId: 1

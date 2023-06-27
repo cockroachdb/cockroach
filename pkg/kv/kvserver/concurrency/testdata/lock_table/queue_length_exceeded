@@ -241,12 +241,6 @@ scan r=req10
 ----
 start-waiting: true
 
-# Note that the state here changed from waitForDistinguished to waitFor. This
-# is because we're cheating slightly in this test by calling scan on a request
-# that's already actively waiting at a lock, which is something that cannot
-# happen outside of unit tests. tryActiveWait doesn't expect this, and doesn't
-# handle this state transition -- we could teach it, but it would be just for
-# this contrived test scenario.
 guard-state r=req10
 ----
-new: state=waitFor txn=txn6 key="b" held=true guard-strength=Intent
+new: state=waitForDistinguished txn=txn6 key="b" held=true guard-strength=Intent
