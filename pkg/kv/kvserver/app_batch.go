@@ -177,13 +177,10 @@ func (b *appBatch) runPostAddTriggers(
 	if res.AddSSTable != nil {
 		copied := addSSTablePreApply(
 			ctx,
-			env.st,
-			env.eng,
-			env.sideloaded,
+			env,
 			kvpb.RaftTerm(cmd.Term),
 			cmd.Index(),
 			*res.AddSSTable,
-			env.bulkLimiter,
 		)
 		b.numAddSST++
 		if copied {
