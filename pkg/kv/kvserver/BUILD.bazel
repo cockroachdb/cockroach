@@ -297,6 +297,7 @@ go_test(
         "range_log_test.go",
         "rebalance_objective_test.go",
         "replica_application_cmd_buf_test.go",
+        "replica_application_result_test.go",
         "replica_application_state_machine_test.go",
         "replica_batch_updates_test.go",
         "replica_circuit_breaker_test.go",
