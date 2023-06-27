@@ -58,7 +58,7 @@ func TestProtectedTimestamps(t *testing.T) {
 		DisableGCQueue:            true,
 		DisableLastProcessedCheck: true,
 	}
-	tc := testcluster.StartTestCluster(t, 3, args)
+	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 	s0 := tc.Server(0)
 
@@ -72,7 +72,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
 	require.NoError(t, err)
 
-	const tableRangeMaxBytes = 1 << 18
+	const tableRangeMaxBytes = 64 << 20
 	_, err = conn.Exec("ALTER TABLE foo CONFIGURE ZONE USING "+
 		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 	require.NoError(t, err)
