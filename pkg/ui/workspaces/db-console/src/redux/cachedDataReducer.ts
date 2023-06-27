@@ -323,7 +323,11 @@ export class CachedDataReducer<
               maybeClearTenantCookie();
               // TODO(couchand): This is an unpleasant dependency snuck in here...
               const { location } = createHashHistory();
-              if (location && !location.pathname.startsWith("/login")) {
+              if (
+                location &&
+                !location.pathname.startsWith("/login") &&
+                !location.pathname.startsWith("/jwt")
+              ) {
                 dispatch(push(getLoginPage(location)));
               }
             }
@@ -635,7 +639,11 @@ export class PaginatedCachedDataReducer<
           if (error.message === "Unauthorized") {
             // TODO(couchand): This is an unpleasant dependency snuck in here...
             const { location } = createHashHistory();
-            if (location && !location.pathname.startsWith("/login")) {
+            if (
+              location &&
+              !location.pathname.startsWith("/login") &&
+              !location.pathname.startsWith("/jwt")
+            ) {
               dispatch(push(getLoginPage(location)));
             }
           }
