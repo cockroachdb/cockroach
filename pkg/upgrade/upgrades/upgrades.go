@@ -319,6 +319,28 @@ var upgrades = []upgradebase.Upgrade{
 }
 
 func init() {
+	// First, add all implicit upgrades.
+	// Implicit upgrades exist for each supported major release and are tied to
+	// the first internal version following each of these.
+	// Typically, the cluster version key names will match `V[0-9]+_[0-9]+Start`.
+	for _, v := range clusterversion.ListBetween(
+		clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey),
+		clusterversion.ByKey(clusterversion.BinaryVersionKey),
+	) {
+		firstUpgrade := roachpb.Version{Major: v.Major, Minor: v.Minor, Internal: 2}
+		if clusterversion.ByKey(clusterversion.BinaryVersionKey).Less(firstUpgrade) {
+			break
+		}
+		if _, ok := registry[firstUpgrade]; !ok {
+			registry[firstUpgrade] = upgrade.NewTenantUpgrade(
+				"prepare upgrade from "+roachpb.Version{Major: v.Major, Minor: v.Minor}.PrettyPrint(),
+				firstUpgrade,
+				FirstUpgradeFromReleasePrecondition,
+				FirstUpgradeFromRelease,
+			)
+		}
+	}
+	// Next, add all explicit upgrades.
 	for _, m := range upgrades {
 		if _, exists := registry[m.Version()]; exists {
 			panic(errors.AssertionFailedf("duplicate upgrade registration for %v", m.Version()))
