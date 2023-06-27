@@ -59,6 +59,8 @@ type AlterTenantCapability struct {
 	TenantSpec   *TenantSpec
 	Capabilities []TenantCapability
 	IsRevoke     bool
+
+	AllCapabilities bool
 }
 
 var _ Statement = &AlterTenantCapability{}
@@ -68,19 +70,24 @@ func (n *AlterTenantCapability) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER TENANT ")
 	ctx.FormatNode(n.TenantSpec)
 	if n.IsRevoke {
-		ctx.WriteString(" REVOKE CAPABILITY ")
+		ctx.WriteString(" REVOKE ")
 	} else {
-		ctx.WriteString(" GRANT CAPABILITY ")
+		ctx.WriteString(" GRANT ")
 	}
-	for i, capability := range n.Capabilities {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		ctx.WriteString(capability.Name)
-		value := capability.Value
-		if value != nil {
-			ctx.WriteString(" = ")
-			ctx.FormatNode(value)
+	if n.AllCapabilities {
+		ctx.WriteString("ALL CAPABILITIES")
+	} else {
+		ctx.WriteString("CAPABILITY ")
+		for i, capability := range n.Capabilities {
+			if i > 0 {
+				ctx.WriteString(", ")
+			}
+			ctx.WriteString(capability.Name)
+			value := capability.Value
+			if value != nil {
+				ctx.WriteString(" = ")
+				ctx.FormatNode(value)
+			}
 		}
 	}
 }

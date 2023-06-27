@@ -102,7 +102,7 @@ var multitenantClusterInitTasks = []autoconfigpb.Task{
 		[]string{
 			// Create a main secondary tenant template.
 			"CREATE TENANT template",
-			"ALTER TENANT template GRANT CAPABILITY can_admin_relocate_range, can_admin_unsplit, can_view_node_info, can_view_tsdb_metrics, can_use_nodelocal_storage, can_check_consistency, exempt_from_rate_limiting",
+			"ALTER TENANT template GRANT ALL CAPABILITIES",
 			// Enable admin scatter/split in tenant SQL.
 			// TODO(knz): Move this to in-tenant config task.
 			"ALTER TENANT template SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled = true",
