@@ -183,3 +183,43 @@ type ExternalStorageOptions struct {
 type ExternalStorageConstructor func(
 	context.Context, ExternalStorageContext, cloudpb.ExternalStorage,
 ) (ExternalStorage, error)
+
+// NewExternalStorageAccessor creates an uninitialized ExternalStorageAccessor.
+func NewExternalStorageAccessor() *ExternalStorageAccessor {
+	return &ExternalStorageAccessor{ready: make(chan struct{})}
+}
+
+// ExternalStorageAccessor is a container for accessing the ExternalStorage
+// factory methods once they are initialized. Attempts to access them prior to
+// initialization will block.
+type ExternalStorageAccessor struct {
+	ready   chan struct{}
+	factory ExternalStorageFactory
+	byURI   ExternalStorageFromURIFactory
+}
+
+// Init initializes the ExternalStorageAccessor with the passed factories.
+func (a *ExternalStorageAccessor) Init(
+	factory ExternalStorageFactory, uriFactory ExternalStorageFromURIFactory,
+) error {
+	a.factory = factory
+	a.byURI = uriFactory
+	close(a.ready)
+	return nil
+}
+
+// Open opens an ExternalStorage.
+func (a *ExternalStorageAccessor) Open(
+	ctx context.Context, dest cloudpb.ExternalStorage, opts ...ExternalStorageOption,
+) (ExternalStorage, error) {
+	<-a.ready
+	return a.factory(ctx, dest, opts...)
+}
+
+// OpenURL opens an ExternalStorage using a URI spec.
+func (a *ExternalStorageAccessor) OpenURL(
+	ctx context.Context, uri string, user username.SQLUsername, opts ...ExternalStorageOption,
+) (ExternalStorage, error) {
+	<-a.ready
+	return a.byURI(ctx, uri, user, opts...)
+}
