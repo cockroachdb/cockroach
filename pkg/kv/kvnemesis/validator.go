@@ -1230,6 +1230,19 @@ func (v *validator) checkNonAmbError(
 func (v *validator) failIfError(
 	op Operation, r Result, exceptions ...func(err error) bool,
 ) (ambiguous, hasError bool) {
+	exceptions = append(exceptions[:len(exceptions):len(exceptions)], func(err error) bool {
+		return errors.Is(err, errInjected)
+	}, func(err error) bool {
+		// Work-around for [1].
+		//
+		// TODO(arul): find out why we (as of [2]) sometimes leaking
+		// *TransactionPushError (wrapped in `UnhandledRetryableError`) from
+		// `db.Get`, `db.Scan`, etc.
+		//
+		// [1]: https://github.com/cockroachdb/cockroach/issues/105330
+		// [2]: https://github.com/cockroachdb/cockroach/pull/97779
+		return errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil))
+	})
 	switch r.Type {
 	case ResultType_Unknown:
 		err := errors.AssertionFailedf(`unknown result %s`, op)

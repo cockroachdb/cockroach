@@ -24,7 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
+
+var errInjected = errors.New("injected error")
 
 type loggerKey struct{}
 
@@ -171,16 +174,31 @@ func RunNemesis(
 
 		reproFile := l(ctx, "repro.go", "// Reproduction steps:\n%s", printRepro(stepsByWorker))
 		rangefeedFile := l(ctx, "kvs-rangefeed.txt", "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
-		var kvsFile string
-		scanKVs, err := dbs[0].Scan(ctx, dataSpan.Key, dataSpan.EndKey, -1)
-		if err != nil {
-			l(ctx, "", "could not scan actual latest values: %+v", err)
-		} else {
+		kvsFile := "<error>"
+		var scanKVs []kv.KeyValue
+		for i := 0; ; i++ {
+			var err error
+			scanKVs, err = dbs[0].Scan(ctx, dataSpan.Key, dataSpan.EndKey, -1)
+			if errors.Is(err, errInjected) && i < 100 {
+				// The scan may end up resolving intents, and the intent resolution may
+				// fail with an injected reproposal error. We do want to know the
+				// contents anyway, so retry appropriately. (The interceptor lowers the
+				// probability of injecting an error with successive attempts, so this
+				// is essentially guaranteed to work out).
+				//
+				// Just in case there is a real infinite loop here, we only try this
+				// 100 times.
+				continue
+			} else if err != nil {
+				l(ctx, "", "could not scan actual latest values: %+v", err)
+				break
+			}
 			var kvsBuf strings.Builder
 			for _, kv := range scanKVs {
 				fmt.Fprintf(&kvsBuf, "  %s %s -> %s\n", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 			}
 			kvsFile = l(ctx, "kvs-scan.txt", "kvs (scan of latest values according to crdb):\n%s", kvsBuf.String())
+			break
 		}
 		l(ctx, "", `failures(verbose): %s
 repro steps: %s
