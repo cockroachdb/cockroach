@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/errors"
 	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 )
 
 // Printer is an interface that lets us use what's common between the
@@ -1536,6 +1537,25 @@ func NewNotLeaseHolderErrorWithSpeculativeLease(
 	return NewNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)
 }
 
+// MissingRecordError is reported when a record is missing.
+type MissingRecordError struct{}
+
+func (e *MissingRecordError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *MissingRecordError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("missing record")
+	return nil
+}
+
+func init() {
+	errors.RegisterLeafDecoder(errors.GetTypeKey((*MissingRecordError)(nil)), func(_ context.Context, _ string, _ []string, _ proto.Message) error {
+		return &MissingRecordError{}
+	})
+}
+
+var _ errors.SafeFormatter = &MissingRecordError{}
 var _ errors.SafeFormatter = &NotLeaseHolderError{}
 var _ errors.SafeFormatter = &RangeNotFoundError{}
 var _ errors.SafeFormatter = &RangeKeyMismatchError{}
