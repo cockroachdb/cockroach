@@ -2054,6 +2054,14 @@ func (n *Node) TenantSettings(
 		})
 	}
 
+	// Do we even have a record for this tenant?
+	tInfo, infoCh, found := w2.GetInfo(args.TenantID)
+	if !found {
+		return stream.Send(&kvpb.TenantSettingsEvent{
+			Error: errors.EncodeError(ctx, &kvpb.MissingRecordError{}),
+		})
+	}
+
 	sendSettings := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting, incremental bool) error {
 		log.VInfof(ctx, 1, "sending precedence %d: %v", precedence, overrides)
 		return stream.Send(&kvpb.TenantSettingsEvent{
@@ -2149,7 +2157,6 @@ func (n *Node) TenantSettings(
 
 	// Send the initial tenant metadata. See the explanatory comment
 	// above for details.
-	tInfo, infoCh, _ := w2.GetInfo(args.TenantID)
 	if err := sendTenantInfo(firstPrecedenceLevel, tInfo); err != nil {
 		return err
 	}

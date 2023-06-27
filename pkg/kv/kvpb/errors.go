@@ -1536,6 +1536,19 @@ func NewNotLeaseHolderErrorWithSpeculativeLease(
 	return NewNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)
 }
 
+// MissingRecordError is reported when a record is missing.
+type MissingRecordError struct{}
+
+func (e *MissingRecordError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *MissingRecordError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("missing record")
+	return nil
+}
+
+var _ errors.SafeFormatter = &MissingRecordError{}
 var _ errors.SafeFormatter = &NotLeaseHolderError{}
 var _ errors.SafeFormatter = &RangeNotFoundError{}
 var _ errors.SafeFormatter = &RangeKeyMismatchError{}

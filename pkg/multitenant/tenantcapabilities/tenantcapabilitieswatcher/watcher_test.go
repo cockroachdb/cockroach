@@ -241,6 +241,14 @@ func TestDataDriven(t *testing.T) {
 				)
 				lastUpdateTS = ts.Clock().Now()
 
+			case "wait-for-info":
+				tID := tenantcapabilitiestestutils.GetTenantID(t, d)
+				info, _, err := watcher.WaitForInfo(ctx, tID)
+				require.NoError(t, err)
+				var buf strings.Builder
+				fmt.Fprintf(&buf, "%+v\n", pretty.Formatter(info))
+				return buf.String()
+
 			case "get-capabilities":
 				tID := tenantcapabilitiestestutils.GetTenantID(t, d)
 				info, _, found := watcher.GetInfo(tID)
