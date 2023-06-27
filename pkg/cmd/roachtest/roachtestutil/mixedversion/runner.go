@@ -19,6 +19,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -32,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 type (
@@ -249,7 +249,16 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
 		tr.logStep(prefix, ss, l)
 	}()
-	if err := ss.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l)); err != nil {
+
+	if err := func() (retErr error) {
+		defer func() {
+			if r := recover(); r != nil {
+				l.Printf("panic stack trace:\n%s", string(debug.Stack()))
+				retErr = fmt.Errorf("panic (stack trace above): %v", r)
+			}
+		}()
+		return ss.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l))
+	}(); err != nil {
 		if isContextCanceled(err) {
 			l.Printf("step terminated (context canceled)")
 			// Avoid creating a `stepError` (which involves querying binary
@@ -331,7 +340,7 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 		tr.logger.Printf("could not rename failed step logger: %v", err)
 	}
 
-	return errors.WithStack(tf)
+	return tf
 }
 
 func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) {
