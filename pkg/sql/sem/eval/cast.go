@@ -583,6 +583,11 @@ func performCastWithoutPrecisionTruncation(
 		}
 
 	case types.PGLSNFamily:
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"version %v must be finalized to use pg_lsn",
+				clusterversion.ByKey(clusterversion.V23_2))
+		}
 		switch d := d.(type) {
 		case *tree.DString:
 			return tree.ParseDPGLSN(string(*d))
