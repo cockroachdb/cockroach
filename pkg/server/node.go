@@ -2147,6 +2147,12 @@ func (n *Node) TenantSettings(
 		return err
 	}
 
+	// Wait until we have a valid tenant record for this tenant ID.
+	tInfo, infoCh, err := w2.WaitForInfo(ctx, args.TenantID)
+	if err != nil {
+		return err
+	}
+
 	// Send the initial state.
 
 	// Note: for compatibility with pre-23.1 tenant clients, it is
@@ -2189,10 +2195,6 @@ func (n *Node) TenantSettings(
 
 	// Send the initial tenant metadata. See the explanatory comment
 	// above for details.
-	tInfo, infoCh, err := w2.WaitForInfo(ctx, args.TenantID)
-	if err != nil {
-		return err
-	}
 	if err := sendTenantInfo(firstPrecedenceLevel, tInfo); err != nil {
 		return err
 	}
