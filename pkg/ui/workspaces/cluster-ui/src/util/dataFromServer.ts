@@ -20,6 +20,7 @@ export interface DataFromServer {
   OIDCAutoLogin: boolean;
   OIDCLoginEnabled: boolean;
   OIDCButtonText: string;
+  OIDCGenerateJWTAuthTokenEnabled: boolean;
   FeatureFlags: FeatureFlags;
 }
 

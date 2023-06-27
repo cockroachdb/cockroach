@@ -15,6 +15,7 @@ import { Button } from "src/components";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 const OIDC_LOGIN_PATH = "/oidc/v1/login";
+const OIDC_LOGIN_PATH_WITH_JWT = "/oidc/v1/login?jwt";
 
 const OIDCLoginButton = ({ loginState }: { loginState: LoginAPIState }) => {
   return (
@@ -48,4 +49,29 @@ const OIDCLogin: React.FC<
   return null;
 };
 
+const OIDCGenerateJWTAuthToken: React.FC<
+  {
+    loginState: LoginAPIState;
+  } & RouteComponentProps
+> = props => {
+  if (props.loginState.oidcGenerateJWTAuthTokenEnabled) {
+    return (
+      <a href={OIDC_LOGIN_PATH_WITH_JWT}>
+        <Button
+          type="secondary"
+          className="submit-button-oidc"
+          disabled={props.loginState.inProgress}
+          textAlign={"center"}
+        >
+          Generate JWT auth token for cluster SSO
+        </Button>
+      </a>
+    );
+  }
+  return null;
+};
+
 export const OIDCLoginConnected = withRouter(OIDCLogin);
+export const OIDCGenerateJWTAuthTokenConnected = withRouter(
+  OIDCGenerateJWTAuthToken,
+);

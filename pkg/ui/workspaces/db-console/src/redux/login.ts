@@ -133,6 +133,7 @@ export interface LoginAPIState {
   oidcAutoLogin: boolean;
   oidcLoginEnabled: boolean;
   oidcButtonText: string;
+  oidcGenerateJWTAuthTokenEnabled: boolean;
 }
 
 export const emptyLoginState: LoginAPIState = {
@@ -142,6 +143,8 @@ export const emptyLoginState: LoginAPIState = {
   oidcAutoLogin: dataFromServer.OIDCAutoLogin,
   oidcLoginEnabled: dataFromServer.OIDCLoginEnabled,
   oidcButtonText: dataFromServer.OIDCButtonText,
+  oidcGenerateJWTAuthTokenEnabled:
+    dataFromServer.OIDCGenerateJWTAuthTokenEnabled,
 };
 
 // Actions

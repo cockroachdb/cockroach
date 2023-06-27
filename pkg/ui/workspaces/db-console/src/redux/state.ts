@@ -63,6 +63,7 @@ const emptyDataFromServer: DataFromServer = {
   OIDCAutoLogin: false,
   OIDCButtonText: "",
   OIDCLoginEnabled: false,
+  OIDCGenerateJWTAuthTokenEnabled: false,
   Tag: "",
   Version: "",
 };
@@ -107,6 +108,8 @@ export function createAdminUIStore(
         oidcAutoLogin: dataFromServer.OIDCAutoLogin,
         oidcLoginEnabled: dataFromServer.OIDCLoginEnabled,
         oidcButtonText: dataFromServer.OIDCButtonText,
+        oidcGenerateJWTAuthTokenEnabled:
+          dataFromServer.OIDCGenerateJWTAuthTokenEnabled,
       },
       flags: dataFromServer.FeatureFlags,
     },
