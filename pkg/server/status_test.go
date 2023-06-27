@@ -262,7 +262,6 @@ func TestStatusGossipJson(t *testing.T) {
 // stats contains the required fields.
 func TestStatusEngineStatsJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 99261, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	dir, cleanupFn := testutils.TempDir(t)
