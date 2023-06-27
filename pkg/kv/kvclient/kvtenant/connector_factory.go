@@ -31,6 +31,12 @@ type ConnectorConfig struct {
 	RPCContext        *rpc.Context
 	RPCRetryOptions   retry.Options
 	DefaultZoneConfig *zonepb.ZoneConfig
+
+	// ShutdownTenantConnectorEarlyIfNoRecordPresent, if set, will cause the
+	// tenant connector to be shut down early if no record is present in the
+	// system.tenants table. This is useful for tests that want to verify that
+	// the tenant connector can't start when the record doesn't exist.
+	ShutdownTenantConnectorEarlyIfNoRecordPresent bool
 }
 
 // KVAddressConfig encompasses the network addresses, pointing to KV nodes,
