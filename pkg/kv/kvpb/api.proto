@@ -3078,15 +3078,28 @@ message TenantSettingsRequest {
 
 // TenantSettingsEvent is used to report changes to setting overrides for a
 // particular tenant.
-//
-// Each event pertains to a certain precedence value (see
-// TenantSettingsPrecedence).
+// The protocol is as follows:
+// - When a tenant server first connects, a non-incremental TenantSettingsEvent
+//   settings event is sent to the client for each precedence value.
+//   This reports to the client the initial values of all the cluster setting
+//   overrides.
+// - Afterwards, more TenantSettingsEvent are sent (with Incremental set or not)
+//   whenever settings are updated.
 //
 // Note: this API is designed to allow flexibility of implementation on the
 // server side (e.g. to make it maintain very little state per tenant).
 message TenantSettingsEvent {
-  // Precedence must be a valid TenantSettingsPrecedence value.
-  uint32 precedence = 1 [(gogoproto.casttype) = "TenantSettingsPrecedence"];
+  enum Precedence {
+    // Sentinel value to ensure that the 0 value is not a valid precedence.
+    INVALID = 0;
+    // Setting overrides specific to 1 tenant.
+    TENANT_SPECIFIC_OVERRIDES = 1;
+    // Setting overrides applied to all tenants.
+    ALL_TENANTS_OVERRIDES = 2;
+  }
+
+  // Precedence is the type of overrides that are reported in this event.
+  Precedence precedence = 1;
 
   // Incremental is true if the list of overrides is a list of changes since the
   // last event. In that case, any overrides that have been removed are returned
