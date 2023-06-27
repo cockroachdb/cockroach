@@ -469,7 +469,9 @@ message RestoreDetails {
   // Disables loacality checking for zone configs.
   bool SkipLocalitiesCheck = 29;
 
-  // NEXT ID: 30.
+  bool experimental_progressive = 30;
+
+  // NEXT ID: 31.
 }
 
 

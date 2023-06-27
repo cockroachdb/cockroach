@@ -3812,6 +3812,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{UnsafeRestoreIncompatibleVersion: true}
   }
+| EXPERIMENTAL DEFERRED COPY
+  {
+    $$.val = &tree.RestoreOptions{ExperimentalProgressive: true}
+  }
 
 import_format:
   name

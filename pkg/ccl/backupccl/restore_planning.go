@@ -921,6 +921,7 @@ func resolveOptionsForRestoreJobDescription(
 		SchemaOnly:                       opts.SchemaOnly,
 		VerifyData:                       opts.VerifyData,
 		UnsafeRestoreIncompatibleVersion: opts.UnsafeRestoreIncompatibleVersion,
+		ExperimentalProgressive:          opts.ExperimentalProgressive,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -2011,11 +2012,12 @@ func doRestorePlan(
 		// compatability.
 		//
 		// TODO(msbutler): Delete in 23.1
-		RestoreSystemUsers:  restoreStmt.DescriptorCoverage == tree.SystemUsers,
-		PreRewriteTenantId:  oldTenantID,
-		SchemaOnly:          restoreStmt.Options.SchemaOnly,
-		VerifyData:          restoreStmt.Options.VerifyData,
-		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
+		RestoreSystemUsers:      restoreStmt.DescriptorCoverage == tree.SystemUsers,
+		PreRewriteTenantId:      oldTenantID,
+		SchemaOnly:              restoreStmt.Options.SchemaOnly,
+		VerifyData:              restoreStmt.Options.VerifyData,
+		SkipLocalitiesCheck:     restoreStmt.Options.SkipLocalitiesCheck,
+		ExperimentalProgressive: restoreStmt.Options.ExperimentalProgressive,
 	}
 
 	jr := jobs.Record{

@@ -145,6 +145,7 @@ type RestoreOptions struct {
 	SchemaOnly                       bool
 	VerifyData                       bool
 	UnsafeRestoreIncompatibleVersion bool
+	ExperimentalProgressive          bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -492,6 +493,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("unsafe_restore_incompatible_version")
 	}
+
+	if o.ExperimentalProgressive {
+		maybeAddSep()
+		ctx.WriteString("experimental deferred copy")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -632,6 +638,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.UnsafeRestoreIncompatibleVersion = other.UnsafeRestoreIncompatibleVersion
 	}
 
+	if o.ExperimentalProgressive {
+		if other.ExperimentalProgressive {
+			return errors.New("experimental deferred copy specified multiple times")
+		}
+	} else {
+		o.ExperimentalProgressive = other.ExperimentalProgressive
+	}
+
 	return nil
 }
 
@@ -656,7 +670,8 @@ func (o RestoreOptions) IsDefault() bool {
 		o.SchemaOnly == options.SchemaOnly &&
 		o.VerifyData == options.VerifyData &&
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
-		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion
+		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
+		o.ExperimentalProgressive == options.ExperimentalProgressive
 }
 
 // BackupTargetList represents a list of targets.
