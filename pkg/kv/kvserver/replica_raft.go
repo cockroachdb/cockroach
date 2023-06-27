@@ -2603,9 +2603,9 @@ func ComputeRaftLogSize(
 }
 
 // shouldCampaignAfterConfChange returns true if the current replica should
-// campaign after a conf change. If the leader replica is removed, the
-// leaseholder should campaign. We don't want to campaign on multiple replicas,
-// since that would cause ties.
+// campaign after a conf change. If the leader replica is demoted or removed,
+// the leaseholder should campaign. We don't want to campaign on multiple
+// replicas, since that would cause ties.
 //
 // If there is no current leaseholder we'll have to wait out the election
 // timeout before someone campaigns, but that's ok -- either we'll have to wait
@@ -2622,7 +2622,7 @@ func shouldCampaignAfterConfChange(
 	raftStatus raft.BasicStatus,
 	leaseStatus kvserverpb.LeaseStatus,
 ) bool {
-	if raftStatus.Lead == 0 {
+	if raftStatus.Lead == raft.None {
 		// Leader unknown. We can't know if it was removed by the conf change, and
 		// because we force an election without prevote we don't want to risk
 		// throwing spurious elections.
@@ -2637,9 +2637,11 @@ func shouldCampaignAfterConfChange(
 		// don't expect to hit this, but let's be defensive.
 		return false
 	}
-	if _, ok := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead)); ok {
-		// The leader is still in the descriptor.
-		return false
+	if replDesc, ok := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead)); ok {
+		if replDesc.IsAnyVoter() {
+			// The leader is still a voter in the descriptor.
+			return false
+		}
 	}
 	// Prior to 23.2, the first voter in the descriptor campaigned, so we do
 	// the same in mixed-version clusters to avoid ties.
