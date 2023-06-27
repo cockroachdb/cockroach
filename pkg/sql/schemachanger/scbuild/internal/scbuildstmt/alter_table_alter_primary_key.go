@@ -162,7 +162,7 @@ func getprimaryIndexShardColumn(
 	if indexElem.Sharding == nil {
 		return nil
 	}
-	shardColID := getColumnIDFromColumnName(b, tableID, tree.Name(indexElem.Sharding.Name))
+	shardColID := getColumnIDFromColumnName(b, tableID, tree.Name(indexElem.Sharding.Name), false /* required */)
 	return mustRetrieveColumnElem(b, tableID, shardColID)
 }
 
@@ -181,7 +181,7 @@ func alterPKInPrimaryIndexAndItsTemp(
 		// If index is sharded, the first key column will be the new shard col.
 		if index.Sharding != nil {
 			ret = append(ret, indexColumnSpec{
-				columnID: getColumnIDFromColumnName(b, tableID, tree.Name(index.Sharding.Name)),
+				columnID: getColumnIDFromColumnName(b, tableID, tree.Name(index.Sharding.Name), false /* required */),
 				kind:     scpb.IndexColumn_KEY,
 			})
 		}
