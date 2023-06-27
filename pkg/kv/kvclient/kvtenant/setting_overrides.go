@@ -38,6 +38,16 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			c.tryForgetClient(ctx, client)
 			continue
 		}
+
+		// Reset the sentinel checks. We start a new sequence of messages
+		// from the server every time we (re)connect.
+		func() {
+			c.settingsMu.Lock()
+			defer c.settingsMu.Unlock()
+			c.settingsMu.receivedFirstAllTenantOverrides = false
+			c.settingsMu.receivedFirstSpecificOverrides = false
+		}()
+
 		for {
 			e, err := stream.Recv()
 			if err != nil {
