@@ -129,7 +129,7 @@ func (sr *schemaResolver) LookupObject(
 
 	// Check if we are looking up a type which matches a built-in type in
 	// CockroachDB but is an extension type on the public schema in PostgreSQL.
-	if flags.DesiredObjectKind == tree.TypeObject && scName == tree.PublicSchema {
+	if flags.DesiredObjectKind == tree.TypeObject && scName == catconstants.PublicSchemaName {
 		if alias, ok := types.PublicSchemaAliases[obName]; ok {
 			if flags.RequireMutable {
 				return true, catalog.ResolvedObjectPrefix{}, nil, pgerror.Newf(pgcode.WrongObjectType, "type %q is a built-in type", obName)
@@ -144,7 +144,7 @@ func (sr *schemaResolver) LookupObject(
 				return found, prefix, nil, err
 			}
 			if dbDesc.HasPublicSchemaWithDescriptor() {
-				publicSchemaID := dbDesc.GetSchemaID(tree.PublicSchema)
+				publicSchemaID := dbDesc.GetSchemaID(catconstants.PublicSchemaName)
 				return true, prefix, typedesc.MakeSimpleAlias(alias, publicSchemaID), nil
 			}
 			return true, prefix, typedesc.MakeSimpleAlias(alias, keys.PublicSchemaID), nil

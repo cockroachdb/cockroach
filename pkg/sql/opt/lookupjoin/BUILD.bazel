@@ -44,6 +44,7 @@ go_test(
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/parser",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/testutils/datapathutils",

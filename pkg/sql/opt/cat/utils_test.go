@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -41,12 +42,12 @@ func TestExpandDataSourceGlob(t *testing.T) {
 		expectedError string
 	}{
 		{
-			pattern:       tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a"),
+			pattern:       tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "a"),
 			expectedNames: `[t.public.a]`,
 			expectedIDs:   `[53]`,
 		},
 		{
-			pattern:       tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "z"),
+			pattern:       tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "z"),
 			expectedError: `error: no data source matches prefix: "t.public.z"`,
 		},
 		{

@@ -89,6 +89,7 @@ go_test(
         "//pkg/sql/schemachanger/scexec/scmutationexec",  # keep
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",

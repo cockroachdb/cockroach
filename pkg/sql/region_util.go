@@ -1148,7 +1148,7 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 		regionConfig.RegionEnumID(),
 		regionLabels,
 		desc,
-		tree.NewQualifiedTypeName(desc.Name, tree.PublicSchema, tree.RegionEnum),
+		tree.NewQualifiedTypeName(desc.Name, catconstants.PublicSchemaName, tree.RegionEnum),
 		EnumTypeMultiRegion,
 	); err != nil {
 		return err
