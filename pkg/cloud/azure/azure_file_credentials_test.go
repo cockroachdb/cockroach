@@ -42,7 +42,10 @@ func TestAzureFileCredential(t *testing.T) {
 	bytes, err := json.Marshal(azJSON)
 	require.NoError(t, err)
 
-	fmt.Println("@@@ js", string(bytes), "STRUCT", azJSON)
+	fmt.Println("@@@ js", string(bytes), "STRUCT", azJSON,
+		os.Getenv("AZURE_CLIENT_ID"),
+		os.Getenv("AZURE_CLIENT_SECRET"),
+		os.Getenv("AZURE_TENANT_ID"))
 	require.NoError(t, os.WriteFile(p, bytes, 0600))
 
 	cred, err := NewAzureFileCredential(p, nil)

@@ -54,6 +54,10 @@ func NewAzureFileCredential(
 func NewDefaultAzureCredentialWithFile(
 	options *azidentity.DefaultAzureCredentialOptions,
 ) (azcore.TokenCredential, error) {
+	if options == nil {
+		options = &azidentity.DefaultAzureCredentialOptions{}
+	}
+
 	// The Default credential supports env vars and managed identity magic.
 	// We rely on the former for testing and the latter in prod.
 	// https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential
