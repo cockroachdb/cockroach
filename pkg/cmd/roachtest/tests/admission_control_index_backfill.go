@@ -28,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
-const tpce100kSnapshotPrefix = "tpce-100k"
-
 func registerIndexBackfill(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
 		10, /* nodeCount */
@@ -43,15 +41,14 @@ func registerIndexBackfill(r registry.Registry) {
 	clusterSpec.GCEVolumeType = "pd-ssd"
 
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/index-backfill",
-		Timeout:   6 * time.Hour,
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		// TODO(irfansharif): Reduce to weekly cadence once stabilized.
-		// Tags:            registry.Tags(`weekly`),
+		Name:            "admission-control/index-backfill",
+		Timeout:         6 * time.Hour,
+		Owner:           registry.OwnerAdmissionControl,
+		Benchmark:       true,
+		Tags:            registry.Tags(`weekly`),
 		Cluster:         clusterSpec,
 		RequiresLicense: true,
-		SnapshotPrefix:  tpce100kSnapshotPrefix,
+		SnapshotPrefix:  "index-backfill-tpce-100k",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Spec().NodeCount - 1
 			workloadNode := c.Spec().NodeCount
