@@ -45,12 +45,13 @@ var (
 
 // Config is used to construct an OracleFactory.
 type Config struct {
-	NodeDescs  kvcoord.NodeDescStore
-	NodeID     roachpb.NodeID   // current node's ID. 0 for secondary tenants.
-	Locality   roachpb.Locality // current node's locality.
-	Settings   *cluster.Settings
-	Clock      *hlc.Clock
-	RPCContext *rpc.Context
+	NodeDescs   kvcoord.NodeDescStore
+	NodeID      roachpb.NodeID   // current node's ID. 0 for secondary tenants.
+	Locality    roachpb.Locality // current node's locality.
+	Settings    *cluster.Settings
+	Clock       *hlc.Clock
+	RPCContext  *rpc.Context
+	LatencyFunc kvcoord.LatencyFunc
 }
 
 // Oracle is used to choose the lease holder for ranges. This
@@ -73,6 +74,10 @@ type Oracle interface {
 	// When the range's closed timestamp policy is known, it is passed in.
 	// Otherwise, the default closed timestamp policy is provided.
 	//
+	// ignoreMisplannedRanges boolean indicates whether the placement of the
+	// TableReaders according to this replica choice should **not** result in
+	// creating of Ranges ProducerMetadata.
+	//
 	// A RangeUnavailableError can be returned if there's no information in gossip
 	// about any of the nodes that might be tried.
 	ChoosePreferredReplica(
@@ -82,7 +87,7 @@ type Oracle interface {
 		leaseholder *roachpb.ReplicaDescriptor,
 		ctPolicy roachpb.RangeClosedTimestampPolicy,
 		qState QueryState,
-	) (roachpb.ReplicaDescriptor, error)
+	) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error)
 }
 
 // OracleFactory creates an oracle from a Config.
@@ -114,13 +119,21 @@ var oracleFactories = map[Policy]OracleFactory{}
 // done by an oracle on behalf of one particular query.
 type QueryState struct {
 	RangesPerNode  util.FastIntMap
-	AssignedRanges map[roachpb.RangeID]roachpb.ReplicaDescriptor
+	AssignedRanges map[roachpb.RangeID]ReplicaDescriptorEx
+}
+
+// ReplicaDescriptorEx is a small extension of the roachpb.ReplicaDescriptor
+// that also stores whether this replica info should be ignored for the purposes
+// of misplanned ranges.
+type ReplicaDescriptorEx struct {
+	ReplDesc               roachpb.ReplicaDescriptor
+	IgnoreMisplannedRanges bool
 }
 
 // MakeQueryState creates an initialized QueryState.
 func MakeQueryState() QueryState {
 	return QueryState{
-		AssignedRanges: make(map[roachpb.RangeID]roachpb.ReplicaDescriptor),
+		AssignedRanges: make(map[roachpb.RangeID]ReplicaDescriptorEx),
 	}
 }
 
@@ -141,12 +154,12 @@ func (o *randomOracle) ChoosePreferredReplica(
 	_ *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
 	_ QueryState,
-) (roachpb.ReplicaDescriptor, error) {
+) (roachpb.ReplicaDescriptor, bool, error) {
 	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.OnlyPotentialLeaseholders)
 	if err != nil {
-		return roachpb.ReplicaDescriptor{}, err
+		return roachpb.ReplicaDescriptor{}, false, err
 	}
-	return replicas[rand.Intn(len(replicas))].ReplicaDescriptor, nil
+	return replicas[rand.Intn(len(replicas))].ReplicaDescriptor, false, nil
 }
 
 type closestOracle struct {
@@ -163,11 +176,15 @@ type closestOracle struct {
 }
 
 func newClosestOracle(cfg Config) Oracle {
+	latencyFn := cfg.LatencyFunc
+	if latencyFn == nil {
+		latencyFn = latencyFunc(cfg.RPCContext)
+	}
 	return &closestOracle{
 		nodeDescs:   cfg.NodeDescs,
 		nodeID:      cfg.NodeID,
 		locality:    cfg.Locality,
-		latencyFunc: latencyFunc(cfg.RPCContext),
+		latencyFunc: latencyFn,
 	}
 }
 
@@ -175,18 +192,22 @@ func (o *closestOracle) ChoosePreferredReplica(
 	ctx context.Context,
 	_ *kv.Txn,
 	desc *roachpb.RangeDescriptor,
-	_ *roachpb.ReplicaDescriptor,
+	leaseholder *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
 	_ QueryState,
-) (roachpb.ReplicaDescriptor, error) {
+) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error) {
 	// We know we're serving a follower read request, so consider all non-outgoing
 	// replicas.
 	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.AllExtantReplicas)
 	if err != nil {
-		return roachpb.ReplicaDescriptor{}, err
+		return roachpb.ReplicaDescriptor{}, false, err
 	}
 	replicas.OptimizeReplicaOrder(o.nodeID, o.latencyFunc, o.locality)
-	return replicas[0].ReplicaDescriptor, nil
+	repl := replicas[0].ReplicaDescriptor
+	// There are no "misplanned" ranges if we know the leaseholder, and we're
+	// deliberately choosing non-leaseholder.
+	ignoreMisplannedRanges = leaseholder != nil && leaseholder.NodeID != repl.NodeID
+	return repl, ignoreMisplannedRanges, nil
 }
 
 // maxPreferredRangesPerLeaseHolder applies to the binPackingOracle.
@@ -235,15 +256,15 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	leaseholder *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
 	queryState QueryState,
-) (roachpb.ReplicaDescriptor, error) {
+) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error) {
 	// If we know the leaseholder, we choose it.
 	if leaseholder != nil {
-		return *leaseholder, nil
+		return *leaseholder, false, nil
 	}
 
 	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.OnlyPotentialLeaseholders)
 	if err != nil {
-		return roachpb.ReplicaDescriptor{}, err
+		return roachpb.ReplicaDescriptor{}, false, err
 	}
 	replicas.OptimizeReplicaOrder(o.nodeID, o.latencyFunc, o.locality)
 
@@ -253,7 +274,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	for i, repl := range replicas {
 		assignedRanges := queryState.RangesPerNode.GetDefault(int(repl.NodeID))
 		if assignedRanges != 0 && assignedRanges < o.maxPreferredRangesPerLeaseHolder {
-			return repl.ReplicaDescriptor, nil
+			return repl.ReplicaDescriptor, false, nil
 		}
 		if assignedRanges < minLoad {
 			leastLoadedIdx = i
@@ -263,7 +284,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 	// Either no replica was assigned any previous ranges, or all replicas are
 	// full. Use the least-loaded one (if all the load is 0, then the closest
 	// replica is returned).
-	return replicas[leastLoadedIdx].ReplicaDescriptor, nil
+	return replicas[leastLoadedIdx].ReplicaDescriptor, false, nil
 }
 
 // replicaSliceOrErr returns a ReplicaSlice for the given range descriptor.
@@ -304,18 +325,18 @@ func (o preferFollowerOracle) ChoosePreferredReplica(
 	ctx context.Context,
 	_ *kv.Txn,
 	desc *roachpb.RangeDescriptor,
-	_ *roachpb.ReplicaDescriptor,
+	leaseholder *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
 	_ QueryState,
-) (roachpb.ReplicaDescriptor, error) {
+) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error) {
 	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.AllExtantReplicas)
 	if err != nil {
-		return roachpb.ReplicaDescriptor{}, err
+		return roachpb.ReplicaDescriptor{}, false, err
 	}
 
 	leaseholders, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.OnlyPotentialLeaseholders)
 	if err != nil {
-		return roachpb.ReplicaDescriptor{}, err
+		return roachpb.ReplicaDescriptor{}, false, err
 	}
 	leaseholderNodeIDs := make(map[roachpb.NodeID]bool, len(leaseholders))
 	for i := range leaseholders {
@@ -327,5 +348,9 @@ func (o preferFollowerOracle) ChoosePreferredReplica(
 	})
 
 	// TODO: Pick a random replica from replicas[:len(replicas)-len(leaseholders)]
-	return replicas[0].ReplicaDescriptor, nil
+	repl := replicas[0].ReplicaDescriptor
+	// There are no "misplanned" ranges if we know the leaseholder, and we're
+	// deliberately choosing non-leaseholder.
+	ignoreMisplannedRanges = leaseholder != nil && leaseholder.NodeID != repl.NodeID
+	return repl, ignoreMisplannedRanges, nil
 }
