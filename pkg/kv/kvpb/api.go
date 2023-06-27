@@ -1895,22 +1895,6 @@ func (s *ScanStats) String() string {
 	return redact.StringWithoutMarkers(s)
 }
 
-// TenantSettingsPrecedence identifies the precedence of a set of setting
-// overrides. It is used by the TenantSettings API which supports passing
-// multiple overrides for the same setting.
-type TenantSettingsPrecedence uint32
-
-const (
-	// SpecificTenantOverrides is the high precedence for tenant setting overrides.
-	// These overrides take precedence over AllTenantsOverrides.
-	SpecificTenantOverrides TenantSettingsPrecedence = 1 + iota
-
-	// AllTenantsOverrides is the low precedence for tenant setting overrides.
-	// These overrides are only effectual for a tenant if there is no override
-	// with the SpecificTenantOverrides precedence..
-	AllTenantsOverrides
-)
-
 // RangeFeedEventSink is an interface for sending a single rangefeed event.
 type RangeFeedEventSink interface {
 	Context() context.Context
