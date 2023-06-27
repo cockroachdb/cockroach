@@ -90,6 +90,8 @@ type indexHTMLArgs struct {
 	OIDCLoginEnabled bool
 	OIDCButtonText   string
 	FeatureFlags     serverpb.FeatureFlags
+
+	OIDCGenerateJWTAuthTokenEnabled bool
 }
 
 // OIDCUIConf is a variable that stores data required by the
@@ -100,6 +102,8 @@ type OIDCUIConf struct {
 	ButtonText string
 	AutoLogin  bool
 	Enabled    bool
+
+	GenerateJWTAuthTokenEnabled bool
 }
 
 // OIDCUI is an interface that our OIDC configuration must implement in order to be able
@@ -164,6 +168,8 @@ func Handler(cfg Config) http.Handler {
 			OIDCLoginEnabled: oidcConf.Enabled,
 			OIDCButtonText:   oidcConf.ButtonText,
 			FeatureFlags:     cfg.Flags,
+
+			OIDCGenerateJWTAuthTokenEnabled: oidcConf.GenerateJWTAuthTokenEnabled,
 		}
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()
