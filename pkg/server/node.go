@@ -2189,7 +2189,10 @@ func (n *Node) TenantSettings(
 
 	// Send the initial tenant metadata. See the explanatory comment
 	// above for details.
-	tInfo, infoCh, _ := w2.GetInfo(args.TenantID)
+	tInfo, infoCh, err := w2.WaitForInfo(ctx, args.TenantID)
+	if err != nil {
+		return err
+	}
 	if err := sendTenantInfo(firstPrecedenceLevel, tInfo); err != nil {
 		return err
 	}

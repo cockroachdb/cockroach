@@ -132,6 +132,28 @@ func (w *Watcher) getInternal(tenantID roachpb.TenantID) *watcherEntry {
 	return cp
 }
 
+// WaitForInfo waits until the metadata for the given tenant
+// is available from the rangefeed.
+func (w *Watcher) WaitForInfo(
+	ctx context.Context, tenantID roachpb.TenantID,
+) (entry tenantcapabilities.Entry, updateCh <-chan struct{}, err error) {
+	for {
+		var found bool
+		entry, updateCh, found = w.GetInfo(tenantID)
+		if found {
+			return entry, updateCh, nil
+		}
+		select {
+		case <-updateCh:
+			continue
+		case <-ctx.Done():
+			return entry, nil, ctx.Err()
+		case <-w.stopper.ShouldQuiesce():
+			return entry, nil, errors.Errorf("server shutting down")
+		}
+	}
+}
+
 // GetInfo reads the non-capability fields from the tenant entry.
 // TODO(knz): GetInfo and GetCapabilities should probably be combined.
 func (w *Watcher) GetInfo(id roachpb.TenantID) (tenantcapabilities.Entry, <-chan struct{}, bool) {
