@@ -142,13 +142,13 @@ func TestSplitQueue(t *testing.T) {
 			)
 			s.SplitRange(endKey)
 
+			testSettings.RangeSizeSplitThreshold = tc.splitThreshold
 			changer := state.NewReplicaChanger()
 			store, _ := s.Store(testingStore)
 			sq := NewSplitQueue(
 				store.StoreID(),
 				changer,
-				testSettings.RangeSplitDelayFn(),
-				tc.splitThreshold,
+				testSettings,
 				start,
 			)
 

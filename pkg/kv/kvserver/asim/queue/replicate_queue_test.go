@@ -368,7 +368,7 @@ func TestReplicateQueue(t *testing.T) {
 			rq := NewReplicateQueue(
 				store.StoreID(),
 				changer,
-				testSettings.ReplicaChangeDelayFn(),
+				testSettings,
 				s.MakeAllocator(store.StoreID()),
 				s.StorePool(store.StoreID()),
 				start,
