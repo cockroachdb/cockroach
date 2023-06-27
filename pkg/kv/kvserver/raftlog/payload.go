@@ -50,6 +50,11 @@ func EncodeCommand(
 		if raftAdmissionMeta != nil {
 			entryEncoding = EntryEncodingSideloadedWithAC
 		}
+
+		if command.ReplicatedEvalResult.AddSSTable.Data == nil &&
+			command.ReplicatedEvalResult.AddSSTable.RemoteFileLoc == "" {
+			return nil, errors.Errorf("cannot sideload empty SSTable")
+		}
 	}
 
 	// NB: If (significantly) re-working how raft commands are encoded, make the
