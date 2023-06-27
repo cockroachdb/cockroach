@@ -273,6 +273,12 @@ type TestServerInterface interface {
 	// starting a tenant is made, the server will return the specified error.
 	DisableStartTenant(reason error)
 
+	// WaitForTenantReadiness waits until the tenant record is known
+	// to the in-RAM caches. Trying to start a tenant server before
+	// this is called can run into a "missing record" error even
+	// if the tenant record exists in KV.
+	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
+
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
 	// (it doesn't overlap system spans or SQL tables).
 	//

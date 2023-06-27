@@ -160,6 +160,8 @@ type connector struct {
 	defaultZoneCfg  *zonepb.ZoneConfig
 	addrs           []string
 
+	earlyShutdownIfMissingTenantRecord bool
+
 	startCh  chan struct{} // closed when connector has started up
 	startErr error
 
@@ -192,6 +194,7 @@ type connector struct {
 
 // client represents an RPC client that proxies to a KV instance.
 type client struct {
+	conn *grpc.ClientConn
 	kvpb.InternalClient
 	serverpb.StatusClient
 	serverpb.AdminClient
@@ -251,6 +254,8 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 		rpcRetryOptions: cfg.RPCRetryOptions,
 		defaultZoneCfg:  cfg.DefaultZoneConfig,
 		addrs:           addrs,
+
+		earlyShutdownIfMissingTenantRecord: cfg.ShutdownTenantConnectorEarlyIfNoRecordPresent,
 	}
 
 	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
@@ -311,7 +316,7 @@ func (c *connector) Start(ctx context.Context) error {
 
 func (c *connector) internalStart(ctx context.Context) error {
 	gossipStartupCh := make(chan struct{})
-	settingsStartupCh := make(chan struct{})
+	settingsStartupCh := make(chan error)
 	bgCtx := c.AnnotateCtx(context.Background())
 
 	if err := c.rpcContext.Stopper.RunAsyncTask(bgCtx, "connector-gossip", func(ctx context.Context) {
@@ -339,9 +344,13 @@ func (c *connector) internalStart(ctx context.Context) error {
 		case <-gossipStartupCh:
 			log.Infof(ctx, "kv connector gossip subscription started")
 			gossipStartupCh = nil
-		case <-settingsStartupCh:
-			log.Infof(ctx, "kv connector tenant settings started")
+		case err := <-settingsStartupCh:
 			settingsStartupCh = nil
+			if err != nil {
+				log.Infof(ctx, "kv connector initialization error: %v", err)
+				return err
+			}
+			log.Infof(ctx, "kv connector tenant settings started")
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-c.rpcContext.Stopper.ShouldQuiesce():
@@ -920,6 +929,7 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
+				conn:             conn,
 				InternalClient:   kvpb.NewInternalClient(conn),
 				StatusClient:     serverpb.NewStatusClient(conn),
 				AdminClient:      serverpb.NewAdminClient(conn),
@@ -950,6 +960,10 @@ func (c *connector) tryForgetClient(ctx context.Context, client kvpb.InternalCli
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.mu.client == client {
+		err := c.mu.client.conn.Close() // nolint:grpcconnclose
+		if err != nil {
+			log.Warningf(ctx, "error closing client conn: %v", err)
+		}
 		c.mu.client = nil
 	}
 }

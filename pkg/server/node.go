@@ -2033,6 +2033,22 @@ func (n *Node) GossipSubscription(
 	}
 }
 
+func (n *Node) waitForTenantWatcherReadiness(
+	ctx context.Context,
+) (*tenantsettingswatcher.Watcher, *tenantcapabilitieswatcher.Watcher, error) {
+	w := n.tenantSettingsWatcher
+	if err := w.WaitForStart(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	w2 := n.tenantInfoWatcher
+	if err := w2.WaitForStart(ctx); err != nil {
+		return nil, nil, err
+	}
+
+	return w, w2, nil
+}
+
 // TenantSettings implements the kvpb.InternalServer interface.
 func (n *Node) TenantSettings(
 	args *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
@@ -2040,17 +2056,18 @@ func (n *Node) TenantSettings(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
-	w := n.tenantSettingsWatcher
-	if err := w.WaitForStart(ctx); err != nil {
+	w, w2, err := n.waitForTenantWatcherReadiness(ctx)
+	if err != nil {
 		return stream.Send(&kvpb.TenantSettingsEvent{
 			Error: errors.EncodeError(ctx, err),
 		})
 	}
 
-	w2 := n.tenantInfoWatcher
-	if err := w2.WaitForStart(ctx); err != nil {
+	// Do we even have a record for this tenant?
+	tInfo, infoCh, found := w2.GetInfo(args.TenantID)
+	if !found {
 		return stream.Send(&kvpb.TenantSettingsEvent{
-			Error: errors.EncodeError(ctx, err),
+			Error: errors.EncodeError(ctx, &kvpb.MissingRecordError{}),
 		})
 	}
 
@@ -2149,7 +2166,6 @@ func (n *Node) TenantSettings(
 
 	// Send the initial tenant metadata. See the explanatory comment
 	// above for details.
-	tInfo, infoCh, _ := w2.GetInfo(args.TenantID)
 	if err := sendTenantInfo(firstPrecedenceLevel, tInfo); err != nil {
 		return err
 	}
