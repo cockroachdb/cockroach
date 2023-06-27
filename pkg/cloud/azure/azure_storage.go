@@ -252,10 +252,8 @@ func makeAzureStorage(
 			return nil, errors.New(
 				"implicit credentials disallowed for azure due to --external-io-disable-implicit-credentials flag")
 		}
-		// The Default credential supports env vars and managed identity magic.
-		// We rely on the former for testing and the latter in prod.
-		// https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential
-		credential, err := azidentity.NewDefaultAzureCredential(nil)
+
+		credential, err := NewDefaultAzureCredentialWithFile(nil)
 		if err != nil {
 			return nil, errors.Wrap(err, "azure default credential")
 		}

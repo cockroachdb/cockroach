@@ -15,8 +15,9 @@ import (
 var ApplicationCredentialsFile = envutil.EnvOrDefaultString("COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE", "")
 
 type FileCredential struct {
-	fileName string
-	options  *FileCredentialOptions
+	fileName    string
+	options     *FileCredentialOptions
+	credentials azcore.TokenCredential
 }
 
 // FileCredentialOptions contains optional parameters for FileCredential
@@ -25,11 +26,9 @@ type FileCredentialOptions struct {
 }
 
 type azureCredentialsJSON struct {
-	tenantID     string
-	clientID     string
-	clientSecret string
-	username     string
-	password     string
+	TenantID     string `json:"tenant_id"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
 }
 
 var _ azcore.TokenCredential = &FileCredential{}
@@ -45,11 +44,35 @@ func NewAzureFileCredential(
 		options = &FileCredentialOptions{}
 	}
 
-	return &FileCredential{fileName: fileName, options: options}, nil
+	c := &FileCredential{fileName: fileName, options: options}
+	if err := c.reloadCredentialsFromFile(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
-func NewAzureFileEnvVarCredential() (*FileCredential, error) {
-	return NewAzureFileCredential(ApplicationCredentialsFile, nil)
+func NewDefaultAzureCredentialWithFile(
+	options *azidentity.DefaultAzureCredentialOptions,
+) (azcore.TokenCredential, error) {
+	// The Default credential supports env vars and managed identity magic.
+	// We rely on the former for testing and the latter in prod.
+	// https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential
+	defaultCredentials, err := azidentity.NewDefaultAzureCredential(options)
+	if err != nil {
+		return nil, errors.Wrap(err, "default credential")
+	}
+
+	fileCredentials, err := NewAzureFileCredential(ApplicationCredentialsFile, &FileCredentialOptions{ClientOptions: options.ClientOptions})
+	if err != nil {
+		return nil, errors.Wrap(err, "file credential")
+	}
+
+	credential, err := azidentity.NewChainedTokenCredential([]azcore.TokenCredential{fileCredentials, defaultCredentials}, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "chaining credentials")
+	}
+
+	return credential, nil
 }
 
 // TODO: as part of a chain this may get retried even if file doesn't exist,
@@ -57,48 +80,56 @@ func NewAzureFileEnvVarCredential() (*FileCredential, error) {
 func (c *FileCredential) GetToken(
 	ctx context.Context, options policy.TokenRequestOptions,
 ) (azcore.AccessToken, error) {
+	token, err := c.credentials.GetToken(ctx, options)
+	if err != nil {
+		// TODO: parse the error explicitly instead of reloading the file every time.
+		if err := c.reloadCredentialsFromFile(); err != nil {
+			return azcore.AccessToken{}, err
+		}
+
+		return c.credentials.GetToken(ctx, options)
+	}
+
+	return token, nil
+}
+
+func (c *FileCredential) reloadCredentialsFromFile() error {
 	// Read the credentials file.
 	data, err := os.ReadFile(c.fileName)
 	if err != nil {
-		return azcore.AccessToken{}, err
+		return err
 	}
 
 	// Unmarshal the credentials.
 	var credsJSON azureCredentialsJSON
 	if err := json.Unmarshal(data, &credsJSON); err != nil {
-		return azcore.AccessToken{}, errors.Wrapf(err, "failed to unmarshal credentials")
+		return errors.Wrapf(err, "failed to unmarshal credentials")
 	}
 
 	credentials, err := getCredentialsFromJSON(credsJSON, c.options.ClientOptions)
 	if err != nil {
-		return azcore.AccessToken{}, errors.Wrapf(err, "invalid credentials JSON")
+		return errors.Wrapf(err, "invalid credentials JSON")
 	}
 
-	return credentials.GetToken(ctx, options)
+	c.credentials = credentials
+	return nil
 }
 
 func getCredentialsFromJSON(
 	json azureCredentialsJSON, clientOptions azcore.ClientOptions,
 ) (azcore.TokenCredential, error) {
-	if json.tenantID == "" {
+	if json.TenantID == "" {
 		return nil, errors.New("missing tenant ID")
 	}
 
-	if json.clientID == "" {
+	if json.ClientID == "" {
 		return nil, errors.New("missing client ID")
 	}
 
-	if json.clientSecret != "" {
-		o := &azidentity.ClientSecretCredentialOptions{ClientOptions: clientOptions}
-		return azidentity.NewClientSecretCredential(json.tenantID, json.clientID, json.clientSecret, o)
+	if json.ClientSecret == "" {
+		return nil, errors.New("missing client secret")
 	}
 
-	if json.username != "" {
-		if json.password != "" {
-			o := &azidentity.UsernamePasswordCredentialOptions{ClientOptions: clientOptions}
-			return azidentity.NewUsernamePasswordCredential(json.tenantID, json.clientID, json.username, json.password, o)
-		}
-		return nil, errors.New("no value for password")
-	}
-	return nil, errors.New("incomplete credentials JSON with only tenant ID and client ID")
+	o := &azidentity.ClientSecretCredentialOptions{ClientOptions: clientOptions}
+	return azidentity.NewClientSecretCredential(json.TenantID, json.ClientID, json.ClientSecret, o)
 }
