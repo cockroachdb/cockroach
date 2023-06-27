@@ -1996,6 +1996,45 @@ message AddSSTableRequest {
   // also find and return the key at which the span after the added file span
   // is likely non-empty. See AddSSTableResponse.FollowingLikelyNonEmptySpanStart.
   bool return_following_likely_non_empty_span_start = 9;
+
+  // RemoteFile indicates that the span indicated by the request start and end 
+  // key of the file specified should be added. Data cannot be set if RemoteFile
+  // is non-empty, and many other request parameters such as collision/shadow
+  // checking, write-at-request-timestamp, or ingest-as-writes are unsupported.
+  //
+  // TODO(dt, msbutler, bilal): This is unsupported.
+  // TOOD(dt, msbutler, bilal): support sst_timestamp_to_request_timestamp.
+  message  RemoteFile {
+    string location = 1;
+    string path = 2;
+  }
+  RemoteFile remote_file = 10 [(gogoproto.nullable) = false];
+  
+  // AddSSTableRequest_PrefixReplacement is used to represent a prefix to be 
+  // replaced and the prefix with which to replace it.
+  message PrefixReplacement {
+    bytes from = 1;
+    bytes to = 2;
+  }
+
+  // PrefixReplaecment is used to that keys in the sst with the prefix specified
+  // in "from" should instead appear to have that prefix replaced by "to", when
+  // during iteration, seeking, or other reads. For example, an SST containing 
+  // keys a1, a2, and a3 when added with PrefixReplaecment={From: a, To:x} would
+  // produce the same results for subsequent operations as adding an SST with
+  // the keys x1, x2, x3 instead. The implementaiton may however elect to defer
+  // these replacements until the file is read.
+  //
+  // TODO(dt,msbutler,bilal): This is unsupported.
+  PrefixReplacement prefix_replacement = 11 [(gogoproto.nullable) = false];
+
+  // IgnoreKeysAboveTimestamp is used when ingesting an SSTable that contains
+  // keys, including mvcc revisions of keys, captured over a time range, to 
+  // indicate that readers of that sstable should read it "as of" a the fixed 
+  // time, ignoring any keys with later timestamps.
+  //
+  // TODO(dt,msbutler,bilal): This is unsupported.
+  util.hlc.Timestamp ignore_keys_above_timestamp = 12 [(gogoproto.nullable) = false];
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
