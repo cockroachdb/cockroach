@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
@@ -2086,7 +2087,7 @@ func (n *Node) TenantSettings(
 		})
 	}
 
-	send := func(precedence kvpb.TenantSettingsPrecedence, overrides []kvpb.TenantSetting) error {
+	send := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting) error {
 		log.VInfof(ctx, 1, "sending precedence %d: %v", precedence, overrides)
 		return stream.Send(&kvpb.TenantSettingsEvent{
 			Precedence:  precedence,
@@ -2095,13 +2096,28 @@ func (n *Node) TenantSettings(
 		})
 	}
 
+	// Sanity check: this ensures that someone notices if the proto
+	// definition changes but the code below is not adapted.
+	if numPrecedences := len(kvpb.TenantSettingsEvent_Precedence_value); numPrecedences != 3 {
+		err := errors.AssertionFailedf("programming error: expected 3 precedence values, got %d", numPrecedences)
+		logcrash.ReportOrPanic(ctx, &n.execCfg.Settings.SV, "%w", err)
+		return err
+	}
+
+	// Send the initial state.
+	//
+	// The protocol defines that there is one initial response per
+	// precedence value, with Incremental set to false. This is important:
+	// the client waits for at least one non-incremental message
+	// for each predecende before continuing.
+
 	allOverrides, allCh := w.GetAllTenantOverrides()
-	if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
+	if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
 		return err
 	}
 
 	tenantOverrides, tenantCh := w.GetTenantOverrides(args.TenantID)
-	if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+	if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
 		return err
 	}
 
@@ -2109,15 +2125,19 @@ func (n *Node) TenantSettings(
 		select {
 		case <-allCh:
 			// All-tenant overrides have changed, send them again.
+			// TODO(multitenant): We can optimize this by only sending the delta since the last
+			// update, with Incremental set to true.
 			allOverrides, allCh = w.GetAllTenantOverrides()
-			if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
+			if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
 				return err
 			}
 
 		case <-tenantCh:
 			// Tenant-specific overrides have changed, send them again.
+			// TODO(multitenant): We can optimize this by only sending the delta since the last
+			// update, with Incremental set to true.
 			tenantOverrides, tenantCh = w.GetTenantOverrides(args.TenantID)
-			if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+			if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
 				return err
 			}
 

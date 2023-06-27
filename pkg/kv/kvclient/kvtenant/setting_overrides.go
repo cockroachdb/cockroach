@@ -38,7 +38,7 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			c.tryForgetClient(ctx, client)
 			continue
 		}
-		for firstEventInStream := true; ; firstEventInStream = false {
+		for {
 			e, err := stream.Recv()
 			if err != nil {
 				if err == io.EOF {
@@ -55,17 +55,22 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				continue
 			}
 
-			if err := c.processSettingsEvent(e, firstEventInStream); err != nil {
+			settingsReady, err := c.processSettingsEvent(e)
+			if err != nil {
 				log.Errorf(ctx, "error processing tenant settings event: %v", err)
 				_ = stream.CloseSend()
 				c.tryForgetClient(ctx, client)
 				break
 			}
 
-			// Signal that startup is complete once we receive an event.
-			if startupCh != nil {
-				close(startupCh)
-				startupCh = nil
+			// Signal that startup is complete once we have enough events to start.
+			if settingsReady {
+				log.Infof(ctx, "received initial tenant settings")
+
+				if startupCh != nil {
+					close(startupCh)
+					startupCh = nil
+				}
 			}
 		}
 	}
@@ -73,22 +78,25 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 
 // processSettingsEvent updates the setting overrides based on the event.
 func (c *connector) processSettingsEvent(
-	e *kvpb.TenantSettingsEvent, firstEventInStream bool,
-) error {
-	if firstEventInStream && e.Incremental {
-		return errors.Newf("first event must not be Incremental")
-	}
+	e *kvpb.TenantSettingsEvent,
+) (settingsReady bool, err error) {
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
 
+	if (!c.settingsMu.receivedFirstAllTenantOverrides || !c.settingsMu.receivedFirstSpecificOverrides) && e.Incremental {
+		return false, errors.Newf("need to receive non-incremental setting events first")
+	}
+
 	var m map[string]settings.EncodedValue
 	switch e.Precedence {
-	case kvpb.AllTenantsOverrides:
+	case kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES:
+		c.settingsMu.receivedFirstAllTenantOverrides = true
 		m = c.settingsMu.allTenantOverrides
-	case kvpb.SpecificTenantOverrides:
+	case kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES:
+		c.settingsMu.receivedFirstSpecificOverrides = true
 		m = c.settingsMu.specificOverrides
 	default:
-		return errors.Newf("unknown precedence value %d", e.Precedence)
+		return false, errors.Newf("unknown precedence value %d", e.Precedence)
 	}
 
 	// If the event is not incremental, clear the map.
@@ -107,39 +115,24 @@ func (c *connector) processSettingsEvent(
 		}
 	}
 
-	// Do a non-blocking send on the notification channel (if it is not nil). This
-	// is a buffered channel and if it already contains a message, there's no
-	// point in sending a duplicate notification.
-	select {
-	case c.settingsMu.notifyCh <- struct{}{}:
-	default:
-	}
+	// Notify watchers if any.
+	close(c.settingsMu.notifyCh)
+	// Define a new notification channel for subsequent watchers.
+	c.settingsMu.notifyCh = make(chan struct{})
 
-	return nil
-}
-
-// RegisterOverridesChannel is part of the settingswatcher.OverridesMonitor
-// interface.
-func (c *connector) RegisterOverridesChannel() <-chan struct{} {
-	c.settingsMu.Lock()
-	defer c.settingsMu.Unlock()
-	if c.settingsMu.notifyCh != nil {
-		panic(errors.AssertionFailedf("multiple calls not supported"))
-	}
-	ch := make(chan struct{}, 1)
-	// Send an initial message on the channel.
-	ch <- struct{}{}
-	c.settingsMu.notifyCh = ch
-	return ch
+	// The protocol defines that the server sends one initial
+	// non-incremental message for both precedences.
+	settingsReady = c.settingsMu.receivedFirstAllTenantOverrides && c.settingsMu.receivedFirstSpecificOverrides
+	return settingsReady, nil
 }
 
 // Overrides is part of the settingswatcher.OverridesMonitor interface.
-func (c *connector) Overrides() map[string]settings.EncodedValue {
-	// We could be more efficient here, but we expect this function to be called
-	// only when there are changes (which should be rare).
-	res := make(map[string]settings.EncodedValue)
+func (c *connector) Overrides() (map[string]settings.EncodedValue, <-chan struct{}) {
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
+
+	res := make(map[string]settings.EncodedValue, len(c.settingsMu.allTenantOverrides)+len(c.settingsMu.specificOverrides))
+
 	// First copy the all-tenant overrides.
 	for name, val := range c.settingsMu.allTenantOverrides {
 		res[name] = val
@@ -149,5 +142,5 @@ func (c *connector) Overrides() map[string]settings.EncodedValue {
 	for name, val := range c.settingsMu.specificOverrides {
 		res[name] = val
 	}
-	return res
+	return res, c.settingsMu.notifyCh
 }

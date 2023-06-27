@@ -47,7 +47,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
 		return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 	}
-	eventCh := make(chan *kvpb.TenantSettingsEvent)
+	eventCh := make(chan *kvpb.TenantSettingsEvent, 2)
 	defer close(eventCh)
 	settingsFn := func(req *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer) error {
 		if req.TenantID != tenantID {
@@ -87,20 +87,33 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	case <-time.After(10 * time.Millisecond):
 	}
 
-	ch := c.RegisterOverridesChannel()
-	// We should always get an initial notification.
-	waitForSettings(t, ch)
-
 	ev := &kvpb.TenantSettingsEvent{
-		Precedence:  1,
+		Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
 		Incremental: false,
 		Overrides:   nil,
 	}
 	eventCh <- ev
-	require.NoError(t, <-startedC)
 
-	waitForSettings(t, ch)
-	expectSettings(t, c, "foo=default bar=default baz=default")
+	select {
+	case err := <-startedC:
+		t.Fatalf("Start unexpectedly completed with err=%v", err)
+	case <-time.After(10 * time.Millisecond):
+	}
+
+	ev = &kvpb.TenantSettingsEvent{
+		Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
+		Incremental: false,
+		Overrides:   nil,
+	}
+	eventCh <- ev
+	select {
+	case err := <-startedC:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatalf("failed to see start complete")
+	}
+
+	ch := expectSettings(t, c, "foo=default bar=default baz=default")
 
 	st := func(name, val string) kvpb.TenantSetting {
 		return kvpb.TenantSetting{
@@ -111,53 +124,53 @@ func TestConnectorSettingOverrides(t *testing.T) {
 
 	// Set some all-tenant overrides.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.AllTenantsOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("foo", "all"), st("bar", "all")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)
-	expectSettings(t, c, "foo=all bar=all baz=default")
+	ch = expectSettings(t, c, "foo=all bar=all baz=default")
 
 	// Set some tenant-specific overrides, with all-tenant overlap.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.SpecificTenantOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("foo", "specific"), st("baz", "specific")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)
-	expectSettings(t, c, "foo=specific bar=all baz=specific")
+	ch = expectSettings(t, c, "foo=specific bar=all baz=specific")
 
 	// Remove an all-tenant override that has a specific override.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.AllTenantsOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("foo", "")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)
-	expectSettings(t, c, "foo=specific bar=all baz=specific")
+	ch = expectSettings(t, c, "foo=specific bar=all baz=specific")
 
 	// Remove a specific override.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.SpecificTenantOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("foo", "")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)
-	expectSettings(t, c, "foo=default bar=all baz=specific")
+	ch = expectSettings(t, c, "foo=default bar=all baz=specific")
 
 	// Non-incremental change to all-tenants override.
 	ev = &kvpb.TenantSettingsEvent{
-		Precedence:  kvpb.AllTenantsOverrides,
+		Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
 		Incremental: true,
 		Overrides:   []kvpb.TenantSetting{st("bar", "all")},
 	}
 	eventCh <- ev
 	waitForSettings(t, ch)
-	expectSettings(t, c, "foo=default bar=all baz=specific")
+	_ = expectSettings(t, c, "foo=default bar=all baz=specific")
 }
 
 func waitForSettings(t *testing.T, ch <-chan struct{}) {
@@ -169,14 +182,15 @@ func waitForSettings(t *testing.T, ch <-chan struct{}) {
 		t.Fatalf("waitForSettings timed out")
 	}
 }
-func expectSettings(t *testing.T, c *connector, exp string) {
+
+func expectSettings(t *testing.T, c *connector, exp string) <-chan struct{} {
 	t.Helper()
 	vars := []string{"foo", "bar", "baz"}
 	values := make(map[string]string)
 	for i := range vars {
 		values[vars[i]] = "default"
 	}
-	overrides := c.Overrides()
+	overrides, updateCh := c.Overrides()
 	for _, v := range vars {
 		if val, ok := overrides[v]; ok {
 			values[v] = val.Value
@@ -190,4 +204,6 @@ func expectSettings(t *testing.T, c *connector, exp string) {
 	if str != exp {
 		t.Errorf("expected:  %s  got:  %s", exp, str)
 	}
+
+	return updateCh
 }
