@@ -115,8 +115,8 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info /dev/nu
 [node ?] ? heap profiles found
 [node 1] requesting goroutine dump list... received response... done
 [node ?] ? goroutine dumps found
-[node 1] requesting log file ...
-[node 1] 0 log file ...
+[node 1] requesting log files list... received response... done
+[node ?] ? log files found
 [node 1] requesting ranges... received response... done
 [node 1] writing ranges... writing JSON output: debug/nodes/1/ranges.json... done
 [cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
