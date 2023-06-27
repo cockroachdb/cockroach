@@ -12,7 +12,6 @@ package kvserver_test
 
 import (
 	"context"
-	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -116,32 +115,22 @@ LIMIT
 	require.NoError(t, err)
 	defer eng.Close()
 
-	// Determine LastIndex, LastTerm, and next MaxLeaseIndex by scanning
-	// existing log.
-	it, err := raftlog.NewIterator(ctx, rangeID, eng, raftlog.IterOptions{})
-	require.NoError(t, err)
-	defer it.Close()
+	// Load the last index in the log.
 	rsl := logstore.NewStateLoader(rangeID)
 	lastIndex, err := rsl.LoadLastIndex(ctx, eng)
 	require.NoError(t, err)
 	t.Logf("loaded LastIndex: %d", lastIndex)
+	// Determine the term and MaxLeaseIndex of the last entry.
+	it, err := raftlog.NewIterator(ctx, rangeID, eng, raftlog.IterOptions{})
+	require.NoError(t, err)
+	defer it.Close()
 	ok, err := it.SeekGE(lastIndex)
 	require.NoError(t, err)
 	require.True(t, ok)
-
-	var lai kvpb.LeaseAppliedIndex
-	var lastTerm uint64
-	require.NoError(t, raftlog.Visit(
-		ctx, eng, rangeID, lastIndex, math.MaxUint64, func(entry raftpb.Entry) error {
-			ent, err := raftlog.NewEntry(it.Entry())
-			require.NoError(t, err)
-			if lai < ent.Cmd.MaxLeaseIndex {
-				lai = ent.Cmd.MaxLeaseIndex
-			}
-			lastTerm = ent.Term
-			return nil
-		}))
-
+	ent, err := raftlog.NewEntry(it.Entry())
+	require.NoError(t, err)
+	lastTerm, lai := ent.Term, ent.Cmd.MaxLeaseIndex
+	// Load the lease state.
 	sl := stateloader.Make(rangeID)
 	lease, err := sl.LoadLease(ctx, eng)
 	require.NoError(t, err)
