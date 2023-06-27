@@ -275,14 +275,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideVectorize:   "off",
 	},
 	{
-		Name:                "local-v1.1-at-v1.0-noupgrade",
-		NumNodes:            1,
-		OverrideDistSQLMode: "off",
-		BootstrapVersion:    roachpb.Version{Major: 1},
-		BinaryVersion:       roachpb.Version{Major: 1, Minor: 1},
-		DisableUpgrade:      true,
-	},
-	{
 		Name:                "fakedist",
 		NumNodes:            3,
 		UseFakeSpanResolver: true,
