@@ -89,6 +89,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	funcBodyFound := false
 	languageFound := false
 	var funcBodyStr string
+	var language tree.FunctionLanguage
 	for _, option := range cf.Options {
 		switch opt := option.(type) {
 		case tree.FunctionBodyStr:
@@ -96,6 +97,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 			funcBodyStr = string(opt)
 		case tree.FunctionLanguage:
 			languageFound = true
+			language = opt
 			// Check the language here, before attempting to parse the function body.
 			if _, err := funcinfo.FunctionLangToProto(opt); err != nil {
 				panic(err)
@@ -132,6 +134,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
 		if err != nil {
 			panic(err)
+		}
+		if language == tree.FunctionLangSQL && types.IsRecordType(typ) {
+			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
+				"SQL functions cannot have arguments of type record"))
 		}
 
 		// Add the parameter to the base scope of the body.
