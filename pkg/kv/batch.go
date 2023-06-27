@@ -973,6 +973,7 @@ func (b *Batch) adminRelocateRange(
 func (b *Batch) addSSTable(
 	s, e interface{},
 	data []byte,
+	remoteFile kvpb.AddSSTableRequest_RemoteFile,
 	disallowConflicts bool,
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
@@ -996,6 +997,7 @@ func (b *Batch) addSSTable(
 			EndKey: end,
 		},
 		Data:                           data,
+		RemoteFile:                     remoteFile,
 		DisallowConflicts:              disallowConflicts,
 		DisallowShadowing:              disallowShadowing,
 		DisallowShadowingBelow:         disallowShadowingBelow,
