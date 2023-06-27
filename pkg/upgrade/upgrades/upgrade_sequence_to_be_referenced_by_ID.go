@@ -117,9 +117,12 @@ func maybeUpgradeSeqReferencesInTableOrView(
 	) error {
 		// Set up: retrieve table desc for `idToUpgrade` and a schema resolver
 		tableDesc, sc, cleanup, err := upgradeSetUpForTableOrView(ctx, d, txn, descriptors, idToUpgrade)
-		// If the table descriptor that we looked up was dropped, then
-		// nothing needs to be done for this table.
-		if err != nil || tableDesc.Dropped() {
+		if err != nil {
+			// If the descriptor has been dropped, move along.
+			if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+				errors.Is(err, catalog.ErrDescriptorDropped) {
+				return nil
+			}
 			return err
 		}
 		defer cleanup()
@@ -195,6 +198,7 @@ func upgradeSequenceReferenceInTable(
 	// be upgraded to be referenced by ID, so we store them here so that we can later schedule schema changes to
 	// them, after their backreference's ByID are set to true.
 	var changedSeqDescs []*tabledesc.Mutable
+	var changedAny bool
 
 	// a function that will modify `expr` in-place if it contains any sequence reference by name (to by ID).
 	maybeUpgradeSeqReferencesInExpr := func(expr *string) error {
@@ -209,12 +213,21 @@ func upgradeSequenceReferenceInTable(
 		if len(seqIdentifiers) == 0 {
 			return nil
 		}
+		var anyByName bool
+		for _, id := range seqIdentifiers {
+			if anyByName = !id.IsByID(); anyByName {
+				break
+			}
+		}
+		if !anyByName {
+			return nil
+		}
 
+		changedAny = true
 		seqNameToID, err := maybeUpdateBackRefsAndBuildMap(ctx, sc, tableDesc, seqIdentifiers, &changedSeqDescs)
 		if err != nil {
 			return err
 		}
-
 		// Perform the sequence replacement in the default expression.
 		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(parsedExpr, seqNameToID)
 		if err != nil {
@@ -238,6 +251,9 @@ func upgradeSequenceReferenceInTable(
 				return err
 			}
 		}
+	}
+	if !changedAny {
+		return nil
 	}
 
 	// Write the schema change for all referenced sequence descriptors.
