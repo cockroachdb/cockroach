@@ -182,6 +182,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalInheritedRoleMembersTableID:        crdbInternalInheritedRoleMembers,
 		catconstants.CrdbInternalKVSystemPrivilegesViewID:           crdbInternalKVSystemPrivileges,
+		catconstants.CrdbInternalStmtStatsPersistedV22_1TableID:     crdbInternalStmtStatsPersistedViewV22_1,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -5879,6 +5880,39 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
 		{Name: "statistics", Typ: types.Jsonb},
 		{Name: "plan", Typ: types.Jsonb},
 		{Name: "index_recommendations", Typ: types.StringArray},
+	},
+}
+
+// crdb_internal.crdb_internal.stmt_stats_persisted_v22_1 is the same as
+// crdb_internal.crdb_internal.stmt_stats_persisted_v22_1 without the
+// index_recommendations column.
+var crdbInternalStmtStatsPersistedViewV22_1 = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.stmt_stats_persisted_v22_1 AS
+      SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          node_id,
+          agg_interval,
+          metadata,
+          statistics,
+          plan
+      FROM
+          system.statement_statistics`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "transaction_fingerprint_id", Typ: types.Bytes},
+		{Name: "plan_hash", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "node_id", Typ: types.Int},
+		{Name: "agg_interval", Typ: types.Interval},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "plan", Typ: types.Jsonb},
 	},
 }
 
