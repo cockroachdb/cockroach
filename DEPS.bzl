@@ -10587,10 +10587,10 @@ def go_deps():
         ],
         build_file_proto_mode = "default",
         importpath = "go.etcd.io/raft/v3",
-        sha256 = "c0befdb4cef60ab589f6875d541dace26b87db876f3f31f02ed0ae3cc3271f4d",
-        strip_prefix = "go.etcd.io/raft/v3@v3.0.0-20230607113044-515b14280da2",
+        sha256 = "7540ce70b9c79987eb5a09f693302931ac88e34757397451c5d44c202649adb3",
+        strip_prefix = "go.etcd.io/raft/v3@v3.0.0-20230626154957-a10cd4571633",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/raft/v3/io_etcd_go_raft_v3-v3.0.0-20230607113044-515b14280da2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/raft/v3/io_etcd_go_raft_v3-v3.0.0-20230626154957-a10cd4571633.zip",
         ],
     )
     go_repository(
