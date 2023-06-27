@@ -129,6 +129,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
+
+		// Reset the annotations to the original values
+		b.evalCtx.Annotations = oldEvalCtxAnn
+		b.semaCtx.Annotations = oldSemaCtxAnn
 	}
 
 	// bodyScope is the base scope for each statement in the body. We add the
