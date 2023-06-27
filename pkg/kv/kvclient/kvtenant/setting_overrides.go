@@ -83,18 +83,23 @@ func (c *connector) processSettingsEvent(
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
 
-	if (!c.settingsMu.receivedFirstAllTenantOverrides || !c.settingsMu.receivedFirstSpecificOverrides) && e.Incremental {
-		return false, errors.Newf("need to receive non-incremental setting events first")
-	}
-
 	var m map[string]settings.EncodedValue
 	switch e.Precedence {
 	case kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES:
+		if !c.settingsMu.receivedFirstAllTenantOverrides && e.Incremental {
+			return false, errors.Newf("need to receive non-incremental setting events first")
+		}
+
 		c.settingsMu.receivedFirstAllTenantOverrides = true
 		m = c.settingsMu.allTenantOverrides
+
 	case kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES:
+		if !c.settingsMu.receivedFirstSpecificOverrides && e.Incremental {
+			return false, errors.Newf("need to receive non-incremental setting events first")
+		}
 		c.settingsMu.receivedFirstSpecificOverrides = true
 		m = c.settingsMu.specificOverrides
+
 	default:
 		return false, errors.Newf("unknown precedence value %d", e.Precedence)
 	}
