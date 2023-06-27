@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -188,6 +190,18 @@ type connector struct {
 		// notifyCh is closed when there are changes to overrides.
 		notifyCh chan struct{}
 	}
+
+	metadataMu struct {
+		syncutil.Mutex
+
+		tenantName   roachpb.TenantName
+		dataState    mtinfopb.TenantDataState
+		serviceMode  mtinfopb.TenantServiceMode
+		capabilities *tenantcapabilitiespb.TenantCapabilities
+
+		// notifyCh is closed when there are changes to the metadata.
+		notifyCh chan struct{}
+	}
 }
 
 // client represents an RPC client that proxies to a KV instance.
@@ -259,6 +273,7 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
 	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
 	c.settingsMu.notifyCh = make(chan struct{})
+	c.metadataMu.notifyCh = make(chan struct{})
 	return c
 }
 
