@@ -63,6 +63,7 @@ go_test(
         "@com_github_azure_azure_sdk_for_go_sdk_storage_azblob//service",
         "@com_github_azure_go_autorest_autorest//azure",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )

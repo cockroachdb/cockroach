@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,8 +45,8 @@ func TestAzureFileCredential(t *testing.T) {
 
 	fmt.Println("@@@ js", string(bytes), "STRUCT", azJSON,
 		os.Getenv("AZURE_CLIENT_ID"),
-		os.Getenv("AZURE_CLIENT_SECRET"),
-		os.Getenv("AZURE_TENANT_ID"))
+		redact.Safe(os.Getenv("AZURE_CLIENT_SECRET")),
+		redact.Safe(os.Getenv("AZURE_TENANT_ID")))
 	require.NoError(t, os.WriteFile(p, bytes, 0600))
 
 	cred, err := NewAzureFileCredential(p, nil)
