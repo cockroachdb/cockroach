@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -630,13 +629,10 @@ var addSSTPreApplyWarn = struct {
 
 func addSSTablePreApply(
 	ctx context.Context,
-	st *cluster.Settings,
-	eng storage.Engine,
-	sideloaded logstore.SideloadStorage,
+	env postAddEnv,
 	term kvpb.RaftTerm,
 	index kvpb.RaftIndex,
 	sst kvserverpb.ReplicatedEvalResult_AddSSTable,
-	limiter *rate.Limiter,
 ) bool {
 	checksum := util.CRC32(sst.Data)
 
@@ -648,7 +644,7 @@ func addSSTablePreApply(
 		)
 	}
 
-	path, err := sideloaded.Filename(ctx, index, term)
+	path, err := env.sideloaded.Filename(ctx, index, term)
 	if err != nil {
 		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
 	}
@@ -670,18 +666,18 @@ func addSSTablePreApply(
 	// filesystem supports it, rather than writing a new copy of it. We cannot
 	// pass it the path in the sideload store as the engine deletes the passed
 	// path on success.
-	if linkErr := eng.Link(path, ingestPath); linkErr != nil {
+	if linkErr := env.eng.Link(path, ingestPath); linkErr != nil {
 		// We're on a weird file system that doesn't support Link. This is unlikely
 		// to happen in any "normal" deployment but we have a fallback path anyway.
 		log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
-		if err := ingestViaCopy(ctx, st, eng, ingestPath, term, index, sst, limiter); err != nil {
+		if err := ingestViaCopy(ctx, env.st, env.eng, ingestPath, term, index, sst, env.bulkLimiter); err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}
 		return true /* copied */
 	}
 
 	// Regular path - we made a hard link, so we can ingest the hard link now.
-	ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
+	ingestErr := env.eng.IngestExternalFiles(ctx, []string{ingestPath})
 	if ingestErr != nil {
 		log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
 	}
