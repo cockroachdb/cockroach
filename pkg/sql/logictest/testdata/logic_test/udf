@@ -55,6 +55,9 @@ CREATE FUNCTION f() RETURNS INT IMMUTABLE AS $$ SELECT 1 $$;
 statement error pq: no function body specified
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL;
 
+statement error pq: SQL functions cannot have arguments of type record
+CREATE FUNCTION f(r RECORD) RETURNS INT LANGUAGE SQL AS 'SELECT i'
+
 statement ok
 CREATE FUNCTION a(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT i'
 

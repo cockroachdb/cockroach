@@ -119,6 +119,10 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		if err != nil {
 			panic(err)
 		}
+		if language == tree.FunctionLangSQL && types.IsRecordType(typ) {
+			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
+				"SQL functions cannot have arguments of type record"))
+		}
 
 		// Add the argument to the base scope of the body.
 		argColName := funcArgColName(arg.Name, i)
