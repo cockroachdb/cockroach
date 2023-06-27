@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -73,10 +75,77 @@ func (d *replicaDecoder) decode(ctx context.Context, ents []raftpb.Entry) error 
 	return nil
 }
 
+// retrieveLocalProposalsV2 is used with useReproposalsV2, replacing a call
+// to retrieveLocalProposals. The V2 implementation is simpler because a log
+// entry that comes up for a local proposal can always consume that proposal
+// from the map because V2 never mutates the MaxLeaseIndex for the same proposal.
+// In contrast, with V1, we can only remove the proposal from the map once we
+// have found a log entry that had a matching MaxLeaseIndex. This lead to the
+// complexity of having multiple entries associated to the same proposal during
+// application.
+func (d *replicaDecoder) retrieveLocalProposalsV2() (anyLocal bool) {
+	d.r.mu.Lock()
+	defer d.r.mu.Unlock()
+
+	var it replicatedCmdBufSlice
+
+	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
+		cmd := it.cur()
+		cmd.proposal = d.r.mu.proposals[cmd.ID]
+		var alloc *quotapool.IntAlloc
+		if cmd.proposal != nil {
+			// INVARIANT: a proposal is consumed (i.e. removed from the proposals map)
+			// the first time it comes up for application. (If the proposal fails due
+			// to an illegal LeaseAppliedIndex, a new proposal might be spawned to
+			// retry but that proposal will be unrelated as far as log application is
+			// concerned).
+			//
+			// INVARIANT: local proposals are not in the proposals map while being
+			// applied, and they never re-enter the proposals map either during or
+			// afterwards.
+			//
+			// (propBuf.{Insert,ReinsertLocked} ignores proposals that have
+			// v2SeenDuringApplicationSet to make this true).
+			if cmd.proposal.v2SeenDuringApplication {
+				err := errors.AssertionFailedf("ProposalData seen twice during application: %+v", cmd.proposal)
+				logcrash.ReportOrPanic(d.r.AnnotateCtx(cmd.ctx), &d.r.store.ClusterSettings().SV, "%v", err)
+				// If we didn't panic, treat the proposal as non-local. This makes sure
+				// we don't repropose it under a new lease index.
+				cmd.proposal = nil
+			} else {
+				cmd.proposal.v2SeenDuringApplication = true
+				anyLocal = true
+				delete(d.r.mu.proposals, cmd.ID)
+				if d.r.mu.proposalQuota != nil {
+					alloc = cmd.proposal.quotaAlloc
+					cmd.proposal.quotaAlloc = nil
+				}
+			}
+		}
+
+		// NB: this may append nil. It's intentional. The quota release queue
+		// needs to have one slice entry per entry applied (even if the entry
+		// is rejected).
+		//
+		// TODO(tbg): there used to be an optimization where we'd elide mutating
+		// this slice until we saw a local proposal under a populated
+		// b.r.mu.proposalQuota. We can bring it back.
+		if d.r.mu.proposalQuota != nil {
+			d.r.mu.quotaReleaseQueue = append(d.r.mu.quotaReleaseQueue, alloc)
+		}
+	}
+	return anyLocal
+}
+
 // retrieveLocalProposals binds each of the decoder's commands to their local
 // proposals if they were proposed locally. The method also sets the ctx fields
 // on all commands.
 func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal bool) {
+	if useReproposalsV2 {
+		// NB: we *must* use this new code for correctness, since we have an invariant
+		// described within.
+		return d.retrieveLocalProposalsV2()
+	}
 	d.r.mu.Lock()
 	defer d.r.mu.Unlock()
 	// Assign all the local proposals first then delete all of them from the map

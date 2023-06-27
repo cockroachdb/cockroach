@@ -261,6 +261,16 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 	b.p.rlocker().Lock()
 	defer b.p.rlocker().Unlock()
 
+	if p.v2SeenDuringApplication {
+		if useReproposalsV2 {
+			// We should never see a proposal that has already been on the apply loop
+			// passed to `Insert`. The only place where such proposals can be seen is
+			// `ReinsertLocked`.
+			return errors.AssertionFailedf("proposal that was already applied passed to propBuf.Insert: %+v", p)
+		}
+		return nil
+	}
+
 	if filter := b.testing.insertFilter; filter != nil {
 		if err := filter(p); err != nil {
 			return err
@@ -289,6 +299,9 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 // buffer back into the buffer to be reproposed at a new Raft log index. Unlike
 // Insert, it does not modify the command.
 func (b *propBuf) ReinsertLocked(ctx context.Context, p *ProposalData) error {
+	if p.v2SeenDuringApplication {
+		return nil
+	}
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
 	idx, err := b.allocateIndex(ctx, true /* wLocked */)
@@ -574,6 +587,12 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 
 			// We don't want deduct flow tokens for reproposed commands, and of
 			// course for proposals that didn't integrate with kvflowcontrol.
+			//
+			// TODO(tbg): with useReproposalsV2, we make new proposals in
+			// tryReproposeWithNewLeaseIndex that will have createdAtTicks ==
+			// proposedAtTicks. They will have !reproposal but raftAdmissionMeta=nil.
+			// What is createdAtTicks==proposedAtTicks even good for? The !reproposal
+			// condition already handles the case in which it isn't.
 			shouldAdmit := p.createdAtTicks == p.proposedAtTicks && !reproposal && p.raftAdmissionMeta != nil
 			if !shouldAdmit {
 				admitHandles = append(admitHandles, admitEntHandle{})
