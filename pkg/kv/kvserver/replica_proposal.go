@@ -115,18 +115,34 @@ type ProposalData struct {
 	// sends, but not command application. In order to enable safely tracing events
 	// beneath, modifying this ctx field in *ProposalData requires holding the
 	// raftMu.
+	//
+	// This is either the caller's context (if they are waiting for the result)
+	// or a "background" context, perhaps with a span in it (for async consensus
+	// or in case the caller has given up).
+	//
+	// Note that there is also replicatedCmd.{ctx,sp} and so confusion may arise
+	// about which one to log to. Generally if p.ctx has a span, replicatedCmd.ctx
+	// has a span that follows from it. However, if p.ctx has no span or the
+	// replicatedCmd is not associated to a local ProposalData, replicatedCmd.ctx
+	// may still have a span, if the remote proposer requested tracing. It follows
+	// that during command application one should always use `replicatedCmd.ctx`
+	// for best coverage. `p.ctx` should be used when a `replicatedCmd` is not in
+	// scope, i.e. outside of raft command application.
+	//
+	// TODO(tbg): under useReproposalsV2, the field can be modified safely as long
+	// as the ProposalData is still in `r.mu.proposals` and `r.mu` is held. If it's
+	// not in that map, we are log application and have exclusive access. Add a more
+	// general comment that explains what can be accessed where (I think I wrote one
+	// somewhere but it should live on ProposalData).
 	ctx context.Context
 
-	// An optional tracing span bound to the proposal. Will be cleaned
-	// up when the proposal finishes.
+	// An optional tracing span bound to the proposal in the case of async
+	// consensus (it will be referenced by p.ctx). We need to finish this span
+	// after applying this proposal, since we created it. It is not used for
+	// anything else (all tracing goes through `p.ctx`).
 	sp *tracing.Span
 
 	// idKey uniquely identifies this proposal.
-	// TODO(andrei): idKey is legacy at this point: We could easily key commands
-	// by their MaxLeaseIndex, and doing so should be ok with a stop- the-world
-	// migration. However, various test facilities depend on the command ID for
-	// e.g. replay protection. Later edit: the MaxLeaseIndex assignment has,
-	// however, moved to happen later, at proposal time.
 	idKey kvserverbase.CmdIDKey
 
 	// proposedAtTicks is the (logical) time at which this command was
@@ -139,6 +155,9 @@ type ProposalData struct {
 
 	// command is serialized and proposed to raft. In the event of
 	// reproposals its MaxLeaseIndex field is mutated.
+	//
+	// TODO(tbg): when useReproposalsV2==true is baked in, the above comment
+	// is stale - MLI never gets mutated.
 	command *kvserverpb.RaftCommand
 
 	// encodedCommand is the encoded Raft command, with an optional prefix
@@ -195,6 +214,29 @@ type ProposalData struct {
 	// raftAdmissionMeta captures the metadata we encode as part of the command
 	// when first proposed for replication admission control.
 	raftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
+
+	// v2SeenDuringApplication is set to true right at the very beginning of
+	// processing this proposal for application (regardless of what the outcome of
+	// application is). Under useReproposalsV2, a local proposal is bound to an
+	// entry only once and the proposals map entry removed. This flag makes sure
+	// that the proposal buffer won't accidentally reinsert the proposal into the
+	// map. In doing so, this field also addresses locking concerns. As long as
+	// the ProposalData is in the `proposals` map, replicaMu must be held. But
+	// command application unlinks the command from the map and wants to be able
+	// to access it without acquiring replicaMu. The only other actor that can
+	// access the proposal while it is being applied is the proposal buffer (which
+	// always holds replicaMu); since v2SeenDuringApplication is flipped while
+	// under the lock (which log application holds at that point in time) and is
+	// never mutated afterwards, the proposal buffer is allowed to access that
+	// particular field and use it to avoid touching the ProposalData. A similar
+	// strategy is not possible under !useReproposalsV2 because by "design",
+	// proposals may repeatedly leave and re-enter the map and ultimately still
+	// apply successfully.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/97605
+	//
+	// Never set unless useReproposalsV2 is active.
+	v2SeenDuringApplication bool
 }
 
 // useReplicationAdmissionControl indicates whether this raft command should
@@ -232,6 +274,12 @@ func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposal
 //
 // The method is safe to call more than once, but only the first result will be
 // returned to the client.
+//
+// TODO(tbg): a stricter invariant should hold: if a proposal is signaled
+// multiple times, at most one of them is not an AmbiguousResultError. In
+// other words, we get at most one result from log application, all other
+// results are from mechanisms that unblock the client despite not knowing
+// the outcome of the proposal.
 func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 	if proposal.doneCh != nil {
 		proposal.doneCh <- pr
