@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -1403,4 +1404,79 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 			}
 		})
 	}
+}
+
+func TestRUSettingsChanged(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params := base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantDisabled,
+	}
+
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	sysDB := sqlutils.MakeSQLRunner(mainDB)
+
+	tenantID := serverutils.TestTenantID()
+	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID: tenantID,
+	})
+	defer tenant1.Stopper().Stop(ctx)
+	defer tenantDB1.Close()
+	tdb := sqlutils.MakeSQLRunner(tenantDB1)
+	tdb.Exec(t, "CREATE TABLE abcd (a INT, b INT, c INT, d INT, INDEX (a, b, c))")
+	tdb.Exec(t, "INSERT INTO abcd (SELECT t%2, t%3, t, -t FROM generate_series(1,50000) g(t))")
+
+	measureRU := func() float64 {
+		output := tdb.QueryStr(t, "EXPLAIN ANALYZE SELECT a FROM (VALUES (1, 1), (0, 2)) v(x, y) INNER LOOKUP JOIN abcd ON (a, b) = (x, y)")
+		for _, row := range output {
+			if len(row) != 1 {
+				t.Fatalf("expected one column")
+			}
+			val := row[0]
+			if strings.Contains(val, "estimated RUs consumed") {
+				substr := strings.Split(val, " ")
+				require.Equalf(t, 4, len(substr), "expected RU consumption message to have four words")
+				ruCountStr := strings.Replace(strings.TrimSpace(substr[3]), ",", "", -1)
+				estimatedRU, err := strconv.ParseFloat(ruCountStr, 64)
+				require.NoError(t, err, "failed to retrieve estimated RUs")
+				return estimatedRU
+			}
+		}
+		t.Fatalf("did not find RUs consumed in %v", output)
+		return 0
+	}
+
+	ruBefore := measureRU()
+
+	// Increase the RU cost of everything by 100x
+	settings := []*settings.FloatSetting{
+		tenantcostmodel.ReadBatchCost,
+		tenantcostmodel.ReadRequestCost,
+		tenantcostmodel.ReadPayloadCostPerMiB,
+		tenantcostmodel.WriteBatchCost,
+		tenantcostmodel.WriteRequestCost,
+		tenantcostmodel.WritePayloadCostPerMiB,
+		tenantcostmodel.SQLCPUSecondCost,
+		tenantcostmodel.PgwireEgressCostPerMiB,
+		tenantcostmodel.ExternalIOEgressCostPerMiB,
+		tenantcostmodel.ExternalIOIngressCostPerMiB,
+	}
+	for _, setting := range settings {
+		sysDB.Exec(t, fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = $1", setting.Key()), setting.Default()*100)
+	}
+
+	// Check to make sure the cost of the query increased. Use SucceedsSoon
+	// because the settings propogation is async.
+	testutils.SucceedsSoon(t, func() error {
+		ruAfter := measureRU()
+		ruExpected := ruBefore * 100
+		if ruExpected*0.5 < ruAfter && ruAfter <= ruExpected*1.5 {
+			return nil
+		}
+		return errors.Newf("expected an ru cost of about %f found %f", ruExpected, ruAfter)
+	})
 }
