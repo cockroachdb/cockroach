@@ -1188,6 +1188,35 @@ func (t *logicTest) newCluster(
 	knobOpts []knobOpt,
 	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
 ) {
+	makeClusterSettings := func(forSystemTenant bool) *cluster.Settings {
+		var st *cluster.Settings
+		if forSystemTenant {
+			// System tenants use the constructor that doesn't initialize the
+			// cluster version (see makeTestConfigFromParams). This is needed
+			// for local-mixed-22.1-22.2 config.
+			st = cluster.MakeClusterSettings()
+		} else {
+			// Regular tenants use the constructor that initializes the cluster
+			// version (see TestServer.StartTenant).
+			st = cluster.MakeTestingClusterSettings()
+		}
+		// Disable stats collection on system tables before the cluster is
+		// started, otherwise there is a race condition where stats may be
+		// collected before we can disable them with `SET CLUSTER SETTING`. We
+		// disable stats collection on system tables in order to have
+		// deterministic tests.
+		stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &st.SV, false)
+		if t.cfg.UseFakeSpanResolver {
+			// We will need to update the DistSQL span resolver with the fake
+			// resolver, but this can only be done while DistSQL is disabled.
+			// Note that this is needed since the internal queries could use
+			// DistSQL if it's not disabled, and we have to disable it before
+			// the cluster started (so that we don't have any internal queries
+			// using DistSQL concurrently with updating the span resolver).
+			sql.DistSQLClusterExecMode.Override(context.Background(), &st.SV, int64(sessiondatapb.DistSQLOff))
+		}
+		return st
+	}
 	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
 	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
 		corpusCollectionCallback = t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t())
@@ -1215,10 +1244,7 @@ func (t *logicTest) newCluster(
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			SQLMemoryPoolSize: serverArgs.MaxSQLMemoryLimit,
-			TempStorageConfig: base.DefaultTestTempStorageConfigWithSize(
-				cluster.MakeTestingClusterSettings(), tempStorageDiskLimit,
-			),
+			SQLMemoryPoolSize:        serverArgs.MaxSQLMemoryLimit,
 			DisableDefaultTestTenant: t.cfg.UseTenant || t.cfg.DisableDefaultTestTenant,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -1337,6 +1363,10 @@ func (t *logicTest) newCluster(
 				}
 			}
 		}
+		nodeParams.Settings = makeClusterSettings(true /* forSystemTenant */)
+		nodeParams.TempStorageConfig = base.DefaultTestTempStorageConfigWithSize(
+			nodeParams.Settings, tempStorageDiskLimit,
+		)
 		paramsPerNode[i] = nodeParams
 	}
 	params.ServerArgsPerNode = paramsPerNode
@@ -1350,16 +1380,25 @@ func (t *logicTest) newCluster(
 
 	t.cluster = serverutils.StartNewTestCluster(t.rootT, cfg.NumNodes, params)
 	if cfg.UseFakeSpanResolver {
-		fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
-		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+		// We need to update the DistSQL span resolver with the fake resolver.
+		// Note that DistSQL was disabled in makeClusterSetting above, so we
+		// will reset the setting after updating the span resolver.
+		for nodeIdx := 0; nodeIdx < cfg.NumNodes; nodeIdx++ {
+			fakeResolver := physicalplanutils.FakeResolverForTestCluster(t.cluster)
+			t.cluster.Server(nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+		}
+		serverutils.SetClusterSetting(t.rootT, t.cluster, "sql.defaults.distsql", "auto")
 	}
 
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
 	if cfg.UseTenant {
 		t.tenantAddrs = make([]string, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
+			settings := makeClusterSettings(false /* forSystemTenant */)
+			tempStorageConfig := base.DefaultTestTempStorageConfigWithSize(settings, tempStorageDiskLimit)
 			tenantArgs := base.TestTenantArgs{
 				TenantID:                    serverutils.TestTenantID(),
+				Settings:                    settings,
 				AllowSettingClusterSettings: true,
 				TestingKnobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -1375,7 +1414,7 @@ func (t *logicTest) newCluster(
 					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
-				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
+				TempStorageConfig: &tempStorageConfig,
 				Locality:          paramsPerNode[i].Locality,
 				TracingDefault:    params.ServerArgs.TracingDefault,
 				// Give every tenant its own ExternalIO directory.
