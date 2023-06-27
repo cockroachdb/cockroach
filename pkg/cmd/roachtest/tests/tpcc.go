@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -795,27 +794,6 @@ func registerTPCC(r registry.Registry) {
 					}
 				},
 				SetupType: usingImport,
-			})
-		},
-	})
-	r.Add(registry.TestSpec{
-		Name:              "tpcc/interleaved/nodes=3/cpu=16/w=500",
-		Owner:             registry.OwnerSQLQueries,
-		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
-		Timeout:           6 * time.Hour,
-		EncryptionSupport: registry.EncryptionMetamorphic,
-		Leases:            registry.MetamorphicLeases,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			skip.WithIssue(t, 53886)
-			runTPCC(ctx, t, c, tpccOptions{
-				// Currently, we do not support import on interleaved tables which
-				// prohibits loading/importing a fixture. If/when this is supported the
-				// number of warehouses should be increased as we would no longer
-				// bottleneck on initialization which is significantly slower than import.
-				Warehouses:     500,
-				Duration:       time.Minute * 15,
-				ExtraSetupArgs: "--interleaved=true",
-				SetupType:      usingInit,
 			})
 		},
 	})
