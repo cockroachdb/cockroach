@@ -68,9 +68,9 @@ func TestParseCipherMethod(t *testing.T) {
 
 		// Invalid values
 		"aes/pad=pkcs": `cipher method has wrong format: "aes/pad=pkcs"`,
-		"aescbc":       `cipher method has unsupported algorithm: "aescbc"`,
-		"aes-ctr":      `cipher method has unsupported mode: "ctr"`,
-		"aes/pad:zero": `cipher method has unsupported padding: "zero"`,
+		"aescbc":       `cipher method has invalid algorithm: "aescbc"`,
+		"aes-ctr":      `cipher method has invalid mode: "ctr"`,
+		"aes/pad:zero": `cipher method has invalid padding: "zero"`,
 	} {
 		t.Run(input, func(t *testing.T) {
 			_, err := parseCipherMethod(input)
