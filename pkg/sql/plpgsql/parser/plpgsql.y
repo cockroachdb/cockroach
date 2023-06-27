@@ -2,8 +2,6 @@
 package parser
 
 import (
-  "fmt"
-
   "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser/lexbase"
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -443,15 +441,15 @@ decl_statement: decl_varname decl_const decl_datatype decl_collate decl_notnull 
 
 opt_scrollable:
   {
-  fmt.Println("plpgsqllex.(*lexer).pos in opt_scrollable empty", plpgsqllex.(*lexer).lastPos)
+    return unimplemented(plpgsqllex, "cursor")
   }
 | NO_SCROLL SCROLL
   {
-  fmt.Println("plpgsqllex.(*lexer).pos in opt_scrollable no_scroll", plpgsqllex.(*lexer).lastPos)
+    return unimplemented(plpgsqllex, "cursor")
   }
 | SCROLL
   {
-  fmt.Println("plpgsqllex.(*lexer).pos in opt_scrollable scroll", plpgsqllex.(*lexer).lastPos)
+    return unimplemented(plpgsqllex, "cursor")
   }
 ;
 
@@ -508,11 +506,15 @@ decl_const:
   }
 ;
 
-// TODO(chengxiong): better handling for type names.
-decl_datatype: IDENT
+decl_datatype:
   {
-    // TODO(drewk): need to ensure the syntax is correct.
-    typ, err := plpgsqllex.(*lexer).GetTypeFromValidSQLSyntax($1)
+    // Read until reaching one of the tokens that can follow a declaration
+    // data type.
+    sqlStr, _ := plpgsqllex.(*lexer).ReadSqlConstruct(
+      ';', COLLATE, NOT, '=', COLON_EQUALS, DECLARE,
+    )
+    // TODO(drewk): need to ensure the syntax for the type is correct.
+    typ, err := plpgsqllex.(*lexer).GetTypeFromValidSQLSyntax(sqlStr)
     if err != nil {
       setErr(plpgsqllex, err)
     }
@@ -1270,10 +1272,9 @@ opt_loop_label:
 
 opt_label:
   {
+    $$ = ""
   }
 | any_identifier
-  {
-  }
 ;
 
 opt_exitcond: ';'
@@ -1293,11 +1294,7 @@ opt_exitcond: ';'
  */
 any_identifier:
 IDENT
-  {
-  }
 | unreserved_keyword
-  {
-  }
 ;
 
 unreserved_keyword:

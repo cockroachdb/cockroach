@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// TODO: not sure if there's anything else needed for expression
 type PLpgSQLExpr = tree.Expr
 
 type PLpgSQLStatement interface {
@@ -63,6 +62,7 @@ type PLpgSQLStmtBlock struct {
 	Scope      VariableScope
 }
 
+// TODO(drewk): format Label and Exceptions fields.
 func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 	if s.Decls != nil {
 		ctx.WriteString("DECLARE\n")
@@ -70,13 +70,13 @@ func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 			dec.Format(ctx)
 		}
 	}
-	// TODO: Make sure the child statement is pretty printed correctly
+	// TODO(drewk): Make sure the child statement is pretty printed correctly
+	// with indents.
 	ctx.WriteString("BEGIN\n")
 	for _, childStmt := range s.Body {
 		childStmt.Format(ctx)
 	}
 	ctx.WriteString("END\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 func (s *PLpgSQLStmtBlock) PlpgSQLStatementTag() string {
@@ -161,7 +161,7 @@ func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
 	s.Condition.Format(ctx)
 	ctx.WriteString(" THEN\n")
 	for _, stmt := range s.ThenBody {
-		// TODO: Pretty Print with spaces not tabs
+		// TODO(drewk): Pretty Print with spaces, not tabs.
 		ctx.WriteString("\t")
 		stmt.Format(ctx)
 	}
@@ -175,8 +175,7 @@ func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString("\t")
 		elseStmt.Format(ctx)
 	}
-	ctx.WriteString("END IF\n")
-	ctx.WriteString("<NOT DONE YET>\n")
+	ctx.WriteString("END IF;\n")
 }
 
 func (s *PLpgSQLStmtIf) PlpgSQLStatementTag() string {
@@ -232,7 +231,7 @@ func (s *PLpgSQLStmtIfElseIfArm) WalkStmt(visitor PLpgSQLStmtVisitor) {
 // stmt_case
 type PLpgSQLStmtCase struct {
 	PLpgSQLStatementImpl
-	// TODO: Change to PLpgSQLExpr
+	// TODO(drewk): Change to PLpgSQLExpr
 	TestExpr     string
 	Var          PLpgSQLVariable
 	CaseWhenList []*PLpgSQLStmtCaseWhenArm
@@ -240,13 +239,14 @@ type PLpgSQLStmtCase struct {
 	ElseStmts    []PLpgSQLStatement
 }
 
+// TODO(drewk): fix the whitespace/newline formatting for CASE (see the
+// stmt_case test file).
 func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("CASE")
 	if len(s.TestExpr) > 0 {
 		ctx.WriteString(fmt.Sprintf(" %s", s.TestExpr))
 	}
 	ctx.WriteString("\n")
-	// TODO: Strip spaces before each comma of the when list
 	for _, when := range s.CaseWhenList {
 		when.Format(ctx)
 	}
@@ -258,8 +258,6 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 		}
 	}
 	ctx.WriteString("END CASE\n")
-	ctx.WriteString("<NOT DONE YET>\n")
-
 }
 
 func (s *PLpgSQLStmtCase) PlpgSQLStatementTag() string {
@@ -282,7 +280,7 @@ func (s *PLpgSQLStmtCase) WalkStmt(visitor PLpgSQLStmtVisitor) {
 
 type PLpgSQLStmtCaseWhenArm struct {
 	PLpgSQLStatementImpl
-	// TODO: Change to PLpgSQLExpr
+	// TODO(drewk): Change to PLpgSQLExpr
 	Expr  string
 	Stmts []PLpgSQLStatement
 }
@@ -428,7 +426,7 @@ func (s *PLpgSQLStmtForQuerySelectLoop) WalkStmt(visitor PLpgSQLStmtVisitor) {
 
 type PLpgSQLStmtForQueryCursorLoop struct {
 	PLpgSQLStmtForQueryLoop
-	CurVar   int // TODO: is this CursorVariable?
+	CurVar   int // TODO(drewk): is this CursorVariable?
 	ArgQuery PLpgSQLExpr
 }
 
@@ -467,7 +465,7 @@ type PLpgSQLStmtForEachALoop struct {
 	PLpgSQLStatementImpl
 	Label string
 	Var   *PLpgSQLVariable
-	Slice int // TODO: not sure what this is
+	Slice int // TODO(drewk): not sure what this is
 	Expr  PLpgSQLExpr
 	Body  []PLpgSQLStatement
 }
@@ -639,9 +637,8 @@ type PLpgSQLStmtAssert struct {
 }
 
 func (s *PLpgSQLStmtAssert) Format(ctx *tree.FmtCtx) {
-	// TODO: Pretty print the assert condition and message
+	// TODO(drewk): Pretty print the assert condition and message
 	ctx.WriteString("ASSERT\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 func (s *PLpgSQLStmtAssert) PlpgSQLStatementTag() string {
@@ -661,7 +658,7 @@ type PLpgSQLStmtExecSql struct {
 }
 
 func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
-	// TODO: Pretty print the sql statement
+	// TODO(drewk): Pretty print the sql statement
 	ctx.WriteString("EXECUTE bare sql query")
 	if s.Into {
 		ctx.WriteString(" WITH INTO")
@@ -670,7 +667,6 @@ func (s *PLpgSQLStmtExecSql) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString(" STRICT")
 	}
 	ctx.WriteString("\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 func (s *PLpgSQLStmtExecSql) PlpgSQLStatementTag() string {
@@ -693,7 +689,7 @@ type PLpgSQLStmtDynamicExecute struct {
 }
 
 func (s *PLpgSQLStmtDynamicExecute) Format(ctx *tree.FmtCtx) {
-	// TODO: Pretty print the original command
+	// TODO(drewk): Pretty print the original command
 	ctx.WriteString("EXECUTE a dynamic command")
 	if s.Into {
 		ctx.WriteString(" WITH INTO")
@@ -705,7 +701,6 @@ func (s *PLpgSQLStmtDynamicExecute) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString(" WITH USING")
 	}
 	ctx.WriteString("\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 }
 
 func (s *PLpgSQLStmtDynamicExecute) PlpgSQLStatementTag() string {
@@ -742,14 +737,12 @@ type PLpgSQLStmtCall struct {
 }
 
 func (s *PLpgSQLStmtCall) Format(ctx *tree.FmtCtx) {
-	// TODO: Correct the pretty printing and keep func call
+	// TODO(drewk): Correct the Call field and print the Expr and Target.
 	if s.IsCall {
 		ctx.WriteString("CALL a function/procedure\n")
 	} else {
 		ctx.WriteString("DO a code block\n")
 	}
-	ctx.WriteString("<NOT DONE YET>\n")
-
 }
 
 func (s *PLpgSQLStmtCall) PlpgSQLStatementTag() string {
@@ -764,7 +757,7 @@ func (s *PLpgSQLStmtCall) WalkStmt(visitor PLpgSQLStmtVisitor) {
 type PLpgSQLStmtGetDiag struct {
 	PLpgSQLStatementImpl
 	IsStacked bool
-	DiagItems PLpgSQLStmtGetDiagItemList // TODO: what is this?
+	DiagItems PLpgSQLStmtGetDiagItemList // TODO(drewk): what is this?
 }
 
 func (s *PLpgSQLStmtGetDiag) Format(ctx *tree.FmtCtx) {
@@ -806,7 +799,7 @@ func (s *PLpgSQLStmtGetDiag) WalkStmt(visitor PLpgSQLStmtVisitor) {
 // stmt_open
 type PLpgSQLStmtOpen struct {
 	PLpgSQLStatementImpl
-	CurVar        int // TODO: this could just a PLpgSQLVariable
+	CurVar        int // TODO(drewk): this could just a PLpgSQLVariable
 	CursorOptions uint32
 	// TODO(jane): This is temporary and we should remove it and use CurVar.
 	CursorName       string
@@ -837,10 +830,10 @@ func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
 	if !s.WithExplicitExpr {
 		ctx.WriteString("FOR ")
 		if s.DynamicQuery != "" {
-			// TODO: Make sure placeholders are properly printed
+			// TODO(drewk): Make sure placeholders are properly printed
 			ctx.WriteString(fmt.Sprintf("EXECUTE %s ", s.DynamicQuery))
 			if len(s.Params) != 0 {
-				// TODO: Dont print instances of multiple params with brackets `[...]`
+				// TODO(drewk): Dont print instances of multiple params with brackets `[...]`
 				ctx.WriteString(fmt.Sprintf("USING %s", s.Params))
 			}
 		} else {
@@ -865,7 +858,7 @@ func (s *PLpgSQLStmtOpen) WalkStmt(visitor PLpgSQLStmtVisitor) {
 type PLpgSQLStmtFetch struct {
 	PLpgSQLStatementImpl
 	Target           PLpgSQLVariable
-	CurVar           int // TODO: this could just a PLpgSQLVariable
+	CurVar           int // TODO(drewk): this could just a PLpgSQLVariable
 	Direction        PLpgSQLFetchDirection
 	HowMany          int64
 	Expr             PLpgSQLExpr
@@ -890,13 +883,12 @@ func (s *PLpgSQLStmtFetch) WalkStmt(visitor PLpgSQLStmtVisitor) {
 // stmt_close
 type PLpgSQLStmtClose struct {
 	PLpgSQLStatementImpl
-	CurVar int // TODO: this could just a PLpgSQLVariable
+	CurVar int // TODO(drewk): this could just a PLpgSQLVariable
 }
 
 func (s *PLpgSQLStmtClose) Format(ctx *tree.FmtCtx) {
-	// TODO: Pretty- Print the cursor identifier
+	// TODO(drewk): Pretty- Print the cursor identifier
 	ctx.WriteString("CLOSE a cursor\n")
-	ctx.WriteString("<NOT DONE YET>\n")
 
 }
 

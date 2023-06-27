@@ -1,0 +1,38 @@
+parse
+  DECLARE
+    i INT;
+    n INT := array_length(arr, 1);
+    res INT[] := ARRAY[]::INT[];
+  BEGIN
+    i := 0;
+    LOOP
+      IF i = idx THEN
+        res := res || val;
+      ELSE
+        res := res || arr[i+1];
+      END IF;
+    i := i + 1;
+    IF i >= n THEN EXIT; END IF;
+    END LOOP;
+    RETURN res;
+  END
+----
+DECLARE
+i INT8;
+n INT8 := array_length(arr, 1);
+res INT8[] := ARRAY[]::INT8[];
+BEGIN
+i := 0;
+LOOP
+IF i = idx THEN
+	res := res || val;
+ELSE
+	res := res || arr[i + 1];
+END IF;
+i := i + 1;
+IF i >= n THEN
+	EXIT;
+END IF;
+END LOOP;
+RETURN res;
+END

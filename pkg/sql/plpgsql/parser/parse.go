@@ -64,6 +64,8 @@ func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) 
 		if lval.id == ERROR {
 			return p.scanner.In()[startPos:], tokens, true
 		}
+		// Reset the plpgsqlSymType struct before scanning.
+		lval = plpgsqlSymType{}
 		posBeforeScan := p.scanner.Pos()
 		p.scanner.Scan(&lval)
 		if lval.id == 0 {
@@ -94,7 +96,7 @@ func (p *Parser) parseWithDepth(
 func (p *Parser) parse(
 	depth int, sql string, tokens []plpgsqlSymType, nakedIntType *types.T,
 ) (statements.PLpgStatement, error) {
-	p.lexer.init(sql, tokens, nakedIntType)
+	p.lexer.init(sql, tokens, nakedIntType, &p.parserImpl)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
 		if p.lexer.lastError == nil {

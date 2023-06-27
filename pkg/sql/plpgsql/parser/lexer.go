@@ -42,9 +42,11 @@ type lexer struct {
 	numAnnotations  tree.AnnotationIdx
 
 	lastError error
+
+	parser plpgsqlParser
 }
 
-func (l *lexer) init(sql string, tokens []plpgsqlSymType, nakedIntType *types.T) {
+func (l *lexer) init(sql string, tokens []plpgsqlSymType, nakedIntType *types.T, p plpgsqlParser) {
 	l.in = sql
 	l.tokens = tokens
 	l.lastPos = -1
@@ -52,8 +54,8 @@ func (l *lexer) init(sql string, tokens []plpgsqlSymType, nakedIntType *types.T)
 	l.numPlaceholders = 0
 	l.numAnnotations = 0
 	l.lastError = nil
-
 	l.nakedIntType = nakedIntType
+	l.parser = p
 }
 
 // cleanup is used to avoid holding on to memory unnecessarily (for the cases
@@ -285,42 +287,51 @@ func (l *lexer) ReadSqlExpressionStr2(
 }
 
 func (l *lexer) ReadSqlConstruct(
-	terminator1 int, terminator2 int, terminator3 int,
+	terminator1 int, terminators ...int,
 ) (sqlStr string, terminatorMet int) {
-	exprTokenStrs := make([]string, 0)
+	if l.parser.Lookahead() != -1 {
+		// Push back the lookahead token so that it can be included in the string.
+		l.PushBack(1)
+	}
 	parenLevel := 0
+	startPos := l.lastPos + 1
 	for l.lastPos < len(l.tokens) {
 		tok := l.Peek()
 		if int(tok.id) == terminator1 && parenLevel == 0 {
 			terminatorMet = terminator1
 			break
-		} else if int(tok.id) == terminator2 && parenLevel == 0 {
-			terminatorMet = terminator2
+		}
+		for _, term := range terminators {
+			if int(tok.id) == term && parenLevel == 0 {
+				terminatorMet = term
+			}
+		}
+		if terminatorMet != 0 {
 			break
-		} else if int(tok.id) == terminator3 && parenLevel == 0 {
-			terminatorMet = terminator3
-			break
-		} else if tok.id == '(' || tok.id == '[' {
+		}
+		if tok.id == '(' || tok.id == '[' {
 			parenLevel++
-
 		} else if tok.id == ')' || tok.id == ']' {
 			parenLevel--
 			if parenLevel < 0 {
 				panic(errors.AssertionFailedf("wrongly nested parentheses"))
 			}
 		}
-		exprTokenStrs = append(exprTokenStrs, tok.Str())
 		l.lastPos++
 	}
 	if parenLevel != 0 {
 		panic(errors.AssertionFailedf("parentheses is badly nested"))
 	}
-	if len(exprTokenStrs) == 0 {
+	if startPos > l.lastPos {
 		//TODO(jane): show the terminator in the panic message.
-		l.setErr(errors.New("there should be at least one token for sql expression"))
+		l.setErr(errors.New("missing SQL expression"))
 	}
-
-	return strings.Join(exprTokenStrs, " "), terminatorMet
+	end := len(l.in)
+	if l.lastPos+1 < len(l.tokens) {
+		end = int(l.tokens[l.lastPos+1].Pos())
+	}
+	start := int(l.tokens[startPos].Pos())
+	return l.in[start:end], terminatorMet
 }
 
 func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(openStmt *plpgsqltree.PLpgSQLStmtOpen) {
@@ -351,10 +362,19 @@ func (l *lexer) Peek() plpgsqlSymType {
 	return plpgsqlSymType{}
 }
 
-// PushBack move the lastP
+// PushBack rewinds the lexer by n tokens.
 func (l *lexer) PushBack(n int) {
-	if l.lastPos-n >= 0 {
-		l.lastPos -= n
+	if n < 0 {
+		panic(errors.AssertionFailedf("negative n provided to PushBack"))
+	}
+	l.lastPos -= n
+	if l.lastPos < -1 {
+		// Return to the initialized state.
+		l.lastPos = -1
+	}
+	if n >= 1 {
+		// Invalidate the parser lookahead token.
+		l.parser.(*plpgsqlParserImpl).char = -1
 	}
 }
 

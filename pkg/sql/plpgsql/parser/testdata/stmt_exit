@@ -10,7 +10,6 @@ BEGIN
 EXIT some_label;
 EXIT some_label WHEN some_condition;
 END
-<NOT DONE YET>
 
 parse
 DECLARE
@@ -24,4 +23,3 @@ BEGIN
 CONTINUE some_label;
 CONTINUE some_label WHEN some_condition;
 END
-<NOT DONE YET>

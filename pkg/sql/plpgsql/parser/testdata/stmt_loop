@@ -16,7 +16,6 @@ EXIT WHEN x = 10;
 x := x + 1;
 END LOOP;
 END
-<NOT DONE YET>
 
 
 parse
@@ -38,4 +37,3 @@ EXIT WHEN x = 10;
 x := x + 1;
 END LOOP mathing;
 END
-<NOT DONE YET>
