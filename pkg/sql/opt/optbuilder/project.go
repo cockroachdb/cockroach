@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // constructProjectForScope constructs a projection if it will result in a
@@ -340,13 +341,34 @@ func (b *Builder) finishBuildScalarRef(
 //
 // Note that this is all a cheap no-op if Add is not called.
 type projectionBuilder struct {
-	b        *Builder
-	inScope  *scope
+	b *Builder
+	// inScope is the scope of the expression to build a projection on top of.
+	inScope *scope
+	// resolveScope is the scope used to resolve column references in projection
+	// expressions. If resolveScope is nil, then inScope is used to resolve
+	// column references.
+	resolveScope *scope
+	// outScope is the scope of the resulting projection.
 	outScope *scope
 }
 
 func makeProjectionBuilder(b *Builder, inScope *scope) projectionBuilder {
 	return projectionBuilder{b: b, inScope: inScope}
+}
+
+// HasResolveScope returns true if a scope other than the inScope has been
+// provided.
+func (pb *projectionBuilder) HasResolveScope() bool {
+	return pb.resolveScope != nil
+}
+
+// SetResolveScope replaces inScope for resolving column references in
+// projection expressions.
+func (pb *projectionBuilder) SetResolveScope(resolveScope *scope) {
+	if pb.HasResolveScope() {
+		panic(errors.AssertionFailedf("expected resolveScope to be nil"))
+	}
+	pb.resolveScope = resolveScope
 }
 
 // Add a projection.
@@ -361,9 +383,13 @@ func (pb *projectionBuilder) Add(
 		pb.outScope = pb.inScope.replace()
 		pb.outScope.appendColumnsFromScope(pb.inScope)
 	}
-	typedExpr := pb.inScope.resolveType(expr, desiredType)
+	resolveScope := pb.inScope
+	if pb.HasResolveScope() {
+		resolveScope = pb.resolveScope
+	}
+	typedExpr := resolveScope.resolveType(expr, desiredType)
 	scopeCol := pb.outScope.addColumn(name, typedExpr)
-	scalar := pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
+	scalar := pb.b.buildScalar(typedExpr, resolveScope, pb.outScope, scopeCol, nil)
 
 	return scopeCol.id, scalar
 }
