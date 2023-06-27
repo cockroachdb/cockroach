@@ -13,6 +13,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -78,7 +79,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Write
 
 	// Write an engine value to be deleted.
 	require.NoError(t, e.PutUnversioned(mvccKey("b").Key, []byte("value")))
-	require.NoError(t, b.ClearUnversioned(mvccKey("b").Key))
+	require.NoError(t, b.ClearUnversioned(mvccKey("b").Key, ClearOptions{}))
 
 	// Write an engine value to be merged.
 	require.NoError(t, e.PutUnversioned(mvccKey("c").Key, appender("foo")))
@@ -91,12 +92,25 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Write
 	require.NoError(t, e.PutUnversioned(mvccKey("d").Key, []byte("before")))
 	require.NoError(t, b.SingleClearEngineKey(EngineKey{Key: mvccKey("d").Key}))
 
+	// Write a MVCC value to be deleted with a known value size.
+	keyF := mvccKey("f")
+	keyF.Timestamp.WallTime = 1
+	valueF := MVCCValue{Value: roachpb.Value{RawBytes: []byte("fvalue")}}
+	encodedValueF, err := EncodeMVCCValue(valueF)
+	require.NoError(t, err)
+	require.NoError(t, e.PutMVCC(keyF, valueF))
+	require.NoError(t, b.ClearMVCC(keyF, ClearOptions{
+		ValueSizeKnown: true,
+		ValueSize:      uint32(len(encodedValueF)),
+	}))
+
 	// Check all keys are in initial state (nothing from batch has gone
 	// through to engine until commit).
 	expValues := []MVCCKeyValue{
 		{Key: mvccKey("b"), Value: []byte("value")},
 		{Key: mvccKey("c"), Value: appender("foo")},
 		{Key: mvccKey("d"), Value: []byte("before")},
+		{Key: keyF, Value: encodedValueF},
 	}
 	kvs, err := Scan(e, localMax, roachpb.KeyMax, 0)
 	require.NoError(t, err)
@@ -199,7 +213,7 @@ func TestReadOnlyBasics(t *testing.T) {
 	// For a read-only ReadWriter, all Writer methods should panic.
 	failureTestCases := []func(){
 		func() { _ = ro.ApplyBatchRepr(nil, false) },
-		func() { _ = ro.ClearUnversioned(a.Key) },
+		func() { _ = ro.ClearUnversioned(a.Key, ClearOptions{}) },
 		func() { _ = ro.SingleClearEngineKey(EngineKey{Key: a.Key}) },
 		func() { _ = ro.ClearRawRange(a.Key, a.Key, true, true) },
 		func() { _ = ro.Merge(a, nil) },
@@ -215,7 +229,7 @@ func TestReadOnlyBasics(t *testing.T) {
 	if err := e.PutUnversioned(mvccKey("b").Key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.ClearUnversioned(mvccKey("b").Key); err != nil {
+	if err := e.ClearUnversioned(mvccKey("b").Key, ClearOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.PutUnversioned(mvccKey("c").Key, appender("foo")); err != nil {
@@ -249,13 +263,17 @@ func TestReadOnlyBasics(t *testing.T) {
 func TestBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// Disable metamorphism in the value-encoding; our asserts include the
+	// length of the encoded value to test delete-sized.
+
+	DisableMetamorphicSimpleValueEncoding(t)
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b WriteBatch) error {
 		repr := b.Repr()
 
 		r, err := NewBatchReader(repr)
 		require.NoError(t, err)
 
-		const expectedCount = 5
+		const expectedCount = 6
 		require.Equal(t, expectedCount, r.Count())
 		count, err := BatchCount(repr)
 		require.NoError(t, err)
@@ -267,6 +285,9 @@ func TestBatchRepr(t *testing.T) {
 			switch r.KeyKind() {
 			case pebble.InternalKeyKindDelete:
 				ops = append(ops, fmt.Sprintf("delete(%s)", string(r.Key())))
+			case pebble.InternalKeyKindDeleteSized:
+				v, _ := binary.Uvarint(r.Value())
+				ops = append(ops, fmt.Sprintf("delete-sized(%s,%d)", string(r.Key()), v))
 			case pebble.InternalKeyKindSet:
 				ops = append(ops, fmt.Sprintf("put(%s,%s)", string(r.Key()), string(r.Value())))
 			case pebble.InternalKeyKindMerge:
@@ -287,6 +308,7 @@ func TestBatchRepr(t *testing.T) {
 			"merge(c\x00)",
 			"put(e\x00,)",
 			"single_delete(d\x00)",
+			"delete-sized(f\x00\x00\x00\x00\x00\x00\x00\x00\x01\t,17)",
 		}
 		require.Equal(t, expOps, ops)
 
@@ -383,7 +405,7 @@ func TestBatchGet(t *testing.T) {
 	if err := b.PutUnversioned(mvccKey("a").Key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.ClearUnversioned(mvccKey("b").Key); err != nil {
+	if err := b.ClearUnversioned(mvccKey("b").Key, ClearOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.Merge(mvccKey("c"), appender("bar")); err != nil {
@@ -435,7 +457,7 @@ func TestBatchMerge(t *testing.T) {
 	if err := b.PutUnversioned(mvccKey("a").Key, appender("a-value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.ClearUnversioned(mvccKey("b").Key); err != nil {
+	if err := b.ClearUnversioned(mvccKey("b").Key, ClearOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.Merge(mvccKey("c"), appender("c-value")); err != nil {
@@ -578,7 +600,10 @@ func TestBatchScanWithDelete(t *testing.T) {
 	if err := e.PutUnversioned(mvccKey("a").Key, []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.ClearUnversioned(mvccKey("a").Key); err != nil {
+	if err := b.ClearUnversioned(mvccKey("a").Key, ClearOptions{
+		ValueSizeKnown: true,
+		ValueSize:      uint32(len("value")),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	kvs, err := Scan(b, localMax, roachpb.KeyMax, 0)
@@ -611,7 +636,10 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Now, delete "a" in batch.
-	if err := b.ClearUnversioned(mvccKey("a").Key); err != nil {
+	if err := b.ClearUnversioned(mvccKey("a").Key, ClearOptions{
+		ValueSizeKnown: true,
+		ValueSize:      uint32(len("value1")),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	// A scan with max=1 should scan "b".
@@ -862,7 +890,8 @@ func TestDecodeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	e, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
+	e, err := Open(context.Background(), InMemory(),
+		cluster.MakeTestingClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	assert.NoError(t, err)
 	defer e.Close()
 
@@ -924,7 +953,7 @@ func TestBatchReader(t *testing.T) {
 	require.NoError(t, b.PutEngineRangeKey(roachpb.Key("rangeFrom"), roachpb.Key("rangeTo"), []byte{7}, []byte("engineRangeKey")))
 
 	// Clear some already empty keys.
-	require.NoError(t, b.ClearMVCC(pointKey("mvccKey", 9)))
+	require.NoError(t, b.ClearMVCC(pointKey("mvccKey", 9), ClearOptions{}))
 	require.NoError(t, b.ClearMVCCRangeKey(rangeKey("rangeFrom", "rangeTo", 9)))
 	require.NoError(t, b.ClearRawRange(roachpb.Key("clearFrom"), roachpb.Key("clearTo"), true, true))
 
