@@ -222,7 +222,7 @@ export default function (props: GraphDashboardProps) {
         {_.map(nodeIDs, nid => (
           <Metric
             key={nid}
-            name="cr.store.rocksdb.wal-bytes-written"
+            name="cr.store.storage.wal.bytes_written"
             title={getNodeNameById(nid)}
             sources={storeIDsForNode(storeIDsByNodeID, nid)}
             nonNegativeRate
