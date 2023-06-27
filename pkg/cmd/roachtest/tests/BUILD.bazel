@@ -132,7 +132,6 @@ go_library(
         "rebalance_stats.go",
         "registry.go",
         "replicagc.go",
-        "reset_quorum.go",
         "restart.go",
         "restore.go",
         "roachmart.go",
