@@ -49,7 +49,7 @@ import (
 //     simulation. The default values are: rw_ratio=0 rate=0 min_block=1
 //     max_block=1 min_key=1 max_key=10_000 access_skew=false.
 //
-//   - "ken_cluster" [nodes=<int>] [stores_per_node=<int>]
+//   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1.
