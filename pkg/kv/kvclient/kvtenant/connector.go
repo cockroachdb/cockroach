@@ -311,7 +311,7 @@ func (c *connector) Start(ctx context.Context) error {
 
 func (c *connector) internalStart(ctx context.Context) error {
 	gossipStartupCh := make(chan struct{})
-	settingsStartupCh := make(chan struct{})
+	settingsStartupCh := make(chan error)
 	bgCtx := c.AnnotateCtx(context.Background())
 
 	if err := c.rpcContext.Stopper.RunAsyncTask(bgCtx, "connector-gossip", func(ctx context.Context) {
@@ -339,9 +339,13 @@ func (c *connector) internalStart(ctx context.Context) error {
 		case <-gossipStartupCh:
 			log.Infof(ctx, "kv connector gossip subscription started")
 			gossipStartupCh = nil
-		case <-settingsStartupCh:
-			log.Infof(ctx, "kv connector tenant settings started")
+		case err := <-settingsStartupCh:
 			settingsStartupCh = nil
+			if err != nil {
+				log.Infof(ctx, "kv connector initialization error: %v", err)
+				return err
+			}
+			log.Infof(ctx, "kv connector tenant settings started")
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-c.rpcContext.Stopper.ShouldQuiesce():

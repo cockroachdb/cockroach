@@ -24,7 +24,7 @@ import (
 // runTenantSettingsSubscription listens for tenant setting override changes.
 // It closes the given channel once the initial set of overrides were obtained.
 // Exits when the context is done.
-func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh chan struct{}) {
+func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh chan<- error) {
 	for ctx.Err() == nil {
 		client, err := c.getClient(ctx)
 		if err != nil {
@@ -63,6 +63,11 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				// Hard logical error. We expect io.EOF next.
 				err := errors.DecodeError(ctx, e.Error)
 				log.Errorf(ctx, "error consuming TenantSettings RPC: %v", err)
+				if startupCh != nil {
+					startupCh <- err
+					close(startupCh)
+					return
+				}
 				continue
 			}
 
@@ -79,6 +84,7 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				log.Infof(ctx, "received initial tenant settings")
 
 				if startupCh != nil {
+					startupCh <- nil
 					close(startupCh)
 					startupCh = nil
 				}
