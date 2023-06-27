@@ -466,6 +466,7 @@ go_test(
         "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/allstacks",
         "//pkg/util/caller",
         "//pkg/util/circuit",
         "//pkg/util/ctxgroup",
