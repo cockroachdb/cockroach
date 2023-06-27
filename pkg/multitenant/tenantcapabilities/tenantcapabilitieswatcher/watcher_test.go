@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -240,6 +241,28 @@ func TestDataDriven(t *testing.T) {
 					delete.TenantID.ToUint64(),
 				)
 				lastUpdateTS = ts.Clock().Now()
+
+			case "wait-for-info":
+				tID := tenantcapabilitiestestutils.GetTenantID(t, d)
+				var info tenantcapabilities.Entry
+				for {
+					var found bool
+					var infoCh <-chan struct{}
+					info, infoCh, found = watcher.GetInfo(tID)
+					if found {
+						break
+					}
+					select {
+					case <-infoCh:
+						continue
+					case <-time.After(10 * time.Second):
+						t.Fatalf("timed out waiting for info for tenant %v", tID)
+					}
+				}
+
+				var buf strings.Builder
+				fmt.Fprintf(&buf, "%+v\n", pretty.Formatter(info))
+				return buf.String()
 
 			case "get-capabilities":
 				tID := tenantcapabilitiestestutils.GetTenantID(t, d)

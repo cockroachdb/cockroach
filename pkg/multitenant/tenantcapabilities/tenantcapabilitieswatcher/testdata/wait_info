@@ -1,0 +1,15 @@
+# Exercise the wait-for-info API. The strength of this test comes from
+# stressing it: if the API is incorrect it would result in spurious,
+# non-deterministic failures.
+
+start
+----
+ok
+
+upsert ten=10 name=foo service=shared can_admin_unsplit=true
+----
+ok
+
+wait-for-info ten=10
+----
+ten=10 cap=can_admin_unsplit:true 

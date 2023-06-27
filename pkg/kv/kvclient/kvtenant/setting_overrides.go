@@ -13,6 +13,7 @@ package kvtenant
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -24,7 +25,7 @@ import (
 // runTenantSettingsSubscription listens for tenant setting override changes.
 // It closes the given channel once the initial set of overrides were obtained.
 // Exits when the context is done.
-func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh chan struct{}) {
+func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh chan<- error) {
 	for ctx.Err() == nil {
 		client, err := c.getClient(ctx)
 		if err != nil {
@@ -63,6 +64,18 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				// Hard logical error. We expect io.EOF next.
 				err := errors.DecodeError(ctx, e.Error)
 				log.Errorf(ctx, "error consuming TenantSettings RPC: %v", err)
+				if startupCh != nil && errors.Is(err, &kvpb.MissingRecordError{}) && c.earlyShutdownIfMissingTenantRecord {
+					startupCh <- err
+					close(startupCh)
+					return
+				}
+				// Don't hammer the server with requests if there was an
+				// actual error reported.
+				select {
+				case <-ctx.Done():
+				case <-c.rpcContext.Stopper.ShouldQuiesce():
+				case <-time.After(1 * time.Second):
+				}
 				continue
 			}
 
@@ -79,6 +92,7 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				log.Infof(ctx, "received initial tenant settings")
 
 				if startupCh != nil {
+					startupCh <- nil
 					close(startupCh)
 					startupCh = nil
 				}
