@@ -46,7 +46,9 @@ func TestAzureFileCredential(t *testing.T) {
 	fmt.Println("@@@ js", string(bytes), "STRUCT", azJSON,
 		os.Getenv("AZURE_CLIENT_ID"),
 		redact.Safe(os.Getenv("AZURE_CLIENT_SECRET")),
-		redact.Safe(os.Getenv("AZURE_TENANT_ID")))
+		len(os.Getenv("AZURE_CLIENT_SECRET")),
+		redact.Safe(os.Getenv("AZURE_TENANT_ID")),
+		len(os.Getenv("AZURE_TENANT_ID")))
 	require.NoError(t, os.WriteFile(p, bytes, 0600))
 
 	cred, err := NewAzureFileCredential(p, nil)
