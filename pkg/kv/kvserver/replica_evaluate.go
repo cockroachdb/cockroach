@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -54,12 +55,15 @@ func optimizePuts(
 	}
 	// Returns false on occurrence of a duplicate key.
 	maybeAddPut := func(key roachpb.Key) bool {
-		// Note that casting the byte slice key to a string does not allocate.
+		// The lookup will not copy key but the map insertion will, but since the
+		// map doesn't escape and we don't mutate the keys its safe to
+		// not allocate for both.
+		mapKey := encoding.UnsafeConvertBytesToString(key)
 		if unique != nil {
-			if _, ok := unique[string(key)]; ok {
+			if _, ok := unique[mapKey]; ok {
 				return false
 			}
-			unique[string(key)] = struct{}{}
+			unique[mapKey] = struct{}{}
 		}
 		if minKey == nil || bytes.Compare(key, minKey) < 0 {
 			minKey = key
