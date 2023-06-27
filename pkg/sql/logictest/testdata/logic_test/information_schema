@@ -460,6 +460,7 @@ crdb_internal       session_variables
 crdb_internal       statement_statistics
 crdb_internal       statement_statistics_persisted
 crdb_internal       statement_statistics_v22_1
+crdb_internal       stmt_stats_persisted_v22_1
 crdb_internal       super_regions
 crdb_internal       table_columns
 crdb_internal       table_indexes
@@ -792,6 +793,7 @@ session_variables
 statement_statistics
 statement_statistics_persisted
 statement_statistics_v22_1
+stmt_stats_persisted_v22_1
 super_regions
 table_columns
 table_indexes
@@ -1135,7 +1137,7 @@ system         crdb_internal       kv_inherited_role_members              SYSTEM
 system         crdb_internal       kv_node_liveness                       SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_status                         SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                        SYSTEM VIEW  NO                  1
-system         crdb_internal       kv_system_privileges                    SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_system_privileges                   SYSTEM VIEW  NO                  1
 system         crdb_internal       leases                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       lost_descriptors_with_data             SYSTEM VIEW  NO                  1
 system         crdb_internal       node_build_info                        SYSTEM VIEW  NO                  1
@@ -1164,6 +1166,7 @@ system         crdb_internal       session_variables                      SYSTEM
 system         crdb_internal       statement_statistics                   SYSTEM VIEW  NO                  1
 system         crdb_internal       statement_statistics_persisted         SYSTEM VIEW  NO                  1
 system         crdb_internal       statement_statistics_v22_1             SYSTEM VIEW  NO                  1
+system         crdb_internal       stmt_stats_persisted_v22_1             SYSTEM VIEW  NO                  1
 system         crdb_internal       super_regions                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_columns                          SYSTEM VIEW  NO                  1
 system         crdb_internal       table_indexes                          SYSTEM VIEW  NO                  1
@@ -2802,7 +2805,7 @@ NULL     public   system         crdb_internal       kv_inherited_role_members  
 NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NO            YES
-NULL     public   system         crdb_internal       kv_system_privileges                    SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_system_privileges                   SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NO            YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NO            YES
@@ -2831,6 +2834,7 @@ NULL     public   system         crdb_internal       session_variables          
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_persisted         SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_v22_1             SELECT          NO            YES
+NULL     public   system         crdb_internal       stmt_stats_persisted_v22_1             SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES
@@ -3380,7 +3384,7 @@ NULL     public   system         crdb_internal       kv_inherited_role_members  
 NULL     public   system         crdb_internal       kv_node_liveness                       SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NO            YES
-NULL     public   system         crdb_internal       kv_system_privileges                    SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_system_privileges                   SELECT          NO            YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NO            YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NO            YES
@@ -3409,6 +3413,7 @@ NULL     public   system         crdb_internal       session_variables          
 NULL     public   system         crdb_internal       statement_statistics                   SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_persisted         SELECT          NO            YES
 NULL     public   system         crdb_internal       statement_statistics_v22_1             SELECT          NO            YES
+NULL     public   system         crdb_internal       stmt_stats_persisted_v22_1             SELECT          NO            YES
 NULL     public   system         crdb_internal       super_regions                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       table_indexes                          SELECT          NO            YES

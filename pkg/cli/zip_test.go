@@ -93,6 +93,7 @@ table_name NOT IN (
 	'statement_statistics',
 	'statement_statistics_persisted',
 	'statement_statistics_v22_1',
+	'stmt_stats_persisted_v22_1',
 	'transaction_statistics',
 	'transaction_statistics_persisted',
 	'tenant_usage_details',

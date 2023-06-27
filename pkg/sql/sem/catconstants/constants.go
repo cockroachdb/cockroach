@@ -167,6 +167,7 @@ const (
 	CrdbInternalSuperRegions
 	CrdbInternalInheritedRoleMembersTableID
 	CrdbInternalKVSystemPrivilegesViewID
+	CrdbInternalStmtStatsPersistedV22_1TableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
