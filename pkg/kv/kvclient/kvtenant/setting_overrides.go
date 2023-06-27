@@ -115,10 +115,13 @@ func (c *connector) processSettingsEvent(
 		}
 	}
 
-	// Notify watchers if any.
-	close(c.settingsMu.notifyCh)
-	// Define a new notification channel for subsequent watchers.
-	c.settingsMu.notifyCh = make(chan struct{})
+	// Do a non-blocking send on the notification channel (if it is not nil). This
+	// is a buffered channel and if it already contains a message, there's no
+	// point in sending a duplicate notification.
+	select {
+	case c.settingsMu.notifyCh <- struct{}{}:
+	default:
+	}
 
 	// The protocol defines that the server sends one initial
 	// non-incremental message for both precedences.
@@ -126,13 +129,28 @@ func (c *connector) processSettingsEvent(
 	return settingsReady, nil
 }
 
-// Overrides is part of the settingswatcher.OverridesMonitor interface.
-func (c *connector) Overrides() (map[string]settings.EncodedValue, <-chan struct{}) {
+// RegisterOverridesChannel is part of the settingswatcher.OverridesMonitor
+// interface.
+func (c *connector) RegisterOverridesChannel() <-chan struct{} {
 	c.settingsMu.Lock()
 	defer c.settingsMu.Unlock()
+	if c.settingsMu.notifyCh != nil {
+		panic(errors.AssertionFailedf("multiple calls not supported"))
+	}
+	ch := make(chan struct{}, 1)
+	// Send an initial message on the channel.
+	ch <- struct{}{}
+	c.settingsMu.notifyCh = ch
+	return ch
+}
 
-	res := make(map[string]settings.EncodedValue, len(c.settingsMu.allTenantOverrides)+len(c.settingsMu.specificOverrides))
-
+// Overrides is part of the settingswatcher.OverridesMonitor interface.
+func (c *connector) Overrides() map[string]settings.EncodedValue {
+	// We could be more efficient here, but we expect this function to be called
+	// only when there are changes (which should be rare).
+	res := make(map[string]settings.EncodedValue)
+	c.settingsMu.Lock()
+	defer c.settingsMu.Unlock()
 	// First copy the all-tenant overrides.
 	for name, val := range c.settingsMu.allTenantOverrides {
 		res[name] = val
@@ -142,5 +160,5 @@ func (c *connector) Overrides() (map[string]settings.EncodedValue, <-chan struct
 	for name, val := range c.settingsMu.specificOverrides {
 		res[name] = val
 	}
-	return res, c.settingsMu.notifyCh
+	return res
 }

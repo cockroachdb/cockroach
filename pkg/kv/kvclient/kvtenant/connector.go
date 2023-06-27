@@ -160,9 +160,6 @@ type connector struct {
 	defaultZoneCfg  *zonepb.ZoneConfig
 	addrs           []string
 
-	startCh  chan struct{} // closed when connector has started up
-	startErr error
-
 	mu struct {
 		syncutil.RWMutex
 		client               *client
@@ -185,7 +182,7 @@ type connector struct {
 		receivedFirstSpecificOverrides bool
 		specificOverrides              map[string]settings.EncodedValue
 
-		// notifyCh is closed when there are changes to overrides.
+		// notifyCh receives an event when there are changes to overrides.
 		notifyCh chan struct{}
 	}
 }
@@ -258,7 +255,6 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
 	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
 	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
-	c.settingsMu.notifyCh = make(chan struct{})
 	return c
 }
 
@@ -280,36 +276,10 @@ func (connectorFactory) NewConnector(
 	return NewConnector(cfg, []string{addressConfig.LoopbackAddress}), nil
 }
 
-// WaitForStart waits until the connector has started.
-func (c *connector) WaitForStart(ctx context.Context) error {
-	// Fast path check.
-	select {
-	case <-c.startCh:
-		return c.startErr
-	default:
-	}
-	if c.startCh == nil {
-		return errors.AssertionFailedf("Start() was not yet called")
-	}
-	select {
-	case <-c.startCh:
-		return c.startErr
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
 // Start launches the connector's worker thread and waits for it to successfully
 // connect to a KV node. Start returns once the connector has determined the
 // cluster's ID and set connector.rpcContext.ClusterID.
 func (c *connector) Start(ctx context.Context) error {
-	c.startCh = make(chan struct{})
-	c.startErr = c.internalStart(ctx)
-	close(c.startCh)
-	return c.startErr
-}
-
-func (c *connector) internalStart(ctx context.Context) error {
 	gossipStartupCh := make(chan struct{})
 	settingsStartupCh := make(chan struct{})
 	bgCtx := c.AnnotateCtx(context.Background())
