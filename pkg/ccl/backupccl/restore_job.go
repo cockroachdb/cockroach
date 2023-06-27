@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -3121,6 +3122,8 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	return nil
 }
 
+var progRestoreGate = envutil.EnvOrDefaultBool("COCKROACH_UNSAFE_RESTORE", false)
+
 // sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
 // to test out ingesting "remote" SSTs. It will be replaced with a real distsql
 // plan and processors in the future.
@@ -3140,6 +3143,11 @@ func sendAddRemoteSSTs(
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
 	defer close(progCh)
+
+	if !progRestoreGate {
+		return errors.AssertionFailedf("experimental restore mode not supported")
+	}
+
 	if encryption != nil {
 		return errors.AssertionFailedf("encryption not supported with progressive restore")
 	}
