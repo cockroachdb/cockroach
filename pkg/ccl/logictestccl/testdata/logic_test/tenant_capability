@@ -314,3 +314,63 @@ statement error pgcode 42601 value required for capability: span_config_bounds
 ALTER TENANT scb GRANT CAPABILITY span_config_bounds;
 
 subtest end
+
+subtest all_caps
+
+statement ok
+CREATE TENANT allc
+
+query TT colnames,rowsort
+SELECT capability_name, capability_value FROM [SHOW TENANT allc WITH CAPABILITIES]
+----
+capability_name            capability_value
+can_admin_relocate_range   false
+can_admin_scatter          true
+can_admin_split            true
+can_admin_unsplit          false
+can_check_consistency      false
+can_use_nodelocal_storage  false
+can_view_node_info         false
+can_view_tsdb_metrics      false
+exempt_from_rate_limiting  false
+span_config_bounds         {}
+
+statement ok
+ALTER TENANT allc REVOKE ALL CAPABILITIES
+
+query TT colnames,rowsort
+SELECT capability_name, capability_value FROM [SHOW TENANT allc WITH CAPABILITIES]
+----
+capability_name            capability_value
+can_admin_relocate_range   false
+can_admin_scatter          false
+can_admin_split            false
+can_admin_unsplit          false
+can_check_consistency      false
+can_use_nodelocal_storage  false
+can_view_node_info         false
+can_view_tsdb_metrics      false
+exempt_from_rate_limiting  false
+span_config_bounds         {}
+
+statement ok
+ALTER TENANT allc GRANT ALL CAPABILITIES
+
+query TT colnames,rowsort
+SELECT capability_name, capability_value FROM [SHOW TENANT allc WITH CAPABILITIES]
+----
+capability_name            capability_value
+can_admin_relocate_range   true
+can_admin_scatter          true
+can_admin_split            true
+can_admin_unsplit          true
+can_check_consistency      true
+can_use_nodelocal_storage  true
+can_view_node_info         true
+can_view_tsdb_metrics      true
+exempt_from_rate_limiting  true
+span_config_bounds         {}
+
+
+
+subtest end

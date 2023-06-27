@@ -6603,12 +6603,29 @@ alter_tenant_capability_stmt:
       Capabilities: $6.tenantCapabilities(),
     }
   }
+| ALTER TENANT tenant_spec GRANT ALL CAPABILITIES
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantCapability{
+      TenantSpec: $3.tenantSpec(),
+      AllCapabilities: true,
+    }
+  }
 | ALTER TENANT tenant_spec REVOKE CAPABILITY tenant_capability_list
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
       TenantSpec: $3.tenantSpec(),
       Capabilities: $6.tenantCapabilities(),
+      IsRevoke: true,
+    }
+  }
+| ALTER TENANT tenant_spec REVOKE ALL CAPABILITIES
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantCapability{
+      TenantSpec: $3.tenantSpec(),
+      AllCapabilities: true,
       IsRevoke: true,
     }
   }
