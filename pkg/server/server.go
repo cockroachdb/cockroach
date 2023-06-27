@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
@@ -860,6 +861,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		KVFlowHandles:                admissionControl.storesFlowControl,
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
+		ExternalStorage:              cloud.NewExternalStorageAccessor(),
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
@@ -2049,6 +2051,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 		nil, /* TenantExternalIORecorder */
 		s.registry,
 	)
+	if err := s.node.storeCfg.ExternalStorage.Init(
+		s.externalStorageBuilder.makeExternalStorage, s.externalStorageBuilder.makeExternalStorageFromURI,
+	); err != nil {
+		return err
+	}
 
 	// If enabled, start reporting diagnostics.
 	if s.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut {
