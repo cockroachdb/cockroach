@@ -477,6 +477,8 @@ message RestoreDetails {
 
   roachpb.Locality execution_locality = 30 [(gogoproto.nullable) = false];
   
+  bool experimental_online = 31;
+
   // NEXT ID: 31.
 }
 
