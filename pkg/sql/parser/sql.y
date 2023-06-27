@@ -3820,7 +3820,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{ExecutionLocality: $4.expr()}
   }
-
+| EXPERIMENTAL DEFERRED COPY
+  {
+    $$.val = &tree.RestoreOptions{ExperimentalOnline: true}
+  }
 
 virtual_cluster_opt:
   TENANT  { /* SKIP DOC */ }
