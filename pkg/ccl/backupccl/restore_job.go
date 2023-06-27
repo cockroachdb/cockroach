@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -3126,6 +3127,8 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	return nil
 }
 
+var onlineRestoreGate = envutil.EnvOrDefaultBool("COCKROACH_UNSAFE_RESTORE", false)
+
 // sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
 // to test out ingesting "remote" SSTs. It will be replaced with a real distsql
 // plan and processors in the future.
@@ -3145,6 +3148,11 @@ func sendAddRemoteSSTs(
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
 	defer close(progCh)
+
+	if !onlineRestoreGate {
+		return errors.AssertionFailedf("experimental restore mode not supported")
+	}
+
 	if encryption != nil {
 		return errors.AssertionFailedf("encryption not supported with online restore")
 	}
@@ -3162,7 +3170,7 @@ func sendAddRemoteSSTs(
 	}
 
 	for i, backup := range backups {
-		remaining := int64(512 << 20)
+		remainingBytesInTargetRange := int64(512 << 20)
 		iter, err := layers[i].NewFileIter(ctx)
 		if err != nil {
 			return err
@@ -3174,18 +3182,23 @@ func sendAddRemoteSSTs(
 
 			file := iter.Value()
 
-			log.Infof(ctx, "Experimetnal restore: sending span %s of file %s from backup %s", file.Span, file.Path, backup.Dir.String())
-			if file.EntryCounts.DataSize > remaining {
-				log.Infof(ctx, "Experimetnal restore: need to split since %d > %d", file.EntryCounts.DataSize, remaining)
-				hour := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
-				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, file.Span.Key, hour); err != nil {
+			log.Infof(ctx, "Experimental restore: sending span %s of file %s from backup %s",
+				file.Span, file.Path, backup.Dir.String(),
+			)
+			if file.EntryCounts.DataSize > remainingBytesInTargetRange {
+				log.Infof(ctx, "Experimental restore: need to split since %d > %d",
+					file.EntryCounts.DataSize, remainingBytesInTargetRange,
+				)
+				expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
+				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, file.Span.Key, expiration); err != nil {
 					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
 				}
 				if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, file.Span.Key, 4<<20); err != nil {
 					log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
 				}
 			}
-			loc := kvpb.AddSSTableRequest_RemoteFile{Location: uris[i], Path: file.Path}
+			loc := kvpb.AddSSTableRequest_RemoteFile{Locator: uris[i], Path: file.Path}
+			// TODO(dt): see if KV has any better ideas for making these up.
 			stats := &enginepb.MVCCStats{
 				ContainsEstimates: 1,
 				KeyBytes:          file.EntryCounts.DataSize / 2,
@@ -3195,7 +3208,7 @@ func sendAddRemoteSSTs(
 				LiveCount:         file.EntryCounts.Rows + file.EntryCounts.IndexEntries,
 			}
 			var err error
-			_, remaining, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx, file.Span, loc, stats)
+			_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx, file.Span, loc, stats)
 			if err != nil {
 				return err
 			}
