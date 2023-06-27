@@ -381,6 +381,12 @@ func (d *buildDeps) IncrementSchemaChangeAlterCounter(counterType string, extra 
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra(counterType, maybeExtra))
 }
 
+// IncrementSchemaChangeCreateCounter implements the scbuild.Dependencies
+// interface.
+func (d *buildDeps) IncrementSchemaChangeCreateCounter(counterType string) {
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter(counterType))
+}
+
 // IncrementSchemaChangeDropCounter implements the scbuild.Dependencies
 // interface.
 func (d *buildDeps) IncrementSchemaChangeDropCounter(counterType string) {

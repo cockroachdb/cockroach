@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -180,6 +181,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 			"cannot create schema without being connected to a database")
 	}
 
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("schema"))
 	sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaCreate)
 	dbName := p.CurrentDatabase()
 	if n.Schema.ExplicitCatalog {
