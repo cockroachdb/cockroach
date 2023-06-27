@@ -99,6 +99,16 @@ func coefficientOfVariation(vals []float64) float64 {
 	return stdev / mean
 }
 
+// arithmeticMean is an average measure where avg = sum / count. This fn is
+// included to return 0 instead of NaN like the stats pkg used underneath.
+func arithmeticMean(vals []float64) float64 {
+	if len(vals) == 0 {
+		return 0
+	}
+	mean, _ := stats.Mean(vals)
+	return mean
+}
+
 func scale(vals []float64, scale float64) []float64 {
 	scaled := make([]float64, len(vals))
 	for i := range vals {
