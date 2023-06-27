@@ -2739,8 +2739,14 @@ func TestHeartbeatDialback(t *testing.T) {
 		case ping := <-pingChan2:
 			log.Infof(ctx, "Received %+v", ping)
 		case <-time.After(1 * time.Second):
-			require.ErrorAs(t, ctx1.ConnHealth(remoteAddr2, 2, DefaultClass), &ErrNoConnection)
-			require.ErrorAs(t, ctx2.ConnHealth(remoteAddr1, 1, SystemClass), &ErrNoConnection)
+			{
+				err1 := ctx1.ConnHealth(remoteAddr2, 2, DefaultClass)
+				require.True(t, errors.HasType(err1, ErrNoConnection), "%+v", err1)
+			}
+			{
+				err2 := ctx2.ConnHealth(remoteAddr1, 1, SystemClass)
+				require.True(t, errors.HasType(err2, ErrNoConnection), "%+v", err2)
+			}
 			return
 		}
 	}
