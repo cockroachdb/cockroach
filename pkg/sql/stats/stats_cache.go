@@ -751,7 +751,7 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 	}
 
 	if forecast {
-		forecasts := ForecastTableStatistics(ctx, statsList)
+		forecasts := ForecastTableStatistics(ctx, &sc.Settings.SV, statsList)
 		statsList = append(statsList, forecasts...)
 		// Some forecasts could have a CreatedAt time before or after some collected
 		// stats, so make sure the list is sorted in descending CreatedAt order.
