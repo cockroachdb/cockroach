@@ -146,6 +146,7 @@ type RestoreOptions struct {
 	VerifyData                       bool
 	UnsafeRestoreIncompatibleVersion bool
 	ExecutionLocality                Expr
+	ExperimentalOnline               bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -499,6 +500,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("execution locality = ")
 		ctx.FormatNode(o.ExecutionLocality)
 	}
+
+	if o.ExperimentalOnline {
+		maybeAddSep()
+		ctx.WriteString("experimental deferred copy")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -645,6 +651,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("execution locality option specified multiple times")
 	}
 
+	if o.ExperimentalOnline {
+		if other.ExperimentalOnline {
+			return errors.New("experimental deferred copy specified multiple times")
+		}
+	} else {
+		o.ExperimentalOnline = other.ExperimentalOnline
+	}
+
 	return nil
 }
 
@@ -670,7 +684,8 @@ func (o RestoreOptions) IsDefault() bool {
 		o.VerifyData == options.VerifyData &&
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
 		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
-		o.ExecutionLocality == options.ExecutionLocality
+		o.ExecutionLocality == options.ExecutionLocality &&
+		o.ExperimentalOnline == options.ExperimentalOnline
 }
 
 // BackupTargetList represents a list of targets.
