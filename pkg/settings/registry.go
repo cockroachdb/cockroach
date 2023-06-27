@@ -171,6 +171,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.auth.createrole_allows_grant_role_membership.enabled": {},
 	"changefeed.replan_flow_frequency":                         {},
 	"changefeed.replan_flow_threshold":                         {},
+	"jobs.trace.force_dump_mode":                               {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

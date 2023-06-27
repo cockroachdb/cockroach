@@ -531,6 +531,11 @@ func (r *restoreResumer) ForceRealSpan() bool {
 	return true
 }
 
+// DumpTraceAfterRun implements the TraceableJob interface.
+func (r *restoreResumer) DumpTraceAfterRun() bool {
+	return true
+}
+
 // remapAndFilterRelevantStatistics changes the table ID references in
 // the stats from those they had in the backed up database to what
 // they should be in the restored database.
