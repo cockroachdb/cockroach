@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -52,7 +53,16 @@ type fakeExecResumer struct {
 	FailOrCancel func(context.Context) error
 }
 
+func (d fakeExecResumer) ForceRealSpan() bool {
+	return true
+}
+
+func (d fakeExecResumer) DumpTraceAfterRun() bool {
+	return true
+}
+
 var _ jobs.Resumer = fakeExecResumer{}
+var _ jobs.TraceableJob = fakeExecResumer{}
 
 func (d fakeExecResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if d.OnResume != nil {
@@ -258,9 +268,10 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		files := listExecutionDetails(t, s, jobspb.JobID(importJobID))
-		require.Len(t, files, 2)
+		require.Len(t, files, 3)
 		require.Regexp(t, "distsql\\..*\\.html", files[0])
 		require.Regexp(t, "goroutines\\..*\\.txt", files[1])
+		require.Regexp(t, "resumer-trace-n[0-9]\\..*\\.txt", files[2])
 
 		// Resume the job, so it can write another DistSQL diagram and goroutine
 		// snapshot.
@@ -270,11 +281,13 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
-		require.Len(t, files, 4)
+		require.Len(t, files, 6)
 		require.Regexp(t, "distsql\\..*\\.html", files[0])
 		require.Regexp(t, "distsql\\..*\\.html", files[1])
 		require.Regexp(t, "goroutines\\..*\\.txt", files[2])
 		require.Regexp(t, "goroutines\\..*\\.txt", files[3])
+		require.Regexp(t, "resumer-trace-n[0-9]\\..*\\.txt", files[4])
+		require.Regexp(t, "resumer-trace-n[0-9]\\..*\\.txt", files[5])
 	})
 }
 

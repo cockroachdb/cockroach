@@ -734,8 +734,10 @@ func (c *cutoverProgressTracker) onCompletedCallback(
 	return nil
 }
 
-func (s *streamIngestionResumer) ForceRealSpan() bool { return true }
+func (s *streamIngestionResumer) ForceRealSpan() bool     { return true }
+func (s *streamIngestionResumer) DumpTraceAfterRun() bool { return true }
 
+var _ jobs.TraceableJob = &streamIngestionResumer{}
 var _ jobs.Resumer = &streamIngestionResumer{}
 
 func init() {

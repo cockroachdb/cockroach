@@ -45,6 +45,10 @@ func (r *traceSpanResumer) ForceRealSpan() bool {
 	return true
 }
 
+func (r *traceSpanResumer) DumpTraceAfterRun() bool {
+	return true
+}
+
 type traceSpanResumer struct {
 	ctx               context.Context
 	recordedSpanCh    chan struct{}

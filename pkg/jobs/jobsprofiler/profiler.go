@@ -48,7 +48,10 @@ func StorePlanDiagram(
 			infoStorage := jobs.InfoStorageForJob(txn, jobID)
 			return infoStorage.Write(ctx, dspKey, []byte(diagURL.String()))
 		})
-		if err != nil {
+		// Don't log the error if the context has been canceled. This will likely be
+		// when the node is shutting down and so it doesn't add value to spam the
+		// logs with the error.
+		if err != nil && ctx.Err() == nil {
 			log.Warningf(ctx, "failed to generate and write DistSQL diagram for job %d: %v",
 				jobID, err.Error())
 		}

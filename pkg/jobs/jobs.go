@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -42,34 +41,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/jsonpb"
-)
-
-// jobDumpTraceMode is the type that represents the mode in which a traceable
-// job will dump a trace zip.
-type jobDumpTraceMode int64
-
-const (
-	// A Traceable job will not dump a trace zip.
-	noDump jobDumpTraceMode = iota
-	// A Traceable job will dump a trace zip on failure.
-	dumpOnFail
-	// A Traceable job will dump a trace zip in any of paused, canceled, failed,
-	// succeeded states.
-	dumpOnStop
-)
-
-var traceableJobDumpTraceMode = settings.RegisterEnumSetting(
-	settings.TenantWritable,
-	"jobs.trace.force_dump_mode",
-	"determines the state in which all traceable jobs will dump their cluster wide, inflight, "+
-		"trace recordings. Traces may be dumped never, on fail, "+
-		"or on any status change i.e paused, canceled, failed, succeeded.",
-	"never",
-	map[int64]string{
-		int64(noDump):     "never",
-		int64(dumpOnFail): "onFail",
-		int64(dumpOnStop): "onStop",
-	},
 )
 
 // Job manages logging the progress of long-running system processes, like
@@ -159,6 +130,9 @@ type TraceableJob interface {
 	// ForceRealSpan forces the registry to create a real Span instead of a
 	// low-overhead non-recordable noop span.
 	ForceRealSpan() bool
+	// DumpTraceAfterRun determines whether the job's trace is dumped to disk at
+	// the end of every adoption.
+	DumpTraceAfterRun() bool
 }
 
 func init() {
