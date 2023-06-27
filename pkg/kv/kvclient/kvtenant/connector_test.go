@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -70,14 +71,32 @@ func (m *mockServer) TenantSettings(
 	req *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
 ) error {
 	if m.tenantSettingsFn == nil {
+		// First message - required by startup protocol.
 		if err := stream.Send(&kvpb.TenantSettingsEvent{
+			EventType:   kvpb.TenantSettingsEvent_SETTING_EVENT,
 			Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
 			Incremental: false,
 			Overrides:   nil,
 		}); err != nil {
 			return err
 		}
+		// Initial tenant metadata.
+		if err := stream.Send(&kvpb.TenantSettingsEvent{
+			EventType: kvpb.TenantSettingsEvent_METADATA_EVENT,
+			Name:      "foo",
+			// TODO(knz): remove cast after the dep cycle has been resolved.
+			DataState:   uint32(mtinfopb.DataStateReady),
+			ServiceMode: uint32(mtinfopb.ServiceModeExternal),
+
+			// Make the event look like a fake no-op setting event.
+			Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
+			Incremental: true,
+		}); err != nil {
+			return err
+		}
+		// Finish startup.
 		return stream.Send(&kvpb.TenantSettingsEvent{
+			EventType:   kvpb.TenantSettingsEvent_SETTING_EVENT,
 			Precedence:  kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES,
 			Incremental: false,
 			Overrides:   nil,
