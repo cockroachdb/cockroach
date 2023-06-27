@@ -89,6 +89,7 @@ func getCombinedStatementStats(
 	var err error
 
 	if req.FetchMode == nil || req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
+
 		transactions, err = collectCombinedTransactions(ctx, ie, whereClause, args, orderAndLimit, testingKnobs)
 		if err != nil {
 			return nil, serverError(ctx, err)
@@ -98,7 +99,7 @@ func getCombinedStatementStats(
 	if req.FetchMode != nil && req.FetchMode.StatsType == serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
 		// If we're fetching for txns, the client still expects statement stats for
 		// stmts in the txns response.
-		statements, err = collectStmtsForTxns(ctx, ie, req, transactions, testingKnobs)
+		statements, err = collectStmtsForTxns(ctx, ie, req, transactions, testingKnobs, settings)
 	} else {
 		statements, err = collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit, settings, testingKnobs)
 	}
@@ -151,7 +152,7 @@ func getTotalRuntimeSecs(
 
 	whereClause := buffer.String()
 
-	queryWithPlaceholders := `
+	const queryWithPlaceholders = `
 SELECT
 COALESCE(
   sum(
@@ -159,17 +160,17 @@ COALESCE(
     (statistics-> 'statistics' ->> 'cnt')::FLOAT
   )
 , 0)
-FROM crdb_internal.%s_statistics%s
+FROM %s
 %s
 `
 
-	getRuntime := func(table string) (float32, error) {
+	getRuntime := func(persistedTable, inMemoryTable string) (float32, error) {
 		it, err := ie.QueryIteratorEx(
 			ctx,
-			fmt.Sprintf(`%s-total-runtime`, table),
+			fmt.Sprintf(`%s-total-runtime`, persistedTable),
 			nil,
 			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(queryWithPlaceholders, table, `_persisted`, whereClause),
+			fmt.Sprintf(queryWithPlaceholders, persistedTable, whereClause),
 			args...)
 
 		defer func() {
@@ -201,10 +202,10 @@ FROM crdb_internal.%s_statistics%s
 			}
 			it, err = ie.QueryIteratorEx(
 				ctx,
-				fmt.Sprintf(`%s-total-runtime-with-memory`, table),
+				fmt.Sprintf(`%s-total-runtime-with-memory`, inMemoryTable),
 				nil,
 				sessiondata.NodeUserSessionDataOverride,
-				fmt.Sprintf(queryWithPlaceholders, table, ``, whereClause),
+				fmt.Sprintf(queryWithPlaceholders, inMemoryTable, whereClause),
 				args...)
 
 			if err != nil {
@@ -228,14 +229,16 @@ FROM crdb_internal.%s_statistics%s
 	}
 
 	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_TxnStatsOnly {
-		stmtsRuntime, err = getRuntime("statement")
+		stmtsRuntime, err = getRuntime(
+			"crdb_internal.stmt_stats_persisted_v22_1", "crdb_internal.statement_statistics_v22_1")
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
 	if req.FetchMode == nil || req.FetchMode.StatsType != serverpb.CombinedStatementsStatsRequest_StmtStatsOnly {
-		txnsRuntime, err = getRuntime("transaction")
+		txnsRuntime, err = getRuntime(
+			"crdb_internal.transaction_statistics_persisted", "crdb_internal.transaction_statistics")
 		if err != nil {
 			return 0, 0, err
 		}
@@ -403,10 +406,6 @@ func collectCombinedStatements(
 	settings *cluster.Settings,
 	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
-	table := "crdb_internal.statement_statistics_persisted"
-	if !settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations) {
-		table = "crdb_internal.statement_statistics_v22_1"
-	}
 
 	aostClause := testingKnobs.GetAOSTClause()
 	const expectedNumDatums = 6
@@ -428,7 +427,7 @@ GROUP BY
 
 	query := fmt.Sprintf(
 		queryFormat,
-		table,
+		"crdb_internal.stmt_stats_persisted_v22_1",
 		whereClause,
 		aostClause,
 		orderAndLimit)
@@ -452,7 +451,7 @@ GROUP BY
 
 		query = fmt.Sprintf(
 			queryFormat,
-			`crdb_internal.statement_statistics`,
+			`crdb_internal.statement_statistics_v22_1`,
 			whereClause,
 			aostClause,
 			orderAndLimit)
@@ -648,11 +647,12 @@ func collectStmtsForTxns(
 	req *serverpb.CombinedStatementsStatsRequest,
 	transactions []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics,
 	testingKnobs *sqlstats.TestingKnobs,
+	settings *cluster.Settings,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 
 	whereClause, args := buildWhereClauseForStmtsByTxn(req, transactions, testingKnobs)
 
-	queryFormat := `
+	const queryFormat = `
 SELECT
     fingerprint_id,
     transaction_fingerprint_id,
@@ -668,24 +668,29 @@ GROUP BY
 
 	const expectedNumDatums = 5
 
-	query := fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics_persisted", whereClause)
+	withIndexRecs := settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations)
 
-	it, err := ie.QueryIteratorEx(ctx, "stmts-for-txn", nil,
-		sessiondata.NodeUserSessionDataOverride, query, args...)
+	var it sqlutil.InternalRows
+	var err error
+	if withIndexRecs {
+		it, err = ie.QueryIteratorEx(ctx, "stmts-for-txn", nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(queryFormat, "crdb_internal.stmt_stats_persisted_v22_1", whereClause), args...)
 
-	if err != nil {
-		return nil, serverError(ctx, err)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
 	}
 
-	// If there are no results from the persisted table, retrieve the data from the combined view
-	// with data in-memory.
-	if !it.HasResults() {
+	// If there are no results from the persisted table or we need to use the v22_1 table, retrieve
+	// the data from the combined view with data in-memory. It doesn't matter that we only use the 22_1
+	// table here because we don't need index recs for the query.
+	if !withIndexRecs || !it.HasResults() {
 		err = closeIterator(it, err)
 
-		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics`, whereClause)
-
 		it, err = ie.QueryIteratorEx(ctx, "stmts-for-txn-with-memory", nil,
-			sessiondata.NodeUserSessionDataOverride, query, args...)
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics_v22_1`, whereClause), args...)
 
 		if err != nil {
 			return nil, serverError(ctx, err)
@@ -788,25 +793,19 @@ func getStatementDetails(
 		return nil, serverError(ctx, err)
 	}
 
-	withIndexRecs := settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations)
-	stmtsTable := "crdb_internal.statement_statistics_persisted"
-
-	if !withIndexRecs {
-		stmtsTable = "crdb_internal.statement_statistics_v22_1"
-	}
-
 	// (xinhaoz) I don't think this propagation of the table name is ideal, but
 	// since this is only for the 22.2 release branch it's not really worth the
 	// effort to refactor these calls.
-	statementTotal, err := getTotalStatementDetails(ctx, ie, whereClause, args, stmtsTable)
+	statementTotal, err := getTotalStatementDetails(ctx, ie, whereClause, args)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 	statementStatisticsPerAggregatedTs, err :=
-		getStatementDetailsPerAggregatedTs(ctx, ie, whereClause, args, limit, stmtsTable)
+		getStatementDetailsPerAggregatedTs(ctx, ie, whereClause, args, limit)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
+	withIndexRecs := settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations)
 	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit, withIndexRecs)
 	if err != nil {
 		return nil, serverError(ctx, err)
@@ -907,11 +906,7 @@ func getStatementDetailsQueryClausesAndArgs(
 
 // getTotalStatementDetails return all the statistics for the selected statement combined.
 func getTotalStatementDetails(
-	ctx context.Context,
-	ie *sql.InternalExecutor,
-	whereClause string,
-	args []interface{},
-	table string,
+	ctx context.Context, ie *sql.InternalExecutor, whereClause string, args []interface{},
 ) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
 	const expectedNumDatums = 4
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
@@ -924,7 +919,8 @@ func getTotalStatementDetails(
 		GROUP BY
 				fingerprint_id
 		LIMIT 1`
-	query := fmt.Sprintf(queryFormat, table, whereClause)
+
+	query := fmt.Sprintf(queryFormat, "crdb_internal.stmt_stats_persisted_v22_1", whereClause)
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
 		sessiondata.NodeUserSessionDataOverride, query, args...)
@@ -936,7 +932,7 @@ func getTotalStatementDetails(
 	// If there are no results from the persisted table, retrieve the data from the combined view
 	// with data in-memory.
 	if row.Len() == 0 {
-		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics`, whereClause)
+		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics_v22_1`, whereClause)
 		row, err = ie.QueryRowEx(ctx, "combined-stmts-details-total-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if err != nil {
@@ -993,7 +989,6 @@ func getStatementDetailsPerAggregatedTs(
 	whereClause string,
 	args []interface{},
 	limit int64,
-	table string,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByAggregatedTs, error) {
 	const expectedNumDatums = 3
 	queryFormat := `SELECT
@@ -1005,8 +1000,9 @@ func getStatementDetailsPerAggregatedTs(
 				aggregated_ts
 		ORDER BY aggregated_ts ASC
 		LIMIT $%d`
-	query := fmt.Sprintf(queryFormat, table, whereClause, len(args)+1)
+
 	args = append(args, limit)
+	query := fmt.Sprintf(queryFormat, "crdb_internal.stmt_stats_persisted_v22_1", whereClause, len(args))
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp", nil,
 		sessiondata.InternalExecutorOverride{
@@ -1025,7 +1021,7 @@ func getStatementDetailsPerAggregatedTs(
 	// with data in-memory.
 	if !it.HasResults() {
 		err = closeIterator(it, err)
-		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics`, whereClause, len(args))
+		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics_v22_1`, whereClause, len(args))
 		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-aggregated-timestamp-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if err != nil {
@@ -1124,18 +1120,7 @@ func getStatementDetailsPerPlanHash(
 	withIndexRecs bool,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash, error) {
 	expectedNumDatums := 4
-	table := `crdb_internal.statement_statistics_v22_1`
-	queryFormat := `SELECT
-				plan_hash,
-				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
-				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
-				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
-		FROM %s %s
-		GROUP BY
-				plan_hash,
-				plan_gist
-		LIMIT $%d`
-
+	var queryFormat, table string
 	if withIndexRecs {
 		expectedNumDatums = 5
 		table = `crdb_internal.statement_statistics_persisted`
@@ -1151,6 +1136,19 @@ func getStatementDetailsPerPlanHash(
 				plan_gist,
 				index_recommendations
 		LIMIT $%d`
+	} else {
+		table = `crdb_internal.stmt_stats_persisted_v22_1`
+		queryFormat = `SELECT
+				plan_hash,
+				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
+				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
+				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics
+		FROM %s %s
+		GROUP BY
+				plan_hash,
+				plan_gist
+		LIMIT $%d`
+
 	}
 	query := fmt.Sprintf(queryFormat, table, whereClause, len(args)+1)
 	args = append(args, limit)
@@ -1172,7 +1170,12 @@ func getStatementDetailsPerPlanHash(
 	// with data in-memory.
 	if !it.HasResults() {
 		err = closeIterator(it, err)
-		query = fmt.Sprintf(queryFormat, `crdb_internal.statement_statistics`, whereClause, len(args))
+		if withIndexRecs {
+			table = "crdb_internal.statement_statistics"
+		} else {
+			table = "crdb_internal.statement_statistics_v22_1"
+		}
+		query = fmt.Sprintf(queryFormat, table, whereClause, len(args))
 		it, err = ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash-with-memory", nil,
 			sessiondata.NodeUserSessionDataOverride, query, args...)
 		if err != nil {
