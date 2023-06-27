@@ -459,30 +459,51 @@ func (s *PersistedSQLStats) updateStatementStats(
 	serializedPlanHash []byte,
 	stats *roachpb.CollectedStatementStatistics,
 ) error {
-	updateStmt := `
-UPDATE system.statement_statistics
-SET statistics = $1,
-index_recommendations = $2
-WHERE fingerprint_id = $3
-  AND transaction_fingerprint_id = $4
-	AND aggregated_ts = $5
-  AND app_name = $6
-  AND plan_hash = $7
-  AND node_id = $8
-`
 	statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&stats.Stats)
 	if err != nil {
 		return err
 	}
 	statistics := tree.NewDJSON(statisticsJSON)
-	indexRecommendations := tree.NewDArray(types.String)
-	for _, recommendation := range stats.Stats.IndexRecommendations {
-		if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
-			return err
-		}
-	}
 
 	nodeID := s.GetEnabledSQLInstanceID()
+
+	args := []interface{}{
+		statistics,                         // statistics
+		serializedFingerprintID,            // fingerprint_id
+		serializedTransactionFingerprintID, // transaction_fingerprint_id
+		aggregatedTs,                       // aggregated_ts
+		stats.Key.App,                      // app_name
+		serializedPlanHash,                 // plan_hash
+		nodeID,                             // node_id
+	}
+
+	updateStmt := `
+UPDATE system.statement_statistics
+SET statistics = $1
+`
+
+	if s.cfg.Settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations) {
+		// Add index recs.
+		indexRecommendations := tree.NewDArray(types.String)
+		for _, recommendation := range stats.Stats.IndexRecommendations {
+			if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+				return err
+			}
+		}
+		args = append(args, indexRecommendations)
+
+		updateStmt += `, index_recommendations = $8`
+	}
+
+	updateStmt += `
+WHERE fingerprint_id = $2
+  AND transaction_fingerprint_id = $3
+	AND aggregated_ts = $4
+  AND app_name = $5
+  AND plan_hash = $6
+  AND node_id = $7
+`
+
 	rowsAffected, err := s.cfg.InternalExecutor.ExecEx(
 		ctx,
 		"update-stmt-stats",
@@ -490,16 +511,7 @@ WHERE fingerprint_id = $3
 		sessiondata.InternalExecutorOverride{
 			User: username.NodeUserName(),
 		},
-		updateStmt,
-		statistics,                         // statistics
-		indexRecommendations,               // index_recommendations
-		serializedFingerprintID,            // fingerprint_id
-		serializedTransactionFingerprintID, // transaction_fingerprint_id
-		aggregatedTs,                       // aggregated_ts
-		stats.Key.App,                      // app_name
-		serializedPlanHash,                 // plan_hash
-		nodeID,                             // node_id
-	)
+		updateStmt, args...)
 
 	if err != nil {
 		return err
