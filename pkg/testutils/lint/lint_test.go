@@ -2306,6 +2306,8 @@ func TestLint(t *testing.T) {
 			// pooling, etc, then test code needs to adhere as well.
 			stream.GrepNot(nakedGoroutineExceptions + `:.*Use of go keyword not allowed`),
 			stream.GrepNot(nakedGoroutineExceptions + `:.*Illegal call to Group\.Go\(\)`),
+			// We purposefully dereference nil in this file to test panic handling
+			stream.GrepNot(`pkg/cmd/roachtest/roachtestutil/mixedversion/runner_test\.go:.*nil dereference`),
 		}
 
 		const vetTool = "roachvet"
