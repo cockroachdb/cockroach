@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -27,16 +28,16 @@ import (
 
 type replicateQueue struct {
 	baseQueue
-	planner plan.ReplicationPlanner
-	clock   *hlc.Clock
-	delay   func(rangeSize int64, add bool) time.Duration
+	planner  plan.ReplicationPlanner
+	clock    *hlc.Clock
+	settings *config.SimulationSettings
 }
 
 // NewReplicateQueue returns a new replicate queue.
 func NewReplicateQueue(
 	storeID state.StoreID,
 	stateChanger state.Changer,
-	delay func(rangeSize int64, add bool) time.Duration,
+	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
@@ -49,7 +50,7 @@ func NewReplicateQueue(
 			stateChanger:   stateChanger,
 			next:           start,
 		},
-		delay: delay,
+		settings: settings,
 		planner: plan.NewReplicaPlanner(
 			allocator, storePool, plan.ReplicaPlannerTestingKnobs{}),
 		clock: storePool.Clock(),
@@ -164,7 +165,7 @@ func (rq *replicateQueue) applyChange(
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
 			TransferTarget: state.StoreID(op.Target),
 			Author:         rq.storeID,
-			Wait:           rq.delay(0, false),
+			Wait:           rq.settings.ReplicaChangeDelayFn()(0, false),
 		}
 	case plan.AllocationChangeReplicasOp:
 		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", rng, op.Details)
@@ -172,7 +173,7 @@ func (rq *replicateQueue) applyChange(
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
 			Author:  rq.storeID,
-			Wait:    rq.delay(rng.Size(), true),
+			Wait:    rq.settings.ReplicaChangeDelayFn()(rng.Size(), true),
 		}
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to apply replicate queue change", op))
