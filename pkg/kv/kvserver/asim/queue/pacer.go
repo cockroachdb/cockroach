@@ -13,6 +13,7 @@ package queue
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 )
 
@@ -28,32 +29,25 @@ type ReplicaPacer interface {
 type ReplicaScanner struct {
 	// TOOD(kvoli): make this a function which returns the store's current
 	// replicas in state.
-	nextReplsFn        func() []state.Replica
-	repls              []state.Replica
-	start              time.Time
-	lastLoop           time.Time
-	targetLoopInterval time.Duration
-	minIterInvterval   time.Duration
-	maxIterInvterval   time.Duration
-	iterInterval       time.Duration
-	visited            int
-
-	shuffler func(n int, swap func(i, j int))
+	nextReplsFn  func() []state.Replica
+	repls        []state.Replica
+	settings     *config.SimulationSettings
+	start        time.Time
+	lastLoop     time.Time
+	iterInterval time.Duration
+	visited      int
+	shuffler     func(n int, swap func(i, j int))
 }
 
 // NewScannerReplicaPacer returns a scanner replica pacer.
 func NewScannerReplicaPacer(
-	nextReplsFn func() []state.Replica,
-	targetLoopInterval, minIterInterval, maxIterInterval time.Duration,
-	seed int64,
+	nextReplsFn func() []state.Replica, settings *config.SimulationSettings,
 ) *ReplicaScanner {
 	return &ReplicaScanner{
-		nextReplsFn:        nextReplsFn,
-		repls:              make([]state.Replica, 0, 1),
-		targetLoopInterval: targetLoopInterval,
-		minIterInvterval:   minIterInterval,
-		maxIterInvterval:   maxIterInterval,
-		shuffler:           state.NewShuffler(seed),
+		nextReplsFn: nextReplsFn,
+		repls:       make([]state.Replica, 0, 1),
+		settings:    settings,
+		shuffler:    state.NewShuffler(settings.Seed),
 	}
 }
 
@@ -90,15 +84,15 @@ func (rp *ReplicaScanner) resetPacerLoop(tick time.Time) {
 		return
 	}
 
-	iterInterval := time.Duration(rp.targetLoopInterval.Nanoseconds() / int64(len(rp.repls)))
+	iterInterval := time.Duration(rp.settings.PacerLoopInterval.Nanoseconds() / int64(len(rp.repls)))
 
 	// Adjust minimum and maximum times according to the min/max interval
 	// allowed.
-	if iterInterval < rp.minIterInvterval {
-		iterInterval = rp.minIterInvterval
+	if iterInterval < rp.settings.PacerMinIterInterval {
+		iterInterval = rp.settings.PacerMinIterInterval
 	}
-	if iterInterval > rp.maxIterInvterval {
-		iterInterval = rp.maxIterInvterval
+	if iterInterval > rp.settings.PacerMaxIterIterval {
+		iterInterval = rp.settings.PacerMaxIterIterval
 	}
 
 	// Set the start time on first loop, otherwise roll it over from the
