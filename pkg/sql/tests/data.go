@@ -19,6 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,6 +30,43 @@ func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 	t.Helper()
 	if err := CheckKeyCountE(t, kvDB, span, numKeys); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// CheckKeyCountIncludingTombstoned checks that the number of keys (including
+// those whose tombstones are marked but not GC'ed yet) in the provided span
+// matches the expected number.
+func CheckKeyCountIncludingTombstoned(
+	t *testing.T, s serverutils.TestServerInterface, tableSpan roachpb.Span, expectedNum int,
+) {
+	// Check key count including tombstoned ones.
+	engines := s.Engines()
+	if len(engines) != 1 {
+		t.Fatalf("expecting 1 engine from the test server, but found %d", len(engines))
+	}
+
+	keyCount := 0
+	it := engines[0].NewMVCCIterator(
+		storage.MVCCKeyIterKind,
+		storage.IterOptions{
+			LowerBound: tableSpan.Key,
+			UpperBound: tableSpan.EndKey,
+		},
+	)
+
+	for it.SeekGE(storage.MVCCKey{Key: tableSpan.Key}); ; it.NextKey() {
+		ok, err := it.Valid()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			break
+		}
+		keyCount++
+	}
+	it.Close()
+	if keyCount != expectedNum {
+		t.Fatalf("expecting %d keys, but found %d", expectedNum, keyCount)
 	}
 }
 
