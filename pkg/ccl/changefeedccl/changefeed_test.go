@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"math"
 	"math/rand"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -5536,6 +5538,24 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
 		`kafka://nope`)
+
+	// Validate exactly_once options
+	sqlDB.ExpectErr( // Require initial_scan=only
+		t, `exactly_once requires initial_scan='only'`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH exactly_once`,
+	)
+	sqlDB.ExpectErr( // only cloud storage sinks supported
+		t, `exactly once export unsupported for kafka sink`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH initial_scan_only, exactly_once`,
+	)
+	sqlDB.ExpectErr( // same as above, but use webhook and try initial_scan='only'
+		t, `exactly once export unsupported for webhook-https sink`,
+		`CREATE CHANGEFEED FOR foo INTO 'webhook-https://nope/' WITH initial_scan='only', exactly_once`,
+	)
+	sqlDB.ExpectErr( // Try core style changefeed
+		t, ` exactly_once is incompatible with core changefeed and requires storage sink to be specified`,
+		`CREATE CHANGEFEED FOR foo WITH initial_scan='only', exactly_once`,
+	)
 }
 
 func TestChangefeedDescription(t *testing.T) {
@@ -6149,9 +6169,9 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 						// checkpoints are behind, changefeed can handle rolling restarts by
 						// utilizing the most up-to-date checkpoint information transmitted by
 						// the aggregators to the change frontier processor.
-						ShouldCheckpointToJobRecord: func(hw hlc.Timestamp) bool {
+						ShouldCheckpointToJobRecord: func(hw hlc.Timestamp) (bool, error) {
 							checkpointHW.Store(hw)
-							return false
+							return false, nil
 						},
 
 						OnDrain: func() <-chan struct{} {
@@ -7421,6 +7441,190 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 	// "enterprise" and "webhook" sink implementations are too slow
 	// for a test that reads 5k messages.
 	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestOmitSinks("enterprise", "webhook"))
+}
+
+func TestChangefeedExactlyOnceExport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testTmpDir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	str := strconv.Itoa
+
+	const numNodes = 4
+	const numRows = 1000
+	const splitStep = 50
+
+	args := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{}}
+
+	// We will populate numRows rows, with split point every splitStep rows.
+	// Furthermore, we'll configure changefeed to checkpoint its progress on
+	// every ResolvedSpan event.
+	// We want to trigger a transient error after some number of checkpoint events, and then
+	// we'll verify that we have no duplicates.
+	var numResolvedSpansRemaining atomic.Int32 // NB: must be reset every on every test.
+	const errorAlreadyReturnedSentinel int32 = -42
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{
+			AlwaysCheckpointSpans: true,
+			ShouldCheckpointToJobRecord: func(_ hlc.Timestamp) (bool, error) {
+				if numResolvedSpansRemaining.Load() != errorAlreadyReturnedSentinel && numResolvedSpansRemaining.Add(-1) <= 0 {
+					numResolvedSpansRemaining.Store(errorAlreadyReturnedSentinel)
+					return false, errors.New("trigger error")
+
+				}
+				return false, nil
+			},
+		}},
+	}
+
+	for i := 0; i < numNodes; i++ {
+		args.ServerArgsPerNode[i] = base.TestServerArgs{
+			ExternalIODir: path.Join(testTmpDir, str(i)),
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "x", Value: str(i / 2)}, {Key: "y", Value: str(i % 2)}}},
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant, // need nodelocal and splits.
+			Knobs:             knobs,
+		}
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, numNodes, args)
+	defer tc.Stopper().Stop(ctx)
+	tc.ToggleReplicateQueues(false)
+
+	n2 := sqlutils.MakeSQLRunner(tc.Conns[1])
+
+	// Setup a table with at least one range on each node to be sure we will see a
+	// file from that node if it isn't excluded by filter. Relocate can fail with
+	// errors like `change replicas... descriptor changed` thus the SucceedsSoon.
+	n2.ExecMultiple(t,
+		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
+		"CREATE TABLE x (id INT PRIMARY KEY)",
+	)
+
+	n2.Exec(t, "INSERT INTO x SELECT generate_series(1, $1)", numRows)
+	n2.Exec(t, "ALTER TABLE x SPLIT AT SELECT id FROM x WHERE id % $1 = 0", splitStep)
+	nodes := []int{1, 2, 3, 4}
+	for i := 0; i < numRows; i += splitStep {
+		// Shuffle and pick 3 replicas.
+		rand.Shuffle(len(nodes), func(i, j int) {
+			nodes[i], nodes[j] = nodes[j], nodes[i]
+		})
+		replicas := strings.Join([]string{strconv.Itoa(nodes[0]), strconv.Itoa(nodes[1]), strconv.Itoa(nodes[2])}, ",")
+		// Relocate to replicas.
+		n2.ExecSucceedsSoon(t,
+			fmt.Sprintf(`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[%s], %d)`, replicas, i))
+	}
+
+	localityTest := func(t *testing.T, useCDCQuery bool, testName, filter string, expect []bool) {
+		// Trigger retryable error after observing that many resolved span events.
+		// Allow 0 since to test retry before the first checkpoint.
+		triggerErrorAfter := int32(rand.Intn(10))
+		t.Run(fmt.Sprintf("%s/errAfter=%d", testName, triggerErrorAfter),
+			func(t *testing.T) {
+				numResolvedSpansRemaining.Store(triggerErrorAfter)
+
+				// Write files to a dedicated subdirectory to make sure test instances
+				// do not interfere.
+				uniqTestPath := path.Join(strconv.Itoa(rand.Int()), testName)
+				t.Logf("generating files under %s", uniqTestPath)
+				const fileSize = 64 // Tiny file size to cause lots of flushes.
+				dest := fmt.Sprintf("nodelocal://0/%s?file_size=%d", uniqTestPath, fileSize)
+
+				var id int
+				if useCDCQuery {
+					// CDC query flavor needs few additional options (envelope, key in value) to enable
+					// parsing of the JSON files.
+					n2.QueryRow(t,
+						"CREATE CHANGEFEED INTO $1 WITH initial_scan='only', execution_locality=$2, exactly_once, envelope='wrapped',key_in_value "+
+							"AS SELECT * FROM x WHERE id % 2 = 0", dest, filter).Scan(&id)
+				} else {
+					n2.QueryRow(t,
+						"CREATE CHANGEFEED FOR x INTO $1 WITH initial_scan='only', execution_locality=$2, exactly_once",
+						dest, filter).Scan(&id)
+				}
+				jobID := jobspb.JobID(id)
+				waitForJobStatus(n2, t, jobID, jobs.StatusSucceeded)
+
+				p := jobutils.GetJobPayload(t, n2, jobID)
+				payload := p.GetChangefeed()
+				require.NotNil(t, payload)
+
+				// Now check each testTmpDir against expectation.
+				filesSomewhere := false
+				for nodeID := range expect {
+					where := path.Join(testTmpDir, str(nodeID), uniqTestPath)
+					if _, err := os.Stat(where); err != nil {
+						// Not all directories expected to exist due to locality settings.
+						require.True(t, os.IsNotExist(err))
+						continue
+					}
+					x, err := os.ReadDir(where)
+					filesHere := err == nil && len(x) > 0
+					if !expect[nodeID] {
+						require.False(t, filesHere, where)
+					}
+					filesSomewhere = filesSomewhere || filesHere
+				}
+				require.True(t, filesSomewhere)
+
+				// Walk testName directory on all nodes, and collect all message IDs.
+				allMessages := make(map[string][]string)
+
+				for nodeID := range expect {
+					where := path.Join(testTmpDir, str(nodeID), uniqTestPath)
+					if _, err := os.Stat(where); err != nil {
+						// Not all directories expected to exist due to locality settings.
+						require.True(t, os.IsNotExist(err))
+						continue
+					}
+
+					require.NoError(t,
+						filepath.WalkDir(where, func(p string, d fs.DirEntry, err error) error {
+							if err != nil {
+								return err
+							}
+							if d.IsDir() {
+								return nil
+							}
+							messages, err := readJSONMessages(p, "x", changefeedbase.OptFormatJSON, false, nil)
+							if err != nil {
+								return err
+							}
+							for _, m := range messages {
+								require.True(t, len(m.Key) > 0)
+								allMessages[string(m.Key)] = append(allMessages[string(m.Key)], p)
+							}
+							return nil
+						}))
+				}
+
+				expectedRows := numRows
+				if useCDCQuery {
+					expectedRows /= 2 // We emitted every other row with cdc query.
+				}
+				require.Equal(t, expectedRows, len(allMessages),
+					"duplicate messages: \n%s",
+					strings.Join(func() (dups []string) {
+						for k, v := range allMessages {
+							if len(v) > 1 {
+								dups = append(dups, fmt.Sprintf("%s: %s", k, v))
+							}
+						}
+						return dups
+					}(), "\n"),
+				)
+			})
+
+	}
+
+	testutils.RunTrueAndFalse(t, "useCDCQuery", func(t *testing.T, useCDCQuery bool) {
+		localityTest(t, useCDCQuery, "all", "", []bool{true, true, true, true})
+		localityTest(t, useCDCQuery, "x", "x=0", []bool{true, true, false, false})
+		localityTest(t, useCDCQuery, "y", "y=1", []bool{false, true, false, true})
+	})
 }
 
 func TestChangefeedOnlyInitialScanCSV(t *testing.T) {

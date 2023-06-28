@@ -73,7 +73,11 @@ type TestingKnobs struct {
 
 	// ShouldCheckpointToJobRecord returns true if change frontier should checkpoint itself
 	// to the job record.
-	ShouldCheckpointToJobRecord func(hw hlc.Timestamp) bool
+	ShouldCheckpointToJobRecord func(hw hlc.Timestamp) (bool, error)
+
+	// AlwaysCheckpointSpans forces span level checkpoint to be written for
+	// every resolved span.
+	AlwaysCheckpointSpans bool
 
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}

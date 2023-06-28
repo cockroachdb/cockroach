@@ -60,6 +60,10 @@ message ChangeAggregatorSpec {
 
   // select is the "select clause" for predicate changefeed.
   optional Expression select = 6 [(gogoproto.nullable) = false];
+
+  // Partition number identifies this aggregator static partition number.
+  optional int32 partition = 7 [(gogoproto.nullable) = false];
+  optional int64 flush_generation = 8 [(gogoproto.nullable) = false];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
