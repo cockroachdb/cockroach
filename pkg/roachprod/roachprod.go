@@ -449,9 +449,7 @@ func SQL(
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
-func IP(
-	ctx context.Context, l *logger.Logger, clusterName string, external bool,
-) ([]string, error) {
+func IP(l *logger.Logger, clusterName string, external bool) ([]string, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
 	}
@@ -463,22 +461,18 @@ func IP(
 	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
 
-	if external {
-		for i := 0; i < len(nodes); i++ {
-			ips[i] = c.VMs[nodes[i]-1].PublicIP
-		}
-	} else {
-		var err error
-		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
-			node := nodes[i]
-			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
-			ips[i] = res.Stdout
-			return res, err
-		}, install.DefaultSSHRetryOpts); err != nil {
-			return nil, err
+	for i := 0; i < len(nodes); i++ {
+		node := nodes[i]
+		if external {
+			ips[i] = c.Host(node)
+		} else {
+			ips[i], err = c.GetInternalIP(node)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
+
 	return ips, nil
 }
 
@@ -923,7 +917,7 @@ func PgURL(
 		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
+			res.Stdout, res.Err = c.GetInternalIP(node)
 			ips[i] = res.Stdout
 			return res, err
 		}, install.DefaultSSHRetryOpts); err != nil {

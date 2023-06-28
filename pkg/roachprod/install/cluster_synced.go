@@ -129,8 +129,20 @@ func newRunRetryOpts(
 
 var DefaultSSHRetryOpts = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDetails) bool { return errors.Is(res.Err, rperrors.ErrSSH255) })
 
-// defaultSCPRetry assumes any error is retryable
-var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt, func(res *RunResultDetails) bool { return true })
+// defaultSCPRetry won't retry if the error output contains any of the following
+// substrings, in which cases retries are unlikely to help.
+var noScpRetrySubstrings = []string{"no such file or directory", "permission denied", "connection timed out"}
+var defaultSCPRetry = newRunRetryOpts(defaultRetryOpt,
+	func(res *RunResultDetails) bool {
+		out := strings.ToLower(res.Stderr)
+		for _, s := range noScpRetrySubstrings {
+			if strings.Contains(out, s) {
+				return false
+			}
+		}
+		return true
+	},
+)
 
 // runWithMaybeRetry will run the specified function `f` at least once, or only
 // once if `runRetryOpts` is nil
@@ -219,30 +231,14 @@ func (c *SyncedCluster) TargetNodes() Nodes {
 }
 
 // GetInternalIP returns the internal IP address of the specified node.
-func (c *SyncedCluster) GetInternalIP(
-	l *logger.Logger, ctx context.Context, n Node,
-) (string, error) {
+func (c *SyncedCluster) GetInternalIP(n Node) (string, error) {
 	if c.IsLocal() {
 		return c.Host(n), nil
 	}
 
-	sess := c.newSession(l, n, `hostname --all-ip-addresses`, withDebugName("get-internal-ip"))
-	defer sess.Close()
-
-	var stdout, stderr strings.Builder
-	sess.SetStdout(&stdout)
-	sess.SetStderr(&stderr)
-	if err := sess.Run(ctx); err != nil {
-		return "", errors.Wrapf(err,
-			"GetInternalIP: failed to execute hostname on %s:%d:\n(stdout) %s\n(stderr) %s",
-			c.Name, n, stdout.String(), stderr.String())
-	}
-	ip := strings.TrimSpace(stdout.String())
+	ip := c.VMs[n-1].PrivateIP
 	if ip == "" {
-		return "", errors.Errorf(
-			"empty internal IP returned, stdout:\n%s\nstderr:\n%s",
-			stdout.String(), stderr.String(),
-		)
+		return "", errors.Errorf("no private IP for node %d", n)
 	}
 	return ip, nil
 }
@@ -1020,7 +1016,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 // SetupSSH configures the cluster for use with SSH. This is generally run after
 // the cloud.Cluster has been synced which resets the SSH credentials on the
 // machines and sets them up for the current user. This method enables the
-// hosts to talk to eachother and optionally configures additional keys to be
+// hosts to talk to each other and optionally configures additional keys to be
 // added to the hosts via the c.AuthorizedKeys field. It does so in the following
 // steps:
 //
@@ -1111,38 +1107,18 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		node Node
 		ip   string
 	}
+	// Build a list of internal IPs for each provider and
+	// public IPs for all nodes.
 	providerPrivateIPs := make(map[string][]nodeInfo)
-	// Build a list of internal IPs for each provider.
-	if err := c.Parallel(l, "retrieving hosts", len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
-		node := c.Nodes[i]
-		provider := c.VMs[node-1].Provider
-		res := &RunResultDetails{Node: node}
-		ip := ""
-		for j := 0; j < 20 && ip == ""; j++ {
-			var err error
-			ip, err = c.GetInternalIP(l, ctx, node)
-			if err != nil {
-				res.Err = errors.Wrapf(err, "pgurls")
-				return res, res.Err
-			}
-			time.Sleep(time.Second)
-		}
-		if ip == "" {
-			res.Err = fmt.Errorf("retrieved empty IP address")
-			return res, res.Err
-		}
-		mu.Lock()
-		providerPrivateIPs[provider] = append(providerPrivateIPs[provider], nodeInfo{node: node, ip: ip})
-		mu.Unlock()
-		return res, nil
-	}, DefaultSSHRetryOpts); err != nil {
-		return err
-	}
-
-	// Get public IPs for all nodes.
 	publicIPs := make([]string, 0, len(c.Nodes))
-	for _, i := range c.Nodes {
-		publicIPs = append(publicIPs, c.Host(i))
+	for _, node := range c.Nodes {
+		provider := c.VMs[node-1].Provider
+		ip, err := c.GetInternalIP(node)
+		if err != nil {
+			return err
+		}
+		providerPrivateIPs[provider] = append(providerPrivateIPs[provider], nodeInfo{node: node, ip: ip})
+		publicIPs = append(publicIPs, c.Host(node))
 	}
 
 	providerKnownHostData := make(map[string][]byte)
@@ -1314,7 +1290,7 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 		return nil
 	}
 
-	nodeNames, err := c.createNodeCertArguments(ctx, l)
+	nodeNames, err := c.createNodeCertArguments()
 	if err != nil {
 		return err
 	}
@@ -1394,7 +1370,7 @@ func (c *SyncedCluster) DistributeTenantCerts(
 		return errors.New("host cluster missing certificate bundle")
 	}
 
-	nodeNames, err := c.createNodeCertArguments(ctx, l)
+	nodeNames, err := c.createNodeCertArguments()
 	if err != nil {
 		return err
 	}
@@ -1542,48 +1518,29 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 
 // createNodeCertArguments returns a list of strings appropriate for use as
 // SubjectAlternativeName arguments to the ./cockroach cert create-node command.
-func (c *SyncedCluster) createNodeCertArguments(
-	ctx context.Context, l *logger.Logger,
-) ([]string, error) {
-	// Gather the internal IP addresses for every node in the cluster, even
-	// if it won't be added to the cluster itself we still add the IP address
-	// to the node cert.
-	var ips []string
-	nodes := allNodes(len(c.VMs))
-	if !c.IsLocal() {
-		ips = make([]string, len(nodes))
-		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*RunResultDetails, error) {
-			node := nodes[i]
-			res := &RunResultDetails{Node: node}
-
-			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
-			ips[i] = res.Stdout
-			return res, errors.Wrapf(res.Err, "IPs")
-		}, DefaultSSHRetryOpts); err != nil {
-			return nil, err
-		}
-	}
+func (c *SyncedCluster) createNodeCertArguments() ([]string, error) {
 	nodeNames := []string{"localhost"}
 	if c.IsLocal() {
 		// For local clusters, we only need to add one of the VM IP addresses.
-		nodeNames = append(nodeNames, "$(hostname)", c.VMs[0].PublicIP)
-	} else {
-		// Add both the local and external IP addresses, as well as the
-		// hostnames to the node certificate.
-		nodeNames = append(nodeNames, ips...)
-		for i := range c.VMs {
-			nodeNames = append(nodeNames, c.VMs[i].PublicIP)
+		return append(nodeNames, "$(hostname)", c.VMs[0].PublicIP), nil
+	}
+	// Gather the internal and external IP addresse and hostname for every node in the cluster, even
+	// if it won't be added to the cluster itself we still add the IP address
+	// to the node cert.
+	for _, n := range allNodes(len(c.VMs)) {
+		ip, err := c.GetInternalIP(n)
+		if err != nil {
+			return nil, err
 		}
-		for i := range c.VMs {
-			nodeNames = append(nodeNames, fmt.Sprintf("%s-%04d", c.Name, i+1))
-			// On AWS nodes internally have a DNS name in the form ip-<ip address>
-			// where dots have been replaces with dashes.
-			// See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-dns-hostnames
-			if c.VMs[i].Provider == aws.ProviderName {
-				nodeNames = append(nodeNames, "ip-"+strings.ReplaceAll(ips[i], ".", "-"))
-			}
+		nodeNames = append(nodeNames, ip, c.Host(n), fmt.Sprintf("%s-%04d", c.Name, n))
+		// AWS nodes internally have a DNS name in the form ip-<ip-addresss>
+		// where dots are replaced with dashes.
+		// See https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html#vpc-dns-hostnames
+		if c.VMs[n-1].Provider == aws.ProviderName {
+			nodeNames = append(nodeNames, "ip-"+strings.ReplaceAll(ip, ".", "-"))
 		}
 	}
+
 	return nodeNames, nil
 }
 
@@ -2308,7 +2265,7 @@ func (c *SyncedCluster) pghosts(
 	if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := nodes[i]
 		res := &RunResultDetails{Node: node}
-		res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
+		res.Stdout, res.Err = c.GetInternalIP(node)
 		ips[i] = res.Stdout
 		return res, errors.Wrapf(res.Err, "pghosts")
 	}, DefaultSSHRetryOpts); err != nil {
@@ -2402,6 +2359,7 @@ func scp(l *logger.Logger, src, dest string) (*RunResultDetails, error) {
 	args := []string{
 		"scp", "-r", "-C",
 		"-o", "StrictHostKeyChecking=no",
+		"-o", "ConnectTimeout=10",
 	}
 	args = append(args, sshAuthArgs()...)
 	args = append(args, src, dest)
