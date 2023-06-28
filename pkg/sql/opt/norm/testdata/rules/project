@@ -249,7 +249,7 @@ CREATE TABLE child (
 )
 ----
 
-opt
+norm expect=EliminateJoinUnderProjectLeft
 SELECT
   id,
   (SELECT child.parent_id FROM parent WHERE id = child.parent_id)
@@ -317,6 +317,49 @@ project
       │    └── fd: (7)-->(8,10)
       └── filters
            └── r1:10 = x:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+
+# Regression test for #105687 - don't attempt to remap columns that are
+# synthesized by a subquery.
+norm expect=EliminateJoinUnderProjectRight
+SELECT (
+  SELECT NULL
+  FROM (VALUES (0)) AS t2 (c)
+  JOIN (VALUES (0), (0)) AS t1 (c) ON t2.c = t1.c
+)
+FROM (VALUES (1)), (VALUES (0), (1));
+----
+project
+ ├── columns: "?column?":6
+ ├── cardinality: [2 - 2]
+ ├── values
+ │    ├── cardinality: [2 - 2]
+ │    ├── ()
+ │    └── ()
+ └── projections
+      └── subquery [as="?column?":6, subquery]
+           └── max1-row
+                ├── columns: "?column?":5
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(5)
+                └── project
+                     ├── columns: "?column?":5
+                     ├── cardinality: [0 - 2]
+                     ├── fd: ()-->(5)
+                     ├── select
+                     │    ├── columns: column1:4!null
+                     │    ├── cardinality: [0 - 2]
+                     │    ├── fd: ()-->(4)
+                     │    ├── values
+                     │    │    ├── columns: column1:4!null
+                     │    │    ├── cardinality: [2 - 2]
+                     │    │    ├── (0,)
+                     │    │    └── (0,)
+                     │    └── filters
+                     │         └── column1:4 = 0 [outer=(4), constraints=(/4: [/0 - /0]; tight), fd=()-->(4)]
+                     └── projections
+                          └── NULL [as="?column?":5]
 
 # --------------------------------------------------
 # EliminateProject
