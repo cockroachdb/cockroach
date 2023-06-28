@@ -518,6 +518,23 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"regions",
 		},
 	},
+	"crdb_internal.kv_protected_ts_records": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"id",
+			"ts",
+			"meta_type",
+			"meta",
+			"num_spans",
+			"spans",
+			"verified",
+			"target",
+			"decoded_meta",
+			"decoded_target",
+			// Internal meta may contain sensitive data such as usernames.
+			// "internal_meta",
+			"num_ranges",
+		},
+	},
 	"crdb_internal.table_indexes": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"descriptor_id",

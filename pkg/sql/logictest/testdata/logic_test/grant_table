@@ -77,6 +77,7 @@ test           crdb_internal       kv_inherited_role_members               publi
 test           crdb_internal       kv_node_liveness                        public   SELECT          false
 test           crdb_internal       kv_node_status                          public   SELECT          false
 test           crdb_internal       kv_repairable_catalog_corruptions       public   SELECT          false
+test           crdb_internal       kv_protected_ts_records                 public   SELECT          false
 test           crdb_internal       kv_store_status                         public   SELECT          false
 test           crdb_internal       kv_system_privileges                    public   SELECT          false
 test           crdb_internal       leases                                  public   SELECT          false
