@@ -12,6 +12,7 @@ package funcdesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -111,6 +112,25 @@ func (fdb *functionDescriptorBuilder) RunRestoreChanges(
 	// Upgrade the declarative schema changer state.
 	if scpb.MigrateDescriptorState(version, fdb.maybeModified.DeclarativeSchemaChangerState) {
 		fdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
+	}
+	return nil
+}
+
+// StripDanglingBackReferences implements the catalog.DescriptorBuilder
+// interface.
+func (fdb *functionDescriptorBuilder) StripDanglingBackReferences(
+	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
+) error {
+	sliceIdx := 0
+	for _, backref := range fdb.maybeModified.DependedOnBy {
+		fdb.maybeModified.DependedOnBy[sliceIdx] = backref
+		if descIDMightExist(backref.ID) {
+			sliceIdx++
+		}
+	}
+	if sliceIdx < len(fdb.maybeModified.DependedOnBy) {
+		fdb.maybeModified.DependedOnBy = fdb.maybeModified.DependedOnBy[:sliceIdx]
+		fdb.changes.Add(catalog.StrippedDanglingBackReferences)
 	}
 	return nil
 }
