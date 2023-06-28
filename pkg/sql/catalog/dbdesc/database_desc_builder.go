@@ -174,6 +174,12 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 func (ddb *databaseDescriptorBuilder) StripDanglingBackReferences(
 	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 ) error {
+	for schemaName, schemaInfo := range ddb.maybeModified.Schemas {
+		if !descIDMightExist(schemaInfo.ID) {
+			delete(ddb.maybeModified.Schemas, schemaName)
+			ddb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
 	return nil
 }
 

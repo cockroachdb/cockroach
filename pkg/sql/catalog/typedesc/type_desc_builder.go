@@ -135,6 +135,17 @@ func (tdb *typeDescriptorBuilder) RunRestoreChanges(
 func (tdb *typeDescriptorBuilder) StripDanglingBackReferences(
 	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 ) error {
+	sliceIdx := 0
+	for _, id := range tdb.maybeModified.ReferencingDescriptorIDs {
+		tdb.maybeModified.ReferencingDescriptorIDs[sliceIdx] = id
+		if descIDMightExist(id) {
+			sliceIdx++
+		}
+	}
+	if sliceIdx < len(tdb.maybeModified.ReferencingDescriptorIDs) {
+		tdb.maybeModified.ReferencingDescriptorIDs = tdb.maybeModified.ReferencingDescriptorIDs[:sliceIdx]
+		tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+	}
 	return nil
 }
 

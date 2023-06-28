@@ -134,6 +134,7 @@ func (sdb *schemaDescriptorBuilder) RunRestoreChanges(
 func (sdb *schemaDescriptorBuilder) StripDanglingBackReferences(
 	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 ) error {
+	// There's nothing we can do for schemas here.
 	return nil
 }
 

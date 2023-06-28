@@ -121,6 +121,17 @@ func (fdb *functionDescriptorBuilder) RunRestoreChanges(
 func (fdb *functionDescriptorBuilder) StripDanglingBackReferences(
 	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 ) error {
+	sliceIdx := 0
+	for _, backref := range fdb.maybeModified.DependedOnBy {
+		fdb.maybeModified.DependedOnBy[sliceIdx] = backref
+		if descIDMightExist(backref.ID) {
+			sliceIdx++
+		}
+	}
+	if sliceIdx < len(fdb.maybeModified.DependedOnBy) {
+		fdb.maybeModified.DependedOnBy = fdb.maybeModified.DependedOnBy[:sliceIdx]
+		fdb.changes.Add(catalog.StrippedDanglingBackReferences)
+	}
 	return nil
 }
 

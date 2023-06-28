@@ -190,6 +190,72 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 func (tdb *tableDescriptorBuilder) StripDanglingBackReferences(
 	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 ) error {
+	// Strip dangling back-references in depended_on_by,
+	{
+		sliceIdx := 0
+		for _, backref := range tdb.maybeModified.DependedOnBy {
+			tdb.maybeModified.DependedOnBy[sliceIdx] = backref
+			if descIDMightExist(backref.ID) {
+				sliceIdx++
+			}
+		}
+		if sliceIdx < len(tdb.maybeModified.DependedOnBy) {
+			tdb.maybeModified.DependedOnBy = tdb.maybeModified.DependedOnBy[:sliceIdx]
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
+	// ... in inbound foreign keys,
+	{
+		sliceIdx := 0
+		for _, backref := range tdb.maybeModified.InboundFKs {
+			tdb.maybeModified.InboundFKs[sliceIdx] = backref
+			if descIDMightExist(backref.OriginTableID) {
+				sliceIdx++
+			}
+		}
+		if sliceIdx < len(tdb.maybeModified.InboundFKs) {
+			tdb.maybeModified.InboundFKs = tdb.maybeModified.InboundFKs[:sliceIdx]
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
+	// ... in the replacement_of field,
+	if id := tdb.maybeModified.ReplacementOf.ID; id != descpb.InvalidID && !descIDMightExist(id) {
+		tdb.maybeModified.ReplacementOf.Reset()
+		tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+	}
+	// ... in the drop_job field,
+	if id := tdb.maybeModified.DropJobID; id != jobspb.InvalidJobID && !nonTerminalJobIDMightExist(id) {
+		tdb.maybeModified.DropJobID = jobspb.InvalidJobID
+		tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+	}
+	// ... in the mutation_jobs slice,
+	{
+		sliceIdx := 0
+		for _, backref := range tdb.maybeModified.MutationJobs {
+			tdb.maybeModified.MutationJobs[sliceIdx] = backref
+			if nonTerminalJobIDMightExist(backref.JobID) {
+				sliceIdx++
+			}
+		}
+		if sliceIdx < len(tdb.maybeModified.MutationJobs) {
+			tdb.maybeModified.MutationJobs = tdb.maybeModified.MutationJobs[:sliceIdx]
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
+	// ... in the row_level_ttl field,
+	if ttl := tdb.maybeModified.RowLevelTTL; ttl != nil {
+		if id := jobspb.JobID(ttl.ScheduleID); id != jobspb.InvalidJobID && !nonTerminalJobIDMightExist(id) {
+			tdb.maybeModified.RowLevelTTL = nil
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
+	// ... in the sequence ownership field.
+	if seq := tdb.maybeModified.SequenceOpts; seq != nil {
+		if id := seq.SequenceOwner.OwnerTableID; id != descpb.InvalidID && !descIDMightExist(id) {
+			seq.SequenceOwner.Reset()
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
 	return nil
 }
 
