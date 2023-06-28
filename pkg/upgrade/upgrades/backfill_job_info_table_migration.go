@@ -20,12 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-var jobInfoBackfillBatchSize = envutil.EnvOrDefaultInt("COCKROACH_UPGRADE_JOB_BACKFILL_BATCH", 100)
 
 const (
 	backfillJobInfoSharedPrefix = `WITH inserted AS (
@@ -64,7 +61,7 @@ func backfillJobInfoTable(
 					sessiondata.NodeUserSessionDataOverride,
 					stmt,
 					resumeAfter,
-					jobInfoBackfillBatchSize,
+					upgrade.JobsBackfillBatchSize,
 				)
 
 				if err != nil {

@@ -14,8 +14,25 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// JobsBackfillBatchSize is used to batch writes in backfill migrations being
+// performed on jobs tables. Batching writes across multiple transactions
+// prevents large backfill migrations from failing continuously due to
+// contention.
+var JobsBackfillBatchSize = envutil.EnvOrDefaultInt("COCKROACH_UPGRADE_JOB_BACKFILL_BATCH", 100)
+
+// JobsBackfillBatchSizeTestOverride can be used in tests to change
+// JobsBackfillBatchSize.
+func JobsBackfillBatchSizeTestOverride(value int) func() {
+	prev := JobsBackfillBatchSize
+	JobsBackfillBatchSize = value
+	return func() {
+		JobsBackfillBatchSize = prev
+	}
+}
 
 // FenceVersionFor constructs the appropriate "fence version" for the given
 // cluster version. Fence versions allow the upgrades infrastructure to safely

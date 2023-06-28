@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -93,6 +94,9 @@ func TestCreateAdoptableJobPopulatesJobType(t *testing.T) {
 func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Set a small batch size so the migration uses more than one batch for testing.
+	defer upgrade.JobsBackfillBatchSizeTestOverride(2)()
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
