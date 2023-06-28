@@ -151,7 +151,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 		iter.SeekGE(key)
 
-		if err := batch.ClearUnversioned(key.Key, ClearOptions{}); err != nil {
+		if err := batch.ClearUnversioned(key.Key); err != nil {
 			t.Fatal(err)
 		}
 
@@ -246,7 +246,7 @@ func TestEngineBatch(t *testing.T) {
 
 	apply := func(rw ReadWriter, d data) error {
 		if d.value == nil {
-			return rw.ClearUnversioned(d.key.Key, ClearOptions{})
+			return rw.ClearUnversioned(d.key.Key)
 		} else if d.merge {
 			return rw.Merge(d.key, d.value)
 		}
@@ -277,7 +277,7 @@ func TestEngineBatch(t *testing.T) {
 			currentBatch[k] = batch[shuffledIndices[k]]
 		}
 		// Reset the key
-		if err := engine.ClearUnversioned(key.Key, ClearOptions{}); err != nil {
+		if err := engine.ClearUnversioned(key.Key); err != nil {
 			t.Fatal(err)
 		}
 		// Run it once with individual operations and remember the result.
@@ -291,7 +291,7 @@ func TestEngineBatch(t *testing.T) {
 		// Run the whole thing as a batch and compare.
 		b := engine.NewBatch()
 		defer b.Close()
-		if err := b.ClearUnversioned(key.Key, ClearOptions{}); err != nil {
+		if err := b.ClearUnversioned(key.Key); err != nil {
 			t.Fatal(err)
 		}
 		for _, op := range currentBatch {
@@ -350,9 +350,9 @@ func TestEnginePutGetDelete(t *testing.T) {
 	for i, err := range []error{
 		engine.PutUnversioned(mvccKey("").Key, []byte("")),
 		engine.PutUnversioned(NilKey.Key, []byte("")),
-		engine.ClearUnversioned(NilKey.Key, ClearOptions{}),
-		engine.ClearUnversioned(NilKey.Key, ClearOptions{}),
-		engine.ClearUnversioned(mvccKey("").Key, ClearOptions{}),
+		engine.ClearUnversioned(NilKey.Key),
+		engine.ClearUnversioned(NilKey.Key),
+		engine.ClearUnversioned(mvccKey("").Key),
 	} {
 		if err == nil {
 			t.Fatalf("%d: illegal handling of empty key", i)
@@ -382,10 +382,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 		if !bytes.Equal(val, c.value) {
 			t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
 		}
-		if err := engine.ClearUnversioned(c.key.Key, ClearOptions{
-			ValueSizeKnown: true,
-			ValueSize:      uint32(len(val)),
-		}); err != nil {
+		if err := engine.ClearUnversioned(c.key.Key); err != nil {
 			t.Errorf("delete: expected no error, but got %s", err)
 		}
 		val = mvccGetRaw(t, engine, c.key)

@@ -321,7 +321,7 @@ func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
 	data := make([]byte, raftlog.RaftCommandPrefixLen, needed)
 	raftlog.EncodeRaftCommandPrefix(data, raftlog.EntryEncodingStandardWithoutAC, p.idKey)
 	data = data[:raftlog.RaftCommandPrefixLen+p.command.Size()]
-	if _, err := protoutil.MarshalTo(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
+	if _, err := protoutil.MarshalToSizedBuffer(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
 		panic(err)
 	}
 	return data

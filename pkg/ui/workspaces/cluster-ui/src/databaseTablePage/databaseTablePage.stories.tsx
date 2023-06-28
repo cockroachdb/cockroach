@@ -27,6 +27,9 @@ const withLoadingIndicator: DatabaseTablePageProps = {
   databaseName: randomName(),
   name: randomName(),
   automaticStatsCollectionEnabled: true,
+  schemaName: randomName(),
+  indexUsageStatsEnabled: false,
+  showIndexRecommendations: false,
   details: {
     loading: true,
     loaded: false,
@@ -70,6 +73,9 @@ const withData: DatabaseTablePageProps = {
   databaseName: randomName(),
   name: name,
   automaticStatsCollectionEnabled: true,
+  schemaName: randomName(),
+  indexUsageStatsEnabled: true,
+  showIndexRecommendations: true,
   details: {
     loading: false,
     loaded: true,

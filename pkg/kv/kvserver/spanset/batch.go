@@ -415,11 +415,6 @@ func (i *EngineIterator) Value() ([]byte, error) {
 	return i.i.Value()
 }
 
-// ValueLen is part of the storage.EngineIterator interface.
-func (i *EngineIterator) ValueLen() int {
-	return i.i.ValueLen()
-}
-
 // UnsafeRawEngineKey is part of the storage.EngineIterator interface.
 func (i *EngineIterator) UnsafeRawEngineKey() []byte {
 	return i.i.UnsafeRawEngineKey()
@@ -527,34 +522,34 @@ func (s spanSetWriter) checkAllowed(key roachpb.Key) error {
 	return nil
 }
 
-func (s spanSetWriter) ClearMVCC(key storage.MVCCKey, opts storage.ClearOptions) error {
+func (s spanSetWriter) ClearMVCC(key storage.MVCCKey) error {
 	if err := s.checkAllowed(key.Key); err != nil {
 		return err
 	}
-	return s.w.ClearMVCC(key, opts)
+	return s.w.ClearMVCC(key)
 }
 
-func (s spanSetWriter) ClearUnversioned(key roachpb.Key, opts storage.ClearOptions) error {
+func (s spanSetWriter) ClearUnversioned(key roachpb.Key) error {
 	if err := s.checkAllowed(key); err != nil {
 		return err
 	}
-	return s.w.ClearUnversioned(key, opts)
+	return s.w.ClearUnversioned(key)
 }
 
 func (s spanSetWriter) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts storage.ClearOptions,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
 	if err := s.checkAllowed(key); err != nil {
 		return err
 	}
-	return s.w.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, opts)
+	return s.w.ClearIntent(key, txnDidNotUpdateMeta, txnUUID)
 }
 
-func (s spanSetWriter) ClearEngineKey(key storage.EngineKey, opts storage.ClearOptions) error {
+func (s spanSetWriter) ClearEngineKey(key storage.EngineKey) error {
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
 	}
-	return s.w.ClearEngineKey(key, opts)
+	return s.w.ClearEngineKey(key)
 }
 
 func (s spanSetWriter) SingleClearEngineKey(key storage.EngineKey) error {
