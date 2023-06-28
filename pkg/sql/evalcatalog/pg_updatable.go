@@ -79,9 +79,6 @@ func (b *Builtins) RepairedDescriptor(
 	if db == nil {
 		return nil, pgerror.New(pgcode.InvalidBinaryRepresentation, "empty descriptor")
 	}
-	if err := db.RunPostDeserializationChanges(); err != nil {
-		return nil, err
-	}
 	if err := db.StripDanglingBackReferences(descIDMightExist, nonTerminalJobIDMightExist); err != nil {
 		return nil, err
 	}
