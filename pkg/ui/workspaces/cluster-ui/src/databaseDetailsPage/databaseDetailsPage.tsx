@@ -13,9 +13,7 @@ import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
-import { Breadcrumbs } from "src/breadcrumbs";
 import { Dropdown, DropdownOption } from "src/dropdown";
-import { CaretRight } from "src/icon/caretRight";
 import { DatabaseIcon } from "src/icon/databaseIcon";
 import { StackIcon } from "src/icon/stackIcon";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
@@ -27,25 +25,13 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import * as format from "src/util/format";
-import {
-  DATE_FORMAT,
-  EncodeDatabaseTableUri,
-  EncodeDatabaseUri,
-  EncodeUriName,
-} from "src/util/format";
-import {
-  getMatchParamByName,
-  mvccGarbage,
-  schemaNameAttr,
-  syncHistory,
-  unique,
-} from "../util";
+import { DATE_FORMAT, EncodeDatabaseTableUri } from "src/util/format";
+import { mvccGarbage, syncHistory, unique } from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment-timezone";
-import { Caution } from "@cockroachlabs/icons";
 import { Anchor } from "../anchor";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
@@ -198,12 +184,10 @@ function filterBySearchQuery(
     return matchString.includes(search);
   }
 
-  const res = search
+  return search
     .toLowerCase()
     .split(" ")
     .every(val => matchString.includes(val));
-
-  return res;
 }
 
 export class DatabaseDetailsPage extends React.Component<
@@ -540,159 +524,161 @@ export class DatabaseDetailsPage extends React.Component<
   };
 
   private columnsForTablesViewMode(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
-    return [
-      {
-        title: (
-          <Tooltip placement="bottom" title="The name of the table.">
-            Tables
-          </Tooltip>
-        ),
-        cell: table => <TableNameCell table={table} dbDetails={this.props} />,
-        sort: table => table.name,
-        className: cx("database-table__col-name"),
-        name: "name",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="The approximate compressed total disk size across all replicas of the table."
-          >
-            Replication Size
-          </Tooltip>
-        ),
-        cell: table =>
-          this.checkInfoAvailable(
-            table.lastError,
-            format.Bytes(table.details.replicationSizeInBytes),
+    return (
+      [
+        {
+          title: (
+            <Tooltip placement="bottom" title="The name of the table.">
+              Tables
+            </Tooltip>
           ),
-        sort: table => table.details.replicationSizeInBytes,
-        className: cx("database-table__col-size"),
-        name: "replicationSize",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="The total number of ranges in the table."
-          >
-            Ranges
-          </Tooltip>
-        ),
-        cell: table =>
-          this.checkInfoAvailable(table.lastError, table.details.rangeCount),
-        sort: table => table.details.rangeCount,
-        className: cx("database-table__col-range-count"),
-        name: "rangeCount",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="The number of columns in the table."
-          >
-            Columns
-          </Tooltip>
-        ),
-        cell: table =>
-          this.checkInfoAvailable(table.lastError, table.details.columnCount),
-        sort: table => table.details.columnCount,
-        className: cx("database-table__col-column-count"),
-        name: "columnCount",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="The number of indexes in the table."
-          >
-            Indexes
-          </Tooltip>
-        ),
-        cell: table => {
-          return table.details.hasIndexRecommendations &&
-            this.props.showIndexRecommendations
-            ? this.checkInfoAvailable(
-                table.lastError,
-                <IndexRecWithIconCell table={table} />,
-              )
-            : this.checkInfoAvailable(
-                table.lastError,
-                table.details.indexCount,
-              );
+          cell: table => <TableNameCell table={table} dbDetails={this.props} />,
+          sort: table => table.name,
+          className: cx("database-table__col-name"),
+          name: "name",
         },
-        sort: table => table.details.indexCount,
-        className: cx("database-table__col-index-count"),
-        name: "indexCount",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="Regions/Nodes on which the table data is stored."
-          >
-            Regions
-          </Tooltip>
-        ),
-        cell: table =>
-          this.checkInfoAvailable(
-            table.lastError,
-            table.details.nodesByRegionString || "None",
+        {
+          title: (
+            <Tooltip
+              placement="bottom"
+              title="The approximate compressed total disk size across all replicas of the table."
+            >
+              Replication Size
+            </Tooltip>
           ),
-        sort: table => table.details.nodesByRegionString,
-        className: cx("database-table__col--regions"),
-        name: "regions",
-        showByDefault: this.props.showNodeRegionsColumn,
-        hideIfTenant: true,
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title={
-              <div className={cx("tooltip__table--title")}>
-                {"% of total uncompressed logical data that has not been modified (updated or deleted). " +
-                  "A low percentage can cause statements to scan more data ("}
-                <Anchor href={mvccGarbage} target="_blank">
-                  MVCC values
-                </Anchor>
-                {") than required, which can reduce performance."}
-              </div>
-            }
-          >
-            % of Live Data
-          </Tooltip>
-        ),
-        cell: table =>
-          this.checkInfoAvailable(
-            table.lastError,
-            <MVCCInfoCell details={table.details} />,
+          cell: table =>
+            this.checkInfoAvailable(
+              table.lastError,
+              format.Bytes(table.details.replicationSizeInBytes),
+            ),
+          sort: table => table.details.replicationSizeInBytes,
+          className: cx("database-table__col-size"),
+          name: "replicationSize",
+        },
+        {
+          title: (
+            <Tooltip
+              placement="bottom"
+              title="The total number of ranges in the table."
+            >
+              Ranges
+            </Tooltip>
           ),
-        sort: table => table.details.livePercentage,
-        className: cx("database-table__col-column-count"),
-        name: "livePercentage",
-      },
-      {
-        title: (
-          <Tooltip
-            placement="bottom"
-            title="The last time table statistics were created or updated."
-          >
-            Table Stats Last Updated <Timezone />
-          </Tooltip>
-        ),
-        cell: table => (
-          <Timestamp
-            time={table.details.statsLastUpdated}
-            format={DATE_FORMAT}
-            fallback={"No table statistics found"}
-          />
-        ),
-        sort: table => table.details.statsLastUpdated,
-        className: cx("database-table__col--table-stats"),
-        name: "tableStatsUpdated",
-      },
-    ];
+          cell: table =>
+            this.checkInfoAvailable(table.lastError, table.details.rangeCount),
+          sort: table => table.details.rangeCount,
+          className: cx("database-table__col-range-count"),
+          name: "rangeCount",
+        },
+        {
+          title: (
+            <Tooltip
+              placement="bottom"
+              title="The number of columns in the table."
+            >
+              Columns
+            </Tooltip>
+          ),
+          cell: table =>
+            this.checkInfoAvailable(table.lastError, table.details.columnCount),
+          sort: table => table.details.columnCount,
+          className: cx("database-table__col-column-count"),
+          name: "columnCount",
+        },
+        {
+          title: (
+            <Tooltip
+              placement="bottom"
+              title="The number of indexes in the table."
+            >
+              Indexes
+            </Tooltip>
+          ),
+          cell: table => {
+            return table.details.hasIndexRecommendations &&
+              this.props.showIndexRecommendations
+              ? this.checkInfoAvailable(
+                  table.lastError,
+                  <IndexRecWithIconCell table={table} />,
+                )
+              : this.checkInfoAvailable(
+                  table.lastError,
+                  table.details.indexCount,
+                );
+          },
+          sort: table => table.details.indexCount,
+          className: cx("database-table__col-index-count"),
+          name: "indexCount",
+        },
+        {
+          title: (
+            <Tooltip
+              placement="bottom"
+              title="Regions/Nodes on which the table data is stored."
+            >
+              Regions
+            </Tooltip>
+          ),
+          cell: table =>
+            this.checkInfoAvailable(
+              table.lastError,
+              table.details.nodesByRegionString || "None",
+            ),
+          sort: table => table.details.nodesByRegionString,
+          className: cx("database-table__col--regions"),
+          name: "regions",
+          showByDefault: this.props.showNodeRegionsColumn,
+          hideIfTenant: true,
+        },
+        {
+          title: (
+            <Tooltip
+              placement="bottom"
+              title={
+                <div className={cx("tooltip__table--title")}>
+                  {"% of total uncompressed logical data that has not been modified (updated or deleted). " +
+                    "A low percentage can cause statements to scan more data ("}
+                  <Anchor href={mvccGarbage} target="_blank">
+                    MVCC values
+                  </Anchor>
+                  {") than required, which can reduce performance."}
+                </div>
+              }
+            >
+              % of Live Data
+            </Tooltip>
+          ),
+          cell: table =>
+            this.checkInfoAvailable(
+              table.lastError,
+              <MVCCInfoCell details={table.details} />,
+            ),
+          sort: table => table.details.livePercentage,
+          className: cx("database-table__col-column-count"),
+          name: "livePercentage",
+        },
+        {
+          title: (
+            <Tooltip
+              placement="bottom"
+              title="The last time table statistics were created or updated."
+            >
+              Table Stats Last Updated <Timezone />
+            </Tooltip>
+          ),
+          cell: table => (
+            <Timestamp
+              time={table.details.statsLastUpdated}
+              format={DATE_FORMAT}
+              fallback={"No table statistics found"}
+            />
+          ),
+          sort: table => table.details.statsLastUpdated,
+          className: cx("database-table__col--table-stats"),
+          name: "tableStatsUpdated",
+        },
+      ] as ColumnDescriptor<DatabaseDetailsPageDataTable>[]
+    ).filter(c => c.showByDefault !== false);
   }
 
   private columnsForGrantsViewMode(): ColumnDescriptor<DatabaseDetailsPageDataTable>[] {
