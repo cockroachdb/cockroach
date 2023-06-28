@@ -2068,7 +2068,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 		switch ba.Requests[0].GetInner().Method() {
 		case kvpb.Put, kvpb.Scan:
 			return nil, kvpb.NewErrorWithTxn(
-				kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err"),
+				kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err", nil),
 				ba.Txn)
 		case kvpb.EndTxn:
 			br.Txn.Status = roachpb.COMMITTED
@@ -2168,7 +2168,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 
 		if attempt == 0 {
 			return nil, kvpb.NewErrorWithTxn(
-				kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err"),
+				kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err", nil),
 				ba.Txn)
 		}
 		return br, nil

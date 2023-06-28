@@ -481,7 +481,7 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 
 		// Return a transaction retry error.
 		return nil, kvpb.NewErrorWithTxn(
-			kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, ""), ba.Txn)
+			kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "", nil), ba.Txn)
 	}
 	refreshes := 0
 	onRefresh := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -514,7 +514,7 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	br, pErr = tsr.SendLocked(ctx, ba)
 	require.Nil(t, br)
 	require.NotNil(t, pErr)
-	exp := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "")
+	exp := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "", nil)
 	require.Equal(t, exp, pErr.GetDetail())
 	require.Equal(t, tsr.knobs.MaxTxnRefreshAttempts, refreshes)
 }
@@ -626,7 +626,7 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 		require.Equal(t, origReadTs, refReq.RefreshFrom)
 
 		return nil, kvpb.NewError(kvpb.NewRefreshFailedError(
-			kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}))
+			kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("a"), hlc.Timestamp{WallTime: 1}, nil))
 	}
 	unexpected := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Fail(t, "unexpected")
@@ -832,7 +832,7 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				pushedTxn := ba.Txn.Clone()
 				pushedTxn.WriteTimestamp = pushedTs1
 				return nil, kvpb.NewErrorWithTxn(
-					kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, ""), pushedTxn)
+					kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "", nil), pushedTxn)
 			}
 			onRefresh1 := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 1)
@@ -901,7 +901,7 @@ func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
 				pushedTxn := ba.Txn.Clone()
 				pushedTxn.WriteTimestamp = pushedTs1
 				return nil, kvpb.NewErrorWithTxn(
-					kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, ""), pushedTxn)
+					kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "", nil), pushedTxn)
 			}
 			onScanAndPut := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 				require.Len(t, ba.Requests, 2)
@@ -1176,11 +1176,11 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	// we did not retry due to the refresh span bytes is incremented.
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (batchResponse *kvpb.BatchResponse, r *kvpb.Error) {
 		return nil, kvpb.NewErrorWithTxn(
-			kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, ""), ba.Txn)
+			kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "", nil), ba.Txn)
 	})
 
 	br, pErr = tsr.SendLocked(ctx, ba)
-	exp := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "")
+	exp := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "", nil)
 	require.Equal(t, exp, pErr.GetDetail())
 	require.Nil(t, br)
 	require.Equal(t, int64(1), tsr.metrics.ClientRefreshFailWithCondensedSpans.Count())

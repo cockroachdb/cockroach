@@ -355,11 +355,19 @@ func TestErrorGRPCStatus(t *testing.T) {
 }
 
 func TestRefreshSpanError(t *testing.T) {
-	e1 := NewRefreshFailedError(RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("foo"), hlc.Timestamp{WallTime: 3})
+	txn := enginepb.TxnMeta{
+		ID:             uuid.UUID{2},
+		Key:            roachpb.Key("foo"),
+		WriteTimestamp: hlc.Timestamp{WallTime: 3},
+		MinTimestamp:   hlc.Timestamp{WallTime: 4},
+	}
+	e1 := NewRefreshFailedError(RefreshFailedError_REASON_COMMITTED_VALUE, roachpb.Key("foo"), hlc.Timestamp{WallTime: 3}, &txn)
 	require.Equal(t, "encountered recently written committed value \"foo\" @0.000000003,0", e1.Error())
+	require.Equal(t, txn, e1.ConflictingTxn)
 
-	e2 := NewRefreshFailedError(RefreshFailedError_REASON_INTENT, roachpb.Key("bar"), hlc.Timestamp{WallTime: 4})
+	e2 := NewRefreshFailedError(RefreshFailedError_REASON_INTENT, roachpb.Key("bar"), hlc.Timestamp{WallTime: 4}, &txn)
 	require.Equal(t, "encountered recently written intent \"bar\" @0.000000004,0", e2.Error())
+	require.Equal(t, txn, e2.ConflictingTxn)
 }
 
 func TestNotLeaseholderError(t *testing.T) {

@@ -95,7 +95,7 @@ func refreshRange(
 
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
 			return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
-				key.Key, iter.RangeKeys().Versions[0].Timestamp)
+				key.Key, iter.RangeKeys().Versions[0].Timestamp, nil)
 		}
 
 		if !key.IsValue() {
@@ -130,12 +130,12 @@ func refreshRange(
 				continue
 			}
 			return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
-				key.Key, meta.Txn.WriteTimestamp)
+				key.Key, meta.Txn.WriteTimestamp, meta.Txn)
 		}
 
 		// If a committed value is found, return an error.
 		return kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE,
-			key.Key, key.Timestamp)
+			key.Key, key.Timestamp, nil)
 	}
 	return nil
 }

@@ -363,7 +363,7 @@ func EndTxn(
 		// request is marking the commit as explicit, this check must succeed. We
 		// assert this in txnCommitter.makeTxnCommitExplicitAsync.
 		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args.Deadline); retry {
-			return result.Result{}, kvpb.NewTransactionRetryError(reason, extraMsg)
+			return result.Result{}, kvpb.NewTransactionRetryError(reason, extraMsg, nil)
 		}
 
 		// If the transaction needs to be staged as part of an implicit commit

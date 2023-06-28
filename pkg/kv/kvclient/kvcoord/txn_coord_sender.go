@@ -420,7 +420,7 @@ func generateTxnDeadlineExceededErr(txn *roachpb.Transaction, deadline hlc.Times
 		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
 		exceededBy, txn.WriteTimestamp, deadline)
 	return kvpb.NewErrorWithTxn(
-		kvpb.NewTransactionRetryError(kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
+		kvpb.NewTransactionRetryError(kvpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg, nil), txn)
 }
 
 // finalizeNonLockingTxnLocked finalizes a non-locking txn, either marking it as
@@ -805,8 +805,10 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	// reflect the reason for the restart. More details about the
 	// different error types are documented above on the metaRestart
 	// variables.
+	var contentionTxnMeta *enginepb.TxnMeta
 	switch tErr := pErr.GetDetail().(type) {
 	case *kvpb.TransactionRetryError:
+		contentionTxnMeta = &tErr.ConflictingTxn
 		switch tErr.Reason {
 		case kvpb.RETRY_WRITE_TOO_OLD:
 			tc.metrics.RestartsWriteTooOld.Inc()
@@ -842,7 +844,9 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	retErr := kvpb.NewTransactionRetryWithProtoRefreshError(
 		redact.Sprint(pErr),
 		errTxnID, // the id of the transaction that encountered the error
-		newTxn)
+		newTxn,
+		contentionTxnMeta,
+	)
 
 	// Move to a retryable error state, where all Send() calls fail until the
 	// state is cleared.
@@ -1162,7 +1166,7 @@ func (tc *TxnCoordSender) ManualRestart(
 	tc.mu.txn.Restart(pri, 0 /* upgradePriority */, ts)
 
 	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		msg, tc.mu.txn.ID, tc.mu.txn)
+		msg, tc.mu.txn.ID, tc.mu.txn, nil)
 
 	// Move to a retryable error state, where all Send() calls fail until the
 	// state is cleared.

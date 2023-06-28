@@ -435,7 +435,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 
 	retryErr := kvpb.NewErrorWithTxn(
 		kvpb.NewTransactionRetryError(
-			kvpb.RETRY_SERIALIZABLE, "test err"),
+			kvpb.RETRY_SERIALIZABLE, "test err", nil),
 		txn.TestingCloneTxn()).GoError()
 
 	abortErr := kvpb.NewErrorWithTxn(

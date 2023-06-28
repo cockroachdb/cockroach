@@ -333,7 +333,7 @@ func TestAsOfRetry(t *testing.T) {
 					if count > 0 && bytes.Contains(req.Key, []byte(key)) {
 						magicVals.restartCounts[key]--
 						err := kvpb.NewTransactionRetryError(
-							kvpb.RETRY_REASON_UNKNOWN, "filter err")
+							kvpb.RETRY_REASON_UNKNOWN, "filter err", nil)
 						magicVals.failedValues[string(req.Key)] =
 							failureRecord{err, args.Hdr.Txn}
 						txn := args.Hdr.Txn.Clone()
