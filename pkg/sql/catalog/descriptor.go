@@ -791,9 +791,6 @@ type TypeDescriptor interface {
 	// GetReferencingDescriptorID returns the ID of the referencing descriptor at
 	// ordinal refOrdinal.
 	GetReferencingDescriptorID(refOrdinal int) descpb.ID
-	// GetReferencingDescriptorIDs returns IDs of descriptors referencing this
-	// type.
-	GetReferencingDescriptorIDs() []descpb.ID
 
 	// AsEnumTypeDescriptor returns this instance cast to EnumTypeDescriptor
 	// if this type is an enum type, nil otherwise.
