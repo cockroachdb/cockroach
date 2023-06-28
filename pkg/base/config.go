@@ -266,14 +266,8 @@ var (
 	// etcd/raft does register MsgHeartbeatResp as follower activity, and these
 	// are sent across the low-latency system RPC class, so it shouldn't be
 	// affected by RPC head-of-line blocking for MsgApp traffic.
-	//
-	// Note that time will not appear to progress on a quiesced range, so when
-	// unquiescing it may take some time before a leader steps down or a candidate
-	// is able to obtain prevotes.
-	//
-	// For now, we disable this by default, due to liveness concerns.
 	defaultRaftEnableCheckQuorum = envutil.EnvOrDefaultBool(
-		"COCKROACH_RAFT_ENABLE_CHECKQUORUM", false)
+		"COCKROACH_RAFT_ENABLE_CHECKQUORUM", true)
 
 	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
 	// Range's Raft log can grow to before log truncations are triggered while at
