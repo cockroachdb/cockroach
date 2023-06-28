@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -560,7 +559,7 @@ type distResolver struct {
 func (r *distResolver) getRangesForSpans(
 	ctx context.Context, spans []roachpb.Span,
 ) ([]roachpb.Span, error) {
-	spans, _, err := kvfeed.AllRangeSpans(ctx, r.DistSender, spans)
+	spans, _, err := r.DistSender.AllRangeSpans(ctx, spans)
 	return spans, err
 }
 

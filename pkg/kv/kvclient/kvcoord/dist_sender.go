@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -2761,6 +2762,40 @@ func (ds *DistSender) maybeIncrementErrCounters(br *kvpb.BatchResponse, err erro
 		}
 		ds.metrics.ErrCounts[typ].Inc(1)
 	}
+}
+
+// AllRangeSpans returns the list of all ranges that cover input spans along with the
+// nodeCountHint indicating the number of nodes that host those ranges.
+func (ds *DistSender) AllRangeSpans(
+	ctx context.Context, spans []roachpb.Span,
+) (_ []roachpb.Span, nodeCountHint int, _ error) {
+	ranges := make([]roachpb.Span, 0, len(spans))
+
+	it := MakeRangeIterator(ds)
+	var replicas util.FastIntMap
+
+	for i := range spans {
+		rSpan, err := keys.SpanAddr(spans[i])
+		if err != nil {
+			return nil, 0, err
+		}
+		for it.Seek(ctx, rSpan.Key, Ascending); ; it.Next(ctx) {
+			if !it.Valid() {
+				return nil, 0, it.Error()
+			}
+			ranges = append(ranges, roachpb.Span{
+				Key: it.Desc().StartKey.AsRawKey(), EndKey: it.Desc().EndKey.AsRawKey(),
+			})
+			for _, r := range it.Desc().InternalReplicas {
+				replicas.Set(int(r.NodeID), 0)
+			}
+			if !it.NeedAnother(rSpan) {
+				break
+			}
+		}
+	}
+
+	return ranges, replicas.Len(), nil
 }
 
 // skipStaleReplicas advances the transport until it's positioned on a replica

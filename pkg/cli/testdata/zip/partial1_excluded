@@ -29,6 +29,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [cluster] retrieving SQL data for crdb_internal.jobs... writing output: debug/crdb_internal.jobs.json... done
 [cluster] retrieving SQL data for crdb_internal.kv_node_liveness... writing output: debug/crdb_internal.kv_node_liveness.json... done
 [cluster] retrieving SQL data for crdb_internal.kv_node_status... writing output: debug/crdb_internal.kv_node_status.json... done
+[cluster] retrieving SQL data for crdb_internal.kv_protected_ts_records... writing output: debug/crdb_internal.kv_protected_ts_records.json... done
 [cluster] retrieving SQL data for crdb_internal.kv_store_status... writing output: debug/crdb_internal.kv_store_status.json... done
 [cluster] retrieving SQL data for crdb_internal.kv_system_privileges... writing output: debug/crdb_internal.kv_system_privileges.json... done
 [cluster] retrieving SQL data for crdb_internal.partitions... writing output: debug/crdb_internal.partitions.json... done

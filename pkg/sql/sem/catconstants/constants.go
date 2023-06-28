@@ -197,6 +197,7 @@ const (
 	CrdbInternalKVFlowControllerID
 	CrdbInternalKVFlowHandlesID
 	CrdbInternalKVFlowTokenDeductions
+	CrdbInternalKVProtectedTS
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

@@ -601,6 +601,7 @@ kv_flow_token_deductions                NULL
 kv_inherited_role_members               NULL
 kv_node_liveness                        NULL
 kv_node_status                          NULL
+kv_protected_ts_records                 NULL
 kv_store_status                         NULL
 kv_system_privileges                    NULL
 leases                                  NULL
