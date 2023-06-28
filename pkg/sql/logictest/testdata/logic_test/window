@@ -4393,3 +4393,44 @@ NULL  4  4
 
 statement ok
 RESET null_ordered_last
+
+# Regression test for NULLS in the ORDER BY clause of a window function
+# operating in RANGE mode (#94032).
+query III
+SELECT
+  id,
+  first_value(id) OVER (ORDER BY id),
+  first_value(id) OVER (ORDER BY id NULLS LAST)
+FROM nulls_last_test
+ORDER BY id;
+----
+NULL  NULL  1
+1     NULL  1
+2     NULL  1
+3     NULL  1
+
+query III
+SELECT
+  id,
+  first_value(id) OVER (ORDER BY id RANGE 1 PRECEDING),
+  first_value(id) OVER (ORDER BY id NULLS LAST RANGE 1 PRECEDING)
+FROM nulls_last_test
+ORDER BY id;
+----
+NULL  NULL  NULL
+1     1     1
+2     1     1
+3     2     2
+
+query III
+SELECT
+  id,
+  first_value(id) OVER (ORDER BY id RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING),
+  first_value(id) OVER (ORDER BY id NULLS LAST RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING)
+FROM nulls_last_test
+ORDER BY id;
+----
+NULL  NULL  NULL
+1     2     2
+2     3     3
+3     NULL  NULL
