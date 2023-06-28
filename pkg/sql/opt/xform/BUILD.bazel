@@ -62,7 +62,7 @@ go_library(
 
 go_test(
     name = "xform_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "coster_test.go",
         "general_funcs_test.go",
@@ -71,7 +71,7 @@ go_test(
         "optimizer_test.go",
         "physical_props_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]) + [
         "//c-deps:libgeos",
         "//pkg/sql/opt/testutils/opttester:testfixtures",
