@@ -1472,6 +1472,8 @@ func (m mockAddressResolver) GetAllInstances(
 	return res, nil
 }
 
+// TODO(msbutler): add check for locality strength the other returned value of ClosesInstances
+
 func TestClosestInstances(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	type instances map[int]string
@@ -1508,7 +1510,8 @@ func TestClosestInstances(t *testing.T) {
 				infos = append(infos, info)
 			}
 			var got picked
-			for _, i := range closestInstances(infos, l) {
+			instances, _ := ClosestInstances(infos, l)
+			for _, i := range instances {
 				got = append(got, int(i))
 			}
 			require.ElementsMatch(t, tc.expected, got)
