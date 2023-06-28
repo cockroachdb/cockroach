@@ -477,6 +477,33 @@ func createChangefeedJobRecord(
 		SessionData:          &sd.SessionData,
 	}
 
+	if opts.ExactlyOnceExport() {
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_2_ExactlyOnceCDCExport) {
+			return nil, pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cannot create new changefeed export with exactly once option until upgrade to version %s is complete",
+				changefeedbase.OptExecutionLocality, clusterversion.V23_2_ExactlyOnceCDCExport.String(),
+			)
+		}
+
+		tableDescs, err := fetchTableDescriptors(ctx, p.ExecCfg(), AllTargets(details), details.StatementTime)
+		if err != nil {
+			return nil, err
+		}
+		trackedSpans, err := fetchSpansForTables(ctx, p, tableDescs, details, details.StatementTime)
+		if err != nil {
+			return nil, err
+		}
+		spanPartitions, _, err := partitionSpans(ctx, p, details, trackedSpans, nil, p.DistSQLPlanner())
+		if err != nil {
+			return nil, err
+		}
+		details.StaticPartition = make([]jobspb.ChangefeedDetails_Partition, len(spanPartitions))
+		for i, sp := range spanPartitions {
+			details.StaticPartition[i].Spans = sp.Spans
+		}
+	}
+
 	specs := AllTargets(details)
 	hasSelectPrivOnAllTables := true
 	hasChangefeedPrivOnAllTables := true
@@ -1023,7 +1050,8 @@ func logSanitizedChangefeedDestination(ctx context.Context, destination string) 
 func validateDetailsAndOptions(
 	details jobspb.ChangefeedDetails, opts changefeedbase.StatementOptions,
 ) error {
-	if err := opts.ValidateForCreateChangefeed(details.Select != ""); err != nil {
+	isCoreChangefeed := details.SinkURI == ""
+	if err := opts.ValidateForCreateChangefeed(isCoreChangefeed); err != nil {
 		return err
 	}
 	if opts.HasEndTime() {

@@ -58,8 +58,8 @@ const (
 // they will be eventually returned directly via pgwire). In either case,
 // periodically a span will become resolved as of some timestamp, meaning that
 // no new rows will ever be emitted at or below that timestamp. These span-level
-// resolved timestamps are emitted as a marshaled `jobspb.ResolvedSpan` proto in
-// column 0.
+// resolved timestamps are emitted as a marshaled `jobspb.ChangeAggregatorProgress`
+// proto in column 0.
 //
 // The flow will always have exactly one ChangeFrontier processor which all the
 // ChangeAggregators feed into. It collects all span-level resolved timestamps
@@ -243,12 +243,8 @@ func startDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 
-	var checkpoint *jobspb.ChangefeedProgress_Checkpoint
-	if progress := localState.progress.GetChangefeed(); progress != nil && progress.Checkpoint != nil {
-		checkpoint = progress.Checkpoint
-	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater,
-		trackedSpans, checkpoint, localState.drainingNodes)(ctx, dsp)
+		trackedSpans, localState.progress.GetChangefeed(), localState.drainingNodes)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -319,78 +315,134 @@ var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
 		"changefeed.balance_range_distribution.enable", false),
 ).WithPublic()
 
+// noLocalityFilter indicates that execution is not restricted by locality.
+const noLocalityFilter = ""
+
+func usingStaticPartition(details jobspb.ChangefeedDetails) bool {
+	return len(details.StaticPartition) > 0
+}
+
+// defaultSpanPartition partitions spans using default approach.
+func staticPartitionSpans(
+	ctx context.Context,
+	partitions []jobspb.ChangefeedDetails_Partition,
+	dsp *sql.DistSQLPlanner,
+	locFilter roachpb.Locality,
+) ([]sql.SpanPartition, error) {
+	if len(partitions) == 0 {
+		return nil, errors.AssertionFailedf("expected non-empty static partition")
+	}
+	// Round robbin static partition across all nodes matching locality filter.
+	instances, err := dsp.GetAllInstancesByLocality(ctx, locFilter)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(instances) == 0 {
+		return nil, errors.New("no available instances")
+	}
+	spanPartitions := make([]sql.SpanPartition, len(instances))
+	for i, instance := range instances {
+		spanPartitions[i].SQLInstanceID = instance.InstanceID
+	}
+	for i, p := range partitions {
+		idx := i % len(spanPartitions)
+		spanPartitions[idx].Spans = append(spanPartitions[idx].Spans, p.Spans...)
+	}
+	return spanPartitions, nil
+}
+
+func partitionSpans(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	details jobspb.ChangefeedDetails,
+	trackedSpans []roachpb.Span,
+	drainingNodes []roachpb.NodeID,
+	dsp *sql.DistSQLPlanner,
+) ([]sql.SpanPartition, *sql.PlanningCtx, error) {
+	scanType, err := changefeedbase.MakeStatementOptions(details.Opts).GetInitialScanType()
+	if err != nil {
+		return nil, nil, err
+	}
+	isCoreChangefeed := details.SinkURI == ``
+
+	distMode := sql.DistributionTypeAlways
+	if isCoreChangefeed {
+		// Sinkless feeds get one ChangeAggregator on this node.
+		distMode = sql.DistributionTypeNone
+	}
+
+	var locFilter roachpb.Locality
+	if loc := details.Opts[changefeedbase.OptExecutionLocality]; loc != noLocalityFilter {
+		if err := locFilter.Set(loc); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	var blankTxn *kv.Txn
+	planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
+		sql.DistributionType(distMode), physicalplan.DefaultReplicaChooser, locFilter)
+
+	var spanPartitions []sql.SpanPartition
+	if usingStaticPartition(details) {
+		spanPartitions, err = staticPartitionSpans(ctx, details.StaticPartition, dsp, locFilter)
+	} else {
+		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+	}
+
+	if err != nil {
+		return nil, nil, err
+	}
+	cfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
+	if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil &&
+		knobs.FilterDrainingNodes != nil && len(drainingNodes) > 0 {
+		spanPartitions, err = knobs.FilterDrainingNodes(spanPartitions, drainingNodes)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	sv := &execCtx.ExecCfg().Settings.SV
+	if enableBalancedRangeDistribution.Get(sv) && scanType == changefeedbase.OnlyInitialScan && !usingStaticPartition(details) {
+		// Currently, balanced range distribution supported only in export mode.
+		// TODO(yevgeniy): Consider lifting this restriction.
+		sender := execCtx.ExecCfg().DB.NonTransactionalSender()
+		distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
+
+		spanPartitions, err = rebalanceSpanPartitions(
+			ctx, &distResolver{distSender}, rebalanceThreshold.Get(sv), spanPartitions)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return spanPartitions, planCtx, nil
+}
+
 func makePlan(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
 	initialHighWater hlc.Timestamp,
 	trackedSpans []roachpb.Span,
-	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
+	progress *jobspb.ChangefeedProgress,
 	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-		var blankTxn *kv.Txn
-
-		distMode := sql.DistributionTypeAlways
-		if details.SinkURI == `` {
-			// Sinkless feeds get one ChangeAggregator on this node.
-			distMode = sql.DistributionTypeNone
-		}
-
-		var locFilter roachpb.Locality
-		if loc := details.Opts[changefeedbase.OptExecutionLocality]; loc != "" {
-			if err := locFilter.Set(loc); err != nil {
-				return nil, nil, err
-			}
-		}
-
-		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
-			sql.DistributionType(distMode), physicalplan.DefaultReplicaChooser, locFilter)
-		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+		spanPartitions, planCtx, err := partitionSpans(ctx, execCtx, details, trackedSpans, drainingNodes, dsp)
 		if err != nil {
 			return nil, nil, err
 		}
-
-		cfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
-		if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil &&
-			knobs.FilterDrainingNodes != nil && len(drainingNodes) > 0 {
-			spanPartitions, err = knobs.FilterDrainingNodes(spanPartitions, drainingNodes)
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-
-		sv := &execCtx.ExecCfg().Settings.SV
-		if enableBalancedRangeDistribution.Get(sv) {
-			scanType, err := changefeedbase.MakeStatementOptions(details.Opts).GetInitialScanType()
-			if err != nil {
-				return nil, nil, err
-			}
-
-			// Currently, balanced range distribution supported only in export mode.
-			// TODO(yevgeniy): Consider lifting this restriction.
-			if scanType == changefeedbase.OnlyInitialScan {
-				sender := execCtx.ExecCfg().DB.NonTransactionalSender()
-				distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
-
-				spanPartitions, err = rebalanceSpanPartitions(
-					ctx, &distResolver{distSender}, rebalanceThreshold.Get(sv), spanPartitions)
-				if err != nil {
-					return nil, nil, err
-				}
-			}
-		}
-
 		// Use the same checkpoint for all aggregators; each aggregator will only look at
 		// spans that are assigned to it.
 		// We could compute per-aggregator checkpoint, but that's probably an overkill.
 		var aggregatorCheckpoint execinfrapb.ChangeAggregatorSpec_Checkpoint
 		var checkpointSpanGroup roachpb.SpanGroup
 
-		if checkpoint != nil {
-			checkpointSpanGroup.Add(checkpoint.Spans...)
-			aggregatorCheckpoint.Spans = checkpoint.Spans
-			aggregatorCheckpoint.Timestamp = checkpoint.Timestamp
+		if progress != nil && progress.Checkpoint != nil {
+			checkpointSpanGroup.Add(progress.Checkpoint.Spans...)
+			aggregatorCheckpoint.Spans = progress.Checkpoint.Spans
+			aggregatorCheckpoint.Timestamp = progress.Checkpoint.Timestamp
 		}
 
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
@@ -398,22 +450,27 @@ func makePlan(
 			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
 			for watchIdx, nodeSpan := range sp.Spans {
 				initialResolved := initialHighWater
-				if checkpointSpanGroup.Encloses(nodeSpan) {
-					initialResolved = checkpoint.Timestamp
+				if checkpointSpanGroup.Encloses(nodeSpan) && progress != nil && progress.Checkpoint != nil {
+					initialResolved = progress.Checkpoint.Timestamp
 				}
 				watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
 					Span:            nodeSpan,
 					InitialResolved: initialResolved,
 				}
 			}
-
+			var flushGeneration int64
+			if progress != nil && i < len(progress.FlushGeneration) {
+				flushGeneration = progress.FlushGeneration[i]
+			}
 			aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
-				Watches:    watches,
-				Checkpoint: aggregatorCheckpoint,
-				Feed:       details,
-				UserProto:  execCtx.User().EncodeProto(),
-				JobID:      jobID,
-				Select:     execinfrapb.Expression{Expr: details.Select},
+				Watches:         watches,
+				Checkpoint:      aggregatorCheckpoint,
+				Feed:            details,
+				UserProto:       execCtx.User().EncodeProto(),
+				JobID:           jobID,
+				Select:          execinfrapb.Expression{Expr: details.Select},
+				Partition:       int32(i),
+				FlushGeneration: flushGeneration,
 			}
 		}
 
@@ -428,6 +485,7 @@ func makePlan(
 			UserProto:    execCtx.User().EncodeProto(),
 		}
 
+		cfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
 		if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil && knobs.OnDistflowSpec != nil {
 			knobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
 		}

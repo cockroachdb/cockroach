@@ -557,6 +557,9 @@ const (
 	// FormatVirtualSSTables, allowing use of virtual sstables in Pebble.
 	V23_2_PebbleFormatVirtualSSTables
 
+	// V23_2_ExactlyOnceCDCExport enables exactly once semantics for changefeed export.
+	V23_2_ExactlyOnceCDCExport
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -969,6 +972,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_2_PebbleFormatVirtualSSTables,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 16},
+	},
+	{
+		Key:     V23_2_ExactlyOnceCDCExport,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 18},
 	},
 
 	// *************************************************

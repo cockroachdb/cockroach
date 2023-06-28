@@ -28,7 +28,7 @@ func TestOptionsValidations(t *testing.T) {
 
 	tests := []struct {
 		input     map[string]string
-		isPred    bool
+		isCore    bool
 		expectErr string
 	}{
 		{map[string]string{"format": "txt"}, false, "unknown format"},
@@ -44,7 +44,7 @@ func TestOptionsValidations(t *testing.T) {
 
 	for _, test := range tests {
 		o := MakeStatementOptions(test.input)
-		err := o.ValidateForCreateChangefeed(test.isPred)
+		err := o.ValidateForCreateChangefeed(test.isCore)
 		if test.expectErr == "" {
 			require.NoError(t, err)
 		} else {

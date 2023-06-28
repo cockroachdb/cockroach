@@ -140,6 +140,9 @@ const (
 
 	OptInitialScanOnly = `initial_scan_only`
 
+	// OptExactlyOnce enables exactly once semantics when running export (initial_scan_only).
+	OptExactlyOnce = "exactly_once"
+
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
 	OptEnvelopeDeprecatedRow EnvelopeType = `deprecated_row`
@@ -336,6 +339,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptInitialScan:                        enum("yes", "no", "only").orEmptyMeans("yes"),
 	OptNoInitialScan:                      flagOption,
 	OptInitialScanOnly:                    flagOption,
+	OptExactlyOnce:                        flagOption,
 	DeprecatedOptProtectDataFromGCOnPause: flagOption,
 	OptExpirePTSAfter:                     durationOption.thatCanBeZero(),
 	OptKafkaSinkConfig:                    jsonOption,
@@ -370,7 +374,7 @@ var SQLValidOptions map[string]struct{} = nil
 var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
-var CloudStorageValidOptions = makeStringSet(OptCompression)
+var CloudStorageValidOptions = makeStringSet(OptCompression, OptExactlyOnce)
 
 // WebhookValidOptions is options exclusive to webhook sink
 var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig)
@@ -388,7 +392,7 @@ var ExternalConnectionValidOptions = unionStringSets(SQLValidOptions, KafkaValid
 
 // CaseInsensitiveOpts options which supports case Insensitive value
 var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents,
-	OptSchemaChangePolicy, OptOnError, OptInitialScan)
+	OptSchemaChangePolicy, OptOnError, OptInitialScan, OptExactlyOnce)
 
 // RetiredOptions are the options which are no longer active.
 var RetiredOptions = makeStringSet(DeprecatedOptProtectDataFromGCOnPause)
@@ -697,6 +701,11 @@ func (s StatementOptions) GetInitialScanType() (InitialScanType, error) {
 	}
 
 	return NoInitialScan, nil
+}
+
+func (s StatementOptions) ExactlyOnceExport() bool {
+	_, isSet := s.m[OptExactlyOnce]
+	return isSet
 }
 
 func (s StatementOptions) IsInitialScanSpecified() bool {
@@ -1047,7 +1056,7 @@ func describeEnum(strs ...string) string {
 // ValidateForCreateChangefeed checks that the provided options are
 // valid for a CREATE CHANGEFEED statement using the type assertions
 // in ChangefeedOptionExpectValues.
-func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool) (e error) {
+func (s StatementOptions) ValidateForCreateChangefeed(isCoreChangefeed bool) (e error) {
 	defer func() {
 		e = pgerror.Wrap(e, pgcode.InvalidParameterValue, "")
 	}()
@@ -1081,6 +1090,16 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 			return errors.Newf(`%s=%s is only usable with %s`, OptFormat, OptFormatCSV, OptInitialScanOnly)
 		}
 	}
+
+	if s.IsSet(OptExactlyOnce) {
+		if scanType != OnlyInitialScan {
+			return errors.Newf("%[1]s requires initial_scan='only' option because %[1]s is only usable during changefeed export", OptExactlyOnce)
+		}
+		if isCoreChangefeed {
+			return errors.Newf("%[1]s is incompatible with core changefeed and requires storage sink to be specified", OptExactlyOnce)
+		}
+	}
+
 	// Right now parquet does not support any of these options
 	if s.m[OptFormat] == string(OptFormatParquet) {
 		if err := validateUnsupportedOptions(ParquetFormatUnsupportedOptions, fmt.Sprintf("format=%s", OptFormatParquet)); err != nil {
