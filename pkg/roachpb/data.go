@@ -497,7 +497,7 @@ func (v *Value) SetProto(msg protoutil.Message) error {
 	// directly into the Value.RawBytes field instead of allocating a separate
 	// []byte and copying.
 	v.ensureRawBytes(headerSize + msg.Size())
-	if _, err := protoutil.MarshalTo(msg, v.RawBytes[headerSize:]); err != nil {
+	if _, err := protoutil.MarshalToSizedBuffer(msg, v.RawBytes[headerSize:]); err != nil {
 		return err
 	}
 	// Special handling for timeseries data.

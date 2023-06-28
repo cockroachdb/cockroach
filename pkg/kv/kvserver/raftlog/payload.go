@@ -93,7 +93,7 @@ func EncodeCommand(
 				return nil, errors.AssertionFailedf("missing origin node for flow token returns")
 			}
 		}
-		if _, err := protoutil.MarshalTo(
+		if _, err := protoutil.MarshalToSizedBuffer(
 			raftAdmissionMeta,
 			data[preLen:preLen+admissionMetaLen],
 		); err != nil {
@@ -112,7 +112,7 @@ func EncodeCommand(
 	}
 
 	// Encode the rest of the command.
-	if _, err := protoutil.MarshalTo(command, data[preLen+admissionMetaLen:]); err != nil {
+	if _, err := protoutil.MarshalToSizedBuffer(command, data[preLen+admissionMetaLen:]); err != nil {
 		return nil, err
 	}
 	return data, nil
