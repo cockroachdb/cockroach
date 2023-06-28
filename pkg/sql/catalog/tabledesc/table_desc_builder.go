@@ -988,6 +988,9 @@ func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged 
 // TableDescriptor and the code relies on the value being set based on the
 // MVCC timestamp.
 func maybeSetCreateAsOfTime(desc *descpb.TableDescriptor) (hasChanged bool) {
+	if desc.CreateQuery == "" {
+		return false
+	}
 	if !desc.CreateAsOfTime.IsEmpty() || desc.Version > 1 || desc.ModificationTime.IsEmpty() {
 		return false
 	}
