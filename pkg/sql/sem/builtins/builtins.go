@@ -5123,7 +5123,77 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
-				ret, err := evalCtx.CatalogBuiltins.DescriptorWithPostDeserializationChanges(ctx, []byte(s))
+				descIDAlwaysValid := func(id descpb.ID) bool {
+					return true
+				}
+				jobIDAlwaysValid := func(id jobspb.JobID) bool {
+					return true
+				}
+				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
+					ctx, []byte(s), descIDAlwaysValid, jobIDAlwaysValid,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(ret)), nil
+			},
+			Info:       "This function is used to update descriptor representations",
+			Volatility: volatility.Stable,
+		},
+	),
+	"crdb_internal.repaired_descriptor": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "descriptor", Typ: types.Bytes},
+				{Name: "valid_descriptor_ids", Typ: types.IntArray},
+				{Name: "valid_job_ids", Typ: types.IntArray},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDBytes(args[0])
+				if !ok {
+					return nil, errors.Newf("expected bytes value, got %T", args[0])
+				}
+				descIDs, ok := tree.AsDArray(args[1])
+				if !ok {
+					return nil, errors.Newf("expected array value, got %T", args[1])
+				}
+				descIDMap := make(map[descpb.ID]struct{}, descIDs.Len())
+				for i, n := 0, descIDs.Len(); i < n; i++ {
+					id, isInt := tree.AsDInt(descIDs.Array[i])
+					if !isInt {
+						return nil, errors.Newf("expected int value, got %T", descIDs.Array[i])
+					}
+					descIDMap[descpb.ID(id)] = struct{}{}
+				}
+				descIDMightExist := func(id descpb.ID) bool {
+					_, found := descIDMap[id]
+					return found
+				}
+				jobIDs, ok := tree.AsDArray(args[2])
+				if !ok {
+					return nil, errors.Newf("expected array value, got %T", args[2])
+				}
+				jobIDMap := make(map[jobspb.JobID]struct{}, jobIDs.Len())
+				for i, n := 0, jobIDs.Len(); i < n; i++ {
+					id, isInt := tree.AsDInt(jobIDs.Array[i])
+					if !isInt {
+						return nil, errors.Newf("expected int value, got %T", descIDs.Array[i])
+					}
+					jobIDMap[jobspb.JobID(id)] = struct{}{}
+				}
+				nonTerminalJobIDMightExist := func(id jobspb.JobID) bool {
+					_, found := jobIDMap[id]
+					return found
+				}
+				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
+					ctx, []byte(s), descIDMightExist, nonTerminalJobIDMightExist,
+				)
 				if err != nil {
 					return nil, err
 				}
