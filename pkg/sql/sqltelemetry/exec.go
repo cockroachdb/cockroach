@@ -37,3 +37,11 @@ var CascadesLimitReached = telemetry.GetCounterOnce("sql.exec.cascade-limit-reac
 // HashAggregationDiskSpillingDisabled is to be incremented whenever the disk
 // spilling of the vectorized hash aggregator is disabled.
 var HashAggregationDiskSpillingDisabled = telemetry.GetCounterOnce("sql.exec.hash-agg-spilling-disabled")
+
+// DistributedErrorLocalRetryAttempt is to be incremented whenever a distributed
+// query error results in a local rerun.
+var DistributedErrorLocalRetryAttempt = telemetry.GetCounterOnce("sql.exec.dist-query-rerun-locally-attempt")
+
+// DistributedErrorLocalRetrySuccess is to be incremented whenever the local
+// rerun - of a distributed query that hit SQL retryable error - succeeded.
+var DistributedErrorLocalRetrySuccess = telemetry.GetCounterOnce("sql.exec.dist-query-rerun-locally-success")
