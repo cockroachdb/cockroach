@@ -13,11 +13,11 @@ package funcdesc_test
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
