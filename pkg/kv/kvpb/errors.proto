@@ -29,6 +29,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvpb";
 import "errorspb/errors.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
+import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -263,6 +264,7 @@ message TransactionRetryError {
   // TODO(davidh): Remove in 23.2
   optional string extra_msg = 2 [(gogoproto.nullable) = false];
   optional string extra_msg_redactable = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+  optional storage.enginepb.TxnMeta conflicting_txn = 4 [(gogoproto.nullable) = false];
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -490,6 +492,9 @@ message TransactionRetryWithProtoRefreshError {
 
   // A user-readable message containing redaction markers.
   optional string msg_redactable = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+
+  // The conflicting txn identifier (if available).
+  optional storage.enginepb.TxnMeta conflicting_txn = 5 [(gogoproto.nullable) = false];
 }
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
@@ -620,6 +625,10 @@ message RefreshFailedError {
 
   // The timestamp the key was last updated.
   optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  
+  // The conflicting txn identifier (if available). 
+  // TODO(aadityas): make this nullable
+  optional storage.enginepb.TxnMeta conflicting_txn = 4 [(gogoproto.nullable) = false];
 }
 
 // ErrorDetail is a union type containing all available errors.

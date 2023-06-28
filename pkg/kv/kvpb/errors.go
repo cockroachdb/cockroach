@@ -16,6 +16,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -724,13 +725,20 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 // to improve this: wrap `pErr.GoError()` with a barrier and then with the
 // TransactionRetryWithProtoRefreshError.
 func NewTransactionRetryWithProtoRefreshError(
-	msg redact.RedactableString, txnID uuid.UUID, txn roachpb.Transaction,
+	msg redact.RedactableString,
+	txnID uuid.UUID,
+	txn roachpb.Transaction,
+	conflictingTxn *enginepb.TxnMeta,
 ) *TransactionRetryWithProtoRefreshError {
+	if conflictingTxn == nil {
+		conflictingTxn = &enginepb.TxnMeta{}
+	}
 	return &TransactionRetryWithProtoRefreshError{
-		Msg:           msg.StripMarkers(),
-		MsgRedactable: msg,
-		TxnID:         txnID,
-		Transaction:   txn,
+		Msg:            msg.StripMarkers(),
+		MsgRedactable:  msg,
+		TxnID:          txnID,
+		Transaction:    txn,
+		ConflictingTxn: *conflictingTxn,
 	}
 }
 
@@ -781,12 +789,16 @@ var _ transactionRestartError = &TransactionPushError{}
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
 func NewTransactionRetryError(
-	reason TransactionRetryReason, extraMsg redact.RedactableString,
+	reason TransactionRetryReason, extraMsg redact.RedactableString, conflictingTxn *enginepb.TxnMeta,
 ) *TransactionRetryError {
+	if conflictingTxn == nil {
+		conflictingTxn = &enginepb.TxnMeta{}
+	}
 	return &TransactionRetryError{
 		Reason:             reason,
 		ExtraMsg:           extraMsg.StripMarkers(),
 		ExtraMsgRedactable: extraMsg,
+		ConflictingTxn:     *conflictingTxn,
 	}
 }
 
@@ -1439,13 +1451,21 @@ var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
 // NewRefreshFailedError initializes a new RefreshFailedError. reason can be 'committed value'
 // or 'intent' which caused the failed refresh, key is the key that we failed
 // refreshing, and ts is the timestamp of the committed value or intent that was written.
+// TODO(aadityas): consider helper functions
 func NewRefreshFailedError(
-	reason RefreshFailedError_Reason, key roachpb.Key, ts hlc.Timestamp,
+	reason RefreshFailedError_Reason,
+	key roachpb.Key,
+	ts hlc.Timestamp,
+	conflictingTxn *enginepb.TxnMeta,
 ) *RefreshFailedError {
+	if conflictingTxn == nil {
+		conflictingTxn = &enginepb.TxnMeta{}
+	}
 	return &RefreshFailedError{
-		Reason:    reason,
-		Key:       key,
-		Timestamp: ts,
+		Reason:         reason,
+		Key:            key,
+		Timestamp:      ts,
+		ConflictingTxn: *conflictingTxn,
 	}
 }
 

@@ -3658,7 +3658,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 	err1WriteTimestamp := txn.WriteTimestamp.Add(100, 0)
 	err2WriteTimestamp := txn.WriteTimestamp.Add(200, 0)
 
-	retryErr := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err")
+	retryErr := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err", nil)
 	abortErr := kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 	conditionFailedErr := &kvpb.ConditionFailedError{}
 	writeIntentErr := &kvpb.WriteIntentError{}

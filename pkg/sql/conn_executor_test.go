@@ -750,7 +750,7 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 				BeforePrepare: func(ctx context.Context, stmt string, txn *kv.Txn) error {
 					if strings.Contains(stmt, uniqueString) && atomic.AddInt64(&failed, 1) <= numToFail {
 						return kvpb.NewTransactionRetryWithProtoRefreshError("boom",
-							txn.ID(), *txn.TestingCloneTxn())
+							txn.ID(), *txn.TestingCloneTxn(), nil)
 					}
 					return nil
 				},
@@ -811,7 +811,7 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 			}
 			if atomic.AddInt64(&retryCount, 1) <= numToRetry {
 				return kvpb.NewErrorWithTxn(
-					kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected retry error"), ba.Txn,
+					kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected retry error", nil), ba.Txn,
 				)
 			}
 		}
@@ -889,7 +889,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 				return nil
 			}
 			return kvpb.NewErrorWithTxn(
-				kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "boom"), ba.Txn)
+				kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "boom", nil), ba.Txn)
 		}
 		return nil
 	})

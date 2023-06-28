@@ -64,7 +64,7 @@ func Refresh(
 	} else if res.Value != nil {
 		if ts := res.Value.Timestamp; refreshFrom.Less(ts) {
 			return result.Result{},
-				kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
+				kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts, nil)
 		}
 	}
 
@@ -72,7 +72,7 @@ func Refresh(
 	// at or beneath the refresh timestamp.
 	if res.Intent != nil && res.Intent.Txn.ID != h.Txn.ID {
 		return result.Result{}, kvpb.NewRefreshFailedError(kvpb.RefreshFailedError_REASON_INTENT,
-			res.Intent.Key, res.Intent.Txn.WriteTimestamp)
+			res.Intent.Key, res.Intent.Txn.WriteTimestamp, &res.Intent.Txn)
 	}
 
 	return result.Result{}, nil

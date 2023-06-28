@@ -4281,3 +4281,45 @@ func BenchmarkReturnOnRangeBoundary(b *testing.B) {
 		require.NoError(b, txn.Commit(ctx))
 	}
 }
+
+// TODO(aadityas): test cases
+//   - intent exits (done)
+//   - commited value (still needs to be done)
+//   - refresh range using a scan
+//     _, err = txn1.Scan(ctx, "a,ab")
+//
+// stress test this
+func TestRefreshFailIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	err := db.Put(ctx, "a", "put")
+	require.NoError(t, err)
+
+	txn1 := db.NewTxn(ctx, "original txn")
+	txn2 := db.NewTxn(ctx, "contending txn")
+
+	_, err = txn1.Get(ctx, "a")
+	require.NoError(t, err)
+
+	_, err = txn2.Get(ctx, "b")
+	require.NoError(t, err)
+
+	err = txn2.Put(ctx, "a", "put")
+	require.NoError(t, err)
+
+	err = txn1.Put(ctx, "b", "put")
+	require.NoError(t, err)
+
+	err = txn1.Commit(ctx)
+	require.Error(t, err)
+
+	tErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
+	require.ErrorAs(t, err, &tErr)
+	require.NotNil(t, tErr.ConflictingTxn)
+	require.Equal(t, txn2.ID(), tErr.ConflictingTxn.ID)
+	require.Equal(t, int32(1), tErr.ConflictingTxn.CoordinatorNodeID)
+}

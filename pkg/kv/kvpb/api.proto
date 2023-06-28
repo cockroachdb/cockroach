@@ -2097,7 +2097,7 @@ message RefreshRangeRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   reserved 2;
 
-  // refresh_from specifies the exclusive lower-bound of the verification. The
+  // refresh_from specifies the exclusive lower-bound of the verification. The 
   // request verifies that there are no writes (committed or provisional) in the
   // range (refresh_from, txn.read_timestamp].
   util.hlc.Timestamp refresh_from = 3 [(gogoproto.nullable) = false];

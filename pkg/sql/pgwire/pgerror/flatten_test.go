@@ -106,6 +106,7 @@ func TestFlatten(t *testing.T) {
 					"test",
 					uuid.MakeV4(),
 					roachpb.Transaction{},
+					nil,
 				),
 				"",
 			),
@@ -119,6 +120,7 @@ func TestFlatten(t *testing.T) {
 					redact.Sprint(kvpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hlc.Timestamp{}, hlc.ClockTimestamp{})),
 					uuid.MakeV4(),
 					roachpb.Transaction{},
+					nil,
 				),
 				"",
 			),
@@ -129,9 +131,10 @@ func TestFlatten(t *testing.T) {
 		{
 			errors.Wrap(
 				kvpb.NewTransactionRetryWithProtoRefreshError(
-					redact.Sprint(kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "")),
+					redact.Sprint(kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "", nil)),
 					uuid.MakeV4(),
 					roachpb.Transaction{},
+					nil,
 				),
 				"",
 			),
@@ -145,6 +148,7 @@ func TestFlatten(t *testing.T) {
 					redact.Sprint(kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_PUSHER_ABORTED)),
 					uuid.MakeV4(),
 					roachpb.Transaction{},
+					nil,
 				),
 				"",
 			),

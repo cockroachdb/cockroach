@@ -128,7 +128,7 @@ func injectErrors(req kvpb.Request, hdr kvpb.Header, magicVals *filterVals, veri
 			{counts: magicVals.restartCounts, errFn: func() error {
 				// Note we use a retry error that cannot be automatically retried
 				// by the transaction coord sender.
-				return kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected err")
+				return kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected err", nil)
 			}},
 			{counts: magicVals.abortCounts, errFn: func() error {
 				return kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_ABORTED_RECORD_FOUND)
@@ -1640,7 +1640,7 @@ func TestTxnAutoRetryReasonAvailable(t *testing.T) {
 			if req, ok := args.Req.(*kvpb.GetRequest); ok {
 				if bytes.Contains(req.Key, retriedStmtKey) && retryCount < numRetries {
 					return kvpb.NewErrorWithTxn(kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN,
-						redact.Sprintf("injected err %d", retryCount+1)), args.Hdr.Txn)
+						redact.Sprintf("injected err %d", retryCount+1), nil), args.Hdr.Txn)
 				}
 			}
 			return nil

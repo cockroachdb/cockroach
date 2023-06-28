@@ -148,7 +148,7 @@ func (m *MockTransactionalSender) ManualRestart(
 	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp, msg redact.RedactableString,
 ) error {
 	m.txn.Restart(pri, 0 /* upgradePriority */, ts)
-	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, m.txn)
+	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, m.txn, nil)
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the TxnSender interface.

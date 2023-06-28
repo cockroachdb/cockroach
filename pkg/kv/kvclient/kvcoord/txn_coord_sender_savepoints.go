@@ -128,6 +128,7 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 				"cannot rollback to savepoint after a transaction restart",
 				tc.mu.txn.ID,
 				tc.mu.txn,
+				nil,
 			)
 		}
 		return err
@@ -171,6 +172,7 @@ func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointTo
 			"cannot release savepoint after a transaction restart",
 			tc.mu.txn.ID,
 			tc.mu.txn,
+			nil,
 		)
 	}
 	return err

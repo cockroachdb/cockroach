@@ -59,7 +59,7 @@ func TestingRequestFilterRetryTxnWithPrefix(
 			defer txnTracker.Unlock()
 			if txnTracker.retryCounts[r.Txn.Name] < maxCount {
 				txnTracker.retryCounts[r.Txn.Name]++
-				return kvpb.NewError(kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected error"))
+				return kvpb.NewError(kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, "injected error", nil))
 			}
 		}
 		return nil
