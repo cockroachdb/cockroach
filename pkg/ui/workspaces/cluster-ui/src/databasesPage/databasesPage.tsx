@@ -276,16 +276,17 @@ export class DatabasesPage extends React.Component<
   }
 
   componentDidUpdate(
-    prevProp: Readonly<DatabasesPageProps>,
+    prevProps: Readonly<DatabasesPageProps>,
     prevState: Readonly<DatabasesPageState>,
   ): void {
-    if (this.shouldRefreshDatabaseInformation(prevState, prevProp)) {
+    if (this.shouldRefreshDatabaseInformation(prevState, prevProps)) {
       this.updateQueryParams();
       this.refresh();
     }
     if (
-      prevProp.indexRecommendationsEnabled !==
-      this.props.indexRecommendationsEnabled
+      prevProps.indexRecommendationsEnabled !==
+        this.props.indexRecommendationsEnabled ||
+      prevProps.showNodeRegionsColumn !== this.props.showNodeRegionsColumn
     ) {
       this.setState({ columns: this.columns() });
     }
