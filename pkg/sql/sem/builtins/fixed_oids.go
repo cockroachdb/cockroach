@@ -2418,6 +2418,10 @@ var builtinOidsArray = []string{
 	2445: `lead(val: pg_lsn, n: int, default: pg_lsn) -> pg_lsn`,
 	2446: `last_value(val: pg_lsn) -> pg_lsn`,
 	2447: `pg_lsnsend(pg_lsn: pg_lsn) -> bytes`,
+	2448: `st_asmvtgeom(geometry: geometry, bbox: box2d, extent: int, buffer: int, clip: bool) -> geometry`,
+	2449: `st_asmvtgeom(geometry: geometry, bbox: box2d, extent: int, buffer: int) -> geometry`,
+	2450: `st_asmvtgeom(geometry: geometry, bbox: box2d, extent: int) -> geometry`,
+	2451: `st_asmvtgeom(geometry: geometry, bbox: box2d) -> geometry`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
