@@ -134,14 +134,10 @@ func (s *Simulator) StoreAddNotify(storeID state.StoreID, _ state.State) {
 func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 	allocator := s.state.MakeAllocator(storeID)
 	storePool := s.state.StorePool(storeID)
-	// TODO(kvoli): Instead of passing in individual settings to construct
-	// the each ticking component, pass a pointer to the simulation
-	// settings struct. That way, the settings may be adjusted dynamically
-	// during a simulation.
 	s.rqs[storeID] = queue.NewReplicateQueue(
 		storeID,
 		s.changer,
-		s.settings.ReplicaChangeDelayFn(),
+		s.settings,
 		allocator,
 		storePool,
 		tick,
@@ -149,16 +145,12 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 	s.sqs[storeID] = queue.NewSplitQueue(
 		storeID,
 		s.changer,
-		s.settings.RangeSplitDelayFn(),
-		s.settings.RangeSizeSplitThreshold,
+		s.settings,
 		tick,
 	)
 	s.pacers[storeID] = queue.NewScannerReplicaPacer(
 		s.state.NextReplicasFn(storeID),
-		s.settings.PacerLoopInterval,
-		s.settings.PacerMinIterInterval,
-		s.settings.PacerMaxIterIterval,
-		s.settings.Seed,
+		s.settings,
 	)
 	s.controllers[storeID] = op.NewController(
 		s.changer,

@@ -94,14 +94,14 @@ func TestScannerReplicaPacer(t *testing.T) {
 
 	for _, tc := range testCases {
 		nextReplsFn := createNextRepls(tc.replCount)
-
+		testSettings := config.DefaultSimulationSettings()
+		testSettings.PacerLoopInterval = tc.loopInterval
+		testSettings.PacerMinIterInterval = tc.minInterval
+		testSettings.PacerMaxIterIterval = tc.maxInterval
 		t.Run(tc.desc, func(t *testing.T) {
 			pacer := NewScannerReplicaPacer(
 				nextReplsFn,
-				tc.loopInterval,
-				tc.minInterval,
-				tc.maxInterval,
-				config.DefaultSimulationSettings().Seed,
+				testSettings,
 			)
 			results := make([]int, 0, 1)
 			for _, tick := range tc.ticks {
