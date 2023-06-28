@@ -15,7 +15,6 @@ import "gogoproto/gogo.proto";
 import "obsservice/obspb/opentelemetry-proto/logs/v1/logs.proto";
 import "obsservice/obspb/opentelemetry-proto/common/v1/common.proto";
 import "obsservice/obspb/opentelemetry-proto/resource/v1/resource.proto";
-import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/cockroachdb/cockroach/pkg/obsservice/obspb";
 
