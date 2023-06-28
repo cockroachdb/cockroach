@@ -1426,6 +1426,59 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 	}
 }
 
+// readJSONMessages reads JSON messages from the specified file.
+func readJSONMessages(
+	path string,
+	topic string,
+	format changefeedbase.FormatType,
+	isBare bool,
+	markSeen func(m *cdctest.TestFeedMessage) bool,
+) (rows []*cdctest.TestFeedMessage, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err = errors.CombineErrors(err, f.Close())
+	}()
+
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		value := append([]byte(nil), s.Bytes()...)
+		m := &cdctest.TestFeedMessage{
+			Topic: topic,
+			Value: value,
+		}
+
+		// NB: This is the logic for JSON. Avro will involve parsing an
+		// "Object Container File".
+		switch format {
+		case ``, changefeedbase.OptFormatJSON:
+			// Cloud storage sinks default the `WITH key_in_value` option so that
+			// the key is recoverable. Extract it out of the value (also removing it
+			// so the output matches the other sinks). Note that this assumes the
+			// format is json, this will have to be fixed once we add format=avro
+			// support to cloud storage.
+			//
+			// TODO(dan): Leave the key in the value if the TestFeed user
+			// specifically requested it.
+			if m.Key, m.Value, err = extractKeyFromJSONValue(isBare, m.Value); err != nil {
+				return nil, err
+			}
+			if markSeen != nil && !markSeen(m) {
+				continue
+			}
+			m.Resolved = nil
+			rows = append(rows, m)
+		case changefeedbase.OptFormatCSV:
+			rows = append(rows, m)
+		default:
+			return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, format)
+		}
+	}
+	return rows, nil
+}
+
 func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 	if strings.HasSuffix(path, `.tmp`) {
 		// File in the process of being written by ExternalStorage. Ignore.
@@ -1499,53 +1552,17 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 	// cloud storage uses a different delimiter. Let tests be agnostic.
 	topic = strings.Replace(topic, `+`, `.`, -1)
 
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
 	if format == changefeedbase.OptFormatParquet {
 		envelopeType := changefeedbase.EnvelopeType(details.Opts[changefeedbase.OptEnvelope])
 		return c.appendParquetTestFeedMessages(path, topic, envelopeType)
 	}
 
-	s := bufio.NewScanner(f)
-	for s.Scan() {
-		value := append([]byte(nil), s.Bytes()...)
-		m := &cdctest.TestFeedMessage{
-			Topic: topic,
-			Value: value,
-		}
-
-		// NB: This is the logic for JSON. Avro will involve parsing an
-		// "Object Container File".
-		switch format {
-		case ``, changefeedbase.OptFormatJSON:
-			// Cloud storage sinks default the `WITH key_in_value` option so that
-			// the key is recoverable. Extract it out of the value (also removing it
-			// so the output matches the other sinks). Note that this assumes the
-			// format is json, this will have to be fixed once we add format=avro
-			// support to cloud storage.
-			//
-			// TODO(dan): Leave the key in the value if the TestFeed user
-			// specifically requested it.
-			if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
-				return err
-			}
-			if isNew := c.markSeen(m); !isNew {
-				continue
-			}
-			m.Resolved = nil
-			c.rows = append(c.rows, m)
-		case changefeedbase.OptFormatCSV:
-			c.rows = append(c.rows, m)
-		default:
-			return errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, format)
-		}
+	rows, err := readJSONMessages(path, topic, format, c.isBare, c.markSeen)
+	if err != nil {
+		return err
 	}
+	c.rows = append(c.rows, rows...)
 	return nil
-
 }
 
 // teeGroup facilitates reading messages from input channel
