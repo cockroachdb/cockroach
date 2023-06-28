@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -37,9 +38,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -216,6 +219,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalKVFlowHandlesID:                    crdbInternalKVFlowHandles,
 		catconstants.CrdbInternalKVFlowControllerID:                 crdbInternalKVFlowController,
 		catconstants.CrdbInternalKVFlowTokenDeductions:              crdbInternalKVFlowTokenDeductions,
+		catconstants.CrdbInternalKVProtectedTS:                      crdbInternalKVProtectedTSTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -1398,6 +1402,270 @@ func makeJobsTableRows(
 		}
 		matched = true
 	}
+}
+
+const crdbInternalKVProtectedTSTableQuery = `
+	SELECT id, ts, meta_type, meta, num_spans, spans, verified, target,
+		crdb_internal.pb_to_json(
+		  	'cockroach.protectedts.Target',
+		  	target,
+		    false /* emit defaults */,
+		    false /* include redaction marker */ 
+		          /* NB: redactions in the debug zip are handled elsewhere by marking columns as sensitive */
+		) as decoded_targets
+	FROM system.protected_ts_records
+`
+
+// TODO (#104161): num_ranges excludes ranges when targeting a database,
+// cluster, or tenant.
+var crdbInternalKVProtectedTSTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.kv_protected_ts_records (
+   id        			UUID NOT NULL,
+   ts        			DECIMAL NOT NULL,
+   meta_type 			STRING NOT NULL,
+   meta      			BYTES,
+   num_spans 			INT8 NOT NULL,
+   spans     			BYTES NOT NULL, -- We do not decode this column since it is deprecated in 22.2+.
+   verified  			BOOL NOT NULL,
+   target    			BYTES,  
+   decoded_meta 		JSON,   -- Decoded data from the meta column above.
+                                -- This data can have different structures depending on the meta_type. 
+   decoded_target 		JSON,   -- Decoded data from the target column above.
+   internal_meta        JSON,   -- Additional metadata added by this virtual table (ex. job owner for job meta_type) 
+   num_ranges  			INT     -- Number of ranges protected by this PTS record.
+)`,
+	comment: `decoded protected timestamp metadata from system.protected_ts_records (KV scan). does not decode `,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (err error) {
+		defer func() {
+			err = pgerror.Wrap(err, pgcode.Internal, "internal pts table")
+		}()
+
+		it, err := p.InternalSQLTxn().QueryIteratorEx(
+			ctx, "crdb-internal-protected-timestamps-table", p.txn,
+			sessiondata.NodeUserSessionDataOverride,
+			crdbInternalKVProtectedTSTableQuery)
+		if err != nil {
+			return err
+		}
+
+		cleanup := func(ctx context.Context) {
+			if err := it.Close(); err != nil {
+				// TODO(yuzefovich): this error should be propagated further up
+				// and not simply being logged. Fix it (#61123).
+				log.Warningf(ctx, "error closing an iterator: %v", err)
+			}
+		}
+		defer cleanup(ctx)
+
+		// Create JSON object builders for re-use.
+		jobsDecodedMetaBuilder, err := json.NewFixedKeysObjectBuilder(jobsDecodedMetaKeys)
+		if err != nil {
+			return err
+		}
+		jobsInternalMetaBuilder, err := json.NewFixedKeysObjectBuilder(jobsInternalMetaKeys)
+		if err != nil {
+			return err
+		}
+		schedulesDecodedMetaBuilder, err := json.NewFixedKeysObjectBuilder(schedulesDecodedMetaKeys)
+		if err != nil {
+			return err
+		}
+		schedulesInternalMetaBuilder, err := json.NewFixedKeysObjectBuilder(schedulesInternalMetaKeys)
+		if err != nil {
+			return err
+		}
+
+		var id, ts, metaType, meta, numSpans, spans, verified, target, decodedTarget tree.Datum
+
+		for {
+			hasNext, err := it.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !hasNext {
+				return nil
+			}
+
+			r := it.Cur()
+			id, ts, metaType, meta, numSpans, spans, verified, target, decodedTarget =
+				r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]
+
+			metaTypeDatum, ok := metaType.(*tree.DString)
+			if !ok {
+				return errors.AssertionFailedf("could not get datum string from meta type")
+			}
+			metaTypeBytes := tree.NewFmtCtx(tree.FmtBareStrings)
+			metaTypeDatum.Format(metaTypeBytes)
+			metaTypeString := metaTypeBytes.CloseAndGetString()
+
+			var decodedMeta tree.Datum
+			decodedMeta = tree.DNull
+			var internalMeta tree.Datum
+			internalMeta = tree.DNull
+
+			// Since this column is nullable in the system table, we should do a check.
+			if meta != tree.DNull {
+				metaBytes, ok := meta.(*tree.DBytes)
+				if !ok {
+					return errors.AssertionFailedf("could not get datum bytes from meta")
+				}
+
+				switch metaTypeString {
+				case jobsprotectedts.GetMetaType(jobsprotectedts.Jobs):
+					decodedMeta, internalMeta, err = decodeMetaFieldsForJobs(ctx, p, metaBytes, jobsDecodedMetaBuilder,
+						jobsInternalMetaBuilder)
+					if err != nil {
+						return err
+					}
+				case jobsprotectedts.GetMetaType(jobsprotectedts.Schedules):
+					decodedMeta, internalMeta, err = decodeMetaFieldsForSchedules(ctx, p, metaBytes,
+						schedulesDecodedMetaBuilder, schedulesInternalMetaBuilder)
+					if err != nil {
+						return err
+					}
+				default:
+				}
+			}
+
+			// Calculate the number of ranges protected by the PTS record.
+			var numRanges tree.Datum
+			// -1 is a sentinel value indicating that targets could not be
+			// decoded.
+			numRanges = tree.NewDInt(-1)
+			// Before 22.2, there was no target column in the system table. PTS records created before then which have
+			// persisted until the present will have a null target field. Instead of the target field, these PTS records
+			// use the spans column. Since the spans column is deprecated, we don't bother decoding it in this virtual
+			// table.
+			if target != tree.DNull {
+				targetBytes, ok := target.(*tree.DBytes)
+				if !ok {
+					return errors.AssertionFailedf("could not decode target")
+				}
+				var targetProto ptpb.Target
+				// It is safe to use UnsafeBytes if we do not mutate them.
+				if err := protoutil.Unmarshal(targetBytes.UnsafeBytes(), &targetProto); err != nil {
+					return err
+				}
+				switch t := targetProto.Union.(type) {
+				// TODO (#104161): support range estimate for clusters, tenants, and database schema objects.
+				case *ptpb.Target_Cluster:
+				case *ptpb.Target_Tenants:
+				case *ptpb.Target_SchemaObjects:
+					// Looking up leased descriptors can be faster mean they are one version off, which is acceptable for computing
+					// the number of ranges.
+					descs, err := p.Descriptors().ByIDWithLeased(p.InternalSQLTxn().KV()).Get().Descs(ctx, t.SchemaObjects.IDs)
+					if err != nil {
+						return err
+					}
+					var allSpans []roachpb.Span
+					for _, desc := range descs {
+						switch desc.DescriptorType() {
+						case catalog.Table:
+							tableDesc := desc.(catalog.TableDescriptor)
+							for _, idx := range tableDesc.AllIndexes() {
+								idxSpan := tableDesc.IndexSpan(p.execCfg.Codec, idx.GetID())
+								allSpans = append(allSpans, idxSpan)
+							}
+						default:
+						}
+					}
+					ranges, _, err := p.DistSQLPlanner().distSender.AllRangeSpans(ctx, allSpans)
+					if err != nil {
+						return err
+					}
+					numRanges = tree.NewDInt(tree.DInt(len(ranges)))
+				}
+			}
+
+			if err := addRow(id, ts, metaType, meta, numSpans, spans, verified, target, decodedMeta, decodedTarget, internalMeta, numRanges); err != nil {
+				return err
+			}
+
+		}
+	},
+}
+
+var schedulesDecodedMetaKeys = []string{"scheduleID"}
+var schedulesInternalMetaKeys = []string{"scheduleLabel", "scheduleOwner"}
+
+func decodeMetaFieldsForSchedules(
+	ctx context.Context,
+	p *planner,
+	metaBytes *tree.DBytes,
+	decodedMetaBuilder *json.FixedKeysObjectBuilder,
+	internalMetaBuilder *json.FixedKeysObjectBuilder,
+) (decodedMeta tree.Datum, internalMeta tree.Datum, err error) {
+	schedID, err := jobsprotectedts.DecodeID(metaBytes.UnsafeBytes())
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := decodedMetaBuilder.Set(schedulesDecodedMetaKeys[0], json.FromInt64(schedID)); err != nil {
+		return nil, nil, err
+	}
+	decodedMetaJSON, err := decodedMetaBuilder.Build()
+	if err != nil {
+		return nil, nil, err
+	}
+	decodedMeta = tree.NewDJSON(decodedMetaJSON)
+
+	schedEnv := scheduledjobs.ProdJobSchedulerEnv
+	sched, err := jobs.ScheduledJobTxn(p.InternalSQLTxn()).Load(ctx, schedEnv, schedID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := internalMetaBuilder.Set(schedulesInternalMetaKeys[0], json.FromString(sched.ScheduleLabel())); err != nil {
+		return nil, nil, err
+	}
+	if err := internalMetaBuilder.Set(schedulesInternalMetaKeys[1], json.FromString(sched.Owner().Normalized())); err != nil {
+		return nil, nil, err
+	}
+	internalMetaJSON, err := internalMetaBuilder.Build()
+	if err != nil {
+		return nil, nil, err
+	}
+	internalMeta = tree.NewDJSON(internalMetaJSON)
+
+	return decodedMeta, internalMeta, nil
+}
+
+var jobsDecodedMetaKeys = []string{"jobID"}
+var jobsInternalMetaKeys = []string{"jobUsername"}
+
+func decodeMetaFieldsForJobs(
+	ctx context.Context,
+	p *planner,
+	metaBytes *tree.DBytes,
+	decodedMetaBuilder *json.FixedKeysObjectBuilder,
+	internalMetaBuilder *json.FixedKeysObjectBuilder,
+) (decodedMeta tree.Datum, internalMeta tree.Datum, err error) {
+	jobID, err := jobsprotectedts.DecodeID(metaBytes.UnsafeBytes())
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := decodedMetaBuilder.Set(jobsDecodedMetaKeys[0], json.FromInt64(jobID)); err != nil {
+		return nil, nil, err
+	}
+	decodedMetaJSON, err := decodedMetaBuilder.Build()
+	if err != nil {
+		return nil, nil, err
+	}
+	decodedMeta = tree.NewDJSON(decodedMetaJSON)
+
+	job, err := p.ExecCfg().JobRegistry.LoadJob(ctx, jobspb.JobID(jobID))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := internalMetaBuilder.Set(jobsInternalMetaKeys[0], json.FromString(job.Payload().UsernameProto.Decode().Normalized())); err != nil {
+		return nil, nil, err
+	}
+	internalMetaJSON, err := internalMetaBuilder.Build()
+	if err != nil {
+		return nil, nil, err
+	}
+	internalMeta = tree.NewDJSON(internalMetaJSON)
+
+	return decodedMeta, internalMeta, nil
 }
 
 // execStatAvg is a helper for execution stats shown in virtual tables. Returns

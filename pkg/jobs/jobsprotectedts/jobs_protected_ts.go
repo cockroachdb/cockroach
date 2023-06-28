@@ -93,7 +93,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 // will stop protecting key spans.
 func MakeRecord(
 	recordID uuid.UUID,
-	metaID int64,
+	metaID int64, /* jobID or scheduleID, matching the MetaType */
 	tsToProtect hlc.Timestamp,
 	deprecatedSpans []roachpb.Span,
 	metaType MetaType,
