@@ -805,8 +805,10 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	// reflect the reason for the restart. More details about the
 	// different error types are documented above on the metaRestart
 	// variables.
+	var conflictingTxn *enginepb.TxnMeta
 	switch tErr := pErr.GetDetail().(type) {
 	case *kvpb.TransactionRetryError:
+		conflictingTxn = tErr.ConflictingTxn
 		switch tErr.Reason {
 		case kvpb.RETRY_WRITE_TOO_OLD:
 			tc.metrics.RestartsWriteTooOld.Inc()
@@ -839,10 +841,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	newTxn := kvpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
 
 	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
-	retErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		redact.Sprint(pErr),
-		errTxnID, // the id of the transaction that encountered the error
-		newTxn)
+	retErr := kvpb.NewTransactionRetryWithProtoRefreshErrorWithConflictingTxn(redact.Sprint(pErr), errTxnID, newTxn, conflictingTxn)
 
 	// Move to a retryable error state, where all Send() calls fail until the
 	// state is cleared.
@@ -1161,8 +1160,7 @@ func (tc *TxnCoordSender) ManualRestart(
 	// have been performed at the wrong epoch).
 	tc.mu.txn.Restart(pri, 0 /* upgradePriority */, ts)
 
-	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(
-		msg, tc.mu.txn.ID, tc.mu.txn)
+	pErr := kvpb.NewTransactionRetryWithProtoRefreshError(msg, tc.mu.txn.ID, tc.mu.txn)
 
 	// Move to a retryable error state, where all Send() calls fail until the
 	// state is cleared.

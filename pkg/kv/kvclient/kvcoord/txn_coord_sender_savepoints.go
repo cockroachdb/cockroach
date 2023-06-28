@@ -124,11 +124,7 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 	err := tc.checkSavepointLocked(sp)
 	if err != nil {
 		if errors.Is(err, errSavepointInvalidAfterTxnRestart) {
-			err = kvpb.NewTransactionRetryWithProtoRefreshError(
-				"cannot rollback to savepoint after a transaction restart",
-				tc.mu.txn.ID,
-				tc.mu.txn,
-			)
+			err = kvpb.NewTransactionRetryWithProtoRefreshError("cannot rollback to savepoint after a transaction restart", tc.mu.txn.ID, tc.mu.txn)
 		}
 		return err
 	}
@@ -167,11 +163,7 @@ func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointTo
 	sp := s.(*savepoint)
 	err := tc.checkSavepointLocked(sp)
 	if errors.Is(err, errSavepointInvalidAfterTxnRestart) {
-		err = kvpb.NewTransactionRetryWithProtoRefreshError(
-			"cannot release savepoint after a transaction restart",
-			tc.mu.txn.ID,
-			tc.mu.txn,
-		)
+		err = kvpb.NewTransactionRetryWithProtoRefreshError("cannot release savepoint after a transaction restart", tc.mu.txn.ID, tc.mu.txn)
 	}
 	return err
 }

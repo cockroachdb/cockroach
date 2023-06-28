@@ -1639,8 +1639,7 @@ func TestTxnAutoRetryReasonAvailable(t *testing.T) {
 		func(args kvserverbase.FilterArgs) *kvpb.Error {
 			if req, ok := args.Req.(*kvpb.GetRequest); ok {
 				if bytes.Contains(req.Key, retriedStmtKey) && retryCount < numRetries {
-					return kvpb.NewErrorWithTxn(kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN,
-						redact.Sprintf("injected err %d", retryCount+1)), args.Hdr.Txn)
+					return kvpb.NewErrorWithTxn(kvpb.NewTransactionRetryError(kvpb.RETRY_REASON_UNKNOWN, redact.Sprintf("injected err %d", retryCount+1)), args.Hdr.Txn)
 				}
 			}
 			return nil

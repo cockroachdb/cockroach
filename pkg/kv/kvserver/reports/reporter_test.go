@@ -459,8 +459,7 @@ func (it *erroryRangeIterator) Next(ctx context.Context) (roachpb.RangeDescripto
 		it.injectErrAfter = -1
 
 		var err error
-		err = kvpb.NewTransactionRetryWithProtoRefreshError(
-			"injected err", uuid.Nil, roachpb.Transaction{})
+		err = kvpb.NewTransactionRetryWithProtoRefreshError("injected err", uuid.Nil, roachpb.Transaction{})
 		// Let's wrap the error to check the unwrapping.
 		err = errors.Wrap(err, "dummy wrapper")
 		// Feed the error to the underlying iterator to reset it.
