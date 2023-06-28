@@ -72,6 +72,10 @@ type TestingKnobs struct {
 	// to the job record.
 	ShouldCheckpointToJobRecord func(hw hlc.Timestamp) bool
 
+	// AlwaysCheckpointSpans forces span level checkpoint to be written for
+	// every resolved span.
+	AlwaysCheckpointSpans bool
+
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}
 }

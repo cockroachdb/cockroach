@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"math"
 	"math/rand"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -5071,6 +5073,24 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `unknown on_error: not_valid, valid values are 'pause' and 'fail'`,
 		`CREATE CHANGEFEED FOR foo into $1 WITH on_error='not_valid'`,
 		`kafka://nope`)
+
+	// Validate exactly_once options
+	sqlDB.ExpectErr( // Require initial_scan=only
+		t, `exactly_once requires initial_scan='only'`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH exactly_once`,
+	)
+	sqlDB.ExpectErr( // only cloud storage sinks supported
+		t, `this sink is incompatible with option exactly_once`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH initial_scan_only, exactly_once`,
+	)
+	sqlDB.ExpectErr( // same as above, but use webhook and try initial_scan='only'
+		t, `this sink is incompatible with option exactly_once`,
+		`CREATE CHANGEFEED FOR foo INTO 'webhook-https://nope/' WITH initial_scan='only', exactly_once`,
+	)
+	sqlDB.ExpectErr( // Try core style changefeed
+		t, ` exactly_once is incompatible with core changefeed and requires storage sink to be specified`,
+		`CREATE CHANGEFEED FOR foo WITH initial_scan='only', exactly_once`,
+	)
 }
 
 func TestChangefeedDescription(t *testing.T) {
@@ -7331,6 +7351,142 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 	// "enterprise" and "webhook" sink implementations are too slow
 	// for a test that reads 5k messages.
 	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestOmitSinks("enterprise", "webhook"))
+}
+
+func TestChangefeedExactlyOnceExport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	str := strconv.Itoa
+
+	const numNodes = 4
+	const numRows = 1000
+	const splitStep = 50
+
+	args := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{}}
+
+	// We will populate numRows rows, with split point every splitStep rows.
+	// Furthermore, we'll configure changefeed to checkpoint its progress on
+	// every ResolvedSpan event.
+	// We want to trigger a transient error after the checkpoint event, and then
+	// we'll verify that we have no duplicates.
+	var numResolvedSpans atomic.Int32
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{
+			AlwaysCheckpointSpans: true,
+			RaiseRetryableError: func() error {
+				if numResolvedSpans.Add(1) == 3 {
+					return errors.New("trigger error")
+				}
+				return nil
+			},
+		}},
+	}
+
+	for i := 0; i < numNodes; i++ {
+		args.ServerArgsPerNode[i] = base.TestServerArgs{
+			ExternalIODir: path.Join(dir, str(i)),
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "x", Value: str(i / 2)}, {Key: "y", Value: str(i % 2)}}},
+			DefaultTestTenant: base.TestTenantDisabled, // need nodelocal and splits.
+			Knobs:             knobs,
+		}
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, numNodes, args)
+	defer tc.Stopper().Stop(ctx)
+	tc.ToggleReplicateQueues(false)
+
+	n2 := sqlutils.MakeSQLRunner(tc.Conns[1])
+
+	// Setup a table with at least one range on each node to be sure we will see a
+	// file from that node if it isn't excluded by filter. Relocate can fail with
+	// errors like `change replicas... descriptor changed` thus the SucceedsSoon.
+	n2.ExecMultiple(t,
+		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
+		"CREATE TABLE x (id INT PRIMARY KEY)",
+	)
+
+	n2.Exec(t, "INSERT INTO x SELECT generate_series(1, $1)", numRows)
+	n2.Exec(t, "ALTER TABLE x SPLIT AT SELECT id FROM x WHERE id % $1 = 0", splitStep)
+	nodes := []int{1, 2, 3, 4}
+	for i := 0; i < numRows; i += splitStep {
+		// Shuffle and pick 3 replicas.
+		rand.Shuffle(len(nodes), func(i, j int) {
+			nodes[i], nodes[j] = nodes[j], nodes[i]
+		})
+		replicas := strings.Join([]string{strconv.Itoa(nodes[0]), strconv.Itoa(nodes[1]), strconv.Itoa(nodes[2])}, ",")
+		// Relocate to replicas.
+		n2.ExecSucceedsSoon(t,
+			fmt.Sprintf(`ALTER TABLE x EXPERIMENTAL_RELOCATE VALUES (ARRAY[%s], %d)`, replicas, i))
+	}
+
+	test := func(t *testing.T, name, filter string, expect []bool) {
+		t.Run(name, func(t *testing.T) {
+			// Run and wait for the changefeed.
+			var id int
+			n2.QueryRow(t,
+				"CREATE CHANGEFEED FOR x INTO $1 WITH initial_scan='only', execution_locality=$2, exactly_once",
+				"nodelocal://0/"+name, filter).Scan(&id)
+			jobID := jobspb.JobID(id)
+			waitForJobStatus(n2, t, jobID, jobs.StatusSucceeded)
+
+			p := jobutils.GetJobPayload(t, n2, jobspb.JobID(jobID))
+			payload := p.GetChangefeed()
+			require.NotNil(t, payload)
+
+			// Now check each dir against expectation.
+			filesSomewhere := false
+			for i := range expect {
+				where := path.Join(dir, str(i), name)
+				x, err := os.ReadDir(where)
+				filesHere := err == nil && len(x) > 0
+				if !expect[i] {
+					require.False(t, filesHere, where)
+				}
+				filesSomewhere = filesSomewhere || filesHere
+			}
+			require.True(t, filesSomewhere)
+
+			allMessages := make(map[string][]string)
+			allFiles := make([]string, 0, numRows)
+			require.NoError(t,
+				filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+					if d.IsDir() {
+						return nil
+					}
+					allFiles = append(allFiles, p)
+					messages, err := readJSONMessages(p, "x", changefeedbase.OptFormatJSON, false, nil)
+					if err != nil {
+						return err
+					}
+					for _, m := range messages {
+						allMessages[string(m.Key)] = append(allMessages[string(m.Key)], p)
+					}
+					return nil
+				}))
+
+			require.Equal(t, numRows, len(allMessages),
+				"duplicate messages: \n%s",
+				strings.Join(func() (dups []string) {
+					for k, v := range allMessages {
+						if len(v) > 1 {
+							dups = append(dups, fmt.Sprintf("%s: %s", k, v))
+						}
+					}
+					return dups
+				}(), "\n"),
+			)
+		})
+	}
+
+	test(t, "all", "", []bool{true, true, true, true})
+	test(t, "x", "x=0", []bool{true, true, false, false})
+	test(t, "y", "y=1", []bool{false, true, false, true})
 }
 
 func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
