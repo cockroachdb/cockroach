@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,6 +55,10 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 			0,       /* 0B causes everything to be an ingest */
 		).(int))
 	}())
+
+// RaftEntriesMemLimit is the limit for raft entries pulled into memory.
+// Unlimited if <= 0.
+var RaftEntriesMemLimit = envutil.EnvOrDefaultBytes("COCKROACH_RAFT_ENTRIES_MEMORY_LIMIT", 0)
 
 // replicaRaftStorage implements the raft.Storage interface.
 type replicaRaftStorage Replica
