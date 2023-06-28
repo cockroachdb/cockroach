@@ -787,8 +787,7 @@ func (tp *txnPipeliner) adjustError(
 	// Turn an IntentMissingError into a transactional retry error.
 	if ime, ok := pErr.GetDetail().(*kvpb.IntentMissingError); ok {
 		log.VEventf(ctx, 2, "transforming intent missing error into retry: %v", ime)
-		err := kvpb.NewTransactionRetryError(
-			kvpb.RETRY_ASYNC_WRITE_FAILURE, redact.Sprintf("missing intent on: %s", ime.Key))
+		err := kvpb.NewTransactionRetryError(kvpb.RETRY_ASYNC_WRITE_FAILURE, redact.Sprintf("missing intent on: %s", ime.Key))
 		retryErr := kvpb.NewErrorWithTxn(err, pErr.GetTxn())
 		retryErr.Index = pErr.Index
 		return retryErr

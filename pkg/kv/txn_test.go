@@ -309,8 +309,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 							if pErr.TransactionRestart() != kvpb.TransactionRestart_NONE {
 								// HACK ALERT: to do without a TxnCoordSender, we jump through
 								// hoops to get the retryable error expected by db.Txn().
-								return nil, kvpb.NewError(kvpb.NewTransactionRetryWithProtoRefreshError(
-									"foo", ba.Txn.ID, *ba.Txn))
+								return nil, kvpb.NewError(kvpb.NewTransactionRetryWithProtoRefreshError("foo", ba.Txn.ID, *ba.Txn))
 							}
 							return nil, pErr
 						}

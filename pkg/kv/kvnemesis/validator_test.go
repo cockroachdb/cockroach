@@ -34,8 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var retryableError = kvpb.NewTransactionRetryWithProtoRefreshError(
-	``, uuid.MakeV4(), roachpb.Transaction{})
+var retryableError = kvpb.NewTransactionRetryWithProtoRefreshError(``, uuid.MakeV4(), roachpb.Transaction{})
 
 func withTimestamp(op Operation, ts int) Operation {
 	op.Result().OptionalTimestamp = hlc.Timestamp{WallTime: int64(ts)}

@@ -749,8 +749,7 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				BeforePrepare: func(ctx context.Context, stmt string, txn *kv.Txn) error {
 					if strings.Contains(stmt, uniqueString) && atomic.AddInt64(&failed, 1) <= numToFail {
-						return kvpb.NewTransactionRetryWithProtoRefreshError("boom",
-							txn.ID(), *txn.TestingCloneTxn())
+						return kvpb.NewTransactionRetryWithProtoRefreshError("boom", txn.ID(), *txn.TestingCloneTxn())
 					}
 					return nil
 				},
