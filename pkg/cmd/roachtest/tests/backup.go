@@ -904,6 +904,14 @@ type mvccRangeTombstoneConfig struct {
 
 	// TODO(msbutler): delete once tenants can back up to nodelocal.
 	skipBackupRestore bool
+
+	// short configures the test to only read from the first 3 tpch files, and conduct
+	// 1 import rollback.
+	short bool
+
+	// debugSkipRollback configures the test to return after the first import,
+	// skipping rollback steps.
+	debugSkipRollback bool
 }
 
 // runBackupMVCCRangeTombstones tests that backup and restore works in the
@@ -1030,10 +1038,16 @@ revert=2'`)
 		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.5?AUTH=implicit`,
 		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.7?AUTH=implicit`,
 	}
+	if config.short {
+		files = files[:2]
+	}
 	_, err = conn.ExecContext(ctx, fmt.Sprintf(
 		`IMPORT INTO orders CSV DATA ('%s') WITH delimiter='|'`, strings.Join(files, "', '")))
 	require.NoError(t, err)
 
+	if config.debugSkipRollback {
+		return
+	}
 	// Fingerprint for restore comparison.
 	name, ts, fpInitial := fingerprint("initial", "tpch", "orders")
 	restores = append(restores, restore{
@@ -1058,6 +1072,9 @@ revert=2'`)
 		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.6?AUTH=implicit`,
 		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.8?AUTH=implicit`,
 	}
+	if config.short {
+		files = files[:1]
+	}
 
 	_, err = conn.ExecContext(ctx,
 		`SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest'`)
@@ -1065,6 +1082,10 @@ revert=2'`)
 
 	var jobID string
 	for i := 0; i < 2; i++ {
+		if i > 0 && config.short {
+			t.L().Printf("skipping import rollback")
+			continue
+		}
 		t.Status("importing even-numbered files")
 		require.NoError(t, conn.QueryRowContext(ctx, fmt.Sprintf(
 			`IMPORT INTO orders CSV DATA ('%s') WITH delimiter='|', detached`,

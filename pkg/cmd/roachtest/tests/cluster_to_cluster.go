@@ -83,6 +83,8 @@ type c2cSetup struct {
 
 const maxExpectedLatencyDefault = 2 * time.Minute
 
+const maxCutoverTimeoutDefault = 5 * time.Minute
+
 var c2cPromMetrics = map[string]clusterstats.ClusterStat{
 	"LogicalMegabytes": {
 		LabelName: "node",
@@ -270,6 +272,11 @@ func (kv replicateKV) runDriver(
 }
 
 type replicateBulkOps struct {
+	// short uses less data during the import and rollback steps. Also only runs one rollback.
+	short bool
+
+	// debugSkipRollback skips all rollback steps during the test.
+	debugSkipRollback bool
 }
 
 func (bo replicateBulkOps) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
@@ -286,6 +293,8 @@ func (bo replicateBulkOps) runDriver(
 	runBackupMVCCRangeTombstones(workloadCtx, t, c, mvccRangeTombstoneConfig{
 		skipBackupRestore: true,
 		skipClusterSetup:  true,
+		short:             bo.short,
+		debugSkipRollback: bo.debugSkipRollback,
 		tenantName:        setup.src.name})
 	return nil
 }
@@ -323,6 +332,9 @@ type replicationSpec struct {
 
 	// timeout specifies when the roachtest should fail due to timeout.
 	timeout time.Duration
+
+	// cutoverTimeout specifies how long we expect cutover to take.
+	cutoverTimeout time.Duration
 
 	expectedNodeDeaths int32
 
@@ -552,7 +564,7 @@ func (rd *replicationDriver) stopReplicationStream(
 	ctx context.Context, ingestionJob int, cutoverTime time.Time,
 ) {
 	rd.setup.dst.sysSQL.Exec(rd.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, rd.setup.dst.name, cutoverTime)
-	err := retry.ForDuration(time.Minute*5, func() error {
+	err := retry.ForDuration(rd.rs.cutoverTimeout, func() error {
 		var status string
 		var payloadBytes []byte
 		res := rd.setup.dst.sysSQL.DB.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJob)
@@ -670,6 +682,11 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	if rd.rs.maxAcceptedLatency != 0 {
 		maxExpectedLatency = rd.rs.maxAcceptedLatency
 	}
+
+	if rd.rs.cutoverTimeout == 0 {
+		rd.rs.cutoverTimeout = maxCutoverTimeoutDefault
+	}
+
 	lv := makeLatencyVerifier("stream-ingestion", 0, maxExpectedLatency, rd.t.L(),
 		getStreamIngestionJobInfo, rd.t.Status, rd.rs.expectedNodeDeaths > 0)
 	defer lv.maybeLogLatencyHist()
@@ -829,15 +846,32 @@ func registerClusterToCluster(r registry.Registry) {
 			skip:               "for local ad hoc testing",
 		},
 		{
-			name:               "c2c/BulkOps",
+			name:               "c2c/BulkOps/full",
 			srcNodes:           4,
 			dstNodes:           4,
 			cpus:               8,
-			pdSize:             500,
+			pdSize:             100,
 			workload:           replicateBulkOps{},
-			timeout:            4 * time.Hour,
+			timeout:            2 * time.Hour,
+			cutoverTimeout:     1 * time.Hour,
 			additionalDuration: 0,
 			cutover:            5 * time.Minute,
+			maxAcceptedLatency: 1 * time.Hour,
+			skip:               "Reveals a bad bug related to replicating an import. See https://github.com/cockroachdb/cockroach/issues/105676 ",
+		},
+		{
+			name:               "c2c/BulkOps/singleImport",
+			srcNodes:           4,
+			dstNodes:           4,
+			cpus:               8,
+			pdSize:             100,
+			workload:           replicateBulkOps{short: true, debugSkipRollback: true},
+			timeout:            2 * time.Hour,
+			cutoverTimeout:     1 * time.Hour,
+			additionalDuration: 0,
+			cutover:            1 * time.Minute,
+			maxAcceptedLatency: 1 * time.Hour,
+			skip:               "Reveals a bad bug related to replicating an import. See https://github.com/cockroachdb/cockroach/issues/105676 ",
 		},
 	} {
 		sp := sp
