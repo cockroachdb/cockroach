@@ -903,3 +903,18 @@ func sinkSupportsConcurrentEmits(sink EventSink) bool {
 	_, ok := sink.(*batchingSink)
 	return ok
 }
+
+// tryConfigureExactlyOnceSemantics configures exactly once semantics if the
+// sink supports those.
+func tryConfigureExactlyOnceSemantics(
+	ctx context.Context, sink EventSink, partitionID int32, flushGen int64,
+) error {
+	switch s := sink.(type) {
+	case *cloudStorageSink:
+		return s.configureExactlyOnceSemantics(ctx, partitionID, flushGen)
+	case *safeSink:
+		return tryConfigureExactlyOnceSemantics(ctx, s.wrapped, partitionID, flushGen)
+	default:
+		return errors.AssertionFailedf("sink %T does not support exactly once semantics", sink)
+	}
+}
