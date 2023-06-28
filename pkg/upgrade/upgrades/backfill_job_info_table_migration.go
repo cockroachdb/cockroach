@@ -25,7 +25,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var jobInfoBackfillBatchSize = envutil.EnvOrDefaultInt("COCKROACH_UPGRADE_JOB_BACKFILL_BATCH", 100)
+// JobsBackfillBatchSize_22_2_78 is used to batch writes in the below migration.
+// Batching writes across multiple transactions prevents this upgrade
+// from failing continuously due to contention on system.jobs.
+var JobsBackfillBatchSize_22_2_78 = envutil.EnvOrDefaultInt("COCKROACH_UPGRADE_22_2_78_BACKFILL_BATCH", 100)
 
 const (
 	backfillJobInfoSharedPrefix = `WITH inserted AS (
@@ -64,7 +67,7 @@ func backfillJobInfoTable(
 					sessiondata.NodeUserSessionDataOverride,
 					stmt,
 					resumeAfter,
-					jobInfoBackfillBatchSize,
+					JobsBackfillBatchSize_22_2_78,
 				)
 
 				if err != nil {

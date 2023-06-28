@@ -94,6 +94,14 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Set a small batch size so the migration uses more than one batch for testing.
+	// Reset it after the test completes.
+	prev := upgrades.JobsBackfillBatchSize_22_2_20
+	upgrades.JobsBackfillBatchSize_22_2_20 = 2
+	defer func() {
+		upgrades.JobsBackfillBatchSize_22_2_20 = prev
+	}()
+
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
