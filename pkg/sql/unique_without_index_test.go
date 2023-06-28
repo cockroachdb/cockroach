@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -56,7 +55,8 @@ func TestUWIConstraintReferencingTypes(t *testing.T) {
 			"defaultdb", "t")
 		typDesc := desctestutils.TestingGetPublicTypeDescriptor(kvDB, keys.SystemSQLCodec,
 			"defaultdb", "typ")
-		require.Equal(t, []descpb.ID{tableDesc.GetID()}, typDesc.GetReferencingDescriptorIDs())
+		require.Equal(t, 1, typDesc.NumReferencingDescriptors())
+		require.Equal(t, tableDesc.GetID(), typDesc.GetReferencingDescriptorID(0))
 
 		// Ensure that dropping `typ` fails because `typ` is referenced by the constraint.
 		tdb.ExpectErr(t, `pq: cannot drop type "typ" because other objects \(\[defaultdb.public.t\]\) still depend on it`, "DROP TYPE typ")
@@ -65,7 +65,7 @@ func TestUWIConstraintReferencingTypes(t *testing.T) {
 		tdb.Exec(t, "ALTER TABLE t DROP CONSTRAINT unique_j")
 		typDesc = desctestutils.TestingGetPublicTypeDescriptor(kvDB, keys.SystemSQLCodec,
 			"defaultdb", "typ")
-		require.Nil(t, typDesc.GetReferencingDescriptorIDs())
+		require.Zero(t, typDesc.NumReferencingDescriptors())
 
 		// Ensure that now we can succeed dropping `typ`.
 		tdb.Exec(t, "DROP TYPE typ")
