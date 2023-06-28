@@ -29,6 +29,12 @@ import (
 // registerPointTombstone registers the point tombstone test.
 func registerPointTombstone(r registry.Registry) {
 	r.Add(registry.TestSpec{
+		Skip: "pebble#2340",
+		SkipDetails: "This roachtest is implemented ahead of implementing and using " +
+			"pebble#2340 within Cockroach. Currently, this roachtest fails through " +
+			"a timeout because the disk space corresponding to the large KVs is " +
+			"never reclaimed. Once pebble#2340 is integrated into Cockroach, we " +
+			"expect this to begin passing, and we can un-skip it.",
 		Name:              "point-tombstone/heterogeneous-value-sizes",
 		Owner:             registry.OwnerStorage,
 		Cluster:           r.MakeClusterSpec(4),
@@ -130,7 +136,7 @@ func registerPointTombstone(r registry.Registry) {
 			require.LessOrEqual(t, statsAfterDeletes.livePercentage, 0.10)
 
 			// Wait for garbage collection to delete the non-live data.
-			targetSize := uint64(3 << 30) /* 3 GiB */
+			targetSize := uint64(2 << 30) /* 2 GB */
 			t.Status("waiting for garbage collection and compaction to reduce on-disk size to ", humanize.IBytes(targetSize))
 			m = c.NewMonitor(ctx, c.Range(1, 3))
 			m.Go(func(ctx context.Context) error {
@@ -166,7 +172,7 @@ type tableSizeInfo struct {
 }
 
 func (info tableSizeInfo) String() string {
-	return fmt.Sprintf("databaseID: %d, tableID: %d, rangeCount: %d, approxDiskBytes: %s, liveBytes: %s, totalBytes: %s, livePercentage: %.2f",
+	return fmt.Sprintf("databaseID: %d, tableID: %d, rangeCount: %d, approxDiskBytes: %s, liveBytes: %s, totalBytes: %s, livePercentage: %.1f",
 		info.databaseID,
 		info.tableID,
 		info.rangeCount,

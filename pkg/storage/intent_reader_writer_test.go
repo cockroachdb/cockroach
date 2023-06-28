@@ -114,12 +114,12 @@ func (p *printWriter) reset() {
 	fmt.Fprintf(&p.b, "=== Calls ===\n")
 }
 
-func (p *printWriter) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
+func (p *printWriter) ClearUnversioned(key roachpb.Key) error {
 	fmt.Fprintf(&p.b, "ClearUnversioned(%s)\n", string(key))
-	return p.Writer.ClearUnversioned(key, opts)
+	return p.Writer.ClearUnversioned(key)
 }
 
-func (p *printWriter) ClearEngineKey(key EngineKey, opts ClearOptions) error {
+func (p *printWriter) ClearEngineKey(key EngineKey) error {
 	ltKey, err := key.ToLockTableKey()
 	var str string
 	if err != nil {
@@ -129,7 +129,7 @@ func (p *printWriter) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 		str = printLTKey(ltKey)
 	}
 	fmt.Fprintf(&p.b, "ClearEngineKey(%s)\n", str)
-	return p.Writer.ClearEngineKey(key, opts)
+	return p.Writer.ClearEngineKey(key)
 }
 
 func (p *printWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
@@ -242,7 +242,7 @@ func TestIntentDemuxWriter(t *testing.T) {
 				d.ScanArgs(t, "txn", &txn)
 				txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txn)))
 				txnDidNotUpdateMeta := readTxnDidNotUpdateMeta(t, d)
-				scratch, err = w.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, scratch, ClearOptions{})
+				scratch, err = w.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, scratch)
 				if err != nil {
 					return err.Error()
 				}
