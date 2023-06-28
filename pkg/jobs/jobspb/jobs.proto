@@ -1016,6 +1016,14 @@ message ChangefeedDetails {
 
   string select = 10;
   sessiondatapb.SessionData session_data = 11;
+
+
+  // List of partitions representing static partitioning of EXPORT spans.
+  message Partition {
+    repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+  }
+  repeated Partition static_partition = 12 [(gogoproto.nullable) = false];
+
   reserved 1, 2, 5;
   reserved "targets";
 }
@@ -1059,6 +1067,17 @@ message ResolvedSpans {
   Stats stats = 2 [(gogoproto.nullable) = false];
 }
 
+message ChangeAggregatorProgress {
+  ResolvedSpans spans = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Partition and flush_generation applicable to static span partitioning
+  // used during changefeed exports with exactly once semantics.
+  int32 partition = 2;
+  // Flush generation indicates that all files up to, but not including, this
+  // generation number have been written out (i.e. this is the  flush generation
+  // number the sink should use were the changefeed to restart).
+  int64 flush_generation = 3;
+}
+
 message ChangefeedProgress {
   reserved 1;
 
@@ -1089,6 +1108,10 @@ message ChangefeedProgress {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false
   ];
+
+  // Flush generation for a static partition used during changefeed EXPORT.
+  // The length of this array matches the number of static partitions used during exactly once export.
+  repeated int64 flush_generation = 5;
 }
 
 // CreateStatsDetails are used for the CreateStats job, which is triggered

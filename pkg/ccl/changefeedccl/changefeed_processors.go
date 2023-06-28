@@ -11,7 +11,9 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
@@ -100,6 +102,13 @@ type changeAggregator struct {
 	// boundary information.
 	frontier *schemaChangeFrontier
 
+	exactlyOnce struct {
+		enabled bool
+		// flushGeneration keeps track of number of times explicit flush was performed.
+		// Used to support changefeed export with exactly once semantics.
+		flushGeneration exactlyOnceExportOracle
+	}
+
 	metrics                *Metrics
 	sliMetrics             *sliMetrics
 	sliMetricsID           int64
@@ -114,6 +123,25 @@ type timestampLowerBoundOracle interface {
 type changeAggregatorLowerBoundOracle struct {
 	sf                         frontier
 	initialInclusiveLowerBound hlc.Timestamp
+}
+
+type flushGenerationOracle interface {
+	get() int64
+	inc()
+}
+
+type exactlyOnceExportOracle struct {
+	gen atomic.Int64
+}
+
+var _ flushGenerationOracle = (*exactlyOnceExportOracle)(nil)
+
+func (e *exactlyOnceExportOracle) get() int64 {
+	return e.gen.Load()
+}
+
+func (e *exactlyOnceExportOracle) inc() {
+	e.gen.Add(1)
 }
 
 // inclusiveLowerBoundTs is used to generate a representative timestamp to name
@@ -152,6 +180,7 @@ func newChangeAggregatorProcessor(
 		spec:    spec,
 		memAcc:  memMonitor.MakeBoundAccount(),
 	}
+
 	if err := ca.Init(
 		ctx,
 		ca,
@@ -171,6 +200,10 @@ func newChangeAggregatorProcessor(
 	}
 
 	opts := changefeedbase.MakeStatementOptions(ca.spec.Feed.Opts)
+	if opts.ExactlyOnceExport() {
+		ca.exactlyOnce.enabled = true
+		ca.exactlyOnce.flushGeneration.gen.Store(spec.FlushGeneration)
+	}
 
 	// MinCheckpointFrequency controls how frequently the changeAggregator flushes the sink
 	// and checkpoints the local frontier to changeFrontier. It is used as a rough
@@ -285,6 +318,14 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.MoveToDraining(err)
 		ca.cancel()
 		return
+	}
+
+	if ca.exactlyOnce.enabled {
+		if err := tryConfigureExactlyOnceSemantics(ctx, ca.sink, ca.spec.Partition, &ca.exactlyOnce.flushGeneration); err != nil {
+			ca.MoveToDraining(err)
+			ca.cancel()
+			return
+		}
 	}
 
 	// This is the correct point to set up certain hooks depending on the sink
@@ -839,16 +880,26 @@ func (ca *changeAggregator) flushFrontier() error {
 		return span.ContinueMatch
 	})
 
-	return ca.emitResolved(batch)
+	batch.Stats = jobspb.ResolvedSpans_Stats{
+		RecentKvCount: ca.recentKVCount,
+	}
+
+	if err := ca.emitResolved(batch); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
-	progressUpdate := jobspb.ResolvedSpans{
-		ResolvedSpans: batch.ResolvedSpans,
-		Stats: jobspb.ResolvedSpans_Stats{
-			RecentKvCount: ca.recentKVCount,
-		},
+	progressUpdate := jobspb.ChangeAggregatorProgress{
+		ResolvedSpans: batch,
 	}
+
+	if ca.exactlyOnce.enabled {
+		progressUpdate.Partition = ca.spec.Partition
+		progressUpdate.FlushGeneration = ca.exactlyOnce.flushGeneration.get()
+	}
+
 	updateBytes, err := protoutil.Marshal(&progressUpdate)
 	if err != nil {
 		return err
@@ -948,6 +999,12 @@ type changeFrontier struct {
 	// map (shared structure between all feeds within the same scope on the node).
 	metricsID    int
 	sliMetricsID int64
+
+	// keep track of aggregator progress information related to exactly once export.
+	exactlyOnce struct {
+		enabled       bool
+		flushProgress []int64
+	}
 
 	knobs TestingKnobs
 }
@@ -1101,6 +1158,11 @@ func newChangeFrontierProcessor(
 		slowLogEveryN: log.Every(slowSpanMaxFrequency),
 	}
 
+	opts := changefeedbase.MakeStatementOptions(cf.spec.Feed.Opts)
+	cf.exactlyOnce.enabled = opts.ExactlyOnceExport()
+	if cf.exactlyOnce.enabled {
+		cf.exactlyOnce.flushProgress = make([]int64, len(spec.Feed.StaticPartition))
+	}
 	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		cf.knobs = *cfKnobs
 	}
@@ -1123,7 +1185,6 @@ func newChangeFrontierProcessor(
 	); err != nil {
 		return nil, err
 	}
-	opts := changefeedbase.MakeStatementOptions(cf.spec.Feed.Opts)
 
 	freq, emitResolved, err := opts.GetResolvedTimestampInterval()
 	if err != nil {
@@ -1389,15 +1450,22 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 		return errors.AssertionFailedf(`unexpected datum type %T: %s`, d.Datum, d.Datum)
 	}
 
-	var resolvedSpans jobspb.ResolvedSpans
-	if err := protoutil.Unmarshal([]byte(*raw), &resolvedSpans); err != nil {
+	var progress jobspb.ChangeAggregatorProgress
+	if err := protoutil.Unmarshal([]byte(*raw), &progress); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			`unmarshalling aggregator progress update: %x`, raw)
 	}
 
-	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
+	cf.maybeMarkJobIdle(progress.Stats.RecentKvCount)
 
-	for _, resolved := range resolvedSpans.ResolvedSpans {
+	if partition := int(progress.Partition); cf.exactlyOnce.enabled {
+		if partition >= len(cf.exactlyOnce.flushProgress) {
+			return errors.AssertionFailedf("unexpected partition %d, max %d", partition, len(cf.exactlyOnce.flushProgress))
+		}
+		cf.exactlyOnce.flushProgress[partition] = progress.FlushGeneration
+	}
+
+	for i, resolved := range progress.ResolvedSpans.ResolvedSpans {
 		// Inserting a timestamp less than the one the changefeed flow started at
 		// could potentially regress the job progress. This is not expected, but it
 		// was a bug at one point, so assert to prevent regressions.
@@ -1411,7 +1479,11 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 				redact.Safe(resolved.Timestamp), resolved.Span, redact.Safe(cf.highWaterAtStart))
 			continue
 		}
-		if err := cf.forwardFrontier(resolved); err != nil {
+
+		// force span checkpoint if requested by the test, but only do it for the last
+		// resolved span in the progress update.
+		forceSpanCheckpoint := cf.knobs.AlwaysCheckpointSpans && i == len(progress.ResolvedSpans.ResolvedSpans)-1
+		if err := cf.forwardFrontier(resolved, forceSpanCheckpoint); err != nil {
 			return err
 		}
 	}
@@ -1419,7 +1491,9 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 	return nil
 }
 
-func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
+func (cf *changeFrontier) forwardFrontier(
+	resolved jobspb.ResolvedSpan, forceSpanCheckpoint bool,
+) error {
 	frontierChanged, err := cf.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
@@ -1430,7 +1504,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	// If frontier changed, we emit resolved timestamp.
 	emitResolved := frontierChanged
 
-	checkpointed, err := cf.maybeCheckpointJob(resolved, frontierChanged)
+	checkpointed, err := cf.maybeCheckpointJob(resolved, frontierChanged, forceSpanCheckpoint)
 	if err != nil {
 		return err
 	}
@@ -1484,7 +1558,7 @@ func (cf *changeFrontier) maybeMarkJobIdle(recentKVCount uint64) {
 }
 
 func (cf *changeFrontier) maybeCheckpointJob(
-	resolvedSpan jobspb.ResolvedSpan, frontierChanged bool,
+	resolvedSpan jobspb.ResolvedSpan, frontierChanged bool, forceSpanCheckpoint bool,
 ) (bool, error) {
 	// When in a Backfill, the frontier remains unchanged at the backfill boundary
 	// as we receive spans from the scan request at the Backfill Timestamp
@@ -1508,13 +1582,26 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
 	if updateCheckpoint {
 		maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Get(&cf.flowCtx.Cfg.Settings.SV)
+		// If we are running exactly once export, we can't restrict the checkpoint
+		// size because doing so would invalidate flush generation information.
+		if cf.exactlyOnce.enabled {
+			maxBytes = math.MaxInt64
+		}
+
 		checkpoint.Spans, checkpoint.Timestamp = cf.frontier.getCheckpointSpans(maxBytes)
 	}
 
 	if updateCheckpoint || updateHighWater {
-		if cf.knobs.ShouldCheckpointToJobRecord != nil && !cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier()) {
-			return false, nil
+		if cf.knobs.ShouldCheckpointToJobRecord != nil {
+			skip, err := cf.knobs.ShouldCheckpointToJobRecord(cf.frontier.Frontier())
+			if err != nil {
+				return false, err
+			}
+			if skip {
+				return false, nil
+			}
 		}
+
 		checkpointStart := timeutil.Now()
 		updated, err := cf.checkpointJobProgress(cf.frontier.Frontier(), checkpoint)
 		if err != nil {
@@ -1558,6 +1645,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.Checkpoint = &checkpoint
+			changefeedProgress.FlushGeneration = cf.exactlyOnce.flushProgress
 
 			if err := cf.manageProtectedTimestamps(cf.Ctx(), txn, changefeedProgress); err != nil {
 				log.Warningf(cf.Ctx(), "error managing protected timestamp record: %v", err)
