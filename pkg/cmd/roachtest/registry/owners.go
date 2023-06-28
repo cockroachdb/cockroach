@@ -24,6 +24,7 @@ const (
 	OwnerObsInf           Owner = `obs-inf-prs`
 	OwnerServer           Owner = `server` // not currently staffed
 	OwnerSQLFoundations   Owner = `sql-foundations`
+	OwnerMigrations       Owner = `migrations`
 	OwnerSQLQueries       Owner = `sql-queries`
 	OwnerStorage          Owner = `storage`
 	OwnerTestEng          Owner = `test-eng`
