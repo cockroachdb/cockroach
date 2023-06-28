@@ -115,6 +115,19 @@ LIMIT
 	require.NoError(t, err)
 	defer eng.Close()
 
+	appendSomeStuff(ctx, t, st, eng, rangeID, batches, entsPerBatch)
+}
+
+func appendSomeStuff(
+	ctx context.Context,
+	t *testing.T,
+	st *cluster.Settings,
+	eng storage.Engine,
+	rangeID roachpb.RangeID,
+	batches, entsPerBatch int,
+) {
+	t.Helper()
+
 	// Load the last index in the log.
 	rsl := logstore.NewStateLoader(rangeID)
 	lastIndex, err := rsl.LoadLastIndex(ctx, eng)
