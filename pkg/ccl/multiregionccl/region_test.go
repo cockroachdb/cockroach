@@ -41,7 +41,6 @@ func TestMultiRegionDatabaseStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "times out under race")
-	skip.WithIssue(t, 102761)
 
 	ctx := context.Background()
 	knobs := base.TestingKnobs{}
