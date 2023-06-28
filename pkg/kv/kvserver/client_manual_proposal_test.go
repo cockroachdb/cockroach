@@ -12,6 +12,7 @@ package kvserver_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -116,6 +117,67 @@ LIMIT
 	defer eng.Close()
 
 	appendSomeStuff(ctx, t, st, eng, rangeID, batches, entsPerBatch)
+}
+
+// TestCreateManyUnappliedEntriesAcrossRanges is a (by default skipped) test
+// that writes a very large unapplied raft log across many ranges. When a node
+// is back up, it tries to apply these entries, and may pull a lot of entries
+// into memory. This test helps to exercise the memory budgeting strategy.
+//
+// See: https://github.com/cockroachdb/cockroach/issues/102840
+func TestCreateManyUnappliedEntriesAcrossRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// NB: the actual logic takes only milliseconds, but we need to start/stop a
+	// test cluster twice and that is slow.
+	skip.UnderShort(t, "takes ~4s")
+
+	ctx := context.Background()
+
+	// NB: To set up a "real" cockroach-data dir with a large raft log in
+	// system.settings, and then restart the node to watch it apply the long raft
+	// log, you can use the below:
+	//
+	//    p := os.ExpandEnv("$HOME/go/src/github.com/cockroachdb/cockroach/cockroach-data")
+	//    const entsPerBatch = 100000
+	//    const batches = 1000
+	//
+	//   ./dev build && rm -rf cockroach-data && timeout 10 ./cockroach start-single-node --logtostderr --insecure ; \
+	//   ./workload init kv --splits=50 'postgresql://root@localhost:26257?sslmode=disable' ; \
+	//   go test ./pkg/kv/kvserver/ -v --run TestCreateManyUnappliedProbes && sleep 3 && \
+	//   (./cockroach start-single-node --logtostderr=INFO --insecure | grep -F r10/)
+	//
+	// Then wait and watch the `raft.commandsapplied` metric to see r10 apply the entries.
+	// p := filepath.Join(t.TempDir(), "cockroach-data")
+	// const entsPerBatch = 10
+	// const batches = 3
+
+	p := os.ExpandEnv("$HOME/go/src/github.com/cockroachdb/cockroach/cockroach-data")
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{StoreSpecs: []base.StoreSpec{{Path: p}}},
+		ReplicationMode: base.ReplicationManual,
+	})
+
+	var ids []roachpb.RangeID
+	rows, err := tc.ServerConn(0).Query(`SELECT range_id FROM [SHOW RANGES FROM TABLE kv.kv]`)
+	require.NoError(t, err)
+	for rows.Next() {
+		ids = append(ids, 0)
+		require.NoError(t, rows.Scan(&ids[len(ids)-1]))
+	}
+	tc.Stopper().Stop(ctx)
+	fmt.Print(ids)
+
+	st := cluster.MakeTestingClusterSettings()
+	eng, err := storage.Open(ctx, storage.Filesystem(p), st)
+	require.NoError(t, err)
+	defer eng.Close()
+	for _, id := range ids {
+		const entsPerBatch = 100000
+		const batches = 100
+		appendSomeStuff(ctx, t, st, eng, id, batches, entsPerBatch)
+	}
 }
 
 func appendSomeStuff(
