@@ -1380,12 +1380,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
 	fn(ctx)
 
-	auditlogging.UserAuditEnterpriseParamsHook = func(st *cluster.Settings, clusterID uuid.UUID) func() (*cluster.Settings, uuid.UUID, error) {
-		return func() (*cluster.Settings, uuid.UUID, error) {
-			return st, clusterID, nil
-		}
-	}(execCfg.Settings, cfg.ClusterIDContainer.Get())
-
 	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.SessionInitCache.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
 
 	return &SQLServer{
