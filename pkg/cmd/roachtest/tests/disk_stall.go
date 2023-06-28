@@ -296,6 +296,7 @@ func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 }
 
 func (s *dmsetupDiskStaller) Cleanup(ctx context.Context) {
+	s.c.Run(ctx, s.c.All(), `sudo dmsetup resume data1`)
 	s.c.Run(ctx, s.c.All(), `sudo umount /mnt/data1`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
 	s.c.Run(ctx, s.c.All(), `sudo mount /mnt/data1`)

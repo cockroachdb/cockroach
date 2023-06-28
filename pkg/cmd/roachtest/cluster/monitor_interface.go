@@ -29,6 +29,7 @@ type Monitor interface {
 	// clean roachtest shutdown. To prevent leaky goroutines, the caller must call
 	// Wait() or WaitE() before returning.
 	Go(fn func(context.Context) error)
+	GoWithCancel(fn func(context.Context) error) func()
 	WaitE() error
 	Wait()
 }
