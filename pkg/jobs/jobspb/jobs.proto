@@ -173,6 +173,12 @@ message StreamIngestionProgress {
   repeated string stream_addresses = 5;
 
   reserved 3;
+
+  // RemainingCutoverSpans contains the spans the still need to be cutover once
+  // the cutover time gets set.
+  repeated roachpb.Span remaining_cutover_spans = 8 [(gogoproto.nullable) = false];
+
+  // Next Id: 9
 }
 
 message StreamReplicationDetails {
