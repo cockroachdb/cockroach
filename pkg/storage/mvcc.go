@@ -1430,7 +1430,7 @@ func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err erro
 	} else {
 		data = data[:size]
 	}
-	n, err := protoutil.MarshalTo(meta, data)
+	n, err := protoutil.MarshalToSizedBuffer(meta, data)
 	if err != nil {
 		return nil, err
 	}

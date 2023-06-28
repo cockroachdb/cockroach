@@ -951,7 +951,7 @@ func (b *propBuf) marshallLAIAndClosedTimestampToProposalLocked(
 	// capacity for this footer.
 	preLen := len(p.encodedCommand)
 	p.encodedCommand = p.encodedCommand[:preLen+buf.Size()]
-	_, err := protoutil.MarshalTo(buf, p.encodedCommand[preLen:])
+	_, err := protoutil.MarshalToSizedBuffer(buf, p.encodedCommand[preLen:])
 	return err
 }
 
