@@ -610,8 +610,8 @@ func visitRanges(
 		key = newKey
 		first = false
 
-		for i, v := range visitors {
-			var err error
+		for i := 0; i < len(visitors); {
+			v := visitors[i]
 			if sameZoneAsPrevRange {
 				v.visitSameZone(ctx, &rd)
 			} else {
@@ -626,6 +626,8 @@ func visitRanges(
 				// Remove this visitor; it shouldn't be called any more.
 				visitors = append(visitors[:i], visitors[i+1:]...)
 				visitorErrs = append(visitorErrs, err)
+			} else {
+				i++
 			}
 		}
 	}
