@@ -136,15 +136,14 @@ ORDER BY table_name
 	sqlDB.Exec(t, `SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true`)
 
 	tests := []struct {
-		name      string
-		create    string
-		with      string
-		typ       string
-		data      string
-		err       string
-		rejected  string
-		query     map[string][][]string
-		skipIssue int
+		name     string
+		create   string
+		with     string
+		typ      string
+		data     string
+		err      string
+		rejected string
+		query    map[string][][]string
 	}{
 		{
 			name: "duplicate unique index key",
@@ -1339,10 +1338,6 @@ COPY public.t (a, b) FROM stdin;
 				}
 			}
 			t.Run(fmt.Sprintf("%s/%s: save_rejected=%v", tc.typ, tc.name, saveRejected), func(t *testing.T) {
-				if tc.skipIssue != 0 {
-					skip.WithIssue(t, tc.skipIssue)
-					return
-				}
 				dbName := fmt.Sprintf("d%d", i)
 				if saveRejected {
 					dbName = dbName + "_save"
