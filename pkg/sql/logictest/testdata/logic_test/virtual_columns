@@ -1374,3 +1374,39 @@ ALTER TABLE t81675 ADD COLUMN j INT GENERATED ALWAYS AS (i+1) VIRTUAL NOT NULL;
 
 statement ok
 DROP TABLE t81675;
+
+
+# Regression tests for #91817. Assignment casts should be applied to virtual
+# computed column projections when the expression type is not identical to the
+# column type.
+subtest regression_91817
+
+statement ok
+CREATE TABLE t91817a (
+  s STRING,
+  comp_s "char" AS (s) STORED,
+  comp_v "char" AS (s) VIRTUAL
+);
+INSERT INTO t91817a VALUES ('foo')
+
+# The stored and virtual computed columns should have the same value.
+query TTT
+SELECT * FROM t91817a
+----
+foo  f  f
+
+statement ok
+CREATE TABLE t91817b (
+  k INT2 PRIMARY KEY,
+  v INT2 GENERATED ALWAYS AS (k + 1) VIRTUAL
+);
+INSERT INTO t91817b VALUES (0)
+
+# This query should not cause an internal error.
+query T
+SELECT var_pop(v::INT8) OVER ()
+FROM t91817b
+GROUP BY k, v
+HAVING every(true)
+----
+0
