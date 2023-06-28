@@ -112,9 +112,9 @@ import (
 //     assertion applies per-store, over 'ticks' duration.
 //
 //     For type=stat assertions, if the stat (e.g. stat=replicas) value of the
-//     last ticks (e.g. ticks=5) duration is not exactly equal to threshold,
-//     the assertion fails. This applies for a specified store which must be
-//     provided with store=storeID.
+//     last ticks (e.g. ticks=5) duration is not exactly equal to threshold, the
+//     assertion fails. This applies for specified stores which must be provided
+//     with stores=(storeID,...).
 //
 //     For type=conformance assertions, you may assert on the number of
 //     replicas that you expect to be underreplicated (under),
@@ -443,17 +443,16 @@ func TestDataDriven(t *testing.T) {
 						threshold: threshold,
 					})
 				case "stat":
-					var store int
+					var stores []int
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
 					scanArg(t, d, "threshold", &threshold)
-					scanArg(t, d, "store", &store)
+					scanArg(t, d, "stores", &stores)
 					assertions = append(assertions, storeStatAssertion{
 						ticks:         ticks,
 						stat:          stat,
 						acceptedValue: threshold,
-						// TODO(kvoli): support setting multiple stores.
-						stores: []int{store},
+						stores:        stores,
 					})
 				case "conformance":
 					var under, over, unavailable, violating int
@@ -527,15 +526,20 @@ func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{})
 		d.ScanArgs(t, key, &tmp)
 		*dest, err = strconv.ParseFloat(tmp, 64)
 		require.NoError(t, err)
-	case *string, *int, *int64, *uint64, *bool:
+	case *[]int, *string, *int, *int64, *uint64, *bool:
 		d.ScanArgs(t, key, dest)
 	default:
 		require.Fail(t, "unsupported type %T", dest)
 	}
 }
 
-func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
+// scanIfExists looks up the first arg in CmdArgs array that matches the
+// provided firstKey. If found, it scans the value into dest and returns true;
+// Otherwise, it does nothing and returns false.
+func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interface{}) bool {
 	if d.HasArg(key) {
 		scanArg(t, d, key, dest)
+		return true
 	}
+	return false
 }
