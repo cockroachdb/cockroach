@@ -5386,6 +5386,10 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderStressWithIssue(t, 102839, "flaky test")
+	skip.UnderDeadlockWithIssue(t, 102839, "flaky test")
+	skip.UnderRaceWithIssue(t, 102839, "flaky test")
+
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
