@@ -12,6 +12,7 @@ package dbdesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -165,6 +166,14 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 	if scpb.MigrateDescriptorState(version, ddb.maybeModified.DeclarativeSchemaChangerState) {
 		ddb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
+	return nil
+}
+
+// StripDanglingBackReferences implements the catalog.DescriptorBuilder
+// interface.
+func (ddb *databaseDescriptorBuilder) StripDanglingBackReferences(
+	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
+) error {
 	return nil
 }
 
