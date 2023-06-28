@@ -152,6 +152,9 @@ func getResultColumns(
 		a := args.(*deleteArgs)
 		return tableColumns(a.Table, a.ReturnCols), nil
 
+	case deleteBatchOp:
+		return nil, nil
+
 	case opaqueOp:
 		if args.(*opaqueArgs).Metadata != nil {
 			return args.(*opaqueArgs).Metadata.Columns(), nil

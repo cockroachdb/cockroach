@@ -38,28 +38,6 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 			"DELETE statement requires LIMIT when ORDER BY is used"))
 	}
 
-	batch := del.Batch
-	if batch != nil {
-		var hasSize bool
-		for i, param := range batch.Params {
-			switch param.(type) {
-			case *tree.SizeBatchParam:
-				if hasSize {
-					panic(pgerror.Newf(pgcode.Syntax, "invalid parameter at index %d, SIZE already specified", i))
-				}
-				hasSize = true
-			}
-		}
-		if hasSize {
-			// TODO(ecwall): remove when DELETE BATCH is supported
-			panic(pgerror.Newf(pgcode.Syntax,
-				"DELETE BATCH (SIZE <size>) not implemented"))
-		}
-		// TODO(ecwall): remove when DELETE BATCH is supported
-		panic(pgerror.Newf(pgcode.Syntax,
-			"DELETE BATCH not implemented"))
-	}
-
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(del.Table, privilege.DELETE)
 
@@ -115,4 +93,10 @@ func (mb *mutationBuilder) buildDelete(returning *tree.ReturningExprs) {
 	)
 
 	mb.buildReturning(returning)
+}
+
+func (b *Builder) buildDeleteBatch(del *tree.Delete, inScope *scope) (outScope *scope) {
+	outScope = inScope.push()
+	outScope.expr = b.factory.ConstructDeleteBatch(del)
+	return outScope
 }

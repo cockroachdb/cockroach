@@ -1430,6 +1430,10 @@ func (b *logicalPropsBuilder) buildDeleteProps(del *DeleteExpr, rel *props.Relat
 	b.buildMutationProps(del, rel)
 }
 
+func (b *logicalPropsBuilder) buildDeleteBatchProps(del *DeleteBatchExpr, rel *props.Relational) {
+	b.buildBasicProps(del, opt.ColList{}, rel)
+}
+
 func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Relational) {
 	BuildSharedProps(mutation, &rel.Shared, b.evalCtx)
 
