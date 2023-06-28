@@ -21,16 +21,23 @@ apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
 cat > /etc/apt/sources.list.d/docker.list <<EOF
 deb https://download.docker.com/linux/ubuntu focal stable
 EOF
+
+curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' > /etc/apt/sources.list.d/gcloud.list
+
+curl -sLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add -
+echo "deb [arch=$(dpkg --print-architecture)] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/azure-cli.list
+
 # Some images come with apt autoupgrade job running at start, let's give it a few minutes to finish to avoid races.
 echo "Sleeping for 3 minutes to allow apt daily cronjob to finish..."
 sleep 3m
-apt-get update --yes
+apt-get update
 
-# Install the sudo version patched for CVE-2021-3156
-apt-get install --yes sudo
-
+# Installing gnome-keyring prevents the error described in
+# https://github.com/moby/moby/issues/34048
 apt-get install --yes \
   autoconf \
+  azure-cli \
   bison \
   build-essential \
   curl \
@@ -38,6 +45,8 @@ apt-get install --yes \
   docker-compose \
   flex \
   gnome-keyring \
+  google-cloud-sdk \
+  google-cloud-cli-gke-gcloud-auth-plugin \
   gnupg2 \
   git \
   jq \
@@ -45,6 +54,7 @@ apt-get install --yes \
   pass \
   python2 \
   python3 \
+  sudo \
   unzip
 
 # Enable support for executing binaries of all architectures via qemu emulation
@@ -91,22 +101,6 @@ $SHASUM /tmp/bazelisk
 EOF
 chmod +x /tmp/bazelisk
 mv /tmp/bazelisk /usr/bin/bazel
-
-# gcloud won't be automatically installed for ARM machines (which run on AWS).
-if [ $ARCH = aarch64 ]; then
-    curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-377.0.0-linux-arm.tar.gz > /tmp/gcloud.tar.gz
-    sha256sum -c - <<EOF
-42dd29714b052d3460b005b3d09faacdb0818e70edd60c20d447a1594fd6aa83 /tmp/gcloud.tar.gz
-EOF
-    tar -C /usr/local -zxf /tmp/gcloud.tar.gz
-    rm /tmp/gcloud.tar.gz
-    /usr/local/google-cloud-sdk/install.sh -q --usage-reporting false
-    ln -s /usr/local/google-cloud-sdk/bin/gcloud /usr/bin
-    ln -s /usr/local/google-cloud-sdk/bin/gsutil /usr/bin
-fi
-
-# Installing gnome-keyring prevents the error described in
-# https://github.com/moby/moby/issues/34048
 
 # Add a user for the TeamCity agent if it doesn't exist already.
 id -u agent &>/dev/null 2>&1 || adduser agent --disabled-password
