@@ -100,3 +100,6 @@ cockroachdb/unowned:
   aliases:
     cockroachdb/rfc-prs: other
   triage_column_id: 0 # TODO
+cockroachdb/migrations:
+  label: T-migrations
+  triage_column_id: 19552034
