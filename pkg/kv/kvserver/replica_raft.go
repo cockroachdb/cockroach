@@ -795,7 +795,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if hasReady = raftGroup.HasReady(); hasReady {
 			// Since we are holding raftMu, only this Ready() call will use
 			// raftMu.bytesAccount. It tracks memory usage that this Ready incurs.
-			r.raftMu.bytesAccountUse = true
+			r.raftMu.bytesAccountUse = RaftEntriesMemLimit > 0
 			syncRd := raftGroup.Ready()
 			r.raftMu.bytesAccountUse = false
 			// We apply committed entries during this handleRaftReady, so it is ok to

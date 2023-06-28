@@ -720,8 +720,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 	nodeRegistry.AddMetric(raftEntriesMetric)
 	raftEntriesMonitor := mon.NewMonitorWithLimit("raft-entries", mon.MemoryResource,
-		math.MaxInt64 /* limit */, raftEntriesMetric, nil /* maxHist */, 512<<10, /* increment */
-		math.MaxInt64 /* noteworthy */, st)
+		kvserver.RaftEntriesMemLimit, raftEntriesMetric, nil, /* maxHist */
+		512<<10 /* increment */, math.MaxInt64 /* noteworthy */, st)
 	raftEntriesMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 
 	// Closer order is important with BytesMonitor.
