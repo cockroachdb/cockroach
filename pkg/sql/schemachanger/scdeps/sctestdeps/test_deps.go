@@ -109,6 +109,12 @@ func (s *TestState) IncrementSchemaChangeDropCounter(counterType string) {
 	s.LogSideEffectf("increment telemetry for sql.schema.drop_%s", counterType)
 }
 
+// IncrementSchemaChangeCreateCounter implements the scbuild.Dependencies
+// interface.
+func (s *TestState) IncrementSchemaChangeCreateCounter(counterType string) {
+	s.LogSideEffectf("increment telemetry for sql.schema.create_%s", counterType)
+}
+
 // IncrementSchemaChangeAddColumnTypeCounter  implements the scbuild.Dependencies
 // interface.
 func (s *TestState) IncrementSchemaChangeAddColumnTypeCounter(typeName string) {

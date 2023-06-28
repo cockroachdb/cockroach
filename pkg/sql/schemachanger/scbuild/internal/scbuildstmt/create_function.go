@@ -28,6 +28,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	if n.Replace {
 		panic(scerrors.NotImplementedError(n))
 	}
+	b.IncrementSchemaChangeCreateCounter("function")
 
 	dbElts, scElts := b.ResolvePrefix(n.FuncName.ObjectNamePrefix, privilege.CREATE)
 	_, _, sc := scpb.FindSchema(scElts)
