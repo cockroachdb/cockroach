@@ -13,6 +13,7 @@ package funcdesc_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"strconv"
 	"testing"
 
@@ -799,6 +800,58 @@ func TestToOverload(t *testing.T) {
 			overload.ReturnType = nil
 			tc.expected.ReturnType = nil
 			require.Equal(t, tc.expected, *overload)
+		})
+	}
+}
+
+func TestStripDanglingBackReferences(t *testing.T) {
+	type testCase struct {
+		input, expectedOutput descpb.FunctionDescriptor
+		validIDs              catalog.DescriptorIDSet
+	}
+
+	testData := []testCase{
+		{
+			input: descpb.FunctionDescriptor{
+				Name: "foo",
+				ID:   105,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{
+						ID:        104,
+						ColumnIDs: []descpb.ColumnID{1},
+					},
+					{
+						ID:        12345,
+						ColumnIDs: []descpb.ColumnID{1},
+					},
+				},
+			},
+			expectedOutput: descpb.FunctionDescriptor{
+				Name: "foo",
+				ID:   105,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{
+						ID:        104,
+						ColumnIDs: []descpb.ColumnID{1},
+					},
+				},
+			},
+			validIDs: catalog.MakeDescriptorIDSet(104, 105),
+		},
+	}
+
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("#%02d", i+1), func(t *testing.T) {
+			b := funcdesc.NewBuilder(&test.input)
+			require.NoError(t, b.RunPostDeserializationChanges())
+			out := funcdesc.NewBuilder(&test.expectedOutput)
+			require.NoError(t, out.RunPostDeserializationChanges())
+			require.NoError(t, b.StripDanglingBackReferences(test.validIDs.Contains, func(id jobspb.JobID) bool {
+				return false
+			}))
+			desc := b.BuildCreatedMutableFunction()
+			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.Equal(t, out.BuildCreatedMutableFunction().FuncDesc(), desc.FuncDesc())
 		})
 	}
 }

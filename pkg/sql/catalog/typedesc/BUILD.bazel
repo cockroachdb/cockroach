@@ -49,6 +49,7 @@ go_test(
     deps = [
         ":typedesc",
         "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
