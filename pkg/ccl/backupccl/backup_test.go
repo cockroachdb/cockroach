@@ -942,8 +942,8 @@ func TestBackupRestoreEmpty(t *testing.T) {
 // for tables with negative primary key data caused AdminSplit to fail.
 func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 68127, "flaky test")
 	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "test is too slow to run under race, presumably because of the multiple splits")
 
 	const numAccounts = 1000
 

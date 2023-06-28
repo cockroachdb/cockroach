@@ -110,7 +110,7 @@ func TestDeleteDescriptorsOfDroppedFunctions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		v0 = clusterversion.TestingBinaryMinSupportedVersion
+		v0 = clusterversion.ByKey(clusterversion.V23_1_DeleteDroppedFunctionDescriptors - 1)
 		v1 = clusterversion.ByKey(clusterversion.V23_1_DeleteDroppedFunctionDescriptors)
 	)
 
@@ -187,11 +187,10 @@ func TestDeleteDescriptorsOfDroppedFunctions(t *testing.T) {
 
 	// Make sure other descriptors are intact.
 	const deletedFnCount = 4
-	const newSystemTableCount = 6
 	var newTotalDescCnt int
 	row = tdb.QueryRow(t, `SELECT count(*) FROM system.descriptor`)
 	row.Scan(&newTotalDescCnt)
-	require.Equal(t, originalTotalDescCnt-deletedFnCount+newSystemTableCount, newTotalDescCnt)
+	require.Equal(t, originalTotalDescCnt-deletedFnCount, newTotalDescCnt)
 
 	row = tdb.QueryRow(t, countTotalDroppedFunctionQuery)
 	row.Scan(&cntFnToDelete)

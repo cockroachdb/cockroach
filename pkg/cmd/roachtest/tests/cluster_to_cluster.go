@@ -845,17 +845,18 @@ func registerClusterToCluster(r registry.Registry) {
 			func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rd := makeReplicationDriver(t, c, sp)
 				rd.setupC2C(ctx, t, c)
+				m := rd.newMonitor(ctx)
 
-				m := c.NewMonitor(ctx)
 				hc := roachtestutil.NewHealthChecker(t, c, rd.crdbNodes())
 				m.Go(func(ctx context.Context) error {
 					require.NoError(t, hc.Runner(ctx))
 					return nil
 				})
-				defer hc.Done()
-
+				defer func() {
+					hc.Done()
+					m.Wait()
+				}()
 				rd.main(ctx)
-				m.Wait()
 			})
 	}
 }
