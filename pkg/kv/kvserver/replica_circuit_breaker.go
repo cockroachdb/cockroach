@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -185,6 +184,8 @@ func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
 	bgCtx := br.ambCtx.AnnotateCtx(context.Background())
 	if err := br.stopper.RunAsyncTask(bgCtx, "replica-probe", func(ctx context.Context) {
 		defer done()
+		ctx, cancel := br.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 
 		if !br.enabled() {
 			report(nil)
@@ -225,17 +226,13 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 	probeReq := &kvpb.ProbeRequest{}
 	probeReq.Key = desc.StartKey.AsRawKey()
 	ba.Add(probeReq)
-	thresh, ok := r.slowReplicationThreshold(ba)
+	_, ok := r.slowReplicationThreshold(ba)
 	if !ok {
 		// Breakers are disabled now.
 		return nil
 	}
-	if err := contextutil.RunWithTimeout(ctx, "probe", thresh,
-		func(ctx context.Context) error {
-			_, pErr := r.Send(ctx, ba)
-			return pErr.GoError()
-		},
-	); err != nil {
+	_, pErr := r.Send(ctx, ba)
+	if err := pErr.GoError(); err != nil {
 		return r.replicaUnavailableError(err)
 	}
 	return nil
