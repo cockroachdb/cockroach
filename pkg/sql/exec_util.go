@@ -1775,7 +1775,7 @@ type StreamingTestingKnobs struct {
 
 	// OnCutoverProgressUpdate is called on every progress update
 	// call during the cutover process.
-	OnCutoverProgressUpdate func()
+	OnCutoverProgressUpdate func(remainingSpans roachpb.Spans)
 
 	// CutoverProgressShouldUpdate overrides the standard logic
 	// for whether the job record is updated on a progress update.

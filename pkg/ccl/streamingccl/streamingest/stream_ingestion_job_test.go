@@ -415,13 +415,17 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	ctx := context.Background()
 
 	progressUpdated := make(chan struct{})
+	progressRead := make(chan struct{})
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Streaming: &sql.StreamingTestingKnobs{
 				OverrideRevertRangeBatchSize: 1,
 				CutoverProgressShouldUpdate:  func() bool { return true },
-				OnCutoverProgressUpdate: func() {
+				OnCutoverProgressUpdate: func(_ roachpb.Spans) {
 					progressUpdated <- struct{}{}
+
+					// Only begin next progress update once the test has read the latest progress update.
+					<-progressRead
 				},
 			},
 		},
@@ -464,7 +468,8 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	mockReplicationJobRecord := jobs.Record{
 		Details: mockReplicationJobDetails,
 		Progress: jobspb.StreamIngestionProgress{
-			CutoverTime: cutover,
+			CutoverTime:           cutover,
+			RemainingCutoverSpans: roachpb.Spans{mockReplicationJobDetails.Span},
 		},
 		Username: username.TestUserName(),
 	}
@@ -503,13 +508,17 @@ func TestCutoverFractionProgressed(t *testing.T) {
 		for range progressUpdated {
 			sip := loadProgress()
 			curProgress := sip.GetFractionCompleted()
+			progressRead <- struct{}{}
 			progressUpdates++
-			if lastFraction > curProgress {
-				return errors.Newf("unexpected progress fraction: %f > %f", lastFraction, curProgress)
+			if lastFraction >= curProgress {
+				return errors.Newf("unexpected progress fraction: %f (previous) >= %f (current)",
+					lastFraction,
+					curProgress)
 			}
 			rangesLeft := metrics.ReplicationCutoverProgress.Value()
 			if lastRangesLeft < rangesLeft {
-				return errors.Newf("unexpected range count from metric: %d > %d", rangesLeft, lastRangesLeft)
+				return errors.Newf("unexpected range count from metric: %d (current) > %d (previous)",
+					rangesLeft, lastRangesLeft)
 			}
 			lastRangesLeft = rangesLeft
 			lastFraction = curProgress
@@ -528,4 +537,88 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	require.Equal(t, float32(1), sip.GetFractionCompleted())
 	require.Equal(t, int64(0), metrics.ReplicationCutoverProgress.Value())
 	require.True(t, progressUpdates > 1)
+}
+
+// TestCutoverCheckpointing asserts that cutover progress persists to the job
+// record and ensures the cutover job does not duplicate persisted work after
+// the job is paused after a few updates.
+func TestCutoverCheckpointing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	progressUpdated := make(chan struct{})
+	pauseRequested := make(chan struct{})
+	var updateCount int
+	remainingSpanUpdates := make(map[string]struct{})
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		CutoverProgressShouldUpdate:  func() bool { return true },
+		OverrideRevertRangeBatchSize: 1,
+		OnCutoverProgressUpdate: func(remainingSpansUpdate roachpb.Spans) {
+
+			// If checkpointing works properly, we expect no repeating remaining span updates.
+			_, ok := remainingSpanUpdates[remainingSpansUpdate.String()]
+			require.False(t, ok, fmt.Sprintf("repeated remaining span update %s", remainingSpansUpdate.String()))
+			remainingSpanUpdates[remainingSpansUpdate.String()] = struct{}{}
+
+			updateCount++
+			if updateCount == 3 {
+				close(progressUpdated)
+				// Wait until the job is in a pause-requested state, which causes subsequent
+				// updates to the job record (like cutover progress updates) to
+				// error with a pause-requested tag, causing the whole job to pause.
+				<-pauseRequested
+			}
+		},
+	}
+
+	ctx := context.Background()
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobIDInt, replicationJobIDInt := c.StartStreamReplication(ctx)
+	replicationJobID := jobspb.JobID(replicationJobIDInt)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobIDInt))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, replicationJobID)
+	c.WaitUntilStartTimeReached(replicationJobID)
+
+	c.SrcTenantSQL.Exec(t, `CREATE TABLE foo(id) AS SELECT generate_series(1, 10)`)
+
+	cutoverTime := c.SrcCluster.Server(0).Clock().Now()
+
+	// Insert some revisions which we can revert to a timestamp before the update.
+	c.SrcTenantSQL.Exec(t, `UPDATE foo SET id = id + 1`)
+
+	c.WaitUntilReplicatedTime(c.SrcCluster.Server(0).Clock().Now(), replicationJobID)
+
+	getCutoverRemainingSpans := func() roachpb.Spans {
+		progress := jobutils.GetJobProgress(t, c.DestSysSQL, replicationJobID).GetStreamIngest()
+		return progress.RemainingCutoverSpans
+	}
+
+	// Ensure there are no remaining cutover spans before cutover begins.
+	require.Equal(t, len(getCutoverRemainingSpans()), 0)
+
+	c.Cutover(producerJobIDInt, replicationJobIDInt, cutoverTime.GoTime(), true)
+	<-progressUpdated
+
+	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, &replicationJobID)
+	close(pauseRequested)
+	jobutils.WaitForJobToPause(t, c.DestSysSQL, replicationJobID)
+
+	details := jobutils.GetJobPayload(t, c.DestSysSQL, replicationJobID).GetStreamIngestion()
+
+	// Assert that some progress has been persisted.
+	remainingSpans := getCutoverRemainingSpans()
+	require.Greater(t, len(remainingSpans), 0)
+	require.NotEqual(t, remainingSpans, roachpb.Spans{details.Span})
+
+	c.DestSysSQL.Exec(t, `RESUME JOB $1`, &replicationJobID)
+	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, replicationJobID)
+
+	// Ensure no spans are left to cutover. Stringify during comparison because
+	// the empty remainingSpans are encoded as
+	// roachpb.Spans{roachpb.Span{Key:/Min, EndKey:/Min}.
+	require.Equal(t, getCutoverRemainingSpans().String(), roachpb.Spans{}.String())
 }
