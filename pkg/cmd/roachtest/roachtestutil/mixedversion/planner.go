@@ -21,14 +21,12 @@ import (
 )
 
 type (
-	// TestPlan is the output of planning a mixed-version test. The
-	// initialVersion and finalVersion fields are just for presentation
-	// purposes, as the plan is defined by the sequence of steps that it
-	// contains.
+	// TestPlan is the output of planning a mixed-version test. The list
+	// of `versions` are just for presentation purposes, as the plan is
+	// defined by the sequence of steps that it contains.
 	TestPlan struct {
-		initialVersion string
-		finalVersion   string
-		startClusterID int
+		versions       []string
+		startClusterID int // step ID after which the cluster should be ready to receive connections
 		steps          []testStep
 	}
 
@@ -37,7 +35,7 @@ type (
 	testPlanner struct {
 		stepCount      int
 		startClusterID int
-		initialVersion string
+		versions       []string
 		crdbNodes      option.NodeListOption
 		rt             test.Test
 		options        testOptions
@@ -54,99 +52,129 @@ const (
 	lastBranchPadding  = "   "
 )
 
-// Plan returns the TestPlan generated using the `prng` in the
-// testPlanner field. Currently, the test will always follow the
-// following high level outline:
+// Plan returns the TestPlan used to upgrade the cluster from the
+// first to the final version in the `versions` field. The test plan
+// roughly translates to the sequence of steps below:
 //
-//   - start all nodes in the cluster from a random predecessor version,
-//     maybe using fixtures.
-//   - set `preserve_downgrade_option`.
-//   - run startup hooks.
-//   - upgrade all nodes to the current cockroach version (running
+//  1. start all nodes in the cluster at the initial version, maybe
+//     using fixtures.
+//  2. run startup hooks.
+//  3. for each cluster upgrade:
+//     - set `preserve_downgrade_option`.
+//     - upgrade all nodes to the next cockroach version (running
 //     mixed-version hooks at times determined by the planner).
-//   - downgrade all nodes back to the predecessor version (running
-//     mixed-version hooks again).
-//   - upgrade all nodes back to the current cockroach version one
-//     more time (running mixed-version hooks).
-//   - finally, reset `preserve_downgrade_option`, allowing the
-//     cluster to upgrade. Mixed-version hooks may be executed while
+//     - maybe downgrade all nodes back to the previous version
+//     (running mixed-version hooks again).
+//     - if a rollback was performed, upgrade all nodes back to the
+//     next version one more time (running mixed-version hooks).
+//     - reset `preserve_downgrade_option`, allowing the cluster
+//     to upgrade. Mixed-version hooks may be executed while
 //     this is happening.
-//   - run after-test hooks.
-//
-// TODO(renato): further opportunities for random exploration:
-// - going back multiple releases instead of just one
-// - inserting arbitrary delays (`sleep` calls) during the test.
+//     - run after-upgrade hooks.
 func (p *testPlanner) Plan() *TestPlan {
 	var steps []testStep
-	addSteps := func(ss []testStep) { steps = append(steps, ss...) }
 
-	addSteps(p.initSteps())
-	addSteps(p.hooks.BackgroundSteps(p.nextID, p.initialContext(), p.bgChans))
+	steps = append(steps, p.testSetupSteps()...)
+	steps = append(steps, p.hooks.BackgroundSteps(p.nextID, p.longRunningContext(), p.bgChans)...)
 
-	// previous -> current
-	addSteps(p.upgradeSteps(p.initialVersion, clusterupgrade.MainVersion))
-	// current -> previous (rollback)
-	addSteps(p.downgradeSteps(clusterupgrade.MainVersion, p.initialVersion))
-	// previous -> current
-	addSteps(p.upgradeSteps(p.initialVersion, clusterupgrade.MainVersion))
-	// finalize
-	addSteps(p.finalizeUpgradeSteps())
+	for prevVersionIdx := 0; prevVersionIdx+1 < len(p.versions); prevVersionIdx++ {
+		fromVersion := p.versions[prevVersionIdx]
+		toVersion := p.versions[prevVersionIdx+1]
 
-	addSteps(p.finalSteps())
+		upgradeStep := sequentialRunStep{
+			label: fmt.Sprintf("upgrade cluster from %q to %q", versionMsg(fromVersion), versionMsg(toVersion)),
+		}
+		addUpgradeSteps := func(ss []testStep) {
+			upgradeStep.steps = append(upgradeStep.steps, ss...)
+		}
+
+		addUpgradeSteps(p.initUpgradeSteps(fromVersion, toVersion))
+
+		// previous -> next
+		addUpgradeSteps(p.upgradeSteps(fromVersion, toVersion))
+		if p.shouldRollback(toVersion) {
+			// next -> previous (rollback)
+			addUpgradeSteps(p.downgradeSteps(toVersion, fromVersion))
+
+			// previous -> current
+			addUpgradeSteps(p.upgradeSteps(fromVersion, toVersion))
+		}
+
+		// finalize
+		addUpgradeSteps(p.finalizeUpgradeSteps(fromVersion, toVersion))
+
+		// wait for upgrade to finalize
+		addUpgradeSteps(p.finalUpgradeSteps(fromVersion, toVersion))
+
+		steps = append(steps, upgradeStep)
+	}
+
 	return &TestPlan{
-		initialVersion: p.initialVersion,
-		finalVersion:   versionMsg(clusterupgrade.MainVersion),
+		versions:       p.versions,
 		startClusterID: p.startClusterID,
 		steps:          steps,
 	}
 }
 
-func (p *testPlanner) initialContext() Context {
+func (p *testPlanner) finalContext(fromVersion, toVersion string, finalizing bool) Context {
 	return Context{
-		FromVersion:      p.initialVersion,
-		ToVersion:        clusterupgrade.MainVersion,
-		FromVersionNodes: p.crdbNodes,
-	}
-}
-
-func (p *testPlanner) finalContext(finalizing bool) Context {
-	return Context{
-		FromVersion:    p.initialVersion,
-		ToVersion:      clusterupgrade.MainVersion,
+		FromVersion:    fromVersion,
+		ToVersion:      toVersion,
 		ToVersionNodes: p.crdbNodes,
 		Finalizing:     finalizing,
 	}
 }
 
-// initSteps returns the sequence of steps that should be executed
-// before we start changing binaries on nodes in the process of
-// upgrading/downgrading. It will also run any startup hooks the user
-// may have provided.
-func (p *testPlanner) initSteps() []testStep {
+// longRunningContext is the test context passed to long running tasks
+// (background functions and the like). In these scenarios,
+// `FromVersion` and `ToVersion` correspond to, respectively, the
+// initial version the cluster is started at, and the final version
+// once the test finishes.
+func (p *testPlanner) longRunningContext() Context {
+	return Context{
+		FromVersion: p.versions[0],
+		ToVersion:   p.versions[len(p.versions)-1],
+		Finalizing:  false,
+	}
+}
+
+func (p *testPlanner) testSetupSteps() []testStep {
+	initialVersion := p.versions[0]
+
 	var steps []testStep
 	if p.prng.Float64() < p.options.useFixturesProbability {
-		steps = []testStep{installFixturesStep{id: p.nextID(), version: p.initialVersion, crdbNodes: p.crdbNodes}}
+		steps = []testStep{installFixturesStep{id: p.nextID(), version: initialVersion, crdbNodes: p.crdbNodes}}
 	}
+
 	p.startClusterID = p.nextID()
-	steps = append(steps, startStep{id: p.startClusterID, version: p.initialVersion, rt: p.rt, crdbNodes: p.crdbNodes})
+	steps = append(steps,
+		startStep{id: p.startClusterID, version: initialVersion, rt: p.rt, crdbNodes: p.crdbNodes},
+		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
+	)
 
 	return append(
-		append(steps,
-			waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
-			preserveDowngradeOptionStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
-		),
-		p.hooks.StartupSteps(p.nextID, p.initialContext())...,
+		steps,
+		p.hooks.StartupSteps(p.nextID, p.longRunningContext())...,
 	)
 }
 
-// finalSteps are the steps to be run once the nodes have been
+// initUpgradeSteps returns the sequence of steps that should be
+// executed before we start changing binaries on nodes in the process
+// of upgrading/downgrading.
+func (p *testPlanner) initUpgradeSteps(fromVersion, toVersion string) []testStep {
+	return []testStep{
+		preserveDowngradeOptionStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+	}
+}
+
+// finalUpgradeSteps are the steps to be run once the nodes have been
 // upgraded/downgraded. It will wait for the cluster version on all
 // nodes to be the same and then run any after-finalization hooks the
 // user may have provided.
-func (p *testPlanner) finalSteps() []testStep {
+func (p *testPlanner) finalUpgradeSteps(fromVersion, toVersion string) []testStep {
 	return append([]testStep{
 		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
-	}, p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.finalContext(false /* finalizing */))...)
+	}, p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.finalContext(fromVersion, toVersion, false /* finalizing */))...)
 }
 
 func (p *testPlanner) upgradeSteps(from, to string) []testStep {
@@ -195,10 +223,24 @@ func (p *testPlanner) changeVersionSteps(from, to, label string) []testStep {
 // finalizeUpgradeSteps finalizes the upgrade by resetting the
 // `preserve_downgrade_option` and potentially running mixed-version
 // hooks while the cluster version is changing.
-func (p *testPlanner) finalizeUpgradeSteps() []testStep {
+func (p *testPlanner) finalizeUpgradeSteps(fromVersion, toVersion string) []testStep {
 	return append([]testStep{
 		finalizeUpgradeStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
-	}, p.hooks.MixedVersionSteps(p.finalContext(true /* finalizing */), p.nextID)...)
+	}, p.hooks.MixedVersionSteps(p.finalContext(fromVersion, toVersion, true /* finalizing */), p.nextID)...)
+}
+
+// shouldRollback returns whether the test will attempt a rollback. If
+// we are upgrading to the current version being tested, we always
+// rollback, as we want to expose that upgrade to complex upgrade
+// scenarios. If this is an intermediate upgrade in a multi-upgrade
+// test, then rollback with a probability. This stops tests from
+// having excessively long running times.
+func (p *testPlanner) shouldRollback(toVersion string) bool {
+	if toVersion == clusterupgrade.MainVersion {
+		return true
+	}
+
+	return p.prng.Float64() < rollbackIntermediateUpgradesProbability
 }
 
 func (p *testPlanner) nextID() int {
@@ -221,9 +263,14 @@ func (plan *TestPlan) PrettyPrint() string {
 		plan.prettyPrintStep(&out, step, treeBranchString(i, len(plan.steps)))
 	}
 
+	formattedVersions := make([]string, 0, len(plan.versions))
+	for _, v := range plan.versions {
+		formattedVersions = append(formattedVersions, fmt.Sprintf("%q", versionMsg(v)))
+	}
+
 	return fmt.Sprintf(
-		"mixed-version test plan for upgrading from %s to %s:\n%s",
-		plan.initialVersion, plan.finalVersion, out.String(),
+		"mixed-version test plan for upgrading from %s:\n%s",
+		strings.Join(formattedVersions, " to "), out.String(),
 	)
 }
 
@@ -238,7 +285,7 @@ func (plan *TestPlan) prettyPrintStep(out *strings.Builder, step testStep, prefi
 		}
 	}
 
-	// writeRunnable is the function that generates the description for
+	// writeSingle is the function that generates the description for
 	// a singleStep. It can include extra information, such as whether
 	// there's a delay associated with the step (in the case of
 	// concurrent execution), and what database node the step is

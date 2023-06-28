@@ -107,6 +107,12 @@ const (
 	// finalized.
 	runWhileMigratingProbability = 0.5
 
+	// rollbackIntermediateUpgradesProbability is the probability that
+	// an "intermediate" upgrade (i.e., an upgrade to a version older
+	// than the one being tested) will also go through a rollback during
+	// a test run.
+	rollbackIntermediateUpgradesProbability = 0.3
+
 	// numNodesInFixtures is the number of nodes expected to exist in a
 	// cluster that can use the test fixtures in
 	// `pkg/cmd/roachtest/fixtures`.
@@ -132,6 +138,8 @@ var (
 		// detect bugs, especially in migrations.
 		useFixturesProbability: 0.7,
 		upgradeTimeout:         clusterupgrade.DefaultUpgradeTimeout,
+		minUpgrades:            1,
+		maxUpgrades:            3,
 	}
 )
 
@@ -230,6 +238,8 @@ type (
 	testOptions struct {
 		useFixturesProbability float64
 		upgradeTimeout         time.Duration
+		minUpgrades            int
+		maxUpgrades            int
 	}
 
 	customOption func(*testOptions)
@@ -265,7 +275,7 @@ type (
 		_buildVersion *version.Version
 		// test-only field, allows us to have deterministic tests even as
 		// the predecessor data changes.
-		predecessorFunc func(*rand.Rand, *version.Version) (string, error)
+		predecessorFunc func(*rand.Rand, *version.Version, int) ([]string, error)
 	}
 
 	shouldStop chan struct{}
@@ -298,6 +308,31 @@ func AlwaysUseFixtures(opts *testOptions) {
 func UpgradeTimeout(timeout time.Duration) customOption {
 	return func(opts *testOptions) {
 		opts.upgradeTimeout = timeout
+	}
+}
+
+// MinUpgrades allows callers to set a minimum number of upgrades each
+// test run should exercise.
+func MinUpgrades(n int) customOption {
+	return func(opts *testOptions) {
+		opts.minUpgrades = n
+	}
+}
+
+// MaxUpgrades allows callers to set a maximum number of upgrades to
+// be performed during a test run.
+func MaxUpgrades(n int) customOption {
+	return func(opts *testOptions) {
+		opts.maxUpgrades = n
+	}
+}
+
+// NumUpgrades allows callers to specify the exact number of upgrades
+// every test run should perform.
+func NumUpgrades(n int) customOption {
+	return func(opts *testOptions) {
+		opts.minUpgrades = n
+		opts.maxUpgrades = n
 	}
 }
 
@@ -336,7 +371,7 @@ func NewTest(
 		prng:            prng,
 		seed:            seed,
 		hooks:           &testHooks{prng: prng, crdbNodes: crdbNodes},
-		predecessorFunc: release.RandomPredecessor,
+		predecessorFunc: release.RandomPredecessorHistory,
 	}
 
 	assertValidTest(test, t.Fatal)
@@ -486,19 +521,19 @@ func (t *Test) run(plan *TestPlan) error {
 }
 
 func (t *Test) plan() (*TestPlan, error) {
-	previousRelease, err := t.predecessorFunc(t.prng, t.buildVersion())
+	previousReleases, err := t.predecessorFunc(t.prng, t.buildVersion(), t.numUpgrades())
 	if err != nil {
 		return nil, err
 	}
 
 	planner := testPlanner{
-		initialVersion: previousRelease,
-		options:        t.options,
-		rt:             t.rt,
-		crdbNodes:      t.crdbNodes,
-		hooks:          t.hooks,
-		prng:           t.prng,
-		bgChans:        t.bgChans,
+		versions:  append(previousReleases, clusterupgrade.MainVersion),
+		options:   t.options,
+		rt:        t.rt,
+		crdbNodes: t.crdbNodes,
+		hooks:     t.hooks,
+		prng:      t.prng,
+		bgChans:   t.bgChans,
 	}
 
 	return planner.Plan(), nil
@@ -519,6 +554,15 @@ func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) userFunc 
 	}
 }
 
+// numUpgrades returns the number of upgrades that will be performed
+// in this test run. Returns a number in the [minUpgrades, maxUpgrades]
+// range.
+func (t *Test) numUpgrades() int {
+	return t.prng.Intn(
+		t.options.maxUpgrades-t.options.minUpgrades+1,
+	) + t.options.minUpgrades
+}
+
 // installFixturesStep is the step that copies the fixtures from
 // `pkg/cmd/roachtest/fixtures` for a specific version into the nodes'
 // store dir.
@@ -532,7 +576,7 @@ func (s installFixturesStep) ID() int                { return s.id }
 func (s installFixturesStep) Background() shouldStop { return nil }
 
 func (s installFixturesStep) Description() string {
-	return fmt.Sprintf("installing fixtures for version %q", s.version)
+	return fmt.Sprintf("install fixtures for version %q", s.version)
 }
 
 func (s installFixturesStep) Run(
@@ -554,7 +598,7 @@ func (s startStep) ID() int                { return s.id }
 func (s startStep) Background() shouldStop { return nil }
 
 func (s startStep) Description() string {
-	return fmt.Sprintf("starting cluster at version %q", s.version)
+	return fmt.Sprintf("start cluster at version %q", s.version)
 }
 
 // Run uploads the binary associated with the given version and starts
@@ -612,7 +656,7 @@ func (s preserveDowngradeOptionStep) ID() int                { return s.id }
 func (s preserveDowngradeOptionStep) Background() shouldStop { return nil }
 
 func (s preserveDowngradeOptionStep) Description() string {
-	return "preventing auto-upgrades by setting `preserve_downgrade_option`"
+	return "prevent auto-upgrades by setting `preserve_downgrade_option`"
 }
 
 func (s preserveDowngradeOptionStep) Run(
@@ -876,6 +920,14 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 		err := fmt.Errorf(
 			"invalid cluster: use of fixtures requires %d cockroach nodes, got %d (%v)",
 			numNodesInFixtures, len(test.crdbNodes), test.crdbNodes,
+		)
+		fatalFunc(errors.Wrap(err, "mixedversion.NewTest"))
+	}
+
+	if test.options.minUpgrades > test.options.maxUpgrades {
+		err := fmt.Errorf(
+			"invalid test options: minUpgrades=%d maxUpgrades=%d",
+			test.options.minUpgrades, test.options.maxUpgrades,
 		)
 		fatalFunc(errors.Wrap(err, "mixedversion.NewTest"))
 	}

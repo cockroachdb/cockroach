@@ -69,44 +69,50 @@ func TestTestPlanner(t *testing.T) {
 
 	plan, err := mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 10)
+	require.Len(t, plan.steps, 6)
 
 	// Assert on the pretty-printed version of the test plan as that
 	// asserts the ordering of the steps we want to take, and as a bonus
 	// tests the printing function itself.
 	expectedPrettyPlan := fmt.Sprintf(`
-mixed-version test plan for upgrading from %[1]s to <current>:
-├── starting cluster at version "%[1]s" (1)
-├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (2)
-├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+` (3)
+mixed-version test plan for upgrading from "%[1]s" to "<current>":
+├── install fixtures for version "%[1]s" (1)
+├── start cluster at version "%[1]s" (2)
+├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (3)
 ├── run "initialize bank workload" (4)
 ├── start background hooks concurrently
 │   ├── run "bank workload", after 50ms delay (5)
 │   ├── run "rand workload", after 200ms delay (6)
 │   └── run "csv server", after 500ms delay (7)
-├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 1 with binary version <current> (8)
-│   ├── run "mixed-version 1" (9)
-│   ├── restart node 4 with binary version <current> (10)
-│   ├── restart node 3 with binary version <current> (11)
-│   ├── run "mixed-version 2" (12)
-│   └── restart node 2 with binary version <current> (13)
-├── downgrade nodes :1-4 from "<current>" to "%[1]s"
-│   ├── restart node 4 with binary version %[1]s (14)
-│   ├── run "mixed-version 2" (15)
-│   ├── restart node 2 with binary version %[1]s (16)
-│   ├── restart node 3 with binary version %[1]s (17)
-│   ├── restart node 1 with binary version %[1]s (18)
-│   └── run "mixed-version 1" (19)
-├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 4 with binary version <current> (20)
-│   ├── run "mixed-version 1" (21)
-│   ├── restart node 1 with binary version <current> (22)
-│   ├── restart node 2 with binary version <current> (23)
-│   ├── run "mixed-version 2" (24)
-│   └── restart node 3 with binary version <current> (25)
-├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (26)
-└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (27)
+└── upgrade cluster from "%[1]s" to "<current>"
+   ├── prevent auto-upgrades by setting `+"`preserve_downgrade_option`"+` (8)
+   ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
+   │   ├── restart node 1 with binary version <current> (9)
+   │   ├── restart node 3 with binary version <current> (10)
+   │   ├── run "mixed-version 2" (11)
+   │   ├── restart node 2 with binary version <current> (12)
+   │   ├── run "mixed-version 1" (13)
+   │   └── restart node 4 with binary version <current> (14)
+   ├── downgrade nodes :1-4 from "<current>" to "%[1]s"
+   │   ├── restart node 2 with binary version %[1]s (15)
+   │   ├── run "mixed-version 1" (16)
+   │   ├── restart node 1 with binary version %[1]s (17)
+   │   ├── run "mixed-version 2" (18)
+   │   ├── restart node 3 with binary version %[1]s (19)
+   │   └── restart node 4 with binary version %[1]s (20)
+   ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
+   │   ├── restart node 4 with binary version <current> (21)
+   │   ├── restart node 3 with binary version <current> (22)
+   │   ├── restart node 1 with binary version <current> (23)
+   │   ├── run mixed-version hooks concurrently
+   │   │   ├── run "mixed-version 1", after 0s delay (24)
+   │   │   └── run "mixed-version 2", after 0s delay (25)
+   │   └── restart node 2 with binary version <current> (26)
+   ├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (27)
+   ├── run mixed-version hooks concurrently
+   │   ├── run "mixed-version 1", after 100ms delay (28)
+   │   └── run "mixed-version 2", after 0s delay (29)
+   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (30)
 `, predecessorVersion)
 
 	expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
@@ -123,15 +129,89 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 	requireConcurrentHooks(t, plan.steps[3], "startup 1", "startup 2")
 
 	// Assert that AfterUpgradeFinalized hooks are scheduled to run in
-	// the last step of the test.
+	// the last step of the upgrade.
 	mvt = newTest()
 	mvt.AfterUpgradeFinalized("finalizer 1", dummyHook)
 	mvt.AfterUpgradeFinalized("finalizer 2", dummyHook)
 	mvt.AfterUpgradeFinalized("finalizer 3", dummyHook)
 	plan, err = mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 9)
-	requireConcurrentHooks(t, plan.steps[8], "finalizer 1", "finalizer 2", "finalizer 3")
+	require.Len(t, plan.steps, 4)
+	upgradeSteps := plan.steps[3].(sequentialRunStep)
+	require.Len(t, upgradeSteps.steps, 7)
+	requireConcurrentHooks(t, upgradeSteps.steps[6], "finalizer 1", "finalizer 2", "finalizer 3")
+}
+
+// TestMultipleUpgrades tests the generation of test plans that
+// involve multiple upgrades.
+func TestMultipleUpgrades(t *testing.T) {
+	mvt := newTest(NumUpgrades(3))
+	mvt.predecessorFunc = func(rng *rand.Rand, v *version.Version, n int) ([]string, error) {
+		return []string{"22.1.8", "22.2.3", "23.1.4"}, nil
+	}
+
+	mvt.InMixedVersion("mixed-version 1", dummyHook)
+	initBank := roachtestutil.NewCommand("./cockroach workload init bank")
+	runBank := roachtestutil.NewCommand("./cockroach workload run bank")
+	mvt.Workload("bank", nodes, initBank, runBank)
+
+	plan, err := mvt.plan()
+	require.NoError(t, err)
+
+	expectedPrettyPlan := fmt.Sprintf(`
+mixed-version test plan for upgrading from "%[1]s" to "%[2]s" to "%[3]s" to "<current>":
+├── start cluster at version "%[1]s" (1)
+├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (2)
+├── run "initialize bank workload" (3)
+├── run "bank workload" (4)
+├── upgrade cluster from "%[1]s" to "%[2]s"
+│   ├── prevent auto-upgrades by setting `+"`preserve_downgrade_option`"+` (5)
+│   ├── upgrade nodes :1-4 from "%[1]s" to "%[2]s"
+│   │   ├── restart node 2 with binary version %[2]s (6)
+│   │   ├── restart node 4 with binary version %[2]s (7)
+│   │   ├── restart node 1 with binary version %[2]s (8)
+│   │   ├── run "mixed-version 1" (9)
+│   │   └── restart node 3 with binary version %[2]s (10)
+│   ├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (11)
+│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (12)
+├── upgrade cluster from "%[2]s" to "%[3]s"
+│   ├── prevent auto-upgrades by setting `+"`preserve_downgrade_option`"+` (13)
+│   ├── upgrade nodes :1-4 from "%[2]s" to "%[3]s"
+│   │   ├── restart node 3 with binary version %[3]s (14)
+│   │   ├── restart node 1 with binary version %[3]s (15)
+│   │   ├── run "mixed-version 1" (16)
+│   │   ├── restart node 4 with binary version %[3]s (17)
+│   │   └── restart node 2 with binary version %[3]s (18)
+│   ├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (19)
+│   ├── run "mixed-version 1" (20)
+│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (21)
+└── upgrade cluster from "%[3]s" to "<current>"
+   ├── prevent auto-upgrades by setting `+"`preserve_downgrade_option`"+` (22)
+   ├── upgrade nodes :1-4 from "%[3]s" to "<current>"
+   │   ├── restart node 4 with binary version <current> (23)
+   │   ├── run "mixed-version 1" (24)
+   │   ├── restart node 1 with binary version <current> (25)
+   │   ├── restart node 2 with binary version <current> (26)
+   │   └── restart node 3 with binary version <current> (27)
+   ├── downgrade nodes :1-4 from "<current>" to "23.1.4"
+   │   ├── restart node 1 with binary version %[3]s (28)
+   │   ├── restart node 3 with binary version %[3]s (29)
+   │   ├── restart node 4 with binary version %[3]s (30)
+   │   ├── restart node 2 with binary version %[3]s (31)
+   │   └── run "mixed-version 1" (32)
+   ├── upgrade nodes :1-4 from "%[3]s" to "<current>"
+   │   ├── restart node 2 with binary version <current> (33)
+   │   ├── run "mixed-version 1" (34)
+   │   ├── restart node 3 with binary version <current> (35)
+   │   ├── restart node 1 with binary version <current> (36)
+   │   └── restart node 4 with binary version <current> (37)
+   ├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (38)
+   ├── run "mixed-version 1" (39)
+   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (40)
+`, "22.1.8", "22.2.3", "23.1.4")
+
+	expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
+	require.Equal(t, expectedPrettyPlan, plan.PrettyPrint())
 }
 
 // TestDeterministicTestPlan tests that generating a test plan with
@@ -196,17 +276,19 @@ func TestDeterministicHookSeeds(t *testing.T) {
 		plan, err := mvt.plan()
 		require.NoError(t, err)
 
+		upgradeStep := plan.steps[3].(sequentialRunStep)
+
 		// We can hardcode these paths since we are using a fixed seed in
 		// these tests.
-		firstRun := plan.steps[3].(sequentialRunStep).steps[4].(runHookStep)
+		firstRun := upgradeStep.steps[1].(sequentialRunStep).steps[3].(runHookStep)
 		require.Equal(t, "do something", firstRun.hook.name)
 		require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		secondRun := plan.steps[4].(sequentialRunStep).steps[1].(runHookStep)
+		secondRun := upgradeStep.steps[2].(sequentialRunStep).steps[2].(runHookStep)
 		require.Equal(t, "do something", secondRun.hook.name)
 		require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		thirdRun := plan.steps[5].(sequentialRunStep).steps[3].(runHookStep)
+		thirdRun := upgradeStep.steps[3].(sequentialRunStep).steps[2].(runHookStep)
 		require.Equal(t, "do something", thirdRun.hook.name)
 		require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
@@ -215,9 +297,9 @@ func TestDeterministicHookSeeds(t *testing.T) {
 	}
 
 	expectedData := [][]int{
-		{97, 94, 35, 65, 21},
-		{40, 30, 46, 88, 46},
-		{96, 91, 48, 85, 76},
+		{37, 94, 58, 5, 22},
+		{56, 88, 23, 85, 45},
+		{99, 37, 96, 23, 63},
 	}
 	const numRums = 50
 	for j := 0; j < numRums; j++ {
@@ -313,8 +395,8 @@ func newTest(options ...customOption) *Test {
 // Always use the same predecessor version to make this test
 // deterministic even as changes continue to happen in the
 // cockroach_releases.yaml file.
-func testPredecessorFunc(rng *rand.Rand, v *version.Version) (string, error) {
-	return predecessorVersion, nil
+func testPredecessorFunc(rng *rand.Rand, v *version.Version, n int) ([]string, error) {
+	return []string{predecessorVersion}, nil
 }
 
 // requireConcurrentHooks asserts that the given step is a concurrent
