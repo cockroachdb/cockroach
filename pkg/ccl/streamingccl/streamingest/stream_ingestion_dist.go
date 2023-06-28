@@ -11,6 +11,8 @@ package streamingest
 import (
 	"context"
 	"fmt"
+	"math"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -221,11 +223,15 @@ func (p *replicationFlowPlanner) makePlan(
 		if err != nil {
 			return nil, nil, err
 		}
+		destNodeLocalities, err := getDestNodeLocalities(ctx, dsp, sqlInstanceIDs)
+		if err != nil {
+			return nil, nil, err
+		}
 
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := constructStreamIngestionPlanSpecs(
 			streamingccl.StreamAddress(details.StreamAddress),
 			topology,
-			sqlInstanceIDs,
+			destNodeLocalities,
 			initialScanTimestamp,
 			previousReplicatedTime,
 			checkpoint,
@@ -317,10 +323,101 @@ func measurePlanChange(before, after *sql.PhysicalPlan) float64 {
 	return float64(diff) / float64(oldCount)
 }
 
+type partitionWithCandidates struct {
+	partition          streamclient.PartitionInfo
+	closestDestIDs     []base.SQLInstanceID
+	sharedPrefixLength int
+}
+
+type candidatesByPriority []partitionWithCandidates
+
+func (a candidatesByPriority) Len() int      { return len(a) }
+func (a candidatesByPriority) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a candidatesByPriority) Less(i, j int) bool {
+	return a[i].sharedPrefixLength > a[j].sharedPrefixLength
+}
+
+type nodeMatcher struct {
+	destMatchCount map[base.SQLInstanceID]int
+	destNodesInfo  []sql.InstanceLocality
+}
+
+func makeNodeMatcher(destNodesInfo []sql.InstanceLocality) nodeMatcher {
+	return nodeMatcher{
+		destMatchCount: make(map[base.SQLInstanceID]int, len(destNodesInfo)),
+		destNodesInfo:  destNodesInfo,
+	}
+}
+
+func (nm nodeMatcher) destNodeIDs() []base.SQLInstanceID {
+	allDestNodeIDs := make([]base.SQLInstanceID, 0, len(nm.destNodesInfo))
+	for _, info := range nm.destNodesInfo {
+		allDestNodeIDs = append(allDestNodeIDs, info.GetInstanceID())
+	}
+	return allDestNodeIDs
+}
+
+// findSourceNodePriority finds the closest dest nodes for each source node and
+// returns a list of (source node, dest node match candidates) pairs ordered by
+// matching priority. A source node is earlier (higher priority) in the list if
+// it shares more locality tiers with their destination node match candidates.
+func (nm nodeMatcher) findSourceNodePriority(topology streamclient.Topology) candidatesByPriority {
+
+	allDestNodeIDs := nm.destNodeIDs()
+	candidates := make(candidatesByPriority, 0, len(topology.Partitions))
+	for _, partition := range topology.Partitions {
+		closestDestIDs, sharedPrefixLength := sql.ClosestInstances(nm.destNodesInfo,
+			partition.SrcLocality)
+		if sharedPrefixLength == 0 {
+			closestDestIDs = allDestNodeIDs
+		}
+		candidate := partitionWithCandidates{
+			partition:          partition,
+			closestDestIDs:     closestDestIDs,
+			sharedPrefixLength: sharedPrefixLength,
+		}
+		candidates = append(candidates, candidate)
+	}
+	sort.Sort(candidates)
+
+	return candidates
+}
+
+// findMatch returns the destination node id with the fewest src node matches from the input list.
+func (nm nodeMatcher) findMatch(destIDCandidates []base.SQLInstanceID) base.SQLInstanceID {
+	minCount := math.MaxInt
+	currentMatch := base.SQLInstanceID(0)
+
+	for _, destID := range destIDCandidates {
+		currentDestCount := nm.destMatchCount[destID]
+		if currentDestCount < minCount {
+			currentMatch = destID
+			minCount = currentDestCount
+		}
+	}
+	nm.destMatchCount[currentMatch]++
+	return currentMatch
+}
+
+func getDestNodeLocalities(
+	ctx context.Context, dsp *sql.DistSQLPlanner, instanceIDs []base.SQLInstanceID,
+) ([]sql.InstanceLocality, error) {
+
+	instanceInfos := make([]sql.InstanceLocality, 0, len(instanceIDs))
+	for _, id := range instanceIDs {
+		nodeDesc, err := dsp.GetSQLInstanceInfo(id)
+		if err != nil {
+			log.Eventf(ctx, "unable to get node descriptor for sql node %s", id)
+			return nil, err
+		}
+		instanceInfos = append(instanceInfos, sql.MakeInstanceLocality(id, nodeDesc.Locality))
+	}
+	return instanceInfos, nil
+}
 func constructStreamIngestionPlanSpecs(
 	streamAddress streamingccl.StreamAddress,
 	topology streamclient.Topology,
-	sqlInstanceIDs []base.SQLInstanceID,
+	destSQLInstances []sql.InstanceLocality,
 	initialScanTimestamp hlc.Timestamp,
 	previousReplicatedTimestamp hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
@@ -329,41 +426,50 @@ func constructStreamIngestionPlanSpecs(
 	sourceTenantID roachpb.TenantID,
 	destinationTenantID roachpb.TenantID,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
-	// For each stream partition in the topology, assign it to a node.
-	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(sqlInstanceIDs))
+
+	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(destSQLInstances))
+	destSQLInstancesToIdx := make(map[base.SQLInstanceID]int, len(destSQLInstances))
+	for i, id := range destSQLInstances {
+		spec := &execinfrapb.StreamIngestionDataSpec{
+			StreamID:                    uint64(streamID),
+			JobID:                       int64(jobID),
+			PreviousReplicatedTimestamp: previousReplicatedTimestamp,
+			InitialScanTimestamp:        initialScanTimestamp,
+			Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
+			StreamAddress:               string(streamAddress),
+			PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
+			TenantRekey: execinfrapb.TenantRekey{
+				OldID: sourceTenantID,
+				NewID: destinationTenantID,
+			},
+		}
+		streamIngestionSpecs = append(streamIngestionSpecs, spec)
+		destSQLInstancesToIdx[id.GetInstanceID()] = i
+	}
 
 	trackedSpans := make([]roachpb.Span, 0)
 	subscribingSQLInstances := make(map[string]uint32)
-	for i, partition := range topology.Partitions {
-		// Round robin assign the stream partitions to nodes. Partitions 0 through
-		// len(nodes) - 1 creates the spec. Future partitions just add themselves to
-		// the partition addresses.
-		if i < len(sqlInstanceIDs) {
-			spec := &execinfrapb.StreamIngestionDataSpec{
-				StreamID:                    uint64(streamID),
-				JobID:                       int64(jobID),
-				PreviousReplicatedTimestamp: previousReplicatedTimestamp,
-				InitialScanTimestamp:        initialScanTimestamp,
-				Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
-				StreamAddress:               string(streamAddress),
-				PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
-				TenantRekey: execinfrapb.TenantRekey{
-					OldID: sourceTenantID,
-					NewID: destinationTenantID,
-				},
-			}
-			streamIngestionSpecs = append(streamIngestionSpecs, spec)
-		}
-		n := i % len(sqlInstanceIDs)
 
-		subscribingSQLInstances[partition.ID] = uint32(sqlInstanceIDs[n])
-		streamIngestionSpecs[n].PartitionSpecs[partition.ID] = execinfrapb.StreamIngestionPartitionSpec{
+	// Update stream ingestion specs with their matched source node.
+	matcher := makeNodeMatcher(destSQLInstances)
+	for _, candidate := range matcher.findSourceNodePriority(topology) {
+		destID := matcher.findMatch(candidate.closestDestIDs)
+
+		partition := candidate.partition
+		subscribingSQLInstances[partition.ID] = uint32(destID)
+
+		specIdx, ok := destSQLInstancesToIdx[destID]
+		if !ok {
+			return nil, nil, errors.AssertionFailedf(
+				"matched destination node id does not contain a stream ingestion spec")
+		}
+		streamIngestionSpecs[specIdx].PartitionSpecs[partition.ID] = execinfrapb.
+			StreamIngestionPartitionSpec{
 			PartitionID:       partition.ID,
 			SubscriptionToken: string(partition.SubscriptionToken),
 			Address:           string(partition.SrcAddr),
 			Spans:             partition.Spans,
 		}
-
 		trackedSpans = append(trackedSpans, partition.Spans...)
 	}
 

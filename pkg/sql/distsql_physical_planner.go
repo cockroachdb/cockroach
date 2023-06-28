@@ -1475,7 +1475,8 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			}
 
 			// TODO(dt): Pre-compute / cache this result, e.g. in the instance reader.
-			if closest := closestInstances(instances, nodeDesc.Locality); len(closest) > 0 {
+			if closest, _ := ClosestInstances(instances,
+				nodeDesc.Locality); len(closest) > 0 {
 				return closest[rng.Intn(len(closest))]
 			}
 
@@ -1506,24 +1507,50 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 	return resolver, nil, nil
 }
 
-// closestInstances returns the subset of instances which are closest to the
+type InstanceLocalityGetter interface {
+	sqlinstance.InstanceInfo | InstanceLocality
+	GetInstanceID() base.SQLInstanceID
+	GetLocality() roachpb.Locality
+}
+
+type InstanceLocality struct {
+	id       base.SQLInstanceID
+	locality roachpb.Locality
+}
+
+func MakeInstanceLocality(id base.SQLInstanceID, locality roachpb.Locality) InstanceLocality {
+	return InstanceLocality{id: id, locality: locality}
+}
+
+func (il InstanceLocality) GetInstanceID() base.SQLInstanceID {
+	return il.id
+}
+
+func (ii InstanceLocality) GetLocality() roachpb.Locality {
+	return ii.locality
+}
+
+// ClosestInstances returns the subset of instances which are closest to the
 // passed locality, i.e. those which jointly have the longest shared prefix of
-// at least length 1. Returns nil, rather than the entire input, if no instances
-// have *any* shared locality prefix.
-func closestInstances(
-	instances []sqlinstance.InstanceInfo, loc roachpb.Locality,
-) []base.SQLInstanceID {
+// at least length 1 and the shared prefix length. Returns nil, rather than the
+// entire input, if no instances have *any* shared locality prefix.
+func ClosestInstances[instance InstanceLocalityGetter](
+	instances []instance, loc roachpb.Locality,
+) ([]base.SQLInstanceID, int) {
 	best := 1
 	var res []base.SQLInstanceID
 	for _, i := range instances {
-		if l := i.Locality.SharedPrefix(loc); l > best {
+		if l := i.GetLocality().SharedPrefix(loc); l > best {
 			best = l
-			res = append(res[:0], i.InstanceID)
+			res = append(res[:0], i.GetInstanceID())
 		} else if l == best {
-			res = append(res, i.InstanceID)
+			res = append(res, i.GetInstanceID())
 		}
 	}
-	return res
+	if len(res) == 0 {
+		best = 0
+	}
+	return res, best
 }
 
 // maybeReassignToGatewaySQLInstance checks whether the span partitioning is
