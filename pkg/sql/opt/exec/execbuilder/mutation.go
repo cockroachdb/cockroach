@@ -559,6 +559,13 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	return ep, nil
 }
 
+func (b *Builder) buildDeleteBatch(del *memo.DeleteBatchExpr) (ep execPlan, err error) {
+	ep.root, err = b.factory.ConstructDeleteBatch(
+		del.Syntax,
+	)
+	return
+}
+
 // tryBuildDeleteRange attempts to construct a fast DeleteRange execution for a
 // logical Delete operator, checking all required conditions. See
 // exec.Factory.ConstructDeleteRange.

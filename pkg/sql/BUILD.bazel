@@ -77,6 +77,7 @@ go_library(
         "deallocate.go",
         "delayed.go",
         "delete.go",
+        "delete_batch.go",
         "delete_range.go",
         "descriptor.go",
         "discard.go",

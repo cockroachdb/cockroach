@@ -357,3 +357,10 @@ define AlterRangeRelocatePrivate {
     # Props stores the required physical properties for the input expression.
     Props PhysProps
 }
+
+# DeleteBatch represents a `DELETE BATCH FROM .. ` statement.
+[Relational]
+define DeleteBatch {
+    # Syntax is the original delete statement.
+    Syntax Delete
+}

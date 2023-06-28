@@ -1768,6 +1768,10 @@ func (ef *execFactory) ConstructDelete(
 	return &rowCountNode{source: del}, nil
 }
 
+func (ef *execFactory) ConstructDeleteBatch(del *tree.Delete) (exec.Node, error) {
+	return &deleteBatchNode{delete: del}, nil
+}
+
 func (ef *execFactory) ConstructDeleteRange(
 	table cat.Table,
 	needed exec.TableColumnOrdinalSet,

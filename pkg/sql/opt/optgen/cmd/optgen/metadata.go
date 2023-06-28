@@ -251,6 +251,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Volatility":           {fullName: "volatility.V", passByVal: true},
 		"LiteralRows":          {fullName: "opt.LiteralRows", isExpr: true, isPointer: true},
 		"Distribution":         {fullName: "physical.Distribution", passByVal: true},
+		"Delete":               {fullName: "tree.Delete", isPointer: true, usePointerIntern: true},
 	}
 
 	// Add types of generated op and private structs.

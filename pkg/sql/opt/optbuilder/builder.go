@@ -340,6 +340,9 @@ func (b *Builder) buildStmt(
 		return b.buildSelect(stmt.Select, noRowLocking, desiredTypes, inScope)
 
 	case *tree.Delete:
+		if stmt.Batch != nil {
+			return b.buildDeleteBatch(stmt, inScope)
+		}
 		return b.processWiths(stmt.With, inScope, func(inScope *scope) *scope {
 			return b.buildDelete(stmt, inScope)
 		})

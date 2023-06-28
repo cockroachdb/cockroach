@@ -155,6 +155,9 @@ func getResultColumns(
 			a.Passthrough...,
 		), nil
 
+	case deleteBatchOp:
+		return nil, nil
+
 	case opaqueOp:
 		if args.(*opaqueArgs).Metadata != nil {
 			return args.(*opaqueArgs).Metadata.Columns(), nil

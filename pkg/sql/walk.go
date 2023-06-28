@@ -399,6 +399,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&createViewNode{}):                          "create view",
 	reflect.TypeOf(&delayedNode{}):                             "virtual table",
 	reflect.TypeOf(&deleteNode{}):                              "delete",
+	reflect.TypeOf(&deleteBatchNode{}):                         "delete batch",
 	reflect.TypeOf(&deleteRangeNode{}):                         "delete range",
 	reflect.TypeOf(&discardNode{}):                             "discard",
 	reflect.TypeOf(&distinctNode{}):                            "distinct",

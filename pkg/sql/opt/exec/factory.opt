@@ -785,3 +785,8 @@ define LiteralValues {
 define ShowCompletions {
     Command *tree.ShowCompletions
 }
+
+# DeleteBatch implements a DELETE BATCH statement.
+define DeleteBatch {
+    Delete *tree.Delete
+}

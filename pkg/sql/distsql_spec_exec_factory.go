@@ -1020,6 +1020,10 @@ func (e *distSQLSpecExecFactory) ConstructDelete(
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: delete")
 }
 
+func (e *distSQLSpecExecFactory) ConstructDeleteBatch(*tree.Delete) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: delete")
+}
+
 func (e *distSQLSpecExecFactory) ConstructDeleteRange(
 	table cat.Table,
 	needed exec.TableColumnOrdinalSet,
