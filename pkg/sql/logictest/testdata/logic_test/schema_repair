@@ -215,6 +215,32 @@ statement error invalid foreign key backreference
 DROP TABLE corrupt_backref_fk
 
 statement ok
+CREATE FUNCTION repaired(descriptor BYTES) RETURNS BYTES VOLATILE LANGUAGE SQL AS $$
+SELECT crdb_internal.repaired_descriptor(
+  descriptor,
+  (SELECT array_agg(id) AS desc_id_array FROM system.descriptor),
+  (
+    SELECT
+      array_agg(id) AS job_id_array
+    FROM
+      system.jobs
+    WHERE
+      status NOT IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+  )
+)
+$$;
+
+query B
+SELECT crdb_internal.unsafe_upsert_descriptor(id, repaired(descriptor), true)
+FROM system.descriptor
+WHERE id = 'corrupt_backref_fk'::REGCLASS::INT
+----
+true
+
+statement ok
+DROP TABLE corrupt_backref_fk
+
+statement ok
 CREATE TABLE corrupt_backref_view (k INT PRIMARY KEY, v STRING);
 INSERT INTO corrupt_backref_view (k, v) VALUES (1, 'a');
 CREATE VIEW corrupt_view AS SELECT k, v FROM corrupt_backref_view
@@ -236,6 +262,16 @@ SELECT * FROM corrupt_backref_view
 1 a
 
 statement error pgcode XX000 invalid depended-on-by relation back reference
+DROP TABLE corrupt_backref_view
+
+query B
+SELECT crdb_internal.unsafe_upsert_descriptor(id, repaired(descriptor), true)
+FROM system.descriptor
+WHERE id = 'corrupt_backref_view'::REGCLASS::INT
+----
+true
+
+statement ok
 DROP TABLE corrupt_backref_view
 
 statement ok
@@ -261,41 +297,21 @@ a
 statement error pgcode XXUUU referenced descriptor not found
 ALTER TYPE corrupt_backref_typ DROP VALUE 'b'
 
-# This is required to pass the validation tests when the logic test completes.
-subtest cleanup_corrupt_backref
-
 query TB
-SELECT
-  name,
-	crdb_internal.unsafe_delete_descriptor(id, true)
-FROM
-	system.namespace
-WHERE
-	name LIKE '%corrupt_backref_%'
-ORDER BY
-  name
+SELECT ns.name, crdb_internal.unsafe_upsert_descriptor(d.id, repaired(d.descriptor), true)
+FROM system.descriptor d
+INNER JOIN system.namespace ns ON d.id = ns.id
+WHERE ns.name LIKE '%corrupt_backref_typ'
+ORDER BY 1
 ----
-_corrupt_backref_typ  true
-corrupt_backref_fk    true
-corrupt_backref_typ   true
-corrupt_backref_view  true
+_corrupt_backref_typ true
+corrupt_backref_typ true
 
-query TBB
-SELECT
-  name,
-	crdb_internal.force_delete_table_data(id),
-	crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id)
-FROM
-	system.namespace
-WHERE
-	name LIKE '%corrupt_backref_%'
-ORDER BY
-  name
-----
-_corrupt_backref_typ  true  true
-corrupt_backref_fk    true  true
-corrupt_backref_typ   true  true
-corrupt_backref_view  true  true
+statement ok
+ALTER TYPE corrupt_backref_typ DROP VALUE 'b'
+
+statement ok
+DROP TYPE corrupt_backref_typ
 
 # Check that `SET descriptor_validation = off ` disables validation.
 # We do so by corrupting a table descriptor and assert on the successful
