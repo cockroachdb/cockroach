@@ -109,5 +109,9 @@ const (
 
 	// UpgradedDeclarativeSchemaChangerState indicates the declarative schema changer
 	// state was modified.
-	UpgradedDeclarativeSchemaChangerState = 15
+	UpgradedDeclarativeSchemaChangerState
+
+	// StrippedDanglingBackReferences indicates that at least one dangling
+	// back-reference was removed from the descriptor.
+	StrippedDanglingBackReferences
 )

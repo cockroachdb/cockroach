@@ -23,6 +23,7 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/docs",
         "//pkg/geo/geoindex",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings",
