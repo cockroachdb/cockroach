@@ -402,6 +402,20 @@ func TestScheduleChainingWithDatabaseExpansion(t *testing.T) {
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
+	roundedCurrentTime := th.cfg.DB.KV().Clock().PhysicalTime().Round(time.Minute * 5)
+	if roundedCurrentTime.Hour() == 0 && roundedCurrentTime.Minute() == 0 {
+		// The backup schedule in this test uses the following crontab recurrence:
+		// '*/2 * * * *'. In english, this means "run a full backup now, and then
+		// run a full backup every day at midnight, and an incremental every 2
+		// minutes. This test relies on an incremental backup running after the
+		// first full backup and pulling up the PTS record. But, what happens if the
+		// first full backup gets scheduled to run within 2 minutes of midnight? A
+		// second full backup may get scheduled before the expected incremental
+		// backup, breaking the invariant the test expects. For this reason, skip
+		// the test if it's running close to midnight which is rare.
+		skip.IgnoreLint(t, "test flakes when the machine clock is too close to midnight")
+	}
+
 	th.sqlDB.Exec(t, `
 CREATE DATABASE db;
 USE db;
