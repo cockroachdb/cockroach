@@ -55,7 +55,7 @@ func registerCancel(r registry.Registry) {
 
 			t.Status("restoring TPCH dataset for Scale Factor 1")
 			if err := loadTPCHDataset(
-				ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
+				ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), true, /* disableMergeQueue */
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -88,9 +88,16 @@ func registerCancel(r registry.Registry) {
 						query := tpch.QueriesByNumber[queryNum]
 						t.L().Printf("executing q%d\n", queryNum)
 						close(sem)
-						_, err := runnerConn.Exec(queryPrefix + query)
+						rows, err := runnerConn.Query(queryPrefix + "EXPLAIN ANALYZE (DISTSQL) " + query)
 						if err == nil {
 							err = successfullyCompletedErr
+							for rows.Next() {
+								var line string
+								if err = rows.Scan(&line); err != nil {
+									break
+								}
+								t.L().Printf("%s\n", line)
+							}
 						}
 						errCh <- err
 					}(queryNum)
@@ -156,7 +163,15 @@ func registerCancel(r registry.Registry) {
 						numCanceled++
 
 					case <-time.After(5 * time.Second):
-						t.Fatal("query took too long to respond to cancellation")
+						t.Status("cancellation didn't occur within 5 seconds")
+						select {
+						case err = <-errCh:
+							timeToCancel := timeutil.Since(cancelStartTime)
+							t.Status(fmt.Sprintf("canceling q%d took %s\n", queryNum, timeToCancel))
+							t.Fatal("query took too long to respond to cancellation")
+						case <-time.After(time.Minute):
+							t.Fatal("query didn't return after 1 minute either")
+						}
 					}
 				}
 				if minExpected := (numRuns + 1) / 2; numCanceled < minExpected {
