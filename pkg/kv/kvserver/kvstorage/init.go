@@ -504,7 +504,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 			// TODO(tbg): if clearRangeData were in this package we could destroy more
 			// effectively even if for some reason we had in the past written state
 			// other than the HardState here (not supposed to happen, but still).
-			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey(), storage.ClearOptions{}); err != nil {
+			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey()); err != nil {
 				return nil, errors.Wrapf(err, "removing HardState for r%d", repl.RangeID)
 			}
 			log.Eventf(ctx, "removed legacy uninitialized replica for r%s", repl.RangeID)

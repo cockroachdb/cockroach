@@ -543,7 +543,7 @@ func CalcReplicaDigest(
 		} else {
 			timestampBuf = timestampBuf[:size]
 		}
-		if _, err := protoutil.MarshalTo(&legacyTimestamp, timestampBuf); err != nil {
+		if _, err := protoutil.MarshalToSizedBuffer(&legacyTimestamp, timestampBuf); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(timestampBuf); err != nil {
@@ -585,7 +585,7 @@ func CalcReplicaDigest(
 		} else {
 			timestampBuf = timestampBuf[:size]
 		}
-		if _, err := protoutil.MarshalTo(&legacyTimestamp, timestampBuf); err != nil {
+		if _, err := protoutil.MarshalToSizedBuffer(&legacyTimestamp, timestampBuf); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(timestampBuf); err != nil {
