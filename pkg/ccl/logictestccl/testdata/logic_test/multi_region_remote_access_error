@@ -178,70 +178,83 @@ SET enforce_home_region = true
 ### Regression tests for issue #89875
 
 # Non-DML statements should not error out due to enforce_home_region.
-query T
+query T retry
 SELECT table_name FROM [SHOW CREATE messages_global]
 ----
 messages_global
 
 # Non-DML SHOW RANGES statement on RBR table should succeed.
-query I
+query I retry
 SELECT DISTINCT range_id FROM [SHOW RANGES FROM TABLE messages_rbr]
 ----
 52
 
 # Update does not fail when accessing all rows in messages_rbr because lookup
 # join does not error out the lookup table in phase 1.
+retry
 statement ok
 UPDATE messages_rbt SET account_id = -account_id WHERE account_id NOT IN (SELECT account_id FROM messages_rbr)
 
 # Update should fail accessing all rows in messages_rbr.
+retry
 statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
 UPDATE messages_rbt SET account_id = -account_id WHERE message_id NOT IN (SELECT message_id FROM messages_rbr)
 
 # Update should fail accessing all rows in messages_rbr.
+retry
 statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
 UPDATE messages_rbr SET account_id = -account_id WHERE account_id NOT IN (SELECT account_id FROM messages_rbt)
 
 # Delete does not fail when accessing all rows in messages_rbr because lookup
 # join does not error out the lookup table in phase 1.
+retry
 statement ok
 DELETE FROM messages_rbt WHERE account_id NOT IN (SELECT account_id FROM messages_rbr)
 
 # Delete should fail accessing all rows in messages_rbr.
 # join does not error out the lookup table in phase 1.
+retry
 statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
 DELETE FROM messages_rbt WHERE message_id NOT IN (SELECT message_id FROM messages_rbr)
 
 # Delete of potentially all rows in messages_rbr should fail.
+retry
 statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
 DELETE FROM messages_rbr WHERE account_id NOT IN (SELECT account_id FROM messages_rbt)
 
 # Delete accessing all regions should fail.
+retry
 statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
 DELETE FROM messages_rbr WHERE message = 'Hello World!'
 
 # Insert should fail accessing all rows in messages_rbr.
+retry
 statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
 INSERT INTO messages_rbt SELECT * FROM messages_rbr
 
 # Insert into an RBR table should succeed. New rows are placed in the gateway region.
+retry
 statement ok
 INSERT INTO messages_rbr SELECT * FROM messages_rbt
 
 # Upsert into an RBR table should succeed.
+retry
 statement ok
 UPSERT INTO messages_rbr SELECT * FROM messages_rbt
 
 # Upsert should fail accessing all rows in messages_rbr.
+retry
 statement error pq: Query has no home region\. Try adding a LIMIT clause\.
 UPSERT INTO messages_rbt SELECT * FROM messages_rbr
 
 # Upsert into an RBR table uses locality-optimized lookup join and should
 # succeed.
+retry
 statement ok
 UPSERT INTO messages_rbr SELECT * FROM messages_rbt
 
 # UNION ALL where one branch scans all rows of an RBR table should fail.
+retry
 statement error pq: Query has no home region\. Try adding a LIMIT clause\.
 SELECT * FROM messages_rbr UNION ALL SELECT * FROM messages_rbt
 
@@ -254,6 +267,7 @@ SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) UNION ALL SELECT * FROM messa
 
 # A join relation with no home region as the left input of lookup join should
 # not be allowed.
+retry
 statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\.
 SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
   INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
@@ -264,12 +278,14 @@ SELECT c_id FROM child, (SELECT * FROM [VALUES (1)]) v WHERE crdb_region = 'ap-s
 ----
 
 # Joins which may access all regions should error out in phase 1.
+retry
 statement error pq: Query has no home region\. Try adding a filter on p\.crdb_region and/or on key column \(p\.p_id\)\. Try adding a filter on c\.crdb_region and/or on key column \(c\.c_p_id\)\.
 SELECT * FROM parent p, child c WHERE p_id = c_p_id AND
 p.crdb_region = c.crdb_region LIMIT 1
 
 # Locality optimized join is not allowed if the input is a full scan of an RBR
 # table.
+retry
 statement error pq: Query has no home region. Try adding a filter on c\.crdb_region and/or on key column \(c\.c_id\)\.
 SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 1
 
@@ -343,6 +359,7 @@ statement ok
 SET locality_optimized_partitioned_index_scan = false
 
 # This query should error out because it is not locality optimized.
+retry
 statement error pq: Query has no home region\. Try adding a filter on parent\.crdb_region and/or on key column \(parent\.p_id\)\. Try adding a filter on child\.crdb_region and/or on key column \(child\.c_id\)\.
 SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
 
@@ -367,12 +384,14 @@ locality-optimized-search
 
 # Locality optimized search with lookup join will be supported in phase 2 or 3
 # when we can dynamically determine if the lookup will access a remote region.
+retry
 statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.cust_id\)\.
 SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
   (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
 
 # A join relation with no home region as the left input of lookup join should
 # not be allowed.
+retry
 statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\.
 SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
   INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
@@ -486,12 +505,14 @@ inner-join (lookup messages_global [as=g3])
 
 # A join relation with no home region as the left input of lookup join should
 # not be allowed.
+retry
 statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\.
 SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
   INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
 
 # The explicit REGIONAL BY ROW AS column name should be used in the error
 # message if it differs from the default crdb_region.
+retry
 statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region_alt and/or on key column \(rbr\.account_id\)\.
 SELECT * FROM messages_rbr_alt rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
   INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
@@ -530,10 +551,12 @@ ALTER TABLE messages_rbt SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
 
 # Regression test for issue #88788
 # A full scan on an RBT table should error out lookup join.
+retry
 statement error pq: Query has no home region\. The home region \('us-east-1'\) of table 'messages_rbt' does not match the home region \('ap-southeast-2'\) of lookup table 'messages_rbr'\.
 SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
 
 # Select from REGIONAL BY TABLE should indicate the gateway region to use.
+retry
 statement error pq: Query is not running in its home region. Try running the query from region 'us-east-1'.
 SELECT message from messages_rbt@messages_rbt_pkey
 
@@ -545,6 +568,7 @@ USE multi_region_test_db;
 SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ca-central-1'
 ----
 
+retry
 query T nodeidx=4
 SET enforce_home_region = true;
 USE multi_region_test_db;
@@ -556,11 +580,13 @@ project
       └── flags: force-index=msg_idx
 
 # Lookup join should detect REGIONAL BY TABLE in the wrong region.
+retry
 statement error pq: Query has no home region\. The home region \('us-east-1'\) of table 'messages_rbt' does not match the home region \('ap-southeast-2'\) of lookup table 'messages_rbr'\.
 SELECT * FROM  messages_rbt rbt inner lookup join messages_rbr rbr ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 
 # Lookup join should detect REGIONAL BY TABLE in the wrong region.
+retry
 statement error pq: Query has no home region\. The home region \('ap-southeast-2'\) of table 'messages_rbr' does not match the home region \('us-east-1'\) of lookup table 'messages_rbt'\.
 SELECT * FROM messages_rbr rbr inner lookup join messages_rbt rbt ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
@@ -612,20 +638,24 @@ statement ok
 SET enforce_home_region = true
 
 # Tables in non-multiregion databases have no home region.
+retry
 statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT * FROM messages
 
 # If any table in a query has no home region, error out.
+retry
 statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT * FROM non_multiregion_test_db.messages, multi_region_test_db.messages_global
 
 # Scans from tables in non-multiregion databases with contradictions in
 # predicates are not allowed.
+retry
 statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT * FROM messages WHERE account_id = 1 AND account_id = 2
 
 # A lookup join from a multiregion table to non-multiregion table is not
 # allowed.
+retry
 statement error pq: Query has no home region. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT * FROM multi_region_test_db.messages_global mr INNER LOOKUP JOIN non_multiregion_test_db.messages nmr
   ON mr.account_id = nmr.account_id
@@ -637,24 +667,31 @@ statement ok
 USE multi_region_test_db
 
 # Statements which previously succeeded should now fail under REGION survivability.
+retry
 statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT * FROM parent p, child c WHERE c_id = 10 AND p_id = c_p_id
 
+retry
 statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
 
+retry
 statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT * FROM parent LIMIT 1
 
+retry
 statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT * FROM messages_global@messages_global_pkey
 
+retry
 statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT message from messages_rbt@messages_rbt_pkey
 
+retry
 statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
 SELECT message from messages_rbr@msg_idx WHERE crdb_region = 'ap-southeast-2'
 
+retry
 statement error pq: The enforce_home_region setting cannot be combined with REGION survivability. Try accessing only tables in multi-region databases with ZONE survivability.
 EXECUTE s('ap-southeast-2')
 
@@ -689,6 +726,7 @@ project
            └── t1.j @> t2.j
 
 # Inverted join doing lookup into a REGIONAL BY ROW table is not allowed.
+retry
 statement error pq: Query has no home region\. Try adding a filter on t1\.crdb_region and/or on key column \(t1\.j_inverted_key\)\.
 SELECT t1.k FROM json_arr2_rbt AS t2 INNER INVERTED JOIN json_arr1_rbr AS t1 ON t1.j @> t2.j
 

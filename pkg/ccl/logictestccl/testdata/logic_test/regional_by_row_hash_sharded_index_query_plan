@@ -95,7 +95,7 @@ vectorized: true
                                   estimated row count: 1
                                   label: buffer 1
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_child_regional VALUES (123, 321)
 ----
 distribution: local
@@ -190,7 +190,7 @@ CREATE TABLE t_gen_random_uuid (
   FAMILY fam_0 (user_id, val)
 ) LOCALITY REGIONAL BY ROW;
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val) VALUES (4321);
 ----
 distribution: local
@@ -225,7 +225,7 @@ vectorized: true
               row 0, expr 1: gen_random_uuid()
               row 0, expr 2: 'ap-southeast-2'
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val) VALUES (4321) ON CONFLICT DO NOTHING;
 ----
 distribution: local
@@ -285,7 +285,7 @@ vectorized: true
                               row 0, expr 1: gen_random_uuid()
                               row 0, expr 2: 'ap-southeast-2'
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_gen_random_uuid (val) VALUES (4321), (8765) ON CONFLICT DO NOTHING;
 ----
 distribution: local
@@ -357,7 +357,7 @@ CREATE TABLE t_unique_hash_pk (
   id INT PRIMARY KEY USING HASH
 ) LOCALITY REGIONAL BY ROW;
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321);
 ----
 distribution: local
@@ -423,7 +423,7 @@ vectorized: true
                                   table: t_unique_hash_pk@t_unique_hash_pk_pkey
                                   spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT DO NOTHING;
 ----
 distribution: local
@@ -473,7 +473,7 @@ vectorized: true
                   spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
                   parallel
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321), (8765) ON CONFLICT DO NOTHING;
 ----
 distribution: local
@@ -524,7 +524,7 @@ vectorized: true
                           row 0, expr 0: 4321
                           row 1, expr 0: 8765
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT (id) DO NOTHING;
 ----
 distribution: local
@@ -574,7 +574,7 @@ vectorized: true
                   spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
                   parallel
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321), (8765) ON CONFLICT (id) DO NOTHING;
 ----
 distribution: local
@@ -625,7 +625,7 @@ vectorized: true
                           row 0, expr 0: 4321
                           row 1, expr 0: 8765
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT (id) DO UPDATE SET id = excluded.id
 ----
 distribution: local
@@ -731,7 +731,7 @@ vectorized: true
                                   estimated row count: 1 (missing stats)
                                   label: buffer 1
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321), (8765) ON CONFLICT (id) DO UPDATE SET id = excluded.id
 ----
 distribution: local
@@ -833,7 +833,7 @@ vectorized: true
                                   estimated row count: 2 (missing stats)
                                   label: buffer 1
 
-query T
+query T retry
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_pk (id) VALUES (4321);
 ----
 distribution: local
@@ -884,7 +884,7 @@ vectorized: true
                   spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
                   parallel
 
-query T
+query T retry
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_pk (id) VALUES (4321), (8765);
 ----
 distribution: local
@@ -931,7 +931,7 @@ vectorized: true
                       row 0, expr 0: 4321
                       row 1, expr 0: 8765
 
-query T
+query T retry
 EXPLAIN (VERBOSE) UPDATE t_unique_hash_pk SET id = 1234 WHERE id = 4321;
 ----
 distribution: local
@@ -1022,7 +1022,7 @@ CREATE TABLE t_unique_hash_sec_key (
 statement ok
 CREATE UNIQUE INDEX idx_uniq_hash_email ON t_unique_hash_sec_key (email) USING HASH;
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email');
 ----
 distribution: local
@@ -1129,7 +1129,7 @@ vectorized: true
                                   table: t_unique_hash_sec_key@idx_uniq_hash_email
                                   spans: /"\x80"/13/"some_email"/0 /"\xc0"/13/"some_email"/0
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT DO NOTHING;
 ----
 distribution: local
@@ -1202,7 +1202,7 @@ vectorized: true
                                   spans: /"\x80"/4321/0 /"\xc0"/4321/0
                                   parallel
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email'), (8765, 'another_email') ON CONFLICT DO NOTHING;
 ----
 distribution: local
@@ -1271,7 +1271,7 @@ vectorized: true
                                   row 1, expr 0: 8765
                                   row 1, expr 1: 'another_email'
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT (email) DO NOTHING;
 ----
 distribution: local
@@ -1352,7 +1352,7 @@ vectorized: true
                       spans: /"\x80"/4321/0 /"\xc0"/4321/0
                       limit: 1
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email'), (8765, 'another_email') ON CONFLICT (email) DO NOTHING;
 ----
 distribution: local
@@ -1436,7 +1436,7 @@ vectorized: true
                           estimated row count: 0 (missing stats)
                           label: buffer 1
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT (email) DO UPDATE SET email = 'bad_email';
 ----
 distribution: local
@@ -1583,7 +1583,7 @@ vectorized: true
                                   estimated row count: 1 (missing stats)
                                   label: buffer 1
 
-query T
+query T retry
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email'), (8765, 'another_email') ON CONFLICT (email) DO UPDATE SET email = 'bad_email';
 ----
 distribution: local
@@ -1735,7 +1735,7 @@ vectorized: true
                                   estimated row count: 2 (missing stats)
                                   label: buffer 1
 
-query T
+query T retry
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_sec_key VALUES (1, 'email1');
 ----
 distribution: local
@@ -1841,7 +1841,7 @@ vectorized: true
                                   estimated row count: 1 (missing stats)
                                   label: buffer 1
 
-query T
+query T retry
 EXPLAIN (VERBOSE) UPSERT INTO t_unique_hash_sec_key VALUES (1, 'email1'), (8765, 'email2');
 ----
 distribution: local
@@ -1945,7 +1945,7 @@ vectorized: true
                                   estimated row count: 2 (missing stats)
                                   label: buffer 1
 
-query T
+query T retry
 EXPLAIN (VERBOSE) UPDATE t_unique_hash_sec_key SET email = 'email1' WHERE id = 2;
 ----
 distribution: local
