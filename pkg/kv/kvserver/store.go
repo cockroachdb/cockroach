@@ -93,10 +93,6 @@ const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount = 10
 
-	// defaultRaftEntryCacheSize is the default size in bytes for a
-	// store's Raft log entry cache.
-	defaultRaftEntryCacheSize = 1 << 24 // 16M
-
 	// replicaQueueExtraSize is the number of requests that a replica's incoming
 	// message queue can keep over RaftConfig.RaftMaxInflightMsgs. When the leader
 	// maxes out RaftMaxInflightMsgs, we want the receiving replica to still have
@@ -122,6 +118,14 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	//
 	// As of November 2020, this default value could be re-tuned.
 	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 96))
+
+// defaultRaftEntryCacheSize is the default size in bytes for a store's Raft
+// entry cache. The Raft entry cache is shared by all Raft groups managed by the
+// store. It is used to cache uncommitted raft log entries such that once those
+// entries are committed, their application can avoid disk reads to retrieve
+// them from the persistent log.
+var defaultRaftEntryCacheSize = envutil.EnvOrDefaultBytes(
+	"COCKROACH_RAFT_ENTRY_CACHE_SIZE", 16<<20 /* 16 MiB */)
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
@@ -1182,7 +1186,7 @@ func (sc *StoreConfig) SetDefaults() {
 		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 2
 	}
 	if sc.RaftEntryCacheSize == 0 {
-		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
+		sc.RaftEntryCacheSize = uint64(defaultRaftEntryCacheSize)
 	}
 
 	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
