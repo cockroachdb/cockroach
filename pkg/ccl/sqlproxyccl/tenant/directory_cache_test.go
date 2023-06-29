@@ -411,7 +411,6 @@ func TestCancelLookups(t *testing.T) {
 func TestResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
-	skip.UnderDeadlockWithIssue(t, 71365)
 
 	tenantID := roachpb.MustMakeTenantID(40)
 	const lookupCount = 5
@@ -437,12 +436,15 @@ func TestResume(t *testing.T) {
 		}(i)
 	}
 
-	var processes map[net.Addr]*tenantdirsvr.Process
 	// Eventually the tenant process will be resumed.
-	require.Eventually(t, func() bool {
+	var processes map[net.Addr]*tenantdirsvr.Process
+	testutils.SucceedsSoon(t, func() error {
 		processes = tds.Get(tenantID)
-		return len(processes) == 1
-	}, 10*time.Second, 100*time.Millisecond)
+		if len(processes) != 1 {
+			return errors.Newf("expected 1 processes found %d", len(processes))
+		}
+		return nil
+	})
 
 	// Wait until background goroutines complete.
 	wait.Wait()
