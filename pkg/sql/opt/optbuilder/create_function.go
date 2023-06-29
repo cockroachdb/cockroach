@@ -145,9 +145,16 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		if err != nil {
 			panic(err)
 		}
-		if language == tree.FunctionLangSQL && types.IsRecordType(typ) {
-			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
-				"SQL functions cannot have arguments of type record"))
+		if types.IsRecordType(typ) {
+			if language == tree.FunctionLangSQL {
+				panic(pgerror.Newf(pgcode.InvalidFunctionDefinition,
+					"SQL functions cannot have arguments of type record"))
+			} else if language == tree.FunctionLangPLpgSQL {
+				panic(unimplemented.NewWithIssueDetail(105713,
+					"PL/pgSQL functions with RECORD input arguments",
+					"PL/pgSQL functions with RECORD input arguments are not yet supported",
+				))
+			}
 		}
 
 		// Add the parameter to the base scope of the body.
