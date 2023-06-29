@@ -46,14 +46,14 @@ num=2
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,1, info: repl
 
-new-request r=reqLock txn=txn2 ts=10,1 spans=intent@a+intent@b+intent@c+intent@d
+new-request r=reqLock txn=txn2 ts=10,1 spans=exclusive@a+exclusive@b+exclusive@c+exclusive@d
 ----
 
 scan r=reqLock
 ----
 start-waiting: false
 
-acquire r=reqLock k=a durability=u
+acquire r=reqLock k=a durability=u strength=exclusive
 ----
 num=3
  lock: "a"
@@ -63,7 +63,7 @@ num=3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, ts: 10.000000000,1, info: repl
 
-acquire r=reqLock k=b durability=u
+acquire r=reqLock k=b durability=u strength=exclusive
 ----
 num=3
  lock: "a"
