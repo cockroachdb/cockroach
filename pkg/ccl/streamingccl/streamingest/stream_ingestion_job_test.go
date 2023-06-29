@@ -556,6 +556,9 @@ func TestCutoverCheckpointing(t *testing.T) {
 			updateCount++
 			if updateCount == 3 {
 				close(progressUpdated)
+				// Wait until the job is in a pause-requested state, which causes subsequent
+				// updates to the job record (like cutover progress updates) to
+				// error with a pause-requested tag, causing the whole job to pause.
 				<-pauseRequested
 			}
 		},
