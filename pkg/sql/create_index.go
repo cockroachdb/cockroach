@@ -326,6 +326,7 @@ func checkIndexColumns(
 	version clusterversion.ClusterVersion,
 ) error {
 	for i, colDef := range columns {
+		lastCol := i == len(columns)-1
 		col, err := catalog.MustFindColumnByTreeName(desc, colDef.Column)
 		if err != nil {
 			return errors.Wrapf(err, "finding column %d", i)
@@ -342,7 +343,7 @@ func checkIndexColumns(
 		}
 
 		// Checking if JSON Columns can be forward indexed for a given cluster version.
-		if col.GetType().Family() == types.JsonFamily && !inverted && !version.IsActive(clusterversion.V23_2) {
+		if col.GetType().Family() == types.JsonFamily && (!inverted || !lastCol) && !version.IsActive(clusterversion.V23_2) {
 			return errors.WithHint(
 				pgerror.Newf(
 					pgcode.InvalidTableDefinition,
