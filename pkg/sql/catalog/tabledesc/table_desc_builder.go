@@ -400,6 +400,7 @@ func maybeFillInDescriptor(
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
 	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
 	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(desc))
+	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(desc))
 	return changes, nil
 }
 
@@ -1000,6 +1001,21 @@ func maybeStripDanglingSelfBackReferences(tbl *descpb.TableDescriptor) (hasChang
 		}
 		if sliceIdx < len(tbl.MutationJobs) {
 			tbl.MutationJobs = tbl.MutationJobs[:sliceIdx]
+			hasChanged = true
+		}
+	}
+	return hasChanged
+}
+
+func maybeFixSecondaryIndexEncodingType(desc *descpb.TableDescriptor) (hasChanged bool) {
+	if desc.DeclarativeSchemaChangerState != nil || len(desc.Mutations) > 0 {
+		// Don't try to fix the encoding type if a schema change is in progress.
+		return false
+	}
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.EncodingType != catenumpb.SecondaryIndexEncoding {
+			idx.EncodingType = catenumpb.SecondaryIndexEncoding
 			hasChanged = true
 		}
 	}
