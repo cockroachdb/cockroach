@@ -2301,6 +2301,10 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 }
 
 func (t *logicTest) purgeZoneConfig() {
+	if t.cluster == nil {
+		// We can only purge zone configs for in-memory test clusters.
+		return
+	}
 	for i := 0; i < t.cluster.NumServers(); i++ {
 		sysconfigProvider := t.cluster.Server(i).SystemConfigProvider()
 		sysconfig := sysconfigProvider.GetSystemConfig()
