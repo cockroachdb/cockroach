@@ -5807,6 +5807,10 @@ CREATE TABLE crdb_internal.invalid_objects (
 					if dbContext != nil && d.GetParentID() != dbContext.GetID() {
 						return nil
 					}
+				case catalog.FunctionDescriptor:
+					if dbContext != nil && d.GetParentID() != dbContext.GetID() {
+						return nil
+					}
 				default:
 					return nil
 				}
