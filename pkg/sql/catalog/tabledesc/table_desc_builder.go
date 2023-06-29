@@ -400,6 +400,7 @@ func maybeFillInDescriptor(
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
 	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
 	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(desc))
+	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(desc))
 	return changes, nil
 }
 
@@ -1000,6 +1001,24 @@ func maybeStripDanglingSelfBackReferences(tbl *descpb.TableDescriptor) (hasChang
 		}
 		if sliceIdx < len(tbl.MutationJobs) {
 			tbl.MutationJobs = tbl.MutationJobs[:sliceIdx]
+			hasChanged = true
+		}
+	}
+	return hasChanged
+}
+
+func maybeFixSecondaryIndexEncodingType(desc *descpb.TableDescriptor) (hasChanged bool) {
+	if desc.DeclarativeSchemaChangerState != nil {
+		// Don't try to fix the encoding type if a schema change is in progress.
+		return false
+	}
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		// HELP NEEDED: Since 12dec73c593, it seems like we expect primary
+		// indexes to be he here sometimes. How should we modify this check?
+		// Is the short-circuit based on DeclarativeSchemaChangerState enough?
+		if idx.EncodingType != catenumpb.SecondaryIndexEncoding {
+			idx.EncodingType = catenumpb.SecondaryIndexEncoding
 			hasChanged = true
 		}
 	}
