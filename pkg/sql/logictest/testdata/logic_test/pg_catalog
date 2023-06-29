@@ -16,7 +16,7 @@ CREATE TABLE pg_catalog.t (x INT)
 query error database "pg_catalog" does not exist
 DROP DATABASE pg_catalog
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM pg_catalog
 ----
 pg_catalog  pg_aggregate                     table  admin  NULL  NULL
@@ -171,7 +171,7 @@ SELECT * FROM pg_catalog.pg_class c WHERE nonexistent_function()
 
 # Verify pg_catalog handles reflection correctly.
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM test.pg_catalog
 ----
 pg_catalog  pg_aggregate                     table  admin  NULL  NULL
@@ -316,7 +316,7 @@ pg_catalog.pg_namespace  CREATE TABLE pg_catalog.pg_namespace (
                            INDEX pg_namespace_oid_idx (oid ASC) STORING (nspname, nspowner, nspacl)
                          )
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM pg_catalog.pg_namespace
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices  is_hidden
@@ -423,14 +423,14 @@ CREATE INDEX ON constraint_db.t6 ((m = 'foo')) WHERE m = 'foo'
 
 ## pg_catalog.pg_namespace
 
-query OTOT colnames
+query OTOT colnames,rowsort
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner    nspacl
 4294967295  crdb_internal       NULL        NULL
-4294967202  information_schema  NULL        NULL
-4294967115  pg_catalog          NULL        NULL
-4294966985  pg_extension        NULL        NULL
+4294967201  information_schema  NULL        NULL
+4294967114  pg_catalog          NULL        NULL
+4294966984  pg_extension        NULL        NULL
 105         public              2310524507  NULL
 
 # Verify that we can still see the schemas even if we don't have any privilege
@@ -442,14 +442,14 @@ REVOKE ALL ON DATABASE test FROM testuser
 
 user testuser
 
-query OTOT colnames
+query OTOT colnames,rowsort
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner    nspacl
 4294967295  crdb_internal       NULL        NULL
-4294967202  information_schema  NULL        NULL
-4294967115  pg_catalog          NULL        NULL
-4294966985  pg_extension        NULL        NULL
+4294967201  information_schema  NULL        NULL
+4294967114  pg_catalog          NULL        NULL
+4294966984  pg_extension        NULL        NULL
 105         public              2310524507  NULL
 
 user root
@@ -501,7 +501,7 @@ user root
 statement ok
 SET DATABASE = constraint_db
 
-query TTTTBBBB colnames
+query TTTTBBBB colnames,rowsort
 SELECT * FROM constraint_db.pg_catalog.pg_tables WHERE schemaname = 'public'
 ----
 schemaname  tablename  tableowner  tablespace  hasindexes  hasrules  hastriggers  rowsecurity
@@ -512,7 +512,7 @@ public      t4         root        NULL        true        false     false      
 public      t5         root        NULL        true        false     false        false
 public      t6         root        NULL        true        false     false        false
 
-query TB colnames
+query TB colnames,rowsort
 SELECT tablename, hasindexes FROM pg_catalog.pg_tables WHERE schemaname = 'information_schema' AND tablename LIKE '%table%'
 ----
 tablename                     hasindexes
@@ -558,7 +558,7 @@ public      mv1          root          NULL        false       true         SELE
 
 ## pg_catalog.pg_class
 
-query OTOOOOOOO colnames
+query OTOOOOOOO colnames,rowsort
 SELECT c.oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
@@ -591,7 +591,7 @@ oid         relname            relnamespace  reltype  reloftype  relowner    rel
 121         mv1                109           100121   0          1546506610  0           0            0
 784389845   mv1_pkey           109           0        0          1546506610  2631952481  0            0
 
-query TIRIOBBT colnames
+query TIRIOBBT colnames,rowsort
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
@@ -624,7 +624,7 @@ t6_expr_idx1       NULL      NULL       0              0              false     
 mv1                NULL      NULL       0              0              true         false        p
 mv1_pkey           NULL      NULL       0              0              false        false        p
 
-query TBTIIBB colnames
+query TBTIIBB colnames,rowsort
 SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
@@ -657,7 +657,7 @@ t6_expr_idx1       false      i        1         0          false       false
 mv1                false      m        2         0          false       true
 mv1_pkey           false      i        1         0          false       false
 
-query TBBBITT colnames
+query TBBBITT colnames,rowsort
 SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
@@ -972,7 +972,7 @@ t1                 k                         varchar   999873346     sv
 
 ## pg_catalog.pg_am
 
-query OTIIBBBBBBBBBBBOOOOOOOOOOOOOOOOOT colnames
+query OTIIBBBBBBBBBBBOOOOOOOOOOOOOOOOOT colnames,rowsort
 SELECT *
 FROM pg_catalog.pg_am
 ----
@@ -1003,7 +1003,7 @@ oid         relname  adrelid  adnum  adbin                                 adsrc
 
 ## pg_catalog.pg_indexes
 
-query OTTTT colnames
+query OTTTT colnames,rowsort
 SELECT crdb_oid, schemaname, tablename, indexname, tablespace
 FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
@@ -1031,29 +1031,30 @@ query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
 FROM pg_catalog.pg_indexes
 WHERE schemaname = 'public'
+ORDER BY tablename, indexname
 ----
 crdb_oid    tablename  indexname          indexdef
-3687884466  t1         t1_pkey            CREATE UNIQUE INDEX t1_pkey ON constraint_db.public.t1 USING btree (p ASC)
-3687884465  t1         t1_a_key           CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 USING btree (a ASC)
+784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
 3687884464  t1         index_key          CREATE UNIQUE INDEX index_key ON constraint_db.public.t1 USING btree (b ASC, c ASC)
+3687884465  t1         t1_a_key           CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 USING btree (a ASC)
+3687884466  t1         t1_pkey            CREATE UNIQUE INDEX t1_pkey ON constraint_db.public.t1 USING btree (p ASC)
 2342807459  t1_m_seq   primary            CREATE INDEX "primary" ON constraint_db.public.t1_m_seq USING btree (value ASC)
 5181036     t1_n_seq   primary            CREATE INDEX "primary" ON constraint_db.public.t1_n_seq USING btree (value ASC)
 2955071325  t2         t2_pkey            CREATE UNIQUE INDEX t2_pkey ON constraint_db.public.t2 USING btree (rowid ASC)
 2955071326  t2         t2_t1_id_idx       CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 USING btree (t1_id ASC)
-2695335054  t3         t3_pkey            CREATE UNIQUE INDEX t3_pkey ON constraint_db.public.t3 USING btree (rowid ASC)
 2695335053  t3         t3_a_b_idx         CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
+2695335054  t3         t3_pkey            CREATE UNIQUE INDEX t3_pkey ON constraint_db.public.t3 USING btree (rowid ASC)
 3214807592  t4         t4_pkey            CREATE UNIQUE INDEX t4_pkey ON constraint_db.public.t4 USING btree (rowid ASC)
 1869730585  t5         t5_pkey            CREATE UNIQUE INDEX t5_pkey ON constraint_db.public.t5 USING btree (rowid ASC)
-2129466852  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
-2129466855  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
 2129466854  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
-2129466848  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
+2129466855  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
 2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::constraint_db.public.mytype) ASC) WHERE (m = 'foo'::constraint_db.public.mytype)
-784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
+2129466848  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
+2129466852  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
 
-query OOIBBBB colnames
+query OOIBBBB colnames,rowsort
 SELECT indexrelid, indrelid, indnatts, indisunique, indnullsnotdistinct, indisprimary, indisexclusion
 FROM pg_catalog.pg_index
 WHERE indnkeyatts = 2
@@ -1063,7 +1064,7 @@ indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  
 2695335053  114       3         false        false                false         false
 2129466854  120       2         false        false                false         false
 
-query OBBBBB colnames
+query OBBBBB colnames,rowsort
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
 FROM pg_catalog.pg_index
 WHERE indnkeyatts = 2
@@ -1077,6 +1078,7 @@ query OOBBTTTTTT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
 FROM pg_catalog.pg_index
 WHERE indnkeyatts = 2
+ORDER BY indexrelid DESC
 ----
 indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs                indpred
 3687884464  110       true       false           3 4     0 0           0 0       2 2        NULL                    NULL
@@ -1437,7 +1439,7 @@ SELECT * FROM pg_collation
 WHERE collname='en-US'
 ----
 oid         collname  collnamespace  collowner  collencoding  collcollate  collctype  collprovider  collversion  collisdeterministic
-3903121477  en-US     4294967115     NULL       6             NULL         NULL       NULL          NULL         NULL
+3903121477  en-US     4294967114     NULL       6             NULL         NULL       NULL          NULL         NULL
 
 user testuser
 
@@ -1636,16 +1638,16 @@ FROM pg_catalog.pg_depend
 ORDER BY objid, refobjid, refobjsubid
 ----
 classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
-4294967100  111         0         4294967103  110         14           a
-4294967100  112         0         4294967103  110         15           a
-4294967057  842401391   0         4294967103  110         1            n
-4294967057  842401391   0         4294967103  110         2            n
-4294967057  842401391   0         4294967103  110         3            n
-4294967057  842401391   0         4294967103  110         4            n
-4294967100  1179276562  0         4294967103  3687884464  0            n
-4294967100  3935750373  0         4294967103  3687884465  0            n
-4294967100  4072017905  0         4294967103  0           0            n
-4294967100  4170826110  0         4294967103  0           0            n
+4294967099  111         0         4294967102  110         14           a
+4294967099  112         0         4294967102  110         15           a
+4294967056  842401391   0         4294967102  110         1            n
+4294967056  842401391   0         4294967102  110         2            n
+4294967056  842401391   0         4294967102  110         3            n
+4294967056  842401391   0         4294967102  110         4            n
+4294967099  1179276562  0         4294967102  3687884464  0            n
+4294967099  3935750373  0         4294967102  3687884465  0            n
+4294967099  4072017905  0         4294967102  0           0            n
+4294967099  4170826110  0         4294967102  0           0            n
 
 # Some entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table. Other entries are links to pg_class when it is
@@ -1658,8 +1660,8 @@ JOIN pg_class cla ON classid=cla.oid
 JOIN pg_class refcla ON refclassid=refcla.oid
 ----
 classid     refclassid  tablename      reftablename
-4294967057  4294967103  pg_rewrite     pg_class
-4294967100  4294967103  pg_constraint  pg_class
+4294967056  4294967102  pg_rewrite     pg_class
+4294967099  4294967102  pg_constraint  pg_class
 
 # Some entries in pg_depend are foreign key constraints that reference an index
 # in pg_class. Other entries are table-view dependencies
@@ -1737,7 +1739,7 @@ statement ok
 CREATE TYPE newtype1 AS ENUM ('v1', 'v2');
 CREATE TYPE newtype2 AS ENUM ('v3', 'v4')
 
-query OORT colnames
+query OORT colnames,rowsort
 SELECT * FROM pg_enum
 ----
 oid         enumtypid  enumsortorder  enumlabel
@@ -1758,88 +1760,88 @@ WHERE oid < 4194967002 -- exclude implicit types for virtual tables
 ORDER BY oid
 ----
 oid     typname                typnamespace  typowner    typlen  typbyval  typtype
-16      bool                   4294967115    NULL        1       true      b
-17      bytea                  4294967115    NULL        -1      false     b
-18      char                   4294967115    NULL        1       true      b
-19      name                   4294967115    NULL        -1      false     b
-20      int8                   4294967115    NULL        8       true      b
-21      int2                   4294967115    NULL        2       true      b
-22      int2vector             4294967115    NULL        -1      false     b
-23      int4                   4294967115    NULL        4       true      b
-24      regproc                4294967115    NULL        4       true      b
-25      text                   4294967115    NULL        -1      false     b
-26      oid                    4294967115    NULL        4       true      b
-30      oidvector              4294967115    NULL        -1      false     b
-700     float4                 4294967115    NULL        4       true      b
-701     float8                 4294967115    NULL        8       true      b
-705     unknown                4294967115    NULL        0       true      b
-869     inet                   4294967115    NULL        24      true      b
-1000    _bool                  4294967115    NULL        -1      false     b
-1001    _bytea                 4294967115    NULL        -1      false     b
-1002    _char                  4294967115    NULL        -1      false     b
-1003    _name                  4294967115    NULL        -1      false     b
-1005    _int2                  4294967115    NULL        -1      false     b
-1006    _int2vector            4294967115    NULL        -1      false     b
-1007    _int4                  4294967115    NULL        -1      false     b
-1008    _regproc               4294967115    NULL        -1      false     b
-1009    _text                  4294967115    NULL        -1      false     b
-1013    _oidvector             4294967115    NULL        -1      false     b
-1014    _bpchar                4294967115    NULL        -1      false     b
-1015    _varchar               4294967115    NULL        -1      false     b
-1016    _int8                  4294967115    NULL        -1      false     b
-1021    _float4                4294967115    NULL        -1      false     b
-1022    _float8                4294967115    NULL        -1      false     b
-1028    _oid                   4294967115    NULL        -1      false     b
-1041    _inet                  4294967115    NULL        -1      false     b
-1042    bpchar                 4294967115    NULL        -1      false     b
-1043    varchar                4294967115    NULL        -1      false     b
-1082    date                   4294967115    NULL        4       true      b
-1083    time                   4294967115    NULL        8       true      b
-1114    timestamp              4294967115    NULL        8       true      b
-1115    _timestamp             4294967115    NULL        -1      false     b
-1182    _date                  4294967115    NULL        -1      false     b
-1183    _time                  4294967115    NULL        -1      false     b
-1184    timestamptz            4294967115    NULL        8       true      b
-1185    _timestamptz           4294967115    NULL        -1      false     b
-1186    interval               4294967115    NULL        24      true      b
-1187    _interval              4294967115    NULL        -1      false     b
-1231    _numeric               4294967115    NULL        -1      false     b
-1266    timetz                 4294967115    NULL        12      true      b
-1270    _timetz                4294967115    NULL        -1      false     b
-1560    bit                    4294967115    NULL        -1      false     b
-1561    _bit                   4294967115    NULL        -1      false     b
-1562    varbit                 4294967115    NULL        -1      false     b
-1563    _varbit                4294967115    NULL        -1      false     b
-1700    numeric                4294967115    NULL        -1      false     b
-2202    regprocedure           4294967115    NULL        4       true      b
-2205    regclass               4294967115    NULL        4       true      b
-2206    regtype                4294967115    NULL        4       true      b
-2207    _regprocedure          4294967115    NULL        -1      false     b
-2210    _regclass              4294967115    NULL        -1      false     b
-2211    _regtype               4294967115    NULL        -1      false     b
-2249    record                 4294967115    NULL        0       true      p
-2277    anyarray               4294967115    NULL        -1      false     p
-2278    void                   4294967115    NULL        0       true      p
-2283    anyelement             4294967115    NULL        -1      false     p
-2287    _record                4294967115    NULL        -1      false     b
-2950    uuid                   4294967115    NULL        16      true      b
-2951    _uuid                  4294967115    NULL        -1      false     b
-3614    tsvector               4294967115    NULL        -1      false     b
-3615    tsquery                4294967115    NULL        -1      false     b
-3643    _tsvector              4294967115    NULL        -1      false     b
-3645    _tsquery               4294967115    NULL        -1      false     b
-3802    jsonb                  4294967115    NULL        -1      false     b
-3807    _jsonb                 4294967115    NULL        -1      false     b
-4089    regnamespace           4294967115    NULL        4       true      b
-4090    _regnamespace          4294967115    NULL        -1      false     b
-4096    regrole                4294967115    NULL        4       true      b
-4097    _regrole               4294967115    NULL        -1      false     b
-90000   geometry               4294967115    NULL        -1      false     b
-90001   _geometry              4294967115    NULL        -1      false     b
-90002   geography              4294967115    NULL        -1      false     b
-90003   _geography             4294967115    NULL        -1      false     b
-90004   box2d                  4294967115    NULL        32      true      b
-90005   _box2d                 4294967115    NULL        -1      false     b
+16      bool                   4294967114    NULL        1       true      b
+17      bytea                  4294967114    NULL        -1      false     b
+18      char                   4294967114    NULL        1       true      b
+19      name                   4294967114    NULL        -1      false     b
+20      int8                   4294967114    NULL        8       true      b
+21      int2                   4294967114    NULL        2       true      b
+22      int2vector             4294967114    NULL        -1      false     b
+23      int4                   4294967114    NULL        4       true      b
+24      regproc                4294967114    NULL        4       true      b
+25      text                   4294967114    NULL        -1      false     b
+26      oid                    4294967114    NULL        4       true      b
+30      oidvector              4294967114    NULL        -1      false     b
+700     float4                 4294967114    NULL        4       true      b
+701     float8                 4294967114    NULL        8       true      b
+705     unknown                4294967114    NULL        0       true      b
+869     inet                   4294967114    NULL        24      true      b
+1000    _bool                  4294967114    NULL        -1      false     b
+1001    _bytea                 4294967114    NULL        -1      false     b
+1002    _char                  4294967114    NULL        -1      false     b
+1003    _name                  4294967114    NULL        -1      false     b
+1005    _int2                  4294967114    NULL        -1      false     b
+1006    _int2vector            4294967114    NULL        -1      false     b
+1007    _int4                  4294967114    NULL        -1      false     b
+1008    _regproc               4294967114    NULL        -1      false     b
+1009    _text                  4294967114    NULL        -1      false     b
+1013    _oidvector             4294967114    NULL        -1      false     b
+1014    _bpchar                4294967114    NULL        -1      false     b
+1015    _varchar               4294967114    NULL        -1      false     b
+1016    _int8                  4294967114    NULL        -1      false     b
+1021    _float4                4294967114    NULL        -1      false     b
+1022    _float8                4294967114    NULL        -1      false     b
+1028    _oid                   4294967114    NULL        -1      false     b
+1041    _inet                  4294967114    NULL        -1      false     b
+1042    bpchar                 4294967114    NULL        -1      false     b
+1043    varchar                4294967114    NULL        -1      false     b
+1082    date                   4294967114    NULL        4       true      b
+1083    time                   4294967114    NULL        8       true      b
+1114    timestamp              4294967114    NULL        8       true      b
+1115    _timestamp             4294967114    NULL        -1      false     b
+1182    _date                  4294967114    NULL        -1      false     b
+1183    _time                  4294967114    NULL        -1      false     b
+1184    timestamptz            4294967114    NULL        8       true      b
+1185    _timestamptz           4294967114    NULL        -1      false     b
+1186    interval               4294967114    NULL        24      true      b
+1187    _interval              4294967114    NULL        -1      false     b
+1231    _numeric               4294967114    NULL        -1      false     b
+1266    timetz                 4294967114    NULL        12      true      b
+1270    _timetz                4294967114    NULL        -1      false     b
+1560    bit                    4294967114    NULL        -1      false     b
+1561    _bit                   4294967114    NULL        -1      false     b
+1562    varbit                 4294967114    NULL        -1      false     b
+1563    _varbit                4294967114    NULL        -1      false     b
+1700    numeric                4294967114    NULL        -1      false     b
+2202    regprocedure           4294967114    NULL        4       true      b
+2205    regclass               4294967114    NULL        4       true      b
+2206    regtype                4294967114    NULL        4       true      b
+2207    _regprocedure          4294967114    NULL        -1      false     b
+2210    _regclass              4294967114    NULL        -1      false     b
+2211    _regtype               4294967114    NULL        -1      false     b
+2249    record                 4294967114    NULL        0       true      p
+2277    anyarray               4294967114    NULL        -1      false     p
+2278    void                   4294967114    NULL        0       true      p
+2283    anyelement             4294967114    NULL        -1      false     p
+2287    _record                4294967114    NULL        -1      false     b
+2950    uuid                   4294967114    NULL        16      true      b
+2951    _uuid                  4294967114    NULL        -1      false     b
+3614    tsvector               4294967114    NULL        -1      false     b
+3615    tsquery                4294967114    NULL        -1      false     b
+3643    _tsvector              4294967114    NULL        -1      false     b
+3645    _tsquery               4294967114    NULL        -1      false     b
+3802    jsonb                  4294967114    NULL        -1      false     b
+3807    _jsonb                 4294967114    NULL        -1      false     b
+4089    regnamespace           4294967114    NULL        4       true      b
+4090    _regnamespace          4294967114    NULL        -1      false     b
+4096    regrole                4294967114    NULL        4       true      b
+4097    _regrole               4294967114    NULL        -1      false     b
+90000   geometry               4294967114    NULL        -1      false     b
+90001   _geometry              4294967114    NULL        -1      false     b
+90002   geography              4294967114    NULL        -1      false     b
+90003   _geography             4294967114    NULL        -1      false     b
+90004   box2d                  4294967114    NULL        32      true      b
+90005   _box2d                 4294967114    NULL        -1      false     b
 100110  t1                     109           1546506610  -1      false     c
 100111  t1_m_seq               109           1546506610  -1      false     c
 100112  t1_n_seq               109           1546506610  -1      false     c
@@ -2315,7 +2317,7 @@ FROM pg_catalog.pg_type
 WHERE oid = 1000
 ----
 oid   typname  typnamespace  typowner  typlen  typbyval  typtype
-1000  _bool    4294967115    NULL      -1      false     b
+1000  _bool    4294967114    NULL      -1      false     b
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -2373,27 +2375,27 @@ FROM pg_catalog.pg_type
 WHERE oid = $vtableSourceId
 ----
 oid         typname  typnamespace  typowner    typlen  typbyval  typtype
-4294967065  pg_proc  4294967115    2310524507  -1      false     c
+4294967064  pg_proc  4294967114    2310524507  -1      false     c
 
 ## pg_catalog.pg_proc
 
-query TOTOOTTO colnames
+query TOTOOTTO colnames,rowsort
 SELECT proname, pronamespace, nspname, proowner, prolang, procost, prorows, provariadic
 FROM pg_catalog.pg_proc p
 JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE proname='substring'
 ----
 proname    pronamespace  nspname     proowner  prolang  procost  prorows  provariadic
-substring  4294967115    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967115    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967115    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967115    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967115    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967115    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967115    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967115    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967114    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967114    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967114    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967114    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967114    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967114    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967114    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967114    pg_catalog  NULL      0        NULL     NULL     0
 
-query TTBBBB colnames
+query TTBBBB colnames,rowsort
 SELECT proname, protransform, proisagg, proiswindow, prosecdef, proleakproof
 FROM pg_catalog.pg_proc
 WHERE proname='substring'
@@ -2408,7 +2410,7 @@ substring  NULL          false     false        false      false
 substring  NULL          false     false        false      false
 substring  NULL          false     false        false      false
 
-query TBBTT colnames
+query TBBTT colnames,rowsort
 SELECT proname, proisstrict, proretset, provolatile, proparallel
 FROM pg_catalog.pg_proc
 WHERE proname='substring'
@@ -2427,18 +2429,19 @@ query TIIOTTTT colnames
 SELECT proname, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargdefaults
 FROM pg_catalog.pg_proc
 WHERE proname='substring'
+ORDER BY proargtypes
 ----
 proname    pronargs  pronargdefaults  prorettype  proargtypes  proallargtypes  proargmodes  proargdefaults
+substring  2         0                17          17 20        NULL            NULL         NULL
+substring  3         0                17          17 20 20     NULL            NULL         NULL
 substring  2         0                25          25 20        NULL            NULL         NULL
 substring  3         0                25          25 20 20     NULL            NULL         NULL
 substring  2         0                25          25 25        NULL            NULL         NULL
 substring  3         0                25          25 25 25     NULL            NULL         NULL
 substring  2         0                1562        1562 20      NULL            NULL         NULL
 substring  3         0                1562        1562 20 20   NULL            NULL         NULL
-substring  2         0                17          17 20        NULL            NULL         NULL
-substring  3         0                17          17 20 20     NULL            NULL         NULL
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SELECT proname, protrftypes, prosrc, probin, proconfig, proacl
 FROM pg_catalog.pg_proc
 WHERE proname='substring'
@@ -2473,7 +2476,7 @@ WHERE proname='_pg_char_max_length'
 ORDER BY p.oid
 ----
 proname              prosrc               pronamespace  nspname             prorettype  proargtypes
-_pg_char_max_length  _pg_char_max_length  4294967202    information_schema  20          26 23
+_pg_char_max_length  _pg_char_max_length  4294967201    information_schema  20          26 23
 
 query TOIOTTB colnames
 SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes, proisstrict
@@ -2591,16 +2594,17 @@ WHERE
 OR (c.relname = 'pg_class' AND d.objoid IN (SELECT oid FROM pg_catalog.pg_class WHERE relname IN ('pg_user', 'testtable')))
 OR (c.relname = 'pg_class' AND d.objoid IN (SELECT oid FROM pg_catalog.pg_class WHERE relname IN ('pg_user', 'testtable', 'testtable_x_idx')))
 OR (c.relname = 'pg_namespace' AND d.objoid IN (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'testschema'))
+ORDER BY d.objoid, description
 ----
 relname       objoid      classoid    objsubid  description
-pg_class      135         4294967103  0         mycomment1
-pg_class      135         4294967103  1         mycomment2
-pg_class      125730312   4294967103  0         mycomment3
-pg_namespace  136         4294967074  0         mycomment4
-pg_class      4294966987  4294967103  0         database users
-pg_proc       738         4294967065  0         Calculates the absolute value of `val`.
-pg_proc       739         4294967065  0         Calculates the absolute value of `val`.
-pg_proc       740         4294967065  0         Calculates the absolute value of `val`.
+pg_class      135         4294967102  0         mycomment1
+pg_class      135         4294967102  1         mycomment2
+pg_namespace  136         4294967073  0         mycomment4
+pg_proc       738         4294967064  0         Calculates the absolute value of `val`.
+pg_proc       739         4294967064  0         Calculates the absolute value of `val`.
+pg_proc       740         4294967064  0         Calculates the absolute value of `val`.
+pg_class      125730312   4294967102  0         mycomment3
+pg_class      4294966986  4294967102  0         database users
 
 ## pg_catalog.pg_shdescription
 
@@ -2611,7 +2615,7 @@ query OOT colnames
 SELECT objoid, classoid, description FROM pg_catalog.pg_shdescription
 ----
 objoid  classoid    description
-100     4294967097  mydbcomment
+100     4294967096  mydbcomment
 
 ## pg_catalog.pg_event_trigger
 
@@ -2633,7 +2637,7 @@ SELECT * FROM pg_catalog.pg_stat_activity
 ----
 datid  datname  pid  usesysid  usename  application_name  client_addr  client_hostname  client_port  backend_start  xact_start  query_start  state_change  wait_event_type  wait_event  state  backend_xid  backend_xmin  query  backend_type  leader_pid
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM pg_catalog.pg_stat_activity
 ----
 column_name       data_type    is_nullable  column_default  generation_expression  indices  is_hidden
@@ -2675,6 +2679,7 @@ FROM
   pg_catalog.pg_settings
 WHERE
   name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled', 'multiple_active_portals_enabled')
+ORDER BY name
 ----
 name                                                       setting             category  short_desc  extra_desc  vartype
 allow_ordinal_column_references                            off                 NULL      NULL        NULL        string
@@ -2831,6 +2836,7 @@ FROM
   pg_catalog.pg_settings
 WHERE
   name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled', 'multiple_active_portals_enabled')
+ORDER BY name
 ----
 name                                                       setting             unit  context  enumvals  boot_val            reset_val
 allow_ordinal_column_references                            off                 NULL  user     NULL      off                 off
@@ -2979,7 +2985,7 @@ variable_inequality_lookup_join_enabled                    on                  N
 vectorize                                                  on                  NULL  user     NULL      on                  on
 xmloption                                                  content             NULL  user     NULL      content             content
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
 ----
 name                                                       source  min_val  max_val  sourcefile  sourceline
@@ -3151,7 +3157,7 @@ CREATE SEQUENCE foo
 statement ok
 CREATE SEQUENCE bar MAXVALUE 10 MINVALUE 5 START 6 INCREMENT 2
 
-query OOIIIIIB colnames
+query OOIIIIIB colnames,rowsort
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
@@ -3165,7 +3171,7 @@ statement ok
 SET database = constraint_db
 
 # Verify sequences can't be seen from another database.
-query OOIIIIIB
+query OOIIIIIB rowsort
 SELECT * FROM pg_catalog.pg_sequence
 ----
 111  20  1  1  9223372036854775807  1  1  false
@@ -3177,7 +3183,7 @@ query OTOOTBBOOOOOOOO colnames
 SELECT * FROM pg_catalog.pg_operator where oprname='+' and oprleft='float8'::regtype
 ----
 oid       oprname  oprnamespace  oprowner  oprkind  oprcanmerge  oprcanhash  oprleft  oprright  oprresult  oprcom  oprnegate  oprcode  oprrest  oprjoin
-74817020  +        4294967115    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
+74817020  +        4294967114    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
 
 # Verify proper functionality of system information functions.
 
@@ -3194,7 +3200,7 @@ SELECT pg_catalog.pg_get_expr('1', 0, true)
 statement ok
 SET DATABASE = constraint_db
 
-query OTT
+query OTT rowsort
 SELECT def.oid, c.relname, pg_catalog.pg_get_expr(def.adbin, def.adrelid)
 FROM pg_catalog.pg_attrdef def
 JOIN pg_catalog.pg_class c ON def.adrelid = c.oid
@@ -3295,7 +3301,7 @@ SELECT proname FROM pg_catalog.pg_proc WHERE oid = 0
 
 ## Ensure that unnest works with oid wrapper arrays
 
-query O
+query O rowsort
 SELECT unnest((SELECT proargtypes FROM pg_proc WHERE proname='split_part'));
 ----
 25
@@ -3629,10 +3635,11 @@ CREATE index on test_schema.test(b)
 query TTTT colnames
 SELECT schemaname, tablename, indexname, indexdef
 FROM pg_indexes WHERE schemaname='test_schema' and tablename='test'
+ORDER BY indexname
 ----
 schemaname   tablename  indexname   indexdef
-test_schema  test       test_pkey   CREATE UNIQUE INDEX test_pkey ON test.test_schema.test USING btree (a ASC)
 test_schema  test       test_b_idx  CREATE INDEX test_b_idx ON test.test_schema.test USING btree (b ASC)
+test_schema  test       test_pkey   CREATE UNIQUE INDEX test_pkey ON test.test_schema.test USING btree (a ASC)
 
 # Make sure that selecting from vtables with indexes in other dbs properly
 # hides descriptors that should be hidden.
@@ -3670,6 +3677,7 @@ query TT colnames
 SELECT indexname, indexdef
 FROM pg_catalog.pg_indexes
 WHERE tablename = 'geospatial_table'
+ORDER BY indexname
 ----
 indexname              indexdef
 geospatial_table_pkey  CREATE UNIQUE INDEX geospatial_table_pkey ON test.public.geospatial_table USING btree (id ASC)
@@ -3698,11 +3706,12 @@ query TT colnames
 SELECT indexname, indexdef
 FROM pg_catalog.pg_indexes
 WHERE tablename = 'partial_index_table'
+ORDER BY indexname
 ----
 indexname                   indexdef
-partial_index_table_pkey    CREATE UNIQUE INDEX partial_index_table_pkey ON test.public.partial_index_table USING btree (rowid ASC)
 partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE (a > 0)
 partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::test.public.testenum, 'bar'::test.public.testenum))
+partial_index_table_pkey    CREATE UNIQUE INDEX partial_index_table_pkey ON test.public.partial_index_table USING btree (rowid ASC)
 
 query TT colnames
 SELECT conname, condef
@@ -3720,7 +3729,7 @@ subtest regression_46799
 statement ok
 CREATE TABLE t46799 (x INT DEFAULT 1, y INT DEFAULT 1);
 
-query I
+query I rowsort
 SELECT adnum FROM pg_attrdef WHERE adrelid = 't46799'::REGCLASS
 ----
 1
@@ -3734,7 +3743,7 @@ statement ok
 ALTER TABLE t46799 ADD COLUMN y INT DEFAULT 1;
 
 # Make sure after adding and dropping the same column, the adnum for the re-added column increases.
-query I
+query I rowsort
 select adnum from pg_attrdef WHERE adrelid = 't46799'::REGCLASS
 ----
 1
@@ -3750,7 +3759,7 @@ SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 170  170  jt
 
-query ITT
+query ITT rowsort
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1    NULL  NULL
@@ -4024,7 +4033,7 @@ indoption
 query TTI
 SELECT database_name, descriptor_name, descriptor_id from test.crdb_internal.create_statements where descriptor_name = 'pg_views'
 ----
-test  pg_views  4294966986
+test  pg_views  4294966985
 
 # Verify INCLUDED columns appear in pg_index. See issue #59563
 statement ok
@@ -4354,7 +4363,7 @@ CREATE STATISTICS stxobj2 ON a, c FROM test.stxtbl2;
 CREATE TABLE stx(stx) AS SELECT generate_series(1,100);
 ANALYZE stx;
 
-query TTOOITT colnames
+query TTOOITT colnames,rowsort
 SELECT
   relname,
   stxname,
