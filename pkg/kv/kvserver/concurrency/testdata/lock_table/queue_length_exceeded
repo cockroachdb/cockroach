@@ -10,7 +10,7 @@ new-txn txn=txn2 ts=10 epoch=0
 new-txn txn=txn3 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=intent@a
+new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
 ----
 
 new-request r=req2 txn=txn2 ts=10 spans=intent@a
@@ -23,7 +23,7 @@ scan r=req1
 ----
 start-waiting: false
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -188,14 +188,14 @@ num=1
 new-txn txn=txn6 ts=10 epoch=0
 ----
 
-new-request r=req9 txn=txn6 ts=10 spans=intent@b
+new-request r=req9 txn=txn6 ts=10 spans=exclusive@b
 ----
 
 scan r=req9
 ----
 start-waiting: false
 
-acquire r=req9 k=b durability=u
+acquire r=req9 k=b durability=u strength=exclusive
 ----
 num=2
  lock: "a"

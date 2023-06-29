@@ -17,23 +17,23 @@ new-txn txn=txn2 ts=10 epoch=0
 new-txn txn=txn3 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=intent@a
+new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
 ----
 
-new-request r=req2 txn=txn2 ts=10 spans=intent@a
+new-request r=req2 txn=txn2 ts=10 spans=exclusive@a
 ----
 
 new-request r=req3 txn=txn3 ts=10 spans=intent@a
 ----
 
-new-request r=req4 txn=txn2 ts=10 spans=intent@a
+new-request r=req4 txn=txn2 ts=10 spans=exclusive@a
 ----
 
 scan r=req1
 ----
 start-waiting: false
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -59,7 +59,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=Intent
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=Exclusive
 
 guard-state r=req3
 ----
@@ -67,7 +67,7 @@ new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
 
 guard-state r=req4
 ----
-new: state=waitFor txn=txn1 key="a" held=true guard-strength=Intent
+new: state=waitFor txn=txn1 key="a" held=true guard-strength=Exclusive
 
 print
 ----
@@ -122,11 +122,11 @@ guard-state r=req4
 new: state=waitSelf
 
 # ---------------------------------------------------------------------------------
-# req4 is waiting on reserved "a", and req2 from the same txn acquires the
-# lock. req4 stops waiting
+# req4 is waiting on claimed "a", and req2 from the same txn acquires the
+# lock. req4 stops waiting.
 # ---------------------------------------------------------------------------------
 
-acquire r=req2 k=a durability=u
+acquire r=req2 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -146,3 +146,4 @@ new: state=doneWaiting
 scan r=req4
 ----
 start-waiting: false
+

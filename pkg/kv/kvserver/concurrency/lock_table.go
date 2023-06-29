@@ -768,6 +768,8 @@ func (g *lockTableGuardImpl) curLockMode() lock.Mode {
 	switch g.curStrength() {
 	case lock.None:
 		reqMode = lock.MakeModeNone(g.ts, isolation.Serializable)
+	case lock.Exclusive:
+		reqMode = lock.MakeModeExclusive(g.ts, isolation.Serializable)
 	case lock.Intent:
 		reqMode = lock.MakeModeIntent(g.ts)
 	default:
@@ -916,6 +918,8 @@ type queuedGuard struct {
 
 // Information about a lock holder for unreplicated locks.
 type unreplicatedLockHolderInfo struct {
+	// Lock strength is always lock.Exclusive.
+
 	// All the TxnSeqs in the current epoch at which this lock has been acquired,
 	// in increasing order. We track these so that if a lock is acquired at both
 	// seq 5 and seq 7, rollback of 7 does not cause the lock to be released. This
@@ -946,6 +950,8 @@ func (ulh *unreplicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 // Information about a lock holder for replicated locks. Notably, unlike
 // unreplicated locks, this does not include any sequence numbers.
 type replicatedLockHolderInfo struct {
+	// Lock strength is always lock.Intent.
+
 	// The timestamp at which the replicated lock is held. Must not regress.
 	ts hlc.Timestamp
 }
@@ -1008,8 +1014,6 @@ type lockState struct {
 		// call to acquire/update the lock (if the call was made using a TxnMeta
 		// with an older epoch).
 		txn *enginepb.TxnMeta
-
-		// Lock strength is always lock.Intent.
 
 		// INVARIANT: If the lock is held (i.e. the locked boolean is set to true),
 		// then atleast one of (and possibly both of) unreplicatedInfo and
@@ -1701,14 +1705,20 @@ func (l *lockState) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 	return l.holder.txn, l.holder.replicatedInfo.ts
 }
 
-// getLockMode returns the Mode with which a lock is held.
+// getLockMode returns the Mode with which a lock is held. If a lock is held
+// by a transaction with multiple locking strengths, the mode corresponding to
+// the highest lock strength is returned.
 //
 // REQUIRES: l.mu is locked.
 func (l *lockState) getLockMode() lock.Mode {
 	lockHolderTxn, lockHolderTS := l.getLockHolder()
 	assert(lockHolderTxn != nil, "cannot get lock mode of an unheld lock")
 
-	return lock.MakeModeIntent(lockHolderTS)
+	if l.isHeldReplicated() {
+		return lock.MakeModeIntent(lockHolderTS)
+	}
+	// TODO(arul): Thread in the correct isolation level here.
+	return lock.MakeModeExclusive(lockHolderTS, isolation.Serializable)
 }
 
 // Removes the current lock holder from the lock.
@@ -1852,7 +1862,17 @@ func (l *lockState) alreadyHoldsLockAndIsAllowedToProceed(g *lockTableGuardImpl)
 	// is trying to promote a lock it previously acquired. In such cases, the
 	// existence of a lock with weaker strength doesn't do much for this request.
 	// It's no different than the case where its trying to acquire a fresh lock.
-	return g.curStrength() <= heldMode.Strength
+	return g.curStrength() <= heldMode.Strength ||
+		// TODO(arul): We want to allow requests that are writing to keys that they
+		// hold exclusive locks on to "jump ahead" of any potential waiters. This
+		// prevents deadlocks. The logic here is a bandaid until we implement a
+		// solution for the general case of arbitrary lock upgrades
+		// (e.g. shared -> exclusive, etc.). We'll do so by prioritizing requests
+		// from transaction's that hold locks over transactions that don't when
+		// storing them in the list of queuedWriters. Instead of sorting the list
+		// of queuedWriters just based on sequence numbers alone, we'll instead use
+		// (belongsToALockHolderTxn, sequence number) to construct the sort order.
+		(g.curStrength() == lock.Intent && heldMode.Strength == lock.Exclusive)
 }
 
 // conflictsWithLockHolder returns true if the request, referenced by the
@@ -1873,9 +1893,13 @@ func (l *lockState) conflictsWithLockHolder(g *lockTableGuardImpl) bool {
 		return false // the lock isn't held; no conflict to speak of
 	}
 	// We should never get here if the lock is already held by another request
-	// from the same transaction; this should already be checked in
+	// from the same transaction with sufficient strength (read: less than or
+	// equal to what this guy wants); this should already be checked in
 	// alreadyHoldLockAndIsAllowedToProceed.
-	assert(!g.isSameTxn(lockHolderTxn), "lock already held by the request's transaction")
+	assert(
+		!g.isSameTxn(lockHolderTxn) || g.curStrength() > l.getLockMode().Strength,
+		"lock already held by the request's transaction with sufficient strength",
+	)
 	finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
 	if ok {
 		up := roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: l.key})
@@ -2306,7 +2330,7 @@ func (l *lockState) acquireLock(acq *roachpb.LockAcquisition, clock *hlc.Clock) 
 		//
 		// A lock's timestamp at a given durability level is not allowed to
 		// regress, so by forwarding its timestamp during the second acquisition
-		// instead if assigning to it blindly, it remains at 20.
+		// instead of assigning to it blindly, it remains at 20.
 		//
 		// However, a lock's timestamp as reported by getLockHolder can regress
 		// if it is acquired at a lower timestamp and a different durability
@@ -2528,7 +2552,7 @@ func (l *lockState) discoveredLock(
 			return errors.AssertionFailedf("discovered non-conflicting lock")
 		}
 
-	case lock.Intent:
+	case lock.Intent, lock.Exclusive:
 		// Immediately enter the lock's queuedWriters list.
 		// NB: this inactive waiter can be non-transactional.
 		g.mu.Lock()
@@ -3280,8 +3304,13 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 		// If not enabled, don't track any locks.
 		return nil
 	}
-	if acq.Strength != lock.Intent {
-		return errors.AssertionFailedf("lock strength not Intent")
+	switch acq.Strength {
+	case lock.Intent:
+		assert(acq.Durability == lock.Replicated, "incorrect durability")
+	case lock.Exclusive:
+		assert(acq.Durability == lock.Unreplicated, "incorrect durability")
+	default:
+		return errors.AssertionFailedf("unsupported lock strength %s", acq.Strength)
 	}
 	var l *lockState
 	t.locks.mu.Lock()

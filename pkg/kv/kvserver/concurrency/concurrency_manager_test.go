@@ -75,7 +75,7 @@ import (
 // check-opt-no-conflicts            req=<req-name>
 // is-key-locked-by-conflicting-txn  req=<req-name> key=<key> strength=<strength>
 //
-// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u]
+// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u] [strength=<strength>]
 // on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 // on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 //
@@ -399,11 +399,26 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				seqNum := enginepb.TxnSeq(seq)
 
+				// Consider locks to be unreplicated if unspecified.
 				dur := lock.Unreplicated
 				if d.HasArg("dur") {
 					dur = scanLockDurability(t, d)
 				}
-
+				var str lock.Strength
+				if d.HasArg("str") {
+					str = concurrency.ScanLockStrength(t, d)
+				} else {
+					// If no lock strength is provided in the test, infer it from the
+					// durability.
+					switch dur {
+					case lock.Unreplicated:
+						str = lock.Exclusive
+					case lock.Replicated:
+						str = lock.Intent
+					default:
+						t.Fatal("unknown durability")
+					}
+				}
 				// Confirm that the request has a corresponding write request.
 				found := false
 				for _, ru := range guard.Req.Requests {
@@ -425,7 +440,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				mon.runSync("acquire lock", func(ctx context.Context) {
 					log.Eventf(ctx, "txn %s @ %s", txn.Short(), key)
-					acq := roachpb.MakeLockAcquisition(txnAcquire, roachpb.Key(key), dur)
+					acq := roachpb.MakeLockAcquisition(txnAcquire, roachpb.Key(key), dur, str)
 					m.OnLockAcquired(ctx, &acq)
 				})
 				return c.waitAndCollect(t, mon)
