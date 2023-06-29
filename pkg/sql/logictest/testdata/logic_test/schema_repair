@@ -115,6 +115,9 @@ SELECT * FROM crdb_internal.unsafe_upsert_descriptor($corrupt_id, crdb_internal.
 statement ok
 SELECT * FROM corruptdesc;
 
+statement ok
+DROP TABLE lostdata
+
 # Test the crdb_internal.force_delete_table_data function
 subtest force_delete_data
 
@@ -186,6 +189,9 @@ select * from crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_t
 query I
 SELECT * FROM forcedeletemydata ORDER BY v ASC
 ----
+
+statement ok
+DROP TABLE forcedeletemydata
 
 # Test that corrupt back-references should not prevent objects from being queried.
 subtest queryable_despite_corrupt_back_refs
@@ -312,6 +318,15 @@ ALTER TYPE corrupt_backref_typ DROP VALUE 'b'
 
 statement ok
 DROP TYPE corrupt_backref_typ
+
+skipif config local-mixed-22.2-23.1
+query T
+SELECT ns.name
+FROM system.namespace ns
+INNER JOIN system.descriptor d ON d.id = ns.id
+WHERE d.descriptor <> repaired(d.descriptor)
+ORDER BY 1
+----
 
 # Check that `SET descriptor_validation = off ` disables validation.
 # We do so by corrupting a table descriptor and assert on the successful
