@@ -101,7 +101,8 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	// of it and investigate it further if needed.
 	if dst.current == scpb.Status_ABSENT &&
 		dst.target == scpb.ToAbsent &&
-		(target == scpb.ToPublic || target == scpb.Transient) {
+		(target == scpb.ToPublic || target == scpb.Transient) &&
+		dst.metadata.TargetIsLinkedToSchemaChange() {
 		panic(scerrors.NotImplementedErrorf(nil, "attempt to revive a ghost element:"+
 			" [elem=%v],[current=ABSENT],[target=ToAbsent],[newTarget=%v]", dst.element.String(), target.Status()))
 	}

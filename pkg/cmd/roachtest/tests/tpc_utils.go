@@ -88,7 +88,7 @@ func loadTPCHDataset(
 		// If the scale factor was smaller than the required scale factor, wipe the
 		// cluster and restore.
 		m.ExpectDeaths(int32(c.Spec().NodeCount))
-		c.Wipe(ctx, roachNodes)
+		c.Wipe(ctx, false /* preserveCerts */, roachNodes)
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 		m.ResetDeaths()
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&

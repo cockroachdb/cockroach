@@ -1,0 +1,7 @@
+/* setup */
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+----
+Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+ └── execute 1 system table mutations transaction

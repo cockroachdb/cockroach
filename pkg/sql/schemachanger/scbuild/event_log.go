@@ -322,7 +322,9 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 		}
 	case *scpb.Sequence:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
-			return nil
+			return &eventpb.CreateSequence{
+				SequenceName: fullyQualifiedName(b, e),
+			}
 		} else {
 			return &eventpb.DropSequence{
 				SequenceName: fullyQualifiedName(b, e),

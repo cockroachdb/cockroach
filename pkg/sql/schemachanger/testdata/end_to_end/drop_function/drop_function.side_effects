@@ -92,8 +92,8 @@ upsert descriptor #105
   -  dependedOnBy:
   -  - byId: true
   -    id: 109
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
@@ -210,8 +210,8 @@ upsert descriptor #105
   +      userName: root
   +    jobId: "1"
   +    nameMapping: {}
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101
@@ -335,8 +335,8 @@ upsert descriptor #105
   -      userName: root
   -    jobId: "1"
   -    nameMapping: {}
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 105
   ...
        start: "1"
      unexposedParentSchemaId: 101

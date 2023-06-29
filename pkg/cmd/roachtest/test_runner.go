@@ -587,7 +587,7 @@ func (r *testRunner) runWorker(
 		if c != nil && testToRun.canReuseCluster {
 			err = func() error {
 				l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
-				if err := c.WipeE(ctx, l); err != nil {
+				if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
 					return err
 				}
 				if err := c.RunE(ctx, c.All(), "rm -rf "+perfArtifactsDir); err != nil {

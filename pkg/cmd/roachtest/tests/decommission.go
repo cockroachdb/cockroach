@@ -746,7 +746,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			}
 			// Now stop+wipe them for good to keep the logs simple and the dead node detector happy.
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
-			c.Wipe(ctx, c.Nodes(targetNodeA, targetNodeB))
+			c.Wipe(ctx, false /* preserveCerts */, c.Nodes(targetNodeA, targetNodeB))
 		}
 	}
 
@@ -871,7 +871,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			t.L().Printf("wiping n%d and adding it back to the cluster as a new node\n", targetNode)
 
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(targetNode))
-			c.Wipe(ctx, c.Node(targetNode))
+			c.Wipe(ctx, false /*preserveCerts */, c.Node(targetNode))
 
 			joinNode := h.getRandNode()
 			internalAddrs, err := c.InternalAddr(ctx, t.L(), c.Node(joinNode))

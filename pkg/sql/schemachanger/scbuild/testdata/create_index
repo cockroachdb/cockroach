@@ -27,6 +27,10 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
   {columnId: 3, indexId: 3, kind: STORED, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 
 build
 CREATE INVERTED INDEX CONCURRENTLY id2
@@ -50,6 +54,10 @@ CREATE INVERTED INDEX CONCURRENTLY id2
   {columnId: 2, indexId: 3, invertedKind: 1, ordinalInKind: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 
 build skip=sql_dependencies
 CREATE INDEX id3
@@ -83,6 +91,10 @@ CREATE INDEX id3
   {columnId: 3, indexId: 3, kind: STORED, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 
 build
 CREATE INDEX id4
@@ -126,3 +138,7 @@ CREATE INDEX id4
   {columnId: 3, indexId: 3, kind: STORED, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}

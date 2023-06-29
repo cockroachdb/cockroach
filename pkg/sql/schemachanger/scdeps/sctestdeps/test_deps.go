@@ -1374,3 +1374,8 @@ func getNameEntryDescriptorType(parentID, parentSchemaID descpb.ID) string {
 	}
 	return ret
 }
+
+// InitializeSequence is part of the scexec.Catalog interface.
+func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
+	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
+}
