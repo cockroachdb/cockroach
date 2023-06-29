@@ -221,32 +221,6 @@ statement error invalid foreign key backreference
 DROP TABLE corrupt_backref_fk
 
 statement ok
-CREATE FUNCTION repaired(descriptor BYTES) RETURNS BYTES VOLATILE LANGUAGE SQL AS $$
-SELECT crdb_internal.repaired_descriptor(
-  descriptor,
-  (SELECT array_agg(id) AS desc_id_array FROM system.descriptor),
-  (
-    SELECT
-      array_agg(id) AS job_id_array
-    FROM
-      system.jobs
-    WHERE
-      status NOT IN ('failed', 'succeeded', 'canceled', 'revert-failed')
-  )
-)
-$$;
-
-query B
-SELECT crdb_internal.unsafe_upsert_descriptor(id, repaired(descriptor), true)
-FROM system.descriptor
-WHERE id = 'corrupt_backref_fk'::REGCLASS::INT
-----
-true
-
-statement ok
-DROP TABLE corrupt_backref_fk
-
-statement ok
 CREATE TABLE corrupt_backref_view (k INT PRIMARY KEY, v STRING);
 INSERT INTO corrupt_backref_view (k, v) VALUES (1, 'a');
 CREATE VIEW corrupt_view AS SELECT k, v FROM corrupt_backref_view
@@ -268,16 +242,6 @@ SELECT * FROM corrupt_backref_view
 1 a
 
 statement error pgcode XX000 invalid depended-on-by relation back reference
-DROP TABLE corrupt_backref_view
-
-query B
-SELECT crdb_internal.unsafe_upsert_descriptor(id, repaired(descriptor), true)
-FROM system.descriptor
-WHERE id = 'corrupt_backref_view'::REGCLASS::INT
-----
-true
-
-statement ok
 DROP TABLE corrupt_backref_view
 
 statement ok
@@ -303,30 +267,38 @@ a
 statement error pgcode XXUUU referenced descriptor not found
 ALTER TYPE corrupt_backref_typ DROP VALUE 'b'
 
-query TB
-SELECT ns.name, crdb_internal.unsafe_upsert_descriptor(d.id, repaired(d.descriptor), true)
-FROM system.descriptor d
-INNER JOIN system.namespace ns ON d.id = ns.id
-WHERE ns.name LIKE '%corrupt_backref_typ'
+subtest repairable_catalog_corruptions
+
+# Inject some corruption into the system.namespace table.
+query B
+SELECT crdb_internal.unsafe_upsert_namespace_entry(104,105,'dangling',12345,true)
+UNION ALL
+SELECT crdb_internal.unsafe_upsert_namespace_entry(104,105,'dangling2',12345,true)
+----
+true
+true
+
+query IITIT
+SELECT * FROM "".crdb_internal.kv_repairable_catalog_corruptions ORDER BY 1,2,3,4
+----
+104  105  _corrupt_backref_typ  114    descriptor
+104  105  corrupt_backref_fk    109    descriptor
+104  105  corrupt_backref_typ   113    descriptor
+104  105  corrupt_backref_view  111    descriptor
+104  105  dangling              12345  namespace
+104  105  dangling2             12345  namespace
+
+query ITB
+SELECT id, corruption, crdb_internal.repair_catalog_corruption(id, corruption)
+FROM "".crdb_internal.kv_repairable_catalog_corruptions
 ORDER BY 1
 ----
-_corrupt_backref_typ true
-corrupt_backref_typ true
-
-statement ok
-ALTER TYPE corrupt_backref_typ DROP VALUE 'b'
-
-statement ok
-DROP TYPE corrupt_backref_typ
-
-skipif config local-mixed-22.2-23.1
-query T
-SELECT ns.name
-FROM system.namespace ns
-INNER JOIN system.descriptor d ON d.id = ns.id
-WHERE d.descriptor <> repaired(d.descriptor)
-ORDER BY 1
-----
+109    descriptor  true
+111    descriptor  true
+113    descriptor  true
+114    descriptor  true
+12345  namespace   true
+12345  namespace   NULL
 
 # Check that `SET descriptor_validation = off ` disables validation.
 # We do so by corrupting a table descriptor and assert on the successful

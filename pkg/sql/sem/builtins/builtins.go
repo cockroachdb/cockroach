@@ -5209,6 +5209,72 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Volatility: volatility.Stable,
 		},
 	),
+	"crdb_internal.repair_catalog_corruption": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "descriptor_id", Typ: types.Int},
+				{Name: "corruption", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Body: `
+SELECT
+	CASE corruption
+	WHEN 'descriptor'
+	THEN (
+		SELECT
+			max(
+				crdb_internal.unsafe_upsert_descriptor(
+					id,
+					crdb_internal.repaired_descriptor(
+						descriptor,
+						(SELECT array_agg(id) AS desc_id_array FROM system.descriptor),
+						(
+							SELECT
+								array_agg(id) AS job_id_array
+							FROM
+								system.jobs
+							WHERE
+								status NOT IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+						)
+					),
+					true
+				)
+			)
+		FROM
+			system.descriptor
+		WHERE
+			id = $1
+	)
+	WHEN 'namespace'
+	THEN (
+		SELECT
+			max(
+				crdb_internal.unsafe_delete_namespace_entry(
+					"parentID",
+					"parentSchemaID",
+					name,
+					id,
+					true
+				)
+			)
+		FROM
+			system.namespace
+		WHERE
+			id = $1 AND id NOT IN (SELECT id FROM system.descriptor)
+	)
+	ELSE NULL
+	END
+`,
+			Info: "repair_catalog_corruption(descriptor_id,corruption) attempts to repair corrupt" +
+				" records in system tables associated with that descriptor id",
+			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
+		},
+	),
 
 	"crdb_internal.force_error": makeBuiltin(
 		tree.FunctionProperties{
