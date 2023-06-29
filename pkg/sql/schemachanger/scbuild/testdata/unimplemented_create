@@ -15,10 +15,6 @@ CREATE SCHEMA sc AUTHORIZATION roacher;
 ----
 
 unimplemented
-CREATE SEQUENCE seq;
-----
-
-unimplemented
 CREATE TYPE typ AS ENUM('a','b');
 ----
 

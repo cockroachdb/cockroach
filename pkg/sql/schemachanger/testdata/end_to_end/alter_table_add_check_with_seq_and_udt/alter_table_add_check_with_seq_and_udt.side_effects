@@ -34,8 +34,8 @@ upsert descriptor #104
   +  dependedOnBy:
   +  - byId: true
   +    id: 107
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 104
   ...
        start: "1"
      unexposedParentSchemaId: 101
@@ -112,16 +112,25 @@ upsert descriptor #104
   +  declarativeSchemaChangerState:
   +    authorization:
   +      userName: root
+  +    currentStatuses: <redacted>
   +    jobId: "1"
   +    nameMapping:
   +      id: 104
   +      name: s
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› >
+  +          nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
+  +        statement: ALTER TABLE t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))
+  +        statementTag: ALTER TABLE
   +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
   +  dependedOnBy:
   +  - byId: true
   +    id: 107
-     families:
-     - columnIds:
+     formatVersion: 3
+     id: 104
   ...
        start: "1"
      unexposedParentSchemaId: 101
@@ -263,11 +272,20 @@ upsert descriptor #104
   -  declarativeSchemaChangerState:
   -    authorization:
   -      userName: root
+  -    currentStatuses: <redacted>
   -    jobId: "1"
   -    nameMapping:
   -      id: 104
   -      name: s
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› >
+  -          nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›))
+  -        statement: ALTER TABLE t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))
+  -        statementTag: ALTER TABLE
   -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
      dependedOnBy:
      - byId: true
   ...

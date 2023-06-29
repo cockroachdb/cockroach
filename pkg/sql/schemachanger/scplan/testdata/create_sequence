@@ -1,0 +1,398 @@
+ops
+CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+----
+StatementPhase stage 1 of 1 with 23 MutationType ops
+  transitions:
+    [[Sequence:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 104, Name: START}, PUBLIC], ABSENT] -> PUBLIC
+    [[Column:{DescID: 104, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 104, ColumnID: 1, IndexID: 0}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 104, Name: value, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 0}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: primary, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.CreateSequenceDescriptor
+      SequenceID: 104
+    *scop.SetNameInDescriptor
+      DescriptorID: 104
+      Name: sq1
+    *scop.AddDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 104
+        Name: sq1
+        SchemaID: 101
+    *scop.SetSequenceOptions
+      Key: START
+      SequenceID: 104
+      Value: "32"
+    *scop.MakeAbsentColumnDeleteOnly
+      Column:
+        ColumnID: 1
+        TableID: 104
+    *scop.SetAddedColumnType
+      ColumnType:
+        ColumnID: 1
+        ElementCreationMetadata:
+          in231OrLater: true
+        TableID: 104
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: value
+      TableID: 104
+    *scop.MakeAbsentIndexBackfilling
+      Index:
+        IndexID: 1
+        IsUnique: true
+        TableID: 104
+    *scop.AddColumnToIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 104
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 104
+        Owner: root
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.MakeDeleteOnlyColumnWriteOnly
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeAbsentColumnNotNullWriteOnly
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeBackfillingIndexDeleteOnly
+      IndexID: 1
+      TableID: 104
+    *scop.MakeValidatedColumnNotNullPublic
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeBackfilledIndexMerging
+      IndexID: 1
+      TableID: 104
+    *scop.MakeWriteOnlyColumnPublic
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeMergedIndexWriteOnly
+      IndexID: 1
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 1
+      Name: primary
+      TableID: 104
+    *scop.MakeValidatedPrimaryIndexPublic
+      IndexID: 1
+      TableID: 104
+    *scop.InitSequence
+      SequenceID: 104
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 104
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[Sequence:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
+    [[SequenceOption:{DescID: 104, Name: START}, PUBLIC], PUBLIC] -> ABSENT
+    [[Column:{DescID: 104, ColumnID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 104, ColumnID: 1, IndexID: 0}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 104, Name: value, ColumnID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 0}, PUBLIC], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 104, Name: primary, IndexID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 24 MutationType ops
+  transitions:
+    [[Sequence:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[SequenceOption:{DescID: 104, Name: START}, PUBLIC], ABSENT] -> PUBLIC
+    [[Column:{DescID: 104, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 104, ColumnID: 1, IndexID: 0}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 104, Name: value, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 0}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: primary, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.CreateSequenceDescriptor
+      SequenceID: 104
+    *scop.SetNameInDescriptor
+      DescriptorID: 104
+      Name: sq1
+    *scop.AddDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 104
+        Name: sq1
+        SchemaID: 101
+    *scop.SetSequenceOptions
+      Key: START
+      SequenceID: 104
+      Value: "32"
+    *scop.MakeAbsentColumnDeleteOnly
+      Column:
+        ColumnID: 1
+        TableID: 104
+    *scop.SetAddedColumnType
+      ColumnType:
+        ColumnID: 1
+        ElementCreationMetadata:
+          in231OrLater: true
+        TableID: 104
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: value
+      TableID: 104
+    *scop.MakeAbsentIndexBackfilling
+      Index:
+        IndexID: 1
+        IsUnique: true
+        TableID: 104
+    *scop.AddColumnToIndex
+      ColumnID: 1
+      IndexID: 1
+      TableID: 104
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 104
+        Owner: root
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 104
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.MakeDeleteOnlyColumnWriteOnly
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeAbsentColumnNotNullWriteOnly
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeBackfillingIndexDeleteOnly
+      IndexID: 1
+      TableID: 104
+    *scop.MakeValidatedColumnNotNullPublic
+      ColumnID: 1
+      TableID: 104
+    *scop.MakeBackfilledIndexMerging
+      IndexID: 1
+      TableID: 104
+    *scop.MakeWriteOnlyColumnPublic
+      ColumnID: 1
+      TableID: 104
+    *scop.RefreshStats
+      TableID: 104
+    *scop.MakeMergedIndexWriteOnly
+      IndexID: 1
+      TableID: 104
+    *scop.SetIndexName
+      IndexID: 1
+      Name: primary
+      TableID: 104
+    *scop.MakeValidatedPrimaryIndexPublic
+      IndexID: 1
+      TableID: 104
+    *scop.InitSequence
+      SequenceID: 104
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 104
+
+
+deps
+CREATE SEQUENCE sq1  MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+----
+- from: [Column:{DescID: 105, ColumnID: 1}, DELETE_ONLY]
+  to:   [ColumnName:{DescID: 105, Name: value, ColumnID: 1}, PUBLIC]
+  kind: SameStagePrecedence
+  rules: [column existence precedes column dependents; column name and type set right after column existence]
+- from: [Column:{DescID: 105, ColumnID: 1}, DELETE_ONLY]
+  to:   [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, PUBLIC]
+  kind: Precedence
+  rule: column existence precedes column dependents
+- from: [Column:{DescID: 105, ColumnID: 1}, DELETE_ONLY]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
+  kind: SameStagePrecedence
+  rules: [column existence precedes column dependents; column name and type set right after column existence]
+- from: [Column:{DescID: 105, ColumnID: 1}, DELETE_ONLY]
+  to:   [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, PUBLIC]
+  kind: Precedence
+  rule: column existence precedes column dependents
+- from: [Column:{DescID: 105, ColumnID: 1}, DELETE_ONLY]
+  to:   [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 0}, BACKFILL_ONLY]
+  kind: Precedence
+  rule: column existence precedes index existence
+- from: [Column:{DescID: 105, ColumnID: 1}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Column:{DescID: 105, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, WRITE_ONLY]
+  kind: SameStagePrecedence
+  rule: column writable right before column constraint is enforced.
+- from: [ColumnName:{DescID: 105, Name: value, ColumnID: 1}, PUBLIC]
+  to:   [Column:{DescID: 105, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: column dependents exist before column becomes public
+- from: [ColumnName:{DescID: 105, Name: value, ColumnID: 1}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, PUBLIC]
+  to:   [Column:{DescID: 105, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: column dependents exist before column becomes public
+- from: [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
+  to:   [Column:{DescID: 105, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: column dependents exist before column becomes public
+- from: [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, PUBLIC]
+  to:   [Column:{DescID: 105, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: column dependents exist before column becomes public
+- from: [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 0}, BACKFILLED]
+  kind: Precedence
+  rule: index-column added to index before index is backfilled
+- from: [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 0}, PUBLIC]
+  kind: Precedence
+  rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [IndexName:{DescID: 105, Name: primary, IndexID: 1}, PUBLIC]
+  to:   [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 0}, PUBLIC]
+  kind: SameStagePrecedence
+  rules: [index dependents exist before index becomes public; primary index named right before index becomes public]
+- from: [IndexName:{DescID: 105, Name: primary, IndexID: 1}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Owner:{DescID: 105}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 0}, BACKFILL_ONLY]
+  to:   [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, PUBLIC]
+  kind: Precedence
+  rule: index existence precedes index dependents
+- from: [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 0}, BACKFILL_ONLY]
+  to:   [IndexName:{DescID: 105, Name: primary, IndexID: 1}, PUBLIC]
+  kind: Precedence
+  rule: index existence precedes index dependents
+- from: [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 0}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [Column:{DescID: 105, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [ColumnName:{DescID: 105, Name: value, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [ColumnNotNull:{DescID: 105, ColumnID: 1, IndexID: 0}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [IndexName:{DescID: 105, Name: primary, IndexID: 1}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [Owner:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 0}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [SequenceOption:{DescID: 105, Name: START}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 105, Name: admin}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [SequenceOption:{DescID: 105, Name: START}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 105, Name: admin}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 105, Name: root}, PUBLIC]
+  to:   [Sequence:{DescID: 105}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public

@@ -29,6 +29,7 @@ type immediateState struct {
 	newDescriptors      map[descpb.ID]catalog.MutableDescriptor
 	addedNames          map[descpb.ID]descpb.NameInfo
 	withReset           bool
+	sequencesToInit     []sequenceToInit
 }
 
 type commentToUpdate struct {
@@ -36,6 +37,11 @@ type commentToUpdate struct {
 	subID       int64
 	commentType catalogkeys.CommentType
 	comment     string
+}
+
+type sequenceToInit struct {
+	id       descpb.ID
+	startVal int64
 }
 
 var _ scmutationexec.ImmediateMutationStateUpdater = (*immediateState)(nil)
@@ -108,6 +114,14 @@ func (s *immediateState) CreateDescriptor(desc catalog.MutableDescriptor) {
 	s.newDescriptors[desc.GetID()] = desc
 }
 
+func (s *immediateState) InitSequence(id descpb.ID, startVal int64) {
+	s.sequencesToInit = append(s.sequencesToInit,
+		sequenceToInit{
+			id:       id,
+			startVal: startVal,
+		})
+}
+
 func (s *immediateState) Reset() {
 	s.withReset = true
 }
@@ -160,6 +174,9 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 				return err
 			}
 		}
+	}
+	for _, s := range s.sequencesToInit {
+		c.InitializeSequence(s.id, s.startVal)
 	}
 	return c.Validate(ctx)
 }

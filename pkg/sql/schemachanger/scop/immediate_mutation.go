@@ -259,6 +259,24 @@ type MakeDeleteOnlyColumnAbsent struct {
 	ColumnID descpb.ColumnID
 }
 
+// AddOwnerBackReferenceInSequence adds a sequence ownership
+// back-reference from a sequence.
+type AddOwnerBackReferenceInSequence struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+	TableID    descpb.ID
+	ColumnID   descpb.ColumnID
+}
+
+// AddSequenceOwner adds a sequence ownership reference from the owning
+// table column.
+type AddSequenceOwner struct {
+	immediateMutationOp
+	TableID         descpb.ID
+	ColumnID        descpb.ColumnID
+	OwnedSequenceID descpb.ID
+}
+
 // RemoveOwnerBackReferenceInSequence removes a sequence ownership
 // back-reference from a sequence.
 type RemoveOwnerBackReferenceInSequence struct {
@@ -804,4 +822,23 @@ type UpdateOwner struct {
 type CreateSchemaDescriptor struct {
 	immediateMutationOp
 	SchemaID descpb.ID
+}
+
+type CreateSequenceDescriptor struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+}
+
+type SetSequenceOptions struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+	Key        string
+	Value      string
+}
+
+type InitSequence struct {
+	immediateMutationOp
+	SequenceID     descpb.ID
+	RestartWith    int64
+	UseRestartWith bool
 }

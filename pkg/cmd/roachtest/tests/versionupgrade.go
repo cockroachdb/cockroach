@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -100,17 +101,22 @@ DROP TABLE splitmerge.t;
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All())
-	mvt.OnStartup("setup schema changer workload", func(ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper) error {
-		// Execute the workload init.
-		return c.RunE(ctx, c.All(), "./workload init schemachange")
-	})
-	mvt.InMixedVersion("run backup", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-		// Verify that backups can be created in various configurations. This is
-		// important to test because changes in system tables might cause backups to
-		// fail in mixed-version clusters.
-		dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
-		return h.Exec(rng, `BACKUP TO $1`, dest)
-	})
+	mvt.OnStartup(
+		"setup schema changer workload",
+		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			node := h.RandomNode(rng, c.All())
+			l.Printf("executing workload init on node %d", node)
+			return c.RunE(ctx, c.Node(node), fmt.Sprintf("./workload init schemachange {pgurl%s}", c.All()))
+		})
+	mvt.InMixedVersion(
+		"run backup",
+		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			// Verify that backups can be created in various configurations. This is
+			// important to test because changes in system tables might cause backups to
+			// fail in mixed-version clusters.
+			dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
+			return h.Exec(rng, `BACKUP TO $1`, dest)
+		})
 	mvt.InMixedVersion(
 		"test features",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
@@ -247,7 +253,9 @@ func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) 
 		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
 		startOpts.RoachprodOpts.Sequential = false
-		if err := clusterupgrade.StartWithBinary(ctx, t.L(), u.c, nodes, binary, startOpts); err != nil {
+		if err := clusterupgrade.StartWithSettings(
+			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -259,7 +267,9 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 		startOpts := option.DefaultStartOpts()
 		// NB: can't start sequentially since cluster already bootstrapped.
 		startOpts.RoachprodOpts.Sequential = false
-		if err := clusterupgrade.StartWithBinary(ctx, t.L(), u.c, nodes, binary, startOpts); err != nil {
+		if err := clusterupgrade.StartWithSettings(
+			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
