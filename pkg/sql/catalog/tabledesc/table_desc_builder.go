@@ -992,6 +992,11 @@ func maybeSetCreateAsOfTime(desc *descpb.TableDescriptor) (hasChanged bool) {
 	if !desc.CreateAsOfTime.IsEmpty() || desc.Version > 1 || desc.ModificationTime.IsEmpty() {
 		return false
 	}
+	// Ignore system tables, unless they're explicitly created using CTAS
+	// How that could ever happen is unclear, but never mind.
+	if desc.ParentID == keys.SystemDatabaseID && desc.CreateQuery == "" {
+		return false
+	}
 	// The expectation is that this is only set when the version is 2.
 	// For any version greater than that, this is not accurate but better than
 	// nothing at all.
