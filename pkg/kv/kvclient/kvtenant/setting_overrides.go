@@ -50,6 +50,11 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			c.settingsMu.receivedFirstAllTenantOverrides = false
 			c.settingsMu.receivedFirstSpecificOverrides = false
 		}()
+		func() {
+			c.metadataMu.Lock()
+			defer c.metadataMu.Unlock()
+			c.metadataMu.receivedFirstMetadata = false
+		}()
 
 		for {
 			e, err := stream.Recv()
@@ -87,6 +92,12 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 					return
 				}
 				continue
+			}
+
+			if c.testingEmulateOldVersionSettingsClient {
+				// The old version of the settings client does not understand anything
+				// else than setting events.
+				e.EventType = kvpb.TenantSettingsEvent_SETTING_EVENT
 			}
 
 			var reconnect bool
@@ -141,6 +152,7 @@ func (c *connector) processMetadataEvent(ctx context.Context, e *kvpb.TenantSett
 	c.metadataMu.Lock()
 	defer c.metadataMu.Unlock()
 
+	c.metadataMu.receivedFirstMetadata = true
 	c.metadataMu.capabilities = e.Capabilities
 	c.metadataMu.tenantName = e.Name
 	// TODO(knz): Remove the cast once we have proper typing in the
