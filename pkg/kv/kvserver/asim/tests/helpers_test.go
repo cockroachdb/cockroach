@@ -50,3 +50,23 @@ func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interfa
 	}
 	return false
 }
+
+// scanThreshold looks up the first arg that matches with  "exact_bound",
+// "upper_bound", or "lower_bound" in the CmdArgs array. If found, it creates a
+// threshold struct from the located key-value pair. If no keys are found, a
+// fatal error is triggered. Note that only one key should be specified at a
+// time. If multiple keys are specified, the precedence order is exact_bound >
+// upper_bound > lower_bound.
+func scanThreshold(t *testing.T, d *datadriven.TestData) (th threshold) {
+	if scanIfExists(t, d, "exact_bound", &th.value) {
+		th.thresholdType = exactBound
+		return th
+	}
+	if scanIfExists(t, d, "upper_bound", &th.value) {
+		th.thresholdType = upperBound
+		return th
+	}
+	scanArg(t, d, "lower_bound", &th.value)
+	th.thresholdType = lowerBound
+	return th
+}

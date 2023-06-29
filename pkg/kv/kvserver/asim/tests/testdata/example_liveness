@@ -21,7 +21,7 @@ set_liveness node=6 liveness=decommissioning delay=3m
 
 # The number of replicas on the dead and decommissioning stores should be 0,
 # assert this.
-assertion type=stat stat=replicas ticks=6 threshold=0 stores=(6,7)
+assertion type=stat stat=replicas ticks=6 exact_bound=0 stores=(6,7)
 ----
 
 eval duration=12m seed=42

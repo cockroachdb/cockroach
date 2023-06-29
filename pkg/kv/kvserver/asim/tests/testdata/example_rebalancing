@@ -16,14 +16,14 @@ gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
 # Add two assertions, the first is a balance assertion. The balance assertion
 # requires that when simulation is evaluated that during last 6 ticks (60
 # seconds) the max/mean QPS of the cluster does not exceed 1.15.
-assertion stat=qps type=balance ticks=6 threshold=1.15
+assertion stat=qps type=balance ticks=6 upper_bound=1.15
 ----
 
 # The second is a steady state assertion. The steady state assertion requires
 # that during the last 6 ticks (60 seconds), the value of QPS per-store doesn't
 # increase or decrease by more than 5% of the mean. This type of assertion is
 # useful when a stat is balanced but not necessarily stable.
-assertion stat=qps type=steady ticks=6 threshold=0.05
+assertion stat=qps type=steady ticks=6 upper_bound=0.05
 ----
 
 # The generators are then called and 2 simulation runs, named samples are
@@ -76,7 +76,7 @@ setting gossip_delay=20s
 eval duration=5m samples=2 seed=42
 ----
 failed assertion sample 2
-  balance stat=qps threshold=1.15 ticks=6
+  balance stat=qps threshold=(<1.15) ticks=6
 	max/mean=2.00 tick=0
 	max/mean=2.00 tick=1
 	max/mean=2.00 tick=2
