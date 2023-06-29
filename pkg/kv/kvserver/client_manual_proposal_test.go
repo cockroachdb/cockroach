@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -36,12 +37,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -153,24 +156,16 @@ func TestCreateManyUnappliedEntriesAcrossRanges(t *testing.T) {
 	// const batches = 3
 
 	p := os.ExpandEnv("$HOME/go/src/github.com/cockroachdb/cockroach/cockroach-data")
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{StoreSpecs: []base.StoreSpec{{Path: p}}},
-		ReplicationMode: base.ReplicationManual,
-	})
-
-	var ids []roachpb.RangeID
-	rows, err := tc.ServerConn(0).Query(`SELECT range_id FROM [SHOW RANGES FROM TABLE kv.kv]`)
-	require.NoError(t, err)
-	for rows.Next() {
-		ids = append(ids, 0)
-		require.NoError(t, rows.Scan(&ids[len(ids)-1]))
-	}
-	tc.Stopper().Stop(ctx)
-	fmt.Print(ids)
+	// p := filepath.Join(t.TempDir(), "cockroach-data")
+	const ranges = 20
+	ids := maybeCreateClusterDir(ctx, t, p, ranges)
+	fmt.Println(ids)
 
 	st := cluster.MakeTestingClusterSettings()
-	eng, err := storage.Open(ctx, storage.Filesystem(p), st)
+
+	env, err := fs.InitEnv(ctx, vfs.Default, p, fs.EnvConfig{})
+	require.NoError(t, err)
+	eng, err := storage.Open(ctx, env, st)
 	require.NoError(t, err)
 	defer eng.Close()
 	for _, id := range ids {
@@ -178,6 +173,36 @@ func TestCreateManyUnappliedEntriesAcrossRanges(t *testing.T) {
 		const batches = 100
 		appendSomeStuff(ctx, t, st, eng, id, batches, entsPerBatch)
 	}
+}
+
+func maybeCreateClusterDir(
+	ctx context.Context, t *testing.T, path string, ranges int,
+) []roachpb.RangeID {
+	existing := false
+	if _, err := os.Stat(path); err == nil {
+		existing = true
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs:      base.TestServerArgs{StoreSpecs: []base.StoreSpec{{Path: path}}},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// If the directory does not exist, create it and split the scratch space to
+	// have the requested number of ranges.
+	if !existing || !time.Now().IsZero() {
+		_, desc, err := tc.SplitRange(keys.ScratchRangeMin)
+		require.NoError(t, err)
+		ids := append(make([]roachpb.RangeID, 0, ranges), desc.RangeID)
+		for i := 1; i < ranges; i++ {
+			_, rhs, err := tc.SplitRange(testutils.MakeKey(keys.ScratchRangeMin, []byte(strconv.Itoa(i))))
+			require.NoError(t, err)
+			ids = append(ids, rhs.RangeID)
+		}
+		return ids
+	}
+
+	return nil
 }
 
 func appendSomeStuff(
