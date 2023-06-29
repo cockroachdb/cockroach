@@ -767,9 +767,14 @@ func (g *lockTableGuardImpl) curLockMode() lock.Mode {
 	var reqMode lock.Mode
 	switch g.curStrength() {
 	case lock.None:
-		reqMode = lock.MakeModeNone(g.ts, isolation.Serializable)
+		iso := isolation.Serializable
+		if g.txn != nil {
+			iso = g.txn.IsoLevel
+		}
+		reqMode = lock.MakeModeNone(g.ts, iso)
 	case lock.Exclusive:
-		reqMode = lock.MakeModeExclusive(g.ts, isolation.Serializable)
+		assert(g.txn != nil, "only transactional requests can acquire exclusive locks")
+		reqMode = lock.MakeModeExclusive(g.ts, g.txn.IsoLevel)
 	case lock.Intent:
 		reqMode = lock.MakeModeIntent(g.ts)
 	default:
@@ -1717,8 +1722,7 @@ func (l *lockState) getLockMode() lock.Mode {
 	if l.isHeldReplicated() {
 		return lock.MakeModeIntent(lockHolderTS)
 	}
-	// TODO(arul): Thread in the correct isolation level here.
-	return lock.MakeModeExclusive(lockHolderTS, isolation.Serializable)
+	return lock.MakeModeExclusive(lockHolderTS, lockHolderTxn.IsoLevel)
 }
 
 // Removes the current lock holder from the lock.
