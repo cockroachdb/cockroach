@@ -293,3 +293,19 @@ query T
 SELECT ST_Box2DFromGeoHash(NULL, NULL)::BOX2D;
 ----
 NULL
+
+subtest regression_93541
+
+statement ok
+CREATE TABLE bbox_units (d INT PRIMARY KEY, f FLOAT4);
+
+statement ok
+INSERT INTO bbox_units VALUES (1, 1.0), (2, 'NaN');
+
+query I
+SELECT count(*) FROM bbox_units
+WHERE 'BOX(-10 -10,10 10)'::BOX2D IN (
+  SELECT st_expand('BOX(1 -1, 1 -1)'::BOX2D, t2.f) FROM bbox_units t2
+);
+----
+0
