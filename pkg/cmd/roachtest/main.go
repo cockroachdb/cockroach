@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -543,6 +544,31 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
+	// Install goroutine leak checker and run it at the end of the entire test run.
+	// N.B. if a test is leaking a goroutine, then it will likely be still around.
+	// We could diff goroutine snapshots before/after each executed test, but that could yield false positives; e.g.,
+	// user-specified test teardown goroutines may still be running long after the test has completed.
+	leakCheck := func() func() {
+		orig := leaktest.InterestingGoroutines()
+		return func() {
+			// Cancel all the monitors and anything else that might still be running
+			cancel()
+			// N.B. 5-second grace period seems more than sufficient since teardown has already happened by now.
+			deadline := timeutil.Now().Add(5 * time.Second)
+			for {
+				if err := leaktest.DiffGoroutines(orig); err != nil {
+					if timeutil.Now().Before(deadline) {
+						time.Sleep(50 * time.Millisecond)
+						continue
+					}
+					l.Errorf("Detected Leaked goroutines:\n%v", err)
+				}
+				break
+			}
+		}
+	}
+	defer leakCheck()()
+
 	err := runner.Run(
 		ctx, specs, cfg.count, cfg.parallelism, opt,
 		testOpts{
@@ -557,11 +583,6 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	// kills the process.
 	l.PrintfCtx(ctx, "runTests destroying all clusters")
 	cr.destroyAllClusters(context.Background(), l)
-
-	// Dump all stacks to the build log.
-	// N.B. we expect no user-defined goroutines to be running at this point.
-	// In the future, we can enforce a leak check, analogous to leaktest.AfterTest
-	fmt.Fprintf(os.Stderr, "all stacks:\n\n%s\n", allstacks.Get())
 
 	if teamCity {
 		// Collect the runner logs.

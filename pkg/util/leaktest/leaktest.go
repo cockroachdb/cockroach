@@ -37,7 +37,7 @@ import (
 
 // interestingGoroutines returns all goroutines we care about for the purpose
 // of leak checking. It excludes testing or runtime ones.
-func interestingGoroutines() map[int64]string {
+func InterestingGoroutines() map[int64]string {
 	buf := allstacks.Get()
 	gs := make(map[int64]string)
 	for _, g := range strings.Split(string(buf), "\n\n") {
@@ -109,7 +109,7 @@ func AfterTest(t testing.TB) func() {
 		return func() {}
 	}
 
-	orig := interestingGoroutines()
+	orig := InterestingGoroutines()
 	return func() {
 		t.Helper()
 		// If there was a panic, "leaked" goroutines are expected.
@@ -127,7 +127,7 @@ func AfterTest(t testing.TB) func() {
 		// If the test already failed, we don't pile on any more errors but we check
 		// to see if the leak detector should be disabled for future tests.
 		if t.Failed() {
-			if err := diffGoroutines(orig); err != nil {
+			if err := DiffGoroutines(orig); err != nil {
 				atomic.StoreUint32(&leakDetectorDisabled, 1)
 			}
 			return
@@ -139,7 +139,7 @@ func AfterTest(t testing.TB) func() {
 		// Wait up to 5 seconds, but finish as quickly as possible.
 		deadline := timeutil.Now().Add(5 * time.Second)
 		for {
-			if err := diffGoroutines(orig); err != nil {
+			if err := DiffGoroutines(orig); err != nil {
 				if timeutil.Now().Before(deadline) {
 					time.Sleep(50 * time.Millisecond)
 					continue
@@ -154,9 +154,9 @@ func AfterTest(t testing.TB) func() {
 
 // diffGoroutines compares the current goroutines with the base snapshort and
 // returns an error if they differ.
-func diffGoroutines(base map[int64]string) error {
+func DiffGoroutines(base map[int64]string) error {
 	var leaked []string
-	for id, stack := range interestingGoroutines() {
+	for id, stack := range InterestingGoroutines() {
 		if _, ok := base[id]; !ok {
 			leaked = append(leaked, stack)
 		}
