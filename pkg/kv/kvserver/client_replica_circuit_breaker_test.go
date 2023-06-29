@@ -395,6 +395,56 @@ func TestReplicaCircuitBreaker_Liveness_QuorumLoss(t *testing.T) {
 	require.NoError(t, tc.Write(n1))
 }
 
+// In this test, a txn anchored on the range losing quorum also has an intent on
+// a healthy range. Quorum is lost before committing, poisoning latches for the
+// txn info. When resolving the intent on the healthy range, it will hit a
+// poisoned latch. This should result in a ReplicaUnavailableError from the
+// original range that lost quorum, not from the range with the intent.
+func TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tc := setupCircuitBreakerTest(t)
+	defer tc.Stopper().Stop(ctx)
+
+	// Get lease on n1.
+	require.NoError(t, tc.Write(n1))
+
+	// Split off a healthy range, which will inherit a lease on n1. Remove the
+	// replica on n2, so that it remains healthy when we take down n2.
+	failKey := tc.ScratchRange(t)
+	okKey := failKey.Next()
+	failDesc, _ := tc.SplitRangeOrFatal(t, okKey)
+	okDesc := tc.RemoveVotersOrFatal(t, okKey, tc.Target(n2))
+	t.Logf("failDesc=%s", failDesc)
+	t.Logf("okDesc=%s", okDesc)
+
+	// Start a transaction, anchoring it on the faulty range.
+	db := tc.Server(n1).DB()
+	txn := db.NewTxn(ctx, "test")
+	require.NoError(t, txn.Put(ctx, failKey, "fail"))
+	require.NoError(t, txn.Put(ctx, okKey, "ok"))
+
+	// Lose quorum.
+	tc.StopServer(n2)
+	tc.HeartbeatNodeLiveness(t, n1)
+
+	// Attempt to commit. It should fail, but will poison latches on
+	// the faulty range.
+	tc.SetSlowThreshold(time.Second)
+	err := txn.Commit(ctx)
+	tc.RequireIsBreakerOpen(t, err)
+
+	// Read the key from the healthy range. It should fail due to a poisoned latch
+	// on the txn's anchored range. This error should appear to come from the
+	// failed range, not from the healthy range.
+	_, err = db.Get(ctx, okKey)
+	tc.RequireIsBreakerOpen(t, err)
+	ruErr := &kvpb.ReplicaUnavailableError{}
+	require.True(t, errors.As(err, &ruErr))
+	require.Equal(t, failDesc.RangeID, ruErr.Desc.RangeID)
+}
+
 type dummyStream struct {
 	name string
 	ctx  context.Context
