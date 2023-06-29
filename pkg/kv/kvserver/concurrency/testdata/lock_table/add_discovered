@@ -31,14 +31,14 @@ new-txn txn=txn2 ts=10 epoch=0
 new-txn txn=txn3 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10,1 spans=intent@a
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
 scan r=req1
 ----
 start-waiting: false
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
