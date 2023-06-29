@@ -120,10 +120,11 @@ func NewReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracl
 }
 
 func (rl *ReplicaLoad) record(stat LoadStat, val float64, nodeID roachpb.NodeID) {
+	now := timeutil.Unix(0, rl.clock.PhysicalNow())
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	rl.mu.stats[stat].RecordCount(timeutil.Unix(0, rl.clock.PhysicalNow()), val, nodeID)
+	rl.mu.stats[stat].RecordCount(now, val, nodeID)
 }
 
 // Split will distribute the load from the calling struct, evenly between itself
