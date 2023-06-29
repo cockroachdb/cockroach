@@ -110,7 +110,7 @@ func ReverseScan(
 	}
 
 	if args.KeyLocking != lock.None && h.Txn != nil {
-		err = acquireUnreplicatedLocksOnKeys(&res, h.Txn, args.ScanFormat, &scanRes)
+		err = acquireUnreplicatedLocksOnKeys(&res, h.Txn, args.KeyLocking, args.ScanFormat, &scanRes)
 		if err != nil {
 			return result.Result{}, err
 		}

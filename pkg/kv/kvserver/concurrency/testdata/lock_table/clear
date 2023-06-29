@@ -14,7 +14,7 @@ new-txn txn=txn3 ts=12,1 epoch=0
 
 # txn1 acquires unreplicated exclusive locks at a and b.
 
-new-request r=req1 txn=txn1 ts=10,1 spans=intent@a+intent@b
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@b
 ----
 
 scan r=req1
@@ -25,13 +25,13 @@ guard-state r=req1
 ----
 new: state=doneWaiting
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
-acquire r=req1 k=b durability=u
+acquire r=req1 k=b durability=u strength=exclusive
 ----
 num=2
  lock: "a"

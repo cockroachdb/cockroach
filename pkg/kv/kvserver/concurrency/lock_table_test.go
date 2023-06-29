@@ -85,7 +85,7 @@ start-waiting: <bool>
  Calls lockTable.ScanOptimistic. The request must not have an existing guard.
  If a guard is returned, stores it for later use.
 
-acquire r=<name> k=<key> durability=r|u [ignored-seqs=<int>[-<int>][,<int>[-<int>]]]
+acquire r=<name> k=<key> durability=r|u [ignored-seqs=<int>[-<int>][,<int>[-<int>]] strength=<strength>
 ----
 <error string>
 
@@ -381,7 +381,10 @@ func TestLockTableBasic(t *testing.T) {
 				if s[0] == 'r' {
 					durability = lock.Replicated
 				}
-				acq := roachpb.MakeLockAcquisition(req.Txn, roachpb.Key(key), durability)
+				var str string
+				d.ScanArgs(t, "strength", &str)
+				strength := getStrength(t, d, str)
+				acq := roachpb.MakeLockAcquisition(req.Txn, roachpb.Key(key), durability, strength)
 				var ignored []enginepb.IgnoredSeqNumRange
 				if d.HasArg("ignored-seqs") {
 					ignored = scanIgnoredSeqNumbers(t, d)
@@ -706,6 +709,8 @@ func scanSpans(
 		case lock.None:
 			sa = spanset.SpanReadOnly
 		case lock.Intent:
+			sa = spanset.SpanReadWrite
+		case lock.Exclusive:
 			sa = spanset.SpanReadWrite
 		default:
 			d.Fatalf(t, "unsupported lock strength: %s", str)
@@ -1201,7 +1206,7 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 }
 
 func (e *workloadExecutor) acquireLock(txn *roachpb.Transaction, k roachpb.Key) error {
-	acq := roachpb.MakeLockAcquisition(txn, k, lock.Unreplicated)
+	acq := roachpb.MakeLockAcquisition(txn, k, lock.Unreplicated, lock.Exclusive)
 	err := e.lt.AcquireLock(&acq)
 	if err != nil {
 		return err
@@ -1630,7 +1635,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		}
 	}
 	for _, k := range item.locksToAcquire {
-		acq := roachpb.MakeLockAcquisition(item.Txn, k, lock.Unreplicated)
+		acq := roachpb.MakeLockAcquisition(item.Txn, k, lock.Unreplicated, lock.Exclusive)
 		if err = env.lt.AcquireLock(&acq); err != nil {
 			doneCh <- err
 			return
@@ -1827,7 +1832,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 			}
 			for i := 0; i < locks; i++ {
 				k := roachpb.Key(fmt.Sprintf("%03d", i))
-				acq := roachpb.MakeLockAcquisition(txn, k, lock.Unreplicated)
+				acq := roachpb.MakeLockAcquisition(txn, k, lock.Unreplicated, lock.Exclusive)
 				err := lt.AcquireLock(&acq)
 				if err != nil {
 					b.Fatal(err)

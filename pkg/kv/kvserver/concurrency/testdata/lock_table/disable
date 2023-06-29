@@ -19,7 +19,7 @@ clear disable
 ----
 num=0
 
-new-request r=req1 txn=txn1 ts=10,1 spans=intent@a+intent@c
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@c
 ----
 
 scan r=req1
@@ -43,7 +43,7 @@ scan r=req1
 ----
 start-waiting: false
 
-acquire r=req1 k=c durability=u
+acquire r=req1 k=c durability=u strength=exclusive
 ----
 num=0
 
@@ -58,7 +58,7 @@ num=0
 enable
 ----
 
-new-request r=req2 txn=txn1 ts=10,1 spans=intent@a+intent@c
+new-request r=req2 txn=txn1 ts=10,1 spans=exclusive@a+exclusive@c
 ----
 
 scan r=req2
@@ -83,7 +83,7 @@ start-waiting: true
 
 guard-state r=req2
 ----
-new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Intent
+new: state=waitForDistinguished txn=txn2 key="a" held=true guard-strength=Exclusive
 
 release txn=txn2 span=a
 ----
@@ -96,7 +96,7 @@ guard-state r=req2
 ----
 new: state=doneWaiting
 
-acquire r=req2 k=c durability=u
+acquire r=req2 k=c durability=u strength=exclusive
 ----
 num=2
  lock: "a"

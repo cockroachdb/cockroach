@@ -13,10 +13,10 @@ new-txn txn=txn1 ts=10 epoch=0 seq=2
 new-txn txn=txn2 ts=10 epoch=0
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=intent@a
+new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
 ----
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -37,10 +37,10 @@ num=1
 new-txn txn=txn1 ts=8 epoch=0 seq=3
 ----
 
-new-request r=req2 txn=txn1 ts=8 spans=intent@a
+new-request r=req2 txn=txn1 ts=8 spans=exclusive@a+intent@a
 ----
 
-acquire r=req2 k=a durability=u
+acquire r=req2 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -62,7 +62,7 @@ scan r=reqContend
 ----
 start-waiting: true
 
-acquire r=req2 k=a durability=r
+acquire r=req2 k=a durability=r strength=intent
 ----
 num=1
  lock: "a"
@@ -84,10 +84,10 @@ num=1
 new-txn txn=txn1 ts=10 epoch=1 seq=1
 ----
 
-new-request r=req3 txn=txn1 ts=10 spans=intent@a
+new-request r=req3 txn=txn1 ts=10 spans=exclusive@a
 ----
 
-acquire r=req3 k=a durability=u
+acquire r=req3 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -102,10 +102,10 @@ num=1
 new-txn txn=txn1 ts=6 epoch=2 seq=0
 ----
 
-new-request r=req4 txn=txn1 ts=6 spans=intent@a
+new-request r=req4 txn=txn1 ts=6 spans=exclusive@a
 ----
 
-acquire r=req4 k=a durability=u
+acquire r=req4 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -138,10 +138,10 @@ num=1
 new-txn txn=txn1 ts=14 epoch=2 seq=1
 ----
 
-new-request r=req6 txn=txn1 ts=14 spans=intent@a
+new-request r=req6 txn=txn1 ts=14 spans=intent@a+exclusive@a
 ----
 
-acquire r=req6 k=a durability=r
+acquire r=req6 k=a durability=r strength=intent
 ----
 num=1
  lock: "a"
@@ -154,7 +154,7 @@ guard-state r=req5
 ----
 old: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
 
-acquire r=req6 k=a durability=u
+acquire r=req6 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -214,14 +214,13 @@ num=1
 new-txn txn=txn1 ts=14 epoch=1 seq=1
 ----
 
-new-request r=req8 txn=txn1 ts=14 spans=none@a
+new-request r=req8 txn=txn1 ts=14 spans=exclusive@a
 ----
 
 scan r=req8
 ----
 start-waiting: false
 
-acquire r=req8 k=a durability=u
+acquire r=req8 k=a durability=u strength=exclusive
 ----
 locking request with epoch 1 came after lock(unreplicated) had already been acquired at epoch 2 in txn 00000000-0000-0000-0000-000000000001
-

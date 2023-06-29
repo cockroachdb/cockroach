@@ -14,7 +14,7 @@ new-txn txn=txn3 ts=14,1 epoch=0
 # Acquire a lock on key a at timestamp 10,1
 # -------------------------------------------------------------
 
-new-request r=req1 txn=txn1 ts=10,1 spans=intent@a
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
 scan r=req1
@@ -25,7 +25,7 @@ guard-state r=req1
 ----
 new: state=doneWaiting
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -386,10 +386,10 @@ new-lock-table maxlocks=10000
 new-txn txn=txn1 ts=10 epoch=1 seq=1
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=intent@a
+new-request r=req1 txn=txn1 ts=10 spans=exclusive@a
 ----
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -398,10 +398,10 @@ num=1
 new-txn txn=txn1 ts=10 epoch=1 seq=5
 ----
 
-new-request r=req2 txn=txn1 ts=10 spans=intent@a
+new-request r=req2 txn=txn1 ts=10 spans=exclusive@a
 ----
 
-acquire r=req2 k=a durability=u
+acquire r=req2 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -410,10 +410,10 @@ num=1
 new-txn txn=txn1 ts=10 epoch=1 seq=7
 ----
 
-new-request r=req3 txn=txn1 ts=10 spans=intent@a
+new-request r=req3 txn=txn1 ts=10 spans=exclusive@a
 ----
 
-acquire r=req3 k=a durability=u
+acquire r=req3 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -422,10 +422,10 @@ num=1
 new-txn txn=txn1 ts=10 epoch=1 seq=10
 ----
 
-new-request r=req4 txn=txn1 ts=10 spans=intent@a
+new-request r=req4 txn=txn1 ts=10 spans=exclusive@a
 ----
 
-acquire r=req4 k=a durability=u
+acquire r=req4 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
