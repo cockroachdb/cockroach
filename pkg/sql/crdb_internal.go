@@ -216,6 +216,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalKVFlowHandlesID:                    crdbInternalKVFlowHandles,
 		catconstants.CrdbInternalKVFlowControllerID:                 crdbInternalKVFlowController,
 		catconstants.CrdbInternalKVFlowTokenDeductions:              crdbInternalKVFlowTokenDeductions,
+		catconstants.CrdbInternalRepairableCatalogCorruptionsViewID: crdbInternalRepairableCatalogCorruptions,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -6164,6 +6165,75 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		}
 		return nil
 	},
+}
+
+var crdbInternalRepairableCatalogCorruptions = virtualSchemaView{
+	comment: "known corruptions in the catalog which can be repaired using builtin functions like " +
+		"crdb_internal.repaired",
+	resultColumns: colinfo.ResultColumns{
+		{Name: "parent_id", Typ: types.Int},
+		{Name: "parent_schema_id", Typ: types.Int},
+		{Name: "name", Typ: types.String},
+		{Name: "id", Typ: types.Int},
+		{Name: "corruption", Typ: types.String},
+	},
+	schema: `
+CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
+	parent_id,
+	parent_schema_id,
+	name,
+	id,
+	corruption
+) AS
+	WITH
+		data
+			AS (
+				SELECT
+					ns."parentID" AS parent_id,
+					ns."parentSchemaID" AS parent_schema_id,
+					ns.name,
+					COALESCE(ns.id, d.id) AS id,
+					d.descriptor,
+					crdb_internal.descriptor_with_post_deserialization_changes(d.descriptor)
+						AS updated_descriptor,
+					crdb_internal.repaired_descriptor(
+						d.descriptor,
+						(SELECT array_agg(id) AS desc_id_array FROM system.descriptor),
+						(
+							SELECT
+								array_agg(id) AS job_id_array
+							FROM
+								system.jobs
+							WHERE
+								status NOT IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+						)
+					)
+						AS repaired_descriptor
+				FROM
+					system.namespace AS ns FULL JOIN system.descriptor AS d ON ns.id = d.id
+			),
+		diag
+			AS (
+				SELECT
+					*,
+					CASE
+					WHEN descriptor IS NULL AND id != 29 THEN 'namespace'
+					WHEN updated_descriptor != repaired_descriptor THEN 'descriptor'
+					ELSE NULL
+					END
+						AS corruption
+				FROM
+					data
+			)
+	SELECT
+		parent_id, parent_schema_id, name, id, corruption
+	FROM
+		diag
+	WHERE
+		corruption IS NOT NULL
+	ORDER BY
+		parent_id, parent_schema_id, name, id
+`,
 }
 
 var crdbInternalDefaultPrivilegesTable = virtualSchemaTable{
