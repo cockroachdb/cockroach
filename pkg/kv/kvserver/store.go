@@ -101,10 +101,6 @@ const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount = 10
 
-	// defaultRaftEntryCacheSize is the default size in bytes for a
-	// store's Raft log entry cache.
-	defaultRaftEntryCacheSize = 1 << 24 // 16M
-
 	// replicaQueueExtraSize is the number of requests that a replica's incoming
 	// message queue can keep over RaftConfig.RaftMaxInflightMsgs. When the leader
 	// maxes out RaftMaxInflightMsgs, we want the receiving replica to still have
@@ -133,6 +129,14 @@ var defaultRaftSchedulerConcurrency = envutil.EnvOrDefaultInt(
 // maximum of 6 shards. This significantly relieves contention at high core
 // counts, while also avoiding starvation by excessive sharding.
 var defaultRaftSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
+
+// defaultRaftEntryCacheSize is the default size in bytes for a store's Raft
+// entry cache. The Raft entry cache is shared by all Raft groups managed by the
+// store. It is used to cache uncommitted raft log entries such that once those
+// entries are committed, their application can avoid disk reads to retrieve
+// them from the persistent log.
+var defaultRaftEntryCacheSize = envutil.EnvOrDefaultBytes(
+	"COCKROACH_RAFT_ENTRY_CACHE_SIZE", 16<<20 /* 16 MiB */)
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
@@ -1203,7 +1207,7 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 		sc.RaftSchedulerShardSize = defaultRaftSchedulerShardSize
 	}
 	if sc.RaftEntryCacheSize == 0 {
-		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
+		sc.RaftEntryCacheSize = uint64(defaultRaftEntryCacheSize)
 	}
 	if envutil.EnvOrDefaultBool("COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false) {
 		sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
