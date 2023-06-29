@@ -306,3 +306,79 @@ func expectMetadata(t *testing.T, c *connector, exp string) <-chan struct{} {
 
 	return updateCh
 }
+
+// TestCrossVersionMetadataSupport tests that and old-version
+// connector can talk to a new-version server and a new-version server
+// can talk to an old-version connector.
+func TestCrossVersionMetadataSupport(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, b := range []bool{false, true} {
+		oldVersionClient := b
+		oldVersionServer := !b
+		strs := map[bool]string{false: "new", true: "old"}
+		t.Run(fmt.Sprintf("client=%s/server=%s", strs[oldVersionClient], strs[oldVersionServer]), func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			clock := hlc.NewClockForTesting(nil)
+			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+			s, err := rpc.NewServer(rpcContext)
+			require.NoError(t, err)
+
+			gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
+				return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
+			}
+			server := &mockServer{
+				gossipSubFn:                    gossipSubFn,
+				emulateOldVersionSettingServer: oldVersionServer,
+			}
+			kvpb.RegisterInternalServer(s, server)
+			ln, err := netutil.ListenAndServeGRPC(stopper, s, util.TestAddr)
+			require.NoError(t, err)
+
+			cfg := ConnectorConfig{
+				TenantID:        roachpb.MustMakeTenantID(5),
+				AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
+				RPCContext:      rpcContext,
+				RPCRetryOptions: rpcRetryOpts,
+			}
+			addrs := []string{ln.Addr().String()}
+			c := newConnector(cfg, addrs)
+			c.testingEmulateOldVersionSettingsClient = oldVersionClient
+
+			// Start the connector.
+			startedC := make(chan error)
+			go func() {
+				startedC <- c.Start(ctx)
+			}()
+			select {
+			case err := <-startedC:
+				require.NoError(t, err)
+			case <-time.After(10 * time.Second):
+				t.Fatalf("failed to see start complete")
+			}
+
+			// In any case check that the overrides are available.
+			func() {
+				t.Helper()
+				c.settingsMu.Lock()
+				defer c.settingsMu.Unlock()
+
+				require.True(t, c.settingsMu.receivedFirstAllTenantOverrides)
+				require.True(t, c.settingsMu.receivedFirstSpecificOverrides)
+			}()
+
+			// If either the client or the server is new, the metadata is
+			// not communicated or not processed.
+			receivedFirstMetadata := func() bool {
+				c.metadataMu.Lock()
+				defer c.metadataMu.Unlock()
+				return c.metadataMu.receivedFirstMetadata
+			}()
+			require.False(t, receivedFirstMetadata)
+			expectMetadata(t, c, `tid=5 name="" data=add service=none caps=<nil>`)
+		})
+	}
+}
