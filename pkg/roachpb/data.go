@@ -1979,16 +1979,15 @@ func AsIntents(txn *enginepb.TxnMeta, keys []Key) []Intent {
 }
 
 // MakeLockAcquisition makes a lock acquisition message from the given
-// txn, key, and durability level.
-func MakeLockAcquisition(txn *Transaction, key Key, dur lock.Durability) LockAcquisition {
+// txn, key, durability level, and lock strength.
+func MakeLockAcquisition(
+	txn *Transaction, key Key, dur lock.Durability, str lock.Strength,
+) LockAcquisition {
 	return LockAcquisition{
-		Span:       Span{Key: key},
-		Txn:        txn.TxnMeta,
-		Durability: dur,
-		// TODO(arul): The lock table only supports/expects locks with Intent lock
-		// strength. This will change once we generalize the lock table for
-		// different strengths.
-		Strength:       lock.Intent,
+		Span:           Span{Key: key},
+		Txn:            txn.TxnMeta,
+		Durability:     dur,
+		Strength:       str,
 		IgnoredSeqNums: txn.IgnoredSeqNums,
 	}
 }

@@ -8,19 +8,19 @@ new-lock-table maxlocks=10000
 new-txn txn=txn1 ts=10,1 epoch=0 seq=1
 ----
 
-new-request r=req1 txn=txn1 ts=10,1 spans=intent@a
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
 new-txn txn=txn1 ts=10,1 epoch=0 seq=2
 ----
 
-new-request r=req2 txn=txn1 ts=10,1 spans=intent@a
+new-request r=req2 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
 new-txn txn=txn1 ts=10,1 epoch=0 seq=3
 ----
 
-new-request r=req3 txn=txn1 ts=10,1 spans=intent@a
+new-request r=req3 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
 scan r=req1
@@ -31,19 +31,19 @@ scan r=req2
 ----
 start-waiting: false
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [1]
 
-acquire r=req2 k=a durability=u
+acquire r=req2 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [1, 2]
 
-acquire r=req3 k=a durability=u
+acquire r=req3 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -58,10 +58,10 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=5
 ----
 
-new-request r=req4 txn=txn1 ts=10,1 spans=intent@a
+new-request r=req4 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
-acquire r=req4 k=a durability=u ignored-seqs=1,3
+acquire r=req4 k=a durability=u ignored-seqs=1,3 strength=exclusive
 ----
 num=1
  lock: "a"
@@ -75,10 +75,10 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=8
 ----
 
-new-request r=req5 txn=txn1 ts=10,1 spans=intent@a
+new-request r=req5 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
-acquire r=req5 k=a durability=u ignored-seqs=4
+acquire r=req5 k=a durability=u ignored-seqs=4 strength=exclusive
 ----
 num=1
  lock: "a"
@@ -111,7 +111,7 @@ new-request r=req7 txn=txn1 ts=10,1 spans=intent@a
 # Because the lock is being acquired as a replicated lock nothing in the
 # unreplicated sequence number tracking gets pruned.
 
-acquire r=req7 k=a durability=r ignored-seqs=8
+acquire r=req7 k=a durability=r ignored-seqs=8 strength=intent
 ----
 num=1
  lock: "a"
@@ -122,7 +122,10 @@ num=1
 
 # However, unreplicated lock acquisition with the same ignored sequence number
 # (8) will result in the list of sequence numbers getting pruned.
-acquire r=req7 k=a durability=u ignored-seqs=8
+new-request r=req8 txn=txn1 ts=10,1 spans=exclusive@a
+----
+
+acquire r=req8 k=a durability=u ignored-seqs=8 strength=exclusive
 ----
 num=1
  lock: "a"
@@ -139,13 +142,13 @@ num=1
 new-txn txn=txn1 ts=10,1 epoch=0 seq=11
 ----
 
-new-request r=req8 txn=txn1 ts=10,1 spans=intent@a
+new-request r=req9 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
 # Note that 9 is held as both replicated and unreplicated; however it won't be
 # removed from the replicated list.
 
-acquire r=req8 k=a durability=u ignored-seqs=2-5,9
+acquire r=req9 k=a durability=u ignored-seqs=2-5,9 strength=exclusive
 ----
 num=1
  lock: "a"
@@ -164,10 +167,10 @@ num=1
 new-txn txn=txn1 ts=11,1 epoch=1 seq=12
 ----
 
-new-request r=req9 txn=txn1 ts=11,1 spans=intent@a
+new-request r=req10 txn=txn1 ts=11,1 spans=intent@a
 ----
 
-acquire r=req9 k=a durability=r
+acquire r=req10 k=a durability=r strength=intent
 ----
 num=1
  lock: "a"
