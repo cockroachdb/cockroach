@@ -49,12 +49,16 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	b.trackSchemaDeps = true
 	// Make sure datasource names are qualified.
 	b.qualifyDataSourceNamesInAST = true
+	oldEvalCtxAnn := b.evalCtx.Annotations
+	oldSemaCtxAnn := b.semaCtx.Annotations
 	defer func() {
 		b.insideFuncDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
+		b.evalCtx.Annotations = oldEvalCtxAnn
+		b.semaCtx.Annotations = oldSemaCtxAnn
 
 		b.semaCtx.FunctionResolver = preFuncResolver
 		switch recErr := recover().(type) {
@@ -162,8 +166,18 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 
 	targetVolatility := tree.GetFuncVolatility(cf.Options)
 	// Validate each statement and collect the dependencies.
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
 	for i, stmt := range stmts {
+		// Add statement ast into CreateFunction node for logging purpose, and set
+		// the annotations for this statement so names can be resolved.
+		cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
+		ann := tree.MakeAnnotations(stmt.NumAnnotations)
+		cf.BodyAnnotations = append(cf.BodyAnnotations, &ann)
+
+		// The defer logic will reset the annotations to the old value.
+		b.semaCtx.Annotations = ann
+		b.evalCtx.Annotations = &ann
+
 		var stmtScope *scope
 		// We need to disable stable function folding because we want to catch the
 		// volatility of stable functions. If folded, we only get a scalar and lose
@@ -190,11 +204,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 
 		deps = append(deps, b.schemaDeps...)
 		typeDeps.UnionWith(b.schemaTypeDeps)
-		// Add statement ast into CreateFunction node for logging purpose.
-		cf.BodyStatements = append(cf.BodyStatements, stmt.AST)
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
+
+		// Reset the annotations to the original values
+		b.evalCtx.Annotations = oldEvalCtxAnn
+		b.semaCtx.Annotations = oldSemaCtxAnn
 	}
 
 	if targetVolatility == tree.FunctionImmutable && len(deps) > 0 {
@@ -209,7 +225,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	// Override the function body so that references are fully qualified.
 	for i, option := range cf.Options {
 		if _, ok := option.(tree.FunctionBodyStr); ok {
-			cf.Options[i] = tree.FunctionBodyStr(fmtCtx.String())
+			cf.Options[i] = tree.FunctionBodyStr(fmtCtx.CloseAndGetString())
 			break
 		}
 	}
