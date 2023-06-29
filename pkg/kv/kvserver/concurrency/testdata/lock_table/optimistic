@@ -9,7 +9,7 @@ new-txn txn=txn2 ts=11,1 epoch=0
 
 # req1 will acquire locks for txn1
 
-new-request r=req1 txn=txn1 ts=10,1 spans=intent@c,h
+new-request r=req1 txn=txn1 ts=10,1 spans=exclusive@c,h
 ----
 
 scan r=req1
@@ -20,13 +20,13 @@ should-wait r=req1
 ----
 false
 
-acquire r=req1 k=c durability=u
+acquire r=req1 k=c durability=u strength=exclusive
 ----
 num=1
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,1, info: unrepl seqs: [0]
 
-acquire r=req1 k=g durability=u
+acquire r=req1 k=g durability=u strength=exclusive
 ----
 num=2
  lock: "c"
