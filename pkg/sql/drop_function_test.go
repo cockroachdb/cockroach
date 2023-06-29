@@ -133,10 +133,8 @@ SELECT nextval(105:::REGCLASS);`,
 		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
 		require.Equal(t, "notmyworkday", typ.GetName())
-		require.Equal(t,
-			[]descpb.ID{109},
-			typ.GetReferencingDescriptorIDs(),
-		)
+		require.Equal(t, 1, typ.NumReferencingDescriptors())
+		require.Equal(t, descpb.ID(109), typ.GetReferencingDescriptorID(0))
 
 		return nil
 	})
@@ -176,7 +174,7 @@ SELECT nextval(105:::REGCLASS);`,
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
 		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
-		require.Nil(t, typ.GetReferencingDescriptorIDs())
+		require.Zero(t, typ.NumReferencingDescriptors())
 
 		return nil
 	})

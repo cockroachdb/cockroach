@@ -13,6 +13,7 @@ package evalcatalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -58,11 +59,11 @@ func (b *Builtins) RedactDescriptor(_ context.Context, encodedDescriptor []byte)
 	return protoutil.Marshal(&descProto)
 }
 
-// DescriptorWithPostDeserializationChanges expects an encoded protobuf
-// descriptor, decodes it, puts it into a catalog.DescriptorBuilder,
-// calls RunPostDeserializationChanges, and re-encodes it.
-func (b *Builtins) DescriptorWithPostDeserializationChanges(
-	_ context.Context, encodedDescriptor []byte,
+func (b *Builtins) RepairedDescriptor(
+	_ context.Context,
+	encodedDescriptor []byte,
+	descIDMightExist func(id descpb.ID) bool,
+	nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 ) ([]byte, error) {
 	// Use the largest-possible timestamp as a sentinel value when decoding the
 	// descriptor bytes. This will be used to set the modification time field in
@@ -78,7 +79,7 @@ func (b *Builtins) DescriptorWithPostDeserializationChanges(
 	if db == nil {
 		return nil, pgerror.New(pgcode.InvalidBinaryRepresentation, "empty descriptor")
 	}
-	if err := db.RunPostDeserializationChanges(); err != nil {
+	if err := db.StripDanglingBackReferences(descIDMightExist, nonTerminalJobIDMightExist); err != nil {
 		return nil, err
 	}
 	mut := db.BuildCreatedMutable()

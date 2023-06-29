@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -121,11 +122,17 @@ type CatalogBuiltins interface {
 	// redacts its expressions, and re-encodes it.
 	RedactDescriptor(ctx context.Context, encodedDescriptor []byte) ([]byte, error)
 
-	// DescriptorWithPostDeserializationChanges expects an encoded protobuf
-	// descriptor, decodes it, puts it into a catalog.DescriptorBuilder,
-	// calls RunPostDeserializationChanges, and re-encodes it.
-	DescriptorWithPostDeserializationChanges(
-		ctx context.Context, encodedDescriptor []byte,
+	// RepairedDescriptor expects an encoded protobuf descriptor,
+	// decodes it,
+	// puts it into a catalog.DescriptorBuilder,
+	// calls RunPostDeserializationChanges,
+	// calls StripDanglingBackReferences,
+	// and re-encodes it.
+	RepairedDescriptor(
+		ctx context.Context,
+		encodedDescriptor []byte,
+		descIDMightExist func(id descpb.ID) bool,
+		nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 	) ([]byte, error)
 }
 
