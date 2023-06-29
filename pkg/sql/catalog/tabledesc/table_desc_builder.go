@@ -317,6 +317,7 @@ func maybeFillInDescriptor(
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
 	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
+	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(desc))
 	return changes, nil
 }
 
@@ -891,6 +892,21 @@ func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged 
 		}
 		if !colIDsUsed.Empty() {
 			ck.ColumnIDs = colIDsUsed.Ordered()
+			hasChanged = true
+		}
+	}
+	return hasChanged
+}
+
+func maybeFixSecondaryIndexEncodingType(desc *descpb.TableDescriptor) (hasChanged bool) {
+	if desc.DeclarativeSchemaChangerState != nil || len(desc.Mutations) > 0 {
+		// Don't try to fix the encoding type if a schema change is in progress.
+		return false
+	}
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.EncodingType != catenumpb.SecondaryIndexEncoding {
+			idx.EncodingType = catenumpb.SecondaryIndexEncoding
 			hasChanged = true
 		}
 	}

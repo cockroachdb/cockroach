@@ -109,5 +109,9 @@ const (
 
 	// UpgradedDeclarativeSchemaChangerState indicates the declarative schema changer
 	// state was modified.
-	UpgradedDeclarativeSchemaChangerState = 15
+	UpgradedDeclarativeSchemaChangerState
+
+	// FixSecondaryIndexEncodingType indicates that a secondary index had its
+	// encoding type fixed, so it is not incorrectly marked as a primary index.
+	FixSecondaryIndexEncodingType
 )
