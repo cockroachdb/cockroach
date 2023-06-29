@@ -515,6 +515,7 @@ go_test(
         "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd//raft",
         "@io_etcd_go_raft_v3//:raft",
         "@io_etcd_go_raft_v3//confchange",
         "@io_etcd_go_raft_v3//raftpb",

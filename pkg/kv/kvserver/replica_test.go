@@ -75,7 +75,7 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/raft/v3"
+	"go.etcd.io/etcd/raft"
 	"go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
 )
@@ -10813,7 +10813,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				expTS = ba.Txn.WriteTimestamp
 
 				scan := scanArgs(roachpb.Key("lscan"), roachpb.Key("lscan\x00"))
-				scan.KeyLocking = lock.Update
+				scan.KeyLocking = lock.Exclusive
 				ba.Add(scan)
 				return
 			},
