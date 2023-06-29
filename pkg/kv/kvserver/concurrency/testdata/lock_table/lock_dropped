@@ -10,10 +10,10 @@ new-lock-table maxlocks=10000
 new-txn txn=txn1 ts=10 epoch=0 seq=2
 ----
 
-new-request r=req1 txn=txn1 ts=10 spans=intent@a
+new-request r=req1 txn=txn1 ts=10 spans=intent@a+exclusive@a
 ----
 
-acquire r=req1 k=a durability=r
+acquire r=req1 k=a durability=r strength=intent
 ----
 num=0
 
@@ -22,13 +22,13 @@ num=0
 # lock to be dropped.
 # ---------------------------------------------------------------------------------
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, ts: 10.000000000,0, info: unrepl seqs: [2]
 
-acquire r=req1 k=a durability=r
+acquire r=req1 k=a durability=r strength=intent
 ----
 num=0
 
@@ -40,7 +40,7 @@ num=0
 new-request r=reqContendReader txn=none ts=10 spans=none@a
 ----
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -59,7 +59,7 @@ num=1
     req: 1, txn: none
    distinguished req: 1
 
-acquire r=req1 k=a durability=r
+acquire r=req1 k=a durability=r strength=intent
 ----
 num=0
 
@@ -75,7 +75,7 @@ new: state=doneWaiting
 new-request r=reqContendWriter txn=none ts=10 spans=intent@a
 ----
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -100,7 +100,7 @@ num=1
     active: true req: 2, txn: none
    distinguished req: 1
 
-acquire r=req1 k=a durability=r
+acquire r=req1 k=a durability=r strength=intent
 ----
 num=1
  lock: "a"
@@ -135,7 +135,7 @@ num=0
 # stall indefinitely.
 # ---------------------------------------------------------------------------------
 
-acquire r=req1 k=a durability=u
+acquire r=req1 k=a durability=u strength=exclusive
 ----
 num=1
  lock: "a"
@@ -144,10 +144,10 @@ num=1
 new-txn txn=txn2 ts=10 epoch=0 seq=0
 ----
 
-new-request r=req2 txn=txn2 ts=10 spans=intent@b
+new-request r=req2 txn=txn2 ts=10 spans=exclusive@b+intent@b
 ----
 
-acquire r=req2 k=b durability=u
+acquire r=req2 k=b durability=u strength=exclusive
 ----
 num=2
  lock: "a"
@@ -166,7 +166,7 @@ guard-state r=req3
 ----
 new: state=waitForDistinguished txn=txn1 key="a" held=true guard-strength=None
 
-acquire r=req2 k=b durability=r
+acquire r=req2 k=b durability=r strength=intent
 ----
 num=1
  lock: "a"
