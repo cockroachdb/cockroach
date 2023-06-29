@@ -95,7 +95,7 @@ func TestRoleBasedAuditEnterpriseGated(t *testing.T) {
 		0,
 		math.MaxInt64,
 		10000,
-		regexp.MustCompile(`"EventType":"role_based_audit_event"`),
+		regexp.MustCompile(`"Statement":"SHOW CLUSTER SETTING \\"sql.log.user_audit\\""`),
 		log.WithMarkedSensitiveData,
 	)
 
