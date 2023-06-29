@@ -1055,11 +1055,8 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 				nonRevertible = len(p.Stages) - postCommit
 			}, func(db *gosql.DB) {
 				tdb := sqlutils.MakeSQLRunner(db)
-				var ok bool
-				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetDescIDs(pl.TargetState))
-				if ok {
-					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-				}
+				dbName = maybeGetDatabaseFromIDs(t, tdb, screl.AllTargetDescIDs(pl.TargetState))
+				tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 				after = tdb.QueryStr(t, fetchDescriptorStateQuery)
 			})
 		return postCommit, nonRevertible
@@ -1472,10 +1469,10 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 	cumulativeTest(t, "Backup", path, testFunc)
 }
 
-func maybeGetDatabaseForIDs(
+func maybeGetDatabaseFromIDs(
 	t *testing.T, tdb *sqlutils.SQLRunner, ids catalog.DescriptorIDSet,
-) (dbName string, exists bool) {
-	err := tdb.DB.QueryRowContext(context.Background(), `
+) (dbName string) {
+	results := tdb.QueryStr(t, `
 SELECT name
   FROM system.namespace
  WHERE id
@@ -1493,14 +1490,12 @@ SELECT name
                      WHERE id IN (SELECT * FROM ROWS FROM (unnest($1::INT8[])))
                    )
         )
-`, pq.Array(ids.Ordered())).
-		Scan(&dbName)
-	if errors.Is(err, gosql.ErrNoRows) {
-		return "", false
+`, pq.Array(ids.Ordered()))
+	if len(results) != 1 {
+		skip.IgnoreLintf(t, "requires exactly 1 database to which schema change has"+
+			" happened; get %v: %v", len(results), results)
 	}
-
-	require.NoError(t, err)
-	return dbName, true
+	return results[0][0]
 }
 
 // processPlanInPhase will call processFunc with the plan as of the first
@@ -1808,11 +1803,8 @@ func BackupMixedVersionElements(t *testing.T, path string, newCluster NewMixedCl
 				nonRevertible = len(p.Stages) - postCommit
 			}, func(db *gosql.DB) {
 				tdb := sqlutils.MakeSQLRunner(db)
-				var ok bool
-				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetDescIDs(pl.TargetState))
-				if ok {
-					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-				}
+				dbName = maybeGetDatabaseFromIDs(t, tdb, screl.AllTargetDescIDs(pl.TargetState))
+				tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 				after = tdb.QueryStr(t, fetchDescriptorStateQuery)
 			})
 		return postCommit, nonRevertible
