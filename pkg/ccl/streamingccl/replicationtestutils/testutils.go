@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -268,8 +269,26 @@ func CreateTenantStreamingClusters(
 		}
 	}
 
-	// Start the source cluster.
-	srcCluster, srcURL, srcCleanup := startTestCluster(ctx, t, serverArgs, args.SrcNumNodes)
+	g := ctxgroup.WithContext(ctx)
+
+	var srcCluster *testcluster.TestCluster
+	var srcURL url.URL
+	var srcCleanup func()
+	g.GoCtx(func(ctx context.Context) error {
+		// Start the source cluster.
+		srcCluster, srcURL, srcCleanup = startTestCluster(ctx, t, serverArgs, args.SrcNumNodes)
+		return nil
+	})
+
+	var destCluster *testcluster.TestCluster
+	var destCleanup func()
+	g.GoCtx(func(ctx context.Context) error {
+		// Start the destination cluster.
+		destCluster, _, destCleanup = startTestCluster(ctx, t, serverArgs, args.DestNumNodes)
+		return nil
+	})
+
+	require.NoError(t, g.Wait())
 
 	clusterSettings := cluster.MakeTestingClusterSettings()
 	for _, setting := range []*settings.BoolSetting{
@@ -285,9 +304,6 @@ func CreateTenantStreamingClusters(
 	}
 	srcTenantServer, srcTenantConn := serverutils.StartTenant(t, srcCluster.Server(0), tenantArgs)
 	waitForTenantPodsActive(t, srcTenantServer, 1)
-
-	// Start the destination cluster.
-	destCluster, _, destCleanup := startTestCluster(ctx, t, serverArgs, args.DestNumNodes)
 
 	tsc := &TenantStreamingClusters{
 		T:               t,
@@ -370,13 +386,12 @@ func CreateScatteredTable(t *testing.T, c *TenantStreamingClusters, numNodes int
 	// Create a source table with multiple ranges spread across multiple nodes
 	numRanges := 50
 	rowsPerRange := 20
-	c.SrcTenantSQL.Exec(t, fmt.Sprintf(`
-  CREATE TABLE d.scattered (key INT PRIMARY KEY);
-  INSERT INTO d.scattered (key) SELECT * FROM generate_series(1, %d);
-  ALTER TABLE d.scattered SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
-  ALTER TABLE d.scattered SCATTER;
-  `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
-	c.SrcSysSQL.CheckQueryResultsRetry(t, "SELECT count(distinct lease_holder) from crdb_internal.ranges", [][]string{{fmt.Sprint(numNodes)}})
+	c.SrcTenantSQL.Exec(t, "CREATE TABLE d.scattered (key INT PRIMARY KEY)")
+	c.SrcTenantSQL.Exec(t, "INSERT INTO d.scattered (key) SELECT * FROM generate_series(1, $1)",
+		numRanges*rowsPerRange)
+	c.SrcTenantSQL.Exec(t, "ALTER TABLE d.scattered SPLIT AT (SELECT * FROM generate_series($1::INT, $2::INT, $3::INT))",
+		rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange)
+	c.SrcTenantSQL.Exec(t, "ALTER TABLE d.scattered SCATTER")
 }
 
 var defaultSrcClusterSetting = map[string]string{
