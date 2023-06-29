@@ -624,6 +624,7 @@ type GossipOperator interface {
 // to avoid circular dependency.
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
+	ResetActivityTables(ctx context.Context) error
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
 }
 

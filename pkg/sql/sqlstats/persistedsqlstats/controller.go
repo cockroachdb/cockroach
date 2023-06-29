@@ -59,32 +59,38 @@ func (s *Controller) ResetClusterSQLStats(ctx context.Context) error {
 		return err
 	}
 
-	resetSysTableStats := func(tableName string) (err error) {
-		ex := s.db.Executor()
-		_, err = ex.ExecEx(
-			ctx,
-			"reset-sql-stats",
-			nil, /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			"TRUNCATE "+tableName)
+	if err := s.resetSysTableStats(ctx, "system.statement_statistics"); err != nil {
 		return err
 	}
 
-	if err := resetSysTableStats("system.statement_statistics"); err != nil {
+	if err := s.resetSysTableStats(ctx, "system.transaction_statistics"); err != nil {
 		return err
 	}
 
-	if err := resetSysTableStats("system.transaction_statistics"); err != nil {
-		return err
-	}
+	return s.ResetActivityTables(ctx)
+}
 
+// ResetActivityTables implements the tree.SQLStatsController interface. This
+// method resets the {statement|transaction}_activity system tables.
+func (s *Controller) ResetActivityTables(ctx context.Context) error {
 	if !s.st.Version.IsActive(ctx, clusterversion.V23_1CreateSystemActivityUpdateJob) {
 		return nil
 	}
 
-	if err := resetSysTableStats("system.statement_activity"); err != nil {
+	if err := s.resetSysTableStats(ctx, "system.statement_activity"); err != nil {
 		return err
 	}
 
-	return resetSysTableStats("system.transaction_activity")
+	return s.resetSysTableStats(ctx, "system.transaction_activity")
+}
+
+func (s *Controller) resetSysTableStats(ctx context.Context, tableName string) (err error) {
+	ex := s.db.Executor()
+	_, err = ex.ExecEx(
+		ctx,
+		"reset-sql-stats",
+		nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"TRUNCATE "+tableName)
+	return err
 }

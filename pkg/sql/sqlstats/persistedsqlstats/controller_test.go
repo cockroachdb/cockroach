@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -161,4 +163,100 @@ WHERE app_name = $1
 		require.True(t, found,
 			`expected %s to be found in txn stats, but it was not.`, query)
 	}
+}
+
+func TestActivityTablesReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	defer s.Stopper().Stop(context.Background())
+
+	// Disable sql activity flush job.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.activity.flush.enabled = false`)
+
+	testutils.SucceedsSoon(t, func() error {
+		var enabled bool
+		sqlDB.QueryRow(t,
+			"SHOW CLUSTER SETTING sql.stats.activity.flush.enabled",
+		).Scan(&enabled)
+		if enabled == true {
+			return errors.Newf("waiting for sql activity job to be disabled")
+		}
+		return nil
+	})
+
+	// Give the query runner privilege to insert into the activity tables.
+	sqlDB.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+	sqlDB.Exec(t, "GRANT node TO root")
+
+	// Insert into system.statement_activity table
+	sqlDB.Exec(t, `
+		INSERT INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
+                                       agg_interval, metadata, statistics, plan, index_recommendations, execution_count,
+                                       execution_total_seconds, execution_total_cluster_seconds,
+                                       contention_time_avg_seconds,
+                                       cpu_sql_avg_nanos,
+                                       service_latency_avg_seconds, service_latency_p99_seconds)
+		VALUES (
+			'2023-06-29 15:00:00+00',
+			'\x125167e869920859',
+			'\xbd32daa4ef93bf86',
+			'\x0fa54115f7caf3e6',
+			'activity_tables_reset',
+			'01:00:00',
+			'{"db": "", "distsql": false, "failed": false, "fullScan": false, "implicitTxn": true, "query": "SELECT id FROM system.jobs", "querySummary": "SELECT id FROM system.jobs", "stmtType": "TypeDML", "vec": true}',
+			'{"execution_statistics": {"cnt": 1, "contentionTime": {"mean": 0, "sqDiff": 0}, "cpuSQLNanos": {"mean": 133623, "sqDiff": 0}, "maxDiskUsage": {"mean": 0, "sqDiff": 0}, "maxMemUsage": {"mean": 3.072E+4, "sqDiff": 0}, "mvccIteratorStats": {"blockBytes": {"mean": 28086, "sqDiff": 0}, "blockBytesInCache": {"mean": 0, "sqDiff": 0}, "keyBytes": {"mean": 0, "sqDiff": 0}, "pointCount": {"mean": 6, "sqDiff": 0}, "pointsCoveredByRangeTombstones": {"mean": 0, "sqDiff": 0}, "rangeKeyContainedPoints": {"mean": 0, "sqDiff": 0}, "rangeKeyCount": {"mean": 0, "sqDiff": 0}, "rangeKeySkippedPoints": {"mean": 0, "sqDiff": 0}, "seekCount": {"mean": 2, "sqDiff": 0}, "seekCountInternal": {"mean": 2, "sqDiff": 0}, "stepCount": {"mean": 6, "sqDiff": 0}, "stepCountInternal": {"mean": 6, "sqDiff": 0}, "valueBytes": {"mean": 39, "sqDiff": 0}}, "networkBytes": {"mean": 0, "sqDiff": 0}, "networkMsgs": {"mean": 0, "sqDiff": 0}}, "index_recommendations": [], "statistics": {"bytesRead": {"mean": 432, "sqDiff": 0}, "cnt": 1, "firstAttemptCnt": 1, "idleLat": {"mean": 0, "sqDiff": 0}, "indexes": ["15@4"], "lastErrorCode": "", "lastExecAt": "2023-06-29T15:33:11.042902Z", "latencyInfo": {"max": 0.00142586, "min": 0.00142586, "p50": 0, "p90": 0, "p99": 0}, "maxRetries": 0, "nodes": [3], "numRows": {"mean": 3, "sqDiff": 0}, "ovhLat": {"mean": 0.000012357999999999857, "sqDiff": 0}, "parseLat": {"mean": 0, "sqDiff": 0}, "planGists": ["AgEeCACHDwIAAAMFAgYC"], "planLat": {"mean": 0.000655272, "sqDiff": 0}, "regions": ["us-east1"], "rowsRead": {"mean": 3, "sqDiff": 0}, "rowsWritten": {"mean": 0, "sqDiff": 0}, "runLat": {"mean": 0.00075823, "sqDiff": 0}, "svcLat": {"mean": 0.00142586, "sqDiff": 0}}}',
+			'{"Children": [], "Name": ""}',
+			'{}',
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1
+		)
+	`)
+	// Insert into system.transaction_activity table
+	sqlDB.Exec(t, `
+		INSERT INTO system.public.transaction_activity (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
+ statistics, query, execution_count, execution_total_seconds,
+ execution_total_cluster_seconds, contention_time_avg_seconds, 
+ cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
+		VALUES (
+			'2023-06-29 15:00:00+00',
+			'\x125167e869920859',
+			'activity_tables_reset',
+			'01:00:00',
+			'{"db": "", "distsql": false, "failed": false, "fullScan": false, "implicitTxn": true, "query": "SELECT id FROM system.jobs", "querySummary": "SELECT id FROM system.jobs", "stmtType": "TypeDML", "vec": true}',
+			'{"execution_statistics": {"cnt": 1, "contentionTime": {"mean": 0, "sqDiff": 0}, "cpuSQLNanos": {"mean": 133623, "sqDiff": 0}, "maxDiskUsage": {"mean": 0, "sqDiff": 0}, "maxMemUsage": {"mean": 3.072E+4, "sqDiff": 0}, "mvccIteratorStats": {"blockBytes": {"mean": 28086, "sqDiff": 0}, "blockBytesInCache": {"mean": 0, "sqDiff": 0}, "keyBytes": {"mean": 0, "sqDiff": 0}, "pointCount": {"mean": 6, "sqDiff": 0}, "pointsCoveredByRangeTombstones": {"mean": 0, "sqDiff": 0}, "rangeKeyContainedPoints": {"mean": 0, "sqDiff": 0}, "rangeKeyCount": {"mean": 0, "sqDiff": 0}, "rangeKeySkippedPoints": {"mean": 0, "sqDiff": 0}, "seekCount": {"mean": 2, "sqDiff": 0}, "seekCountInternal": {"mean": 2, "sqDiff": 0}, "stepCount": {"mean": 6, "sqDiff": 0}, "stepCountInternal": {"mean": 6, "sqDiff": 0}, "valueBytes": {"mean": 39, "sqDiff": 0}}, "networkBytes": {"mean": 0, "sqDiff": 0}, "networkMsgs": {"mean": 0, "sqDiff": 0}}, "index_recommendations": [], "statistics": {"bytesRead": {"mean": 432, "sqDiff": 0}, "cnt": 1, "firstAttemptCnt": 1, "idleLat": {"mean": 0, "sqDiff": 0}, "indexes": ["15@4"], "lastErrorCode": "", "lastExecAt": "2023-06-29T15:33:11.042902Z", "latencyInfo": {"max": 0.00142586, "min": 0.00142586, "p50": 0, "p90": 0, "p99": 0}, "maxRetries": 0, "nodes": [3], "numRows": {"mean": 3, "sqDiff": 0}, "ovhLat": {"mean": 0.000012357999999999857, "sqDiff": 0}, "parseLat": {"mean": 0, "sqDiff": 0}, "planGists": ["AgEeCACHDwIAAAMFAgYC"], "planLat": {"mean": 0.000655272, "sqDiff": 0}, "regions": ["us-east1"], "rowsRead": {"mean": 3, "sqDiff": 0}, "rowsWritten": {"mean": 0, "sqDiff": 0}, "runLat": {"mean": 0.00075823, "sqDiff": 0}, "svcLat": {"mean": 0.00142586, "sqDiff": 0}}}',
+			'SELECT id FROM system.jobs',
+			1,
+			1,
+			1,
+			1,
+			1,
+			1,
+			1
+		)
+	`)
+
+	// Check that system.{statement|transaction} activity tables both have 1 row.
+	var count int
+	sqlDB.QueryRow(t, "SELECT count(*) FROM system.statement_activity").Scan(&count)
+	require.Equal(t, 1 /* expected */, count)
+
+	sqlDB.QueryRow(t, "SELECT count(*) FROM system.transaction_activity").Scan(&count)
+	require.Equal(t, 1 /* expected */, count)
+
+	// Flush the tables.
+	sqlDB.QueryRow(t, "SELECT crdb_internal.reset_activity_tables()")
+
+	sqlDB.QueryRow(t, "SELECT count(*) FROM system.statement_activity").Scan(&count)
+	require.Equal(t, 0 /* expected */, count)
+
+	sqlDB.QueryRow(t, "SELECT count(*) FROM system.transaction_activity").Scan(&count)
+	require.Equal(t, 0 /* expected */, count)
 }

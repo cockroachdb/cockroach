@@ -3236,6 +3236,8 @@ that has execution latency greater than the ‘minExecutionLatency’. If the
 ‘expiresAfter’ argument is empty, then the statement bundle request never
 expires until the statement bundle is collected</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.reset_activity_tables"></a><code>crdb_internal.reset_activity_tables() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the {statement|transaction} activity system tables.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.reset_index_usage_stats"></a><code>crdb_internal.reset_index_usage_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected index usage statistics.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.reset_sql_stats"></a><code>crdb_internal.reset_sql_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected SQL statistics.</p>
