@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
@@ -60,6 +61,9 @@ func TestWatcher(t *testing.T) {
 		t.Helper()
 		var vals []string
 		for _, s := range overrides {
+			if s.Name == clusterversion.KeyVersionSetting {
+				continue
+			}
 			vals = append(vals, fmt.Sprintf("%s=%s", s.Name, s.Value.Value))
 		}
 		if actual := strings.Join(vals, " "); actual != expected {
