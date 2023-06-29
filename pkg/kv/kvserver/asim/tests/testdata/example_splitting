@@ -17,7 +17,7 @@ setting split_qps_threshold=2500
 
 # Assert that the number of replicas should not change at all during the last 6
 # ticks of the simulation.
-assertion stat=replicas type=steady ticks=6 threshold=0.00
+assertion stat=replicas type=steady ticks=6 upper_bound=0.00
 ----
 
 eval duration=5m samples=2 seed=42

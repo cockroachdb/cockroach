@@ -7,7 +7,7 @@ gen_ranges ranges=500 placement_skew=true
 set_capacity store=5 io_threshold=1
 ----
 
-assertion type=stat stat=replicas stores=(5) threshold=0 ticks=5
+assertion type=stat stat=replicas stores=(5) exact_bound=0 ticks=5
 ----
 
 eval duration=10m seed=42

@@ -11,10 +11,10 @@ gen_ranges ranges=14 placement_skew=true
 gen_load rate=7000
 ----
 
-assertion stat=leases type=balance ticks=6 threshold=1
+assertion stat=leases type=balance ticks=6 upper_bound=1
 ----
 
-assertion stat=leases type=steady ticks=6 threshold=0
+assertion stat=leases type=steady ticks=6 upper_bound=0
 ----
 
 eval duration=5m seed=42
