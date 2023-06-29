@@ -83,7 +83,6 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	if stmt.Locality != nil {
 		isRbr = stmt.Locality.LocalityLevel == tree.LocalityLevelRow
 		isRbt = stmt.Locality.LocalityLevel == tree.LocalityLevelTable
-		fmt.Println(isRbt)
 	}
 	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
