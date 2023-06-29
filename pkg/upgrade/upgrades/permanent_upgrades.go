@@ -135,11 +135,12 @@ func populateVersionSetting(
 
 	// Tenant ID 0 indicates that we're overriding the value for all
 	// tenants.
-	tenantID := tree.NewDInt(0)
 	_, err = ie.Exec(
 		ctx,
 		"insert-setting", nil, /* txn */
-		fmt.Sprintf(`INSERT INTO system.tenant_settings (tenant_id, name, value, "last_updated", "value_type") VALUES (%d, 'version', x'%x', now(), 'm') ON CONFLICT(tenant_id, name) DO NOTHING`, tenantID, b),
+		fmt.Sprintf(`
+INSERT INTO system.tenant_settings (tenant_id, name, value, last_updated, value_type)
+VALUES (0, 'version', x'%x', now(), 'm') ON CONFLICT(tenant_id, name) DO NOTHING`, b),
 	)
 	if err != nil {
 		return err

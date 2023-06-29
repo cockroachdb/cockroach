@@ -414,11 +414,12 @@ EXCEPT SELECT capability_name, capability_value FROM [SHOW TENANT othertenant WI
 ----
 
 # Check that the setting overrides were copied.
-query TTTT
-SELECT variable, value, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
+query TTTT rowsort
+SELECT variable, IF(variable='version','--',value), type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
 WHERE origin != 'no-override'
 ----
 trace.debug.enable  true  b  per-tenant-override
+version             --    m  all-tenants-override
 
 # Check that the resource usage parameters were copied.
 query IIRRRRI
@@ -462,11 +463,12 @@ EXCEPT SELECT capability_name, capability_value FROM [SHOW TENANT othertenant WI
 ----
 
 # Check the setting overrides were taken over.
-query TTTT
-SELECT variable, value, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
+query TTTT rowsort
+SELECT variable, IF(variable='version','--',value), type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT othertenant]
 WHERE origin != 'no-override'
 ----
 trace.debug.enable  true  b  per-tenant-override
+version             --    m  all-tenants-override
 
 # Check that the resource usage parameters were copied.
 query IIRRRRI
