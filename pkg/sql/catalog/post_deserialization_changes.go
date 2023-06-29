@@ -119,4 +119,8 @@ const (
 	// back-reference to something within the descriptor itself was removed
 	// from the descriptor.
 	StrippedDanglingSelfBackReferences
+
+	// FixSecondaryIndexEncodingType indicates that a secondary index had its
+	// encoding type fixed, so it is not incorrectly marked as a primary index.
+	FixSecondaryIndexEncodingType
 )
