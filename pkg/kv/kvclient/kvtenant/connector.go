@@ -191,8 +191,17 @@ type connector struct {
 		notifyCh chan struct{}
 	}
 
+	// testingEmulateOldVersionSettingsClient is set to true when the
+	// connector should emulate the version where it processed all
+	// events as settings events. Used only for testing.
+	testingEmulateOldVersionSettingsClient bool
+
 	metadataMu struct {
 		syncutil.Mutex
+
+		// receivedFirstMetadata is set to true when the first batch of
+		// metadata bits has been received.
+		receivedFirstMetadata bool
 
 		tenantName   roachpb.TenantName
 		dataState    mtinfopb.TenantDataState

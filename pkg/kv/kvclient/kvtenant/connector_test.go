@@ -53,6 +53,8 @@ type mockServer struct {
 	rangeLookupFn    func(context.Context, *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error)
 	gossipSubFn      func(*kvpb.GossipSubscriptionRequest, kvpb.Internal_GossipSubscriptionServer) error
 	tenantSettingsFn func(request *kvpb.TenantSettingsRequest, server kvpb.Internal_TenantSettingsServer) error
+
+	emulateOldVersionSettingServer bool
 }
 
 func (m *mockServer) RangeLookup(
@@ -80,19 +82,21 @@ func (m *mockServer) TenantSettings(
 		}); err != nil {
 			return err
 		}
-		// Initial tenant metadata.
-		if err := stream.Send(&kvpb.TenantSettingsEvent{
-			EventType: kvpb.TenantSettingsEvent_METADATA_EVENT,
-			Name:      "foo",
-			// TODO(knz): remove cast after the dep cycle has been resolved.
-			DataState:   uint32(mtinfopb.DataStateReady),
-			ServiceMode: uint32(mtinfopb.ServiceModeExternal),
+		if !m.emulateOldVersionSettingServer {
+			// Initial tenant metadata.
+			if err := stream.Send(&kvpb.TenantSettingsEvent{
+				EventType: kvpb.TenantSettingsEvent_METADATA_EVENT,
+				Name:      "foo",
+				// TODO(knz): remove cast after the dep cycle has been resolved.
+				DataState:   uint32(mtinfopb.DataStateReady),
+				ServiceMode: uint32(mtinfopb.ServiceModeExternal),
 
-			// Make the event look like a fake no-op setting event.
-			Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
-			Incremental: true,
-		}); err != nil {
-			return err
+				// Need to ensure this looks like a fake no-op setting override event.
+				Precedence:  kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES,
+				Incremental: true,
+			}); err != nil {
+				return err
+			}
 		}
 		// Finish startup.
 		return stream.Send(&kvpb.TenantSettingsEvent{
