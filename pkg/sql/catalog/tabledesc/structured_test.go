@@ -81,11 +81,7 @@ func TestAllocateIDs(t *testing.T) {
 		Indexes: []descpb.IndexDescriptor{
 			makeIndexDescriptor("d", []string{"b", "a"}),
 			makeIndexDescriptor("e", []string{"b"}),
-			func() descpb.IndexDescriptor {
-				idx := makeIndexDescriptor("f", []string{"c"})
-				idx.EncodingType = catenumpb.PrimaryIndexEncoding
-				return idx
-			}(),
+			makeIndexDescriptor("f", []string{"c"}),
 		},
 		Privileges:    catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 		FormatVersion: descpb.InterleavedFormatVersion,

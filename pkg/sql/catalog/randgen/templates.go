@@ -192,6 +192,14 @@ func defaultTemplate() tbTemplate {
 			t.desc.Families[0].ColumnIDs, colID)
 		t.desc.Families[0].ColumnNames = append(
 			t.desc.Families[0].ColumnNames, colName)
+		if colID == 0 {
+			t.desc.PrimaryIndex.KeyColumnIDs = []descpb.ColumnID{colID}
+			t.desc.PrimaryIndex.KeyColumnNames = []string{colName}
+			t.desc.PrimaryIndex.KeyColumnDirections = []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC}
+		} else {
+			t.desc.PrimaryIndex.StoreColumnIDs = append(t.desc.PrimaryIndex.StoreColumnIDs, colID)
+			t.desc.PrimaryIndex.StoreColumnNames = append(t.desc.PrimaryIndex.StoreColumnNames, colName)
+		}
 	}
 	return t
 }
