@@ -100,43 +100,51 @@ func MigrateCurrentState(version clusterversion.ClusterVersion, state *CurrentSt
 }
 
 // MigrateDescriptorState migrates descriptor state and applies any changes
-// relevant for the current cluster version.
-func MigrateDescriptorState(version clusterversion.ClusterVersion, state *DescriptorState) bool {
+// relevant for the current cluster version. getStateToModify is a function
+// that returns the state to be modified; this is used so that we can avoid
+// cloning the descriptor during RunRestoreChanges unless we need to.
+func MigrateDescriptorState(
+	version clusterversion.ClusterVersion,
+	origState *DescriptorState,
+	getStateToModify func() *DescriptorState,
+) bool {
 	// Nothing to do for empty states.
-	if state == nil {
+	if origState == nil {
 		return false
 	}
 	targetsToRemove := make(map[int]struct{})
 	updated := false
-	for idx, target := range state.Targets {
-		if HasDeprecatedElements(version, target) {
+	for idx, origTarget := range origState.Targets {
+		if HasDeprecatedElements(version, origTarget) {
 			updated = true
-			migrateTargetElement(state.Targets, idx)
+			migrateTargetElement(getStateToModify().Targets, idx)
 			targetsToRemove[idx] = struct{}{}
 		}
-		current, targetStatus, update := migrateStatuses(state.CurrentStatuses[idx], target.TargetStatus)
+		current, targetStatus, update := migrateStatuses(origState.CurrentStatuses[idx], origTarget.TargetStatus)
 		if update {
-			state.CurrentStatuses[idx] = current
-			target.TargetStatus = targetStatus
+			modifiedState := getStateToModify()
+			modifiedState.CurrentStatuses[idx] = current
+			modifiedState.Targets[idx].TargetStatus = targetStatus
 			updated = true
 		}
 	}
-	if !updated {
+	if !updated || len(targetsToRemove) == 0 {
 		return updated
 	}
-	existingTargets := state.Targets
-	existingTargetRanks := state.TargetRanks
-	existingStatuses := state.CurrentStatuses
-	state.Targets = make([]Target, 0, len(existingTargets))
-	state.TargetRanks = make([]uint32, 0, len(existingTargetRanks))
-	state.CurrentStatuses = make([]Status, 0, len(existingStatuses))
+	existingTargets := origState.Targets
+	existingTargetRanks := origState.TargetRanks
+	existingStatuses := origState.CurrentStatuses
+	modifiedState := getStateToModify()
+	modifiedState.Targets = make([]Target, 0, len(existingTargets))
+	modifiedState.TargetRanks = make([]uint32, 0, len(existingTargetRanks))
+	modifiedState.CurrentStatuses = make([]Status, 0, len(existingStatuses))
 	for idx := range existingTargets {
 		if _, ok := targetsToRemove[idx]; ok {
 			continue
 		}
-		state.Targets = append(state.Targets, existingTargets[idx])
-		state.TargetRanks = append(state.TargetRanks, existingTargetRanks[idx])
-		state.CurrentStatuses = append(state.CurrentStatuses, existingStatuses[idx])
+		modifiedState.Targets = append(modifiedState.Targets, existingTargets[idx])
+		modifiedState.TargetRanks = append(modifiedState.TargetRanks, existingTargetRanks[idx])
+		modifiedState.CurrentStatuses = append(modifiedState.CurrentStatuses, existingStatuses[idx])
 	}
 	return updated
 }

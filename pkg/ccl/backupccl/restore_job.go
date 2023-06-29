@@ -430,8 +430,7 @@ func restore(
 }
 
 // loadBackupSQLDescs extracts the backup descriptors, the latest backup
-// descriptor, and all the Descriptors for a backup to be restored. It upgrades
-// the table descriptors to the new FK representation if necessary. FKs that
+// descriptor, and all the Descriptors for a backup to be restored. FKs that
 // can't be restored because the necessary tables are missing are omitted; if
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
 // returned an error prior to this.
@@ -483,7 +482,7 @@ func loadBackupSQLDescs(
 		}
 	}
 	activeVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
-	if err := maybeUpgradeDescriptors(activeVersion, sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
+	if err := maybeUpgradeDescriptors(activeVersion, sqlDescs); err != nil {
 		mem.Shrink(ctx, sz)
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}

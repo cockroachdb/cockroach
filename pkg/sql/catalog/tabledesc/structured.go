@@ -641,9 +641,6 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	// Populate IDs.
 	primaryColIDs := desc.GetPrimaryIndex().CollectKeyColumnIDs()
 	for _, idx := range desc.AllIndexes() {
-		if !idx.Primary() {
-			maybeUpgradeSecondaryIndexFormatVersion(idx.IndexDesc())
-		}
 		if idx.Primary() && idx.GetConstraintID() == 0 {
 			idx.IndexDesc().ConstraintID = desc.NextConstraintID
 			desc.NextConstraintID++

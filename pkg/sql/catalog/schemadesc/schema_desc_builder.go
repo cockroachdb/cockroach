@@ -13,9 +13,7 @@ package schemadesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -79,6 +77,27 @@ func newBuilder(
 	}
 }
 
+// getLatestDesc returns the modified descriptor if it exists, or else the
+// original descriptor.
+func (sdb *schemaDescriptorBuilder) getLatestDesc() *descpb.SchemaDescriptor {
+	desc := sdb.maybeModified
+	if desc == nil {
+		desc = sdb.original
+	}
+	return desc
+}
+
+// getOrInitModifiedDesc returns the modified descriptor, and clones it from
+// the original descriptor if it is not already available. This is a helper
+// function that makes it easier to lazily initialize the modified descriptor,
+// since protoutil.Clone is expensive.
+func (sdb *schemaDescriptorBuilder) getOrInitModifiedDesc() *descpb.SchemaDescriptor {
+	if sdb.maybeModified == nil {
+		sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
+	}
+	return sdb.maybeModified
+}
+
 // DescriptorType implements the catalog.DescriptorBuilder interface.
 func (sdb *schemaDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 	return catalog.Schema
@@ -90,29 +109,20 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() (err error) 
 	defer func() {
 		err = errors.Wrapf(err, "schema %q (%d)", sdb.original.Name, sdb.original.ID)
 	}()
-	// Set the ModificationTime field before doing anything else.
-	// Other changes may depend on it.
-	mustSetModTime, err := descpb.MustSetModificationTime(
-		sdb.original.ModificationTime, sdb.mvccTimestamp, sdb.original.Version,
-	)
-	if err != nil {
-		return err
-	}
-	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
-	if mustSetModTime {
-		sdb.maybeModified.ModificationTime = sdb.mvccTimestamp
-		sdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
-	}
-	if privsChanged, err := catprivilege.MaybeFixPrivileges(
-		&sdb.maybeModified.Privileges,
-		sdb.maybeModified.GetParentID(),
-		descpb.InvalidID,
-		privilege.Schema,
-		sdb.maybeModified.GetName(),
-	); err != nil {
-		return err
-	} else if privsChanged {
-		sdb.changes.Add(catalog.UpgradedPrivileges)
+	{
+		orig := sdb.getLatestDesc()
+		// Set the ModificationTime field before doing anything else.
+		// Other changes may depend on it.
+		mustSetModTime, err := descpb.MustSetModificationTime(
+			orig.ModificationTime, sdb.mvccTimestamp, orig.Version,
+		)
+		if err != nil {
+			return err
+		}
+		if mustSetModTime {
+			sdb.getOrInitModifiedDesc().ModificationTime = sdb.mvccTimestamp
+			sdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+		}
 	}
 	return nil
 }
@@ -122,7 +132,13 @@ func (sdb *schemaDescriptorBuilder) RunRestoreChanges(
 	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state.
-	if scpb.MigrateDescriptorState(version, sdb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(
+		version,
+		sdb.getLatestDesc().DeclarativeSchemaChangerState,
+		func() *scpb.DescriptorState {
+			return sdb.getOrInitModifiedDesc().DeclarativeSchemaChangerState
+		},
+	) {
 		sdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 	return nil

@@ -38,7 +38,6 @@ go_test(
         "//pkg/security/username",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
-        "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/privilege",

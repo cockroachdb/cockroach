@@ -102,7 +102,13 @@ WHERE
 						if err != nil {
 							return err
 						}
-						scpb.MigrateDescriptorState(clusterVersion, mutDesc.GetDeclarativeSchemaChangerState())
+						scpb.MigrateDescriptorState(
+							clusterVersion,
+							mutDesc.GetDeclarativeSchemaChangerState(),
+							func() *scpb.DescriptorState {
+								return mutDesc.GetDeclarativeSchemaChangerState()
+							},
+						)
 						err = descs.WriteDesc(ctx, false, mutDesc, kvTxn)
 						if err != nil {
 							return err

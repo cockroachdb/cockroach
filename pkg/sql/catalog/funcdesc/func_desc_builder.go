@@ -77,6 +77,27 @@ type functionDescriptorBuilder struct {
 	rawBytesInStorage []byte
 }
 
+// getLatestDesc returns the modified descriptor if it exists, or else the
+// original descriptor.
+func (fdb *functionDescriptorBuilder) getLatestDesc() *descpb.FunctionDescriptor {
+	desc := fdb.maybeModified
+	if desc == nil {
+		desc = fdb.original
+	}
+	return desc
+}
+
+// getOrInitModifiedDesc returns the modified descriptor, and clones it from
+// the original descriptor if it is not already available. This is a helper
+// function that makes it easier to lazily initialize the modified descriptor,
+// since protoutil.Clone is expensive.
+func (fdb *functionDescriptorBuilder) getOrInitModifiedDesc() *descpb.FunctionDescriptor {
+	if fdb.maybeModified == nil {
+		fdb.maybeModified = protoutil.Clone(fdb.original).(*descpb.FunctionDescriptor)
+	}
+	return fdb.maybeModified
+}
+
 // DescriptorType implements the catalog.DescriptorBuilder interface.
 func (fdb *functionDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 	return catalog.Function
@@ -88,18 +109,20 @@ func (fdb *functionDescriptorBuilder) RunPostDeserializationChanges() (err error
 	defer func() {
 		err = errors.Wrapf(err, "function %q (%d)", fdb.original.Name, fdb.original.ID)
 	}()
-	// Set the ModificationTime field before doing anything else.
-	// Other changes may depend on it.
-	mustSetModTime, err := descpb.MustSetModificationTime(
-		fdb.original.ModificationTime, fdb.mvccTimestamp, fdb.original.Version,
-	)
-	if err != nil {
-		return err
-	}
-	fdb.maybeModified = protoutil.Clone(fdb.original).(*descpb.FunctionDescriptor)
-	if mustSetModTime {
-		fdb.maybeModified.ModificationTime = fdb.mvccTimestamp
-		fdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+	{
+		orig := fdb.getLatestDesc()
+		// Set the ModificationTime field before doing anything else.
+		// Other changes may depend on it.
+		mustSetModTime, err := descpb.MustSetModificationTime(
+			orig.ModificationTime, fdb.mvccTimestamp, orig.Version,
+		)
+		if err != nil {
+			return err
+		}
+		if mustSetModTime {
+			fdb.getOrInitModifiedDesc().ModificationTime = fdb.mvccTimestamp
+			fdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+		}
 	}
 	return nil
 }
@@ -109,7 +132,13 @@ func (fdb *functionDescriptorBuilder) RunRestoreChanges(
 	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state.
-	if scpb.MigrateDescriptorState(version, fdb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(
+		version,
+		fdb.getLatestDesc().DeclarativeSchemaChangerState,
+		func() *scpb.DescriptorState {
+			return fdb.getOrInitModifiedDesc().DeclarativeSchemaChangerState
+		},
+	) {
 		fdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 	return nil

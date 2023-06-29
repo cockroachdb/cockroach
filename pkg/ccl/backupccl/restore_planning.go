@@ -802,17 +802,8 @@ func resolveTargetDB(
 
 // maybeUpgradeDescriptors performs post-deserialization upgrades on the
 // descriptors.
-//
-// This is done, for instance, to use the newer 19.2-style foreign key
-// representation, if they are not already upgraded.
-//
-// if skipFKsWithNoMatchingTable is set, FKs whose "other" table is missing from
-// the set provided are omitted during the upgrade, instead of causing an error
-// to be returned.
 func maybeUpgradeDescriptors(
-	version clusterversion.ClusterVersion,
-	descs []catalog.Descriptor,
-	skipFKsWithNoMatchingTable bool,
+	version clusterversion.ClusterVersion, descs []catalog.Descriptor,
 ) error {
 	// A data structure for efficient descriptor lookup by ID or by name.
 	descCatalog := &nstree.MutableCatalog{}
@@ -821,12 +812,7 @@ func maybeUpgradeDescriptors(
 	}
 
 	for j, desc := range descs {
-		var b catalog.DescriptorBuilder
-		if tableDesc, isTable := desc.(catalog.TableDescriptor); isTable {
-			b = tabledesc.NewBuilderForFKUpgrade(tableDesc.TableDesc(), skipFKsWithNoMatchingTable)
-		} else {
-			b = desc.NewBuilder()
-		}
+		b := desc.NewBuilder()
 		if err := b.RunPostDeserializationChanges(); err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
 		}
@@ -840,19 +826,12 @@ func maybeUpgradeDescriptors(
 }
 
 // maybeUpgradeDescriptorsInBackupManifests updates the descriptors in the
-// manifests. This is done in particular to use the newer 19.2-style foreign
-// key representation, if they are not already upgraded.
-// This requires resolving cross-table FK references, which is done by looking
-// up all table descriptors across all backup descriptors provided.
-// If skipFKsWithNoMatchingTable is set, FKs whose
-// "other" table is missing from the set provided are omitted during the
-// upgrade, instead of causing an error to be returned.
+// manifests.
 func maybeUpgradeDescriptorsInBackupManifests(
 	ctx context.Context,
 	version clusterversion.ClusterVersion,
 	backupManifests []backuppb.BackupManifest,
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
-	skipFKsWithNoMatchingTable bool,
 ) error {
 	if len(backupManifests) == 0 {
 		return nil
@@ -879,7 +858,7 @@ func maybeUpgradeDescriptorsInBackupManifests(
 		descriptors = append(descriptors, descs...)
 	}
 
-	err := maybeUpgradeDescriptors(version, descriptors, skipFKsWithNoMatchingTable)
+	err := maybeUpgradeDescriptors(version, descriptors)
 	if err != nil {
 		return err
 	}
@@ -1783,7 +1762,7 @@ func doRestorePlan(
 	sqlDescs = append(sqlDescs, newTypeDescs...)
 
 	activeVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
-	if err := maybeUpgradeDescriptors(activeVersion, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
+	if err := maybeUpgradeDescriptors(activeVersion, sqlDescs); err != nil {
 		return err
 	}
 

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -84,6 +83,27 @@ func newBuilder(
 	}
 }
 
+// getLatestDesc returns the modified descriptor if it exists, or else the
+// original descriptor.
+func (ddb *databaseDescriptorBuilder) getLatestDesc() *descpb.DatabaseDescriptor {
+	desc := ddb.maybeModified
+	if desc == nil {
+		desc = ddb.original
+	}
+	return desc
+}
+
+// getOrInitModifiedDesc returns the modified descriptor, and clones it from
+// the original descriptor if it is not already available. This is a helper
+// function that makes it easier to lazily initialize the modified descriptor,
+// since protoutil.Clone is expensive.
+func (ddb *databaseDescriptorBuilder) getOrInitModifiedDesc() *descpb.DatabaseDescriptor {
+	if ddb.maybeModified == nil {
+		ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+	}
+	return ddb.maybeModified
+}
+
 // DescriptorType implements the catalog.DescriptorBuilder interface.
 func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 	return catalog.Database
@@ -95,65 +115,36 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() (err error
 	defer func() {
 		err = errors.Wrapf(err, "database %q (%d)", ddb.original.Name, ddb.original.ID)
 	}()
-	// Set the ModificationTime field before doing anything else.
-	// Other changes may depend on it.
-	mustSetModTime, err := descpb.MustSetModificationTime(
-		ddb.original.ModificationTime, ddb.mvccTimestamp, ddb.original.Version,
-	)
-	if err != nil {
-		return err
-	}
-	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
-	if mustSetModTime {
-		ddb.maybeModified.ModificationTime = ddb.mvccTimestamp
-		ddb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
-	}
-
-	// This should only every happen to the system database. Unlike many other
-	// post-deserialization changes, this does not need to last forever to
-	// support restores. It can be removed after a migration performing such a
-	// migration occurs.
-	//
-	// TODO(ajwerner): Write or piggy-back off some other migration to rewrite
-	// the descriptor, and then remove this in a release that is no longer
-	// compatible with the predecessor of the version with the migration.
-	if ddb.maybeModified.Version == 0 {
-		ddb.maybeModified.Version = 1
-		ddb.changes.Add(catalog.SetSystemDatabaseDescriptorVersion)
-	}
-
-	createdDefaultPrivileges := false
-	removedIncompatibleDatabasePrivs := false
-	// Skip converting incompatible privileges to default privileges on the
-	// system database and let MaybeFixPrivileges handle it instead as we do not
-	// want any default privileges on the system database.
-	if ddb.original.GetID() != keys.SystemDatabaseID {
-		if ddb.maybeModified.DefaultPrivileges == nil {
-			ddb.maybeModified.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(
-				catpb.DefaultPrivilegeDescriptor_DATABASE)
-			createdDefaultPrivileges = true
-		}
-
-		removedIncompatibleDatabasePrivs = maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
-			ddb.maybeModified.Privileges, ddb.maybeModified.DefaultPrivileges,
+	{
+		orig := ddb.getLatestDesc()
+		// Set the ModificationTime field before doing anything else.
+		// Other changes may depend on it.
+		mustSetModTime, err := descpb.MustSetModificationTime(
+			orig.ModificationTime, ddb.mvccTimestamp, orig.Version,
 		)
+		if err != nil {
+			return err
+		}
+		if mustSetModTime {
+			ddb.getOrInitModifiedDesc().ModificationTime = ddb.mvccTimestamp
+			ddb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+		}
+	}
+	{
+		// This should only every happen to the system database. Unlike many other
+		// post-deserialization changes, this does not need to last forever to
+		// support restores. It can be removed after a migration performing such a
+		// migration occurs.
+		//
+		// TODO(ajwerner): Write or piggy-back off some other migration to rewrite
+		// the descriptor, and then remove this in a release that is no longer
+		// compatible with the predecessor of the version with the migration.
+		if ddb.getLatestDesc().Version == 0 {
+			ddb.getOrInitModifiedDesc().Version = 1
+			ddb.changes.Add(catalog.SetSystemDatabaseDescriptorVersion)
+		}
 	}
 
-	privsChanged, err := catprivilege.MaybeFixPrivileges(
-		&ddb.maybeModified.Privileges,
-		descpb.InvalidID,
-		descpb.InvalidID,
-		privilege.Database,
-		ddb.maybeModified.GetName())
-	if err != nil {
-		return err
-	}
-	if privsChanged || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
-		ddb.changes.Add(catalog.UpgradedPrivileges)
-	}
-	if maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified) {
-		ddb.changes.Add(catalog.RemovedSelfEntryInSchemas)
-	}
 	return nil
 }
 
@@ -162,7 +153,13 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 	version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	// Upgrade the declarative schema changer state.
-	if scpb.MigrateDescriptorState(version, ddb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(
+		version,
+		ddb.getLatestDesc().DeclarativeSchemaChangerState,
+		func() *scpb.DescriptorState {
+			return ddb.getOrInitModifiedDesc().DeclarativeSchemaChangerState
+		},
+	) {
 		ddb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 	return nil
@@ -171,46 +168,6 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 // SetRawBytesInStorage implements the catalog.DescriptorBuilder interface.
 func (ddb *databaseDescriptorBuilder) SetRawBytesInStorage(rawBytes []byte) {
 	ddb.rawBytesInStorage = append([]byte(nil), rawBytes...) // deep-copy
-}
-
-func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
-	privileges *catpb.PrivilegeDescriptor, defaultPrivileges *catpb.DefaultPrivilegeDescriptor,
-) (hasChanged bool) {
-	// If privileges are nil, there is nothing to convert.
-	// This case can happen during restore where privileges are not yet created.
-	if privileges == nil {
-		return false
-	}
-
-	var pgIncompatibleDBPrivileges = privilege.List{
-		privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE,
-	}
-
-	for i, user := range privileges.Users {
-		incompatiblePrivileges := user.Privileges & pgIncompatibleDBPrivileges.ToBitField()
-
-		if incompatiblePrivileges == 0 {
-			continue
-		}
-
-		hasChanged = true
-
-		// XOR to remove incompatible privileges.
-		user.Privileges ^= incompatiblePrivileges
-
-		privileges.Users[i] = user
-
-		// Convert the incompatible privileges to default privileges.
-		role := defaultPrivileges.FindOrCreateUser(catpb.DefaultPrivilegesRole{ForAllRoles: true})
-		tableDefaultPrivilegesForAllRoles := role.DefaultPrivilegesPerObject[privilege.Tables]
-
-		defaultPrivilegesForUser := tableDefaultPrivilegesForAllRoles.FindOrCreateUser(user.User())
-		defaultPrivilegesForUser.Privileges |= incompatiblePrivileges
-
-		role.DefaultPrivilegesPerObject[privilege.Tables] = tableDefaultPrivilegesForAllRoles
-	}
-
-	return hasChanged
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.

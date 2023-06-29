@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/redact"
@@ -286,104 +285,6 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			}
 		} else if expectedErr != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
-		}
-	}
-}
-
-func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
-	tests := []struct {
-		privilegeDesc          catpb.PrivilegeDescriptor
-		defaultPrivilegeDesc   catpb.DefaultPrivilegeDescriptor
-		privileges             privilege.List
-		incompatiblePrivileges privilege.List
-		shouldChange           bool
-		users                  []username.SQLUsername
-	}{
-		{ // 0
-			privilegeDesc:          catpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc:   catpb.DefaultPrivilegeDescriptor{},
-			privileges:             privilege.List{privilege.SELECT},
-			incompatiblePrivileges: privilege.List{privilege.SELECT},
-			shouldChange:           true,
-			users: []username.SQLUsername{
-				username.MakeSQLUsernameFromPreNormalizedString("test"),
-			},
-		},
-		{ // 1
-			privilegeDesc:        catpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc: catpb.DefaultPrivilegeDescriptor{},
-			privileges: privilege.List{
-				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.ZONECONFIG,
-			},
-			incompatiblePrivileges: privilege.List{},
-			shouldChange:           false,
-			users: []username.SQLUsername{
-				username.MakeSQLUsernameFromPreNormalizedString("test"),
-			},
-		},
-		{ // 2
-			privilegeDesc:          catpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc:   catpb.DefaultPrivilegeDescriptor{},
-			privileges:             privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE},
-			incompatiblePrivileges: privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE},
-			shouldChange:           true,
-			users: []username.SQLUsername{
-				username.MakeSQLUsernameFromPreNormalizedString("test"),
-			},
-		},
-		{ // 3
-			privilegeDesc:          catpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc:   catpb.DefaultPrivilegeDescriptor{},
-			privileges:             privilege.List{privilege.SELECT},
-			incompatiblePrivileges: privilege.List{privilege.SELECT},
-			shouldChange:           true,
-			users: []username.SQLUsername{
-				username.MakeSQLUsernameFromPreNormalizedString("test"),
-				username.MakeSQLUsernameFromPreNormalizedString("foo"),
-			},
-		},
-		{ // 4
-			privilegeDesc:        catpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc: catpb.DefaultPrivilegeDescriptor{},
-			privileges: privilege.List{
-				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.ZONECONFIG,
-			},
-			incompatiblePrivileges: privilege.List{},
-			shouldChange:           false,
-			users: []username.SQLUsername{
-				username.MakeSQLUsernameFromPreNormalizedString("test"),
-				username.MakeSQLUsernameFromPreNormalizedString("foo"),
-			},
-		},
-	}
-
-	for _, test := range tests {
-		for _, testUser := range test.users {
-			test.privilegeDesc.Grant(testUser, test.privileges, false /* withGrantOption */)
-		}
-
-		shouldChange := maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(&test.privilegeDesc, &test.defaultPrivilegeDesc)
-		require.Equal(t, shouldChange, test.shouldChange)
-
-		for _, testUser := range test.users {
-			for _, priv := range test.incompatiblePrivileges {
-				// Check that the incompatible privileges are removed from the
-				// PrivilegeDescriptor.
-				if test.privilegeDesc.CheckPrivilege(testUser, priv) {
-					t.Errorf("found incompatible privilege %s", priv.String())
-				}
-
-				forAllRoles := test.defaultPrivilegeDesc.
-					FindOrCreateUser(catpb.DefaultPrivilegesRole{ForAllRoles: true})
-				// Check that the incompatible privileges have been converted to the
-				// equivalent default privileges.
-				if !forAllRoles.DefaultPrivilegesPerObject[privilege.Tables].CheckPrivilege(testUser, priv) {
-					t.Errorf(
-						"expected incompatible privilege %s to be converted to a default privilege",
-						priv.String(),
-					)
-				}
-			}
 		}
 	}
 }

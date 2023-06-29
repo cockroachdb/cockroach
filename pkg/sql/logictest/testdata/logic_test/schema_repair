@@ -378,26 +378,26 @@ SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', desc_bytes)-
 $$;
 CREATE FUNCTION stripped(j JSON) RETURNS JSONB STABLE LANGUAGE SQL AS $$
 SELECT jsonb_build_object(
-  'nextConstraintId', (j->>'nextConstraintId')::INT,
+  'checkConstraintColumnIds', (j#>'{checks, 0, columnIds}'),
   'version', (j->>'version')::INT,
   'modificationTime', j->'modificationTime'
 ) $$;
 
 statement ok
-CREATE TABLE t (a INT PRIMARY KEY)
+CREATE TABLE t (a INT PRIMARY KEY CHECK (a > 0))
 
 query T
 SELECT stripped(tbl_json(desc_bytes('t')))
 ----
-{"modificationTime": {}, "nextConstraintId": 2, "version": 1}
+{"checkConstraintColumnIds": [1], "modificationTime": {}, "version": 1}
 
 # Post-deserialization changes are idempotent.
 query T
 SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
 ----
-{"modificationTime": {}, "nextConstraintId": 2, "version": 1}
+{"checkConstraintColumnIds": [1], "modificationTime": {}, "version": 1}
 
-# Erase all constraint IDs from the descriptor.
+# Erase all column IDs from the check constraint.
 # These will be reinstated by descriptor post-deserialization changes.
 statement ok
 SELECT
@@ -406,13 +406,9 @@ SELECT
 		crdb_internal.json_to_pb(
 			'cockroach.sql.sqlbase.Descriptor',
 			json_set(
-				json_set(
-					crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
-					ARRAY['table', 'nextConstraintId'],
-					'0'::JSONB
-				),
-				ARRAY['table', 'primaryIndex', 'constraintId'],
-				'0'::JSONB
+        crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+				ARRAY['table', 'checks', '0', 'columnIds'],
+				'[]'::JSONB
 			)
 		),
 		true
@@ -425,12 +421,12 @@ WHERE
 query T
 SELECT stripped(tbl_json(desc_bytes('t')))
 ----
-{"modificationTime": {}, "nextConstraintId": null, "version": 2}
+{"checkConstraintColumnIds": null, "modificationTime": {}, "version": 2}
 
 query T
 SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
 ----
-{"modificationTime": {}, "nextConstraintId": 2, "version": 2}
+{"checkConstraintColumnIds": [1], "modificationTime": {}, "version": 2}
 
 # Check that existing modification times (possible for pre-19.2 descriptors) are not affected.
 query T
@@ -453,7 +449,7 @@ SELECT
 		)
 	)
 ----
-{"modificationTime": {"logical": 1, "wallTime": "123456789"}, "nextConstraintId": 2, "version": 2}
+{"checkConstraintColumnIds": [1], "modificationTime": {"logical": 1, "wallTime": "123456789"}, "version": 2}
 
 # Perform a schema change to persist post-deserialization changes.
 statement ok
@@ -462,7 +458,7 @@ ALTER TABLE t RENAME TO t_renamed
 query T
 SELECT stripped(tbl_json(desc_bytes('t_renamed')))
 ----
-{"modificationTime": {}, "nextConstraintId": 2, "version": 3}
+{"checkConstraintColumnIds": [1], "modificationTime": {}, "version": 3}
 
 statement ok
 DROP TABLE t_renamed
