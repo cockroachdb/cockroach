@@ -462,19 +462,25 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		}, requestEvalKind)
 		if pErr != nil {
 			if poisonErr := (*poison.PoisonedError)(nil); errors.As(pErr.GoError(), &poisonErr) {
-				// NB: we make the breaker error (which may be nil at this point, but
-				// usually is not) a secondary error, meaning it is not in the error
-				// chain. That is fine; the important bits to investigate
-				// programmatically are the ReplicaUnavailableError (which contains the
-				// descriptor) and the *PoisonedError (which contains the concrete
-				// subspan that caused this request to fail). We mark
-				// circuit.ErrBreakerOpen into the chain as well so that we have the
-				// invariant that all replica circuit breaker errors contain both
-				// ErrBreakerOpen and ReplicaUnavailableError.
-				pErr = roachpb.NewError(r.replicaUnavailableError(errors.CombineErrors(
-					errors.Mark(poisonErr, circuit.ErrBreakerOpen),
-					r.breaker.Signal().Err(),
-				)))
+				// It's possible that intent resolution accessed txn info anchored on a
+				// different range and hit a poisoned latch there, in which case we want
+				// to propagate its ReplicaUnavailableError instead of creating one for
+				// this range (which likely isn't tripped).
+				if !errors.HasType(pErr.GoError(), (*roachpb.ReplicaUnavailableError)(nil)) {
+					// NB: we make the breaker error (which may be nil at this point, but
+					// usually is not) a secondary error, meaning it is not in the error
+					// chain. That is fine; the important bits to investigate
+					// programmatically are the ReplicaUnavailableError (which contains the
+					// descriptor) and the *PoisonedError (which contains the concrete
+					// subspan that caused this request to fail). We mark
+					// circuit.ErrBreakerOpen into the chain as well so that we have the
+					// invariant that all replica circuit breaker errors contain both
+					// ErrBreakerOpen and ReplicaUnavailableError.
+					pErr = roachpb.NewError(r.replicaUnavailableError(errors.CombineErrors(
+						errors.Mark(poisonErr, circuit.ErrBreakerOpen),
+						r.breaker.Signal().Err(),
+					)))
+				}
 			}
 			return nil, nil, pErr
 		} else if resp != nil {
