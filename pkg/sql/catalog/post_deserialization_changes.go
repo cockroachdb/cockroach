@@ -98,4 +98,8 @@ const (
 	// SetCreateAsOfTimeUsingModTime indicates that a table's CreateAsOfTime field
 	// was unset and the ModificationTime value was assigned to it.
 	SetCreateAsOfTimeUsingModTime
+
+	// FixSecondaryIndexEncodingType indicates that a secondary index had its
+	// encoding type fixed, so it is not incorrectly marked as a primary index.
+	FixSecondaryIndexEncodingType
 )

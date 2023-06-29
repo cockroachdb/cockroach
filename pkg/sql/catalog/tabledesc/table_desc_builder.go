@@ -304,6 +304,7 @@ func maybeFillInDescriptor(
 	set(catalog.UpgradedPrivileges, fixedPrivileges)
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
+	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(desc))
 	return changes, nil
 }
 
@@ -829,6 +830,21 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 
 	}
 	return desc.NextConstraintID != initialConstraintID
+}
+
+func maybeFixSecondaryIndexEncodingType(desc *descpb.TableDescriptor) (hasChanged bool) {
+	if desc.DeclarativeSchemaChangerState != nil || len(desc.Mutations) > 0 {
+		// Don't try to fix the encoding type if a schema change is in progress.
+		return false
+	}
+	for i := range desc.Indexes {
+		idx := &desc.Indexes[i]
+		if idx.EncodingType != descpb.SecondaryIndexEncoding {
+			idx.EncodingType = descpb.SecondaryIndexEncoding
+			hasChanged = true
+		}
+	}
+	return hasChanged
 }
 
 // maybeSetCreateAsOfTime ensures that the CreateAsOfTime field is set.
