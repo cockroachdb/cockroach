@@ -128,6 +128,19 @@ project
  └── projections
       └── b.x:1 [as=b1.x:6, outer=(1)]
 
+# The right column can be remapped to a left column because of the implied
+# self-join equality, even though the right column is nullable.
+norm expect=EliminateJoinUnderProjectLeft
+SELECT b.j, b1.j FROM b INNER JOIN b AS b1 ON b.x = b1.x
+----
+project
+ ├── columns: j:3 j:8
+ ├── fd: (3)==(8), (8)==(3)
+ ├── scan b
+ │    └── columns: b.j:3
+ └── projections
+      └── b.j:3 [as=b1.j:8, outer=(3)]
+
 # No-op case because the cross join may duplicate left rows.
 norm expect-not=EliminateJoinUnderProjectLeft
 SELECT 1 FROM b LEFT JOIN a ON True
@@ -234,6 +247,41 @@ project
       └── filters
            └── x:1 = r1:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
 
+# No-op case because the join equality filter is not on a unique column.
+norm expect-not=EliminateJoinUnderProjectLeft
+SELECT b.j, b1.j FROM b INNER JOIN b AS b1 ON b.z = b1.z
+----
+project
+ ├── columns: j:3 j:8
+ └── inner-join (hash)
+      ├── columns: b.z:2!null b.j:3 b1.z:7!null b1.j:8
+      ├── fd: (2)==(7), (7)==(2)
+      ├── scan b
+      │    └── columns: b.z:2 b.j:3
+      ├── scan b [as=b1]
+      │    └── columns: b1.z:7 b1.j:8
+      └── filters
+           └── b.z:2 = b1.z:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
+# No-op case because the join equality filter is between different columns.
+norm expect-not=EliminateJoinUnderProjectLeft
+SELECT b.j, b1.j FROM b INNER JOIN b AS b1 ON b.z = b1.x
+----
+project
+ ├── columns: j:3 j:8
+ └── inner-join (hash)
+      ├── columns: b.z:2!null b.j:3 b1.x:6!null b1.j:8
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      ├── fd: (6)-->(8), (2)==(6), (6)==(2)
+      ├── scan b
+      │    └── columns: b.z:2 b.j:3
+      ├── scan b [as=b1]
+      │    ├── columns: b1.x:6!null b1.j:8
+      │    ├── key: (6)
+      │    └── fd: (6)-->(8)
+      └── filters
+           └── b.z:2 = b1.x:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+
 # Regression test for #102614 - parent.id should be mapped to child.id to allow
 # join elimination to proceed.
 exec-ddl
@@ -270,7 +318,22 @@ project
 # EliminateJoinUnderProjectRight
 # --------------------------------------------------
 
-# No self-join case because EliminateJoinUnderProjectLeft can always match.
+# InnerJoin case with self join.
+norm expect=EliminateJoinUnderProjectRight
+SELECT b1.x, b1.z FROM b INNER JOIN (SELECT * FROM b LIMIT 5) AS b1 ON b.x = b1.x
+----
+limit
+ ├── columns: x:6!null z:7
+ ├── cardinality: [0 - 5]
+ ├── key: (6)
+ ├── fd: (6)-->(7)
+ ├── scan b
+ │    ├── columns: x:6!null z:7
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
+ │    └── limit hint: 5.00
+ └── 5
+
 # InnerJoin case with not-null foreign key.
 norm expect=EliminateJoinUnderProjectRight
 SELECT k, v FROM a INNER JOIN fks ON r1 = x
@@ -294,6 +357,48 @@ project
  │    └── fd: (7)-->(8,10)
  └── projections
       └── r1:10 [as=x:1, outer=(10)]
+
+# The left column can be remapped to a right column.
+norm expect=EliminateJoinUnderProjectRight
+SELECT b.x, b1.j FROM b INNER JOIN (SELECT * FROM b LIMIT 5) AS b1 ON b.x = b1.x
+----
+project
+ ├── columns: x:1!null j:8
+ ├── cardinality: [0 - 5]
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── limit
+ │    ├── columns: x:6!null j:8
+ │    ├── cardinality: [0 - 5]
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(8)
+ │    ├── scan b
+ │    │    ├── columns: x:6!null j:8
+ │    │    ├── key: (6)
+ │    │    ├── fd: (6)-->(8)
+ │    │    └── limit hint: 5.00
+ │    └── 5
+ └── projections
+      └── x:6 [as=x:1, outer=(6)]
+
+# The left column can be remapped to a right column because of the implied
+# self-join equality, even though the left column is nullable.
+norm expect=EliminateJoinUnderProjectRight
+SELECT b.j, b1.j FROM b INNER JOIN (SELECT * FROM b LIMIT 5) AS b1 ON b.x = b1.x
+----
+project
+ ├── columns: j:3 j:8
+ ├── cardinality: [0 - 5]
+ ├── fd: (3)==(8), (8)==(3)
+ ├── limit
+ │    ├── columns: j:8
+ │    ├── cardinality: [0 - 5]
+ │    ├── scan b
+ │    │    ├── columns: j:8
+ │    │    └── limit hint: 5.00
+ │    └── 5
+ └── projections
+      └── j:8 [as=j:3, outer=(8)]
 
 # No-op case because the left input of a LeftJoin cannot be removed.
 norm expect-not=EliminateJoinUnderProjectRight

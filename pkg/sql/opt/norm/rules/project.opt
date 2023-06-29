@@ -32,15 +32,15 @@
                 (ProjectionOuterCols $projections)
             )
             $leftCols:(OutputCols $left)
-            $fds:(FuncDeps $join)
+            $laxEquivs:(GetRemapFuncDeps $join)
         )
 )
 =>
 (Project
     $left
     (MergeProjections
-        (RemapProjectionCols $projections $leftCols $fds)
-        (ProjectRemappedCols $passthrough $leftCols $fds)
+        (RemapProjectionCols $projections $leftCols $laxEquivs)
+        (ProjectRemappedCols $passthrough $leftCols $laxEquivs)
         $passthrough
     )
     (DifferenceCols $passthrough (OutputCols $right))
@@ -61,15 +61,15 @@
                 (ProjectionOuterCols $projections)
             )
             $rightCols:(OutputCols $right)
-            $fds:(FuncDeps $join)
+            $laxEquivs:(GetRemapFuncDeps $join)
         )
 )
 =>
 (Project
     $right
     (MergeProjections
-        (RemapProjectionCols $projections $rightCols $fds)
-        (ProjectRemappedCols $passthrough $rightCols $fds)
+        (RemapProjectionCols $projections $rightCols $laxEquivs)
+        (ProjectRemappedCols $passthrough $rightCols $laxEquivs)
         $passthrough
     )
     (DifferenceCols $passthrough (OutputCols $left))

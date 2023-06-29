@@ -853,15 +853,17 @@ func (c *CustomFuncs) IsStaticTuple(expr opt.ScalarExpr) bool {
 
 // ProjectRemappedCols creates a projection for each column in the "from" set
 // that is not in the "to" set, mapping it to an equivalent column in the "to"
-// set. ProjectRemappedCols panics if this is not possible.
+// set using the given lax equivalences. See GetRemapFuncDeps for context on how
+// the equivalences are derived and why they are valid for column remapping.
+// ProjectRemappedCols panics if this remapping is not possible.
 func (c *CustomFuncs) ProjectRemappedCols(
-	from, to opt.ColSet, fds *props.FuncDepSet,
+	from, to opt.ColSet, laxEquivs *props.FuncDepSet,
 ) (projections memo.ProjectionsExpr) {
 	for col, ok := from.Next(0); ok; col, ok = from.Next(col + 1) {
 		if !to.Contains(col) {
 			// TODO(mgartner): We don't need to compute the entire equivalence group,
 			// we only need to find the first equivalent column that's in the to set.
-			candidates := fds.ComputeEquivGroup(col)
+			candidates := laxEquivs.ComputeEquivGroup(col)
 			candidates.IntersectionWith(to)
 			if candidates.Empty() {
 				panic(errors.AssertionFailedf("cannot remap column %v", col))
@@ -877,14 +879,16 @@ func (c *CustomFuncs) ProjectRemappedCols(
 }
 
 // RemapProjectionCols remaps column references in the given projections to
-// refer to the "to" set.
+// refer to the "to" set using the given lax equivalences. See GetRemapFuncDeps
+// for context on how the equivalences are derived and why they are valid for
+// column remapping.
 func (c *CustomFuncs) RemapProjectionCols(
-	projections memo.ProjectionsExpr, to opt.ColSet, fds *props.FuncDepSet,
+	projections memo.ProjectionsExpr, to opt.ColSet, laxEquivs *props.FuncDepSet,
 ) memo.ProjectionsExpr {
 	getReplacement := func(col opt.ColumnID) opt.ColumnID {
 		// TODO(mgartner): We don't need to compute the entire equivalence group, we
 		// only need to find the first equivalent column that's in the to set.
-		candidates := fds.ComputeEquivGroup(col)
+		candidates := laxEquivs.ComputeEquivGroup(col)
 		candidates.IntersectionWith(to)
 		if candidates.Empty() {
 			panic(errors.AssertionFailedf("cannot remap column"))
@@ -903,4 +907,103 @@ func (c *CustomFuncs) RemapProjectionCols(
 		return c.f.Replace(e, replace)
 	}
 	return *(replace(&projections).(*memo.ProjectionsExpr))
+}
+
+// CanRemapCols returns true if it's possible to remap every column in the
+// "from" set to a column in the "to" set using the given lax equivalences.
+// See GetRemapFuncDeps for context on how the equivalences are derived and why
+// they are valid for column remapping.
+func (c *CustomFuncs) CanRemapCols(from, to opt.ColSet, laxEquivs *props.FuncDepSet) bool {
+	for col, ok := from.Next(0); ok; col, ok = from.Next(col + 1) {
+		if !laxEquivs.ComputeEquivGroup(col).Intersects(to) {
+			// It is not possible to remap this column to one from the "to" set.
+			return false
+		}
+	}
+	return true
+}
+
+// GetRemapFuncDeps returns a FuncDepSet that describes *lax* equivalences
+// between columns in the output of the given join. A lax equivalence has the
+// following semantics: "col1 and col2 have the same value for every row" vs
+// strict equivalence, which additionally disallows NULL values.
+//
+// Lax equivalences are useful for column remapping, which in turn is necessary
+// for join elimination in common cases. For column remapping, we only care that
+// the "to" column has the same values as the "from" column, even if those
+// values are NULL. For that reason, lax equivalences suffice for column
+// remapping.
+// TODO(drewk): column remapping may be sufficient justification to add lax
+// equivalence handling to FuncDepSet.
+//
+// Note that GetRemapFuncDeps is best effort; it may not capture all possible
+// equivalence relations. GetRemapFuncDeps returns nil is no useful equivalences
+// exist.
+func (c *CustomFuncs) GetRemapFuncDeps(join memo.RelExpr) *props.FuncDepSet {
+	md := c.mem.Metadata()
+	joinFDs := &join.Relational().FuncDeps
+	left, right := join.Child(0).(memo.RelExpr), join.Child(1).(memo.RelExpr)
+	leftProps, rightProps := left.Relational(), right.Relational()
+	leftCols, rightCols := leftProps.OutputCols, rightProps.OutputCols
+	if !joinFDs.ComputeEquivClosure(leftCols).Intersects(rightCols) {
+		// There are no equalities between left and right columns.
+		return &props.FuncDepSet{}
+	}
+
+	// Map from the table ID to the column ordinals within the table.
+	getTables := func(cols opt.ColSet) map[opt.TableID]intsets.Fast {
+		var tables map[opt.TableID]intsets.Fast
+		cols.ForEach(func(col opt.ColumnID) {
+			if tab := md.ColumnMeta(col).Table; tab != opt.TableID(0) {
+				if tables == nil {
+					tables = make(map[opt.TableID]intsets.Fast)
+				}
+				colOrds := tables[tab]
+				colOrds.Add(tab.ColumnOrdinal(col))
+				tables[tab] = colOrds
+			}
+		})
+		return tables
+	}
+	leftTables := getTables(leftCols)
+	if leftTables == nil {
+		return joinFDs
+	}
+	rightTables := getTables(rightCols)
+	if rightTables == nil {
+		return joinFDs
+	}
+	// Add the strict equivalences from the join's properties, then infer lax
+	// equivalences based on self-join equalities.
+	var laxEquivs props.FuncDepSet
+	laxEquivs.AddEquivFrom(joinFDs)
+	for leftTable, leftTableOrds := range leftTables {
+		for rightTable, rightTableOrds := range rightTables {
+			if md.TableMeta(leftTable).Table.ID() != md.TableMeta(rightTable).Table.ID() {
+				continue
+			}
+			// This is a self-join. If there are equalities between columns at the
+			// same ordinal positions in each (meta) table and those columns form a
+			// key on each input, *every* pair of columns at the same ordinal position
+			// is laxly equal. If the columns are non-null, they are strictly equal.
+			var eqCols opt.ColSet
+			colOrds := leftTableOrds.Intersection(rightTableOrds)
+			for colOrd, ok := colOrds.Next(0); ok; colOrd, ok = colOrds.Next(colOrd + 1) {
+				leftCol, rightCol := leftTable.ColumnID(colOrd), rightTable.ColumnID(colOrd)
+				if joinFDs.AreColsEquiv(leftCol, rightCol) {
+					eqCols.Add(leftCol)
+					eqCols.Add(rightCol)
+				}
+			}
+			if !eqCols.Empty() && leftProps.FuncDeps.ColsAreStrictKey(eqCols) &&
+				rightProps.FuncDeps.ColsAreStrictKey(eqCols) {
+				// Add equalities between each pair of columns at the same ordinal
+				// position, ignoring those that aren't part of the output.
+				for colOrd, ok := colOrds.Next(0); ok; colOrd, ok = colOrds.Next(colOrd + 1) {
+					laxEquivs.AddEquivalency(leftTable.ColumnID(colOrd), rightTable.ColumnID(colOrd))
+				}
+			}
+		}
+	}
+	return &laxEquivs
 }

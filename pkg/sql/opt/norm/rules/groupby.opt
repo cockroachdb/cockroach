@@ -77,7 +77,7 @@
                 (AggregationOuterCols $aggs)
             )
             $leftCols
-            $fds:(FuncDeps $input)
+            $laxEquivs:(GetRemapFuncDeps $input)
         ) &
         (CanEliminateJoinUnderGroupByLeft $input $aggs)
 )
@@ -85,7 +85,7 @@
 ((OpName)
     (Project
         $left
-        (ProjectRemappedCols $toRemap $leftCols $fds)
+        (ProjectRemappedCols $toRemap $leftCols $laxEquivs)
         $leftCols
     )
     $aggs
@@ -112,7 +112,7 @@
                 (AggregationOuterCols $aggs)
             )
             $rightCols
-            $fds:(FuncDeps $input)
+            $laxEquivs:(GetRemapFuncDeps $input)
         ) &
         (CanEliminateJoinUnderGroupByRight $input $aggs)
 )
@@ -120,7 +120,7 @@
 ((OpName)
     (Project
         $right
-        (ProjectRemappedCols $toRemap $rightCols $fds)
+        (ProjectRemappedCols $toRemap $rightCols $laxEquivs)
         $rightCols
     )
     $aggs
