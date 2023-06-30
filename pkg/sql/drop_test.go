@@ -412,7 +412,6 @@ func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 85876)
 	const chunkSize = 200
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
@@ -447,19 +446,26 @@ func TestDropIndex(t *testing.T) {
 	if _, err := catalog.MustFindIndexByName(tableDesc, "foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
-	// TODO (lucy): Maybe this test API should use an offset starting
-	// from the most recent job instead.
-	const migrationJobOffset = 0
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    username.RootUserName(),
 		Description: `DROP INDEX t.public.kv@foo`,
-		DescriptorIDs: descpb.IDs{
-			tableDesc.GetID(),
-		},
 	}); err != nil {
 		t.Fatal(err)
 	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingForMVCCGC, jobs.Record{
+			Username:    username.NodeUserName(),
+			Description: `GC for DROP INDEX t.public.kv@foo`,
+			DescriptorIDs: descpb.IDs{
+				tableDesc.GetID(),
+			},
+		}); err != nil {
+			return err
+		}
+		return nil
+	})
 
 	if _, err := sqlDB.Exec(`CREATE INDEX foo on t.kv (v);`); err != nil {
 		t.Fatal(err)
@@ -471,37 +477,18 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	newIdxSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, newIdx.GetID())
-	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset+1, jobspb.TypeSchemaChange, jobs.StatusRunning, jobs.Record{
-			Username:    username.RootUserName(),
-			Description: `DROP INDEX t.public.kv@foo`,
-			DescriptorIDs: descpb.IDs{
-				tableDesc.GetID(),
-			},
-			RunningStatus: "waiting for MVCC GC",
-		})
-	})
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
-			Username:    username.RootUserName(),
-			Description: `GC for temporary index used during index backfill`,
+		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingForMVCCGC, jobs.Record{
+			Username:    username.NodeUserName(),
+			Description: `GC for CREATE INDEX foo ON t.public.kv (v)`,
 			DescriptorIDs: descpb.IDs{
 				tableDesc.GetID(),
 			},
-			RunningStatus: "waiting for MVCC GC",
 		}); err != nil {
 			return err
 		}
-
-		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
-			Username:    username.RootUserName(),
-			Description: `GC for DROP INDEX t.public.kv@foo`,
-			DescriptorIDs: descpb.IDs{
-				tableDesc.GetID(),
-			},
-			RunningStatus: "waiting for MVCC GC",
-		})
+		return nil
 	})
 
 	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
