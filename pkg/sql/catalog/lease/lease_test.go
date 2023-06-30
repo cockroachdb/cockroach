@@ -890,8 +890,6 @@ CREATE TABLE t.foo (v INT);
 func TestDescriptorRefreshOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 50037)
-
 	params := createTestServerParams()
 
 	fooAcquiredCount := int32(0)
