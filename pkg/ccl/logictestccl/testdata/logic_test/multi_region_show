@@ -58,7 +58,7 @@ SHOW CREATE DATABASE multi_region_test_placement_restricted_db
 database_name                                     create_statement
 multi_region_test_placement_restricted_db         CREATE DATABASE multi_region_test_placement_restricted_db PRIMARY REGION "ap-southeast-2" REGIONS = "ap-southeast-2", "ca-central-1", "us-east-1" SURVIVE ZONE FAILURE PLACEMENT RESTRICTED
 
-statement error target database or schema does not exist
+statement error database "foo" does not exist
 SHOW CREATE DATABASE foo
 
 # Test that showing localities works for databases and schemas with weird
