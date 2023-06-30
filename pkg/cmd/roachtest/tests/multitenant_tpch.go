@@ -30,10 +30,11 @@ import (
 func runMultiTenantTPCH(
 	ctx context.Context, t test.Test, c cluster.Cluster, enableDirectScans bool, sharedProcess bool,
 ) {
+	secure := true
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	start := func() {
-		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(secure)), c.All())
 	}
 	start()
 
@@ -53,7 +54,7 @@ func runMultiTenantTPCH(
 		}
 		t.Status("restoring TPCH dataset for Scale Factor 1 in ", setupNames[setupIdx])
 		if err := loadTPCHDataset(
-			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
+			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false /* disableMergeQueue */, secure,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +83,7 @@ func runMultiTenantTPCH(
 
 	// Restart and wipe the cluster to remove advantage of the second TPCH run.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
-	c.Wipe(ctx, false /* preserveCerts */)
+	c.Wipe(ctx, secure)
 	start()
 	singleTenantConn = c.Conn(ctx, t.L(), 1)
 	// Disable merge queue in the system tenant.

@@ -76,7 +76,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 
 		t.Status("setting up dataset")
 		err := loadTPCHDataset(
-			ctx, t, c, conn, b.ScaleFactor, m, roachNodes, true, /* disableMergeQueue */
+			ctx, t, c, conn, b.ScaleFactor, m, roachNodes, true /* disableMergeQueue */, false, /* secure */
 		)
 		if err != nil {
 			return err
