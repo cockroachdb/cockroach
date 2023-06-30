@@ -585,13 +585,13 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html"
 pg_catalog,pg_inherits,table,admin,NULL,permanent,prefix,"table inheritance hierarchy (empty - feature does not exist)
 https://www.postgresql.org/docs/9.5/catalog-pg-inherits.html"
 pg_catalog,pg_init_privs,table,admin,NULL,permanent,prefix,pg_init_privs was created for compatibility and is currently unimplemented
-pg_catalog,pg_language,table,admin,NULL,permanent,prefix,"available languages (empty - feature does not exist)
+pg_catalog,pg_language,table,admin,NULL,permanent,prefix,"available languages
 https://www.postgresql.org/docs/9.5/catalog-pg-language.html"
 pg_catalog,pg_largeobject,table,admin,NULL,permanent,prefix,pg_largeobject was created for compatibility and is currently unimplemented
 pg_catalog,pg_largeobject_metadata,table,admin,NULL,permanent,prefix,pg_largeobject_metadata was created for compatibility and is currently unimplemented
 pg_catalog,pg_locks,table,admin,NULL,permanent,prefix,"locks held by active processes (empty - feature does not exist)
 https://www.postgresql.org/docs/9.6/view-pg-locks.html"
-pg_catalog,pg_matviews,table,admin,NULL,permanent,prefix,"available materialized views (empty - feature does not exist)
+pg_catalog,pg_matviews,table,admin,NULL,permanent,prefix,"available materialized views
 https://www.postgresql.org/docs/9.6/view-pg-matviews.html"
 pg_catalog,pg_namespace,table,admin,NULL,permanent,prefix,"available namespaces
 https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html"

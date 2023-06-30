@@ -235,40 +235,65 @@ CREATE TABLE information_schema.key_column_usage (
 
 // InformationSchemaParameters describes the schema of the
 // information_schema.parameters table.
-const InformationSchemaParameters = `CREATE TABLE information_schema.parameters (
-	SPECIFIC_CATALOG STRING,
-	SPECIFIC_SCHEMA STRING,
-	SPECIFIC_NAME STRING,
-	ORDINAL_POSITION INT,
-	PARAMETER_MODE STRING,
-	IS_RESULT STRING,
-	AS_LOCATOR STRING,
-	PARAMETER_NAME STRING,
-	DATA_TYPE STRING,
-	CHARACTER_MAXIMUM_LENGTH INT,
-	CHARACTER_OCTET_LENGTH INT,
-	CHARACTER_SET_CATALOG STRING,
-	CHARACTER_SET_SCHEMA STRING,
-	CHARACTER_SET_NAME STRING,
-	COLLATION_CATALOG STRING,
-	COLLATION_SCHEMA STRING,
-	COLLATION_NAME STRING,
-	NUMERIC_PRECISION INT,
-	NUMERIC_PRECISION_RADIX INT,
-	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT,
-	INTERVAL_TYPE STRING,
-	INTERVAL_PRECISION INT,
-	UDT_CATALOG STRING,
-	UDT_SCHEMA STRING,
-	UDT_NAME STRING,
-	SCOPE_CATALOG STRING,
-	SCOPE_SCHEMA STRING,
-	SCOPE_NAME STRING,
-	MAXIMUM_CARDINALITY INT,
-	DTD_IDENTIFIER STRING,
-	PARAMETER_DEFAULT STRING
-)`
+const InformationSchemaParameters = `
+CREATE VIEW information_schema.parameters AS
+    SELECT CAST(current_database() AS TEXT) AS specific_catalog,
+           CAST(n_nspname AS TEXT) AS specific_schema,
+           CAST(nameconcatoid(proname, p_oid) AS TEXT) AS specific_name,
+           CAST((ss.x).n AS INT) AS ordinal_position,
+           CAST(
+             CASE WHEN proargmodes IS NULL THEN 'IN'
+                WHEN proargmodes[(ss.x).n] = 'i' THEN 'IN'
+                WHEN proargmodes[(ss.x).n] = 'o' THEN 'OUT'
+                WHEN proargmodes[(ss.x).n] = 'b' THEN 'INOUT'
+                WHEN proargmodes[(ss.x).n] = 'v' THEN 'IN'
+                WHEN proargmodes[(ss.x).n] = 't' THEN 'OUT'
+             END AS TEXT) AS parameter_mode,
+           CAST('NO' AS TEXT) AS is_result,
+           CAST('NO' AS TEXT) AS as_locator,
+           CAST(NULLIF(proargnames[(ss.x).n], '') AS TEXT) AS parameter_name,
+           CAST(
+             CASE WHEN t.typelem <> 0 AND t.typlen = -1 THEN 'ARRAY'
+                  WHEN nt.nspname = 'pg_catalog' THEN format_type(t.oid, null)
+                  ELSE 'USER-DEFINED' END AS TEXT)
+             AS data_type,
+           CAST(null AS INT) AS character_maximum_length,
+           CAST(null AS INT) AS character_octet_length,
+           CAST(null AS TEXT) AS character_set_catalog,
+           CAST(null AS TEXT) AS character_set_schema,
+           CAST(null AS TEXT) AS character_set_name,
+           CAST(null AS TEXT) AS collation_catalog,
+           CAST(null AS TEXT) AS collation_schema,
+           CAST(null AS TEXT) AS collation_name,
+           CAST(null AS INT) AS numeric_precision,
+           CAST(null AS INT) AS numeric_precision_radix,
+           CAST(null AS INT) AS numeric_scale,
+           CAST(null AS INT) AS datetime_precision,
+           CAST(null AS TEXT) AS interval_type,
+           CAST(null AS INT) AS interval_precision,
+           CAST(current_database() AS TEXT) AS udt_catalog,
+           CAST(nt.nspname AS TEXT) AS udt_schema,
+           CAST(t.typname AS TEXT) AS udt_name,
+           CAST(null AS TEXT) AS scope_catalog,
+           CAST(null AS TEXT) AS scope_schema,
+           CAST(null AS TEXT) AS scope_name,
+           CAST(null AS INT) AS maximum_cardinality,
+           CAST((ss.x).n AS TEXT) AS dtd_identifier,
+           CAST(
+             CASE WHEN pg_has_role(proowner, 'USAGE')
+                  THEN pg_get_function_arg_default(p_oid, (ss.x).n)
+                  ELSE NULL END
+             AS TEXT) AS parameter_default
+
+    FROM pg_type t, pg_namespace nt,
+         (SELECT n.nspname AS n_nspname, p.proname, p.oid AS p_oid, p.proowner,
+                 p.proargnames, p.proargmodes,
+                 information_schema._pg_expandarray(coalesce(p.proallargtypes, p.proargtypes::oid[])) AS x
+          FROM pg_namespace n, pg_proc p
+          WHERE n.oid = p.pronamespace
+                AND (pg_has_role(p.proowner, 'USAGE') OR
+                     has_function_privilege(p.oid, 'EXECUTE'))) AS ss
+    WHERE t.oid = (ss.x).x AND t.typnamespace = nt.oid;`
 
 // InformationSchemaReferentialConstraints describes the schema of the
 // information_schema.referential_constraints table.
