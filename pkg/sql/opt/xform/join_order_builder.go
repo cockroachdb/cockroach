@@ -472,6 +472,11 @@ func (jb *JoinOrderBuilder) ensureClosure(join memo.RelExpr) {
 	for col, ok := reps.Next(0); ok; col, ok = reps.Next(col + 1) {
 		// Get all columns which are known to be equal to this column.
 		equivGroup := equivFDs.ComputeEquivGroup(col)
+		if !equivGroup.Intersects(join.Relational().NotNullCols) {
+			// If the equivalent columns are nullable, it would be invalid to add an
+			// equality edge because SQL equality rejects NULL values.
+			continue
+		}
 
 		// Ensure that there exists an edge for each distinct pair of equivalent
 		// columns.
