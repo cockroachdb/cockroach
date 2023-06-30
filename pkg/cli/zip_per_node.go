@@ -104,10 +104,10 @@ func (zc *debugZipContext) collectCPUProfiles(
 			var pd profData
 			err := timeutil.RunWithTimeout(ctx, "fetch cpu profile", zc.timeout+zipCtx.cpuProfDuration, func(ctx context.Context) error {
 				resp, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
-					NodeId:  fmt.Sprintf("%d", nodeID),
-					Type:    serverpb.ProfileRequest_CPU,
-					Seconds: secs,
-					Labels:  true,
+					NodeId:     fmt.Sprintf("%d", nodeID),
+					Type:       serverpb.ProfileRequest_CPU,
+					Seconds:    secs,
+					WithLabels: true,
 				})
 				if err != nil {
 					return err

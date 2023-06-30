@@ -1461,64 +1461,29 @@ func (s *statusServer) Stacks(
 	return stacksLocal(req)
 }
 
-// fetchProfileFromAllNodes fetches the CPU profiles from all live nodes in the
-// cluster and merges the samples across all profiles.
-func (s *statusServer) fetchProfileFromAllNodes(
-	ctx context.Context, req *serverpb.ProfileRequest,
-) (*serverpb.JSONResponse, error) {
-	type profData struct {
-		data []byte
-		err  error
-	}
-	type profDataResponse struct {
-		profDataByNodeID map[roachpb.NodeID]*profData
-	}
-	response := profDataResponse{profDataByNodeID: make(map[roachpb.NodeID]*profData)}
-
-	resp, err := s.Node(ctx, &serverpb.NodeRequest{NodeId: "local"})
-	if err != nil {
-		return nil, err
-	}
-	senderServerVersion := resp.Desc.ServerVersion
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
-		statusClient := client.(serverpb.StatusClient)
-		resp, err := statusClient.Node(ctx, &serverpb.NodeRequest{NodeId: "local"})
-		if err != nil {
-			return nodeID, err
+func (s *statusServer) processGoroutineProfilesFromAllNodes(
+	ctx context.Context, response profDataResponse,
+) ([]byte, error) {
+	res := bytes.NewBuffer(nil)
+	for nodeID, pd := range response.profDataByNodeID {
+		if len(pd.data) == 0 && pd.err == nil {
+			log.Warningf(ctx, "no stacks collected for node %d", nodeID)
+			continue // skipped node
 		}
-		var pd *profData
-		err = timeutil.RunWithTimeout(ctx, "fetch cpu profile", 1*time.Minute, func(ctx context.Context) error {
-			log.Infof(ctx, "fetching a CPU profile for %d", resp.Desc.NodeID)
-			resp, err := statusClient.Profile(ctx, &serverpb.ProfileRequest{
-				NodeId:              fmt.Sprintf("%d", nodeID),
-				Type:                serverpb.ProfileRequest_CPU,
-				Seconds:             req.Seconds,
-				Labels:              req.Labels,
-				SenderServerVersion: &senderServerVersion,
-			})
-			if err != nil {
-				return err
-			}
-			pd = &profData{data: resp.Data}
-			return nil
-		})
-		return pd, err
-	}
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		profResp := resp.(*profData)
-		response.profDataByNodeID[nodeID] = profResp
-	}
-	errorFn := func(nodeID roachpb.NodeID, err error) {
-		response.profDataByNodeID[nodeID] = &profData{err: err}
-	}
-	if err := s.iterateNodes(ctx, "cluster-wide CPU profile", dialFn, nodeFn, responseFn, errorFn); err != nil {
-		return nil, serverError(ctx, err)
+
+		if pd.err != nil {
+			log.Warningf(ctx, "failed to collect stacks for node %d: %v", nodeID, pd.err)
+			continue
+		}
+		res.Write(pd.data)
 	}
 
+	return res.Bytes(), nil
+}
+
+func (s *statusServer) processCPUProfilesFromAllNodes(
+	ctx context.Context, response profDataResponse,
+) ([]byte, error) {
 	profs := make([]*profile.Profile, 0, len(response.profDataByNodeID))
 	for nodeID, pd := range response.profDataByNodeID {
 		if len(pd.data) == 0 && pd.err == nil {
@@ -1547,7 +1512,78 @@ func (s *statusServer) fetchProfileFromAllNodes(
 	if err := mergedProfiles.Write(&buf); err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
-	return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
+	return buf.Bytes(), nil
+}
+
+type profData struct {
+	data []byte
+	err  error
+}
+type profDataResponse struct {
+	profDataByNodeID map[roachpb.NodeID]*profData
+}
+
+// fetchProfileFromAllNodes fetches the CPU profiles from all live nodes in the
+// cluster and merges the samples across all profiles.
+func (s *statusServer) fetchProfileFromAllNodes(
+	ctx context.Context, req *serverpb.ProfileRequest,
+) (*serverpb.JSONResponse, error) {
+	response := profDataResponse{profDataByNodeID: make(map[roachpb.NodeID]*profData)}
+
+	resp, err := s.Node(ctx, &serverpb.NodeRequest{NodeId: "local"})
+	if err != nil {
+		return nil, err
+	}
+	senderServerVersion := resp.Desc.ServerVersion
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	opName := fmt.Sprintf("fetch cluster-wide %s profile", req.Type.String())
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		var pd *profData
+		err = timeutil.RunWithTimeout(ctx, opName, 1*time.Minute, func(ctx context.Context) error {
+			resp, err := statusClient.Profile(ctx, &serverpb.ProfileRequest{
+				NodeId:              fmt.Sprintf("%d", nodeID),
+				Type:                req.Type,
+				Seconds:             req.Seconds,
+				WithLabels:          req.WithLabels,
+				LabelFilter:         req.LabelFilter,
+				SenderServerVersion: &senderServerVersion,
+			})
+			if err != nil {
+				return err
+			}
+			pd = &profData{data: resp.Data}
+			return nil
+		})
+		return pd, err
+	}
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		profResp := resp.(*profData)
+		response.profDataByNodeID[nodeID] = profResp
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.profDataByNodeID[nodeID] = &profData{err: err}
+	}
+	if err := s.iterateNodes(ctx, opName, dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, serverError(ctx, err)
+	}
+	var data []byte
+	switch req.Type {
+	case serverpb.ProfileRequest_CPU:
+		data, err = s.processCPUProfilesFromAllNodes(ctx, response)
+	case serverpb.ProfileRequest_GOROUTINE:
+		data, err = s.processGoroutineProfilesFromAllNodes(ctx, response)
+	default:
+		return nil, errors.Newf("cluster-wide collection of %s is unsupported", req.Type.String())
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.JSONResponse{Data: data}, nil
 }
 
 // TODO(tschottdorf): significant overlap with /debug/pprof/heap, except that
@@ -1568,7 +1604,7 @@ func (s *statusServer) Profile(
 	}
 
 	// If the request is for "all" nodes then we collect profiles from all nodes
-	// in the cluster and merge them before returning to the user.
+	// in the cluster and process them before returning to the user.
 	if req.NodeId == "all" {
 		return s.fetchProfileFromAllNodes(ctx, req)
 	}
@@ -1595,7 +1631,7 @@ func (s *statusServer) Profile(
 				serverVersion.String(), req.SenderServerVersion.String())
 		}
 	}
-	return profileLocal(ctx, req, s.st)
+	return profileLocal(ctx, req, s.st, nodeID)
 }
 
 // Regions implements the serverpb.StatusServer interface.

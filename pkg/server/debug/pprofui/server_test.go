@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package pprofui
+package pprofui_test
 
 import (
 	"context"
@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -50,39 +52,49 @@ func init() {
 	}
 }
 
+var supportedProfiles = []string{
+	"cpu", "goroutine", "heap", "threadcreate", "block", "mutex", "allocs",
+}
+
 func TestServer(t *testing.T) {
 	expectedNodeID := "local"
+	withLabels := false
 
 	mockProfile := func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error) {
 		require.Equal(t, expectedNodeID, req.NodeId)
+		require.Equal(t, withLabels, req.WithLabels)
 		b, err := os.ReadFile(datapathutils.TestDataPath(t, "heap.profile"))
 		require.NoError(t, err)
 		return &serverpb.JSONResponse{Data: b}, nil
 	}
 
-	storage := NewMemStorage(1, 0)
-	s := NewServer(storage, ProfilerFunc(mockProfile))
+	storage := pprofui.NewMemStorage(1, 0)
+	s := pprofui.NewServer(storage, ProfilerFunc(mockProfile))
 
+	count := 1
 	for i := 0; i < 3; i++ {
-		t.Run(fmt.Sprintf("request local profile %d", i), func(t *testing.T) {
-			r := httptest.NewRequest("GET", "/heap/", nil)
-			w := httptest.NewRecorder()
-			s.ServeHTTP(w, r)
+		for _, profileType := range supportedProfiles {
+			t.Run(fmt.Sprintf("request local profile %s:%d", profileType, i), func(t *testing.T) {
+				r := httptest.NewRequest("GET", fmt.Sprintf("/%s/", profileType), nil)
+				w := httptest.NewRecorder()
+				s.ServeHTTP(w, r)
 
-			require.Equal(t, http.StatusTemporaryRedirect, w.Code)
+				require.Equal(t, http.StatusTemporaryRedirect, w.Code)
 
-			loc := w.Result().Header.Get("Location")
-			require.Equal(t, fmt.Sprintf("/heap/%d/flamegraph", i+1), loc)
+				loc := w.Result().Header.Get("Location")
+				require.Equal(t, fmt.Sprintf("/%s/%d/flamegraph", profileType, count), loc)
+				count++
 
-			r = httptest.NewRequest("GET", loc, nil)
-			w = httptest.NewRecorder()
+				r = httptest.NewRequest("GET", loc, nil)
+				w = httptest.NewRecorder()
 
-			s.ServeHTTP(w, r)
+				s.ServeHTTP(w, r)
 
-			require.Equal(t, http.StatusOK, w.Code)
-			require.Contains(t, w.Body.String(), "pprof</a></h1>")
-		})
-		require.Equal(t, 1, len(storage.getRecords()),
+				require.Equal(t, http.StatusOK, w.Code)
+				require.Contains(t, w.Body.String(), "pprof</a></h1>")
+			})
+		}
+		require.Equal(t, 1, len(storage.GetRecords()),
 			"storage did not expunge records")
 	}
 
@@ -95,7 +107,97 @@ func TestServer(t *testing.T) {
 
 		require.Equal(t, http.StatusTemporaryRedirect, w.Code)
 		loc := w.Result().Header.Get("Location")
-		require.Equal(t, "/heap/4/flamegraph?node=3", loc)
+		require.Equal(t, fmt.Sprintf("/heap/%d/flamegraph?node=3", count), loc)
+	})
+
+	t.Run("request profile with labels", func(t *testing.T) {
+		expectedNodeID = "3"
+		withLabels = true
+		defer func() {
+			withLabels = false
+		}()
+
+		// Labels are only supported for CPU and GOROUTINE profiles.
+		r := httptest.NewRequest("GET", "/heap/?node=3&labels=true", nil)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		count++
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, "profiling with labels is unsupported for HEAP\n", w.Body.String())
+
+		r = httptest.NewRequest("GET", "/cpu/?node=3&labels=true", nil)
+		w = httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		count++
+		require.Equal(t, http.StatusTemporaryRedirect, w.Code)
+		loc := w.Result().Header.Get("Location")
+		require.Equal(t, fmt.Sprintf("/cpu/%d/flamegraph?node=3&labels=true", count), loc)
+
+		// A GOROUTINE profile with a label will trigger a download since it is not
+		// generated a Profile protobuf format.
+		r = httptest.NewRequest("GET", "/goroutine/?node=3&labels=true", nil)
+		w = httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		count++
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "attachment; filename=goroutine_25.txt", w.Header().Get("Content-Disposition"))
+		require.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+	})
+
+	t.Run("request cluster-wide profiles", func(t *testing.T) {
+		expectedNodeID = "all"
+
+		// Cluster-wide profiles are only supported for CPU and GOROUTINE profiles.
+		r := httptest.NewRequest("GET", "/heap/?node=all", nil)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		count++
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, "cluster-wide collection is unsupported for HEAP\n", w.Body.String())
+
+		r = httptest.NewRequest("GET", "/cpu/?node=all", nil)
+		w = httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		count++
+		require.Equal(t, http.StatusTemporaryRedirect, w.Code)
+		loc := w.Result().Header.Get("Location")
+		require.Equal(t, fmt.Sprintf("/cpu/%d/flamegraph?node=all", count), loc)
+
+		// A GOROUTINE profile with a label will trigger a download since it is not
+		// generated a Profile protobuf format.
+		r = httptest.NewRequest("GET", "/goroutine/?node=all", nil)
+		w = httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		count++
+		require.Equal(t, http.StatusTemporaryRedirect, w.Code)
+		loc = w.Result().Header.Get("Location")
+		require.Equal(t, fmt.Sprintf("/goroutine/%d/flamegraph?node=all", count), loc)
+	})
+
+	t.Run("request profile with label filters", func(t *testing.T) {
+		expectedNodeID = "3"
+		withLabels = true
+		defer func() {
+			withLabels = false
+		}()
+
+		// Labels are only supported for CPU and GOROUTINE profiles.
+		r := httptest.NewRequest("GET", "/heap/?node=3&labels=true&labelfilter=foo:bar", nil)
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		count++
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, "profiling with labels is unsupported for HEAP\n", w.Body.String())
+
+		// A GOROUTINE profile with a label will trigger a download since it is not
+		// generated a Profile protobuf format.
+		r = httptest.NewRequest("GET", "/goroutine/?node=3&labelfilter=foo:bar", nil)
+		w = httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		count++
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "attachment; filename=goroutine_30.txt", w.Header().Get("Content-Disposition"))
+		require.Equal(t, "text/plain", w.Header().Get("Content-Type"))
 	})
 }
 
@@ -104,7 +206,7 @@ func TestServerConcurrentAccess(t *testing.T) {
 	skip.UnderRace(t, "test fails under race due to known race condition with profiles")
 	const (
 		runsPerWorker = 1
-		workers       = ProfileConcurrency
+		workers       = pprofui.ProfileConcurrency
 	)
 	mockProfile := func(ctx context.Context, req *serverpb.ProfileRequest) (*serverpb.JSONResponse, error) {
 		require.Equal(t, expectedNodeID, req.NodeId)
@@ -117,7 +219,7 @@ func TestServerConcurrentAccess(t *testing.T) {
 		return &serverpb.JSONResponse{Data: b}, nil
 	}
 
-	s := NewServer(NewMemStorage(ProfileConcurrency, ProfileExpiry), ProfilerFunc(mockProfile))
+	s := pprofui.NewServer(pprofui.NewMemStorage(pprofui.ProfileConcurrency, pprofui.ProfileExpiry), ProfilerFunc(mockProfile))
 	getProfile := func(profile string, t *testing.T) {
 		t.Helper()
 
@@ -153,4 +255,50 @@ func TestServerConcurrentAccess(t *testing.T) {
 		go runWorker()
 	}
 	wg.Wait()
+}
+
+func TestFilterStacksWithLabels(t *testing.T) {
+	testStacks := `
+8 @ 0x4a13d6 0x46b3bb 0x46aef8 0x12fd53f 0xe9bc43 0x12fd478 0x4d3101
+# labels: {"foo":"baz", "bar":"biz"}
+#       0x12fd53e       github.com/cockroachdb/pebble.(*tableCacheShard).releaseLoop.func1+0x9e github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/table_cache.go:324
+
+10 @ 0x4a13d6 0x4b131c 0x17969e6 0x4d3101
+#       0x17969e5       github.com/cockroachdb/cockroach/pkg/util/admission.initWorkQueue.func2+0x85    github.com/cockroachdb/cockroach/pkg/util/admission/work_queue.go:388
+
+8 @ 0x4a13d6 0x4b131c 0x1796e96 0x4d3101
+# labels: {"bar":"biz"}
+#       0x1796e95       github.com/cockroachdb/cockroach/pkg/util/admission.(*WorkQueue).startClosingEpochs.func1+0x1d5 github.com/cockroachdb/cockroach/pkg
+/util/admission/work_queue.go:462
+`
+	t.Run("empty filter", func(t *testing.T) {
+		res := server.FilterStacksWithLabels([]byte(testStacks), "")
+		require.Equal(t, `
+8 @ 0x4a13d6 0x46b3bb 0x46aef8 0x12fd53f 0xe9bc43 0x12fd478 0x4d3101
+# labels: {"foo":"baz", "bar":"biz"}
+#       0x12fd53e       github.com/cockroachdb/pebble.(*tableCacheShard).releaseLoop.func1+0x9e github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/table_cache.go:324
+
+10 @ 0x4a13d6 0x4b131c 0x17969e6 0x4d3101
+#       0x17969e5       github.com/cockroachdb/cockroach/pkg/util/admission.initWorkQueue.func2+0x85    github.com/cockroachdb/cockroach/pkg/util/admission/work_queue.go:388
+
+8 @ 0x4a13d6 0x4b131c 0x1796e96 0x4d3101
+# labels: {"bar":"biz"}
+#       0x1796e95       github.com/cockroachdb/cockroach/pkg/util/admission.(*WorkQueue).startClosingEpochs.func1+0x1d5 github.com/cockroachdb/cockroach/pkg
+/util/admission/work_queue.go:462
+`, string(res))
+	})
+
+	t.Run("bar-biz filter", func(t *testing.T) {
+		res := server.FilterStacksWithLabels([]byte(testStacks), "\"bar\":\"biz\"")
+		require.Equal(t, `
+8 @ 0x4a13d6 0x46b3bb 0x46aef8 0x12fd53f 0xe9bc43 0x12fd478 0x4d3101
+# labels: {"foo":"baz", "bar":"biz"}
+#       0x12fd53e       github.com/cockroachdb/pebble.(*tableCacheShard).releaseLoop.func1+0x9e github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/table_cache.go:324
+
+8 @ 0x4a13d6 0x4b131c 0x1796e96 0x4d3101
+# labels: {"bar":"biz"}
+#       0x1796e95       github.com/cockroachdb/cockroach/pkg/util/admission.(*WorkQueue).startClosingEpochs.func1+0x1d5 github.com/cockroachdb/cockroach/pkg
+/util/admission/work_queue.go:462
+`, string(res))
+	})
 }

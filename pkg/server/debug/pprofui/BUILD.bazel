@@ -31,9 +31,10 @@ go_test(
     srcs = ["server_test.go"],
     args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
-    embed = [":pprofui"],
     deps = [
+        ":pprofui",
         "//pkg/build/bazel",
+        "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
