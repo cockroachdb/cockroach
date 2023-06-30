@@ -173,6 +173,7 @@ go_library(
         "//pkg/server/autoconfig",
         "//pkg/server/autoconfig/acprovider",
         "//pkg/server/debug",
+        "//pkg/server/debug/pprofui",
         "//pkg/server/diagnostics",
         "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/goroutinedumper",
