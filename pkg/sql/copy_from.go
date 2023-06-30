@@ -1128,7 +1128,7 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	}
 
 	if rows := res.RowsAffected(); rows != numRows {
-		log.Fatalf(ctx, "didn't insert all buffered rows and yet no error was reported. "+
+		return errors.AssertionFailedf("COPY didn't insert all buffered rows and yet no error was reported. "+
 			"Inserted %d out of %d rows.", rows, numRows)
 	}
 	c.insertedRows += numRows
