@@ -2922,8 +2922,6 @@ func TestChangefeedJobControl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 98916, "flaky test")
-
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		ChangefeedJobPermissionsTestSetup(t, s)
 
@@ -2965,7 +2963,9 @@ func TestChangefeedJobControl(t *testing.T) {
 
 		// No one can modify changefeeds created by admins, except for admins.
 		// In this case, the root user creates the changefeed.
-		currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
+		asUser(t, f, "adminUser", func(runner *sqlutils.SQLRunner) {
+			currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
+		})
 		asUser(t, f, `adminUser`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
 			waitForJobStatus(userDB, t, currentFeed.JobID(), "paused")
