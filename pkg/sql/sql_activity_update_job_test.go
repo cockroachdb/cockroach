@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -30,7 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -521,4 +524,145 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	db.QueryRow(t, "SELECT metadata FROM system.public.transaction_activity LIMIT 1").Scan(&metadataJSON)
 	require.NoError(t, json.Unmarshal([]byte(metadataJSON), &metadata))
 	require.NotEmpty(t, metadata.StmtFingerprintIDs)
+}
+
+// Verify the cluster setting ignores activity tables when disabled
+// 1. Changes app name and execute 2 queries (select _, change app name)
+// 2. Check results include the app which should be from activity tables
+// 3. Change the app names in the activity tables
+// 4. Verify original app name no longer found
+// 5. Disable cluster setting
+// 6. Verify original app name in result from statistics table
+func TestActivityStatusCombineAPI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "test is too slow to run under race")
+
+	ctx := context.Background()
+	stubTime := timeutil.Now().Truncate(time.Hour)
+	sqlStatsKnobs := &sqlstats.TestingKnobs{
+		StubTimeNow: func() time.Time { return stubTime },
+		AOSTClause:  "AS OF SYSTEM TIME '-1us'",
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlStatsKnobs,
+			UpgradeManager: &upgradebase.TestingKnobs{
+				DontUseJobs:                       true,
+				SkipUpdateSQLActivityJobBootstrap: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+	defer sqlDB.Close()
+
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	st := cluster.MakeTestingClusterSettings()
+	updater := newSqlActivityUpdater(st, execCfg.InternalDB, sqlStatsKnobs)
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	// Generate a random app name each time to avoid conflicts
+	appName := "test_status_api" + uuid.FastMakeV4().String()
+	db.Exec(t, "SET SESSION application_name = $1", appName)
+
+	// Generate some sql stats data.
+	db.Exec(t, "SELECT 1;")
+
+	// Switch the app name back so any queries ran after do not get included
+	db.Exec(t, "SET SESSION application_name = '$ internal-test'")
+
+	// Flush and transfer stats.
+	var metadataJSON string
+	s.SQLServer().(*Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
+	// Ensure that the metadata column contains the populated 'stmtFingerprintIDs' field.
+	var metadata struct {
+		StmtFingerprintIDs []string `json:"stmtFingerprintIDs,"`
+	}
+
+	require.NoError(t, updater.TransferStatsToActivity(ctx))
+	db.QueryRow(t, "SELECT metadata FROM system.public.transaction_activity LIMIT 1").Scan(&metadataJSON)
+	require.NoError(t, json.Unmarshal([]byte(metadataJSON), &metadata))
+	require.NotEmpty(t, metadata.StmtFingerprintIDs)
+
+	// Hit query endpoint.
+	start := stubTime
+	end := stubTime
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(s, "combinedstmts", &resp, start, end); err != nil {
+		t.Fatal(err)
+	}
+	require.NotEmpty(t, resp.Transactions)
+	require.NotEmpty(t, resp.Statements)
+
+	stmtAppNameCnt := getStmtAppNameCount(resp, appName)
+	require.Greater(t, stmtAppNameCnt, 0)
+
+	txnAppNameCnt := getTxnAppNameCnt(resp, appName)
+	require.Greater(t, txnAppNameCnt, 0)
+
+	// Grant permission and change the activity table info
+	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+	db.Exec(t, "GRANT node TO root")
+	db.Exec(t, "UPDATE system.public.statement_activity SET app_name = 'randomapp' where app_name = $1;", appName)
+	db.Exec(t, "UPDATE system.public.transaction_activity SET app_name = 'randomapp' where app_name = $1;", appName)
+
+	if err := getStatusJSONProto(s, "combinedstmts", &resp, start, end); err != nil {
+		t.Fatal(err)
+	}
+	// Verify the activity table changes caused the response to change.
+	require.NotEmpty(t, resp.Transactions)
+	require.NotEmpty(t, resp.Statements)
+	appNameChangedStmtCnt := getStmtAppNameCount(resp, appName)
+	require.Equal(t, 0, appNameChangedStmtCnt)
+
+	appNameChangedTxnCnt := getTxnAppNameCnt(resp, appName)
+	require.Equal(t, 0, appNameChangedTxnCnt)
+
+	// Disable the activity ui cluster setting so it only pull from stats tables
+	db.Exec(t, "set cluster setting sql.stats.activity.ui.enabled = false;")
+
+	if err := getStatusJSONProto(s, "combinedstmts", &resp, start, end); err != nil {
+		t.Fatal(err)
+	}
+	require.NotEmpty(t, resp.Transactions)
+	require.NotEmpty(t, resp.Statements)
+
+	// These should be the same as the original results.
+	uiDisabledStmtAppNameCnt := getStmtAppNameCount(resp, appName)
+	require.Equal(t, stmtAppNameCnt, uiDisabledStmtAppNameCnt)
+	uiDisabledTxnAppNameCnt := getTxnAppNameCnt(resp, appName)
+	require.Equal(t, txnAppNameCnt, uiDisabledTxnAppNameCnt)
+}
+
+func getTxnAppNameCnt(resp serverpb.StatementsResponse, appName string) int {
+	txnAppNameCnt := 0
+	for _, txn := range resp.Transactions {
+		if txn.StatsData.App == appName {
+			txnAppNameCnt++
+		}
+	}
+	return txnAppNameCnt
+}
+
+func getStmtAppNameCount(resp serverpb.StatementsResponse, appName string) int {
+	stmtAppNameCnt := 0
+	for _, stmt := range resp.Statements {
+		if stmt.Key.KeyData.App == appName {
+			stmtAppNameCnt++
+		}
+	}
+	return stmtAppNameCnt
+}
+
+func getStatusJSONProto(
+	ts serverutils.TestServerInterface,
+	path string,
+	response protoutil.Message,
+	startTime time.Time,
+	endTime time.Time,
+) error {
+	url := fmt.Sprintf("/_status/%s?start=%d&end=%d", path, startTime.Unix(), endTime.Unix())
+	return serverutils.GetJSONProto(ts, url, response)
 }

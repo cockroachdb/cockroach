@@ -100,11 +100,13 @@ func getCombinedStatementStats(
 		activityHasAllData, err = activityTablesHaveFullData(
 			ctx,
 			ie,
+			settings,
 			testingKnobs,
 			reqStartTime,
 			req.Limit,
 			sort,
 		)
+
 		if err != nil {
 			log.Errorf(ctx, "Error on activityTablesHaveFullData: %s", err)
 		}
@@ -182,17 +184,27 @@ func getCombinedStatementStats(
 func activityTablesHaveFullData(
 	ctx context.Context,
 	ie *sql.InternalExecutor,
+	settings *cluster.Settings,
 	testingKnobs *sqlstats.TestingKnobs,
 	reqStartTime *time.Time,
 	limit int64,
 	order serverpb.StatsSortOptions,
 ) (result bool, err error) {
+
+	if !StatsActivityUIEnabled.Get(&settings.SV) {
+		return false, nil
+	}
+
 	if (limit > 0 && !isLimitOnActivityTable(limit)) || !isSortOptionOnActivityTable(order) {
 		return false, nil
 	}
-	var auxDate time.Time
-	dateFormat := "2006-01-02 15:04:05.00"
-	auxDate, err = time.Parse(dateFormat, timeutil.Now().String())
+
+	if reqStartTime == nil {
+		return false, nil
+	}
+
+	// Used to verify the table contained data.
+	zeroDate := time.Time{}
 
 	queryWithPlaceholders := `
 SELECT 
@@ -201,12 +213,13 @@ FROM crdb_internal.statement_activity
 %s
 `
 
+	// Format string "2006-01-02 15:04:05.00" is a golang-specific string
 	it, err := ie.QueryIteratorEx(
 		ctx,
 		"activity-min-ts",
 		nil,
 		sessiondata.NodeUserSessionDataOverride,
-		fmt.Sprintf(queryWithPlaceholders, auxDate.Format(dateFormat), testingKnobs.GetAOSTClause()))
+		fmt.Sprintf(queryWithPlaceholders, zeroDate.Format("2006-01-02 15:04:05.00"), testingKnobs.GetAOSTClause()))
 
 	if err != nil {
 		return false, err
@@ -229,8 +242,8 @@ FROM crdb_internal.statement_activity
 	}()
 
 	minAggregatedTs := tree.MustBeDTimestampTZ(row[0]).Time
-	hasData := !minAggregatedTs.Equal(auxDate) && (reqStartTime.After(minAggregatedTs) || reqStartTime.Equal(minAggregatedTs))
 
+	hasData := !minAggregatedTs.IsZero() && (reqStartTime.After(minAggregatedTs) || reqStartTime.Equal(minAggregatedTs))
 	return hasData, nil
 }
 
@@ -759,9 +772,6 @@ GROUP BY
 
 	var it isql.Rows
 	var err error
-	defer func() {
-		err = closeIterator(it, err)
-	}()
 	if activityTableHasAllData {
 		it, err = getIterator(
 			ctx,
@@ -777,6 +787,10 @@ GROUP BY
 			return nil, serverError(ctx, err)
 		}
 	}
+
+	defer func() {
+		err = closeIterator(it, err)
+	}()
 
 	// If there are no results from the activity table, retrieve the data from the persisted table.
 	if it == nil || !it.HasResults() {
@@ -1045,6 +1059,7 @@ func getStatementDetails(
 		activityHasData, err = activityTablesHaveFullData(
 			ctx,
 			ie,
+			settings,
 			testingKnobs,
 			reqStartTime,
 			1,
