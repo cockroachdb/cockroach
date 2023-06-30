@@ -2162,24 +2162,33 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	}
 }
 
-// TestLeaderAfterSplit verifies that a raft group created by a split
-// elects a leader without waiting for an election timeout.
+// TestLeaderAfterSplit verifies that a raft group created by a split elects a
+// leader without waiting for an election timeout. It also tests that we don't
+// get an election tie, because we only allow the leaseholder to campaign if
+// there is a valid lease.
 func TestLeaderAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				RaftConfig: base.RaftConfig{
-					RaftElectionTimeoutTicks: 1000000,
-				},
+	// Timing-sensitive test, disable under deadlock and stressrace.
+	skip.UnderDeadlock(t)
+	skip.UnderStressRace(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // time out early
+	defer cancel()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				RaftElectionTimeoutTicks: 1000000, // disable elections
 			},
-		})
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
+
 	store := tc.GetFirstStoreFromServer(t, 0)
+	sender := tc.Servers[0].DistSender()
 
 	leftKey := roachpb.Key("a")
 	splitKey := roachpb.Key("m")
@@ -2189,20 +2198,17 @@ func TestLeaderAfterSplit(t *testing.T) {
 	require.NotNil(t, repl)
 	tc.AddVotersOrFatal(t, repl.Desc().StartKey.AsRawKey(), tc.Targets(1, 2)...)
 
-	splitArgs := adminSplitArgs(splitKey)
-	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), splitArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	// Split the range.
+	_, pErr := kv.SendWrapped(ctx, sender, adminSplitArgs(splitKey))
+	require.NoError(t, pErr.GoError())
 
-	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), incArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	// Make sure both the LHS and RHS can replicate a write request. This will
+	// time out if the RHS can't elect a Raft leader.
+	_, pErr = kv.SendWrapped(ctx, sender, incrementArgs(leftKey, 1))
+	require.NoError(t, pErr.GoError())
 
-	incArgs = incrementArgs(rightKey, 2)
-	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), incArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, pErr = kv.SendWrapped(ctx, sender, incrementArgs(rightKey, 1))
+	require.NoError(t, pErr.GoError())
 }
 
 func BenchmarkStoreRangeSplit(b *testing.B) {
