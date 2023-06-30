@@ -3156,3 +3156,216 @@ project
  │         └── t1.c = t2.c
  └── projections
       └── 1
+
+# Regression test for #105608 - don't infer an equality on nullable columns from
+# the top-level join's functional dependencies.
+exec-ddl
+CREATE TABLE patient (id INT8 NOT NULL, site_id INT8, PRIMARY KEY (id));
+----
+
+exec-ddl
+CREATE TABLE site (id INT8 NOT NULL, PRIMARY KEY (id));
+----
+
+exec-ddl
+CREATE TABLE task (id INT8 NOT NULL, description VARCHAR(255), patient_id INT8, PRIMARY KEY (id));
+----
+
+exec-ddl
+ALTER TABLE IF EXISTS patient ADD CONSTRAINT fkhty4ykfvf29xscswwd63mgdoc FOREIGN KEY (site_id) REFERENCES site;
+----
+
+exec-ddl
+ALTER TABLE IF EXISTS task ADD CONSTRAINT fkkk2ow88d08vqxqyvvvmys1j2m FOREIGN KEY (patient_id) REFERENCES patient;
+----
+
+# The edge "task0_.patient_id = task1_.patient_id" should not be created.
+reorderjoins
+SELECT task0_.id AS id1_2_, task0_.description AS descript2_2_, task0_.patient_id AS patient_3_2_
+FROM task AS task0_ WHERE EXISTS (
+	SELECT task1_.id FROM task AS task1_
+	LEFT JOIN patient AS patient2_
+	ON task1_.patient_id = patient2_.id
+	LEFT JOIN site AS site3_
+	ON patient2_.site_id = site3_.id
+	WHERE (task1_.id = task0_.id) AND ((patient2_.id IS NULL) OR (site3_.id IN (2, 1)))
+);
+----
+--------------------------------------------------------------------------------
+Join Tree #1
+--------------------------------------------------------------------------------
+  left-join (hash)
+   ├── scan task [as=task1_]
+   ├── scan patient [as=patient2_]
+   └── filters
+        └── task1_.patient_id = patient2_.id
+Vertexes
+  A:
+    scan task [as=task1_]
+  B:
+    scan patient [as=patient2_]
+Edges
+  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=()]
+Joining AB
+  A B [left, refs=AB]
+Joins Considered: 1
+--------------------------------------------------------------------------------
+Join Tree #2
+--------------------------------------------------------------------------------
+  left-join (hash)
+   ├── left-join (hash)
+   │    ├── scan task [as=task1_]
+   │    ├── scan patient [as=patient2_]
+   │    └── filters
+   │         └── task1_.patient_id = patient2_.id
+   ├── scan site [as=site3_]
+   └── filters
+        └── site_id = site3_.id
+Vertexes
+  A:
+    scan task [as=task1_]
+  B:
+    scan patient [as=patient2_]
+  C:
+    scan site [as=site3_]
+Edges
+  task1_.patient_id = patient2_.id [left, ses=AB, tes=AB, rules=()]
+  site_id = site3_.id [left, ses=BC, tes=BC, rules=()]
+Joining AB
+  A B [left, refs=AB]
+Joining BC
+  B C [left, refs=BC]
+Joining ABC
+  A BC [left, refs=AB]
+  AB C [left, refs=BC]
+Joins Considered: 4
+--------------------------------------------------------------------------------
+Join Tree #3
+--------------------------------------------------------------------------------
+  semi-join (hash)
+   ├── scan task [as=task0_]
+   ├── select
+   │    ├── left-join (hash)
+   │    │    ├── left-join (hash)
+   │    │    │    ├── scan task [as=task1_]
+   │    │    │    ├── scan patient [as=patient2_]
+   │    │    │    └── filters
+   │    │    │         └── task1_.patient_id = patient2_.id
+   │    │    ├── scan site [as=site3_]
+   │    │    └── filters
+   │    │         └── site_id = site3_.id
+   │    └── filters
+   │         └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
+   └── filters
+        └── task1_.id = task0_.id
+Vertexes
+  D:
+    scan task [as=task0_]
+  E:
+    select
+     ├── left-join (hash)
+     │    ├── left-join (hash)
+     │    │    ├── scan task [as=task1_]
+     │    │    ├── scan patient [as=patient2_]
+     │    │    └── filters
+     │    │         └── task1_.patient_id = patient2_.id
+     │    ├── scan site [as=site3_]
+     │    └── filters
+     │         └── site_id = site3_.id
+     └── filters
+          └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
+Edges
+  task1_.id = task0_.id [semi, ses=DE, tes=DE, rules=()]
+Joining DE
+  D E [semi, refs=DE]
+Joins Considered: 1
+--------------------------------------------------------------------------------
+Join Tree #4
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── scan task [as=task0_]
+   ├── select
+   │    ├── left-join (hash)
+   │    │    ├── left-join (hash)
+   │    │    │    ├── scan task [as=task1_]
+   │    │    │    ├── scan patient [as=patient2_]
+   │    │    │    └── filters
+   │    │    │         └── task1_.patient_id = patient2_.id
+   │    │    ├── scan site [as=site3_]
+   │    │    └── filters
+   │    │         └── site_id = site3_.id
+   │    └── filters
+   │         └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
+   └── filters
+        └── task1_.id = task0_.id
+Vertexes
+  D:
+    scan task [as=task0_]
+  E:
+    select
+     ├── left-join (hash)
+     │    ├── left-join (hash)
+     │    │    ├── scan task [as=task1_]
+     │    │    ├── scan patient [as=patient2_]
+     │    │    └── filters
+     │    │         └── task1_.patient_id = patient2_.id
+     │    ├── scan site [as=site3_]
+     │    └── filters
+     │         └── site_id = site3_.id
+     └── filters
+          └── (patient2_.id IS NULL) OR (site3_.id IN (1, 2))
+Edges
+  task1_.id = task0_.id [inner, ses=DE, tes=DE, rules=()]
+Joining DE
+  D E [inner, refs=DE]
+  E D [inner, refs=DE]
+Joins Considered: 2
+================================================================================
+Final Plan
+================================================================================
+project
+ ├── columns: id1_2_:1!null descript2_2_:2 patient_3_2_:3
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── project
+      ├── columns: task0_.id:1!null task0_.description:2 task0_.patient_id:3 task1_.id:6!null
+      ├── key: (6)
+      ├── fd: (1)-->(2,3), (6)-->(3), (1)==(6), (6)==(1)
+      └── inner-join (lookup task [as=task0_])
+           ├── columns: task0_.id:1!null task0_.description:2 task0_.patient_id:3 task1_.id:6!null task1_.patient_id:8 patient2_.id:11 site_id:12 site3_.id:15
+           ├── key columns: [6] = [1]
+           ├── lookup columns are key
+           ├── key: (6)
+           ├── fd: (1)-->(2,3), (6)-->(8,11,12,15), (11)-->(12), (1)==(6), (6)==(1), (3)==(8), (8)==(3)
+           ├── select
+           │    ├── columns: task1_.id:6!null task1_.patient_id:8 patient2_.id:11 site_id:12 site3_.id:15
+           │    ├── key: (6)
+           │    ├── fd: (6)-->(8,11,12,15), (11)-->(12)
+           │    ├── left-join (hash)
+           │    │    ├── columns: task1_.id:6!null task1_.patient_id:8 patient2_.id:11 site_id:12 site3_.id:15
+           │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+           │    │    ├── key: (6)
+           │    │    ├── fd: (6)-->(8,11,12,15), (11)-->(12)
+           │    │    ├── left-join (hash)
+           │    │    │    ├── columns: task1_.id:6!null task1_.patient_id:8 patient2_.id:11 site_id:12
+           │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+           │    │    │    ├── key: (6)
+           │    │    │    ├── fd: (6)-->(8,11,12), (11)-->(12)
+           │    │    │    ├── scan task [as=task1_]
+           │    │    │    │    ├── columns: task1_.id:6!null task1_.patient_id:8
+           │    │    │    │    ├── key: (6)
+           │    │    │    │    └── fd: (6)-->(8)
+           │    │    │    ├── scan patient [as=patient2_]
+           │    │    │    │    ├── columns: patient2_.id:11!null site_id:12
+           │    │    │    │    ├── key: (11)
+           │    │    │    │    └── fd: (11)-->(12)
+           │    │    │    └── filters
+           │    │    │         └── task1_.patient_id:8 = patient2_.id:11 [outer=(8,11), constraints=(/8: (/NULL - ]; /11: (/NULL - ]), fd=(8)==(11), (11)==(8)]
+           │    │    ├── scan site [as=site3_]
+           │    │    │    ├── columns: site3_.id:15!null
+           │    │    │    └── key: (15)
+           │    │    └── filters
+           │    │         └── site_id:12 = site3_.id:15 [outer=(12,15), constraints=(/12: (/NULL - ]; /15: (/NULL - ]), fd=(12)==(15), (15)==(12)]
+           │    └── filters
+           │         └── (patient2_.id:11 IS NULL) OR (site3_.id:15 IN (1, 2)) [outer=(11,15)]
+           └── filters (true)
