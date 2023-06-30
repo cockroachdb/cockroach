@@ -1179,6 +1179,7 @@ func NewStore(
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(
+			cfg.Settings,
 			cfg.StorePool,
 			cfg.RPCContext.RemoteClocks.Latency,
 			cfg.TestingKnobs.AllocatorKnobs,
@@ -1186,6 +1187,7 @@ func NewStore(
 		)
 	} else {
 		s.allocator = MakeAllocator(
+			cfg.Settings,
 			cfg.StorePool, func(string) (time.Duration, bool) {
 				return 0, false
 			}, cfg.TestingKnobs.AllocatorKnobs, s.metrics,

@@ -384,12 +384,13 @@ func createTestAllocator(
 func createTestAllocatorWithKnobs(
 	ctx context.Context, numNodes int, deterministic bool, knobs *AllocatorTestingKnobs,
 ) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
+	st := cluster.MakeTestingClusterSettings()
 	stopper, g, manual, storePool, _ := createTestStorePool(ctx,
 		TestTimeUntilStoreDeadOff, deterministic,
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(
-		storePool, func(string) (time.Duration, bool) {
+		st, storePool, func(string) (time.Duration, bool) {
 			return 0, true
 		}, knobs, nil, /* storeMetrics */
 	)
@@ -1999,12 +2000,13 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, storePool, nl := createTestStorePool(ctx,
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(
-		storePool, func(string) (time.Duration, bool) {
+		st, storePool, func(string) (time.Duration, bool) {
 			return 0, true
 		}, nil /* knobs */, nil, /* storeMetrics */
 	)
@@ -2385,12 +2387,13 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, storePool, nl := createTestStorePool(ctx,
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(
-		storePool, func(string) (time.Duration, bool) {
+		st, storePool, func(string) (time.Duration, bool) {
 			return 0, true
 		}, nil /* knobs */, nil, /* storeMetrics */
 	)
@@ -2453,12 +2456,13 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	stopper, g, clock, storePool, nl := createTestStorePool(ctx,
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(
-		storePool, func(string) (time.Duration, bool) {
+		st, storePool, func(string) (time.Duration, bool) {
 			return 0, true
 		}, nil /* knobs */, nil, /* storeMetrics */
 	)
@@ -5098,6 +5102,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	stopper, g, _, storePool, _ := createTestStorePool(ctx,
 		TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
@@ -5244,7 +5249,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			a := MakeAllocator(
-				storePool, func(addr string) (time.Duration, bool) {
+				st, storePool, func(addr string) (time.Duration, bool) {
 					return c.latency[addr], true
 				}, nil /* knobs */, nil, /* storeMetrics */
 			)
@@ -6819,12 +6824,13 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 
 	var numNodes int
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	stopper, _, _, sp, _ := createTestStorePool(ctx,
 		TestTimeUntilStoreDeadOff, false, /* deterministic */
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(
-		sp, func(string) (time.Duration, bool) {
+		st, sp, func(string) (time.Duration, bool) {
 			return 0, true
 		}, nil /* knobs */, nil, /* storeMetrics */
 	)
@@ -6931,7 +6937,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	a := MakeAllocator(nil, nil, nil /* knobs */, nil /* storeMetrics */)
+	a := MakeAllocator(nil, nil, nil, nil /* knobs */, nil /* storeMetrics */)
 	action, priority := a.ComputeAction(context.Background(), roachpb.SpanConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -7532,7 +7538,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 		false, /* deterministic */
 	)
 	alloc := MakeAllocator(
-		sp, func(string) (time.Duration, bool) {
+		st, sp, func(string) (time.Duration, bool) {
 			return 0, false
 		}, nil /* knobs */, nil, /* storeMetrics */
 	)
@@ -7978,7 +7984,7 @@ func exampleRebalancing(
 		/* deterministic */ true,
 	)
 	alloc := MakeAllocator(
-		sp, func(string) (time.Duration, bool) {
+		st, sp, func(string) (time.Duration, bool) {
 			return 0, false
 		}, nil /* knobs */, nil, /* storeMetrics */
 	)

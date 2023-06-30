@@ -478,6 +478,7 @@ type AllocatorMetrics struct {
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
+	st            *cluster.Settings
 	storePool     *StorePool
 	nodeLatencyFn func(addr string) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
@@ -511,6 +512,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 
 // MakeAllocator creates a new allocator using the specified StorePool.
 func MakeAllocator(
+	st *cluster.Settings,
 	storePool *StorePool,
 	nodeLatencyFn func(addr string) (time.Duration, bool),
 	knobs *AllocatorTestingKnobs,
@@ -526,6 +528,7 @@ func MakeAllocator(
 		randSource = rand.NewSource(rand.Int63())
 	}
 	allocator := Allocator{
+		st:            st,
 		storePool:     storePool,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
