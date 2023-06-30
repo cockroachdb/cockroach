@@ -32,3 +32,13 @@ var SQLStatsShowInternal = settings.RegisterBoolSetting(
 		"statistics on the SQL Activity pages",
 	false,
 ).WithPublic()
+
+// StatsActivityUIEnabled controls if the combined statement stats uses
+// the system.statement_activity and system.transaction_activity which
+// acts as a cache storing the top queries from system.statement_statistics
+// and system.transaction_statistics tables.
+var StatsActivityUIEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.stats.activity.ui.enabled",
+	"enable the combined statistics endpoint to get data from the system activity tables",
+	true)
