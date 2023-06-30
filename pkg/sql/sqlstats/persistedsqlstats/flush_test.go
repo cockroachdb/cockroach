@@ -459,7 +459,7 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 }
 
 func TestSQLStatsPersistedLimitReached(t *testing.T) {
-	skip.UnderStressWithIssue(t, 97488)
+	skip.WithIssue(t, 97488)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
