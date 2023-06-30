@@ -324,8 +324,12 @@ func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.S
 		tenantName, username, password)
 }
 
-// createInMemoryTenant runs through the necessary steps to create an in-memory tenant without
-// resource limits and full dbconsole viewing privileges.
+const appTenantName = "app"
+
+// createInMemoryTenant runs through the necessary steps to create an in-memory
+// tenant without resource limits and full dbconsole viewing privileges. As a
+// convenience, it also returns a connection to the tenant (on a random node in
+// the cluster).
 func createInMemoryTenant(
 	ctx context.Context,
 	t test.Test,
@@ -333,7 +337,7 @@ func createInMemoryTenant(
 	tenantName string,
 	nodes option.NodeListOption,
 	secure bool,
-) {
+) *gosql.DB {
 	sysSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), nodes.RandNode()[0]))
 	sysSQL.Exec(t, "CREATE TENANT $1", tenantName)
 	sysSQL.Exec(t, "ALTER TENANT $1 START SERVICE SHARED", tenantName)
@@ -348,13 +352,15 @@ func createInMemoryTenant(
 	// it clear if they eagerly open a session with the tenant or wait until the
 	// first query. Therefore, wrap connection opening and a ping to the tenant
 	// server in a retry loop.
+	var tenantConn *gosql.DB
 	var tenantSQL *sqlutils.SQLRunner
 	testutils.SucceedsSoon(t, func() error {
-		tenantConn, err := c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
+		var err error
+		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
 		if err != nil {
 			return err
 		}
-		if err := tenantConn.Ping(); err != nil {
+		if err = tenantConn.Ping(); err != nil {
 			return err
 		}
 		tenantSQL = sqlutils.MakeSQLRunner(tenantConn)
@@ -364,6 +370,7 @@ func createInMemoryTenant(
 	if secure {
 		createTenantAdminRole(t, tenantName, tenantSQL)
 	}
+	return tenantConn
 }
 
 // removeTenantRateLimiters ensures the tenant is not throttled by limiters.
