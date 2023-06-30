@@ -796,8 +796,8 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		}
 
 		// ensure that we do not emit a resolved timestamp
-		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) bool {
-			return true
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
+			return true, nil
 		}
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '100ms'`)
@@ -831,8 +831,8 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 		)
 
 		// allow the changefeed to emit resolved events now
-		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) bool {
-			return false
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
+			return false, nil
 		}
 
 		require.NoError(t, feed.Resume())
@@ -1195,10 +1195,10 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		var backfillTimestamp hlc.Timestamp
 		var initialCheckpoint roachpb.SpanGroup
 		var foundCheckpoint int32
-		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) bool {
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
 			// Stop resolving anything after checkpoint set to avoid eventually resolving the full span
 			if initialCheckpoint.Len() > 0 {
-				return true
+				return true, nil
 			}
 
 			// A backfill begins when the backfill resolved event arrives, which has a
@@ -1206,7 +1206,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 			// timestamp.Next()
 			if r.BoundaryType == jobspb.ResolvedSpan_BACKFILL {
 				backfillTimestamp = r.Timestamp
-				return false
+				return false, nil
 			}
 
 			// Check if we've set a checkpoint yet
@@ -1219,15 +1219,15 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 			// Filter non-backfill-related spans
 			if !r.Timestamp.Equal(backfillTimestamp.Next()) {
 				// Only allow spans prior to a valid backfillTimestamp to avoid moving past the backfill
-				return !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next()))
+				return !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next())), nil
 			}
 
 			// Only allow resolving if we definitely won't have a completely resolved table
 			if !r.Span.Equal(tableSpan) && haveGaps {
-				return rnd.Intn(10) > 7
+				return rnd.Intn(10) > 7, nil
 			}
 			haveGaps = true
-			return true
+			return true, nil
 		}
 
 		require.NoError(t, jobFeed.Resume())
@@ -1292,7 +1292,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		// Emit resolved events for the majority of spans. Be extra paranoid and ensure that
 		// we have at least 1 span for which we don't emit resolvedFoo timestamp (to force checkpointing).
 		haveGaps := false
-		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) bool {
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
 			rndMu.Lock()
 			defer rndMu.Unlock()
 
@@ -1303,13 +1303,13 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 				// However, we have to emit something -- otherwise the entire changefeed
 				// machine would not work.
 				r.Span.EndKey = fooTableSpan.Key.Next()
-				return false
+				return false, nil
 			}
 			if haveGaps {
-				return rnd.Intn(10) > 7
+				return rnd.Intn(10) > 7, nil
 			}
 			haveGaps = true
-			return true
+			return true, nil
 		}
 
 		// Checkpoint progress frequently, and set the checkpoint size limit.
@@ -1374,11 +1374,11 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		// Collect spans we attempt to resolve after when we resume.
 		var resolvedFoo []roachpb.Span
-		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) bool {
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
 			if !r.Span.Equal(fooTableSpan) {
 				resolvedFoo = append(resolvedFoo, r.Span)
 			}
-			return false
+			return false, nil
 		}
 
 		require.NoError(t, jobFeed.Resume())
