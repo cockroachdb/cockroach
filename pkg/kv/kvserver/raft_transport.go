@@ -136,6 +136,22 @@ type IncomingRaftMessageHandler interface {
 	) *kvserverpb.DelegateSnapshotResponse
 }
 
+// OutgoingRaftMessageHandler is the interface that must be implemented by
+// arguments to RaftTransport.ListenOutgoingMessage.
+type OutgoingRaftMessageHandler interface {
+	// HandleRaftRequestSent is called synchronously for every Raft messages right
+	// before it is sent to raftSendQueue in RaftTransport.SendAsync(). Note that
+	// the message may not be successfully queued if it gets dropped by SendAsync
+	// due to a full outgoing queue.
+	//
+	// As of now, the only use case of this function is for metrics update on
+	// messages sent which is why it only takes specific properties of the request
+	// as arguments. But it can be easily extended to take the complete request if
+	// needed.
+	HandleRaftRequestSent(ctx context.Context,
+		fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID, msgSize int64)
+}
+
 // RaftTransport handles the rpc messages for raft.
 //
 // The raft transport is asynchronous with respect to the caller, and
@@ -163,6 +179,7 @@ type RaftTransport struct {
 
 	dialer                  *nodedialer.Dialer
 	incomingMessageHandlers syncutil.IntMap // map[roachpb.StoreID]*IncomingRaftMessageHandler
+	outgoingMessageHandlers syncutil.IntMap // map[roachpb.StoreID]*OutgoingRaftMessageHandler
 
 	kvflowControl struct {
 		// Everything nested under this struct is used to return flow tokens
@@ -372,11 +389,26 @@ func (t *RaftTransport) queueByteSize() int64 {
 	return size
 }
 
+// getIncomingRaftMessageHandler returns the registered
+// IncomingRaftMessageHandler for the given StoreID. If no handlers are
+// registered for the StoreID, it returns (nil, false).
 func (t *RaftTransport) getIncomingRaftMessageHandler(
 	storeID roachpb.StoreID,
 ) (IncomingRaftMessageHandler, bool) {
 	if value, ok := t.incomingMessageHandlers.Load(int64(storeID)); ok {
 		return *(*IncomingRaftMessageHandler)(value), true
+	}
+	return nil, false
+}
+
+// getOutgoingMessageHandler returns the registered OutgoingRaftMessageHandler
+// for the given StoreID. If no handlers are registered for the StoreID, it
+// returns (nil, false).
+func (t *RaftTransport) getOutgoingMessageHandler(
+	storeID roachpb.StoreID,
+) (OutgoingRaftMessageHandler, bool) {
+	if value, ok := t.outgoingMessageHandlers.Load(int64(storeID)); ok {
+		return *(*OutgoingRaftMessageHandler)(value), true
 	}
 	return nil, false
 }
@@ -591,6 +623,19 @@ func (t *RaftTransport) ListenIncomingRaftMessages(
 // StopIncomingRaftMessages unregisters a IncomingRaftMessageHandler.
 func (t *RaftTransport) StopIncomingRaftMessages(storeID roachpb.StoreID) {
 	t.incomingMessageHandlers.Delete(int64(storeID))
+}
+
+// ListenOutgoingMessage registers an OutgoingRaftMessageHandler to capture
+// messages right before they are sent through the raftSendQueue.
+func (t *RaftTransport) ListenOutgoingMessage(
+	storeID roachpb.StoreID, handler OutgoingRaftMessageHandler,
+) {
+	t.outgoingMessageHandlers.Store(int64(storeID), unsafe.Pointer(&handler))
+}
+
+// StopOutgoingMessage unregisters an OutgoingRaftMessageHandler.
+func (t *RaftTransport) StopOutgoingMessage(storeID roachpb.StoreID) {
+	t.outgoingMessageHandlers.Delete(int64(storeID))
 }
 
 // processQueue opens a Raft client stream and sends messages from the
@@ -867,6 +912,11 @@ func (t *RaftTransport) SendAsync(
 	// Note: computing the size of the request *before* sending it to the queue,
 	// because the receiver takes ownership of, and can modify it.
 	size := int64(req.Size())
+	if outgoingMessageHandler, ok := t.getOutgoingMessageHandler(req.FromReplica.StoreID); ok {
+		// Capture outgoing Raft messages only when the sender's store has an
+		// OutgoingRaftMessageHandler registered.
+		outgoingMessageHandler.HandleRaftRequestSent(context.Background(), req.FromReplica.NodeID, req.ToReplica.NodeID, size)
+	}
 	select {
 	case q.reqs <- req:
 		q.bytes.Add(size)

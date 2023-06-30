@@ -1893,7 +1893,7 @@ func (h delayingRaftMessageHandler) HandleRaftRequest(
 	}
 	go func() {
 		time.Sleep(raftDelay)
-		err := h.IncomingRaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+		err := h.IncomingRaftMessageHandler.HandleRaftRequest(context.Background(), req, respStream)
 		if err != nil {
 			log.Infof(ctx, "HandleRaftRequest returned err %s", err)
 		}
