@@ -857,14 +857,44 @@ https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-parameters.html
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/parameters-table.html
-var informationSchemaParametersTable = virtualSchemaTable{
-	comment: `built-in function parameters (empty - introspection not yet supported)
+var informationSchemaParametersTable = virtualSchemaView{
+	comment: `function parameters
 https://www.postgresql.org/docs/9.5/infoschema-parameters.html`,
 	schema: vtable.InformationSchemaParameters,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+	resultColumns: colinfo.ResultColumns{
+		{Name: "specific_catalog", Typ: types.String},
+		{Name: "specific_schema", Typ: types.String},
+		{Name: "specific_name", Typ: types.String},
+		{Name: "ordinal_position", Typ: types.Int},
+		{Name: "parameter_mode", Typ: types.String},
+		{Name: "is_result", Typ: types.String},
+		{Name: "as_locator", Typ: types.String},
+		{Name: "parameter_name", Typ: types.String},
+		{Name: "data_type", Typ: types.String},
+		{Name: "character_maximum_length", Typ: types.Int},
+		{Name: "character_octet_length", Typ: types.Int},
+		{Name: "character_set_catalog", Typ: types.String},
+		{Name: "character_set_schema", Typ: types.String},
+		{Name: "character_set_name", Typ: types.String},
+		{Name: "collation_catalog", Typ: types.String},
+		{Name: "collation_schema", Typ: types.String},
+		{Name: "collation_name", Typ: types.String},
+		{Name: "numeric_precision", Typ: types.Int},
+		{Name: "numeric_precision_radix", Typ: types.Int},
+		{Name: "numeric_scale", Typ: types.Int},
+		{Name: "datetime_precision", Typ: types.Int},
+		{Name: "interval_type", Typ: types.String},
+		{Name: "interval_precision", Typ: types.Int},
+		{Name: "udt_catalog", Typ: types.String},
+		{Name: "udt_schema", Typ: types.String},
+		{Name: "udt_name", Typ: types.String},
+		{Name: "scope_catalog", Typ: types.String},
+		{Name: "scope_schema", Typ: types.String},
+		{Name: "scope_name", Typ: types.String},
+		{Name: "maximum_cardinality", Typ: types.Int},
+		{Name: "dtd_identifier", Typ: types.String},
+		{Name: "parameter_default", Typ: types.String},
 	},
-	unimplemented: true,
 }
 
 var (
@@ -966,10 +996,8 @@ https://www.postgresql.org/docs/9.5/infoschema-role-table-grants.html`,
 
 // MySQL:    https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/routines-table.html
 var informationSchemaRoutineTable = virtualSchemaView{
-	comment: "The view routines contains all functions and procedures in the " +
-		"current database. Only those functions and procedures are shown that the " +
-		"current user has access to (by way of being the owner or having some " +
-		"privilege).\nhttps://www.postgresql.org/docs/15/infoschema-routines.html",
+	comment: `built-in functions and user-defined functions
+https://www.postgresql.org/docs/15/infoschema-routines.html`,
 	schema: vtable.InformationSchemaRoutines,
 	resultColumns: colinfo.ResultColumns{
 		{Name: "specific_catalog", Typ: types.String},

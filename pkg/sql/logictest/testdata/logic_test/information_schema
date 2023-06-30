@@ -55,7 +55,7 @@ information_schema  information_schema_catalog_name        table  admin  NULL  N
 information_schema  key_column_usage                       table  admin  NULL  NULL
 information_schema  keywords                               table  admin  NULL  NULL
 information_schema  optimizer_trace                        table  admin  NULL  NULL
-information_schema  parameters                             table  admin  NULL  NULL
+information_schema  parameters                             view   admin  NULL  NULL
 information_schema  partitions                             table  admin  NULL  NULL
 information_schema  plugins                                table  admin  NULL  NULL
 information_schema  processlist                            table  admin  NULL  NULL
@@ -270,7 +270,7 @@ information_schema  information_schema_catalog_name        table  admin  NULL  N
 information_schema  key_column_usage                       table  admin  NULL  NULL
 information_schema  keywords                               table  admin  NULL  NULL
 information_schema  optimizer_trace                        table  admin  NULL  NULL
-information_schema  parameters                             table  admin  NULL  NULL
+information_schema  parameters                             view   admin  NULL  NULL
 information_schema  partitions                             table  admin  NULL  NULL
 information_schema  plugins                                table  admin  NULL  NULL
 information_schema  processlist                            table  admin  NULL  NULL
@@ -4811,9 +4811,11 @@ dtd_identifier            STRING     true         NULL            ·            
 parameter_default         STRING     true         NULL            ·                      {}       false
 
 query TTTITTTTTIITTTTTTIIIITITTTTTTITT colnames
-SELECT * FROM information_schema.parameters
+SELECT * FROM information_schema.parameters WHERE specific_name LIKE 'get_byte%' ORDER BY specific_name, ordinal_position
 ----
 specific_catalog  specific_schema  specific_name  ordinal_position  parameter_mode  is_result  as_locator  parameter_name  data_type  character_maximum_length  character_octet_length  character_set_catalog  character_set_schema  character_set_name  collation_catalog  collation_schema  collation_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision  interval_type  interval_precision  udt_catalog  udt_schema  udt_name  scope_catalog  scope_schema  scope_name  maximum_cardinality  dtd_identifier  parameter_default
+test              pg_catalog       get_byte_854   1                 IN              NO         NO          NULL            bytea      NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                test         pg_catalog  bytea     NULL           NULL          NULL        NULL                 1               NULL
+test              pg_catalog       get_byte_854   2                 IN              NO         NO          NULL            bigint     NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                test         pg_catalog  int8      NULL           NULL          NULL        NULL                 2               NULL
 
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.column_privileges WHERE table_name = 'eventlog'
