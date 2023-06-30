@@ -691,6 +691,26 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", b.left.types[colIdx].String()))
 						}
 					}
+					// If there are no columns projected from the left input, simply advance the
+					// cross-joiner state according to the number of input rows.
+					if len(b.left.types) == 0 {
+						// The last left row may not have been repeated leftNumRepeats times.
+						var toAppend int
+						if bs.numRepeatsIdx > 0 {
+							toAppend = leftNumRepeats - bs.numRepeatsIdx
+							bs.curSrcStartIdx++
+						}
+						// Account for emitting the remaining rows in the left batch.
+						toAppend += leftNumRepeats * (leftSrcEndIdx - bs.curSrcStartIdx)
+						if destStartIdx+toAppend > outputCapacity {
+							// We don't have enough space to repeat the left batch the required number
+							// of times, so we'll have to continue from here on the next call.
+							toAppend = outputCapacity - destStartIdx
+						}
+						// Each left row is emitted leftNumRepeats times,
+						bs.curSrcStartIdx += toAppend / leftNumRepeats
+						bs.numRepeatsIdx += toAppend % leftNumRepeats
+					}
 				}
 			} else {
 				{
@@ -1338,6 +1358,26 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", b.left.types[colIdx].String()))
 						}
+					}
+					// If there are no columns projected from the left input, simply advance the
+					// cross-joiner state according to the number of input rows.
+					if len(b.left.types) == 0 {
+						// The last left row may not have been repeated leftNumRepeats times.
+						var toAppend int
+						if bs.numRepeatsIdx > 0 {
+							toAppend = leftNumRepeats - bs.numRepeatsIdx
+							bs.curSrcStartIdx++
+						}
+						// Account for emitting the remaining rows in the left batch.
+						toAppend += leftNumRepeats * (leftSrcEndIdx - bs.curSrcStartIdx)
+						if destStartIdx+toAppend > outputCapacity {
+							// We don't have enough space to repeat the left batch the required number
+							// of times, so we'll have to continue from here on the next call.
+							toAppend = outputCapacity - destStartIdx
+						}
+						// Each left row is emitted leftNumRepeats times,
+						bs.curSrcStartIdx += toAppend / leftNumRepeats
+						bs.numRepeatsIdx += toAppend % leftNumRepeats
 					}
 				}
 			}
