@@ -192,8 +192,8 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 
 	// Speed up the test.
 	allocatorimpl.MinLeaseTransferStatsDuration = 1 * time.Millisecond
-	allocatorimpl.LeaseRebalanceThreshold = 0.01
 	allocatorimpl.LeaseRebalanceThresholdMin = 0.0
+	const LeaseRebalanceThreshold = 0.01
 
 	const useDisk = false // for debugging purposes
 	spec := func(node int, store int) base.StoreSpec {
@@ -242,6 +242,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			for _, server := range tc.Servers {
 				st := server.ClusterSettings()
 				st.Manual.Store(true)
+				allocatorimpl.LeaseRebalanceThreshold.Override(ctx, &st.SV, LeaseRebalanceThreshold)
 			}
 
 			// Add a few ranges per store.
