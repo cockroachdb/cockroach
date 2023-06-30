@@ -81,3 +81,18 @@ SELECT *
        )
  WHERE r < .01
  LIMIT 1
+
+# Regression test for #105882 - don't infinite loop when the left input has
+# no columns.
+statement ok
+CREATE TABLE t105882 (c0 INT);
+UPSERT INTO t105882 (c0) VALUES(1);
+
+query I
+SELECT (
+  SELECT count(t2.rowid) FROM t105882 t2
+  WHERE ((t1.rowid) IN (SELECT max(t3.rowid) FROM t105882 t3))
+)
+FROM t105882 t1;
+----
+1
