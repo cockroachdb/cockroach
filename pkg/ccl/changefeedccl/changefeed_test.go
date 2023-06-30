@@ -92,7 +92,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -2922,8 +2921,6 @@ func TestChangefeedJobControl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 98916, "flaky test")
-
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		ChangefeedJobPermissionsTestSetup(t, s)
 
@@ -2965,7 +2962,9 @@ func TestChangefeedJobControl(t *testing.T) {
 
 		// No one can modify changefeeds created by admins, except for admins.
 		// In this case, the root user creates the changefeed.
-		currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
+		asUser(t, f, "adminUser", func(runner *sqlutils.SQLRunner) {
+			currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
+		})
 		asUser(t, f, `adminUser`, func(userDB *sqlutils.SQLRunner) {
 			userDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
 			waitForJobStatus(userDB, t, currentFeed.JobID(), "paused")
@@ -3627,7 +3626,7 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 			// any schema changes. Dropping a column in the declarative schema
 			// changer means that an extra error will occur.
 			if _, isSinkless := f.(*sinklessFeedFactory); isSinkless {
-				skip.WithIssue(t, 84511)
+				return
 			}
 			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE drop_column`)
@@ -5197,8 +5196,6 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 83946)
-
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -5227,22 +5224,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 		feedJob := foo.(cdctest.EnterpriseTestFeed)
 		sqlDB.Exec(t, `PAUSE JOB $1`, feedJob.JobID())
 		// PAUSE JOB only requests the job to be paused. Block until it's paused.
-		opts := retry.Options{
-			InitialBackoff: 1 * time.Millisecond,
-			MaxBackoff:     time.Second,
-			Multiplier:     2,
-		}
-		ctx := context.Background()
-		if err := retry.WithMaxAttempts(ctx, opts, 10, func() error {
-			var status string
-			sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, feedJob.JobID()).Scan(&status)
-			if jobs.Status(status) != jobs.StatusPaused {
-				return errors.New("could not pause job")
-			}
-			return nil
-		}); err != nil {
-			t.Fatal(err)
-		}
+		waitForJobStatus(sqlDB, t, feedJob.JobID(), jobs.StatusPaused)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
 		sqlDB.Exec(t, `RESUME JOB $1`, feedJob.JobID())
 		assertPayloads(t, foo, []string{
