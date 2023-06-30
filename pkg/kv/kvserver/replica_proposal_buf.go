@@ -299,9 +299,13 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 // buffer back into the buffer to be reproposed at a new Raft log index. Unlike
 // Insert, it does not modify the command.
 func (b *propBuf) ReinsertLocked(ctx context.Context, p *ProposalData) error {
-	if p.v2SeenDuringApplication {
-		return nil
-	}
+	// NB: we can see proposals here that have already been applied
+	// (v2SeenDuringApplication==true). We want those to not be flushed again.
+	// However, we can also see a proposal here that is not applied yet while
+	// inserting but is applied by the time we flush. So we don't drop the
+	// proposal here, but instead in FlushLockedWithRaftGroup, to unify the two
+	// cases.
+
 	// Update the proposal buffer counter and determine which index we should
 	// insert at.
 	idx, err := b.allocateIndex(ctx, true /* wLocked */)
@@ -642,6 +646,12 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		// with a raft group. Wait until that point to determine whether to reject
 		// the proposal or not.
 		return false
+	}
+	if p.v2SeenDuringApplication {
+		// Due to `refreshProposalsLocked`, we can end up with proposals that are
+		// already applied. We just want to drop those on the floor as we know
+		// that they have fully been taken care of.
+		return true
 	}
 	switch {
 	case p.Request.IsSingleRequestLeaseRequest():
