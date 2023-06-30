@@ -32,3 +32,10 @@ var SQLStatsShowInternal = settings.RegisterBoolSetting(
 		"statistics on the SQL Activity pages",
 	false,
 ).WithPublic()
+
+// StatsActivityUIEnabled the stats activity flush job.
+var StatsActivityUIEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.stats.activity.ui.enabled",
+	"enable the combined statistics endpoint to get data from the system activity tables",
+	true)
