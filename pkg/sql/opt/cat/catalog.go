@@ -83,6 +83,14 @@ type Flags struct {
 // returned by the Resolve methods (schemas and data sources) *must* be
 // immutable after construction, and therefore also thread-safe.
 type Catalog interface {
+	// LookupDatabaseName locates a database with the given name and returns
+	// the name if found. If no name is provided, it will return the name of
+	// the current database. An error is returned if no database with the given
+	// name exists or in the case of an empty name, there is no current database.
+	// TODO(yang): This function can be extended if needed in the future
+	// to return a new cat.Database type similar to ResolveSchema.
+	LookupDatabaseName(ctx context.Context, flags Flags, name string) (tree.Name, error)
+
 	// ResolveSchema locates a schema with the given name and returns it along
 	// with the resolved SchemaName (which has all components filled in).
 	// If the SchemaName is empty, returns the current database/schema (if one is
