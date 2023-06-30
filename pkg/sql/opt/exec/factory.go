@@ -338,6 +338,7 @@ type ExecutionStats struct {
 	KVPairsRead           optional.Uint
 	KVRowsRead            optional.Uint
 	KVBatchRequestsIssued optional.Uint
+	UsedStreamer          bool
 
 	// Storage engine iterator statistics
 	//

@@ -726,6 +726,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.KVPairsRead.MaybeAdd(stats.KV.KVPairsRead)
 				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
 				nodeStats.KVBatchRequestsIssued.MaybeAdd(stats.KV.BatchRequestsIssued)
+				nodeStats.UsedStreamer = stats.KV.UsedStreamer
 				nodeStats.StepCount.MaybeAdd(stats.KV.NumInterfaceSteps)
 				nodeStats.InternalStepCount.MaybeAdd(stats.KV.NumInternalSteps)
 				nodeStats.SeekCount.MaybeAdd(stats.KV.NumInterfaceSeeks)
