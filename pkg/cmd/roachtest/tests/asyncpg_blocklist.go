@@ -31,7 +31,6 @@ var asyncpgBlocklist = blocklist{
 	`test_codecs.TestCodecs.test_array_with_custom_json_text_codec`:                                       "unsupported feature - https://github.com/cockroachdb/cockroach/issues/23468",
 	`test_codecs.TestCodecs.test_composites_in_arrays`:                                                    "unsupported feature - https://github.com/cockroachdb/cockroach/issues/27792",
 	`test_codecs.TestCodecs.test_enum_and_range`:                                                          "unsupported feature - https://github.com/cockroachdb/cockroach/issues/27791",
-	`test_codecs.TestCodecs.test_enum_function_return`:                                                    "unsupported feature - https://github.com/cockroachdb/cockroach/issues/17511",
 	`test_codecs.TestCodecs.test_enum_in_composite`:                                                       "unsupported feature - https://github.com/cockroachdb/cockroach/issues/27792",
 	`test_codecs.TestCodecs.test_invalid_input`:                                                           "default int size discrepancy",
 	`test_codecs.TestCodecs.test_relacl_array_type`:                                                       "unsupported feature - https://github.com/cockroachdb/cockroach/issues/40283",
