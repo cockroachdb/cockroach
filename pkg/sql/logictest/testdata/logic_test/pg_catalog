@@ -2396,14 +2396,14 @@ JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE proname='substring'
 ----
 proname    pronamespace  nspname     proowner  prolang  procost  prorows  provariadic
-substring  4294967111    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967111    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967111    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967111    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967111    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967111    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967111    pg_catalog  NULL      0        NULL     NULL     0
-substring  4294967111    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967111    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967111    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967111    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967111    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967111    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967111    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967111    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967111    pg_catalog  NULL      12       NULL     NULL     0
 
 query TTBBBB colnames,rowsort
 SELECT proname, protransform, proisagg, proiswindow, prosecdef, proleakproof
@@ -4809,3 +4809,13 @@ WHERE
 # (#95633).
 statement ok
 SELECT d.datname, pg_catalog.pg_get_userbyid(d.datdba) FROM pg_catalog.pg_database d;
+
+# pg_language
+
+query OTOBBOOOT colnames
+SELECT * FROM pg_language ORDER BY oid
+----
+oid    lanname   lanowner    lanispl  lanpltrusted  lanplcallfoid  laninline  lanvalidator  lanacl
+12     internal  2310524507  false    false         0              0          0             NULL
+14     sql       2310524507  false    true          0              0          0             NULL
+14024  plpgsql   2310524507  true     true          0              0          0             NULL
