@@ -33,8 +33,10 @@ cockroachdb/sql-queries:
     cockroachdb/sql-optimizer: other
     cockroachdb/sql-opt-prs: other
   triage_column_id: 13549252
+  label: T-sql-queries
 cockroachdb/cluster-observability:
   triage_column_id: 12618343
+  label: T-cluster-observability
 cockroachdb/kv:
   aliases:
     cockroachdb/admission-control: other
@@ -48,14 +50,19 @@ cockroachdb/replication:
   label: T-kv-replication
 cockroachdb/spatial:
   triage_column_id: 9487269
+  label: T-spatial
 cockroachdb/dev-inf:
   triage_column_id: 10210759
+  label: T-dev-inf
 cockroachdb/multiregion:
   triage_column_id: 11926170
+  label: T-multiregion
 cockroachdb/storage:
   triage_column_id: 6668367
+  label: T-storage
 cockroachdb/test-eng:
   triage_column_id: 14041337
+  label: T-testeng
 cockroachdb/security:
   label: T-cross-product-security
 cockroachdb/prodsec:
@@ -78,12 +85,12 @@ cockroachdb/admin-ui:
   aliases:
     cockroachdb/admin-ui-prs: other
   triage_column_id: 6598672
-cockroachdb/kv-obs-prs:
-  triage_column_id: 0 # TODO
+  label: T-observability-inf
 cockroachdb/obs-inf-prs:
   aliases:
     cockroachdb/http-api-prs: other
   triage_column_id: 14196277
+  label: T-observability-inf
 cockroachdb/multi-tenant:
   # Multi-tenant team uses GH projects v2, which doesn't have a REST API, so no triage column ID
   # see .github/workflows/add-issues-to-project.yml
