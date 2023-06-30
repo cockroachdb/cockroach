@@ -436,6 +436,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if s.KVBatchRequestsIssued.HasValue() {
 			e.ob.AddField("KV gRPC calls", string(humanizeutil.Count(s.KVBatchRequestsIssued.Value())))
 		}
+		if s.UsedStreamer {
+			e.ob.AddField("used streamer", "")
+		}
 		if s.MaxAllocatedMem.HasValue() {
 			e.ob.AddField("estimated max memory allocated", humanize.IBytes(s.MaxAllocatedMem.Value()))
 		}

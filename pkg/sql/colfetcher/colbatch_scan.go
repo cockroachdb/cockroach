@@ -105,6 +105,13 @@ func (s *colBatchScanBase) GetConsumedRU() uint64 {
 	return s.tenantConsumptionListener.ConsumedRU
 }
 
+// UsedStreamer is part of the colexecop.KVReader interface.
+func (s *colBatchScanBase) UsedStreamer() bool {
+	// TODO(yuzefovich): update this when the streamer is used to power the
+	// ColBatchScans (#82164).
+	return false
+}
+
 // Release implements the execreleasable.Releasable interface.
 func (s *colBatchScanBase) Release() {
 	// Deeply reset the spans so that we don't hold onto the keys of the spans.

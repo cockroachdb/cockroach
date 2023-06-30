@@ -103,6 +103,7 @@ regions: <hidden>
     │   │ KV pairs read: 2
     │   │ KV bytes read: 8 B
     │   │ KV gRPC calls: 1
+    │   │ used streamer
     │   │ estimated max memory allocated: 0 B
     │   │ estimated max sql temp disk usage: 0 B
     │   │ table: a@a_pkey
@@ -131,6 +132,7 @@ regions: <hidden>
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
+        │ used streamer
         │ estimated max memory allocated: 0 B
         │ estimated max sql temp disk usage: 0 B
         │ table: a@a_pkey
@@ -184,6 +186,7 @@ regions: <hidden>
     │   │ KV pairs read: 2
     │   │ KV bytes read: 8 B
     │   │ KV gRPC calls: 1
+    │   │ used streamer
     │   │ estimated max memory allocated: 0 B
     │   │ table: a@a_pkey
     │   │
@@ -210,6 +213,7 @@ regions: <hidden>
         │ KV rows decoded: 0
         │ KV bytes read: 0 B
         │ KV gRPC calls: 0
+        │ used streamer
         │ estimated max memory allocated: 0 B
         │ table: a@a_pkey
         │
@@ -333,6 +337,7 @@ regions: <hidden>
     │ KV pairs read: 2
     │ KV bytes read: 8 B
     │ KV gRPC calls: 1
+    │ used streamer
     │ estimated max memory allocated: 0 B
     │ table: b@b_pkey
     │ equality: (x) = (x)
@@ -425,6 +430,7 @@ regions: <hidden>
     │ KV pairs read: 4
     │ KV bytes read: 16 B
     │ KV gRPC calls: 2
+    │ used streamer
     │ estimated max memory allocated: 0 B
     │ estimated max sql temp disk usage: 0 B
     │ table: xy@xy_pkey

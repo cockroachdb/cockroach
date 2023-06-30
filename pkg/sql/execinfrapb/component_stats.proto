@@ -165,6 +165,10 @@ message KVStats {
   optional util.optional.Uint num_gets = 21 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_scans = 22 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_reverse_scans = 23 [(gogoproto.nullable) = false];
+
+  // UsedStreamer indicates whether the Streamer API was used to perform KV
+  // operations.
+  optional bool used_streamer = 25 [(gogoproto.nullable) = false];
 }
 
 // ExecStats contains statistics about the execution of a component.
