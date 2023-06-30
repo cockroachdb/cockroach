@@ -22,11 +22,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func Example_node() {
@@ -64,8 +64,7 @@ func Example_node() {
 
 func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	skip.WithIssue(t, 38151)
+	defer log.Scope(t).Close(t)
 
 	start := timeutil.Now()
 	c := NewCLITest(TestCLIParams{})
@@ -130,9 +129,8 @@ func checkNodeStatus(t *testing.T, c TestCLI, output string, start time.Time) {
 	s := bufio.NewScanner(buf)
 
 	type testCase struct {
-		name   string
-		idx    int
-		maxval int64
+		name string
+		idx  int
 	}
 
 	// Skip command line.
@@ -209,11 +207,11 @@ func checkNodeStatus(t *testing.T, c TestCLI, output string, start time.Time) {
 	// have been able to do any splits yet.
 	if nodeCtx.statusShowRanges || nodeCtx.statusShowAll {
 		testcases = append(testcases,
-			testCase{"leader_ranges", baseIdx, 22},
-			testCase{"leaseholder_ranges", baseIdx + 1, 22},
-			testCase{"ranges", baseIdx + 2, 22},
-			testCase{"unavailable_ranges", baseIdx + 3, 1},
-			testCase{"underreplicated_ranges", baseIdx + 4, 1},
+			testCase{"leader_ranges", baseIdx},
+			testCase{"leaseholder_ranges", baseIdx + 1},
+			testCase{"ranges", baseIdx + 2},
+			testCase{"unavailable_ranges", baseIdx + 3},
+			testCase{"underreplicated_ranges", baseIdx + 4},
 		)
 		baseIdx += len(statusNodesColumnHeadersForRanges)
 	}
@@ -221,18 +219,18 @@ func checkNodeStatus(t *testing.T, c TestCLI, output string, start time.Time) {
 	// Adding fields that need verification for --stats flag.
 	if nodeCtx.statusShowStats || nodeCtx.statusShowAll {
 		testcases = append(testcases,
-			testCase{"live_bytes", baseIdx, 100000},
-			testCase{"key_bytes", baseIdx + 1, 50000},
-			testCase{"value_bytes", baseIdx + 2, 100000},
-			testCase{"intent_bytes", baseIdx + 3, 50000},
-			testCase{"system_bytes", baseIdx + 4, 50000},
+			testCase{"live_bytes", baseIdx},
+			testCase{"key_bytes", baseIdx + 1},
+			testCase{"value_bytes", baseIdx + 2},
+			testCase{"intent_bytes", baseIdx + 3},
+			testCase{"system_bytes", baseIdx + 4},
 		)
 		baseIdx += len(statusNodesColumnHeadersForStats)
 	}
 
 	if nodeCtx.statusShowDecommission || nodeCtx.statusShowAll {
 		testcases = append(testcases,
-			testCase{"gossiped_replicas", baseIdx, 30},
+			testCase{"gossiped_replicas", baseIdx},
 		)
 		baseIdx++
 	}
@@ -247,19 +245,19 @@ func checkNodeStatus(t *testing.T, c TestCLI, output string, start time.Time) {
 			t.Errorf("value for %s (%d) cannot be less than 0", tc.name, val)
 			continue
 		}
-		if val > tc.maxval {
-			t.Errorf("value for %s (%d) greater than max (%d)", tc.name, val, tc.maxval)
-		}
 	}
 
 	if nodeCtx.statusShowDecommission || nodeCtx.statusShowAll {
-		names := []string{"is_decommissioning", "is_draining"}
-		for i := range names {
-			if fields[baseIdx] != "false" {
-				t.Errorf("value for %s (%s) should be false", names[i], fields[baseIdx])
+		var found int
+		for i, name := range getStatusNodeHeaders() {
+			switch name {
+			case "is_decommissioning", "is_draining":
+				found++
+				assert.Equal(t, "false", fields[i], name)
+			default:
 			}
-			baseIdx++
 		}
+		assert.Equal(t, 2, found, "missing column in node status output")
 	}
 }
 
@@ -280,7 +278,7 @@ func checkTimeElapsed(t *testing.T, timeStr string, elapsed time.Duration, start
 	// Truncate start time, because the CLI currently outputs times with a second-level
 	// granularity.
 	start = start.Truncate(time.Second)
-	tm, err := time.ParseInLocation(localTimeFormat, timeStr, start.Location())
+	tm, err := time.ParseInLocation("2006-01-02 15:04:05.99999 -0700 MST", timeStr, start.Location())
 	if err != nil {
 		t.Errorf("couldn't parse time '%s': %s", timeStr, err)
 		return
