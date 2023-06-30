@@ -85,6 +85,8 @@ type KVReader interface {
 	// KV requests. It must be safe for concurrent use. It is used to calculate
 	// the SQL CPU time.
 	GetKVCPUTime() time.Duration
+	// UsedStreamer returns whether the Streamer API was used by the KVReader.
+	UsedStreamer() bool
 }
 
 // ZeroInputNode is an execopnode.OpNode with no inputs.

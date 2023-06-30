@@ -268,6 +268,7 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 		s.KV.BytesRead.Set(uint64(vsc.kvReader.GetBytesRead()))
 		s.KV.BatchRequestsIssued.Set(uint64(vsc.kvReader.GetBatchRequestsIssued()))
 		s.KV.ContentionTime.Set(vsc.kvReader.GetContentionTime())
+		s.KV.UsedStreamer = vsc.kvReader.UsedStreamer()
 		scanStats := vsc.kvReader.GetScanStats()
 		execstats.PopulateKVMVCCStats(&s.KV, &scanStats)
 		s.Exec.ConsumedRU.Set(vsc.kvReader.GetConsumedRU())

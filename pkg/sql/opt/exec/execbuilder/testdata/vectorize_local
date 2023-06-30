@@ -75,7 +75,7 @@ maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
 ·
-• lookup join
+• lookup join (streamer)
 │ nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 2
@@ -102,7 +102,7 @@ regions: <hidden>
       table: c@sec
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0U9Fq1EAUffcrLvdJYdwmeRAZEBZDha3tpmxLXyTIZOayxp3MjZkJ7rLsZ_kDfplkpoXWtaJiH8-Zc-89nMPs0X-xKPHq9Py0vAY9U_BuVV2AhrNqsQQD1RLMrIE3oGcNCnRsaKk68ig_YI61wH5gTd7zMFH7KFiYLcpMYOv6MUx0LVDzQCj3GNpgCSVeq8bSipSh4SRDgYaCam1cq-eeNAos2Y6d8xKUgOn2Va8m9BIFvr-B0HYkIfv-zSes2QVyoWV39DTwVw8DKSOhSEyzC3RH5a_gbWLXq8sStLLWJ-HFTVmCD9SD5tEFeE7bcNK68EJCFk0nAdHmMUGnttBRx8MOlLWsVSAjIYsHGxX0J_LAY-jHIGHSR6d3RIH1QWBCtyn6oNaEMj-IP0_6jFt3G3T-MGgzNx_7De1Q4DnzZuzhM7cO2EmYF_cLmNKvJkvzaUM8FkNNMSXsg7L2KPp_ayk_bun1r0rK_0tJtCU9Hlt6ou6Kv-luRb5n5-lBb49tzg61QDJrSj_R8zhouhxYxzMJVnEuEoZ8SK95AguXniaD94fz3w4XPw3Xh2c_AgAA__-952K3
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0U9FqE0EUffcrLvdJYUx38yAyIARDhdQ2KWnpiwSZnbnENbNz15m7mBDyWf6AXya700JrrKjYx3Pm3HsP5zB7TF88arw6PT-dXoMdGXi3XFyAhbPFbA4OFnNwowregB1VqDCwo7lpKKH-gCWuFLaRLaXEsaf2g2DmtqgLhXVoO-nplULLkVDvUWrxhBqvTeVpScZRPClQoSMxtR_W2kkiiwqn7LsmJA1GQX_7qjU9eokK39-A1A1pKL5_SxlbDkJBag5HT5G_JohknIZxZqqd0B1VvoK3mV0vL6dgjfcpCy9uplNIQi1Y7oLAc9rKSR3khYZiMJ0FRJvHBI3ZQkMNxx0Y79kaIaehGA5WRuwnSsCdtJ1o6PWD0ztijKuDwoxuU0xi1oS6PKg_T_qM63AbdPkwaDdxH9sN7VDhOfOma-Ez1wE4aJiM7xfQp7_oLU36DcOxIdQcU8ZJjPdH0f9bS-VxS69_VVL5X0rqEjlIEsk0FFEhbcl2xxafqMvx33S5pNRySPSgx8c2F4eVQnJryj8zcRctXUa2w5kMF8PcQDhKkl_LDGYhP_UG7w-Xvx0e_zS8Ojz7EQAA__9vVGhb
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
