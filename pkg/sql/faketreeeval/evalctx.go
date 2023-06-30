@@ -586,6 +586,11 @@ var _ eval.ClientNoticeSender = &DummyClientNoticeSender{}
 // BufferClientNotice is part of the eval.ClientNoticeSender interface.
 func (c *DummyClientNoticeSender) BufferClientNotice(context.Context, pgnotice.Notice) {}
 
+// SendClientNotice is part of the eval.ClientNoticeSender interface.
+func (c *DummyClientNoticeSender) SendClientNotice(context.Context, pgnotice.Notice) error {
+	return nil
+}
+
 // DummyTenantOperator implements the tree.TenantOperator interface.
 type DummyTenantOperator struct{}
 

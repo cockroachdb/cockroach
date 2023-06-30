@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "codes.go",
         "doc.go",
+        "plpgsql_codenames.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode",
     visibility = ["//visibility:public"],

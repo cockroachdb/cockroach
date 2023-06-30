@@ -499,6 +499,10 @@ type ClientNoticeSender interface {
 	// BufferClientNotice buffers the notice to send to the client.
 	// This is flushed before the connection is closed.
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
+	// SendClientNotice immediately flushes the notice to the client. This is used
+	// to implement PLpgSQL RAISE statements; most cases should use
+	// BufferClientNotice.
+	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
 }
 
 // PrivilegedAccessor gives access to certain queries that would otherwise

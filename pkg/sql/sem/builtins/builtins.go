@@ -27,6 +27,7 @@ import (
 	"math/bits"
 	"math/rand"
 	"net"
+	"regexp"
 	"regexp/syntax"
 	"strconv"
 	"strings"
@@ -5377,7 +5378,7 @@ SELECT
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				msg := string(s)
-				return crdbInternalSendNotice(ctx, evalCtx, "NOTICE", msg)
+				return crdbInternalBufferNotice(ctx, evalCtx, "NOTICE", msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
@@ -5399,7 +5400,7 @@ SELECT
 				if _, ok := pgnotice.ParseDisplaySeverity(severityString); !ok {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "severity %s is invalid", severityString)
 				}
-				return crdbInternalSendNotice(ctx, evalCtx, severityString, msg)
+				return crdbInternalBufferNotice(ctx, evalCtx, severityString, msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
@@ -8096,6 +8097,77 @@ expires until the statement bundle is collected`,
 				"(substrings surrounded by the redaction markers, '‹' and '›') with the redacted marker, " +
 				"'‹×›'.",
 			Volatility: volatility.Immutable,
+		},
+	),
+	"crdb_internal.plpgsql_raise": makeBuiltin(tree.FunctionProperties{
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
+	},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "severity", Typ: types.String},
+				{Name: "message", Typ: types.String},
+				{Name: "detail", Typ: types.String},
+				{Name: "hint", Typ: types.String},
+				{Name: "code", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				argStrings := make([]string, len(args))
+				for i := range args {
+					s, ok := tree.AsDString(args[i])
+					if !ok {
+						return nil, errors.Newf("expected string value, got %T", args[i])
+					}
+					argStrings[i] = string(s)
+				}
+				// Build the error.
+				severity := strings.ToUpper(argStrings[0])
+				if _, ok := pgnotice.ParseDisplaySeverity(severity); !ok {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue, "severity %s is invalid", severity,
+					)
+				}
+				message := argStrings[1]
+				err := errors.Newf("%s", message)
+				err = pgerror.WithSeverity(err, severity)
+				if detail := argStrings[2]; detail != "" {
+					err = errors.WithDetail(err, detail)
+				}
+				if hint := argStrings[3]; hint != "" {
+					err = errors.WithHint(err, hint)
+				}
+				if codeString := argStrings[4]; codeString != "" {
+					var code string
+					if regexp.MustCompile(`[A-Z0-9]{5}`).MatchString(codeString) {
+						// The supplied argument is a valid PG code.
+						code = codeString
+					} else {
+						// The supplied string may be a condition name.
+						if candidates, ok := pgcode.PLpgSQLConditionNameToCode[codeString]; ok {
+							// Some condition names map to more than one code, but postgres
+							// seems to just use the first (smallest) one.
+							code = candidates[0]
+						} else {
+							return nil, pgerror.Newf(pgcode.UndefinedObject,
+								"unrecognized exception condition: \"%s\"", codeString,
+							)
+						}
+					}
+					err = pgerror.WithCandidateCode(err, pgcode.MakeCode(code))
+				}
+				if severity == "ERROR" {
+					// Directly return the error from the function call.
+					return nil, err
+				}
+				// Send the error as a notice to the client, then return NULL.
+				if sendErr := crdbInternalSendNotice(ctx, evalCtx, err); sendErr != nil {
+					return nil, sendErr
+				}
+				return tree.DNull, nil
+			},
+			Info:       "This function is used internally to implement the PLpgSQL RAISE statement.",
+			Volatility: volatility.Volatile,
 		},
 	),
 }
