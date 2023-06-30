@@ -150,7 +150,7 @@ func (sr *SQLRunner) ExpectErr(t Fataler, errRE string, query string, args ...in
 		if err != nil {
 			s = pgerror.FullError(err)
 		}
-		t.Fatalf("expected error '%s', got: %s", errRE, s)
+		t.Fatalf("expected '%s' error '%s', got: %s", query, errRE, s)
 	}
 }
 
