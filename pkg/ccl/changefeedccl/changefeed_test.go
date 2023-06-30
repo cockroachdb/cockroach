@@ -3627,7 +3627,7 @@ func TestChangefeedStopOnSchemaChange(t *testing.T) {
 			// any schema changes. Dropping a column in the declarative schema
 			// changer means that an extra error will occur.
 			if _, isSinkless := f.(*sinklessFeedFactory); isSinkless {
-				skip.WithIssue(t, 84511)
+				return
 			}
 			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE drop_column`)
