@@ -3238,6 +3238,40 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	}
 }
 
+// updateCrossLocalityMetricsOnSnapshotSent updates cross-locality related store
+// metrics when outgoing snapshots are sent to the outgoingSnapshotStream. The
+// metrics being updated include 1. cross-region metrics, which monitor
+// activities across different regions, and 2. cross-zone metrics, which monitor
+// activities across different zones within the same region or in cases where
+// region tiers are not configured.
+func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotSent(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		sm.RangeSnapShotCrossRegionSentBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		sm.RangeSnapShotCrossZoneSentBytes.Inc(inc)
+	}
+}
+
+// updateCrossLocalityMetricsOnSnapshotRcvd updates cross-locality related store
+// metrics when receiving SnapshotRequests through streaming and constructing
+// incoming snapshots. The metrics being updated include 1. cross-region
+// metrics, which monitor activities across different regions, and 2. cross-zone
+// metrics, which monitor activities across different zones within the same
+// region or in cases where region tiers are not configured.
+func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotRcvd(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		sm.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		sm.RangeSnapShotCrossZoneRcvdBytes.Inc(inc)
+	}
+}
+
 func (sm *StoreMetrics) updateEnvStats(stats storage.EnvStats) {
 	sm.EncryptionAlgorithm.Update(int64(stats.EncryptionType))
 }

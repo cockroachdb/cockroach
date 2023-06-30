@@ -419,6 +419,7 @@ go_test(
         "decommission_test.go",
         "drain_test.go",
         "graphite_test.go",
+        "helpers_test.go",
         "index_usage_stats_test.go",
         "init_handshake_test.go",
         "intent_test.go",

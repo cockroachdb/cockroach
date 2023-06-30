@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -286,39 +285,40 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 	nm.Latency.RecordValue(d.Nanoseconds())
 }
 
-// getNodeCounterMetrics fetches the count of each specified node metric from
-// the `metricNames` parameter and returns the result as a map. The keys in the
-// map represent the metric metadata names, while the corresponding values
-// indicate the count of each metric. If any of the specified metric cannot be
-// found or is not a counter, the function will return an error.
-//
-// Assumption: 1. The metricNames parameter should consist of string literals
-// that match the metadata names used for metric counters. 2. Each metric name
-// provided in `metricNames` must exist, unique and be a counter type.
-func (nm nodeMetrics) getNodeCounterMetrics(metricsName []string) (map[string]int64, error) {
-	metricCountMap := make(map[string]int64)
-	getFirstNodeMetric := func(metricName string) int64 {
-		metricsStruct := reflect.ValueOf(nm)
-		for i := 0; i < metricsStruct.NumField(); i++ {
-			field := metricsStruct.Field(i)
-			switch t := field.Interface().(type) {
-			case *metric.Counter:
-				if t.Name == metricName {
-					return t.Count()
-				}
-			}
-		}
-		return -1
+// updateCrossLocalityMetricsOnBatchRequest updates nodeMetrics for batch
+// requests processed on the node. The metrics being updated include 1. total
+// byte count of batch requests processed 2. cross-region metrics, which monitor
+// activities across different regions, and 3. cross-zone metrics, which monitor
+// activities across different zones within the same region or in cases where
+// region tiers are not configured. These metrics may include batches that were
+// not successfully sent but were terminated at an early stage.
+func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	nm.BatchRequestsBytes.Inc(inc)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		nm.CrossRegionBatchRequestBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		nm.CrossZoneBatchRequestBytes.Inc(inc)
 	}
+}
 
-	for _, metricName := range metricsName {
-		count := getFirstNodeMetric(metricName)
-		if count == -1 {
-			return map[string]int64{}, errors.Errorf("cannot find metric for %s", metricName)
-		}
-		metricCountMap[metricName] = count
+// updateCrossLocalityMetricsOnBatchResponse updates nodeMetrics for batch
+// responses that are received back. It updates based on the comparisonResult
+// parameter determined during the initial batch requests check. The underlying
+// assumption is that the response should match the cross-region or cross-zone
+// nature of the requests.
+func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	nm.BatchResponsesBytes.Inc(inc)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		nm.CrossRegionBatchResponseBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		nm.CrossZoneBatchResponseBytes.Inc(inc)
 	}
-	return metricCountMap, nil
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -1326,84 +1326,34 @@ func (n *Node) batchInternal(
 	return br, nil
 }
 
-// isCrossRegionCrossZoneBatch returns (bool, bool) - indicating if the given
-// batch request is cross-region and cross-zone respectively.
-func (n *Node) isCrossRegionCrossZoneBatch(
-	ctx context.Context, ba *kvpb.BatchRequest,
-) (bool, bool) {
+// getLocalityComparison takes gatewayNodeID as input and returns the locality
+// comparison result between the gateway node and the current node. This result
+// indicates whether the two nodes are located in different regions or zones.
+func (n *Node) getLocalityComparison(
+	ctx context.Context, gatewayNodeID roachpb.NodeID,
+) roachpb.LocalityComparisonType {
 	gossip := n.storeCfg.Gossip
 	if gossip == nil {
 		log.VEventf(ctx, 2, "gossip is not configured")
-		return false, false
+		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
-	gatewayNodeDesc, err := gossip.GetNodeDescriptor(ba.GatewayNodeID)
+	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
 	if err != nil {
 		log.VEventf(ctx, 2,
-			"failed to perform look up for node descriptor %+v", err)
-		return false, false
+			"failed to perform look up for node descriptor %v", err)
+		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
-	isCrossRegion, regionErr, isCrossZone, zoneErr := n.Descriptor.Locality.
-		IsCrossRegionCrossZone(gatewayNodeDesc.Locality)
+	comparisonResult, regionErr, zoneErr := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
 	if regionErr != nil {
-		log.VEventf(ctx, 2, "%v", regionErr)
+		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross region %+v", regionErr)
 	}
 	if zoneErr != nil {
-		log.VEventf(ctx, 2, "%v", zoneErr)
+		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross zone %+v", zoneErr)
 	}
 
-	return isCrossRegion, isCrossZone
-}
-
-// checkAndUpdateBatchRequestMetrics updates the batch requests metrics in a
-// more meaningful way. Cross-region metrics monitor activities across different
-// regions. Cross-zone metrics monitor cross-zone activities within the same
-// region or in cases where region tiers are not configured. The check result is
-// returned here to avoid redundant check for metrics updates after receiving
-// batch responses.
-func (n *Node) checkAndUpdateBatchRequestMetrics(
-	ctx context.Context, ba *kvpb.BatchRequest, shouldIncrement bool,
-) (shouldIncCrossRegion bool, shouldIncCrossZone bool) {
-	if !shouldIncrement {
-		return false, false
-	}
-	n.metrics.BatchRequestsBytes.Inc(int64(ba.Size()))
-	isCrossRegion, isCrossZone := n.isCrossRegionCrossZoneBatch(ctx, ba)
-	if isCrossRegion {
-		if !isCrossZone {
-			log.VEventf(ctx, 2, "unexpected: cross region but same zone")
-		} else {
-			n.metrics.CrossRegionBatchRequestBytes.Inc(int64(ba.Size()))
-			shouldIncCrossRegion = true
-		}
-	} else {
-		if isCrossZone {
-			n.metrics.CrossZoneBatchRequestBytes.Inc(int64(ba.Size()))
-			shouldIncCrossZone = true
-		}
-	}
-	return shouldIncCrossRegion, shouldIncCrossZone
-}
-
-// checkAndUpdateBatchResponseMetrics updates the batch response metrics based
-// on the shouldIncCrossRegion and shouldIncCrossZone parameters. These
-// parameters are determined during the initial check for batch requests. The
-// underlying assumption is that if requests were cross-region or cross-zone,
-// the response should be as well.
-func (n *Node) checkAndUpdateBatchResponseMetrics(
-	br *kvpb.BatchResponse, shouldIncCrossRegion bool, shouldIncCrossZone bool, shouldIncrement bool,
-) {
-	if !shouldIncrement {
-		return
-	}
-	n.metrics.BatchResponsesBytes.Inc(int64(br.Size()))
-	if shouldIncCrossRegion {
-		n.metrics.CrossRegionBatchResponseBytes.Inc(int64(br.Size()))
-	}
-	if shouldIncCrossZone {
-		n.metrics.CrossZoneBatchResponseBytes.Inc(int64(br.Size()))
-	}
+	return comparisonResult
 }
 
 // incrementBatchCounters increments counters to track the batch and composite
@@ -1420,19 +1370,13 @@ func (n *Node) incrementBatchCounters(ba *kvpb.BatchRequest) {
 func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	n.incrementBatchCounters(args)
 
-	shouldIncrement := true
-	if fn := n.storeCfg.TestingKnobs.TestingBatchRequestFilter; fn != nil {
-		// ShouldIncrement is always set to true in the production environment. The
-		// testing knob is used here to filter out metrics changes caused by batch
-		// requests that are irrelevant to our tests.
-		shouldIncrement = fn(args)
-	}
-	shouldIncCrossRegion, shouldIncCrossZone := n.checkAndUpdateBatchRequestMetrics(ctx, args, shouldIncrement)
-
 	// NB: Node.Batch is called directly for "local" calls. We don't want to
 	// carry the associated log tags forward as doing so makes adding additional
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
+
+	comparisonResult := n.getLocalityComparison(ctx, args.GatewayNodeID)
+	n.metrics.updateCrossLocalityMetricsOnBatchRequest(comparisonResult, int64(args.Size()))
 
 	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
@@ -1478,14 +1422,7 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		br.Error = kvpb.NewError(err)
 	}
 
-	shouldIncrement = true
-	if fn := n.storeCfg.TestingKnobs.TestingBatchResponseFilter; fn != nil {
-		// ShouldIncrement is always set to true in the production environment. The
-		// testing knob is used here to filter out metrics changes caused by batch
-		// requests that are irrelevant to our tests.
-		shouldIncrement = fn(br)
-	}
-	n.checkAndUpdateBatchResponseMetrics(br, shouldIncCrossRegion, shouldIncCrossZone, shouldIncrement)
+	n.metrics.updateCrossLocalityMetricsOnBatchResponse(comparisonResult, int64(br.Size()))
 	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}

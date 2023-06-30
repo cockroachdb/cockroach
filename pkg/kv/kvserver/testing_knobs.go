@@ -100,16 +100,6 @@ type StoreTestingKnobs struct {
 	// no-op write, and the ForcedError field will be set.
 	TestingPostApplyFilter kvserverbase.ReplicaApplyFilter
 
-	// TestingBatchRequestFilter intercepts Node.Batch() to pass the actual batch
-	// request byte count to the test. A boolean value is returned here to filter
-	// out changes in node metrics that are irrelevant to the test.
-	TestingBatchRequestFilter func(*kvpb.BatchRequest) bool
-
-	// TestingBatchResponseFilter intercepts Node.Batch() to pass the actual batch
-	// request byte count to the test. A boolean value is returned here to filter
-	// out changes in node metrics that are irrelevant to the test.
-	TestingBatchResponseFilter func(*kvpb.BatchResponse) bool
-
 	// TestingResponseErrorEvent is called when an error is returned applying
 	// a command.
 	TestingResponseErrorEvent func(context.Context, *kvpb.BatchRequest, error)
