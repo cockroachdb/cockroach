@@ -618,13 +618,11 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 		select {
 		case <-sig:
 			shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting. Cluster might be left behind.")
-			fmt.Fprintf(os.Stderr, "all stacks:\n\n%s\n", allstacks.Get())
-			os.Exit(2)
 		case <-destroyCh:
 			shout(ctx, l, os.Stderr, "Done destroying all clusters.")
-			fmt.Fprintf(os.Stderr, "all stacks:\n\n%s\n", allstacks.Get())
-			os.Exit(2)
 		}
+		l.Printf("all stacks:\n\n%s\n", allstacks.Get())
+		os.Exit(2)
 	}()
 }
 
