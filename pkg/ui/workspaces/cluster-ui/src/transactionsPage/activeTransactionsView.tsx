@@ -216,6 +216,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
           renderError={() =>
             LoadingError({
               statsType: "transactions",
+              error: sessionsError,
             })
           }
         >
