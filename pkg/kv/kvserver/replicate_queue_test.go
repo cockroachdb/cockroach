@@ -2183,13 +2183,13 @@ func iterateOverAllStores(
 // non-voters when switching from ZONE to REGION survival i.e.
 //
 // ZONE survival configuration:
-// Region 1: Voter, Voter, Voter
-// Region 2: Non-Voter
-// Region 3: Non-Voter
+// Region 1: 3 of [n1 (voter) n2 (voter) n3 (voter)]
+// Region 2: 1 of [n4 (non-voter) n5 (non-voter)]
+// Region 3: 1 of [n6 (non-voter) n7 (non-voter)]
 // to REGION survival configuration:
-// Region 1: Voter, Voter
-// Region 2: Voter, Voter
-// Region 3: Voter
+// Region 1: 2 of [n1 (voter) n2 (voter) n3 (voter)]
+// Region 2: 2 of [n4 (voter) n5 (voter)]
+// Region 3: 1 of [n6 (voter) n7 (voter)]
 //
 // Here we have 7 stores: 3 in Region 1, 2 in Region 2, and 2 in Region 3.
 //
@@ -2334,8 +2334,44 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	var rangeID roachpb.RangeID
 	err = db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID)
 	require.NoError(t, err)
-	addVoterEvents, err := filterRangeLog(tc.Conns[0], rangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated)
+	addVoterEvents, err := filterRangeLog(tc.Conns[0],
+		rangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated)
 	require.NoError(t, err)
+
+	// If there are more than 2 add voter events, it implies that we ran into an
+	// issue where we likely down-replicated from the desired end state of
+	// voters=5, then noticed this and subsequently up-replicated to recover back
+	// to voters=5. This can happen due to ill timed span config updates e.g.
+	//
+	//   Have the correct number of voters (5), however over-satisfied on voters
+	//   in Region 1 (3/2) and undersatisfied in Region 2 (1/2).
+	//
+	//   voters = [s1, s2, s3*, s5, s6] non = []
+	//
+	//   A rebalance occurs at t2 towards s4 from s3 to correct the over/under
+	//   satisfaction. The lease also transfers with the rebalance. Now at Region
+	//   1 (2/2), Region 2 (2/2) and  Region 3 (1/1).
+	//
+	//   voters = [s1, s2, s4*, s5, s6] non = []
+	//
+	//   However, the new leaseholder store s4 has not received the region
+	//   survival config changes and still sees the old zone survival config. s4
+	//   proceeds to start removing voters as there only need to be 3.
+	//
+	//   voters = [s1, s2, s4*, s6] non = [] (note we don't demote here)
+	//
+	//   s4 receives the update that s1 made their initial changes on (voters=5)
+	//   and proceeds to add a voter back to 5.
+	//
+	//   voters = [s1, s2, s4*, s5, s6] non = []
+	//
+	// This is unfortunate but the impact should be limited, so long as the new
+	// leaseholder receives the span config update within a short period of time.
+	// See #101519. If there are more than 2 add voter events, check only the
+	// first 2.
+	if len(addVoterEvents) > 2 {
+		addVoterEvents = addVoterEvents[:2]
+	}
 
 	// Check if an add voter event has an added replica of type LEARNER, and if
 	// it does, it shows that we are adding a new voter rather than promoting an
