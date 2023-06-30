@@ -296,6 +296,11 @@ CREATE TABLE db69713.s.pg_constraintdef_test (
 statement ok
 DROP DATABASE db69713;
 
+statement ok
+RESET DATABASE;
+
+subtest end
+
 # Ensure user must exist to create with owner.
 statement error role/user "fake_user" does not exist
 CREATE DATABASE aa with owner fake_user
@@ -346,5 +351,75 @@ SELECT * FROM [SHOW DATABASES] WHERE database_name = 'ifnotexistsownerdb'
 ----
 database_name       owner     primary_region  secondary_region  regions  survival_goal
 ifnotexistsownerdb  testuser  NULL            NULL              {}       NULL
+
+subtest end
+
+subtest regression_105906
+
+statement ok
+CREATE SCHEMA regression_105906
+
+statement ok
+CREATE DATABASE regression_105906
+
+query TT colnames,rowsort
+SHOW SCHEMAS
+----
+schema_name         owner
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
+regression_105906   root
+
+# Note: regression_105906 should not appear in the list of schemas below
+query TT colnames,rowsort
+SHOW SCHEMAS FROM regression_105906
+----
+schema_name         owner
+crdb_internal       NULL
+information_schema  NULL
+pg_catalog          NULL
+pg_extension        NULL
+public              admin
+
+statement ok
+DROP DATABASE regression_105906
+
+statement ok
+DROP SCHEMA regression_105906
+
+statement ok
+CREATE SCHEMA "rEgReSsIoN 105906"
+
+statement ok
+CREATE DATABASE "rEgReSsIoN 105906"
+
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS]
+----
+public
+rEgReSsIoN 105906
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+
+# Note: "rEgReSsIoN 105906" should not appear in the list of schemas below
+query T rowsort
+SELECT schema_name FROM [SHOW SCHEMAS FROM "rEgReSsIoN 105906"]
+----
+public
+crdb_internal
+information_schema
+pg_catalog
+pg_extension
+
+statement ok
+DROP SCHEMA "rEgReSsIoN 105906"
+
+statement ok
+DROP DATABASE "rEgReSsIoN 105906"
 
 subtest end
