@@ -408,3 +408,46 @@ CREATE TABLE e105393 (a PRIMARY KEY, b) AS TABLE db105393_1.public.t105393;
 
 statement error pq: cross database type references are not supported: db105393_1.public.e105393
 CREATE TABLE e105393 (b) AS SELECT b FROM db105393_1.public.t105393;
+
+# Regression test for #105887
+subtest regression_105887
+
+statement ok
+CREATE TABLE t_105887_job (a INT);
+INSERT INTO t_105887_job values (1);
+
+statement ok
+ALTER TABLE t_105887_job ADD COLUMN b INT NOT NULL DEFAULT 2;
+
+query B
+SELECT count(*) > 0 FROM crdb_internal.jobs WHERE job_type like '%SCHEMA CHANGE%';
+----
+true
+
+statement ok
+CREATE MATERIALIZED VIEW v_105887_1 AS SELECT * FROM [SHOW JOBS];
+CREATE MATERIALIZED VIEW v_105887_2 AS SELECT * FROM crdb_internal.jobs;
+
+query B
+SELECT count(*) > 0 FROM v_105887_1
+----
+true
+
+query B
+SELECT count(*) > 0 FROM v_105887_2
+----
+true
+
+statement ok
+CREATE TABLE t_105887_1 AS SELECT * FROM [SHOW JOBS];
+CREATE TABLE t_105887_2 AS SELECT * FROM crdb_internal.jobs;
+
+query B
+SELECT count(*) > 0 FROM t_105887_1
+----
+true
+
+query B
+SELECT count(*) > 0 FROM t_105887_2
+----
+true
