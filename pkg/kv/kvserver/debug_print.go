@@ -369,20 +369,14 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 	e.Data = nil
 	cmd := e.Cmd
 
-	var leaseStr string
-	if l := cmd.DeprecatedProposerLease; l != nil {
-		leaseStr = l.String() // use the full lease, if available
-	} else {
-		leaseStr = fmt.Sprintf("lease #%d", cmd.ProposerLeaseSequence)
-	}
-
 	wbStr, err := decodeWriteBatch(cmd.WriteBatch)
 	if err != nil {
 		wbStr = "failed to decode: " + err.Error() + "\nafter:\n" + wbStr
 	}
 	cmd.WriteBatch = nil
 
-	return fmt.Sprintf("%s (ID %s) by %s\n%s\nwrite batch:\n%s", &e.Entry, e.ID, leaseStr, &cmd, wbStr), nil
+	return fmt.Sprintf("%s (ID %s) by lease #%d\n%s\nwrite batch:\n%s",
+		&e.Entry, e.ID, cmd.ProposerLeaseSequence, &cmd, wbStr), nil
 }
 
 func tryTxn(kv storage.MVCCKeyValue) (string, error) {

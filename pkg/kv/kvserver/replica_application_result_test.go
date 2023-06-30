@@ -33,17 +33,16 @@ func TestProposalDataAndRaftCommandAreConsideredWhenAddingFields(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	raftCommand := &kvserverpb.RaftCommand{
-		ProposerLeaseSequence:   1,
-		DeprecatedProposerLease: &roachpb.Lease{},
-		MaxLeaseIndex:           1,
-		ClosedTimestamp:         &hlc.Timestamp{},
-		ReplicatedEvalResult:    kvserverpb.ReplicatedEvalResult{IsProbe: true},
-		WriteBatch:              &kvserverpb.WriteBatch{},
-		LogicalOpLog:            &kvserverpb.LogicalOpLog{},
-		TraceData:               map[string]string{},
-		AdmissionPriority:       1,
-		AdmissionCreateTime:     1,
-		AdmissionOriginNode:     1,
+		ProposerLeaseSequence: 1,
+		MaxLeaseIndex:         1,
+		ClosedTimestamp:       &hlc.Timestamp{},
+		ReplicatedEvalResult:  kvserverpb.ReplicatedEvalResult{IsProbe: true},
+		WriteBatch:            &kvserverpb.WriteBatch{},
+		LogicalOpLog:          &kvserverpb.LogicalOpLog{},
+		TraceData:             map[string]string{},
+		AdmissionPriority:     1,
+		AdmissionCreateTime:   1,
+		AdmissionOriginNode:   1,
 	}
 
 	prop := &ProposalData{
@@ -70,11 +69,10 @@ func TestProposalDataAndRaftCommandAreConsideredWhenAddingFields(t *testing.T) {
 	// desired semantics of that field in `tryReproposeWithNewLeaseIndex{,v2}`. Once
 	// this has been done, adjust the expected number of fields below, and populate
 	// the field above, to let this test pass.
-	// test pass.
 	//
 	// NB: we can't use zerofields for two reasons: First, we have unexported fields
 	// here, and second, we don't want to check for recursively populated structs (but
 	// only for the top level fields).
-	require.Equal(t, 11, reflect.TypeOf(*raftCommand).NumField())
+	require.Equal(t, 10, reflect.TypeOf(*raftCommand).NumField())
 	require.Equal(t, 17, reflect.TypeOf(*prop).NumField())
 }
