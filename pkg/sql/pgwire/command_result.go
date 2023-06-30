@@ -288,6 +288,14 @@ func (r *commandResult) BufferNotice(notice pgnotice.Notice) {
 	r.buffer.notices = append(r.buffer.notices, notice)
 }
 
+// SendNotice is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SendNotice(ctx context.Context, notice pgnotice.Notice) error {
+	if err := r.conn.bufferNotice(ctx, notice); err != nil {
+		return err
+	}
+	return r.conn.Flush(r.pos)
+}
+
 // SetColumns is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
 	r.assertNotReleased()
