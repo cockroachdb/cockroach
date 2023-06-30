@@ -46,18 +46,26 @@ const (
 // to the mean range/lease count that permits lease-transfers away from that
 // store.
 // Made configurable for the sake of testing.
-var LeaseRebalanceThreshold = 0.05
+var LeaseRebalanceThreshold = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.allocator.lease_rebalance_threshold",
+	"minimum fraction away from the mean a store's lease count can be before "+
+		"it is considered for lease-transfers",
+	0.05,
+).WithPublic()
 
 // LeaseRebalanceThresholdMin is the absolute number of leases above/below the
 // mean lease count that a store can have before considered overfull/underfull.
 // Made configurable for the sake of testing.
 var LeaseRebalanceThresholdMin = 5.0
 
-// baseLoadBasedLeaseRebalanceThreshold is the equivalent of
+// getBaseLoadBasedLeaseRebalanceThreshold returns the equivalent of
 // LeaseRebalanceThreshold for load-based lease rebalance decisions (i.e.
 // "follow-the-workload"). It's the base threshold for decisions that get
 // adjusted based on the load and latency of the involved ranges/nodes.
-var baseLoadBasedLeaseRebalanceThreshold = 2 * LeaseRebalanceThreshold
+func getBaseLoadBasedLeaseRebalanceThreshold(leaseRebalanceThreshold float64) float64 {
+	return 2 * leaseRebalanceThreshold
+}
 
 // MinLeaseTransferStatsDuration configures the minimum amount of time a
 // replica must wait for stats about request counts to accumulate before
@@ -2560,6 +2568,7 @@ func (a Allocator) FollowTheWorkloadPrefersLocal(
 		return false
 	}
 	adjustment := adjustments[candidate]
+	baseLoadBasedLeaseRebalanceThreshold := getBaseLoadBasedLeaseRebalanceThreshold(LeaseRebalanceThreshold.Get(&a.st.SV))
 	if adjustment > baseLoadBasedLeaseRebalanceThreshold {
 		log.KvDistribution.VEventf(ctx, 3,
 			"s%d is a better fit than s%d due to follow-the-workload (score: %.2f; threshold: %.2f)",
@@ -2732,7 +2741,7 @@ func loadBasedLeaseRebalanceScore(
 	// Start with twice the base rebalance threshold in order to fight more
 	// strongly against thrashing caused by small variances in the distribution
 	// of request weights.
-	rebalanceThreshold := baseLoadBasedLeaseRebalanceThreshold - rebalanceAdjustment
+	rebalanceThreshold := getBaseLoadBasedLeaseRebalanceThreshold(LeaseRebalanceThreshold.Get(&st.SV)) - rebalanceAdjustment
 
 	overfullLeaseThreshold := int32(math.Ceil(meanLeases * (1 + rebalanceThreshold)))
 	overfullScore := source.Capacity.LeaseCount - overfullLeaseThreshold
@@ -2767,7 +2776,8 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 
 	// Allow lease transfer if we're above the overfull threshold, which is
 	// mean*(1+LeaseRebalanceThreshold).
-	overfullLeaseThreshold := int32(math.Ceil(sl.CandidateLeases.Mean * (1 + LeaseRebalanceThreshold)))
+	leaseRebalanceThreshold := LeaseRebalanceThreshold.Get(&a.st.SV)
+	overfullLeaseThreshold := int32(math.Ceil(sl.CandidateLeases.Mean * (1 + leaseRebalanceThreshold)))
 	minOverfullThreshold := int32(math.Ceil(sl.CandidateLeases.Mean + LeaseRebalanceThresholdMin))
 	if overfullLeaseThreshold < minOverfullThreshold {
 		overfullLeaseThreshold = minOverfullThreshold
@@ -2777,7 +2787,7 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	}
 
 	if float64(source.Capacity.LeaseCount) > sl.CandidateLeases.Mean {
-		underfullLeaseThreshold := int32(math.Ceil(sl.CandidateLeases.Mean * (1 - LeaseRebalanceThreshold)))
+		underfullLeaseThreshold := int32(math.Ceil(sl.CandidateLeases.Mean * (1 - leaseRebalanceThreshold)))
 		minUnderfullThreshold := int32(math.Ceil(sl.CandidateLeases.Mean - LeaseRebalanceThresholdMin))
 		if underfullLeaseThreshold > minUnderfullThreshold {
 			underfullLeaseThreshold = minUnderfullThreshold
