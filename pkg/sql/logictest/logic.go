@@ -1247,6 +1247,9 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 		if notice.Hint != "" {
 			t.noticeBuffer = append(t.noticeBuffer, "HINT: "+notice.Hint)
 		}
+		if notice.Code != "" && notice.Code != "00000" {
+			t.noticeBuffer = append(t.noticeBuffer, "SQLSTATE: "+string(notice.Code))
+		}
 	})
 
 	return gosql.OpenDB(connector)
