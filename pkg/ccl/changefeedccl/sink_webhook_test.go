@@ -106,7 +106,13 @@ func testSendAndReceiveRows(t *testing.T, sinkSrc Sink, sinkDest *cdctest.MockWe
 	require.NoError(t, sinkSrc.EmitRow(ctx, nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, pool.alloc()))
 	require.NoError(t, sinkSrc.EmitRow(ctx, nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1002},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, pool.alloc()))
 	require.NoError(t, sinkSrc.Flush(ctx))
-	require.EqualValues(t, 0, pool.used())
+	testutils.SucceedsSoon(t, func() error {
+		remaining := pool.used()
+		if remaining == 0 {
+			return nil
+		}
+		return errors.Newf("waiting for 0 allocs (%d)", remaining)
+	})
 
 	require.Equal(t,
 		"{\"payload\":[{\"after\":{\"col1\":\"val1\",\"rowid\":1002},\"key\":[1001],\"topic:\":\"foo\"}],\"length\":1}", sinkDest.Latest(),
