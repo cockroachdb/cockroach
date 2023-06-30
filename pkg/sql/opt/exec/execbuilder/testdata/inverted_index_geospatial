@@ -45,7 +45,7 @@ regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
@@ -81,7 +81,7 @@ regions: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVeFu2zYQ_r-nONyfJJgGk5LiuRwGeHHVzdtSB0rQoZiMgJFurmCJVElqUxDksfYCe7JBYlLETaPWHQrMP2Tfd_dRx_v40Tdo31Yo8Dz5NVlcwBZepKtT2JC-dPKqIvjtpyRNwLrLUjkylnJnDw_O0-Xz78PpMz777my1fHlxGDPGWATDF4uODoT4MVmdJhfp66Bfqz6CVfo8SeHkNWwxQKULeilrsih-R47rABujc7JWmx66GQqWRYeCBViqpnU9vA4w14ZQ3KArXUUo8KLvMSVZkJkwDLAgJ8tqWPbdFuZ9A5elKqjDABe6amtlBWx9ZxjgeSN7YJLhSZZ1fxRZ1nGWZR372AO_2ZfDMwSpCogYaPeGjMUAf3kFrqxJAPvn77s418qRcqVWj1JG_2XBkCwExB65unZ0D0UhnHh0k54tIJdVZX3h6avFAqyjBnLdKgeH1LlJqdyRADaMzhcQbZ8qqGUHNdXaXIOsKp1LR4UANrzwSrr8DVnQrWtaJ6CvHzq9B2Jc3wboozstrZMbQsFvg0_Xe6n-JOOoeFFWjgyZCd8V_T6fdI0BrWDOBdheXrBOGicGuaJvj7OMhSzLGPvYA4FUsS-tV_mRzKt-DPO-32GDg5BeGh9bJ6tqV27qKG8fn4IxIfqcfVuBo7qBorRbaK3c0CfrFD6pU7iPTj_rUt3ZMhyxpf912Wzp-sPW_GxvhI-9wacf8kb4xb3x5SSJ9pHknWWiXUE8Lt6_4hlnvL_MQxZOp8_Yw89i-gOfxdwHMzbjszhOYn4gHt768_DoyUMffsah_w9jivcZ07k2jswk3h3SnH_9f_Pj8T67Ssk2Wlna2dVTK7PbdYBUbMj_F1vdmpzOjM6H1_hwNfAGoCDrfJb7YKl8qm_wIZmPksNxcjhKjsbJ0Sg5HifHo-Tj98jr26_-DQAA___vrPo-
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVeFu2zYQ_r-nONyfJJgGk5LiuRwGeHHVzdtSB0rQoZiMgJFurmCJVElqUxDksfYCe7JBYlLETaPW3YDNP2Tfd_dRd_f5k27Qvq1Q4Hnyc7K4gC28SFensCF96eRVRfDLD0magHWXpXJkLOXOHh6cp8vn34bTZ3z2zdlq-fLiMGaMsQiGLxYdHQjxfbI6TS7S10F_Vn0Eq_R5ksLJa9higEoX9FLWZFH8ihzXATZG52StNj10MxQsiw4FC7BUTet6eB1grg2huEFXuopQ4EXfY0qyIDNhGGBBTpbVcOy7EeZ9A5elKqjDABe6amtlBWx9ZxjgeSN7YJLhSZZ1vxVZ1nGWZR372AW_2pfDMwSpCogYaPeGjMUAf3oFrqxJAPvrz7s418qRcqVWj1JG_2HBkCwExB65unZ0D0UhnHh0k54tIJdVZX3h6avFAqyjBnLdKgeH1LlJqdyRADaszhcQbZ8qqGUHNdXaXIOsKp1LR4UANtzwSrr8DVnQrWtaJ6CvHzq9B2Jc3wboozstrZMbQsFvg0_Xe6l-J-OoeFFWjgyZCd8V_T6fdI0BrWDOBdheXrBOGicGuaKvj7OMhSzLGPvYBYFUsS-tV_mRzKt-DfO-32HAQUgvjY-tk1W1Kzd1lLeP_wVjQvQ5-7YCR3UDRWm30Fq5oU_WKXxSp3AfnX7UpbqzZThiS__rstnS9Yet-dneCB97g08_5I3wX_FGa6kA6wzJmsx_JlG0j0TvLBTtCuRx8f4jn3HG-4d7yMLp9Bl7-FlMv-OzmPtgxmZ8FsdJzA_Ew7fAPDx60gThZ5jgH6wp3mdN59o4MpN4d0lz_uX_zZ_H-0yVkm20srQz1VMns9t1gFRsyL-brW5NTmdG58NtfLgaeANQkHU-y32wVD7VN_iQzEfJ4Tg5HCVH4-RolByPk-NR8vF75PXtF38HAAD__4Oe_-I=
 
 statement ok
 DROP TABLE geo_table
@@ -132,7 +132,7 @@ regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
@@ -168,7 +168,7 @@ regions: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzclf9u2zYQx__fUxzunySYBpOS4rkcBnhx1c3bUgdK0KGYjYCRbq5gmVRJalMQ-LH2AnuygWJSxM2qzVgHDPUftO_HlzreR0ffoX1bo8DL7MdsdgUbeJEvzmFN-trJm5rgp--yPAPrrivlyFgqnD0-usznz7-Ox8_45KuLxfzl1XHKGGMJ9F8sOTkS4ttscZ5d5a8jv9f2BBb58yyHs9ewwQiVLuml3JJF8TNyXEXYGF2Qtdp4112fMC87FCzCSjWt8-5VhIU2hOIOXeVqQoFXvsacZElmxDDCkpys6n7bd0eY-gKuK1VShxHOdN1ulRWwCZVhhJeN9I7REs-Wy-6XcrnsWOIX9jcLfnGohi8RpCohYaDdGzIWI_zhFbhqSwLYH7_f24VWjpSrtHoSMvo3C4ZkKSAOnptbRw8uPoaz4F3nFzMoZF3bkHj-ajYD66iBQrfKwTF1blQpdyKA9a0LCUSbDyVsZQdb2mpzC7KudSEdlQJY_8Ab6Yo3ZEG3rmmdAJ_fV_rgiHG1izBY9yytk2tCwXfRP-c9V7-ScVS-qGpHhsyI70N_iGddY0ArmHIB1uMF66RxoseVfHm6XDKPi3kqgwsCqfJQmaf8BPPCt2Hq6-0P2IMMaIJtnazrfdzUUdE-fQuGQPiYfVuDo20DZWU30Fq5po_AKT6E0_e6UvdjGQ-MZfh13Wzo9q9H81OYjf8OSXIIkncjk-wDCX7x_hXPOOP-Mo9ZPB4_Y48_s_E3fJLyYEzYhE_SNEv5kXh860_jk4_60v-LNqWHtOlSG0dmlO43aco__7_N4-khp8rJNlpZ2jvVh3Zmu1WEVK4p_Bdb3ZqCLowu-scEc9HrekdJ1oUoD8ZchZAv8LGYD4rjYXE8KE6GxcmgOB0Wp4Pi0_fEq91nfwYAAP__9CH6Pg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUlf9u2zYQx__fUxzunySYBpOS4rkcBnhx1c3bUgdK0KGYjYCRbq5giVRJanMQ-LH2AnuygWJSxM2qzViBrf6D9v34Usf7-MQ7tG9rFHiZ_ZjNrmADL_LFOaxJXzt5UxP89F2WZ2DddaUcGUuFs8dHl_n8-dfx-BmffHWxmL-8Ok4ZYyyB_oslJ0dCfJstzrOr_HXk92pOYJE_z3I4ew0bjFDpkl7KhiyKn5HjKsLW6IKs1ca77vqEeblFwSKsVNs5715FWGhDKO7QVa4mFHjla8xJlmRGDCMsycmq7rd9d4SpL-C6UiVtMcKZrrtGWQGbUBlGeNlK7xgt8Wy53P5SLpdblviF_c2CXxyq4UsEqUpIGGj3hozFCH94Ba5qSAD74_d7u9DKkXKVVk9CRv9mwZAsBcTBc3Pr6MHFx3AWvOv8YgaFrGsbEs9fzWZgHbVQ6E45OKatG1XKnQhgfetCAtHmQwmN3EJDjTa3IOtaF9JRKYD1D7yRrnhDFnTn2s4J8Pl9pQ-OGFe7CIN1z9I6uSYUfBf9c95z9SsZR-WLqnZkyIz4PvSHeLZtDWgFUy7AerxgnTRO9LiSL0-XS-ZxMU9lcEEgVR4q85SfYF74Nkx9vf0Be5ABTbCtk3W9j5u2VHRP_wVDIHzMvq3BUdNCWdkNdFau6SNwig_h9L2u1P1YxgNjGX5dtxu6_evR_FRmo7NUgnWGZEPmP0OUHILo3Qgl-4CCX7z_ymeccf9yj1k8Hj9jjz-z8Td8kvJgTNiET9I0S_mReHwLTOOTjzoE_6JN6SFtutTGkRml-02a8s__b_N5esipcrKtVpb2TvWhndluFSGVawp3s9WdKejC6KJ_TDAXva53lGRdiPJgzFUI-QIfi_mgOB4Wx4PiZFicDIrTYXE6KD59T7zaffZnAAAA__-IE__i
 
 # Also works when creating an index.
 statement ok
@@ -203,7 +203,7 @@ regions: <hidden>
     │ actual row count: 2
     │ filter: st_intersects('010100002026690000000000000C6A18410000008081844E41', geom)
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 2
@@ -239,4 +239,4 @@ regions: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzclf9u2zYQx__fUxzunySYBpOS4rkcBnhx1c3bUgdK0KGYjYCRbq5gmVRJalMQ-LH2AnuygWJSxM2qzVgHDPUftO_HlzreR0ffoX1bo8DL7MdsdgUbeJEvzmFN-trJm5rgp--yPAPrrivlyFgqnD0-usznz7-Ox8_45KuLxfzl1XHKGGMJ9F8sOTkS4ttscZ5d5a8jv9f2BBb58yyHs9ewwQiVLuml3JJF8TNyXEXYGF2Qtdp4112fMC87FCzCSjWt8-5VhIU2hOIOXeVqQoFXvsacZElmxDDCkpys6n7bd0eY-gKuK1VShxHOdN1ulRWwCZVhhJeN9I7REs-Wy-6XcrnsWOIX9jcLfnGohi8RpCohYaDdGzIWI_zhFbhqSwLYH7_f24VWjpSrtHoSMvo3C4ZkKSAOnptbRw8uPoaz4F3nFzMoZF3bkHj-ajYD66iBQrfKwTF1blQpdyKA9a0LCUSbDyVsZQdb2mpzC7KudSEdlQJY_8Ab6Yo3ZEG3rmmdAJ_fV_rgiHG1izBY9yytk2tCwXfRP-c9V7-ScVS-qGpHhsyI70N_iGddY0ArmHIB1uMF66RxoseVfHm6XDKPi3kqgwsCqfJQmaf8BPPCt2Hq6-0P2IMMaIJtnazrfdzUUdE-fQuGQPiYfVuDo20DZWU30Fq5po_AKT6E0_e6UvdjGQ-MZfh13Wzo9q9H81OYjf8OSXIIkncjk-wDCX7x_hXPOOP-Mo9ZPB4_Y48_s_E3fJLyYEzYhE_SNEv5kXh860_jk4_60v-LNqWHtOlSG0dmlO43aco__7_N4-khp8rJNlpZ2jvVh3Zmu1WEVK4p_Bdb3ZqCLowu-scEc9HrekdJ1oUoD8ZchZAv8LGYD4rjYXE8KE6GxcmgOB0Wp4Pi0_fEq91nfwYAAP__9CH6Pg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUlf9u2zYQx__fUxzunySYBpOS4rkcBnhx1c3bUgdK0KGYjYCRbq5giVRJanMQ-LH2AnuygWJSxM2qzViBrf6D9v34Usf7-MQ7tG9rFHiZ_ZjNrmADL_LFOaxJXzt5UxP89F2WZ2DddaUcGUuFs8dHl_n8-dfx-BmffHWxmL-8Ok4ZYyyB_oslJ0dCfJstzrOr_HXk92pOYJE_z3I4ew0bjFDpkl7KhiyKn5HjKsLW6IKs1ca77vqEeblFwSKsVNs5715FWGhDKO7QVa4mFHjla8xJlmRGDCMsycmq7rd9d4SpL-C6UiVtMcKZrrtGWQGbUBlGeNlK7xgt8Wy53P5SLpdblviF_c2CXxyq4UsEqUpIGGj3hozFCH94Ba5qSAD74_d7u9DKkXKVVk9CRv9mwZAsBcTBc3Pr6MHFx3AWvOv8YgaFrGsbEs9fzWZgHbVQ6E45OKatG1XKnQhgfetCAtHmQwmN3EJDjTa3IOtaF9JRKYD1D7yRrnhDFnTn2s4J8Pl9pQ-OGFe7CIN1z9I6uSYUfBf9c95z9SsZR-WLqnZkyIz4PvSHeLZtDWgFUy7AerxgnTRO9LiSL0-XS-ZxMU9lcEEgVR4q85SfYF74Nkx9vf0Be5ABTbCtk3W9j5u2VHRP_wVDIHzMvq3BUdNCWdkNdFau6SNwig_h9L2u1P1YxgNjGX5dtxu6_evR_FRmo7NUgnWGZEPmP0OUHILo3Qgl-4CCX7z_ymeccf9yj1k8Hj9jjz-z8Td8kvJgTNiET9I0S_mReHwLTOOTjzoE_6JN6SFtutTGkRml-02a8s__b_N5esipcrKtVpb2TvWhndluFSGVawp3s9WdKejC6KJ_TDAXva53lGRdiPJgzFUI-QIfi_mgOB4Wx4PiZFicDIrTYXE6KD59T7zaffZnAAAA__-IE__i

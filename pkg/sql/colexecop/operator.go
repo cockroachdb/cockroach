@@ -79,6 +79,8 @@ type KVReader interface {
 	// GetScanStats returns statistics about the scan that happened during the
 	// KV reads. It must be safe for concurrent use.
 	GetScanStats() execstats.ScanStats
+	// UsedStreamer returns whether the Streamer API was used by the KVReader.
+	UsedStreamer() bool
 }
 
 // ZeroInputNode is an execopnode.OpNode with no inputs.

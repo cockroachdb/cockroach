@@ -1178,6 +1178,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVTime:              fis.WaitTime,
 			ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(jr.Ctx(), jr.ExecStatsTrace)),
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
+			UsedStreamer:        jr.usesStreamer,
 		},
 		Output: jr.OutputHelper.Stats(),
 	}

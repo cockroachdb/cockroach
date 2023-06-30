@@ -176,7 +176,15 @@ func makeEmitter(ob *OutputBuilder, spanFormatFn SpanFormatFn) emitter {
 	return emitter{ob: ob, spanFormatFn: spanFormatFn}
 }
 
-func (e *emitter) nodeName(n *Node) (string, error) {
+func (e *emitter) nodeName(n *Node) (name string, _ error) {
+	defer func() {
+		if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
+			if stats.(*exec.ExecutionStats).UsedStreamer {
+				name += " (streamer)"
+			}
+		}
+	}()
+
 	switch n.op {
 	case scanOp:
 		a := n.args.(*scanArgs)

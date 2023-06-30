@@ -176,6 +176,13 @@ func (s *ColBatchScan) GetScanStats() execstats.ScanStats {
 	return execstats.GetScanStats(s.Ctx, nil /* recording */)
 }
 
+// UsedStreamer is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) UsedStreamer() bool {
+	// TODO(yuzefovich): update this when the streamer is used to power the
+	// ColBatchScans (#82164).
+	return false
+}
+
 var colBatchScanPool = sync.Pool{
 	New: func() interface{} {
 		return &ColBatchScan{}

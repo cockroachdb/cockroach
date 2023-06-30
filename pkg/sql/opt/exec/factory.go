@@ -336,6 +336,7 @@ type ExecutionStats struct {
 	KVBytesRead           optional.Uint
 	KVRowsRead            optional.Uint
 	KVBatchRequestsIssued optional.Uint
+	UsedStreamer          bool
 
 	StepCount         optional.Uint
 	InternalStepCount optional.Uint

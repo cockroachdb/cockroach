@@ -74,7 +74,11 @@ const (
 func (s *ComponentStats) StatsForQueryPlan() []string {
 	result := make([]string, 0, 4)
 	s.formatStats(func(key string, value interface{}) {
-		result = append(result, fmt.Sprintf("%s: %v", key, value))
+		if value != nil {
+			result = append(result, fmt.Sprintf("%s: %v", key, value))
+		} else {
+			result = append(result, key)
+		}
 	})
 	return result
 }
@@ -166,6 +170,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 				humanizeutil.Count(s.KV.NumInterfaceSeeks.Value()),
 				humanizeutil.Count(s.KV.NumInternalSeeks.Value())),
 		)
+	}
+	if s.KV.UsedStreamer {
+		fn("used streamer", nil)
 	}
 
 	// Exec stats.
