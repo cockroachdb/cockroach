@@ -1105,10 +1105,11 @@ func (s *Store) receiveSnapshot(
 		log.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
+	comparisonResult := s.getLocalityComparison(ctx,
+		header.RaftMessageRequest.FromReplica.NodeID, header.RaftMessageRequest.ToReplica.NodeID)
+
 	recordBytesReceived := func(inc int64) {
 		s.metrics.RangeSnapshotRcvdBytes.Inc(inc)
-		comparisonResult := s.getLocalityComparison(ctx,
-			header.RaftMessageRequest.FromReplica.NodeID, header.RaftMessageRequest.ToReplica.NodeID)
 		s.metrics.updateCrossLocalityMetricsOnSnapshotRcvd(comparisonResult, inc)
 
 		switch header.Priority {

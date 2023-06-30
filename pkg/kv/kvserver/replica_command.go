@@ -3151,6 +3151,8 @@ func (r *Replica) followerSendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
+	comparisonResult := r.store.getLocalityComparison(ctx, req.CoordinatorReplica.NodeID,
+		req.RecipientReplica.NodeID)
 
 	recordBytesSent := func(inc int64) {
 		// Only counts for delegated bytes if we are not self-delegating.
@@ -3158,8 +3160,6 @@ func (r *Replica) followerSendSnapshot(
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
-		comparisonResult := r.store.getLocalityComparison(ctx, req.CoordinatorReplica.NodeID,
-			req.RecipientReplica.NodeID)
 		r.store.metrics.updateCrossLocalityMetricsOnSnapshotSent(comparisonResult, inc)
 
 		switch header.Priority {
