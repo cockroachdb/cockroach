@@ -3603,6 +3603,8 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_function_is_visible"></a><code>pg_function_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the function with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_function_arg_default"></a><code>pg_get_function_arg_default(func_oid: oid, arg_num: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Get textual representation of a function argument’s default value. The second argument of this function is the argument number among all arguments (i.e. proallargtypes, <em>not</em> proargtypes), starting with 1, because that’s how information_schema.sql uses it. Currently, this always returns NULL, since CockroachDB does not support default values.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_arguments"></a><code>pg_get_function_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list (with defaults) necessary to identify a function, in the form it would need to appear in within CREATE FUNCTION.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_identity_arguments"></a><code>pg_get_function_identity_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list (without defaults) necessary to identify a function, in the form it would need to appear in within ALTER FUNCTION, for instance.</p>
