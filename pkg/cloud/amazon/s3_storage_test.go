@@ -18,8 +18,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -394,6 +396,100 @@ func TestS3DisallowImplicitCredentials(t *testing.T) {
 	require.Nil(t, s3)
 	require.Error(t, err)
 	require.True(t, strings.Contains(err.Error(), "implicit"))
+}
+
+type awserror struct {
+	error
+	orig          error
+	code, message string
+}
+
+var _ awserr.Error = awserror{}
+
+func (a awserror) Code() string {
+	return a.code
+}
+
+func (a awserror) Message() string {
+	return a.message
+}
+
+func (a awserror) OrigErr() error {
+	return a.orig
+}
+
+func TestInterpretAWSCode(t *testing.T) {
+	{
+		// with code
+		input := awserror{
+			error: errors.New("hello"),
+			code:  s3.ErrCodeBucketAlreadyOwnedByYou,
+		}
+		got := interpretAWSError(input)
+		require.NotNil(t, got, "expected tryAWSCode to recognize an awserr.Error type")
+		require.False(t, errors.Is(got, cloud.ErrFileDoesNotExist), "should not include cloud.ErrFileDoesNotExist in the error chain")
+		require.True(t, strings.Contains(got.Error(), s3.ErrCodeBucketAlreadyOwnedByYou), "aws error code should be in the error chain")
+	}
+
+	{
+		// with keywords
+		input := awserror{
+			error: errors.New("‹AccessDenied: User: arn:aws:sts::12345:assumed-role/12345 is not authorized to perform: sts:AssumeRole on resource: arn:aws:iam::12345›"),
+		}
+		got := interpretAWSError(input)
+		require.NotNil(t, got, "expected interpretAWSError to recognize keywords")
+		require.True(t, strings.Contains(got.Error(), "AccessDenied"), "expected to see AccessDenied in error chain")
+		require.True(t, strings.Contains(got.Error(), "AssumeRole"), "expected to see AssumeRole in error chain")
+	}
+
+	{
+		// with particular code
+		input := awserror{
+			error: errors.New("hello"),
+			code:  s3.ErrCodeNoSuchBucket,
+		}
+		got := interpretAWSError(input)
+		require.NotNil(t, got, "expected tryAWSCode to regognize awserr.Error")
+		require.True(t, errors.Is(got, cloud.ErrFileDoesNotExist), "expected cloud.ErrFileDoesNotExist in the error chain")
+		require.True(t, strings.Contains(got.Error(), s3.ErrCodeNoSuchBucket), "aws error code should be in the error chain")
+	}
+
+	{
+		// with keywords and code
+		input := awserror{
+			error: errors.New("‹AccessDenied: User: arn:aws:sts::12345:assumed-role/12345 is not authorized to perform: sts:AssumeRole on resource: arn:aws:iam::12345›"),
+			code:  s3.ErrCodeObjectAlreadyInActiveTierError,
+		}
+		got := interpretAWSError(input)
+		require.NotNil(t, got, "expected interpretAWSError to recognize keywords")
+		require.True(t, strings.Contains(got.Error(), "AccessDenied"), "expected to see AccessDenied in error chain")
+		require.True(t, strings.Contains(got.Error(), "AssumeRole"), "expected to see AssumeRole in error chain")
+		require.True(t, strings.Contains(got.Error(), s3.ErrCodeObjectAlreadyInActiveTierError), "aws error code should be in the error chain")
+		require.True(t, strings.Contains(got.Error(), "12345"), "SDK error should appear in the error chain")
+
+		// the keywords and code should come through while the original got redacted
+		redacted := errors.Redact(got)
+		require.True(t, strings.Contains(got.Error(), "AccessDenied"), "expected to see AccessDenied in error chain after redaction")
+		require.True(t, strings.Contains(got.Error(), "AssumeRole"), "expected to see AssumeRole in error chain after redaction")
+		require.True(t, strings.Contains(got.Error(), s3.ErrCodeObjectAlreadyInActiveTierError), "aws error code should be in the error chain after redaction")
+		require.False(t, strings.Contains(redacted, "12345"), "SDK error should have been redacted")
+	}
+
+	{
+		// no keywords or code
+		input := awserror{
+			error: errors.New("hello"),
+		}
+		got := interpretAWSError(input)
+		require.Equal(t, input, got, "expected interpretAWSError to pass through the same error")
+	}
+
+	{
+		// not an AWS error type
+		input := errors.New("some other generic error")
+		got := interpretAWSError(input)
+		require.Equal(t, input, got, "expected interpretAWSError to pass through the same error")
+	}
 }
 
 // S3 has two "does not exist" errors - ErrCodeNoSuchBucket and ErrCodeNoSuchKey.
