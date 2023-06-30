@@ -235,6 +235,8 @@
 
 /pkg/ccl/jobsccl/            @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
+/pkg/util/future/            @cockroachdb/cdc-prs
+/pkg/util/parquet/           @cockroachdb/cdc-prs
 
 /pkg/ccl/streamingccl/       @cockroachdb/disaster-recovery
 /pkg/ccl/backupccl/          @cockroachdb/disaster-recovery
