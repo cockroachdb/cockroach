@@ -609,7 +609,7 @@ func runTPCHVec(
 
 	t.Status("restoring TPCH dataset for Scale Factor 1")
 	if err := loadTPCHDataset(
-		ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), disableMergeQueue,
+		ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), disableMergeQueue, false, /* secure */
 	); err != nil {
 		t.Fatal(err)
 	}
