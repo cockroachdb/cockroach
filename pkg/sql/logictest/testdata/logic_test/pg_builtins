@@ -76,6 +76,8 @@ SELECT pg_column_size(NULL::int)
 ----
 NULL
 
+subtest end
+
 statement ok
 CREATE TABLE is_visible(a int primary key);
 CREATE TYPE visible_type AS ENUM('a');
@@ -861,3 +863,23 @@ SELECT col_description(0, 0)
 statement
 DROP TABLE system.comments;
 DROP SCHEMA system
+
+subtest nameconcatoid
+
+query T
+select nameconcatoid('cat', 2);
+----
+cat_2
+
+# Test that the name is truncated such that the total length is at most 63 characters.
+query T
+select nameconcatoid(repeat('a', 58) || 'bbbbbbbbbb', 200);
+----
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab_200
+
+query T
+select nameconcatoid(repeat('a', 58) || 'bbbbbbbbbb', 2);
+----
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbb_2
+
+subtest end
