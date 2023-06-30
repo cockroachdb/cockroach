@@ -1,4 +1,4 @@
-# LogicTest: !metamorphic
+# LogicTest: !metamorphic-batch-sizes
 # Disabled to allow us to validate create as with large batch sizes.
 
 # Regression test for #81554, where tried to do gigantic batches for CTAS in

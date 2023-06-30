@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -150,9 +151,9 @@ import (
 // A link to the issue will be printed out if the -print-blocklist-issues flag
 // is specified.
 //
-// There is a special directive '!metamorphic' that adjusts the server to force
-// the usage of production values for some constants that might change via the
-// metamorphic testing.
+// There is a special directive '!metamorphic-batch-sizes' that adjusts the
+// server to force the usage of production values related for some constants,
+// mostly related to batch sizes, that might change via metamorphic testing.
 //
 //
 // ###########################################################
@@ -381,6 +382,12 @@ import (
 //    Defines the start of a subtest. The subtest is any number of statements
 //    that occur after this command until the end of file or the next subtest
 //    command.
+//
+//  - retry
+//    Specifies that the next occurrence of a statement or query directive
+//    (including those which expect errors) will be retried for a fixed
+//    duration until the test passes, or the alloted time has elapsed.
+//    This is similar to the retry option of the query directive.
 //
 // The overall architecture of TestLogic is as follows:
 //
@@ -833,9 +840,6 @@ type logicQuery struct {
 	colTypes string
 	// colNames controls the inclusion of column names in the query result.
 	colNames bool
-	// retry indicates if the query should be retried in case of failure with
-	// exponential backoff up to some maximum duration.
-	retry bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
 	// expectedErr and expectedErrCode are as in logicStatement.
@@ -1015,6 +1019,12 @@ type logicTest struct {
 	// declarativeCorpusCollector used to save declarative schema changer state
 	// to disk.
 	declarativeCorpusCollector *corpus.Collector
+
+	// retry indicates if the statement or query should be retried in case of
+	// failure with exponential backoff up to some maximum duration. It is reset
+	// to false after every successful statement or query test point, including
+	// those which are supposed to error out.
+	retry bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -2299,6 +2309,20 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 	return subtests, nil
 }
 
+func (t *logicTest) purgeZoneConfig() {
+	if t.cluster == nil {
+		// We can only purge zone configs for in-memory test clusters.
+		return
+	}
+	for i := 0; i < t.cluster.NumServers(); i++ {
+		sysconfigProvider := t.cluster.Server(i).SystemConfigProvider()
+		sysconfig := sysconfigProvider.GetSystemConfig()
+		if sysconfig != nil {
+			sysconfig.PurgeZoneConfigCache()
+		}
+	}
+}
+
 func (t *logicTest) processSubtest(
 	subtest subtestDetails, path string, config logictestbase.TestClusterConfig, rng *rand.Rand,
 ) error {
@@ -2308,6 +2332,8 @@ func (t *logicTest) processSubtest(
 	t.lastProgress = timeutil.Now()
 
 	repeat := 1
+	t.retry = false
+
 	for s.Scan() {
 		t.curPath, t.curLineNo = path, s.Line+subtest.lineLineIndexIntoFile
 		if *maxErrs > 0 && t.failures >= *maxErrs {
@@ -2396,6 +2422,11 @@ func (t *logicTest) processSubtest(
 
 			t.success(path)
 
+		case "retry":
+			// retry is a standalone command that may precede a "statement" or "query"
+			// command. It has the same retry effect as the retry option of the query
+			// command.
+			t.retry = true
 		case "statement":
 			stmt := logicStatement{
 				pos:         fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
@@ -2426,7 +2457,19 @@ func (t *logicTest) processSubtest(
 			}
 			if !s.Skip {
 				for i := 0; i < repeat; i++ {
-					if cont, err := t.execStatement(stmt); err != nil {
+					var cont bool
+					var err error
+					if t.retry {
+						err = testutils.SucceedsSoonError(func() error {
+							t.purgeZoneConfig()
+							var tempErr error
+							cont, tempErr = t.execStatement(stmt)
+							return tempErr
+						})
+					} else {
+						cont, err = t.execStatement(stmt)
+					}
+					if err != nil {
 						if !cont {
 							return err
 						}
@@ -2567,7 +2610,7 @@ func (t *logicTest) processSubtest(
 							query.colNames = true
 
 						case "retry":
-							query.retry = true
+							t.retry = true
 
 						case "kvtrace":
 							// kvtrace without any arguments doesn't perform any additional
@@ -2750,14 +2793,16 @@ func (t *logicTest) processSubtest(
 				}
 
 				for i := 0; i < repeat; i++ {
-					if query.retry && !*rewriteResultsInTestfiles {
+					if t.retry && !*rewriteResultsInTestfiles {
 						if err := testutils.SucceedsSoonError(func() error {
+							t.purgeZoneConfig()
 							return t.execQuery(query)
 						}); err != nil {
 							t.Error(err)
 						}
 					} else {
-						if query.retry && *rewriteResultsInTestfiles {
+						if t.retry && *rewriteResultsInTestfiles {
+							t.purgeZoneConfig()
 							// The presence of the retry flag indicates that we expect this
 							// query may need some time to succeed. If we are rewriting, wait
 							// 500ms before executing the query.
@@ -3662,6 +3707,7 @@ func (t *logicTest) formatValues(vals []string, valsPerLine int) []string {
 }
 
 func (t *logicTest) success(file string) {
+	t.retry = false
 	t.progress++
 	now := timeutil.Now()
 	if now.Sub(t.lastProgress) >= 2*time.Second {
@@ -3899,7 +3945,8 @@ func RunLogicTest(
 	}
 
 	// Check whether the test can only be run in non-metamorphic mode.
-	_, onlyNonMetamorphic := logictestbase.ReadTestFileConfigs(t, path, logictestbase.ConfigSet{configIdx})
+	_, nonMetamorphicBatchSizes :=
+		logictestbase.ReadTestFileConfigs(t, path, logictestbase.ConfigSet{configIdx})
 	config := logictestbase.LogicTestConfigs[configIdx]
 
 	// The tests below are likely to run concurrently; `log` is shared
@@ -3951,7 +3998,12 @@ func RunLogicTest(
 	}
 	// Each test needs a copy because of Parallel
 	serverArgsCopy := serverArgs
-	serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || onlyNonMetamorphic
+	serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || nonMetamorphicBatchSizes
+	if serverArgsCopy.ForceProductionValues {
+		if err := coldata.SetBatchSizeForTests(coldata.DefaultColdataBatchSize); err != nil {
+			panic(errors.Wrapf(err, "could not set batch size for test"))
+		}
+	}
 	lt.setup(
 		config, serverArgsCopy, readClusterOptions(t, path), readKnobOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
 	)
