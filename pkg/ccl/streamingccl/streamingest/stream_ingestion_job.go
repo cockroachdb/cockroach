@@ -50,6 +50,7 @@ func applyCutoverTime(
 	if err := jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress.GetStreamIngest()
+			details := md.Payload.GetStreamIngestion()
 			if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
 				return errors.Newf("job %d already started cutting over to timestamp %s",
 					ingestionJobID, progress.CutoverTime)
@@ -59,6 +60,7 @@ func applyCutoverTime(
 			// Update the sentinel being polled by the stream ingestion job to
 			// check if a complete has been signaled.
 			progress.CutoverTime = cutoverTimestamp
+			progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
 			ju.UpdateProgress(md.Progress)
 			return nil
 		}); err != nil {
@@ -478,9 +480,10 @@ func maybeRevertToCutoverTimestamp(
 	// existed in the record at the point of the update rather the
 	// value that may be in the job record before the update.
 	var (
-		shouldRevertToCutover bool
-		cutoverTimestamp      hlc.Timestamp
-		spanToRevert          roachpb.Span
+		shouldRevertToCutover  bool
+		cutoverTimestamp       hlc.Timestamp
+		originalSpanToRevert   roachpb.Span
+		remainingSpansToRevert roachpb.Spans
 	)
 	if err := ingestionJob.NoTxn().Update(ctx,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
@@ -497,7 +500,8 @@ func maybeRevertToCutoverTimestamp(
 			}
 
 			cutoverTimestamp = streamIngestionProgress.CutoverTime
-			spanToRevert = streamIngestionDetails.Span
+			originalSpanToRevert = streamIngestionDetails.Span
+			remainingSpansToRevert = streamIngestionProgress.RemainingCutoverSpans
 			shouldRevertToCutover = cutoverTimeIsEligibleForCutover(ctx, cutoverTimestamp, md.Progress)
 
 			if shouldRevertToCutover {
@@ -525,7 +529,8 @@ func maybeRevertToCutoverTimestamp(
 
 	minProgressUpdateInterval := 15 * time.Second
 	progMetric := p.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicationCutoverProgress
-	progUpdater, err := newCutoverProgressTracker(ctx, p, spanToRevert, ingestionJob, progMetric, minProgressUpdateInterval)
+	progUpdater, err := newCutoverProgressTracker(ctx, p, originalSpanToRevert, remainingSpansToRevert, ingestionJob,
+		progMetric, minProgressUpdateInterval)
 	if err != nil {
 		return false, err
 	}
@@ -537,7 +542,7 @@ func maybeRevertToCutoverTimestamp(
 	if err := sql.RevertSpansFanout(ctx,
 		p.ExecCfg().DB,
 		p,
-		[]roachpb.Span{spanToRevert},
+		remainingSpansToRevert,
 		cutoverTimestamp,
 		// TODO(ssd): It should be safe for us to ingore the
 		// GC threshold. Why aren't we?
@@ -622,22 +627,26 @@ type cutoverProgressTracker struct {
 	originalRangeCount int
 
 	getRangeCount                   func(context.Context, roachpb.Spans) (int, error)
-	onJobProgressUpdate             func()
+	onJobProgressUpdate             func(remainingSpans roachpb.Spans)
 	overrideShouldUpdateJobProgress func() bool
 }
 
 func newCutoverProgressTracker(
 	ctx context.Context,
 	p sql.JobExecContext,
-	spanToRevert roachpb.Span,
+	originalSpanToRevert roachpb.Span,
+	remainingSpansToRevert roachpb.Spans,
 	job *jobs.Job,
 	progMetric *metric.Gauge,
 	minProgressUpdateInterval time.Duration,
 ) (*cutoverProgressTracker, error) {
 	var sg roachpb.SpanGroup
-	sg.Add(spanToRevert)
+	for i := range remainingSpansToRevert {
+		sg.Add(remainingSpansToRevert[i])
+	}
 
-	nRanges, err := sql.NumRangesInSpans(ctx, p.ExecCfg().DB, p.DistSQLPlanner(), sg.Slice())
+	originalRangeCount, err := sql.NumRangesInSpans(ctx, p.ExecCfg().DB, p.DistSQLPlanner(),
+		roachpb.Spans{originalSpanToRevert})
 	if err != nil {
 		return nil, err
 	}
@@ -647,10 +656,10 @@ func newCutoverProgressTracker(
 		minProgressUpdateInterval: minProgressUpdateInterval,
 
 		remainingSpans:     sg,
-		originalRangeCount: nRanges,
+		originalRangeCount: originalRangeCount,
 
 		getRangeCount: func(ctx context.Context, sps roachpb.Spans) (int, error) {
-			return sql.NumRangesInSpans(ctx, p.ExecCfg().DB, p.DistSQLPlanner(), sg.Slice())
+			return sql.NumRangesInSpans(ctx, p.ExecCfg().DB, p.DistSQLPlanner(), sps)
 		},
 	}
 	if testingKnobs := p.ExecCfg().StreamingTestingKnobs; testingKnobs != nil {
@@ -668,8 +677,10 @@ func (c *cutoverProgressTracker) shouldUpdateJobProgress() bool {
 	return timeutil.Since(c.lastUpdatedAt) >= c.minProgressUpdateInterval
 }
 
-func (c *cutoverProgressTracker) updateJobProgress(ctx context.Context, sp []roachpb.Span) error {
-	nRanges, err := c.getRangeCount(ctx, sp)
+func (c *cutoverProgressTracker) updateJobProgress(
+	ctx context.Context, remainingSpans []roachpb.Span,
+) error {
+	nRanges, err := c.getRangeCount(ctx, remainingSpans)
 	if err != nil {
 		return err
 	}
@@ -681,18 +692,27 @@ func (c *cutoverProgressTracker) updateJobProgress(ctx context.Context, sp []roa
 	// the range count too often.
 	c.lastUpdatedAt = timeutil.Now()
 
-	// If our fraction is going to actually move, avoid touching
+	continueUpdate := c.overrideShouldUpdateJobProgress != nil && c.overrideShouldUpdateJobProgress()
+
+	// If our fraction is not going to actually move, avoid touching
 	// the job record.
-	if nRanges >= c.originalRangeCount {
+	if nRanges >= c.originalRangeCount && !continueUpdate {
 		return nil
 	}
 
 	fractionRangesFinished := float32(c.originalRangeCount-nRanges) / float32(c.originalRangeCount)
-	if err := c.job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(fractionRangesFinished)); err != nil {
+
+	persistProgress := func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+		prog := details.(*jobspb.Progress_StreamIngest).StreamIngest
+		prog.RemainingCutoverSpans = remainingSpans
+		return fractionRangesFinished
+	}
+
+	if err := c.job.NoTxn().FractionProgressed(ctx, persistProgress); err != nil {
 		return jobs.SimplifyInvalidStatusError(err)
 	}
 	if c.onJobProgressUpdate != nil {
-		c.onJobProgressUpdate()
+		c.onJobProgressUpdate(remainingSpans)
 	}
 	return nil
 }
