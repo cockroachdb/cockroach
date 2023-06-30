@@ -551,6 +551,7 @@ go_test(
         "copy_in_test.go",
         "copy_test.go",
         "crdb_internal_test.go",
+        "create_as_test.go",
         "create_function_test.go",
         "create_stats_test.go",
         "create_test.go",
