@@ -156,6 +156,25 @@ func (os *optSchema) getDescriptorForPermissionsCheck() catalog.Descriptor {
 	return os.database
 }
 
+// LookupDatabaseName implements the cat.Catalog interface.
+func (oc *optCatalog) LookupDatabaseName(
+	ctx context.Context, flags cat.Flags, name string,
+) (tree.Name, error) {
+	if flags.AvoidDescriptorCaches {
+		defer func(prev bool) {
+			oc.planner.skipDescriptorCache = prev
+		}(oc.planner.skipDescriptorCache)
+		oc.planner.skipDescriptorCache = true
+	}
+	if name == "" {
+		name = oc.planner.CurrentDatabase()
+	}
+	if err := oc.planner.LookupDatabase(ctx, name); err != nil {
+		return "", err
+	}
+	return tree.Name(name), nil
+}
+
 // ResolveSchema is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveSchema(
 	ctx context.Context, flags cat.Flags, name *cat.SchemaName,

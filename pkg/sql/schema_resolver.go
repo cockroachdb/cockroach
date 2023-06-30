@@ -136,6 +136,15 @@ func (sr *schemaResolver) LookupSchema(
 	return true, catalog.ResolvedObjectPrefix{Database: db, Schema: sc}, nil
 }
 
+func (sr *schemaResolver) LookupDatabase(ctx context.Context, dbName string) error {
+	flags := sr.CommonLookupFlagsRequired()
+	_, err := sr.descCollection.GetImmutableDatabaseByName(ctx, sr.txn, dbName, flags)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // CurrentDatabase implements the tree.QualifiedNameResolver interface.
 func (sr *schemaResolver) CurrentDatabase() string {
 	return sr.sessionDataStack.Top().Database
