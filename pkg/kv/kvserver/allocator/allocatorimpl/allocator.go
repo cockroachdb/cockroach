@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/tracker"
 )
@@ -371,64 +371,66 @@ type allocatorError struct {
 	throttledStores       int
 }
 
-func (ae *allocatorError) Error() string {
-	var existingVoterStr string
+func (ae *allocatorError) SafeFormatError(p errors.Printer) (next error) {
+	var existingVoterStr redact.RedactableString
 	if ae.existingVoterCount == 1 {
 		existingVoterStr = "1 already has a voter"
 	} else {
-		existingVoterStr = fmt.Sprintf("%d already have a voter", ae.existingVoterCount)
+		existingVoterStr = redact.Sprintf("%d already have a voter", ae.existingVoterCount)
 	}
 
-	var existingNonVoterStr string
+	var existingNonVoterStr redact.RedactableString
 	if ae.existingNonVoterCount == 1 {
 		existingNonVoterStr = "1 already has a non-voter"
 	} else {
-		existingNonVoterStr = fmt.Sprintf("%d already have a non-voter", ae.existingNonVoterCount)
+		existingNonVoterStr = redact.Sprintf("%d already have a non-voter", ae.existingNonVoterCount)
 	}
 
-	var baseMsg string
 	if ae.throttledStores != 0 {
-		baseMsg = fmt.Sprintf(
+		p.Printf(
 			"0 of %d live stores are able to take a new replica for the range (%d throttled, %s, %s)",
 			ae.aliveStores, ae.throttledStores, existingVoterStr, existingNonVoterStr)
 	} else {
-		baseMsg = fmt.Sprintf(
+		p.Printf(
 			"0 of %d live stores are able to take a new replica for the range (%s, %s)",
 			ae.aliveStores, existingVoterStr, existingNonVoterStr)
 	}
 
 	if len(ae.constraints) == 0 && len(ae.voterConstraints) == 0 {
 		if ae.throttledStores > 0 {
-			return baseMsg
+			return nil
 		}
-		return baseMsg + "; likely not enough nodes in cluster"
+		p.Printf("; likely not enough nodes in cluster")
+		return nil
 	}
 
-	var b strings.Builder
-	b.WriteString(baseMsg)
-	b.WriteString("; replicas must match constraints [")
+	p.Printf("; replicas must match constraints [")
 	for i := range ae.constraints {
 		if i > 0 {
-			b.WriteByte(' ')
+			p.Print(' ')
 		}
-		b.WriteByte('{')
-		b.WriteString(ae.constraints[i].String())
-		b.WriteByte('}')
+		p.Print('{')
+		p.Print(ae.constraints[i].String())
+		p.Print('}')
 	}
-	b.WriteString("]")
+	p.Printf("]")
 
-	b.WriteString("; voting replicas must match voter_constraints [")
+	p.Print("; voting replicas must match voter_constraints [")
 	for i := range ae.voterConstraints {
 		if i > 0 {
-			b.WriteByte(' ')
+			p.Print(' ')
 		}
-		b.WriteByte('{')
-		b.WriteString(ae.voterConstraints[i].String())
-		b.WriteByte('}')
+		p.Print('{')
+		p.Print(ae.voterConstraints[i].String())
+		p.Print('}')
 	}
-	b.WriteString("]")
+	p.Print("]")
 
-	return b.String()
+	return nil
+}
+
+func (ae *allocatorError) Error() string {
+	return redact.Sprint(ae).StripMarkers()
 }
 
 func (*allocatorError) AllocationErrorMarker() {}
