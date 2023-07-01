@@ -366,8 +366,9 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) {
 		if key == versionSettingKey {
 			var newVersion clusterversion.ClusterVersion
 			if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
-				log.Warningf(ctx, "ignoring invalid cluster version: %newVersion - "+
-					"the lack of a refreshed storage cluster version in a secondary tenant may prevent tenant upgrade", err)
+				log.Warningf(ctx, "ignoring invalid cluster version: %s - %v\n"+
+					"Note: the lack of a refreshed storage cluster version in a secondary tenant may prevent tenant upgrade.",
+					newVersion, err)
 			} else {
 				// We don't want to fully process the override in the case
 				// where we're dealing with the "version" setting, as we want
