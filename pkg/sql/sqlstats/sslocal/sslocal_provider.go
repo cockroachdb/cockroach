@@ -145,7 +145,7 @@ func (s *SQLStats) IterateStatementStats(
 
 // StmtStatsIterator returns an instance of sslocal.StmtStatsIterator for
 // the current SQLStats.
-func (s *SQLStats) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtStatsIterator {
+func (s *SQLStats) StmtStatsIterator(options *sqlstats.IteratorOptions) StmtStatsIterator {
 	return NewStmtStatsIterator(s, options)
 }
 
@@ -167,7 +167,7 @@ func (s *SQLStats) IterateTransactionStats(
 
 // TxnStatsIterator returns an instance of sslocal.TxnStatsIterator for
 // the current SQLStats.
-func (s *SQLStats) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
+func (s *SQLStats) TxnStatsIterator(options *sqlstats.IteratorOptions) TxnStatsIterator {
 	return NewTxnStatsIterator(s, options)
 }
 

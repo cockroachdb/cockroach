@@ -29,7 +29,7 @@ type CombinedStmtStatsIterator struct {
 	mem struct {
 		canBeAdvanced bool
 		paused        bool
-		it            *memStmtStatsIterator
+		it            memStmtStatsIterator
 	}
 
 	disk struct {
@@ -42,9 +42,9 @@ type CombinedStmtStatsIterator struct {
 // NewCombinedStmtStatsIterator returns a new instance of
 // CombinedStmtStatsIterator.
 func NewCombinedStmtStatsIterator(
-	memIter *memStmtStatsIterator, diskIter isql.Rows, expectedColCnt int,
-) *CombinedStmtStatsIterator {
-	c := &CombinedStmtStatsIterator{
+	memIter memStmtStatsIterator, diskIter isql.Rows, expectedColCnt int,
+) CombinedStmtStatsIterator {
+	c := CombinedStmtStatsIterator{
 		expectedColCnt: expectedColCnt,
 	}
 
@@ -215,7 +215,7 @@ type CombinedTxnStatsIterator struct {
 	mem struct {
 		canBeAdvanced bool
 		paused        bool
-		it            *memTxnStatsIterator
+		it            memTxnStatsIterator
 	}
 
 	disk struct {
@@ -228,9 +228,9 @@ type CombinedTxnStatsIterator struct {
 // NewCombinedTxnStatsIterator returns a new instance of
 // CombinedTxnStatsIterator.
 func NewCombinedTxnStatsIterator(
-	memIter *memTxnStatsIterator, diskIter isql.Rows, expectedColCnt int,
-) *CombinedTxnStatsIterator {
-	c := &CombinedTxnStatsIterator{
+	memIter memTxnStatsIterator, diskIter isql.Rows, expectedColCnt int,
+) CombinedTxnStatsIterator {
+	c := CombinedTxnStatsIterator{
 		expectedColCnt: expectedColCnt,
 	}
 

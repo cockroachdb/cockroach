@@ -184,12 +184,12 @@ func (s *Container) IterateAggregatedTransactionStats(
 }
 
 // StmtStatsIterator returns an instance of StmtStatsIterator.
-func (s *Container) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtStatsIterator {
+func (s *Container) StmtStatsIterator(options *sqlstats.IteratorOptions) StmtStatsIterator {
 	return NewStmtStatsIterator(s, options)
 }
 
 // TxnStatsIterator returns an instance of TxnStatsIterator.
-func (s *Container) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
+func (s *Container) TxnStatsIterator(options *sqlstats.IteratorOptions) TxnStatsIterator {
 	return NewTxnStatsIterator(s, options)
 }
 
