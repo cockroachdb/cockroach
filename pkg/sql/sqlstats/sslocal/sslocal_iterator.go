@@ -20,7 +20,7 @@ type baseIterator struct {
 	sqlStats *SQLStats
 	idx      int
 	appNames []string
-	options  *sqlstats.IteratorOptions
+	options  sqlstats.IteratorOptions
 }
 
 // StmtStatsIterator is an iterator that can be used to iterate over the
@@ -31,7 +31,7 @@ type StmtStatsIterator struct {
 }
 
 // NewStmtStatsIterator returns a new instance of the StmtStatsIterator.
-func NewStmtStatsIterator(s *SQLStats, options *sqlstats.IteratorOptions) StmtStatsIterator {
+func NewStmtStatsIterator(s *SQLStats, options sqlstats.IteratorOptions) StmtStatsIterator {
 	appNames := s.getAppNames(options.SortedAppNames)
 
 	return StmtStatsIterator{
@@ -82,7 +82,7 @@ type TxnStatsIterator struct {
 }
 
 // NewTxnStatsIterator returns a new instance of the TxnStatsIterator.
-func NewTxnStatsIterator(s *SQLStats, options *sqlstats.IteratorOptions) TxnStatsIterator {
+func NewTxnStatsIterator(s *SQLStats, options sqlstats.IteratorOptions) TxnStatsIterator {
 	appNames := s.getAppNames(options.SortedAppNames)
 
 	return TxnStatsIterator{

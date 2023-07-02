@@ -1659,7 +1659,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return nil
 		}
 
-		return sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, &sqlstats.IteratorOptions{
+		return sqlStats.GetLocalMemProvider().IterateStatementStats(ctx, sqlstats.IteratorOptions{
 			SortedAppNames: true,
 			SortedKey:      true,
 		}, statementVisitor)
@@ -1817,7 +1817,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return nil
 		}
 
-		return sqlStats.GetLocalMemProvider().IterateTransactionStats(ctx, &sqlstats.IteratorOptions{
+		return sqlStats.GetLocalMemProvider().IterateTransactionStats(ctx, sqlstats.IteratorOptions{
 			SortedAppNames: true,
 			SortedKey:      true,
 		}, transactionVisitor)
@@ -1857,7 +1857,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			)
 		}
 
-		return sqlStats.IterateAggregatedTransactionStats(ctx, &sqlstats.IteratorOptions{
+		return sqlStats.IterateAggregatedTransactionStats(ctx, sqlstats.IteratorOptions{
 			SortedAppNames: true,
 		}, appTxnStatsVisitor)
 	},
@@ -6396,7 +6396,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 
 		row := make(tree.Datums, 9 /* number of columns for this virtual table */)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return memSQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
+			return memSQLStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
 			}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
@@ -6798,7 +6798,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 
 		row := make(tree.Datums, 5 /* number of columns for this virtual table */)
 		worker := func(ctx context.Context, pusher rowPusher) error {
-			return memSQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{
+			return memSQLStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
 			}, func(

@@ -651,7 +651,7 @@ func verifyInMemoryStatsCorrectness(
 	t *testing.T, tcs []testCase, statsProvider *persistedsqlstats.PersistedSQLStats,
 ) {
 	for _, tc := range tcs {
-		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			if tc.fingerprint == statistics.Key.Query {
 				require.Equal(t, tc.count, statistics.Stats.Count, "fingerprint: %s", tc.fingerprint)
 			}
@@ -678,7 +678,7 @@ func verifyInMemoryStatsEmpty(
 	t *testing.T, tcs []testCase, statsProvider *persistedsqlstats.PersistedSQLStats,
 ) {
 	for _, tc := range tcs {
-		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), &sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+		err := statsProvider.SQLStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			if tc.fingerprint == statistics.Key.Query {
 				require.Equal(t, 0 /* expected */, statistics.Stats.Count, "fingerprint: %s", tc.fingerprint)
 			}

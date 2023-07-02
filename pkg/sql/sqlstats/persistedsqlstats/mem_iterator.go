@@ -32,7 +32,7 @@ type memStmtStatsIterator struct {
 
 func newMemStmtStatsIterator(
 	stats *sslocal.SQLStats,
-	options *sqlstats.IteratorOptions,
+	options sqlstats.IteratorOptions,
 	aggregatedTS time.Time,
 	aggInterval time.Duration,
 ) memStmtStatsIterator {
@@ -66,7 +66,7 @@ type memTxnStatsIterator struct {
 
 func newMemTxnStatsIterator(
 	stats *sslocal.SQLStats,
-	options *sqlstats.IteratorOptions,
+	options sqlstats.IteratorOptions,
 	aggregatedTS time.Time,
 	aggInterval time.Duration,
 ) memTxnStatsIterator {

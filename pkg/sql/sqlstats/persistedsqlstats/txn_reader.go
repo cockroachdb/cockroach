@@ -27,7 +27,7 @@ import (
 
 // IterateTransactionStats implements sqlstats.Provider interface.
 func (s *PersistedSQLStats) IterateTransactionStats(
-	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
+	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) (err error) {
 	// We override the sorting options since otherwise we would need to implement
 	// sorted and unsorted merge separately. We can revisit this decision if
@@ -78,7 +78,7 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 }
 
 func (s *PersistedSQLStats) persistedTxnStatsIter(
-	ctx context.Context, options *sqlstats.IteratorOptions,
+	ctx context.Context, options sqlstats.IteratorOptions,
 ) (iter isql.Rows, expectedColCnt int, err error) {
 	query, expectedColCnt := s.getFetchQueryForTxnStatsTable(options)
 	exec := s.cfg.DB.Executor()
@@ -96,7 +96,7 @@ func (s *PersistedSQLStats) persistedTxnStatsIter(
 }
 
 func (s *PersistedSQLStats) getFetchQueryForTxnStatsTable(
-	options *sqlstats.IteratorOptions,
+	options sqlstats.IteratorOptions,
 ) (query string, colCnt int) {
 	selectedColumns := []string{
 		"aggregated_ts",
