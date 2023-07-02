@@ -32,7 +32,7 @@ type StmtStatsIterator struct {
 
 // NewStmtStatsIterator returns a StmtStatsIterator.
 func NewStmtStatsIterator(
-	container *Container, options *sqlstats.IteratorOptions,
+	container *Container, options sqlstats.IteratorOptions,
 ) StmtStatsIterator {
 	var stmtKeys stmtList
 	container.mu.Lock()
@@ -124,7 +124,7 @@ type TxnStatsIterator struct {
 }
 
 // NewTxnStatsIterator returns a new instance of TxnStatsIterator.
-func NewTxnStatsIterator(container *Container, options *sqlstats.IteratorOptions) TxnStatsIterator {
+func NewTxnStatsIterator(container *Container, options sqlstats.IteratorOptions) TxnStatsIterator {
 	var txnKeys txnList
 	container.mu.Lock()
 	for k := range container.mu.txns {

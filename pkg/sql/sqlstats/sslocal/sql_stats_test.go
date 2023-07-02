@@ -77,7 +77,7 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 	require.NoError(t,
 		sqlStats.IterateStatementStats(
 			context.Background(),
-			&sqlstats.IteratorOptions{},
+			sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedStatementStatistics,
@@ -196,7 +196,7 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 	require.NoError(t,
 		sqlStats.IterateStatementStats(
 			context.Background(),
-			&sqlstats.IteratorOptions{},
+			sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedStatementStatistics,
@@ -294,7 +294,7 @@ func TestSQLStatsTxnStatsBulkIngest(t *testing.T) {
 	require.NoError(t,
 		sqlStats.IterateTransactionStats(
 			context.Background(),
-			&sqlstats.IteratorOptions{},
+			sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
 				statistics *appstatspb.CollectedTransactionStatistics,
@@ -621,7 +621,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			var stats []*appstatspb.CollectedStatementStatistics
 			err = statsCollector.IterateStatementStats(
 				ctx,
-				&sqlstats.IteratorOptions{},
+				sqlstats.IteratorOptions{},
 				func(_ context.Context, s *appstatspb.CollectedStatementStatistics) error {
 					stats = append(stats, s)
 					return nil
