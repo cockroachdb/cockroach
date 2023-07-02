@@ -2084,7 +2084,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		RequiresLicense:   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().Cloud != spec.GCE {
-				t.Skip("uses gs://cockroachdb-backup-testing, available only in GCE")
+				t.Skip("uses gs://cockroachdb-backup-testing; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)

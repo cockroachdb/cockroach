@@ -540,8 +540,18 @@ func (bs backupSpecs) storagePrefix() string {
 }
 
 func (bs backupSpecs) backupCollection() string {
-	return fmt.Sprintf(`'%s://cockroach-fixtures/backups/%s/%s/%s?AUTH=implicit'`,
-		bs.storagePrefix(), bs.workload.fixtureDir(), bs.version, bs.backupProperties)
+	// N.B. AWS buckets are _regional_ whereas GCS buckets are _multi-regional_. Thus, in order to avoid egress (cost),
+	// we use us-east-2 for AWS, which is the default region for all roachprod clusters. (See roachprod/vm/aws/aws.go)
+	switch bs.storagePrefix() {
+	case "s3":
+		return fmt.Sprintf(`'s3://cockroach-fixtures-us-east-2/backups/%s/%s/%s?AUTH=implicit'`,
+			bs.workload.fixtureDir(), bs.version, bs.backupProperties)
+	case "gs":
+		return fmt.Sprintf(`'gs://cockroach-fixtures/backups/%s/%s/%s?AUTH=implicit'`,
+			bs.workload.fixtureDir(), bs.version, bs.backupProperties)
+	default:
+		panic(fmt.Sprintf("unknown storage prefix: %s", bs.storagePrefix()))
+	}
 }
 
 // getAOSTCmd returns a sql cmd that will return a system time that is equal to the end time of
