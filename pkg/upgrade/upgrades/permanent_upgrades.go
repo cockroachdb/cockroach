@@ -129,24 +129,7 @@ func populateVersionSetting(
 		ctx, "insert-setting", nil, /* txn */
 		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'm') ON CONFLICT(name) DO NOTHING`, b),
 	)
-	if err != nil {
-		return err
-	}
-
-	// Tenant ID 0 indicates that we're overriding the value for all
-	// tenants.
-	_, err = ie.Exec(
-		ctx,
-		"insert-setting", nil, /* txn */
-		fmt.Sprintf(`
-INSERT INTO system.tenant_settings (tenant_id, name, value, last_updated, value_type)
-VALUES (0, 'version', x'%x', now(), 'm') ON CONFLICT(tenant_id, name) DO NOTHING`, b),
-	)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func initializeClusterSecret(
