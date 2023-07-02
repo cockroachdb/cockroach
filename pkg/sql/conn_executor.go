@@ -1098,7 +1098,6 @@ func (s *Server) newConnExecutor(
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
-	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
 	if postSetupFn != nil {
 		postSetupFn(ex)
@@ -1920,6 +1919,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	ex.extraTxnState.numDDL = 0
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
+	ex.extraTxnState.createdSequences = nil
 
 	if ex.extraTxnState.fromOuterTxn {
 		if ex.extraTxnState.shouldResetSyntheticDescriptors {
@@ -1945,8 +1945,6 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
 		log.Warningf(ctx, "error closing cursors: %v", err)
 	}
-
-	ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
 
 	switch ev.eventType {
 	case txnCommit, txnRollback:

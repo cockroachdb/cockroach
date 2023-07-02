@@ -29,6 +29,10 @@ type connExCreatedSequencesAccessor struct {
 }
 
 func (c connExCreatedSequencesAccessor) addCreatedSequence(id descpb.ID) error {
+	if c.ex.extraTxnState.createdSequences == nil {
+		// Lazily allocate.
+		c.ex.extraTxnState.createdSequences = make(map[descpb.ID]struct{})
+	}
 	c.ex.extraTxnState.createdSequences[id] = struct{}{}
 	return nil
 }
