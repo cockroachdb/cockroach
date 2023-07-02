@@ -585,19 +585,6 @@ func setVersionSetting(
 				return err
 			}
 
-			// If we're the system tenant, also send an override to each tenant
-			// to ensure that they know about the new cluster version.
-			if forSystemTenant {
-				if _, err = txn.ExecEx(
-					ctx, "update-setting", txn.KV(),
-					sessiondata.RootUserSessionDataOverride,
-					`UPSERT INTO system.tenant_settings (tenant_id, name, value, "last_updated", "value_type") VALUES ($1, $2, $3, now(), $4)`,
-					tree.NewDInt(0), name, string(rawValue), setting.Typ(),
-				); err != nil {
-					return err
-				}
-			}
-
 			// Perform any necessary post-setting validation. This is used in
 			// the tenant upgrade interlock to ensure that the set of sql
 			// servers present at the time of the settings update, matches the
