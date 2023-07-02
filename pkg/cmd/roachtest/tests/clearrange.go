@@ -215,7 +215,7 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 				return err
 			}
 
-			t.WorkerStatus("waiting for ~", curBankRanges, " merges to complete (and for at least ", timeutil.Since(deadline), " to pass)")
+			t.WorkerStatus("waiting for ~", curBankRanges, " merges to complete (and for at least ", timeutil.Until(deadline), " to pass)")
 			select {
 			case <-after:
 			case <-ctx.Done():

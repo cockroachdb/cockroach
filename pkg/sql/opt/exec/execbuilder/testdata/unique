@@ -227,10 +227,25 @@ statement ok
 CREATE TABLE uniq_uuid (
   id1 UUID DEFAULT gen_random_uuid(),
   id2 UUID DEFAULT '00000000-0000-0000-0000-000000000000',
+  id3 BYTES DEFAULT gen_random_uuid()::BYTES,
+  id4 STRING DEFAULT gen_random_uuid(),
+  id5 VARCHAR(4) DEFAULT gen_random_uuid(),
+  id6 CHAR DEFAULT gen_random_uuid(),
+  id7 VARCHAR DEFAULT gen_random_uuid(),
   UNIQUE WITHOUT INDEX (id1),
   UNIQUE WITHOUT INDEX (id2),
+  UNIQUE WITHOUT INDEX (id3),
+  UNIQUE WITHOUT INDEX (id4),
+  UNIQUE WITHOUT INDEX (id5),
+  UNIQUE WITHOUT INDEX (id6),
+  UNIQUE WITHOUT INDEX (id7),
   FAMILY (id1),
-  FAMILY (id2)
+  FAMILY (id2),
+  FAMILY (id3),
+  FAMILY (id4),
+  FAMILY (id5),
+  FAMILY (id6),
+  FAMILY (id7)
 )
 
 statement ok
@@ -1031,86 +1046,57 @@ vectorized: true
 │ arbiter indexes: uniq_partial_pkey
 │ arbiter constraints: unique_a, unique_b
 │
-└── • project
+└── • hash join (right anti)
     │ columns: (column1, column2, column3)
+    │ estimated row count: 0 (missing stats)
+    │ equality: (b) = (column3)
+    │ right cols are key
     │
-    └── • distinct
-        │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
+    ├── • filter
+    │   │ columns: (b)
+    │   │ estimated row count: 333 (missing stats)
+    │   │ filter: b > 0
+    │   │
+    │   └── • scan
+    │         columns: (b)
+    │         estimated row count: 1,000 (missing stats)
+    │         table: uniq_partial@uniq_partial_pkey
+    │         spans: FULL SCAN
+    │
+    └── • hash join (right anti)
+        │ columns: (column1, column2, column3)
         │ estimated row count: 0 (missing stats)
-        │ distinct on: arbiter_unique_b_distinct
-        │ nulls are distinct
+        │ equality: (a) = (column2)
+        │ right cols are key
+        │ pred: column3 > 0
         │
-        └── • render
-            │ columns: (arbiter_unique_b_distinct, column1, column2, column3)
-            │ render arbiter_unique_b_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
-            │ render column1: column1
-            │ render column2: column2
-            │ render column3: column3
+        ├── • filter
+        │   │ columns: (a, b)
+        │   │ estimated row count: 333 (missing stats)
+        │   │ filter: b > 0
+        │   │
+        │   └── • scan
+        │         columns: (a, b)
+        │         estimated row count: 1,000 (missing stats)
+        │         table: uniq_partial@uniq_partial_pkey
+        │         spans: FULL SCAN
+        │
+        └── • cross join (anti)
+            │ columns: (column1, column2, column3)
+            │ estimated row count: 0 (missing stats)
             │
-            └── • distinct
-                │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
-                │ estimated row count: 0 (missing stats)
-                │ distinct on: arbiter_unique_a_distinct
-                │ nulls are distinct
-                │
-                └── • render
-                    │ columns: (arbiter_unique_a_distinct, column1, column2, column3)
-                    │ render arbiter_unique_a_distinct: (column3 > 0) OR CAST(NULL AS BOOL)
-                    │ render column1: column1
-                    │ render column2: column2
-                    │ render column3: column3
-                    │
-                    └── • hash join (right anti)
-                        │ columns: (column1, column2, column3)
-                        │ estimated row count: 0 (missing stats)
-                        │ equality: (b) = (column3)
-                        │ right cols are key
-                        │
-                        ├── • filter
-                        │   │ columns: (b)
-                        │   │ estimated row count: 333 (missing stats)
-                        │   │ filter: b > 0
-                        │   │
-                        │   └── • scan
-                        │         columns: (b)
-                        │         estimated row count: 1,000 (missing stats)
-                        │         table: uniq_partial@uniq_partial_pkey
-                        │         spans: FULL SCAN
-                        │
-                        └── • hash join (right anti)
-                            │ columns: (column1, column2, column3)
-                            │ estimated row count: 0 (missing stats)
-                            │ equality: (a) = (column2)
-                            │ right cols are key
-                            │ pred: column3 > 0
-                            │
-                            ├── • filter
-                            │   │ columns: (a, b)
-                            │   │ estimated row count: 333 (missing stats)
-                            │   │ filter: b > 0
-                            │   │
-                            │   └── • scan
-                            │         columns: (a, b)
-                            │         estimated row count: 1,000 (missing stats)
-                            │         table: uniq_partial@uniq_partial_pkey
-                            │         spans: FULL SCAN
-                            │
-                            └── • cross join (anti)
-                                │ columns: (column1, column2, column3)
-                                │ estimated row count: 0 (missing stats)
-                                │
-                                ├── • values
-                                │     columns: (column1, column2, column3)
-                                │     size: 3 columns, 1 row
-                                │     row 0, expr 0: 1
-                                │     row 0, expr 1: 2
-                                │     row 0, expr 2: 3
-                                │
-                                └── • scan
-                                      columns: (k)
-                                      estimated row count: 1 (missing stats)
-                                      table: uniq_partial@uniq_partial_pkey
-                                      spans: /1/0
+            ├── • values
+            │     columns: (column1, column2, column3)
+            │     size: 3 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: 2
+            │     row 0, expr 2: 3
+            │
+            └── • scan
+                  columns: (k)
+                  estimated row count: 1 (missing stats)
+                  table: uniq_partial@uniq_partial_pkey
+                  spans: /1/0
 
 # Insert with non-constant input.
 query T
@@ -1408,9 +1394,14 @@ vectorized: true
                   label: buffer 1
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
-# but we do for UUID columns set to other values.
+# but we do for UUID columns set to other values. We also don't require checks
+# on STRING or BYTES columns set to gen_random_uuid() with either an explicit or
+# implicit cast, but we do require checks on CHAR and VARCHAR columns with a
+# limited width.
 query T
-EXPLAIN INSERT INTO uniq_uuid (id1, id2) VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
+EXPLAIN INSERT INTO uniq_uuid (id1, id2, id3, id4, id5, id6)
+VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac',
+  gen_random_uuid()::BYTES, gen_random_uuid(), gen_random_uuid(), gen_random_uuid())
 ----
 distribution: local
 vectorized: true
@@ -1418,20 +1409,56 @@ vectorized: true
 • root
 │
 ├── • insert
-│   │ into: uniq_uuid(id1, id2, rowid)
+│   │ into: uniq_uuid(id1, id2, id3, id4, id5, id6, id7, rowid)
 │   │
 │   └── • buffer
 │       │ label: buffer 1
 │       │
 │       └── • values
-│             size: 3 columns, 1 row
+│             size: 8 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id2) = (column2)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id5) = (id5_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (id2) = (column2)
+            │ equality: (id6) = (id6_cast)
             │ right cols are key
             │ pred: rowid_default != rowid
             │
@@ -1447,8 +1474,15 @@ vectorized: true
 # The default value of id1 is gen_random_uuid(), so we don't need to plan checks
 # for it. But the default value of id2 is '00000000-0000-0000-0000-000000000000',
 # so we do need checks.
+#
+# We don't need checks for id3 and id4, since those columns are types BYTES and
+# STRING respectively, with default values of gen_random_uuid()::BYTES and
+# gen_random_uuid(). We do need checks for id5 and id6, since even though the
+# default value for those columns is gen_random_uuid(), the column width is
+# limited (the types are VARCHAR(4) and CHAR).
 query T
-EXPLAIN INSERT INTO uniq_uuid (id1, id2) VALUES (DEFAULT, DEFAULT)
+EXPLAIN INSERT INTO uniq_uuid (id1, id2, id3, id4, id5, id6)
+VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT)
 ----
 distribution: local
 vectorized: true
@@ -1456,20 +1490,56 @@ vectorized: true
 • root
 │
 ├── • insert
-│   │ into: uniq_uuid(id1, id2, rowid)
+│   │ into: uniq_uuid(id1, id2, id3, id4, id5, id6, id7, rowid)
 │   │
 │   └── • buffer
 │       │ label: buffer 1
 │       │
 │       └── • values
-│             size: 3 columns, 1 row
+│             size: 8 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id2) = (column2)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id5) = (id5_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (id2) = (column2)
+            │ equality: (id6) = (id6_cast)
             │ right cols are key
             │ pred: rowid_default != rowid
             │
@@ -1484,7 +1554,9 @@ vectorized: true
 
 # We can also detect gen_random_uuid() when it is a projection.
 query T
-EXPLAIN INSERT INTO uniq_uuid (id1, id2) SELECT gen_random_uuid(), u FROM other
+EXPLAIN INSERT INTO uniq_uuid (id1, id2, id3, id4, id5, id6, id7)
+SELECT gen_random_uuid(), u, gen_random_uuid()::BYTES, gen_random_uuid(),
+  gen_random_uuid(), gen_random_uuid(), gen_random_uuid() FROM other
 ----
 distribution: local
 vectorized: true
@@ -1492,7 +1564,7 @@ vectorized: true
 • root
 │
 ├── • insert
-│   │ into: uniq_uuid(id1, id2, rowid)
+│   │ into: uniq_uuid(id1, id2, id3, id4, id5, id6, id7, rowid)
 │   │
 │   └── • buffer
 │       │ label: buffer 1
@@ -1504,12 +1576,44 @@ vectorized: true
 │                 table: other@other_pkey
 │                 spans: FULL SCAN
 │
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (u) = (id2)
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@uniq_uuid_pkey
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (id5_cast) = (id5)
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@uniq_uuid_pkey
+│                 spans: FULL SCAN
+│
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • hash join (semi)
-            │ equality: (u) = (id2)
+            │ equality: (id6_cast) = (id6)
             │ pred: rowid_default != rowid
             │
             ├── • scan buffer
@@ -1520,10 +1624,178 @@ vectorized: true
                   table: uniq_uuid@uniq_uuid_pkey
                   spans: FULL SCAN
 
+# With an explicit cast, we still don't need a check on the STRING column (id4).
+# The VARCHAR(4) and CHAR columns (id5 and id6) do need a check.
+query T
+EXPLAIN INSERT INTO uniq_uuid (id4, id5, id6)
+VALUES (gen_random_uuid()::STRING, gen_random_uuid()::VARCHAR(4), gen_random_uuid()::CHAR)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_uuid(id1, id2, id3, id4, id5, id6, id7, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 8 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id2) = (id2_default)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id5) = (column2)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (id6) = (column3)
+            │ right cols are key
+            │ pred: rowid_default != rowid
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_uuid@uniq_uuid_pkey
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  estimated row count: 1
+                  label: buffer 1
+
+# We do need a check if the value in the STRING column (id4) is cast to a
+# limited-width VARCHAR. The VARCHAR(4) and CHAR columns (id5 and id6) still
+# need a check even if the value is cast to a STRING first.
+query T
+EXPLAIN INSERT INTO uniq_uuid (id4, id5, id6)
+VALUES (gen_random_uuid()::VARCHAR(4), gen_random_uuid()::STRING, gen_random_uuid()::STRING)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_uuid(id1, id2, id3, id4, id5, id6, id7, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 8 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id2) = (id2_default)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id4) = (id4_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id5) = (id5_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (id6) = (id6_cast)
+            │ right cols are key
+            │ pred: rowid_default != rowid
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_uuid@uniq_uuid_pkey
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  estimated row count: 1
+                  label: buffer 1
+
+
 statement ok
 SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = true
 
-# After changing the cluster setting, checks are required for both columns.
+# After changing the cluster setting, checks are required for all columns.
 query T
 EXPLAIN INSERT INTO uniq_uuid (id1, id2) VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
 ----
@@ -1533,13 +1805,13 @@ vectorized: true
 • root
 │
 ├── • insert
-│   │ into: uniq_uuid(id1, id2, rowid)
+│   │ into: uniq_uuid(id1, id2, id3, id4, id5, id6, id7, rowid)
 │   │
 │   └── • buffer
 │       │ label: buffer 1
 │       │
 │       └── • values
-│             size: 3 columns, 1 row
+│             size: 8 columns, 1 row
 │
 ├── • constraint-check
 │   │
@@ -1559,12 +1831,102 @@ vectorized: true
 │                 estimated row count: 1
 │                 label: buffer 1
 │
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id2) = (column2)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id3) = (id3_default)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id4) = (id4_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id5) = (id5_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id6) = (id6_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (id2) = (column2)
+            │ equality: (id7) = (id7_cast)
             │ right cols are key
             │ pred: rowid_default != rowid
             │
@@ -2513,9 +2875,13 @@ vectorized: true
                               label: buffer 1
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
-# but we do for UUID columns set to other values.
+# but we do for UUID columns set to other values. We also don't require checks
+# on STRING or BYTES columns set to gen_random_uuid() with either an explicit or
+# implicit cast, but we do require checks on CHAR and VARCHAR columns with a
+# limited width.
 query T
-EXPLAIN UPDATE uniq_uuid SET id1 = '8597b0eb-7b89-4857-858a-fabf86f6a3ac', id2 = gen_random_uuid()
+EXPLAIN UPDATE uniq_uuid SET id1 = '8597b0eb-7b89-4857-858a-fabf86f6a3ac', id2 = gen_random_uuid(),
+id3 = gen_random_uuid()::BYTES, id4 = gen_random_uuid(), id5 = gen_random_uuid(), id6 = gen_random_uuid()
 ----
 distribution: local
 vectorized: true
@@ -2524,50 +2890,7 @@ vectorized: true
 │
 ├── • update
 │   │ table: uniq_uuid
-│   │ set: id1, id2
-│   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • render
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: uniq_uuid@uniq_uuid_pkey
-│                 spans: FULL SCAN
-│                 locking strength: for update
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │
-        └── • hash join (semi)
-            │ equality: (id1_new) = (id1)
-            │ pred: rowid != rowid
-            │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: uniq_uuid@uniq_uuid_pkey
-                  spans: FULL SCAN
-
-statement ok
-SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = true
-
-# After changing the cluster setting, checks are required for both columns.
-query T
-EXPLAIN UPDATE uniq_uuid SET id1 = '8597b0eb-7b89-4857-858a-fabf86f6a3ac', id2 = gen_random_uuid()
-----
-distribution: local
-vectorized: true
-·
-• root
-│
-├── • update
-│   │ table: uniq_uuid
-│   │ set: id1, id2
+│   │ set: id1, id2, id3, id4, id5, id6
 │   │
 │   └── • buffer
 │       │ label: buffer 1
@@ -2596,12 +2919,152 @@ vectorized: true
 │                 table: uniq_uuid@uniq_uuid_pkey
 │                 spans: FULL SCAN
 │
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (id5_cast) = (id5)
+│           │ pred: rowid != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@uniq_uuid_pkey
+│                 spans: FULL SCAN
+│
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • hash join (semi)
-            │ equality: (id2_new) = (id2)
+            │ equality: (id6_cast) = (id6)
+            │ pred: rowid != rowid
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_uuid@uniq_uuid_pkey
+                  spans: FULL SCAN
+
+statement ok
+SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = true
+
+# After changing the cluster setting, checks are required for all columns.
+query T
+EXPLAIN UPDATE uniq_uuid SET id1 = '8597b0eb-7b89-4857-858a-fabf86f6a3ac', id2 = gen_random_uuid(),
+id3 = gen_random_uuid()::BYTES, id4 = gen_random_uuid(), id5 = gen_random_uuid(), id6 = gen_random_uuid()
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_uuid
+│   │ set: id1, id2, id3, id4, id5, id6
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@uniq_uuid_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (id1_new) = (id1)
+│           │ pred: rowid != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@uniq_uuid_pkey
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (id2_new) = (id2)
+│           │ pred: rowid != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@uniq_uuid_pkey
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (id3_new) = (id3)
+│           │ pred: rowid != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@uniq_uuid_pkey
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (id4_cast) = (id4)
+│           │ pred: rowid != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@uniq_uuid_pkey
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (id5_cast) = (id5)
+│           │ pred: rowid != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_uuid@uniq_uuid_pkey
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (id6_cast) = (id6)
             │ pred: rowid != rowid
             │
             ├── • scan buffer
@@ -4093,9 +4556,15 @@ vectorized: true
                               row 1, expr 3: 'bar'
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
-# but we do for UUID columns set to other values.
+# but we do for UUID columns set to other values. We also don't require checks
+# on STRING or BYTES columns set to gen_random_uuid() with either an explicit or
+# implicit cast, but we do require checks on CHAR and VARCHAR columns with a
+# limited width.
 query T
-EXPLAIN UPSERT INTO uniq_uuid (id1, id2) VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
+EXPLAIN UPSERT INTO uniq_uuid (id1, id2, id3, id4, id5, id6, id7)
+VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac',
+  gen_random_uuid()::BYTES, gen_random_uuid()::TEXT, gen_random_uuid(),
+  gen_random_uuid(), gen_random_uuid())
 ----
 distribution: local
 vectorized: true
@@ -4103,20 +4572,56 @@ vectorized: true
 • root
 │
 ├── • upsert
-│   │ into: uniq_uuid(id1, id2, rowid)
+│   │ into: uniq_uuid(id1, id2, id3, id4, id5, id6, id7, rowid)
 │   │
 │   └── • buffer
 │       │ label: buffer 1
 │       │
 │       └── • values
-│             size: 3 columns, 1 row
+│             size: 8 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id2) = (column2)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id5) = (id5_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (id2) = (column2)
+            │ equality: (id6) = (id6_cast)
             │ right cols are key
             │ pred: rowid_default != rowid
             │
@@ -4132,9 +4637,12 @@ vectorized: true
 statement ok
 SET CLUSTER SETTING sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled = true
 
-# After changing the cluster setting, checks are required for both columns.
+# After changing the cluster setting, checks are required for all columns.
 query T
-EXPLAIN UPSERT INTO uniq_uuid (id1, id2) VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac')
+EXPLAIN UPSERT INTO uniq_uuid (id1, id2, id3, id4, id5, id6, id7)
+VALUES (gen_random_uuid(), '8597b0eb-7b89-4857-858a-fabf86f6a3ac',
+  gen_random_uuid()::BYTES, gen_random_uuid(), gen_random_uuid(),
+  gen_random_uuid(), gen_random_uuid())
 ----
 distribution: local
 vectorized: true
@@ -4142,13 +4650,13 @@ vectorized: true
 • root
 │
 ├── • upsert
-│   │ into: uniq_uuid(id1, id2, rowid)
+│   │ into: uniq_uuid(id1, id2, id3, id4, id5, id6, id7, rowid)
 │   │
 │   └── • buffer
 │       │ label: buffer 1
 │       │
 │       └── • values
-│             size: 3 columns, 1 row
+│             size: 8 columns, 1 row
 │
 ├── • constraint-check
 │   │
@@ -4168,12 +4676,102 @@ vectorized: true
 │                 estimated row count: 1
 │                 label: buffer 1
 │
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id2) = (column2)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id3) = (column3)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id4) = (id4_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id5) = (id5_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (id6) = (id6_cast)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_uuid@uniq_uuid_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • hash join (right semi)
-            │ equality: (id2) = (column2)
+            │ equality: (id7) = (id7_cast)
             │ right cols are key
             │ pred: rowid_default != rowid
             │

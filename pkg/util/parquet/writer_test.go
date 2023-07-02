@@ -87,12 +87,12 @@ func randTestingType(rng *rand.Rand) *types.T {
 	return typ
 }
 
-func makeRandDatums(numRows int, sch *colSchema, rng *rand.Rand) [][]tree.Datum {
+func makeRandDatums(numRows int, sch *colSchema, rng *rand.Rand, nullsAllowed bool) [][]tree.Datum {
 	datums := make([][]tree.Datum, numRows)
 	for i := 0; i < numRows; i++ {
 		datums[i] = make([]tree.Datum, len(sch.columnTypes))
 		for j := 0; j < len(sch.columnTypes); j++ {
-			datums[i][j] = randgen.RandDatum(rng, sch.columnTypes[j], true)
+			datums[i][j] = randgen.RandDatum(rng, sch.columnTypes[j], nullsAllowed)
 		}
 	}
 	return datums
@@ -119,7 +119,7 @@ func TestRandomDatums(t *testing.T) {
 	maxRowGroupSize := int64(8)
 
 	sch := makeRandSchema(numCols, randTestingType, rng)
-	datums := makeRandDatums(numRows, sch, rng)
+	datums := makeRandDatums(numRows, sch, rng, true)
 
 	fileName := "TestRandomDatums.parquet"
 	f, err := os.CreateTemp("", fileName)
@@ -623,6 +623,7 @@ func optionsTest(t *testing.T, opt Option, testFn func(t *testing.T, reader *fil
 	err = reader.Close()
 	require.NoError(t, err)
 }
+
 func TestSquashTuples(t *testing.T) {
 	datums := []tree.Datum{
 		tree.NewDInt(1),
@@ -634,6 +635,7 @@ func TestSquashTuples(t *testing.T) {
 		tree.NewDJSON(json.FromBool(false)),
 		tree.NewDInt(0),
 	}
+	labels := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
 
 	for _, tc := range []struct {
 		tupleIntervals [][]int
@@ -645,18 +647,18 @@ func TestSquashTuples(t *testing.T) {
 		},
 		{
 			tupleIntervals: [][]int{{0, 1}, {2, 4}},
-			tupleOutput:    "[(1, 'string') ('\\x6279746573', '52fdfc07-2182-454f-963f-5f0f9a621d72', '1') 0.1 'false' 0]",
+			tupleOutput:    "[((1, 'string') AS a, b) (('\\x6279746573', '52fdfc07-2182-454f-963f-5f0f9a621d72', '1') AS c, d, e) 0.1 'false' 0]",
 		},
 		{
 			tupleIntervals: [][]int{{0, 2}, {3, 3}},
-			tupleOutput:    "[(1, 'string', '\\x6279746573') ('52fdfc07-2182-454f-963f-5f0f9a621d72',) '1' 0.1 'false' 0]",
+			tupleOutput:    "[((1, 'string', '\\x6279746573') AS a, b, c) (('52fdfc07-2182-454f-963f-5f0f9a621d72',) AS d) '1' 0.1 'false' 0]",
 		},
 		{
 			tupleIntervals: [][]int{{0, 7}},
-			tupleOutput:    "[(1, 'string', '\\x6279746573', '52fdfc07-2182-454f-963f-5f0f9a621d72', '1', 0.1, 'false', 0)]",
+			tupleOutput:    "[((1, 'string', '\\x6279746573', '52fdfc07-2182-454f-963f-5f0f9a621d72', '1', 0.1, 'false', 0) AS a, b, c, d, e, f, g, h)]",
 		},
 	} {
-		squashedDatums := squashTuples(datums, tc.tupleIntervals)
+		squashedDatums := squashTuples(datums, tc.tupleIntervals, labels)
 		require.Equal(t, tc.tupleOutput, fmt.Sprint(squashedDatums))
 	}
 }

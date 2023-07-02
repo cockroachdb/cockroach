@@ -14,6 +14,7 @@ import classNames from "classnames/bind";
 import _ from "lodash";
 import { RouteComponentProps } from "react-router-dom";
 import { Helmet } from "react-helmet";
+import moment from "moment-timezone";
 
 import statementsStyles from "../statementsPage/statementsPage.module.scss";
 import {
@@ -223,6 +224,9 @@ export class TransactionDetails extends React.Component<
   };
 
   changeTimeScale = (ts: TimeScale): void => {
+    if (ts.key !== "Custom") {
+      ts.fixedWindowEnd = moment();
+    }
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
@@ -589,6 +593,7 @@ export class TransactionDetails extends React.Component<
           renderError={() =>
             LoadingError({
               statsType: "transactions",
+              error: error,
             })
           }
         />

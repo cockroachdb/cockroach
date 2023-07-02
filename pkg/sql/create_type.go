@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -79,6 +81,7 @@ func (p *planner) CreateType(ctx context.Context, n *tree.CreateType) (planNode,
 }
 
 func (n *createTypeNode) startExec(params runParams) error {
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("type"))
 	// Check if a type with the same name exists already.
 	g := params.p.Descriptors().ByName(params.p.Txn()).MaybeGet()
 	_, typ, err := descs.PrefixAndType(params.ctx, g, n.typeName)
@@ -135,7 +138,7 @@ func getCreateTypeParams(
 	// Check we are not creating a type which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
-	if name.Schema() == tree.PublicSchema {
+	if name.Schema() == catconstants.PublicSchemaName {
 		if _, ok := types.PublicSchemaAliases[name.Object()]; ok {
 			return nil, sqlerrors.NewTypeAlreadyExistsError(name.String())
 		}

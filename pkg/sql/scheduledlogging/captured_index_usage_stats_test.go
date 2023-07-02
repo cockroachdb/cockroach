@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,7 +65,6 @@ func (s *stubDurations) getOverlapDuration() time.Duration {
 
 func TestCaptureIndexUsageStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 102732)
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
@@ -82,7 +80,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	stubLoggingDelay := 0 * time.Second
 
 	// timeBuffer is a short time buffer to account for non-determinism in the logging timings.
-	const timeBuffer = 3 * time.Second
+	const timeBuffer = 4 * time.Second
 
 	settings := cluster.MakeTestingClusterSettings()
 	// Configure capture index usage statistics to be disabled. This is to test

@@ -17,7 +17,7 @@ import { Filters } from "../../queryFilter";
 
 export const databasesListSelector = createSelector(
   adminUISelector,
-  adminUiState => adminUiState.databasesList,
+  adminUiState => adminUiState?.databasesList,
 );
 
 export const selectDatabasesSortSetting = (state: AppState): SortSetting => {

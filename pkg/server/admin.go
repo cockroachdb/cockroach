@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -1368,8 +1367,9 @@ func (s *adminServer) statsForSpan(
 		return nil, err
 	}
 
-	// Get a list of node ids and range count for the specified span.
-	nodeIDs, rangeCount, err := nodeIDsAndRangeCountForSpan(
+	// Get a list of nodeIDs, range counts, and replica counts per node
+	// for the specified span.
+	nodeIDs, rangeCount, replCounts, err := getNodeIDsRangeCountReplCountForSpan(
 		ctx, s.distSender, rSpan,
 	)
 	if err != nil {
@@ -1439,6 +1439,15 @@ func (s *adminServer) statsForSpan(
 			return nil, err
 		}
 	}
+
+	// The semantics of tableStatResponse.ReplicaCount counts replicas
+	// found for this span returned by a cluster-wide fan-out.
+	// We can use descriptors to know what the final count _should_ be,
+	// if we assume every request succeeds (nodes and replicas are reachable).
+	for _, replCount := range replCounts {
+		tableStatResponse.ReplicaCount += replCount
+	}
+
 	for remainingResponses := len(nodeIDs); remainingResponses > 0; remainingResponses-- {
 		select {
 		case resp := <-responses:
@@ -1449,6 +1458,10 @@ func (s *adminServer) statsForSpan(
 					return nil, serverError(ctx, resp.err)
 				}
 
+				// If this node is unreachable,
+				// it's replicas can not be counted.
+				tableStatResponse.ReplicaCount -= replCounts[resp.nodeID]
+
 				tableStatResponse.MissingNodes = append(
 					tableStatResponse.MissingNodes,
 					serverpb.TableStatsResponse_MissingNode{
@@ -1458,7 +1471,6 @@ func (s *adminServer) statsForSpan(
 				)
 			} else {
 				tableStatResponse.Stats.Add(resp.resp.SpanToStats[span.String()].TotalStats)
-				tableStatResponse.ReplicaCount += int64(resp.resp.SpanToStats[span.String()].RangeCount)
 				tableStatResponse.ApproximateDiskBytes += resp.resp.SpanToStats[span.String()].ApproximateDiskBytes
 			}
 		case <-ctx.Done():
@@ -1470,16 +1482,19 @@ func (s *adminServer) statsForSpan(
 	return &tableStatResponse, nil
 }
 
-// Returns the list of node ids for the specified span.
-func nodeIDsAndRangeCountForSpan(
+// Returns the list of node ids, range count,
+// and replica count for the specified span.
+func getNodeIDsRangeCountReplCountForSpan(
 	ctx context.Context, ds *kvcoord.DistSender, rSpan roachpb.RSpan,
-) (nodeIDList []roachpb.NodeID, rangeCount int64, _ error) {
+) (nodeIDList []roachpb.NodeID, rangeCount int64, replCounts map[roachpb.NodeID]int64, _ error) {
 	nodeIDs := make(map[roachpb.NodeID]struct{})
+	replCountForNodeID := make(map[roachpb.NodeID]int64)
 	ri := kvcoord.MakeRangeIterator(ds)
 	ri.Seek(ctx, rSpan.Key, kvcoord.Ascending)
 	for ; ri.Valid(); ri.Next(ctx) {
 		rangeCount++
 		for _, repl := range ri.Desc().Replicas().Descriptors() {
+			replCountForNodeID[repl.NodeID]++
 			nodeIDs[repl.NodeID] = struct{}{}
 		}
 		if !ri.NeedAnother(rSpan) {
@@ -1487,7 +1502,7 @@ func nodeIDsAndRangeCountForSpan(
 		}
 	}
 	if err := ri.Error(); err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
 	nodeIDList = make([]roachpb.NodeID, 0, len(nodeIDs))
@@ -1497,7 +1512,7 @@ func nodeIDsAndRangeCountForSpan(
 	sort.Slice(nodeIDList, func(i, j int) bool {
 		return nodeIDList[i] < nodeIDList[j]
 	})
-	return nodeIDList, rangeCount, nil
+	return nodeIDList, rangeCount, replCountForNodeID, nil
 }
 
 // Users returns a list of users, stripped of any passwords.
@@ -2213,16 +2228,13 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 func getLivenessStatusMap(
 	ctx context.Context, nl *liveness.NodeLiveness, now hlc.Timestamp, st *cluster.Settings,
 ) (map[roachpb.NodeID]livenesspb.NodeLivenessStatus, error) {
-	livenesses, err := nl.GetLivenessesFromKV(ctx)
+	nodeVitalityMap, err := nl.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
 		return nil, err
 	}
-	threshold := liveness.TimeUntilNodeDead.Get(&st.SV)
-
-	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
-	for _, liveness := range livenesses {
-		status := storepool.LivenessStatus(liveness, now, threshold)
-		statusMap[liveness.NodeID] = status
+	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeVitalityMap))
+	for nodeID, vitality := range nodeVitalityMap {
+		statusMap[nodeID] = vitality.LivenessStatus()
 	}
 	return statusMap, nil
 }
@@ -2233,18 +2245,22 @@ func getLivenessStatusMap(
 func getLivenessResponse(
 	ctx context.Context, nl optionalnodeliveness.Interface, now hlc.Timestamp, st *cluster.Settings,
 ) (*serverpb.LivenessResponse, error) {
-	livenesses, err := nl.GetLivenessesFromKV(ctx)
+	nodeVitalityMap, err := nl.ScanNodeVitalityFromKV(ctx)
+
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
 
-	threshold := liveness.TimeUntilNodeDead.Get(&st.SV)
+	livenesses := make([]livenesspb.Liveness, 0, len(nodeVitalityMap))
+	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeVitalityMap))
 
-	statusMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(livenesses))
-	for _, liveness := range livenesses {
-		status := storepool.LivenessStatus(liveness, now, threshold)
-		statusMap[liveness.NodeID] = status
+	for nodeID, vitality := range nodeVitalityMap {
+		livenesses = append(livenesses, vitality.GenLiveness())
+		statusMap[nodeID] = vitality.LivenessStatus()
 	}
+	sort.Slice(livenesses, func(i, j int) bool {
+		return livenesses[i].NodeID < livenesses[j].NodeID
+	})
 	return &serverpb.LivenessResponse{
 		Livenesses: livenesses,
 		Statuses:   statusMap,

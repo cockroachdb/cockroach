@@ -219,7 +219,12 @@ func (ie *InternalExecutor) runWithEx(
 	}
 	wg.Add(1)
 	go func() {
-		if err := ex.run(ctx, ie.mon, &mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
+		if err := ex.run(
+			ctx,
+			ie.mon,
+			&mon.BoundAccount{}, /*reserved*/
+			nil,                 /* cancel */
+		); err != nil {
 			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
 		}
@@ -281,6 +286,7 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			applicationStats,
+			ie.s.cfg.GenerateID(),
 			nil, /* postSetupFn */
 		)
 	} else {
@@ -357,6 +363,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		ie.memMetrics,
 		&ie.s.InternalMetrics,
 		applicationStats,
+		ie.s.cfg.GenerateID(),
 		postSetupFn,
 	)
 

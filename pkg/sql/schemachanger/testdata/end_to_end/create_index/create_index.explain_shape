@@ -1,0 +1,17 @@
+/* setup */
+CREATE TYPE e AS ENUM('a', 'b', 'c');
+CREATE TABLE t (k INT PRIMARY KEY, v e NOT NULL);
+
+/* test */
+EXPLAIN (DDL, SHAPE) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
+----
+Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›);
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey in relation t
+ │    └── into idx1+ (v: k)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into idx1+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index idx1+ in relation t
+ └── execute 1 system table mutations transaction

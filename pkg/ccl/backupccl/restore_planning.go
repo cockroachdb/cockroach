@@ -450,7 +450,7 @@ func allocateDescriptorRewrites(
 				// already have the database descriptor.
 				if table.GetParentSchemaID() == keys.PublicSchemaIDForBackup ||
 					table.GetParentSchemaID() == descpb.InvalidID {
-					publicSchemaID := parentDB.GetSchemaID(tree.PublicSchema)
+					publicSchemaID := parentDB.GetSchemaID(catconstants.PublicSchemaName)
 					descriptorRewrites[table.ID].ParentSchemaID = publicSchemaID
 				}
 			}
@@ -584,7 +584,7 @@ func allocateDescriptorRewrites(
 				// already have the database descriptor.
 				if typ.GetParentSchemaID() == keys.PublicSchemaIDForBackup ||
 					typ.GetParentSchemaID() == descpb.InvalidID {
-					publicSchemaID := parentDB.GetSchemaID(tree.PublicSchema)
+					publicSchemaID := parentDB.GetSchemaID(catconstants.PublicSchemaName)
 					descriptorRewrites[typ.ID].ParentSchemaID = publicSchemaID
 					descriptorRewrites[typ.ArrayTypeID].ParentSchemaID = publicSchemaID
 				}
@@ -2321,7 +2321,7 @@ func planDatabaseModifiersForRestore(
 		if !isSc {
 			continue
 		}
-		if sc.GetName() == tree.PublicSchema {
+		if sc.GetName() == catconstants.PublicSchemaName {
 			dbToPublicSchema[sc.GetParentID()] = sc
 		}
 	}
@@ -2431,7 +2431,7 @@ func restoreCreateDefaultPrimaryRegionEnums(
 		regionLabels,
 		db,
 		sc,
-		tree.NewQualifiedTypeName(db.GetName(), tree.PublicSchema, tree.RegionEnum),
+		tree.NewQualifiedTypeName(db.GetName(), catconstants.PublicSchemaName, tree.RegionEnum),
 		sql.EnumTypeMultiRegion,
 	)
 	if err != nil {

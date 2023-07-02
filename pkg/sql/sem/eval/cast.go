@@ -432,7 +432,7 @@ func performCastWithoutPrecisionTruncation(
 			}
 		case *tree.DBool, *tree.DDecimal:
 			s = d.String()
-		case *tree.DTimestamp, *tree.DDate, *tree.DTime, *tree.DTimeTZ, *tree.DGeography, *tree.DGeometry, *tree.DBox2D:
+		case *tree.DTimestamp, *tree.DDate, *tree.DTime, *tree.DTimeTZ, *tree.DGeography, *tree.DGeometry, *tree.DBox2D, *tree.DPGLSN:
 			s = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 		case *tree.DTimestampTZ:
 			// Convert to context timezone for correct display.
@@ -580,6 +580,21 @@ func performCastWithoutPrecisionTruncation(
 				return tree.DNull, nil
 			}
 			return tree.NewDBox2D(*bbox), nil
+		}
+
+	case types.PGLSNFamily:
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"version %v must be finalized to use pg_lsn",
+				clusterversion.ByKey(clusterversion.V23_2))
+		}
+		switch d := d.(type) {
+		case *tree.DString:
+			return tree.ParseDPGLSN(string(*d))
+		case *tree.DCollatedString:
+			return tree.ParseDPGLSN(d.Contents)
+		case *tree.DPGLSN:
+			return d, nil
 		}
 
 	case types.GeographyFamily:

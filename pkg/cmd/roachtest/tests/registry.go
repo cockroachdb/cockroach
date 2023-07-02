@@ -26,6 +26,7 @@ func RegisterTests(r registry.Registry) {
 	registerBackup(r)
 	registerBackupMixedVersion(r)
 	registerBackupNodeShutdown(r)
+	registerBackupFixtures(r)
 	registerCDC(r)
 	registerCDCMixedVersions(r)
 	registerExportParquet(r)
@@ -147,5 +148,4 @@ func RegisterTests(r registry.Registry) {
 	registerVersion(r)
 	registerYCSB(r)
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
-	registerTenantSpanStatsMixedVersion(r)
 }

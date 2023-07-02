@@ -39,6 +39,7 @@ type ImmediateMutationVisitor interface {
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
 	AddDescriptorName(context.Context, AddDescriptorName) error
+	SetNameInDescriptor(context.Context, SetNameInDescriptor) error
 	MakeDeleteOnlyColumnWriteOnly(context.Context, MakeDeleteOnlyColumnWriteOnly) error
 	MakePublicSecondaryIndexWriteOnly(context.Context, MakePublicSecondaryIndexWriteOnly) error
 	MakeWriteOnlyIndexDeleteOnly(context.Context, MakeWriteOnlyIndexDeleteOnly) error
@@ -51,6 +52,8 @@ type ImmediateMutationVisitor interface {
 	MakeWriteOnlyColumnDeleteOnly(context.Context, MakeWriteOnlyColumnDeleteOnly) error
 	RemoveDroppedColumnType(context.Context, RemoveDroppedColumnType) error
 	MakeDeleteOnlyColumnAbsent(context.Context, MakeDeleteOnlyColumnAbsent) error
+	AddOwnerBackReferenceInSequence(context.Context, AddOwnerBackReferenceInSequence) error
+	AddSequenceOwner(context.Context, AddSequenceOwner) error
 	RemoveOwnerBackReferenceInSequence(context.Context, RemoveOwnerBackReferenceInSequence) error
 	RemoveSequenceOwner(context.Context, RemoveSequenceOwner) error
 	RemoveCheckConstraint(context.Context, RemoveCheckConstraint) error
@@ -122,7 +125,9 @@ type ImmediateMutationVisitor interface {
 	UpdateUserPrivileges(context.Context, UpdateUserPrivileges) error
 	UpdateOwner(context.Context, UpdateOwner) error
 	CreateSchemaDescriptor(context.Context, CreateSchemaDescriptor) error
-	SetSchemaName(context.Context, SetSchemaName) error
+	CreateSequenceDescriptor(context.Context, CreateSequenceDescriptor) error
+	SetSequenceOptions(context.Context, SetSequenceOptions) error
+	InitSequence(context.Context, InitSequence) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -211,6 +216,11 @@ func (op AddDescriptorName) Visit(ctx context.Context, v ImmediateMutationVisito
 }
 
 // Visit is part of the ImmediateMutationOp interface.
+func (op SetNameInDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetNameInDescriptor(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
 func (op MakeDeleteOnlyColumnWriteOnly) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.MakeDeleteOnlyColumnWriteOnly(ctx, op)
 }
@@ -268,6 +278,16 @@ func (op RemoveDroppedColumnType) Visit(ctx context.Context, v ImmediateMutation
 // Visit is part of the ImmediateMutationOp interface.
 func (op MakeDeleteOnlyColumnAbsent) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.MakeDeleteOnlyColumnAbsent(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddOwnerBackReferenceInSequence) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddOwnerBackReferenceInSequence(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddSequenceOwner) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddSequenceOwner(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -626,6 +646,16 @@ func (op CreateSchemaDescriptor) Visit(ctx context.Context, v ImmediateMutationV
 }
 
 // Visit is part of the ImmediateMutationOp interface.
-func (op SetSchemaName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.SetSchemaName(ctx, op)
+func (op CreateSequenceDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.CreateSequenceDescriptor(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetSequenceOptions) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetSequenceOptions(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op InitSequence) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.InitSequence(ctx, op)
 }

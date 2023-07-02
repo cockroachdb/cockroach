@@ -73,7 +73,7 @@ func TestUpdateAbortSpan(t *testing.T) {
 	// Priority don't matter other than that they allow us to detect changes
 	// in the AbortSpanEntry.
 	prevTxn := txn.Clone()
-	prevTxn.WriteTimestamp.Add(-1, 0)
+	prevTxn.WriteTimestamp = prevTxn.WriteTimestamp.Add(-1, 0)
 	prevTxn.Priority--
 	prevTxnAbortSpanEntry := roachpb.AbortSpanEntry{
 		Key:       prevTxn.Key,

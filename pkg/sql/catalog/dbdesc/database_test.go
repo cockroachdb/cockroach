@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -385,5 +386,50 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestStripDanglingBackReferences(t *testing.T) {
+	type testCase struct {
+		name                  string
+		input, expectedOutput descpb.DatabaseDescriptor
+		validIDs              catalog.DescriptorIDSet
+	}
+
+	testData := []testCase{
+		{
+			name: "schema",
+			input: descpb.DatabaseDescriptor{
+				Name: "foo",
+				ID:   100,
+				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
+					"bar": {ID: 101},
+					"baz": {ID: 12345},
+				},
+			},
+			expectedOutput: descpb.DatabaseDescriptor{
+				Name: "foo",
+				ID:   100,
+				Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
+					"bar": {ID: 101},
+				},
+			},
+			validIDs: catalog.MakeDescriptorIDSet(100, 101),
+		},
+	}
+
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			b := NewBuilder(&test.input)
+			require.NoError(t, b.RunPostDeserializationChanges())
+			out := NewBuilder(&test.expectedOutput)
+			require.NoError(t, out.RunPostDeserializationChanges())
+			require.NoError(t, b.StripDanglingBackReferences(test.validIDs.Contains, func(id jobspb.JobID) bool {
+				return false
+			}))
+			desc := b.BuildCreatedMutableDatabase()
+			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.Equal(t, out.BuildCreatedMutableDatabase().DatabaseDesc(), desc.DatabaseDesc())
+		})
 	}
 }

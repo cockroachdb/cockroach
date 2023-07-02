@@ -131,7 +131,7 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 }
 
 // MakeWorkload makes the bin/workload binary. It is only ever built in the
-// crosslinux configuration.
+// crosslinux and crosslinuxarm configurations.
 func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
 	if opts.Release {
 		return errors.Newf("cannot build workload in Release mode")
@@ -151,7 +151,7 @@ func MakeWorkload(platform Platform, opts BuildOptions, pkgDir string) error {
 	if err != nil {
 		return err
 	}
-	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), false)
+	return stageBinary("//pkg/cmd/workload", platform, bazelBin, filepath.Join(pkgDir, "bin"), platform == PlatformLinuxArm)
 }
 
 // MakeRelease makes the release binary and associated files.
@@ -165,6 +165,9 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 	}
 	targetTriple := TargetTripleFromPlatform(platform)
 	var stampCommand string
+	if platform == PlatformWindows {
+		buildArgs = append(buildArgs, "--enable_runfiles")
+	}
 	if opts.Release {
 		if opts.BuildTag == "" {
 			stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s release", targetTriple, opts.Channel)
@@ -178,7 +181,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		stampCommand = fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s %s", targetTriple, opts.Channel)
 	}
 	buildArgs = append(buildArgs, stampCommand)
-	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
+	configs := []string{"-c", "opt", "--config=ci", "--config=force_build_cdeps", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
 	buildArgs = append(buildArgs, configs...)
 	cmd := exec.Command("bazel", buildArgs...)
 	cmd.Dir = pkgDir

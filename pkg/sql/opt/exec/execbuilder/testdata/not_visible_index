@@ -76,13 +76,13 @@ t1_pkey          i  true
 
 # Check System Descriptor.
 query TTBITTTBBBF colnames
-SELECT * FROM [SHOW INDEX FROM system.descriptor]
+SELECT * FROM [SHOW INDEX FROM system.descriptor] ORDER BY seq_in_index
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
 descriptor  primary     false       1             id           id          ASC        false    false     true     1
 descriptor  primary     false       2             descriptor   descriptor  N/A        true     false     true     1
 
-query TT
+query TT rowsort
 SELECT cols.desc->>'name', cols.desc->>'notVisible' FROM (
   SELECT json_array_elements(
     crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes'
@@ -94,7 +94,7 @@ idx_i_invisible  true
 idx_v_invisible  true
 
 # Check crdb_internal.table_indexes.
-query TB colnames
+query TB colnames,rowsort
 SELECT index_name, is_visible FROM crdb_internal.table_indexes ORDER BY index_id
 ----
 index_name       is_visible
@@ -752,31 +752,23 @@ vectorized: true
 │ auto commit
 │ arbiter indexes: t1_pkey, idx_v_unique_invisible
 │
-└── • distinct
-    │ distinct on: v
-    │ nulls are distinct
+└── • lookup join (anti)
+    │ table: t1@t1_pkey
+    │ equality: (k) = (k)
+    │ equality cols are key
     │
-    └── • distinct
-        │ distinct on: k
-        │ nulls are distinct
+    └── • lookup join (anti)
+        │ table: t1@idx_v_unique_invisible
+        │ equality: (v) = (v)
+        │ equality cols are key
         │
-        └── • lookup join (anti)
-            │ table: t1@t1_pkey
-            │ equality: (k) = (k)
-            │ equality cols are key
+        └── • filter
+            │ filter: v IN (1, 2)
             │
-            └── • lookup join (anti)
-                │ table: t1@idx_v_unique_invisible
-                │ equality: (v) = (v)
-                │ equality cols are key
-                │
-                └── • filter
-                    │ filter: v IN (1, 2)
-                    │
-                    └── • scan
-                          missing stats
-                          table: t1@t1_pkey
-                          spans: FULL SCAN
+            └── • scan
+                  missing stats
+                  table: t1@t1_pkey
+                  spans: FULL SCAN
 
 # UPSERT uses primary index to check uniqueness, so idx_v_unique_invisible is
 # not useful.
@@ -1198,7 +1190,7 @@ CREATE TABLE t1 (
   INDEX idx_invisible (other) NOT VISIBLE
 )
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t1]
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -1228,16 +1220,16 @@ ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (other);
 # A new primary index t1_pkey is created on the column other. The old primary
 # index becomes a secondary index t1_c_key on c. idx_invisible remains
 # invisible.
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t1]
 ----
 table_name  index_name     non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
 t1          t1_pkey        false       1             other        other       ASC        false    false     true     1
 t1          t1_pkey        false       2             c            c           N/A        true     false     true     1
-t1          t1_c_key       false       1             c            c           ASC        false    false     true     1
-t1          t1_c_key       false       2             other        other       ASC        true     true      true     1
 t1          idx_visible    true        1             other        other       ASC        false    false     true     1
 t1          idx_invisible  true        1             other        other       ASC        false    false     false    0
+t1          t1_c_key       false       1             c            c           ASC        false    false     true     1
+t1          t1_c_key       false       2             other        other       ASC        true     true      true     1
 
 # Changing the old primary key index t1_c_key (secondary index now) to invisible
 # is fine.
@@ -1532,7 +1524,7 @@ statement ok
 CREATE INDEX k1_idx on t(k);
 ALTER INDEX k1_idx INVISIBLE
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t]
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
@@ -1579,7 +1571,7 @@ t  CREATE TABLE public.t (
      FAMILY fam_0_p_k_v (p, k, v)
    )
 
-query TTBITTTBBBF colnames
+query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t]
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility

@@ -570,6 +570,13 @@ func TestTenantLogic_delete(
 	runLogicTest(t, "delete")
 }
 
+func TestTenantLogic_delete_batch(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "delete_batch")
+}
+
 func TestTenantLogic_dependencies(
 	t *testing.T,
 ) {
@@ -1331,6 +1338,13 @@ func TestTenantLogic_pg_extension(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "pg_extension")
+}
+
+func TestTenantLogic_pg_lsn(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "pg_lsn")
 }
 
 func TestTenantLogic_pgcrypto_builtins(
@@ -2136,6 +2150,13 @@ func TestTenantLogic_udf_oid_ref(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_oid_ref")
+}
+
+func TestTenantLogic_udf_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_plpgsql")
 }
 
 func TestTenantLogic_udf_record(

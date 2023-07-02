@@ -12,12 +12,14 @@ package log
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/errors"
 )
@@ -49,10 +51,11 @@ func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 		hs.doRequest = doGet
 	}
 
-	f, ok := formatters[*c.Format]
+	fConstructor, ok := formatters[*c.Format]
 	if !ok {
 		panic(errors.AssertionFailedf("unknown format: %q", *c.Format))
 	}
+	f := fConstructor()
 	if f.contentType() != "" {
 		hs.contentType = f.contentType()
 	}
@@ -94,7 +97,37 @@ func (hs *httpSink) output(b []byte, opt sinkOutputOptions) (err error) {
 }
 
 func doPost(hs *httpSink, b []byte) (*http.Response, error) {
-	resp, err := hs.client.Post(hs.address, hs.contentType, bytes.NewReader(b))
+	var buf = bytes.Buffer{}
+	var req *http.Request
+
+	if *hs.config.Compression == logconfig.GzipCompression {
+		g := gzip.NewWriter(&buf)
+		_, err := g.Write(b)
+		if err != nil {
+			return nil, err
+		}
+		err = g.Close()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		buf.Write(b)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, hs.address, &buf)
+	if err != nil {
+		return nil, err
+	}
+
+	if *hs.config.Compression == logconfig.GzipCompression {
+		req.Header.Add(httputil.ContentEncodingHeader, httputil.GzipEncoding)
+	}
+
+	for k, v := range hs.config.Headers {
+		req.Header.Add(k, v)
+	}
+	req.Header.Add(httputil.ContentTypeHeader, hs.contentType)
+	resp, err := hs.client.Do(req)
 	if err != nil {
 		return nil, err
 	}

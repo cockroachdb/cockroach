@@ -70,6 +70,7 @@ import changefeedsDashboard from "./dashboards/changefeeds";
 import overloadDashboard from "./dashboards/overload";
 import ttlDashboard from "./dashboards/ttl";
 import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
+import networkingDashboard from "./dashboards/networking";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
@@ -91,7 +92,7 @@ import {
 } from "src/redux/clusterSettings";
 import { getDataFromServer } from "src/util/dataFromServer";
 import { getCookieValue } from "src/redux/cookies";
-import { tenantDropdownOptions, isSystemTenant } from "src/redux/tenants";
+import { isSystemTenant, tenantDropdownOptions } from "src/redux/tenants";
 
 interface GraphDashboard {
   label: string;
@@ -113,6 +114,11 @@ const dashboards: { [key: string]: GraphDashboard } = {
   runtime: {
     label: "Runtime",
     component: runtimeDashboard,
+    isKvDashboard: true,
+  },
+  networking: {
+    label: "Networking",
+    component: networkingDashboard,
     isKvDashboard: true,
   },
   sql: { label: "SQL", component: sqlDashboard, isKvDashboard: false },
@@ -149,7 +155,7 @@ const dashboards: { [key: string]: GraphDashboard } = {
   },
   ttl: { label: "TTL", component: ttlDashboard, isKvDashboard: false },
   crossClusterReplication: {
-    label: "Cross-Cluster Replication",
+    label: "Physical Cluster Replication",
     component: crossClusterReplicationDashboard,
     isKvDashboard: true,
   },
@@ -322,7 +328,7 @@ export class NodeGraphs extends React.Component<
     const nodeSources = selectedNode !== "" ? [selectedNode] : null;
     const selectedTenant = isSystemTenant(currentTenant)
       ? getMatchParamByName(match, tenantNameAttr) || ""
-      : "";
+      : currentTenant;
     // When "all" is the selected source, some graphs display a line for every
     // node in the cluster using the nodeIDs collection. However, if a specific
     // node is already selected, these per-node graphs should only display data
@@ -396,7 +402,7 @@ export class NodeGraphs extends React.Component<
       .filter(
         option =>
           this.props.crossClusterReplicationEnabled ||
-          option.label !== "Cross-Cluster Replication",
+          option.label !== "Physical Cluster Replication",
       );
 
     return (

@@ -59,6 +59,7 @@ export let reviewOfCockroachTerminology: string;
 export let privileges: string;
 export let showSessions: string;
 export let sessionsTable: string;
+export let upgradeTroubleshooting: string;
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const upgradeCockroachVersion =
@@ -132,6 +133,9 @@ export const recomputeDocsURLs = () => {
   uiDebugPages = docsURL("ui-debug-pages.html");
   readsAndWritesOverviewPage = docsURLNoVersion(
     "architecture/reads-and-writes-overview.html#important-concepts",
+  );
+  upgradeTroubleshooting = docsURL(
+    "upgrade-cockroach-version.html#troubleshooting",
   );
 };
 

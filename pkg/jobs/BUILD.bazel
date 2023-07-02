@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -48,6 +47,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/isql",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/protoreflect",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/catconstants",
@@ -170,5 +170,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

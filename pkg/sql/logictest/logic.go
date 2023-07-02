@@ -62,7 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -295,7 +294,9 @@ import (
 //        place of actual results.
 //
 //    Options are comma separated strings from the following:
-//      - nosort (default)
+//      - nosort: sorts neither the returned or expected rows. Skips the
+//            flakiness check that forces either rowsort, valuesort,
+//            partialsort, or an ORDER BY clause to be present.
 //      - rowsort: sorts both the returned and the expected rows assuming one
 //            white-space separated word per column.
 //      - valuesort: sorts all values on all rows as one big set of
@@ -506,10 +507,13 @@ import (
 // - For troubleshooting / analysis: add -v -show-sql -error-summary.
 
 var (
-	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	noticeRE  = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
-	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
-	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
+	resultsRE   = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	noticeRE    = regexp.MustCompile(`^statement\s+notice\s+(.*)$`)
+	errorRE     = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
+	varRE       = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
+	orderRE     = regexp.MustCompile(`(?i)ORDER\s+BY`)
+	explainRE   = regexp.MustCompile(`(?i)EXPLAIN\W+`)
+	showTraceRE = regexp.MustCompile(`(?i)SHOW\s+(KV\s+)?TRACE`)
 
 	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
 	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
@@ -877,6 +881,8 @@ type logicQuery struct {
 	colNames bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
+	// noSort is true if the nosort option was explicitly provided in the test.
+	noSort bool
 	// expectedErr and expectedErrCode are as in logicStatement.
 
 	// if set, the results are cross-checked against previous queries with the
@@ -1254,7 +1260,19 @@ var _ = ((*logicTest)(nil)).newTestServerCluster
 // bootstrapBinaryPath is given by the config's CockroachGoBootstrapVersion.
 // upgradeBinaryPath is given by the config's CockroachGoUpgradeVersion, or
 // is the locally built version if CockroachGoUpgradeVersion was not specified.
-func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBinaryPath string) {
+func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath string) {
+	logsDir, err := os.MkdirTemp("", "cockroach-logs*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanupLogsDir := func() {
+		if t.rootT.Failed() {
+			fmt.Fprintf(os.Stderr, "cockroach logs captured in: %s\n", logsDir)
+		} else {
+			_ = os.RemoveAll(logsDir)
+		}
+	}
+
 	// During config initialization, NumNodes is required to be 3.
 	opts := []testserver.TestServerOpt{
 		testserver.ThreeNodeOpt(),
@@ -1262,6 +1280,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
 		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
 		testserver.PollListenURLTimeoutOpt(120),
+		testserver.CockroachLogsDirOpt(logsDir),
 	}
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
 		// If we're using a cockroach-short binary, that means it was
@@ -1284,7 +1303,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 	}
 
 	t.testserverCluster = ts
-	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop)
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, ts.Stop, cleanupLogsDir)
 
 	t.setUser(username.RootUser, 0 /* nodeIdx */)
 }
@@ -1325,9 +1344,30 @@ func (t *logicTest) newCluster(
 		}
 		return st
 	}
-	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
-	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
-		corpusCollectionCallback = t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t())
+	setSQLTestingKnobs := func(knobs *base.TestingKnobs) {
+		knobs.SQLEvalContext = &eval.TestingKnobs{
+			AssertBinaryExprReturnTypes:     true,
+			AssertUnaryExprReturnTypes:      true,
+			AssertFuncExprReturnTypes:       true,
+			DisableOptimizerRuleProbability: *disableOptRuleProbability,
+			OptimizerCostPerturbation:       *optimizerCostPerturbation,
+			ForceProductionValues:           serverArgs.ForceProductionValues,
+		}
+		knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+			DeterministicExplain:            true,
+			UseTransactionalDescIDGenerator: true,
+		}
+		knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
+			AOSTClause: "AS OF SYSTEM TIME '-1us'",
+		}
+		if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
+			knobs.SQLDeclarativeSchemaChanger = &scexec.TestingKnobs{
+				BeforeStage: t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t()),
+			}
+		}
+		knobs.DistSQL = &execinfra.TestingKnobs{
+			ForceDiskSpill: t.cfg.SQLExecUseDisk,
+		}
 	}
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
@@ -1364,24 +1404,6 @@ func (t *logicTest) newCluster(
 						UseRangeTombstonesForPointDeletes: shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
 				},
-				SQLEvalContext: &eval.TestingKnobs{
-					AssertBinaryExprReturnTypes:     true,
-					AssertUnaryExprReturnTypes:      true,
-					AssertFuncExprReturnTypes:       true,
-					DisableOptimizerRuleProbability: *disableOptRuleProbability,
-					OptimizerCostPerturbation:       *optimizerCostPerturbation,
-					ForceProductionValues:           serverArgs.ForceProductionValues,
-				},
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DeterministicExplain:            true,
-					UseTransactionalDescIDGenerator: true,
-				},
-				SQLStatsKnobs: &sqlstats.TestingKnobs{
-					AOSTClause: "AS OF SYSTEM TIME '-1us'",
-				},
-				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
-					BeforeStage: corpusCollectionCallback,
-				},
 				RangeFeed: &rangefeed.TestingKnobs{
 					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
 				},
@@ -1393,15 +1415,13 @@ func (t *logicTest) newCluster(
 		// matter where the data really is.
 		ReplicationMode: base.ReplicationManual,
 	}
+	setSQLTestingKnobs(&params.ServerArgs.Knobs)
 
 	cfg := t.cfg
 	if cfg.DefaultTestTenant == base.TestTenantEnabled {
 		// In the tenant case we need to enable replication in order to split and
 		// relocate ranges correctly.
 		params.ReplicationMode = base.ReplicationAuto
-	}
-	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
-		ForceDiskSpill: cfg.SQLExecUseDisk,
 	}
 	if cfg.BootstrapVersion != clusterversion.Key(0) {
 		if params.ServerArgs.Knobs.Server == nil {
@@ -1477,13 +1497,6 @@ func (t *logicTest) newCluster(
 				TenantID: serverutils.TestTenantID(),
 				Settings: settings,
 				TestingKnobs: base.TestingKnobs{
-					SQLExecutor: &sql.ExecutorTestingKnobs{
-						DeterministicExplain:            true,
-						UseTransactionalDescIDGenerator: true,
-					},
-					SQLStatsKnobs: &sqlstats.TestingKnobs{
-						AOSTClause: "AS OF SYSTEM TIME '-1us'",
-					},
 					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
@@ -1493,6 +1506,7 @@ func (t *logicTest) newCluster(
 				// Give every tenant its own ExternalIO directory.
 				ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(i)),
 			}
+			setSQLTestingKnobs(&tenantArgs.TestingKnobs)
 
 			for _, opt := range knobOpts {
 				t.rootT.Logf("apply knob opt %T to tenant", opt)
@@ -2677,6 +2691,7 @@ func (t *logicTest) processSubtest(
 						switch opt {
 						case "nosort":
 							query.sorter = nil
+							query.noSort = true
 
 						case "rowsort":
 							query.sorter = rowSort
@@ -3382,6 +3397,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 	defer rows.Close()
 
 	var actualResultsRaw []string
+	rowCount := 0
 	if query.noticetrace {
 		// We have to force close the results for the notice handler from lib/pq
 		// returns results.
@@ -3412,6 +3428,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 				if err := rows.Scan(vals...); err != nil {
 					return err
 				}
+				rowCount++
 				for i, v := range vals {
 					colT := query.colTypes[i]
 					// Ignore column - useful for non-deterministic output.
@@ -3517,6 +3534,32 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 				actualResults = append(actualResults, strings.Join(strings.Fields(result), " "))
 			}
 		}
+	}
+
+	allDuplicateRows := true
+	numCols := len(query.colTypes)
+	resultsWithoutColNames := actualResults
+	if query.colNames {
+		resultsWithoutColNames = resultsWithoutColNames[numCols:]
+	}
+	for i := numCols; i < len(resultsWithoutColNames); i++ {
+		// There are numCols*numRows elements in actualResults, each a string
+		// representation of a single column in a row. The element at i%numCols
+		// is the value in the first row in the same column as i.
+		if resultsWithoutColNames[i%numCols] != resultsWithoutColNames[i] {
+			allDuplicateRows = false
+			break
+		}
+	}
+
+	if rowCount > 1 && !allDuplicateRows && query.sorter == nil && !query.noSort &&
+		!query.kvtrace && !orderRE.MatchString(query.sql) && !explainRE.MatchString(query.sql) &&
+		!showTraceRE.MatchString(query.sql) {
+		return fmt.Errorf("to prevent flakes in queries that return multiple rows, " +
+			"add the rowsort option, the valuesort option, the partialsort option, " +
+			"or an ORDER BY clause. If you are certain that your test will not flake " +
+			"due to a non-deterministic ordering of rows, you can add the nosort option " +
+			"to ignore this error")
 	}
 
 	if query.sorter != nil {

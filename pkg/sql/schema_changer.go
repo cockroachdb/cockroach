@@ -75,6 +75,32 @@ var schemaChangeJobMaxRetryBackoff = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+type schemaChangerMode int
+
+const (
+	// schemaChangerModeNone indicates that the schema changer was not used.
+	schemaChangerModeNone schemaChangerMode = iota
+	// schemaChangerModeLegacy indicates that the legacy schema changer was used.
+	schemaChangerModeLegacy
+	// schemaChangerModeDeclarative indicates that the declarative schema changer
+	// was used.
+	schemaChangerModeDeclarative
+)
+
+// String returns a string representation of the schema changer mode.
+func (m schemaChangerMode) String() string {
+	switch m {
+	case schemaChangerModeNone:
+		return "none"
+	case schemaChangerModeLegacy:
+		return "legacy"
+	case schemaChangerModeDeclarative:
+		return "declarative"
+	default:
+		return fmt.Sprintf("schemaChangerMode(%d)", m)
+	}
+}
+
 const (
 	// RunningStatusWaitingForMVCCGC is used for the GC job when it has cleared
 	// the data but is waiting for MVCC GC to remove the data.
@@ -3151,4 +3177,18 @@ func (p *planner) CanPerformDropOwnedBy(
 		return false, err
 	}
 	return tree.MustBeDInt(row[0]) == 0, err
+}
+
+// CanCreateCrossDBSequenceOwnerRef returns if cross database sequence
+// owner references are allowed.
+func (p *planner) CanCreateCrossDBSequenceOwnerRef() error {
+	if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.FeatureNotSupported,
+				"OWNED BY cannot refer to other databases; (see the '%s' cluster setting)",
+				allowCrossDatabaseSeqOwnerSetting),
+			crossDBReferenceDeprecationHint(),
+		)
+	}
+	return nil
 }

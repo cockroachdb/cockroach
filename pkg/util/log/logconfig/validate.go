@@ -42,6 +42,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	defaultBufferedStaleness := 5 * time.Second
 	defaultFlushTriggerSize := ByteSize(1024 * 1024)   // 1mib
 	defaultMaxBufferSize := ByteSize(50 * 1024 * 1024) // 50mib
+	bufferFmt := BufferFmtNewline
 
 	baseCommonSinkConfig := CommonSinkConfig{
 		Filter:      logpb.Severity_INFO,
@@ -56,6 +57,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 				MaxStaleness:     &zeroDuration,
 				FlushTriggerSize: &zeroByteSize,
 				MaxBufferSize:    &zeroByteSize,
+				Format:           &bufferFmt,
 			},
 		},
 	}
@@ -76,6 +78,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					MaxStaleness:     &zeroDuration,
 					FlushTriggerSize: &zeroByteSize,
 					MaxBufferSize:    &zeroByteSize,
+					Format:           &bufferFmt,
 				},
 			},
 		},
@@ -88,6 +91,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					MaxStaleness:     &defaultBufferedStaleness,
 					FlushTriggerSize: &defaultFlushTriggerSize,
 					MaxBufferSize:    &defaultMaxBufferSize,
+					Format:           &bufferFmt,
 				},
 			},
 		},
@@ -100,6 +104,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 					MaxStaleness:     &defaultBufferedStaleness,
 					FlushTriggerSize: &defaultFlushTriggerSize,
 					MaxBufferSize:    &defaultMaxBufferSize,
+					Format:           &bufferFmt,
 				},
 			},
 		},
@@ -107,6 +112,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		DisableKeepAlives: &bf,
 		Method:            func() *HTTPSinkMethod { m := HTTPSinkMethod(http.MethodPost); return &m }(),
 		Timeout:           &zeroDuration,
+		Compression:       &GzipCompression,
 	}
 
 	propagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
@@ -448,6 +454,9 @@ func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
 	propagateHTTPDefaults(&hsc.HTTPDefaults, c.HTTPDefaults)
 	if hsc.Address == nil || len(*hsc.Address) == 0 {
 		return errors.New("address cannot be empty")
+	}
+	if *hsc.Compression != GzipCompression && *hsc.Compression != NoneCompression {
+		return errors.New("compression must be 'gzip' or 'none'")
 	}
 	return c.ValidateCommonSinkConfig(hsc.CommonSinkConfig)
 }

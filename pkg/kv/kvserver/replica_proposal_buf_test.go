@@ -186,6 +186,8 @@ func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
 	return fn(t.raftGroup)
 }
 
+func (rp *testProposer) onErrProposalDropped(ents []raftpb.Entry, stateType raft.StateType) {}
+
 func (t *testProposer) leaseDebugRLocked() string {
 	return ""
 }
@@ -234,6 +236,12 @@ func (t *testProposer) ownsValidLease(ctx context.Context, now hlc.ClockTimestam
 
 func (t *testProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
 	return t.leaderNotLive
+}
+
+func (t *testProposer) campaignLocked(ctx context.Context) {
+	if err := t.raftGroup.Campaign(); err != nil {
+		panic(err)
+	}
 }
 
 func (t *testProposer) rejectProposalWithRedirectLocked(
@@ -313,7 +321,7 @@ func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
 	data := make([]byte, raftlog.RaftCommandPrefixLen, needed)
 	raftlog.EncodeRaftCommandPrefix(data, raftlog.EntryEncodingStandardWithoutAC, p.idKey)
 	data = data[:raftlog.RaftCommandPrefixLen+p.command.Size()]
-	if _, err := protoutil.MarshalTo(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
+	if _, err := protoutil.MarshalToSizedBuffer(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
 		panic(err)
 	}
 	return data

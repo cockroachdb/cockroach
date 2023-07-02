@@ -12,6 +12,7 @@ package tabledesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -177,11 +179,90 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	}
 
 	// Upgrade the declarative schema changer state
-	if scpb.MigrateDescriptorState(version, tdb.maybeModified.DeclarativeSchemaChangerState) {
+	if scpb.MigrateDescriptorState(version, tdb.maybeModified.ParentID, tdb.maybeModified.DeclarativeSchemaChangerState) {
 		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 
 	return err
+}
+
+// StripDanglingBackReferences implements the catalog.DescriptorBuilder
+// interface.
+func (tdb *tableDescriptorBuilder) StripDanglingBackReferences(
+	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
+) error {
+	// Strip dangling back-references in depended_on_by,
+	{
+		sliceIdx := 0
+		for _, backref := range tdb.maybeModified.DependedOnBy {
+			tdb.maybeModified.DependedOnBy[sliceIdx] = backref
+			if descIDMightExist(backref.ID) {
+				sliceIdx++
+			}
+		}
+		if sliceIdx < len(tdb.maybeModified.DependedOnBy) {
+			tdb.maybeModified.DependedOnBy = tdb.maybeModified.DependedOnBy[:sliceIdx]
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
+	// ... in inbound foreign keys,
+	{
+		sliceIdx := 0
+		for _, backref := range tdb.maybeModified.InboundFKs {
+			tdb.maybeModified.InboundFKs[sliceIdx] = backref
+			if descIDMightExist(backref.OriginTableID) {
+				sliceIdx++
+			}
+		}
+		if sliceIdx < len(tdb.maybeModified.InboundFKs) {
+			tdb.maybeModified.InboundFKs = tdb.maybeModified.InboundFKs[:sliceIdx]
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
+	// ... in the replacement_of field,
+	if id := tdb.maybeModified.ReplacementOf.ID; id != descpb.InvalidID && !descIDMightExist(id) {
+		tdb.maybeModified.ReplacementOf.Reset()
+		tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+	}
+	// ... in the drop_job field,
+	if id := tdb.maybeModified.DropJobID; id != jobspb.InvalidJobID && !nonTerminalJobIDMightExist(id) {
+		tdb.maybeModified.DropJobID = jobspb.InvalidJobID
+		tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+	}
+	// ... in the mutation_jobs slice,
+	{
+		var mutationIDs intsets.Fast
+		for _, m := range tdb.maybeModified.Mutations {
+			mutationIDs.Add(int(m.MutationID))
+		}
+		sliceIdx := 0
+		for _, backref := range tdb.maybeModified.MutationJobs {
+			tdb.maybeModified.MutationJobs[sliceIdx] = backref
+			if nonTerminalJobIDMightExist(backref.JobID) &&
+				mutationIDs.Contains(int(backref.MutationID)) {
+				sliceIdx++
+			}
+		}
+		if sliceIdx < len(tdb.maybeModified.MutationJobs) {
+			tdb.maybeModified.MutationJobs = tdb.maybeModified.MutationJobs[:sliceIdx]
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
+	// ... in the row_level_ttl field,
+	if ttl := tdb.maybeModified.RowLevelTTL; ttl != nil {
+		if id := jobspb.JobID(ttl.ScheduleID); id != jobspb.InvalidJobID && !nonTerminalJobIDMightExist(id) {
+			tdb.maybeModified.RowLevelTTL = nil
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
+	// ... in the sequence ownership field.
+	if seq := tdb.maybeModified.SequenceOpts; seq != nil {
+		if id := seq.SequenceOwner.OwnerTableID; id != descpb.InvalidID && !descIDMightExist(id) {
+			seq.SequenceOwner.Reset()
+			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
+		}
+	}
+	return nil
 }
 
 // SetRawBytesInStorage implements the catalog.DescriptorBuilder interface.
@@ -916,6 +997,11 @@ func maybeSetCreateAsOfTime(desc *descpb.TableDescriptor) (hasChanged bool) {
 	if !desc.CreateAsOfTime.IsEmpty() || desc.Version > 1 || desc.ModificationTime.IsEmpty() {
 		return false
 	}
+	// Ignore system tables, unless they're explicitly created using CTAS
+	// How that could ever happen is unclear, but never mind.
+	if desc.ParentID == keys.SystemDatabaseID && desc.CreateQuery == "" {
+		return false
+	}
 	// The expectation is that this is only set when the version is 2.
 	// For any version greater than that, this is not accurate but better than
 	// nothing at all.
@@ -1085,7 +1171,7 @@ func resolveTableNamesForIDs(
 				// For backups created in 21.2 and prior, the "public" schema is descriptorless,
 				// and always uses the const `keys.PublicSchemaIDForBackUp` as the "public"
 				// schema ID.
-				scName = tree.PublicSchema
+				scName = catconstants.PublicSchemaName
 			}
 		}
 

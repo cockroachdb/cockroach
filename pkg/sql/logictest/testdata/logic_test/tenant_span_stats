@@ -25,7 +25,7 @@ database_id table_id range_count approximate_disk_bytes live_bytes total_bytes l
 
 # SELECT DISTINCT(database_id) FROM crdb_internal.tenant_span_stats:
 # Assert that we are collecting span stats for tables across multiple databases.
-query I colnames
+query I colnames,rowsort
 SELECT DISTINCT(database_id) FROM crdb_internal.tenant_span_stats()
 ----
 database_id
@@ -34,7 +34,7 @@ database_id
 
 # SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106):
 # Assert that we are collecting span stats scoped to the provided database id.
-query II colnames
+query II colnames,rowsort
 SELECT database_id, table_id FROM crdb_internal.tenant_span_stats(106)
 ----
 database_id table_id

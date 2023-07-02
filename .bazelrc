@@ -20,7 +20,6 @@ build --flag_alias=dev=//build/toolchains:dev_flag
 build --flag_alias=force_build_cdeps=//build/toolchains:force_build_cdeps_flag
 build --flag_alias=lintonbuild=//build/toolchains:nogo_flag
 build --flag_alias=nolintonbuild=//build/toolchains:nonogo_explicit_flag
-build --flag_alias=with_ui=//pkg/ui:with_ui_flag
 
 build:crdb_test_off --crdb_test_off
 build:cross --cross
@@ -31,7 +30,6 @@ build:nolintonbuild --nolintonbuild
 # Note: nonogo is classically the name of the nolintonbuild configuration.
 build:nonogo --nolintonbuild
 build:test --crdb_test
-build:with_ui --with_ui
 
 # Basic settings.
 build --define gotags=bazel,gss
@@ -53,18 +51,15 @@ test:race --test_timeout=1200,6000,18000,72000
 
 # CI uses a custom timeout for enormous targets.
 test:use_ci_timeouts --test_timeout=60,300,900,900 --define=use_ci_timeouts=true
-# CI should always run with `--config=ci` or `--config=cinolint`.
-# Prefer the first to the second unless some other job will handle linting the
-# same code you're building.
-build:ci --config=cinolint
+# CI should always run with `--config=ci`.
 build:ci --lintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
-test:cinolint --test_env=GO_TEST_WRAP_TESTV=1
+test:ci --test_env=GO_TEST_WRAP_TESTV=1
 # Dump all output for failed tests to the build log.
-test:cinolint --test_output=errors
+test:ci --test_output=errors
 # Put all tmp artifacts in /artifacts/tmp.
-build:cinolint --test_tmpdir=/artifacts/tmp
+build:ci --test_tmpdir=/artifacts/tmp
 
 build:cross --stamp
 
@@ -82,7 +77,7 @@ build:crosslinuxfips '--workspace_status_command=./build/bazelutil/stamp.sh x86_
 build:crosslinuxfips --config=crosslinuxfipsbase
 build:crosslinuxfipsbase --platforms=//build/toolchains:cross_linux
 build:crosslinuxfipsbase --config=cross
-build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.19.8fips
+build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.19.10fips
 build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
 build:crosswindows --config=crosswindowsbase
 build:crosswindowsbase --platforms=//build/toolchains:cross_windows

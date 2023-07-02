@@ -565,7 +565,8 @@ func TestZoneChecker(t *testing.T) {
 		splits[i].key = ranges[i].split
 	}
 	keyScanner := keysutils.MakePrettyScannerForNamedTables(
-		map[string]int{"t1": t1ID} /* tableNameToID */, nil /* idxNameToID */)
+		roachpb.SystemTenantID, map[string]int{"t1": t1ID} /* tableNameToID */, nil, /* idxNameToID */
+	)
 	rngs, err := processSplits(keyScanner, splits, nil /* stores */)
 	require.NoError(t, err)
 
@@ -633,7 +634,11 @@ func TestRangeIteration(t *testing.T) {
 	compiled, err := compileTestCase(schema)
 	require.NoError(t, err)
 	v := recordingRangeVisitor{}
-	require.NoError(t, visitRanges(ctx, &compiled.iter, compiled.cfg, &v))
+	// In addition to the meat of the test, we'll surround v with
+	// error-injecting range visitors as a regression test for index out of
+	// bounds when removing visitors that encountered errors (#104788).
+	var extraVisitor1, extraVisitor2 errorRangeVisitor
+	require.Error(t, visitRanges(ctx, &compiled.iter, compiled.cfg, &extraVisitor1, &v, &extraVisitor2))
 
 	type entry struct {
 		newZone bool
@@ -684,4 +689,26 @@ func (r *recordingRangeVisitor) reset(ctx context.Context) {
 type visitorEntry struct {
 	newZone bool
 	rng     roachpb.RangeDescriptor
+}
+
+// errorRangeVisitor always returns an error on visitNewZone call.
+type errorRangeVisitor struct {
+	errorReturned bool
+}
+
+var _ rangeVisitor = &errorRangeVisitor{}
+
+func (e *errorRangeVisitor) visitNewZone(context.Context, *roachpb.RangeDescriptor) error {
+	e.errorReturned = true
+	return errors.New("an error")
+}
+
+func (e *errorRangeVisitor) visitSameZone(context.Context, *roachpb.RangeDescriptor) {}
+
+func (e *errorRangeVisitor) failed() bool {
+	return e.errorReturned
+}
+
+func (e *errorRangeVisitor) reset(context.Context) {
+	e.errorReturned = false
 }

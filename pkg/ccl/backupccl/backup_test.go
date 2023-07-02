@@ -89,8 +89,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -942,8 +942,8 @@ func TestBackupRestoreEmpty(t *testing.T) {
 // for tables with negative primary key data caused AdminSplit to fail.
 func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 68127, "flaky test")
 	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "test is too slow to run under race, presumably because of the multiple splits")
 
 	const numAccounts = 1000
 
@@ -1083,7 +1083,9 @@ SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
 		sqlDB.Exec(t, incBackupQuery, queryArgs...)
 	}
 	bankTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
-	backupTableFingerprint := sqlutils.FingerprintTable(t, sqlDB, bankTableID)
+	backupTableFingerprint, err := fingerprintutils.FingerprintTable(ctx, conn, bankTableID,
+		fingerprintutils.Stripped())
+	require.NoError(t, err)
 
 	sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
 
@@ -1104,18 +1106,22 @@ SELECT payload FROM "".crdb_internal.system_jobs ORDER BY created DESC LIMIT 10
 		restoreQuery = fmt.Sprintf("%s WITH kms = %s", restoreQuery, kmsURIFmtString)
 	}
 	queryArgs := append(restoreURIArgs, kmsURIArgs...)
-	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts, backupTableFingerprint)
+	verifyRestoreData(ctx, t, conn, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts,
+		backupTableFingerprint)
 }
 
 func verifyRestoreData(
+	ctx context.Context,
 	t *testing.T,
+	conn *gosql.DB,
 	sqlDB *sqlutils.SQLRunner,
 	storageSQLDB *sqlutils.SQLRunner,
 	restoreQuery string,
 	restoreURIArgs []interface{},
 	numAccounts int,
-	bankStrippedFingerprint int,
+	bankStrippedFingerprint int64,
 ) {
+
 	var unused string
 	var restored struct {
 		rows, idx, bytes int64
@@ -1166,7 +1172,10 @@ func verifyRestoreData(
 		}
 	}
 	restorebankID := sqlutils.QueryTableID(t, sqlDB.DB, "data", "public", "bank")
-	require.Equal(t, bankStrippedFingerprint, sqlutils.FingerprintTable(t, sqlDB, restorebankID))
+	fingerprint, err := fingerprintutils.FingerprintTable(ctx, conn, restorebankID,
+		fingerprintutils.Stripped())
+	require.NoError(t, err)
+	require.Equal(t, bankStrippedFingerprint, fingerprint)
 }
 
 func TestBackupRestoreSystemTables(t *testing.T) {
@@ -3127,7 +3136,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, `DROP TABLE otherstore.receipts`)
 
 		db.ExpectErr(
-			t, `cannot drop relation "customers" because view "unused_view" depends on it`,
+			t, `cannot drop relation "customers" because view "early_customers" depends on it`,
 			`DROP TABLE otherstore.customers`,
 		)
 
@@ -6177,11 +6186,7 @@ func getMockTableDesc(
 // methods.
 func TestPublicIndexTableSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	codec := keysutils.TestingSQLCodec
-	execCfg := &sql.ExecutorConfig{
-		Codec: codec,
-	}
-	unusedMap := make(map[tableAndIndex]bool)
+
 	testCases := []struct {
 		name                string
 		tableID             descpb.ID
@@ -6268,29 +6273,49 @@ func TestPublicIndexTableSpans(t *testing.T) {
 		},
 	}
 
-	for _, test := range testCases {
-		tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
-			test.indexes, test.addingIndexes, test.droppingIndexes)
-		t.Run(fmt.Sprintf("%s:%s", "forEachPublicIndexTableSpan", test.name), func(t *testing.T) {
-			var spans []roachpb.Span
-			forEachPublicIndexTableSpan(tableDesc.TableDesc(), unusedMap, codec, func(sp roachpb.Span) {
-				spans = append(spans, sp)
-			})
-			var unmergedSpans []string
-			for _, span := range spans {
-				unmergedSpans = append(unmergedSpans, span.String())
+	for _, useSecondaryTenant := range []bool{false, true} {
+		name, codec := "system", keys.SystemSQLCodec
+		if useSecondaryTenant {
+			const tenantID = 42
+			name, codec = "secondary", keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
+			for _, tc := range testCases {
+				for i, sp := range tc.expectedSpans {
+					tc.expectedSpans[i] = fmt.Sprintf("/Tenant/%d%s", tenantID, sp)
+				}
+				for i, sp := range tc.expectedMergedSpans {
+					tc.expectedMergedSpans[i] = fmt.Sprintf("/Tenant/%d%s", tenantID, sp)
+				}
 			}
-			require.Equal(t, test.expectedSpans, unmergedSpans)
-		})
+		}
+		execCfg := &sql.ExecutorConfig{Codec: codec}
+		unusedMap := make(map[tableAndIndex]bool)
 
-		t.Run(fmt.Sprintf("%s:%s", "spansForAllTableIndexes", test.name), func(t *testing.T) {
-			mergedSpans, err := spansForAllTableIndexes(execCfg, []catalog.TableDescriptor{tableDesc}, nil /* revs */)
-			require.NoError(t, err)
-			var mergedSpanStrings []string
-			for _, mSpan := range mergedSpans {
-				mergedSpanStrings = append(mergedSpanStrings, mSpan.String())
+		t.Run(name, func(t *testing.T) {
+			for _, test := range testCases {
+				tableDesc := getMockTableDesc(test.tableID, test.pkIndex,
+					test.indexes, test.addingIndexes, test.droppingIndexes)
+				t.Run(fmt.Sprintf("%s:%s", "forEachPublicIndexTableSpan", test.name), func(t *testing.T) {
+					var spans []roachpb.Span
+					forEachPublicIndexTableSpan(tableDesc.TableDesc(), unusedMap, codec, func(sp roachpb.Span) {
+						spans = append(spans, sp)
+					})
+					var unmergedSpans []string
+					for _, span := range spans {
+						unmergedSpans = append(unmergedSpans, span.String())
+					}
+					require.Equal(t, test.expectedSpans, unmergedSpans)
+				})
+
+				t.Run(fmt.Sprintf("%s:%s", "spansForAllTableIndexes", test.name), func(t *testing.T) {
+					mergedSpans, err := spansForAllTableIndexes(execCfg, []catalog.TableDescriptor{tableDesc}, nil /* revs */)
+					require.NoError(t, err)
+					var mergedSpanStrings []string
+					for _, mSpan := range mergedSpans {
+						mergedSpanStrings = append(mergedSpanStrings, mSpan.String())
+					}
+					require.Equal(t, test.expectedMergedSpans, mergedSpanStrings)
+				})
 			}
-			require.Equal(t, test.expectedMergedSpans, mergedSpanStrings)
 		})
 	}
 }
@@ -8634,10 +8659,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	close(blockBackfills)
 
 	var chunkCount int32
-	// Disable running within a tenant because expected index span is not received.
-	// More investigation is necessary.
-	// https://github.com/cockroachdb/cockroach/issues/88633F
-	serverArgs := base.TestServerArgs{DefaultTestTenant: base.TestTenantDisabled}
+	serverArgs := base.TestServerArgs{}
 	serverArgs.Knobs = base.TestingKnobs{
 		// Configure knobs to block the index backfills.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -8752,7 +8774,16 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
 	inc3Spans := getSpansFromManifest(ctx, t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
-	require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
+	// NB: When running in a tenant, we don't add a split point
+	// for an index. As a result, we end up issuing a single
+	// export request for /Table/*/1-3 and while /Table/*/1-2 has
+	// no data in it, the start key is based on the start key of
+	// our request.
+	if tc.StartedDefaultTestTenant() {
+		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{1-3}", dataBankTableID), inc3Spans[0].String())
+	} else {
+		require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
+	}
 
 	// Drop the index.
 	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)

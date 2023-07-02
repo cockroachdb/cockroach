@@ -308,6 +308,9 @@ type kvStoreTokenGranter struct {
 	// computing startingIOTokens-availableIOTokens.
 	startingIOTokens                int64
 	ioTokensExhaustedDurationMetric *metric.Counter
+	availableTokensMetrics          *metric.Gauge
+	tookWithoutPermissionMetric     *metric.Counter
+	totalTokensTaken                *metric.Counter
 	exhaustedStart                  time.Time
 
 	// Estimation models.
@@ -390,6 +393,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		if sg.coordMu.availableIOTokens > 0 {
 			sg.subtractTokensLocked(count, false)
 			sg.coordMu.diskBWTokensUsed[wc] += count
+			sg.totalTokensTaken.Inc(count)
 			return grantSuccess
 		}
 	case admissionpb.ElasticWorkClass:
@@ -397,6 +401,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 			sg.coordMu.elasticDiskBWTokensAvailable -= count
 			sg.subtractTokensLocked(count, false)
 			sg.coordMu.diskBWTokensUsed[wc] += count
+			sg.totalTokensTaken.Inc(count)
 			return grantSuccess
 		}
 	}
@@ -427,6 +432,8 @@ func (sg *kvStoreTokenGranter) tookWithoutPermission(workClass admissionpb.WorkC
 func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64, demuxHandle int8) {
 	wc := admissionpb.WorkClass(demuxHandle)
 	sg.subtractTokensLocked(count, false)
+	sg.tookWithoutPermissionMetric.Inc(count)
+	sg.totalTokensTaken.Inc(count)
 	if wc == admissionpb.ElasticWorkClass {
 		sg.coordMu.elasticDiskBWTokensAvailable -= count
 	}
@@ -453,6 +460,7 @@ func (sg *kvStoreTokenGranter) subtractTokensLocked(count int64, forceTickMetric
 			sg.exhaustedStart = now
 		}
 	}
+	sg.availableTokensMetrics.Update(sg.coordMu.availableIOTokens)
 }
 
 // requesterHasWaitingRequests implements granterWithLockedCalls.
@@ -516,6 +524,7 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 		sg.coordMu.availableIOTokens = ioTokenCapacity
 	}
 	sg.startingIOTokens = sg.coordMu.availableIOTokens
+	sg.availableTokensMetrics.Update(sg.coordMu.availableIOTokens)
 
 	sg.coordMu.elasticDiskBWTokensAvailable += elasticDiskBandwidthTokens
 	if sg.coordMu.elasticDiskBWTokensAvailable > elasticDiskBandwidthTokensCapacity {
@@ -671,6 +680,24 @@ var (
 		Name:        "admission.granter.io_tokens_exhausted_duration.kv",
 		Help:        "Total duration when IO tokens were exhausted, in micros",
 		Measurement: "Microseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvIONumIOTokensTookWithoutPermission = metric.Metadata{
+		Name:        "admission.granter.io_tokens_took_without_permission.kv",
+		Help:        "Total number of tokens taken without permission",
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvIOTotalTokensTaken = metric.Metadata{
+		Name:        "admission.granter.io_tokens_taken.kv",
+		Help:        "Total number of tokens taken",
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvIOTokensAvailable = metric.Metadata{
+		Name:        "admission.granter.io_tokens_available.kv",
+		Help:        "Number of tokens available",
+		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
 )

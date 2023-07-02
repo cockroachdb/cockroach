@@ -609,7 +609,7 @@ subtest test_table_indexes
 statement ok
 CREATE TABLE poor_t (a INT PRIMARY KEY, b INT, INDEX t_idx_b (b) USING HASH WITH (bucket_count=8))
 
-query ITITTBBBI colnames
+query ITITTBBBI colnames,rowsort
 SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_unique, is_inverted, is_sharded, shard_bucket_count
   FROM crdb_internal.table_indexes
  WHERE descriptor_name = 'poor_t'
@@ -1086,3 +1086,11 @@ SELECT c0 FROM t103755 WHERE c0 < 0 OR (c0 IN (VALUES (2)) AND c1 IN (6,8,9)) OR
 ----
 -20
 -10
+
+statement ok
+CREATE TABLE t104484 (c0 VARBIT(10) AS (B'1') STORED)
+
+# We use '$' to match the end of the error text, since we want to assert
+# that the error does not include the schema plan details.
+statement error cannot create a sharded index on a computed column$
+CREATE INDEX ON t104484(c0 DESC) USING HASH

@@ -178,8 +178,8 @@ export const schemaInsightsSortLocalSetting = new LocalSetting<
 export const selectSchemaInsights = createSelector(
   (state: AdminUIState) => state.cachedData,
   adminUiState => {
-    if (!adminUiState.schemaInsights) return [];
-    return adminUiState.schemaInsights.data?.results;
+    if (!adminUiState?.schemaInsights) return [];
+    return adminUiState?.schemaInsights.data?.results;
   },
 );
 

@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "clusterrepl_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cmdccl/clusterrepl",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/ccl/streamingccl",
+        "//pkg/ccl/streamingccl/streamclient",
+        "//pkg/cli/exit",
+        "//pkg/keys",
+        "//pkg/repstream/streampb",
+        "//pkg/roachpb",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/protoutil",
+        "//pkg/util/span",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx_v4//:pgx",
+    ],
+)
+
+go_binary(
+    name = "clusterrepl",
+    embed = [":clusterrepl_lib"],
+    visibility = ["//visibility:public"],
+)

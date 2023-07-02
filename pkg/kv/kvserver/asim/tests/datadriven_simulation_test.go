@@ -19,11 +19,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
@@ -42,14 +49,50 @@ import (
 //     simulation. The default values are: rw_ratio=0 rate=0 min_block=1
 //     max_block=1 min_key=1 max_key=10_000 access_skew=false.
 //
-//   - "gen_state" [stores=<int>] [ranges=<int>] [placement_skew=<bool>]
-//     [repl_factor=<int>] [keyspace=<int>]
-//     Initialize the state generator parameters. On the next call to eval, the
-//     state generator is called to create the initial state used in the
-//     simulation. The default values are: stores=3 ranges=1 repl_factor=3
+//   - "ken_cluster" [nodes=<int>] [stores_per_node=<int>]
+//     Initialize the cluster generator parameters. On the next call to eval,
+//     the cluster generator is called to create the initial state used in the
+//     simulation. The default values are: nodes=3 stores_per_node=1.
+//
+//   - "load_cluster": config=<name>
+//     Load a defined cluster configuration to be the generated cluster in the
+//     simulation. The available confiurations are: single_region: 15 nodes in
+//     region=US, 5 in each zone US_1/US_2/US_3. single_region_multi_store: 3
+//     nodes, 5 stores per node with the same zone/region configuration as
+//     above. multi_region: 36 nodes, 12 in each region and 4 in each zone,
+//     regions having 3 zones. complex: 28 nodes, 3 regions with a skewed
+//     number of nodes per region.
+//
+//   - "gen_ranges" [ranges=<int>] [placement_skew=<bool>] [repl_factor=<int>]
+//     [keyspace=<int>] [range_bytes=<int>]
+//     Initialize the range generator parameters. On the next call to eval, the
+//     range generator is called to assign an ranges and their replica
+//     placement. The default values are ranges=1 repl_factor=3
 //     placement_skew=false keyspace=10000.
 //
-//   - "assertion" type=<string> stat=<string> ticks=<int> threshold=<float>
+//   - set_liveness node=<int> [delay=<duration>]
+//     status=(dead|decommisssioning|draining|unavailable)
+//     Set the liveness status of the node with ID NodeID. This applies at the
+//     start of the simulation or with some delay after the simulation starts,
+//     if specified.
+//
+//   - add_node: [stores=<int>] [locality=<string>] [delay=<duration>]
+//     Add a node to the cluster after initial generation with some delay,
+//     locality and number of stores on the node. The default values are
+//     stores=0 locality=none delay=0.
+//
+//   - set_span_config [delay=<duration>]
+//     [startKey, endKey): <span_config> Provide a new line separated list
+//     of spans and span configurations e.g.
+//     [0,100): num_replicas=5 num_voters=3 constraints={'+region=US_East'}
+//     [100, 500): num_replicas=3
+//     ...
+//     This will update the span config for the span [0,100) to specify 3
+//     voting replicas and 2 non-voting replicas, with a constraint that all
+//     replicas are in the region US_East.
+//
+//   - "assertion" type=<string> [stat=<string>] [ticks=<int>] [threshold=<float>]
+//     [store=<int>] [(under|over|unavailable|violating)=<int>]
 //     Add an assertion to the list of assertions that run against each
 //     sample on subsequent calls to eval. When every assertion holds during eval,
 //     OK is printed, otherwise the reason the assertion(s) failed is printed.
@@ -67,6 +110,16 @@ import (
 //     value over the last ticks (e.g. ticks=6) duration is greater than
 //     threshold (e.g. threshold=0.05) % of the mean, the assertion fails. This
 //     assertion applies per-store, over 'ticks' duration.
+//
+//     For type=stat assertions, if the stat (e.g. stat=replicas) value of the
+//     last ticks (e.g. ticks=5) duration is not exactly equal to threshold, the
+//     assertion fails. This applies for specified stores which must be provided
+//     with stores=(storeID,...).
+//
+//     For type=conformance assertions, you may assert on the number of
+//     replicas that you expect to be underreplicated (under),
+//     overreplicated(over), unavailable(unavailable) and violating
+//     constraints(violating) at the end of the evaluation.
 //
 //   - "setting" [rebalance_mode=<int>] [rebalance_interval=<duration>]
 //     [rebalance_qps_threshold=<float>] [split_qps_threshold=<float>]
@@ -89,14 +142,31 @@ import (
 //     is the simulated time and the y axis is the stat value. A series is
 //     rendered per-store, so if there are 10 stores, 10 series will be
 //     rendered.
+//
+//   - "topology" [sample=<int>]
+//     Print the cluster locality topology of the sample given (default=last).
+//     e.g. for the load_cluster config=single_region
+//     US
+//     ..US_1
+//     ....└── [1 2 3 4 5]
+//     ..US_2
+//     ....└── [6 7 8 9 10]
+//     ..US_3
+//     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
 	ctx := context.Background()
 	dir := datapathutils.TestDataPath(t, ".")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		const defaultKeyspace = 10000
 		loadGen := gen.BasicLoad{}
-		stateGen := gen.BasicState{}
+		var clusterGen gen.ClusterGen
+		var rangeGen gen.RangeGen = gen.BasicRanges{
+			Ranges:            1,
+			ReplicationFactor: 1,
+			KeySpace:          defaultKeyspace,
+		}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
+		eventGen := gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
 		assertions := []SimulationAssertion{}
 		runs := []asim.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -123,21 +193,177 @@ func TestDataDriven(t *testing.T) {
 				loadGen.MaxBlockSize = maxBlock
 				loadGen.MinBlockSize = minBlock
 				return ""
-			case "gen_state":
-				var stores, ranges, replFactor, keyspace = 3, 1, 3, defaultKeyspace
+			case "gen_ranges":
+				var ranges, replFactor, keyspace = 1, 3, defaultKeyspace
+				var bytes int64 = 0
 				var placementSkew bool
 
-				scanIfExists(t, d, "stores", &stores)
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
 				scanIfExists(t, d, "placement_skew", &placementSkew)
 				scanIfExists(t, d, "keyspace", &keyspace)
+				scanIfExists(t, d, "bytes", &bytes)
 
-				stateGen.Stores = stores
-				stateGen.ReplicationFactor = replFactor
-				stateGen.KeySpace = keyspace
-				stateGen.Ranges = ranges
-				stateGen.SkewedPlacement = placementSkew
+				var placementType gen.PlacementType
+				if placementSkew {
+					placementType = gen.Skewed
+				} else {
+					placementType = gen.Uniform
+				}
+				rangeGen = gen.BasicRanges{
+					Ranges:            ranges,
+					PlacementType:     placementType,
+					KeySpace:          keyspace,
+					ReplicationFactor: replFactor,
+					Bytes:             bytes,
+				}
+				return ""
+			case "topology":
+				var sample = len(runs)
+				scanIfExists(t, d, "sample", &sample)
+				top := runs[sample-1].S.Topology()
+				return (&top).String()
+			case "gen_cluster":
+				var nodes = 3
+				var storesPerNode = 1
+				scanIfExists(t, d, "nodes", &nodes)
+				scanIfExists(t, d, "stores_per_node", &storesPerNode)
+				clusterGen = gen.BasicCluster{
+					Nodes:         nodes,
+					StoresPerNode: storesPerNode,
+				}
+				return ""
+			case "load_cluster":
+				var config string
+				var clusterInfo state.ClusterInfo
+				scanArg(t, d, "config", &config)
+
+				switch config {
+				case "single_region":
+					clusterInfo = state.SingleRegionConfig
+				case "single_region_multi_store":
+					clusterInfo = state.SingleRegionMultiStoreConfig
+				case "multi_region":
+					clusterInfo = state.MultiRegionConfig
+				case "complex":
+					clusterInfo = state.ComplexConfig
+				default:
+					panic(fmt.Sprintf("unknown cluster config %s", config))
+				}
+
+				clusterGen = gen.LoadedCluster{
+					Info: clusterInfo,
+				}
+				return ""
+			case "add_node":
+				var delay time.Duration
+				var numStores = 1
+				var localityString string
+				scanIfExists(t, d, "delay", &delay)
+				scanIfExists(t, d, "stores", &numStores)
+				scanIfExists(t, d, "locality", &localityString)
+
+				addEvent := event.DelayedEvent{
+					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
+						node := s.AddNode()
+						if localityString != "" {
+							var locality roachpb.Locality
+							if err := locality.Set(localityString); err != nil {
+								panic(fmt.Sprintf("unable to set node locality %s", err.Error()))
+							}
+							s.SetNodeLocality(node.NodeID(), locality)
+						}
+						for i := 0; i < numStores; i++ {
+							if _, ok := s.AddStore(node.NodeID()); !ok {
+								panic(fmt.Sprintf("adding store to node=%d failed", node))
+							}
+						}
+					},
+					At: settingsGen.Settings.StartTime.Add(delay),
+				}
+				eventGen.DelayedEvents = append(eventGen.DelayedEvents, addEvent)
+				return ""
+			case "set_span_config":
+				var delay time.Duration
+				scanIfExists(t, d, "delay", &delay)
+				for _, line := range strings.Split(d.Input, "\n") {
+					line = strings.TrimSpace(line)
+					if line == "" {
+						continue
+					}
+					tag, data, found := strings.Cut(line, ":")
+					require.True(t, found)
+					tag, data = strings.TrimSpace(tag), strings.TrimSpace(data)
+					span := spanconfigtestutils.ParseSpan(t, tag)
+					conf := spanconfigtestutils.ParseZoneConfig(t, data).AsSpanConfig()
+					eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
+						EventFn: func(ctx context.Context, tick time.Time, s state.State) {
+							s.SetSpanConfig(span, conf)
+						},
+						At: settingsGen.Settings.StartTime.Add(delay),
+					})
+				}
+				return ""
+			case "set_liveness":
+				var nodeID int
+				var liveness string
+				var delay time.Duration
+				livenessStatus := 3
+				scanArg(t, d, "node", &nodeID)
+				scanArg(t, d, "liveness", &liveness)
+				scanIfExists(t, d, "delay", &delay)
+				switch liveness {
+				case "unknown":
+					livenessStatus = 0
+				case "dead":
+					livenessStatus = 1
+				case "unavailable":
+					livenessStatus = 2
+				case "live":
+					livenessStatus = 3
+				case "decommissioning":
+					livenessStatus = 4
+				case "draining":
+					livenessStatus = 5
+					panic(fmt.Sprintf("unkown liveness status: %s", liveness))
+				}
+				eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
+					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
+						s.SetNodeLiveness(
+							state.NodeID(nodeID),
+							livenesspb.NodeLivenessStatus(livenessStatus),
+						)
+					},
+					At: settingsGen.Settings.StartTime.Add(delay),
+				})
+				return ""
+			case "set_capacity":
+				var store int
+				var ioThreshold float64 = -1
+				var capacity, available int64 = -1, -1
+				var delay time.Duration
+
+				scanArg(t, d, "store", &store)
+				scanIfExists(t, d, "io_threshold", &ioThreshold)
+				scanIfExists(t, d, "capacity", &capacity)
+				scanIfExists(t, d, "available", &available)
+				scanIfExists(t, d, "delay", &delay)
+
+				capacityOverride := state.NewCapacityOverride()
+				capacityOverride.Capacity = capacity
+				capacityOverride.Available = available
+				if ioThreshold != -1 {
+					capacityOverride.IOThreshold = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
+				}
+
+				eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
+					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
+						log.Infof(ctx, "setting capacity override %+v", capacityOverride)
+						s.SetCapacityOverride(state.StoreID(store), capacityOverride)
+					},
+					At: settingsGen.Settings.StartTime.Add(delay),
+				})
+
 				return ""
 			case "eval":
 				samples := 1
@@ -158,7 +384,8 @@ func TestDataDriven(t *testing.T) {
 				for sample := 0; sample < samples; sample++ {
 					assertionFailures := []string{}
 					simulator := gen.GenerateSimulation(
-						duration, stateGen, loadGen, settingsGen, seedGen.Int63(),
+						duration, clusterGen, rangeGen, loadGen,
+						settingsGen, eventGen, seedGen.Int63(),
 					)
 					simulator.RunSim(ctx)
 					history := simulator.History()
@@ -195,22 +422,53 @@ func TestDataDriven(t *testing.T) {
 				var threshold float64
 
 				scanArg(t, d, "type", &typ)
-				scanArg(t, d, "stat", &stat)
-				scanArg(t, d, "ticks", &ticks)
-				scanArg(t, d, "threshold", &threshold)
 
 				switch typ {
 				case "balance":
+					scanArg(t, d, "stat", &stat)
+					scanArg(t, d, "ticks", &ticks)
+					scanArg(t, d, "threshold", &threshold)
 					assertions = append(assertions, balanceAssertion{
 						ticks:     ticks,
 						stat:      stat,
 						threshold: threshold,
 					})
 				case "steady":
+					scanArg(t, d, "stat", &stat)
+					scanArg(t, d, "ticks", &ticks)
+					scanArg(t, d, "threshold", &threshold)
 					assertions = append(assertions, steadyStateAssertion{
 						ticks:     ticks,
 						stat:      stat,
 						threshold: threshold,
+					})
+				case "stat":
+					var stores []int
+					scanArg(t, d, "stat", &stat)
+					scanArg(t, d, "ticks", &ticks)
+					scanArg(t, d, "threshold", &threshold)
+					scanArg(t, d, "stores", &stores)
+					assertions = append(assertions, storeStatAssertion{
+						ticks:         ticks,
+						stat:          stat,
+						acceptedValue: threshold,
+						stores:        stores,
+					})
+				case "conformance":
+					var under, over, unavailable, violating int
+					under = conformanceAssertionSentinel
+					over = conformanceAssertionSentinel
+					unavailable = conformanceAssertionSentinel
+					violating = conformanceAssertionSentinel
+					scanIfExists(t, d, "under", &under)
+					scanIfExists(t, d, "over", &over)
+					scanIfExists(t, d, "unavailable", &unavailable)
+					scanIfExists(t, d, "violating", &violating)
+					assertions = append(assertions, conformanceAssertion{
+						underreplicated: under,
+						overreplicated:  over,
+						violating:       violating,
+						unavailable:     unavailable,
 					})
 				}
 				return ""
@@ -221,6 +479,7 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
 				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
 				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
+				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
 				return ""
 			case "plot":
 				var stat string
@@ -228,7 +487,7 @@ func TestDataDriven(t *testing.T) {
 				var buf strings.Builder
 
 				scanArg(t, d, "stat", &stat)
-				scanArg(t, d, "sample", &sample)
+				scanIfExists(t, d, "sample", &sample)
 				scanIfExists(t, d, "height", &height)
 				scanIfExists(t, d, "width", &width)
 
@@ -267,15 +526,20 @@ func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{})
 		d.ScanArgs(t, key, &tmp)
 		*dest, err = strconv.ParseFloat(tmp, 64)
 		require.NoError(t, err)
-	case *string, *int, *int64, *uint64, *bool:
+	case *[]int, *string, *int, *int64, *uint64, *bool:
 		d.ScanArgs(t, key, dest)
 	default:
 		require.Fail(t, "unsupported type %T", dest)
 	}
 }
 
-func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
+// scanIfExists looks up the first arg in CmdArgs array that matches the
+// provided firstKey. If found, it scans the value into dest and returns true;
+// Otherwise, it does nothing and returns false.
+func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interface{}) bool {
 	if d.HasArg(key) {
 		scanArg(t, d, key, dest)
+		return true
 	}
+	return false
 }

@@ -348,7 +348,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 		// VerifyDialback verifies if a reverse connection to the sending node can
 		// be established.
-		return rpcContext.VerifyDialback(ctx, req, resp, cfg.Locality)
+		return rpc.VerifyDialback(ctx, rpcContext, req, resp, cfg.Locality, &rpcContext.Settings.SV)
 	}
 
 	registry.AddMetricStruct(rpcContext.Metrics())
@@ -537,12 +537,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			nodeLiveness.RegisterCallback(nodeLivenessKnobs.IsLiveCallback)
 		}
 	}
+	nodeLiveCountFn := func() int {
+		var count int
+		for _, nv := range nodeLiveness.ScanNodeVitalityFromCache() {
+			if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
+				count++
+			}
+		}
+		return count
+	}
 	storePool := storepool.NewStorePool(
 		cfg.AmbientCtx,
 		st,
 		g,
 		clock,
-		nodeLiveness.GetNodeCount,
+		nodeLiveCountFn,
 		nodeLivenessFn,
 		/* deterministic */ false,
 	)
@@ -998,7 +1007,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		serverIterator,
 		spanConfig.reporter,
 		clock,
-		distSender,
 		rangestats.NewFetcher(db),
 		node,
 	)

@@ -98,16 +98,24 @@ func Build(
 		Targets:       make([]scpb.Target, 0, len(bs.output)),
 		Statements:    els.statements,
 		Authorization: els.authorization,
-		NameMappings:  makeNameMappings(b),
+		NameMappings:  makeNameMappings(bs.output),
 	}
 	initial := make([]scpb.Status, 0, len(bs.output))
 	current := make([]scpb.Status, 0, len(bs.output))
 	version := dependencies.ClusterSettings().Version.ActiveVersion(ctx)
 	withLogEvent := make([]scpb.Target, 0, len(bs.output))
+	var extraTargets []struct {
+		e elementState
+		t scpb.Target
+	}
 	for _, e := range bs.output {
-		if e.metadata.Size() == 0 {
+		if !e.metadata.TargetIsLinkedToSchemaChange() && !shouldElementBeRetainedWithoutMetadata(e.element, e.current) {
 			// Exclude targets which weren't explicitly set.
 			// Explicitly-set targets have non-zero values in the target metadata.
+			// Exceptions are TableData/IndexData elements which allow our planning
+			// execution to skip certain transitions and fences like the two version
+			// invariant. We will only keep these for descriptors going through
+			// a transition.
 			continue
 		}
 		if !version.IsActive(screl.MinElementVersion(e.element)) {
@@ -121,15 +129,37 @@ func Build(
 			// max version.
 			continue
 		}
+
 		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
-		ts.Targets = append(ts.Targets, t)
-		initial = append(initial, e.initial)
-		current = append(current, e.current)
-		if e.withLogEvent {
-			withLogEvent = append(withLogEvent, t)
+		if t.TargetIsLinkedToSchemaChange() {
+			ts.Targets = append(ts.Targets, t)
+			initial = append(initial, e.initial)
+			current = append(current, e.current)
+			if e.withLogEvent {
+				withLogEvent = append(withLogEvent, t)
+			}
+		} else if b.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_2) {
+			extraTargets = append(extraTargets, struct {
+				e elementState
+				t scpb.Target
+			}{e: e, t: t})
+		}
+
+	}
+	seenDescriptors := screl.AllTargetDescIDs(ts)
+	// We are going to retain certain elements for metadata purposes, like
+	// TableData/IndexData elements, which will allow the declarative schema
+	// changer to know if a given table is empty. Once these elements exist
+	// the two-version invariant is applied when making mutations to elements.
+	// Only emit data elements for descriptors if they are references with
+	// some transition.
+	for _, ex := range extraTargets {
+		if seenDescriptors.Contains(screl.GetDescID(ex.t.Element())) {
+			ts.Targets = append(ts.Targets, ex.t)
+			initial = append(initial, ex.e.initial)
+			current = append(current, ex.e.current)
 		}
 	}
-
 	// Ensure none of the involving descriptors have an ongoing schema change,
 	// unless it's newly created.
 	ensureNoConcurrentSchemaChange(&ts, bs)
@@ -241,7 +271,8 @@ type cachedDesc struct {
 	desc             catalog.Descriptor
 	prefix           tree.ObjectNamePrefix
 	backrefs         catalog.DescriptorIDSet
-	ers              *elementResultSet
+	outputIndexes    []int
+	cachedCollection *scpb.ElementCollection[scpb.Element]
 	privileges       map[privilege.Kind]error
 	hasOwnership     bool
 	backrefsResolved bool
@@ -302,7 +333,7 @@ func newBuilderState(
 	return &bs
 }
 
-func makeNameMappings(b scbuildstmt.BuildCtx) (ret scpb.NameMappings) {
+func makeNameMappings(elementStates []elementState) (ret scpb.NameMappings) {
 	id2Idx := make(map[catid.DescID]int)
 	getOrCreate := func(id catid.DescID) (_ *scpb.NameMapping, isNew bool) {
 		if idx, ok := id2Idx[id]; ok {
@@ -322,39 +353,39 @@ func makeNameMappings(b scbuildstmt.BuildCtx) (ret scpb.NameMappings) {
 	isNotDropping := func(ts scpb.TargetStatus) bool {
 		return ts != scpb.ToAbsent && ts != scpb.Transient
 	}
-	scpb.ForEachNamespace(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.Namespace) {
-		dnm, isNew := getOrCreate(e.DescriptorID)
-		if isNew || isNotDropping(ts) {
-			dnm.Name = e.Name
-		}
-	})
-	scpb.ForEachFunctionName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.FunctionName) {
-		dnm, isNew := getOrCreate(e.FunctionID)
-		if isNew || isNotDropping(ts) {
-			dnm.Name = e.Name
-		}
-	})
-	scpb.ForEachIndexName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.IndexName) {
-		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-			ret[idx].Indexes[e.IndexID] = e.Name
-		}
-	})
-	scpb.ForEachColumnName(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ColumnName) {
-		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-			ret[idx].Columns[e.ColumnID] = e.Name
-		}
-	})
-	scpb.ForEachColumnFamily(b, func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ColumnFamily) {
-		if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-			ret[idx].Families[e.FamilyID] = e.Name
-		}
-	})
-	scpb.ForEachConstraintWithoutIndexName(b,
-		func(_ scpb.Status, ts scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
-			if idx, ok := id2Idx[e.TableID]; ok && isNotDropping(ts) {
-				ret[idx].Constraints[e.ConstraintID] = e.Name
+	for _, es := range elementStates {
+		switch e := es.element.(type) {
+		case *scpb.Namespace:
+			dnm, isNew := getOrCreate(e.DescriptorID)
+			if isNew || isNotDropping(es.target) {
+				dnm.Name = e.Name
 			}
-		})
+		case *scpb.FunctionName:
+			dnm, isNew := getOrCreate(e.FunctionID)
+			if isNew || isNotDropping(es.target) {
+				dnm.Name = e.Name
+			}
+		}
+	}
+	for _, es := range elementStates {
+		if !isNotDropping(es.target) {
+			continue
+		}
+		idx, ok := id2Idx[screl.GetDescID(es.element)]
+		if !ok {
+			continue
+		}
+		switch e := es.element.(type) {
+		case *scpb.IndexName:
+			ret[idx].Indexes[e.IndexID] = e.Name
+		case *scpb.ColumnName:
+			ret[idx].Columns[e.ColumnID] = e.Name
+		case *scpb.ColumnFamily:
+			ret[idx].Families[e.FamilyID] = e.Name
+		case *scpb.ConstraintWithoutIndexName:
+			ret[idx].Constraints[e.ConstraintID] = e.Name
+		}
+	}
 	sort.Sort(ret)
 	return ret
 }
@@ -440,4 +471,17 @@ func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 		TreeAnnotator: b.TreeAnnotator,
 		EventLogState: b.EventLogStateWithNewSourceElementID(),
 	}
+}
+
+// shouldElementBeRetainedWithoutMetadata tracks which elements should
+// be retained even if no metadata exists. These elements may contain
+// other hints that are used for planning such as TableData/IndexData elements
+// that allow us to skip the two version invariant or backfills/validation
+// at runtime.
+func shouldElementBeRetainedWithoutMetadata(element scpb.Element, status scpb.Status) bool {
+	switch element.(type) {
+	case *scpb.TableData, *scpb.IndexData:
+		return status == scpb.Status_PUBLIC
+	}
+	return false
 }

@@ -12,14 +12,14 @@ ii'
 --
 schemas: completing for "xor" (7,10)
 --sql:
-SELECT nspname AS completion,
-       'schema' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
-       $2:::INT AS start,
-       $3:::INT AS end
-  FROM pg_catalog.pg_namespace t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
+SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 --placeholders: []interface {}{"xor", 7, 10}
@@ -32,14 +32,14 @@ ii_
 --
 schemas: completing for "" (12,12)
 --sql:
-SELECT nspname AS completion,
-       'schema' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
-       $2:::INT AS start,
-       $3:::INT AS end
-  FROM pg_catalog.pg_namespace t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
+SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 --placeholders: []interface {}{"", 12, 12}
@@ -85,14 +85,14 @@ ii'
 --
 schemas: completing for "pg_" (7,11)
 --sql:
-SELECT nspname AS completion,
-       'schema' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
-       $2:::INT AS start,
-       $3:::INT AS end
-  FROM pg_catalog.pg_namespace t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
+SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 --placeholders: []interface {}{"pg_", 7, 11}
@@ -106,14 +106,14 @@ ii'
 --
 schemas: completing for "PG_" (7,11)
 --sql:
-SELECT nspname AS completion,
-       'schema' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
-       $2:::INT AS start,
-       $3:::INT AS end
-  FROM pg_catalog.pg_namespace t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
+SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 --placeholders: []interface {}{"PG_", 7, 11}

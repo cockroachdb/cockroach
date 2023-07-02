@@ -213,6 +213,25 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="WAL Bytes Written"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      tooltip={`Bytes written to WAL files ${tooltipSelection}.`}
+    >
+      <Axis units={AxisUnits.Bytes} label="written bytes">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.storage.wal.bytes_written"
+            title={getNodeNameById(nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Compactions"
       sources={storeSources}
       tenantSource={tenantSource}

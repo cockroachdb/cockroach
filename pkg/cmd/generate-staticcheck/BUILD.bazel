@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
@@ -11,7 +10,6 @@ go_library(
         "@co_honnef_go_tools//simple",
         "@co_honnef_go_tools//staticcheck",
         "@co_honnef_go_tools//stylecheck",
-        "@co_honnef_go_tools//unused",
     ],
 )
 
@@ -20,5 +18,3 @@ go_binary(
     embed = [":generate-staticcheck_lib"],
     visibility = ["//visibility:public"],
 )
-
-get_x_data(name = "get_x_data")

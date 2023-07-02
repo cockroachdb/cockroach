@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -60,6 +62,16 @@ func (n *createFunctionNode) startExec(params runParams) error {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "the function cannot refer to other databases")
 		}
 	}
+
+	scDesc, err := params.p.descCollection.ByName(params.p.Txn()).Get().Schema(params.ctx, n.dbDesc, n.scDesc.GetName())
+	if err != nil {
+		return err
+	}
+	if scDesc.SchemaKind() == catalog.SchemaTemporary {
+		return unimplemented.NewWithIssue(104687, "cannot create UDFs under a temporary schema")
+	}
+
+	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("function"))
 
 	mutScDesc, err := params.p.descCollection.MutableByName(params.p.Txn()).Schema(params.ctx, n.dbDesc, n.scDesc.GetName())
 	if err != nil {
@@ -105,11 +117,8 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 
-	for _, option := range n.cf.Options {
-		err := setFuncOption(params, udfDesc, option)
-		if err != nil {
-			return err
-		}
+	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
+		return err
 	}
 
 	if err := n.addUDFReferences(udfDesc, params); err != nil {
@@ -182,11 +191,8 @@ func (n *createFunctionNode) replaceFunction(udfDesc *funcdesc.Mutable, params r
 	if err := validateVolatilityInOptions(n.cf.Options, udfDesc); err != nil {
 		return err
 	}
-	for _, option := range n.cf.Options {
-		err := setFuncOption(params, udfDesc, option)
-		if err != nil {
-			return err
-		}
+	if err := setFuncOptions(params, udfDesc, n.cf.Options); err != nil {
+		return err
 	}
 
 	// Removing all existing references before adding new references.
@@ -392,41 +398,61 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 	return nil
 }
 
-func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.FunctionOption) error {
-	switch t := option.(type) {
-	case tree.FunctionVolatility:
-		v, err := funcinfo.VolatilityToProto(t)
-		if err != nil {
-			return err
+func setFuncOptions(
+	params runParams, udfDesc *funcdesc.Mutable, options tree.FunctionOptions,
+) error {
+	var err error
+	var body string
+	var lang catpb.Function_Language
+	for _, option := range options {
+		switch t := option.(type) {
+		case tree.FunctionVolatility:
+			vol, err := funcinfo.VolatilityToProto(t)
+			if err != nil {
+				return err
+			}
+			udfDesc.SetVolatility(vol)
+		case tree.FunctionLeakproof:
+			udfDesc.SetLeakProof(bool(t))
+		case tree.FunctionNullInputBehavior:
+			v, err := funcinfo.NullInputBehaviorToProto(t)
+			if err != nil {
+				return err
+			}
+			udfDesc.SetNullInputBehavior(v)
+		case tree.FunctionLanguage:
+			lang, err = funcinfo.FunctionLangToProto(t)
+			if err != nil {
+				return err
+			}
+			udfDesc.SetLang(lang)
+		case tree.FunctionBodyStr:
+			// Handle the body after the loop, since we don't yet know what language
+			// it is.
+			body = string(t)
+		default:
+			return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
 		}
-		udfDesc.SetVolatility(v)
-	case tree.FunctionLeakproof:
-		udfDesc.SetLeakProof(bool(t))
-	case tree.FunctionNullInputBehavior:
-		v, err := funcinfo.NullInputBehaviorToProto(t)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetNullInputBehavior(v)
-	case tree.FunctionLanguage:
-		v, err := funcinfo.FunctionLangToProto(t)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetLang(v)
-	case tree.FunctionBodyStr:
+	}
+
+	switch lang {
+	case catpb.Function_SQL:
 		// Replace any sequence names in the function body with IDs.
-		seqReplacedFuncBody, err := replaceSeqNamesWithIDs(params.ctx, params.p, string(t), true)
+		seqReplacedFuncBody, err := replaceSeqNamesWithIDs(params.ctx, params.p, body, true)
 		if err != nil {
 			return err
 		}
-		typeReplacedFuncBody, err := serializeUserDefinedTypes(params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */)
+		typeReplacedFuncBody, err := serializeUserDefinedTypes(
+			params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true, /* multiStmt */
+		)
 		if err != nil {
 			return err
 		}
 		udfDesc.SetFuncBody(typeReplacedFuncBody)
-	default:
-		return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
+	case catpb.Function_PLPGSQL:
+		// TODO(drewk): make replaceSeqNamesWithIDs and serializeUserDefinedTypes
+		// play nice with PL/pgSQL.
+		udfDesc.SetFuncBody(body)
 	}
 
 	return nil

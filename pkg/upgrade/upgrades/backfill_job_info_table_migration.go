@@ -42,13 +42,20 @@ const (
 	backfillJobInfoProgressStmt = backfillJobInfoSharedPrefix + jobs.LegacyProgressKey + `', progress` + backfillJobInfoSharedSuffix
 )
 
+// TestingSkipInfoBackfill is a testing hook.
+var TestingSkipInfoBackfill bool
+
 func backfillJobInfoTable(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
+	if TestingSkipInfoBackfill {
+		return nil
+	}
 
 	for step, stmt := range []string{backfillJobInfoPayloadStmt, backfillJobInfoProgressStmt} {
 		var resumeAfter int
 		for batch, done := 0, false; !done; batch++ {
+			var lastAdded int
 			if err := d.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				last, err := d.InternalExecutor.QueryBufferedEx(
 					ctx,
@@ -63,9 +70,8 @@ func backfillJobInfoTable(
 				if err != nil {
 					return errors.Wrap(err, "failed to backfill")
 				}
-				resumeAfter = 0
 				if len(last) == 1 && len(last[0]) == 1 && last[0][0] != tree.DNull {
-					resumeAfter = int(tree.MustBeDInt(last[0][0]))
+					lastAdded = int(tree.MustBeDInt(last[0][0]))
 				} else {
 					done = true
 				}
@@ -77,6 +83,7 @@ func backfillJobInfoTable(
 			if done {
 				break
 			}
+			resumeAfter = lastAdded
 		}
 	}
 	return nil

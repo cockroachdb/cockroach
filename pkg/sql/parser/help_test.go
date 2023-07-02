@@ -11,6 +11,7 @@
 package parser
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -65,6 +66,11 @@ func TestContextualHelp(t *testing.T) {
 
 		{`ALTER TENANT foo START SERVICE ??`, `ALTER TENANT SERVICE`},
 		{`ALTER TENANT foo STOP ??`, `ALTER TENANT SERVICE`},
+
+		{`ALTER TENANT foo GRANT ??`, `ALTER TENANT CAPABILITY`},
+		{`ALTER TENANT foo REVOKE ??`, `ALTER TENANT CAPABILITY`},
+
+		{`ALTER TENANT ??`, `ALTER TENANT`},
 
 		{`ALTER TYPE ??`, `ALTER TYPE`},
 		{`ALTER TYPE t ??`, `ALTER TYPE`},
@@ -601,3 +607,17 @@ func TestHelpKeys(t *testing.T) {
 		})
 	}
 }
+
+// TestNoEmptySyntaxSectionInHelpTexts checks that help texts do not
+// generate an empty "Syntax" section.
+func TestNoEmptySyntaxSectionInHelpTexts(t *testing.T) {
+	for key, body := range HelpMessages {
+		msg := HelpMessage{Command: key, HelpMessageBody: body}
+		bodyMsg := msg.String()
+		if emptySyntaxRe.MatchString(bodyMsg) {
+			t.Errorf("help message for %q contains empty syntax section:\n%s", key, bodyMsg)
+		}
+	}
+}
+
+var emptySyntaxRe = regexp.MustCompile(`(?s)Syntax:\s*(See also:|$)`)

@@ -880,6 +880,9 @@ message TxnInfo {
   // Time elapsed since this transaction started execution.
   google.protobuf.Duration elapsed_time = 16
   [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+
+  // The isolation level of the transaction.
+  string isolation_level = 17;
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -1992,6 +1995,55 @@ message CriticalNodesResponse {
   roachpb.SpanConfigConformanceReport report = 2 [(gogoproto.nullable) = false];
 }
 
+message NetworkConnectivityRequest {
+  string node_id = 1 [
+    (gogoproto.customname) = "NodeID"
+  ];
+}
+
+message NetworkConnectivityResponse {
+  enum ConnectionStatus {
+    // Indicates that system couldn't get information about nodes connection.
+    UNKNOWN = 0;
+    // Source node established connection to target node.
+    ESTABLISHED = 1;
+    // Indicates that node is attempting to establish connection to target node for the first time.
+    ESTABLISHING = 2;
+    // Indicates that connection state is unhealthy.
+    ERROR = 3;
+  }
+
+  message Peer {
+    google.protobuf.Duration latency = 1 [
+      (gogoproto.nullable) = false,
+      (gogoproto.stdduration) = true
+    ];
+    ConnectionStatus status = 2;
+    string address = 4;
+    roachpb.Locality locality = 5;
+    string error = 6;
+  }
+
+  message Connectivity {
+    map<int32, Peer> peers = 1 [
+      (gogoproto.nullable) = false,
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+  }
+
+  map<int32, Connectivity> connections = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  // errors contains any errors that occurred during fan-out calls to other nodes.
+  map<int32, string> errors_by_node_id = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "ErrorsByNodeID",
+    (gogoproto.nullable) = false
+  ];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2454,4 +2506,10 @@ service Status {
   // ListExecutionInsights returns potentially problematic statements cluster-wide,
   // along with actions we suggest the application developer might take to remedy them.
   rpc ListExecutionInsights(ListExecutionInsightsRequest) returns (ListExecutionInsightsResponse) {}
+
+  rpc NetworkConnectivity(NetworkConnectivityRequest) returns (NetworkConnectivityResponse) {
+    option (google.api.http) = {
+      get: "/_status/connectivity"
+    };
+  }
 }

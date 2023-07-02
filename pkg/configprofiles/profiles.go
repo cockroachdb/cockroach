@@ -24,11 +24,11 @@ type alias struct {
 
 var aliases = map[string]alias{
 	"replication-source": {
-		aliasTarget: "multitenant+app+sharedservice",
+		aliasTarget: "multitenant+app+sharedservice+repl",
 		description: "configuration suitable for a replication source cluster",
 	},
 	"replication-target": {
-		aliasTarget: "multitenant+noapp",
+		aliasTarget: "multitenant+noapp+repl",
 		description: "configuration suitable for a replication target cluster",
 	},
 }
@@ -64,27 +64,17 @@ var staticProfiles = map[string]configProfile{
 		description: "multi-tenant cluster with no secondary tenant defined yet",
 		tasks:       multitenantClusterInitTasks,
 	},
+	"multitenant+noapp+repl": {
+		description: "multi-tenant cluster with no secondary tenant defined yet, with replication enabled",
+		tasks:       enableReplication(multitenantClusterInitTasks),
+	},
 	"multitenant+app+sharedservice": {
 		description: "multi-tenant cluster with one secondary tenant configured to serve SQL application traffic",
-		tasks: append(
-			multitenantClusterInitTasks,
-			makeTask("create an application tenant",
-				nil, /* nonTxnSQL */
-				/* txnSQL */ []string{
-					// Create the app tenant record.
-					"CREATE TENANT application",
-					// Run the service for the application tenant.
-					"ALTER TENANT application START SERVICE SHARED",
-				},
-			),
-			makeTask("activate application tenant",
-				/* nonTxnSQL */ []string{
-					// Make the app tenant receive SQL connections by default.
-					"SET CLUSTER SETTING server.controller.default_tenant = 'application'",
-				},
-				nil, /* txnSQL */
-			),
-		),
+		tasks:       multitenantClusterWithAppServiceInitTasks,
+	},
+	"multitenant+app+sharedservice+repl": {
+		description: "multi-tenant cluster with one secondary tenant configured to serve SQL application traffic, with replication enabled",
+		tasks:       enableReplication(multitenantClusterWithAppServiceInitTasks),
 	},
 }
 
@@ -112,7 +102,7 @@ var multitenantClusterInitTasks = []autoconfigpb.Task{
 		[]string{
 			// Create a main secondary tenant template.
 			"CREATE TENANT template",
-			"ALTER TENANT template GRANT CAPABILITY can_admin_relocate_range, can_admin_unsplit, can_view_node_info, can_view_tsdb_metrics, can_use_nodelocal_storage, can_check_consistency, exempt_from_rate_limiting",
+			"ALTER TENANT template GRANT ALL CAPABILITIES",
 			// Enable admin scatter/split in tenant SQL.
 			// TODO(knz): Move this to in-tenant config task.
 			"ALTER TENANT template SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled = true",
@@ -126,6 +116,38 @@ var multitenantClusterInitTasks = []autoconfigpb.Task{
 		},
 		nil, /* txnSQL */
 	),
+}
+
+var multitenantClusterWithAppServiceInitTasks = append(
+	multitenantClusterInitTasks,
+	makeTask("create an application tenant",
+		nil, /* nonTxnSQL */
+		/* txnSQL */ []string{
+			// Create the app tenant record.
+			"CREATE TENANT application",
+			// Run the service for the application tenant.
+			"ALTER TENANT application START SERVICE SHARED",
+		},
+	),
+	makeTask("activate application tenant",
+		/* nonTxnSQL */ []string{
+			// Make the app tenant receive SQL connections by default.
+			"SET CLUSTER SETTING server.controller.default_tenant = 'application'",
+		},
+		nil, /* txnSQL */
+	),
+)
+
+func enableReplication(baseTasks []autoconfigpb.Task) []autoconfigpb.Task {
+	return append(baseTasks,
+		makeTask("enable rangefeeds and replication",
+			/* nonTxnSQL */ []string{
+				"SET CLUSTER SETTING kv.rangefeed.enabled = true",
+				"SET CLUSTER SETTING cross_cluster_replication.enabled = true",
+			},
+			nil, /* txnSQL */
+		),
+	)
 }
 
 func makeTask(description string, nonTxnSQL, txnSQL []string) autoconfigpb.Task {

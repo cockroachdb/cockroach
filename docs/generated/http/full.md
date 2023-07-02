@@ -2173,6 +2173,7 @@ TxnInfo represents an in flight user transaction on some Session.
 | quality_of_service | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this transaction started execution. | [reserved](#support-status) |
+| isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level of the transaction. | [reserved](#support-status) |
 
 
 
@@ -2318,6 +2319,7 @@ TxnInfo represents an in flight user transaction on some Session.
 | quality_of_service | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this transaction started execution. | [reserved](#support-status) |
+| isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level of the transaction. | [reserved](#support-status) |
 
 
 
@@ -5070,6 +5072,123 @@ Support status: [reserved](#support-status)
 | insights | [cockroach.sql.insights.Insight](#cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.sql.insights.Insight) | repeated | insights lists any potentially problematic statements and actions we suggest the application developer might take to remedy them. | [reserved](#support-status) |
 | errors | [cockroach.errorspb.EncodedError](#cockroach.server.serverpb.ListExecutionInsightsResponse-cockroach.errorspb.EncodedError) | repeated | errors holds any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
 
+
+
+
+
+
+
+## NetworkConnectivity
+
+`GET /_status/connectivity`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.NetworkConnectivityRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| connections | [NetworkConnectivityResponse.ConnectionsEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ConnectionsEntry) | repeated |  | [reserved](#support-status) |
+| errors_by_node_id | [NetworkConnectivityResponse.ErrorsByNodeIdEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ErrorsByNodeIdEntry) | repeated | errors contains any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ConnectionsEntry"></a>
+#### NetworkConnectivityResponse.ConnectionsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
+| value | [NetworkConnectivityResponse.Connectivity](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Connectivity) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Connectivity"></a>
+#### NetworkConnectivityResponse.Connectivity
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| peers | [NetworkConnectivityResponse.Connectivity.PeersEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Connectivity.PeersEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Connectivity.PeersEntry"></a>
+#### NetworkConnectivityResponse.Connectivity.PeersEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
+| value | [NetworkConnectivityResponse.Peer](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Peer) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.Peer"></a>
+#### NetworkConnectivityResponse.Peer
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| latency | [google.protobuf.Duration](#cockroach.server.serverpb.NetworkConnectivityResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
+| status | [NetworkConnectivityResponse.ConnectionStatus](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ConnectionStatus) |  |  | [reserved](#support-status) |
+| address | [string](#cockroach.server.serverpb.NetworkConnectivityResponse-string) |  |  | [reserved](#support-status) |
+| locality | [cockroach.roachpb.Locality](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.roachpb.Locality) |  |  | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.NetworkConnectivityResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ErrorsByNodeIdEntry"></a>
+#### NetworkConnectivityResponse.ErrorsByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
+| value | [string](#cockroach.server.serverpb.NetworkConnectivityResponse-string) |  |  |  |
 
 
 

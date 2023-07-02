@@ -289,14 +289,14 @@ func (q *byIDLookupContext) lookupVirtual(
 	// TODO(postamar): get rid of descriptorless public schemas
 	if id == keys.PublicSchemaID {
 		if q.flags.isMutable {
-			err := catalog.NewMutableAccessToVirtualSchemaError(schemadesc.GetPublicSchema())
+			err := catalog.NewMutableAccessToDescriptorlessSchemaError(schemadesc.GetPublicSchema())
 			return nil, catalog.NoValidation, err
 		}
 		return schemadesc.GetPublicSchema(), validate.Write, nil
 	}
 	if vs := q.tc.virtual.getSchemaByID(id); vs != nil {
 		if q.flags.isMutable {
-			err := catalog.NewMutableAccessToVirtualSchemaError(vs.Desc())
+			err := catalog.NewMutableAccessToDescriptorlessSchemaError(vs.Desc())
 			return nil, catalog.NoValidation, err
 		}
 		return vs.Desc(), validate.Write, nil
@@ -320,7 +320,7 @@ func (q *byIDLookupContext) lookupTemporary(
 		return nil, catalog.NoValidation, nil
 	}
 	if q.flags.isMutable {
-		err := catalog.NewMutableAccessToVirtualSchemaError(schemadesc.GetPublicSchema())
+		err := catalog.NewMutableAccessToDescriptorlessSchemaError(td)
 		return nil, catalog.NoValidation, err
 	}
 	return td, validate.Write, nil
@@ -453,7 +453,7 @@ func (tc *Collection) getVirtualDescriptorByName(
 	case catalog.Schema:
 		if vs := tc.virtual.getSchemaByName(name); vs != nil {
 			if isMutableRequired {
-				return haltLookups, nil, catalog.NewMutableAccessToVirtualSchemaError(vs)
+				return haltLookups, nil, catalog.NewMutableAccessToDescriptorlessSchemaError(vs)
 			}
 			return haltLookups, vs, nil
 		}

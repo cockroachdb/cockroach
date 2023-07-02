@@ -699,9 +699,9 @@ func mergeCheckingTimestampCaches(
 				} else {
 					funcs = partitionedLeaderFuncs
 				}
-				tc.Servers[i].RaftTransport().Listen(s.StoreID(), &unreliableRaftHandler{
+				tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(s.StoreID(), &unreliableRaftHandler{
 					rangeID:                    lhsDesc.GetRangeID(),
-					RaftMessageHandler:         s,
+					IncomingRaftMessageHandler: s,
 					unreliableRaftHandlerFuncs: funcs,
 				})
 			}
@@ -709,7 +709,7 @@ func mergeCheckingTimestampCaches(
 			// Make sure the LHS range in uniquiesced so that it elects a new
 			// Raft leader after the partition is established.
 			for _, r := range lhsRepls {
-				r.MaybeUnquiesceAndWakeLeader()
+				r.MaybeUnquiesce()
 			}
 
 			// Issue an increment on the range. The leaseholder should evaluate
@@ -801,17 +801,17 @@ func mergeCheckingTimestampCaches(
 		// Remove the partition. A snapshot to the leaseholder should follow.
 		// This snapshot will inform the leaseholder about the range merge.
 		for i, s := range lhsStores {
-			var h kvserver.RaftMessageHandler
+			var h kvserver.IncomingRaftMessageHandler
 			if i == 0 {
 				h = &unreliableRaftHandler{
 					rangeID:                    lhsDesc.GetRangeID(),
-					RaftMessageHandler:         s,
+					IncomingRaftMessageHandler: s,
 					unreliableRaftHandlerFuncs: restoredLeaseholderFuncs,
 				}
 			} else {
 				h = s
 			}
-			tc.Servers[i].RaftTransport().Listen(s.StoreID(), h)
+			tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(s.StoreID(), h)
 		}
 		close(filterMu.blockHBAndGCs)
 		filterMu.Lock()
@@ -2481,8 +2481,8 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 		nil, /* knobs */
 	)
 	errChan := errorChannelTestHandler(make(chan *kvpb.Error, 1))
-	transport.Listen(store0.StoreID(), errChan)
-	transport.Listen(store1.StoreID(), errChan)
+	transport.ListenIncomingRaftMessages(store0.StoreID(), errChan)
+	transport.ListenIncomingRaftMessages(store1.StoreID(), errChan)
 
 	sendHeartbeat := func(
 		rangeID roachpb.RangeID,
@@ -2736,9 +2736,9 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 
 	// Start dropping all Raft traffic to the LHS on store2 so that it won't be
 	// aware that there is a merge in progress.
-	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:            lhsDesc.RangeID,
-		RaftMessageHandler: store2,
+	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:                    lhsDesc.RangeID,
+		IncomingRaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 				return true
@@ -3017,9 +3017,9 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 
 	// Start dropping all Raft traffic to the LHS replica on store2 so that it
 	// won't be aware that there is a merge in progress.
-	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:            lhsDesc.RangeID,
-		RaftMessageHandler: store2,
+	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:                    lhsDesc.RangeID,
+		IncomingRaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(*kvserverpb.RaftMessageRequest) bool {
 				return true
@@ -3219,7 +3219,7 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 type slowSnapRaftHandler struct {
 	rangeID roachpb.RangeID
 	waitCh  chan struct{}
-	kvserver.RaftMessageHandler
+	kvserver.IncomingRaftMessageHandler
 	syncutil.Mutex
 }
 
@@ -3245,7 +3245,7 @@ func (h *slowSnapRaftHandler) HandleSnapshot(
 			<-waitCh
 		}
 	}
-	return h.RaftMessageHandler.HandleSnapshot(ctx, header, respStream)
+	return h.IncomingRaftMessageHandler.HandleSnapshot(ctx, header, respStream)
 }
 
 // TestStoreRangeMergeUninitializedLHSFollower reproduces a rare bug in which a
@@ -3326,15 +3326,15 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// of range 1 never processes the split trigger, which would create an
 	// initialized replica of A.
 	unreliableHandler := &unreliableRaftHandler{
-		rangeID:            desc.RangeID,
-		RaftMessageHandler: store2,
+		rangeID:                    desc.RangeID,
+		IncomingRaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
 	}
-	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, unreliableHandler)
+	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, unreliableHandler)
 
 	// Perform the split of A, now that store2 won't be able to initialize its
 	// replica of A.
@@ -3343,12 +3343,12 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// Wedge a Raft snapshot that's destined for A. This allows us to capture a
 	// pre-merge Raft snapshot, which we'll let loose after the merge commits.
 	slowSnapHandler := &slowSnapRaftHandler{
-		rangeID:            aRangeID,
-		waitCh:             make(chan struct{}),
-		RaftMessageHandler: unreliableHandler,
+		rangeID:                    aRangeID,
+		waitCh:                     make(chan struct{}),
+		IncomingRaftMessageHandler: unreliableHandler,
 	}
 	defer slowSnapHandler.unblock()
-	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, slowSnapHandler)
+	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, slowSnapHandler)
 
 	// Remove the replica of range 1 on store2. If we were to leave it in place,
 	// store2 would refuse to GC its replica of C after the merge commits, because
@@ -4007,9 +4007,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	aRepl0 := store0.LookupReplica(roachpb.RKey(keyA))
 
 	// Start dropping all Raft traffic to the first range on store2.
-	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:            aRepl0.RangeID,
-		RaftMessageHandler: store2,
+	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:                    aRepl0.RangeID,
+		IncomingRaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 				return true
@@ -4050,9 +4050,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 	// Restore Raft traffic to the LHS on store2.
 	log.Infof(ctx, "restored traffic to store 2")
-	tc.Servers[2].RaftTransport().Listen(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:            aRepl0.RangeID,
-		RaftMessageHandler: store2,
+	tc.Servers[2].RaftTransport().ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:                    aRepl0.RangeID,
+		IncomingRaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 				// Make sure that even going forward no MsgApp for what we just

@@ -110,6 +110,12 @@ func (s *TestState) IncrementSchemaChangeDropCounter(counterType string) {
 	s.LogSideEffectf("increment telemetry for sql.schema.drop_%s", counterType)
 }
 
+// IncrementSchemaChangeCreateCounter implements the scbuild.Dependencies
+// interface.
+func (s *TestState) IncrementSchemaChangeCreateCounter(counterType string) {
+	s.LogSideEffectf("increment telemetry for sql.schema.create_%s", counterType)
+}
+
 // IncrementSchemaChangeAddColumnTypeCounter  implements the scbuild.Dependencies
 // interface.
 func (s *TestState) IncrementSchemaChangeAddColumnTypeCounter(typeName string) {
@@ -704,7 +710,7 @@ func (s *TestState) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (st
 	}
 	scName := ""
 	if obj.GetParentSchemaID() != descpb.InvalidID {
-		scName = tree.PublicSchema
+		scName = catconstants.PublicSchemaName
 		if obj.GetParentSchemaID() != keys.PublicSchemaID {
 			sc, err := s.mustReadImmutableDescriptor(obj.GetParentSchemaID())
 			if err != nil {
@@ -1367,4 +1373,9 @@ func getNameEntryDescriptorType(parentID, parentSchemaID descpb.ID) string {
 		}
 	}
 	return ret
+}
+
+// InitializeSequence is part of the scexec.Catalog interface.
+func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
+	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
 }

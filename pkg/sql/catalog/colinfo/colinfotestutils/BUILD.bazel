@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -9,9 +8,8 @@ go_library(
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/parser",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
@@ -24,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -33,16 +33,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -78,12 +76,6 @@ var (
 	raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
 		"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
 )
-
-func makeIDKey() kvserverbase.CmdIDKey {
-	idKeyBuf := make([]byte, 0, raftlog.RaftCommandIDLen)
-	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
-	return kvserverbase.CmdIDKey(idKeyBuf)
-}
 
 // evalAndPropose prepares the necessary pending command struct and initializes
 // a client command ID if one hasn't been. A verified lease is supplied as a
@@ -128,7 +120,7 @@ func (r *Replica) evalAndPropose(
 	*kvpb.Error,
 ) {
 	defer tok.DoneIfNotMoved(ctx)
-	idKey := makeIDKey()
+	idKey := raftlog.MakeCmdIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, g, st, ui)
 	log.Event(proposal.ctx, "evaluated request")
 
@@ -371,169 +363,50 @@ func (r *Replica) propose(
 	// package is that proposals which are finished carry a raft command with a
 	// MaxLeaseIndex equal to the proposal command's max lease index.
 	defer func(prev kvpb.LeaseAppliedIndex) {
+		if useReproposalsV2 {
+			// The following poorly understood code is not necessary in V2 since
+			// we never mutate MaxLeaseIndex and don't hit propose() twice for
+			// the same *ProposalData.
+			return
+		}
 		if pErr != nil {
 			p.command.MaxLeaseIndex = prev
 		}
 	}(p.command.MaxLeaseIndex)
 
-	// Make sure the maximum lease index is unset. This field will be set in
-	// propBuf.Insert and its encoded bytes will be appended to the encoding
-	// buffer as a MaxLeaseFooter.
-	p.command.MaxLeaseIndex = 0
-
-	// Determine the encoding style for the Raft command.
-	prefix := true
-	entryEncoding := raftlog.EntryEncodingStandardWithoutAC
-	if p.useReplicationAdmissionControl() {
-		entryEncoding = raftlog.EntryEncodingStandardWithAC
+	if !useReproposalsV2 {
+		// Make sure the maximum lease index is unset. This field will be set in
+		// propBuf.Insert and its encoded bytes will be appended to the encoding
+		// buffer as a MaxLeaseFooter.
+		p.command.MaxLeaseIndex = 0
+	} else {
+		if p.command.MaxLeaseIndex > 0 {
+			// TODO: there are a number of other fields that should still be unset.
+			// Verify them all. Some architectural improvements where we pass in a
+			// subset of ProposalData and then complete it here would be even better.
+			return kvpb.NewError(errors.AssertionFailedf("MaxLeaseIndex is set: %+v", p))
+		}
 	}
-	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
-		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
-		// needs to understand it; it cannot simply be an opaque command. To
-		// permit this, the command is proposed by the proposal buffer using
-		// ProposeConfChange. For that reason, we also don't need a Raft command
-		// prefix because the command ID is stored in a field in
-		// raft.ConfChange.
-		log.KvDistribution.Infof(p.ctx, "proposing %s", crt)
-		prefix = false
 
-		// The following deals with removing a leaseholder. A voter can be removed
-		// in two ways. 1) Simple (old style) where there is a reconfiguration
-		// turning a voter into a LEARNER / NON-VOTER. 2) Through an intermediate
-		// joint configuration, where the replica remains in the descriptor, but
-		// as VOTER_{OUTGOING, DEMOTING}. When leaving the JOINT config (a second
-		// Raft operation), the removed replica transitions a LEARNER / NON-VOTER.
-		//
-		// In case (1) the lease needs to be transferred out before a removal is
-		// proposed (cooperative transfer). The code below permits leaseholder
-		// removal only if entering a joint configuration (option 2 above) in which
-		// the leaseholder is (any kind of) voter, and in addition, this joint config
-		// should include a VOTER_INCOMING replica. In this case, the lease is
-		// transferred to this new replica in maybeLeaveAtomicChangeReplicas right
-		// before we exit the joint configuration.
-		//
-		// When the leaseholder is replaced by a new replica, transferring the
-		// lease in the joint config allows transferring directly from old to new,
-		// since both are active in the joint config, without going through a third
-		// node or adding the new node before transferring, which might reduce
-		// fault tolerance. For example, consider v1 in region1 (leaseholder), v2
-		// in region2 and v3 in region3. We want to relocate v1 to a new node v4 in
-		// region1. We add v4 as LEARNER. At this point we can't transfer the lease
-		// to v4, so we could transfer it to v2 first, but this is likely to hurt
-		// application performance. We could instead add v4 as VOTER first, and
-		// then transfer lease directly to v4, but this would change the number of
-		// replicas to 4, and if region1 goes down, we loose a quorum. Instead,
-		// we move to a joint config where v1 (VOTER_DEMOTING_LEARNER) transfer the
-		// lease to v4 (VOTER_INCOMING) directly.
-		//
-		// Our implementation assumes that the intention of the caller is for the
-		// VOTER_INCOMING node to be the replacement replica, and hence get the
-		// lease. We therefore don't dynamically select a lease target during the
-		// joint config, and hand it to the VOTER_INCOMING node. This means,
-		// however, that we only allow a VOTER_DEMOTING to have the lease in a
-		// joint configuration, when there's also a VOTER_INCOMING node (that
-		// will be used as a target for the lease transfer). Otherwise, the caller
-		// is expected to shed the lease before entering a joint configuration.
-		// See also https://github.com/cockroachdb/cockroach/issues/67740.
-		lhDesc, err := r.GetReplicaDescriptor()
-		if err != nil {
+	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
+		if err := checkReplicationChangeAllowed(p.command, r.Desc(), r.StoreID()); err != nil {
+			log.Errorf(ctx, "%v", err)
 			return kvpb.NewError(err)
 		}
-		proposedDesc := p.command.ReplicatedEvalResult.State.Desc
-		// This is a reconfiguration command, we make sure the proposed
-		// config is legal w.r.t. the current leaseholder: we now allow the
-		// leaseholder to be a VOTER_DEMOTING as long as there is a VOTER_INCOMING.
-		// Otherwise, the leaseholder must be a full voter in the target config.
-		// This check won't allow exiting the joint config before the lease is
-		// transferred away. The previous leaseholder is a LEARNER in the target config,
-		// and therefore shouldn't continue holding the lease.
-		if err := roachpb.CheckCanReceiveLease(
-			lhDesc, proposedDesc.Replicas(), true, /* wasLastLeaseholder */
-		); err != nil {
-			err = errors.Handled(err)
-			err = errors.Mark(err, errMarkInvalidReplicationChange)
-			err = errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
-				"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
-				lhDesc, crt, true /* lhRemovalAllowed */, r.Desc(), proposedDesc)
-			log.Errorf(p.ctx, "%v", err)
-			return kvpb.NewError(err)
-		}
+		log.KvDistribution.Infof(p.ctx, "proposing %s", crt)
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
-		if p.useReplicationAdmissionControl() {
-			entryEncoding = raftlog.EntryEncodingSideloadedWithAC
-		}
 		r.store.metrics.AddSSTableProposals.Inc(1)
-
-		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
-			return kvpb.NewErrorf("cannot sideload empty SSTable")
-		}
 	} else if log.V(4) {
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 	}
 
-	// NB: If (significantly) re-working how raft commands are encoded, make the
-	// equivalent change in raftlog.BenchmarkRaftAdmissionMetaOverhead.
-
-	// Create encoding buffer.
-	preLen := 0
-	if prefix {
-		preLen = raftlog.RaftCommandPrefixLen
+	raftAdmissionMeta := p.raftAdmissionMeta
+	if !p.useReplicationAdmissionControl() {
+		raftAdmissionMeta = nil
 	}
-
-	raftAdmissionMeta := &kvflowcontrolpb.RaftAdmissionMeta{}
-	var admissionMetaLen int
-	if p.useReplicationAdmissionControl() {
-		// Encode admission metadata data at the start, right after the command
-		// prefix.
-		raftAdmissionMeta = p.raftAdmissionMeta
-		admissionMetaLen = raftAdmissionMeta.Size()
-	}
-
-	cmdLen := p.command.Size() + admissionMetaLen
-	// Allocate the data slice with enough capacity to eventually hold the two
-	// "footers" that are filled later.
-	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, preLen, needed)
-	// Encode prefix with command ID, if necessary.
-	if prefix {
-		raftlog.EncodeRaftCommandPrefix(data, entryEncoding, p.idKey)
-	}
-
-	// Encode the body of the command.
-	data = data[:preLen+cmdLen]
-
-	// Encode below-raft admission data, if any.
-	if p.useReplicationAdmissionControl() {
-		if !prefix {
-			panic("expected to encode prefix for raft commands using replication admission control")
-		}
-		if buildutil.CrdbTestBuild {
-			if p.raftAdmissionMeta.AdmissionOriginNode == roachpb.NodeID(0) {
-				log.Fatalf(ctx, "missing origin node for flow token returns")
-			}
-		}
-		if _, err := protoutil.MarshalTo(
-			raftAdmissionMeta,
-			data[preLen:preLen+admissionMetaLen],
-		); err != nil {
-			return kvpb.NewError(err)
-		}
-		log.VInfof(ctx, 1, "encoded raft admission meta: pri=%s create-time=%d proposer=n%s",
-			admissionpb.WorkPriority(raftAdmissionMeta.AdmissionPriority),
-			raftAdmissionMeta.AdmissionCreateTime,
-			raftAdmissionMeta.AdmissionOriginNode,
-		)
-		// Zero out what we've already encoded and marshaled, out of an
-		// abundance of paranoia.
-		p.command.AdmissionPriority = 0
-		p.command.AdmissionCreateTime = 0
-		p.command.AdmissionOriginNode = 0
-	}
-
-	// Encode the rest of the command.
-	if _, err := protoutil.MarshalTo(p.command, data[preLen+admissionMetaLen:]); err != nil {
+	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey, raftAdmissionMeta)
+	if err != nil {
 		return kvpb.NewError(err)
 	}
 	p.encodedCommand = data
@@ -545,7 +418,7 @@ func (r *Replica) propose(
   RaftCommand.ReplicatedEvalResult:          %d
   RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
-`, p.Request.Summary(), cmdLen,
+`, p.Request.Summary(), p.command.Size(),
 			p.command.ReplicatedEvalResult.Size(),
 			p.command.ReplicatedEvalResult.Delta.Size(),
 			p.command.WriteBatch.Size(),
@@ -557,8 +430,8 @@ func (r *Replica) propose(
 	//
 	// TODO(tschottdorf): can we mark them so lightstep can group them?
 	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
-	if cmdLen > largeProposalEventThresholdBytes {
-		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(cmdLen)))
+	if ln := len(p.encodedCommand); ln > largeProposalEventThresholdBytes {
+		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(ln)))
 	}
 
 	// Insert into the proposal buffer, which passes the command to Raft to be
@@ -568,10 +441,76 @@ func (r *Replica) propose(
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
 	log.VEvent(p.ctx, 2, "submitting proposal to proposal buffer")
-	err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx))
-	if err != nil {
+	if err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx)); err != nil {
 		return kvpb.NewError(err)
 	}
+	return nil
+}
+
+func checkReplicationChangeAllowed(
+	command *kvserverpb.RaftCommand, desc *roachpb.RangeDescriptor, storeID roachpb.StoreID,
+) error {
+	// The following deals with removing a leaseholder. A voter can be removed
+	// in two ways. 1) Simple (old style) where there is a reconfiguration
+	// turning a voter into a LEARNER / NON-VOTER. 2) Through an intermediate
+	// joint configuration, where the replica remains in the descriptor, but
+	// as VOTER_{OUTGOING, DEMOTING}. When leaving the JOINT config (a second
+	// Raft operation), the removed replica transitions a LEARNER / NON-VOTER.
+	//
+	// In case (1) the lease needs to be transferred out before a removal is
+	// proposed (cooperative transfer). The code below permits leaseholder
+	// removal only if entering a joint configuration (option 2 above) in which
+	// the leaseholder is (any kind of) voter, and in addition, this joint config
+	// should include a VOTER_INCOMING replica. In this case, the lease is
+	// transferred to this new replica in maybeLeaveAtomicChangeReplicas right
+	// before we exit the joint configuration.
+	//
+	// When the leaseholder is replaced by a new replica, transferring the
+	// lease in the joint config allows transferring directly from old to new,
+	// since both are active in the joint config, without going through a third
+	// node or adding the new node before transferring, which might reduce
+	// fault tolerance. For example, consider v1 in region1 (leaseholder), v2
+	// in region2 and v3 in region3. We want to relocate v1 to a new node v4 in
+	// region1. We add v4 as LEARNER. At this point we can't transfer the lease
+	// to v4, so we could transfer it to v2 first, but this is likely to hurt
+	// application performance. We could instead add v4 as VOTER first, and
+	// then transfer lease directly to v4, but this would change the number of
+	// replicas to 4, and if region1 goes down, we loose a quorum. Instead,
+	// we move to a joint config where v1 (VOTER_DEMOTING_LEARNER) transfer the
+	// lease to v4 (VOTER_INCOMING) directly.
+	//
+	// Our implementation assumes that the intention of the caller is for the
+	// VOTER_INCOMING node to be the replacement replica, and hence get the
+	// lease. We therefore don't dynamically select a lease target during the
+	// joint config, and hand it to the VOTER_INCOMING node. This means,
+	// however, that we only allow a VOTER_DEMOTING to have the lease in a
+	// joint configuration, when there's also a VOTER_INCOMING node (that
+	// will be used as a target for the lease transfer). Otherwise, the caller
+	// is expected to shed the lease before entering a joint configuration.
+	// See also https://github.com/cockroachdb/cockroach/issues/67740.
+	lhDesc, lhDescOK := desc.GetReplicaDescriptor(storeID)
+	if !lhDescOK {
+		return kvpb.NewRangeNotFoundError(desc.RangeID, storeID)
+	}
+	proposedDesc := command.ReplicatedEvalResult.State.Desc
+	// This is a reconfiguration command, we make sure the proposed
+	// config is legal w.r.t. the current leaseholder: we now allow the
+	// leaseholder to be a VOTER_DEMOTING as long as there is a VOTER_INCOMING.
+	// Otherwise, the leaseholder must be a full voter in the target config.
+	// This check won't allow exiting the joint config before the lease is
+	// transferred away. The previous leaseholder is a LEARNER in the target config,
+	// and therefore shouldn't continue holding the lease.
+	if err := roachpb.CheckCanReceiveLease(
+		lhDesc, proposedDesc.Replicas(), true, /* wasLastLeaseholder */
+	); err != nil {
+		err = errors.Handled(err)
+		err = errors.Mark(err, errMarkInvalidReplicationChange)
+		err = errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
+			"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",
+			lhDesc, command.ReplicatedEvalResult.ChangeReplicas, true /* lhRemovalAllowed */, desc, proposedDesc)
+		return err
+	}
+
 	return nil
 }
 
@@ -643,11 +582,11 @@ var errRemoved = errors.New("replica removed")
 func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	// We're processing an incoming raft message (from a batch that may
 	// include MsgVotes), so don't campaign if we wake up our raft
-	// group.
-	return r.withRaftGroup(false, func(raftGroup *raft.RawNode) (bool, error) {
-		// If we're not the leader, and we receive a message from a non-leader
-		// replica while quiesced, we wake up the leader too. This prevents spurious
-		// elections.
+	// group to avoid election ties.
+	const mayCampaign = false
+	return r.withRaftGroup(mayCampaign, func(raftGroup *raft.RawNode) (bool, error) {
+		// If we're a follower, and we receive a message from a non-leader replica
+		// while quiesced, we wake up the leader too to prevent spurious elections.
 		//
 		// This typically happens in the case of a partial network partition where
 		// some other replica is partitioned away from the leader but can reach this
@@ -663,14 +602,19 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 		// Note that such partial partitions will typically result in persistent
 		// mass unquiescence due to the continuous prevotes.
 		if r.mu.quiescent {
-			if !r.isRaftLeaderRLocked() && req.FromReplica.ReplicaID != r.mu.leaderID {
-				r.maybeUnquiesceAndWakeLeaderLocked()
-			} else {
-				r.maybeUnquiesceWithOptionsLocked(false /* campaignOnWake */)
-			}
+			st := r.raftBasicStatusRLocked()
+			hasLeader := st.RaftState == raft.StateFollower && st.Lead != 0
+			fromLeader := uint64(req.FromReplica.ReplicaID) == st.Lead
+			wakeLeader := hasLeader && !fromLeader
+			r.maybeUnquiesceLocked(wakeLeader, mayCampaign)
 		}
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
-		if req.Message.Type == raftpb.MsgSnap {
+		switch req.Message.Type {
+		case raftpb.MsgPreVote, raftpb.MsgVote:
+			// If we receive a (pre)vote request, and we find our leader to be dead or
+			// removed, forget it so we can grant the (pre)votes.
+			r.maybeForgetLeaderOnVoteRequestLocked()
+		case raftpb.MsgSnap:
 			// Occasionally a snapshot message may arrive under an outdated term,
 			// which would lead to Raft discarding the snapshot. This should be
 			// really rare in practice, but it does happen in tests and in particular
@@ -1166,12 +1110,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
 		if stats.apply.numConfChangeEntries > 0 {
-			// If the raft leader got removed, campaign the first remaining voter.
-			//
-			// NB: this must be called after Advance() above since campaigning is
-			// a no-op in the presence of unapplied conf changes.
-			if shouldCampaignAfterConfChange(ctx, r.store.StoreID(), r.descRLocked(), raftGroup) {
-				r.campaignLocked(ctx)
+			// If the raft leader got removed, campaign on the leaseholder. Uses
+			// forceCampaignLocked() to bypass PreVote+CheckQuorum, since we otherwise
+			// wouldn't get prevotes from other followers who recently heard from the
+			// old leader and haven't applied the conf change. We know the leader
+			// isn't around anymore anyway.
+			leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
+			raftStatus := raftGroup.BasicStatus()
+			if shouldCampaignAfterConfChange(ctx, r.store.ClusterSettings(), r.store.StoreID(),
+				r.descRLocked(), raftStatus, leaseStatus) {
+				r.forceCampaignLocked(ctx)
 			}
 		}
 
@@ -2107,7 +2055,7 @@ func (r *Replica) withRaftGroupLocked(
 		unquiesce = true
 	}
 	if unquiesce {
-		r.maybeUnquiesceAndWakeLeaderLocked()
+		r.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
 	}
 	return err
 }
@@ -2183,9 +2131,19 @@ func shouldCampaignOnWake(
 	return !livenessEntry.IsLive
 }
 
-// maybeCampaignOnWakeLocked is called when the range wakes from a
-// dormant state (either the initial "raftGroup == nil" state or after
-// being quiescent) and campaigns for raft leadership if appropriate.
+// maybeCampaignOnWakeLocked is called when the replica wakes from a dormant
+// state (either the initial "raftGroup == nil" state or after being quiescent),
+// and campaigns for raft leadership if appropriate: if it has no leader, or it
+// finds a dead leader in liveness.
+//
+// This will use PreVote+CheckQuorum, so it won't disturb an established leader
+// if one currently exists. However, if other replicas wake up to find a dead
+// leader in liveness, they will forget it and grant us a prevote, allowing us
+// to win an election immediately if a quorum considers the leader dead.
+//
+// This may result in a tie if multiple replicas wake simultaneously. However,
+// if other replicas wake in response to our (pre)vote request, they won't
+// campaign to avoid the tie.
 func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	// Raft panics if a node that is not currently a member of the
 	// group tries to campaign. This method should never be called
@@ -2204,6 +2162,64 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpirationLeaseRLocked()) {
 		r.campaignLocked(ctx)
 	}
+}
+
+// maybeForgetLeaderOnVoteRequestLocked is called when receiving a (Pre)Vote
+// request. If the current leader is not live (according to liveness) or not in
+// our range descriptor, we forget it and become a leaderless follower.
+//
+// Normally, with PreVote+CheckQuorum, we won't grant a (pre)vote if we've heard
+// from a leader in the past election timeout interval. However, sometimes we
+// want to call an election despite a recent leader. Forgetting the leader
+// allows us to grant the (pre)vote, and if a quorum of replicas agree that the
+// leader is dead they can win an election. Used specifically when:
+//
+//   - Unquiescing to a dead leader. The first replica to wake will campaign,
+//     the others won't to avoid ties but should grant the vote. See
+//     maybeUnquiesceLocked().
+//
+//   - Stealing leadership from a leader who can't heartbeat liveness.
+//     Otherwise, noone will be able to acquire an epoch lease, and the range is
+//     unavailable. See shouldCampaignOnLeaseRequestRedirect().
+//
+//   - For backwards compatibility in mixed 23.1/23.2 clusters, where 23.2 first
+//     enabled CheckQuorum. The above two cases hold with 23.1. Additionally, when
+//     the leader is removed from the range in 23.1, the first replica in the
+//     range will campaign using (pre)vote, so 23.2 nodes must grant it.
+//
+// TODO(erikgrinaker): The above cases are only relevant with epoch leases and
+// 23.1 compatibility. Consider removing this when no longer needed.
+func (r *Replica) maybeForgetLeaderOnVoteRequestLocked() {
+	raftStatus := r.mu.internalRaftGroup.BasicStatus()
+	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
+	if shouldForgetLeaderOnVoteRequest(raftStatus, livenessMap, r.descRLocked()) {
+		r.forgetLeaderLocked(r.AnnotateCtx(context.TODO()))
+	}
+}
+
+func shouldForgetLeaderOnVoteRequest(
+	raftStatus raft.BasicStatus, livenessMap livenesspb.IsLiveMap, desc *roachpb.RangeDescriptor,
+) bool {
+	// If we're not a follower with a leader, there's noone to forget.
+	if raftStatus.RaftState != raft.StateFollower || raftStatus.Lead == raft.None {
+		return false
+	}
+
+	// If the leader isn't in our descriptor, assume it was removed and
+	// forget about it.
+	replDesc, ok := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead))
+	if !ok {
+		return true
+	}
+
+	// If we don't know about the leader's liveness, assume it's dead and forget it.
+	livenessEntry, ok := livenessMap[replDesc.NodeID]
+	if !ok {
+		return true
+	}
+
+	// Forget the leader if it's no longer live.
+	return !livenessEntry.IsLive
 }
 
 // shouldCampaignOnLeaseRequestRedirect returns whether a replica that is
@@ -2274,12 +2290,86 @@ func shouldCampaignOnLeaseRequestRedirect(
 	return !livenessEntry.Liveness.IsLive(now)
 }
 
+// campaignLocked campaigns for raft leadership, using PreVote and, if
+// CheckQuorum is enabled, the recent leader condition. That is, followers will
+// not grant prevotes if we're behind on the log and, with CheckQuorum, if
+// they've heard from a leader in the past election timeout interval.
+//
+// The CheckQuorum condition can delay elections, particularly with quiesced
+// ranges that don't tick. However, it is necessary to avoid spurious elections
+// and stolen leaderships during partial/asymmetric network partitions, which
+// can lead to permanent unavailability if the leaseholder can no longer reach
+// the leader.
+//
+// Only followers enforce the CheckQuorum recent leader condition though, so if
+// a quorum of followers consider the leader dead and choose to become
+// pre-candidates and campaign then they will grant prevotes and can hold an
+// election without waiting out the election timeout. This can result in
+// election ties, so it's often better for followers to choose to forget their
+// current leader via forgetLeaderLocked(), allowing them to immediately grant
+// (pre)votes without campaigning themselves. Followers and pre-candidates will
+// also grant any number of pre-votes, both for themselves and anyone else
+// that's eligible.
 func (r *Replica) campaignLocked(ctx context.Context) {
 	log.VEventf(ctx, 3, "campaigning")
 	if err := r.mu.internalRaftGroup.Campaign(); err != nil {
 		log.VEventf(ctx, 1, "failed to campaign: %s", err)
 	}
 	r.store.enqueueRaftUpdateCheck(r.RangeID)
+}
+
+// forceCampaignLocked campaigns for raft leadership, but skips the
+// pre-candidate/pre-vote stage, calling an immediate election as candidate, and
+// bypasses the CheckQuorum recent leader condition for votes.
+//
+// This will disrupt an existing leader, and can cause prolonged unavailability
+// under partial/asymmetric network partitions. It should only be used when the
+// caller is certain that the current leader is actually dead, and we're not
+// simply partitioned away from it and/or liveness.
+func (r *Replica) forceCampaignLocked(ctx context.Context) {
+	log.VEventf(ctx, 3, "force campaigning")
+	msg := raftpb.Message{To: uint64(r.replicaID), Type: raftpb.MsgTimeoutNow}
+	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
+		log.VEventf(ctx, 1, "failed to campaign: %s", err)
+	}
+	r.store.enqueueRaftUpdateCheck(r.RangeID)
+}
+
+// forgetLeaderLocked forgets a follower's current raft leader, remaining a
+// leaderless follower in the current term. The replica will not campaign unless
+// the election timeout elapses. However, this allows it to grant (pre)votes if
+// a different candidate is campaigning, or revert to a follower if it receives
+// a message from the leader. It still won't grant prevotes to a lagging
+// follower. This is a noop on non-followers.
+//
+// This is useful with PreVote+CheckQuorum, where a follower will not grant
+// (pre)votes if it has a current leader. Forgetting the leader allows the
+// replica to vote without waiting out the election timeout if it has good
+// reason to believe the current leader is dead. If a quorum of followers
+// independently consider the leader dead, a campaigner can win despite them
+// having heard from a leader recently (in ticks).
+//
+// The motivating case is a quiesced range that unquiesces to a long-dead
+// leader: the first replica will campaign and solicit pre-votes, but normally
+// the other replicas won't grant the prevote because they heard from the leader
+// in the past election timeout (in ticks), requiring waiting for an election
+// timeout. However, if they independently see the leader dead in liveness when
+// unquiescing, they can forget the leader and grant the prevote. If a quorum of
+// replicas independently consider the leader dead, the candidate wins the
+// election. If the leader isn't dead after all, the replica will revert to a
+// follower upon hearing from it.
+//
+// In particular, since a quorum must agree that the leader is dead and forget
+// it for a candidate to win a pre-campaign, this avoids disruptions during
+// partial/asymmetric partitions where individual replicas can mistakenly
+// believe the leader is dead and steal leadership away, which can otherwise
+// lead to persistent unavailability.
+func (r *Replica) forgetLeaderLocked(ctx context.Context) {
+	log.VEventf(ctx, 3, "forgetting leader")
+	msg := raftpb.Message{To: uint64(r.replicaID), Type: raftpb.MsgForgetLeader}
+	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
+		log.VEventf(ctx, 1, "failed to forget leader: %s", err)
+	}
 }
 
 // a lastUpdateTimesMap is maintained on the Raft leader to keep track of the
@@ -2567,40 +2657,58 @@ func ComputeRaftLogSize(
 	return ms.SysBytes + totalSideloaded, nil
 }
 
+// shouldCampaignAfterConfChange returns true if the current replica should
+// campaign after a conf change. If the leader replica is removed, the
+// leaseholder should campaign. We don't want to campaign on multiple replicas,
+// since that would cause ties.
+//
+// If there is no current leaseholder we'll have to wait out the election
+// timeout before someone campaigns, but that's ok -- either we'll have to wait
+// for the lease to expire anyway, or the range is presumably idle.
+//
+// The caller should campaign using forceCampaignLocked(), transitioning
+// directly to candidate and bypassing PreVote+CheckQuorum. Otherwise it won't
+// receive prevotes since other replicas have heard from the leader recently.
 func shouldCampaignAfterConfChange(
 	ctx context.Context,
+	st *cluster.Settings,
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
-	raftGroup *raft.RawNode,
+	raftStatus raft.BasicStatus,
+	leaseStatus kvserverpb.LeaseStatus,
 ) bool {
-	// If a config change was carried out, it's possible that the Raft
-	// leader was removed. Verify that, and if so, campaign if we are
-	// the first remaining voter replica. Without this, the range will
-	// be leaderless (and thus unavailable) for a few seconds.
-	//
-	// We can't (or rather shouldn't) campaign on all remaining voters
-	// because that can lead to a stalemate. For example, three voters
-	// may all make it through PreVote and then reject each other.
-	st := raftGroup.BasicStatus()
-	if st.Lead == 0 {
-		// Leader unknown. This isn't what we expect in steady state, so we
-		// don't do anything.
+	if raftStatus.Lead == 0 {
+		// Leader unknown. We can't know if it was removed by the conf change, and
+		// because we force an election without prevote we don't want to risk
+		// throwing spurious elections.
+		return false
+	}
+	if raftStatus.RaftState == raft.StateLeader {
+		// We're already the leader, no point in campaigning.
 		return false
 	}
 	if !desc.IsInitialized() {
-		// We don't have an initialized, so we can't figure out who is supposed
-		// to campaign. It's possible that it's us and we're waiting for the
-		// initial snapshot, but it's hard to tell. Don't do anything.
+		// No descriptor, so we don't know if the leader has been removed. We
+		// don't expect to hit this, but let's be defensive.
 		return false
 	}
-	// If the leader is no longer in the descriptor but we are the first voter,
-	// campaign.
-	_, leaderStillThere := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead))
-	if !leaderStillThere && storeID == desc.Replicas().VoterDescriptors()[0].StoreID {
-		log.VEventf(ctx, 3, "leader got removed by conf change")
-		return true
+	if _, ok := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead)); ok {
+		// The leader is still in the descriptor.
+		return false
 	}
-	return false
+	// Prior to 23.2, the first voter in the descriptor campaigned, so we do
+	// the same in mixed-version clusters to avoid ties.
+	if !st.Version.IsActive(ctx, clusterversion.V23_2) {
+		if storeID != desc.Replicas().VoterDescriptors()[0].StoreID {
+			// We're not the designated campaigner.
+			return false
+		}
+	} else if !leaseStatus.OwnedBy(storeID) || !leaseStatus.IsValid() {
+		// We're not the leaseholder.
+		return false
+	}
+	log.VEventf(ctx, 3, "leader got removed by conf change, campaigning")
+	return true
 }
 
 // printRaftTail pretty-prints the tail of the log and returns it as a string,

@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -93,7 +94,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		// tenant names or sessions (common during development). Otherwise the user can
 		// get into a state where they cannot load DB Console assets at all due to invalid
 		// cookies.
-		defaultTenantName := roachpb.TenantName(defaultTenantSelect.Get(&c.st.SV))
+		defaultTenantName := roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV))
 		s, err = c.getServer(ctx, defaultTenantName)
 		if err != nil {
 			log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
@@ -123,7 +124,7 @@ func getTenantNameFromHTTPRequest(st *cluster.Settings, r *http.Request) roachpb
 	}
 
 	// No luck so far. Use the configured default.
-	return roachpb.TenantName(defaultTenantSelect.Get(&st.SV))
+	return roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&st.SV))
 }
 
 func getSessionFromCookie(sessionStr string, name roachpb.TenantName) string {
@@ -221,7 +222,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 			// if it's one of the valid logins. Otherwise, we just use the
 			// first one in the list.
 			tenantSelection := tenantNameToSetCookieSlice[0].name
-			defaultName := defaultTenantSelect.Get(&c.st.SV)
+			defaultName := multitenant.DefaultTenantSelect.Get(&c.st.SV)
 			for _, t := range tenantNameToSetCookieSlice {
 				if t.name == defaultName {
 					tenantSelection = t.name

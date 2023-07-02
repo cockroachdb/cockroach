@@ -538,8 +538,8 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	io.kvRequester.setStoreRequestEstimates(requestEstimates)
 	l0WriteLM, l0IngestLM, ingestLM := io.perWorkTokenEstimator.getModelsAtDone()
 	io.kvGranter.setLinearModels(l0WriteLM, l0IngestLM, ingestLM)
-	if _, overloaded := io.ioThreshold.Score(); overloaded || io.aux.doLogFlush ||
-		io.elasticDiskBWTokens != unlimitedTokens {
+	if score, _ := io.ioThreshold.Score(); score >= 0.5 || io.aux.doLogFlush ||
+		io.elasticDiskBWTokens != unlimitedTokens || log.V(1) {
 		log.Infof(ctx, "IO overload: %s", io.adjustTokensResult)
 	}
 }
@@ -815,17 +815,38 @@ func (*ioLoadListener) adjustTokensInner(
 	var totalNumByteTokens int64
 	var smoothedCompactionByteTokens float64
 
-	_, overloaded := ioThreshold.Score()
-	if overloaded {
-		// Don't admit more byte work than we can remove via compactions. totalNumByteTokens
-		// tracks our goal for admission.
-		// Scale down since we want to get under the thresholds over time. This
-		// scaling could be adjusted based on how much above the threshold we are,
-		// but for now we just use a constant.
-		fTotalNumByteTokens := float64(smoothedIntL0CompactedBytes / 2.0)
+	score, _ := ioThreshold.Score()
+	// Multiplying score by 2 for ease of calculation. We're under medium load
+	// if score is in [1, 2) rather than [0.5, 1).
+	score *= 2
+	if score < 1 {
+		// Underload. Maintain a smoothedCompactionByteTokens based on what was
+		// removed, so that when we go over the threshold we have some history.
+		// This is also useful when we temporarily dip below the threshold --
+		// we've seen extreme situations with alternating 15s intervals of above
+		// and below the threshold.
+		numTokens := intL0CompactedBytes
 		// Smooth it. This may seem peculiar since we are already using
-		// smoothedIntL0CompactedBytes, but the else clause below uses a different
-		// computation so we also want the history of smoothedTotalNumByteTokens.
+		// smoothedIntL0CompactedBytes, but the clauses below use different
+		// computations so we also want the history of smoothedCompactionByteTokens.
+		smoothedCompactionByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedCompactionByteTokens
+		totalNumByteTokens = unlimitedTokens
+	} else {
+		var fTotalNumByteTokens float64
+		if score >= 2 {
+			// Overload.
+			//
+			// Don't admit more byte work than we can remove via compactions.
+			// totalNumByteTokens tracks our goal for admission. Scale down
+			// since we want to get under the thresholds over time.
+			fTotalNumByteTokens = float64(smoothedIntL0CompactedBytes / 2.0)
+		} else {
+			// Medium load. score in [1, 2). We use linear interpolation from
+			// medium load to overload, to slowly give out fewer tokens as we
+			// move towards overload.
+			halfSmoothedBytes := float64(smoothedIntL0CompactedBytes / 2.0)
+			fTotalNumByteTokens = -score*halfSmoothedBytes + 3*halfSmoothedBytes
+		}
 		smoothedCompactionByteTokens = alpha*fTotalNumByteTokens + (1-alpha)*prev.smoothedCompactionByteTokens
 		if float64(math.MaxInt64) < smoothedCompactionByteTokens {
 			// Avoid overflow. This should not really happen.
@@ -833,16 +854,8 @@ func (*ioLoadListener) adjustTokensInner(
 		} else {
 			totalNumByteTokens = int64(smoothedCompactionByteTokens)
 		}
-	} else {
-		// Under the threshold. Maintain a smoothedTotalNumByteTokens based on what was
-		// removed, so that when we go over the threshold we have some history.
-		// This is also useful when we temporarily dip below the threshold --
-		// we've seen extreme situations with alternating 15s intervals of above
-		// and below the threshold.
-		numTokens := intL0CompactedBytes
-		smoothedCompactionByteTokens = alpha*float64(numTokens) + (1-alpha)*prev.smoothedCompactionByteTokens
-		totalNumByteTokens = unlimitedTokens
 	}
+
 	// Use the minimum of the token count calculated using compactions and
 	// flushes.
 	tokenKind := compactionTokenKind
@@ -953,6 +966,7 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 			ib(res.aux.diskBW.intervalDiskLoadInfo.writeBandwidth),
 			ib(res.aux.diskBW.intervalDiskLoadInfo.provisionedBandwidth))
 	}
+	p.Printf("; write stalls %d", res.aux.intWriteStalls)
 }
 
 func (res adjustTokensResult) String() string {

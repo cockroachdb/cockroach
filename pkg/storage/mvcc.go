@@ -868,6 +868,51 @@ func MVCCBlindPutProto(
 	return MVCCBlindPut(ctx, writer, ms, key, timestamp, localTimestamp, value, txn)
 }
 
+// MVCCBlindPutInlineWithPrev updates an inline value using a blind put when the
+// previous value is known. The previous value is used to update MVCC stats.
+func MVCCBlindPutInlineWithPrev(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	key roachpb.Key,
+	value, prev roachpb.Value,
+) error {
+	// MVCCBlindPut() will update stats for the new key as if there was no
+	// existing key. Adjust stats for the removal of the previous value, if any.
+	var origMetaKeySize, origMetaValSize int64
+	if prev.IsPresent() && ms != nil {
+		origMetaKeySize = int64(MVCCKey{Key: key}.EncodedSize())
+		origMetaValSize = int64((&enginepb.MVCCMetadata{RawBytes: prev.RawBytes}).Size())
+		updateStatsForInline(ms, key, origMetaKeySize, origMetaValSize, 0, 0)
+	}
+	// Assert correct stats. Must be enabled manually, because the primary caller
+	// is lease requests, and these can race with concurrent lease requests since
+	// they don't hold latches. That's ok, because the lease request will be
+	// rejected below Raft in that case, but it would trip this assertion. We have
+	// plenty of other tests and assertions for this.
+	if false && ms != nil {
+		iter := newMVCCIterator(
+			rw, hlc.Timestamp{}, false /* rangeKeyMasking */, false, /* noInterleavedIntents */
+			IterOptions{
+				KeyTypes: IterKeyTypePointsAndRanges,
+				Prefix:   true,
+			},
+		)
+		defer iter.Close()
+		var meta enginepb.MVCCMetadata
+		ok, metaKeySize, metaValSize, _, err := mvccGetMetadata(iter, MVCCKey{Key: key}, &meta)
+		if err != nil {
+			return err
+		}
+		if ok != prev.IsPresent() || metaKeySize != origMetaKeySize || metaValSize != origMetaValSize {
+			log.Fatalf(ctx,
+				"MVCCBlindPutInlineWithPrev IsPresent=%t (%t) origMetaKeySize=%d (%d) origMetaValSize=%d (%d)",
+				prev.IsPresent(), ok, origMetaKeySize, metaKeySize, origMetaValSize, metaValSize)
+		}
+	}
+	return MVCCBlindPut(ctx, rw, ms, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil)
+}
+
 // LockTableView is a transaction-bound view into an in-memory collections of
 // key-level locks. The set of per-key locks stored in the in-memory lock table
 // structure overlaps with those stored in the persistent lock table keyspace
@@ -1383,7 +1428,7 @@ func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err erro
 	} else {
 		data = data[:size]
 	}
-	n, err := protoutil.MarshalTo(meta, data)
+	n, err := protoutil.MarshalToSizedBuffer(meta, data)
 	if err != nil {
 		return nil, err
 	}
@@ -3824,7 +3869,7 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 		return nil, nil
 	}
 
-	reader, err := NewPebbleBatchReader(data)
+	reader, err := NewBatchReader(data)
 	if err != nil {
 		return nil, err
 	}

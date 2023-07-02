@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -28,7 +27,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util",
         "//pkg/util/envutil",
-        "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/metric",
         "//pkg/util/mon",
@@ -82,5 +80,3 @@ stringer(
     src = "test_cluster_replication_mode.go",
     typ = "TestClusterReplicationMode",
 )
-
-get_x_data(name = "get_x_data")

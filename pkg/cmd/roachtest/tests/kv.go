@@ -66,6 +66,7 @@ func registerKV(r registry.Registry) {
 		tracing                  bool // `trace.debug.enable`
 		tags                     map[string]struct{}
 		owner                    registry.Owner // defaults to KV
+		sharedProcessMT          bool
 	}
 	computeNumSplits := func(opts kvOptions) int {
 		// TODO(ajwerner): set this default to a more sane value or remove it and
@@ -131,6 +132,9 @@ func registerKV(r registry.Registry) {
 				t.Fatalf("failed to enable tracing: %v", err)
 			}
 		}
+		if opts.sharedProcessMT {
+			createInMemoryTenant(ctx, t, c, appTenantName, c.Range(1, nodes), false /* secure */)
+		}
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
@@ -175,9 +179,13 @@ func registerKV(r registry.Registry) {
 				envFlags = " " + e
 			}
 
-			cmd := fmt.Sprintf("./workload run kv --tolerate-errors --init"+
-				histograms+concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+envFlags+
-				" {pgurl:1-%d}", nodes)
+			url := fmt.Sprintf(" {pgurl:1-%d}", nodes)
+			if opts.sharedProcessMT {
+				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
+			}
+			cmd := "./workload run kv --tolerate-errors --init" +
+				histograms + concurrency + splits + duration + readPercent +
+				batchSize + blockSize + sequential + envFlags + url
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
 		})
@@ -187,20 +195,28 @@ func registerKV(r registry.Registry) {
 	for _, opts := range []kvOptions{
 		// Standard configs.
 		{nodes: 1, cpus: 8, readPercent: 0},
+		{nodes: 1, cpus: 8, readPercent: 0, sharedProcessMT: true},
 		// CPU overload test, to stress admission control.
 		{nodes: 1, cpus: 8, readPercent: 50, concMultiplier: 8192},
 		// IO write overload test, to stress admission control.
 		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 1, cpus: 8, readPercent: 95},
+		{nodes: 1, cpus: 8, readPercent: 95, sharedProcessMT: true},
 		{nodes: 1, cpus: 32, readPercent: 0},
+		{nodes: 1, cpus: 32, readPercent: 0, sharedProcessMT: true},
 		{nodes: 1, cpus: 32, readPercent: 95},
+		{nodes: 1, cpus: 32, readPercent: 95, sharedProcessMT: true},
 		{nodes: 3, cpus: 8, readPercent: 0},
+		{nodes: 3, cpus: 8, readPercent: 0, sharedProcessMT: true},
 		{nodes: 3, cpus: 8, readPercent: 95},
+		{nodes: 3, cpus: 8, readPercent: 95, sharedProcessMT: true},
 		{nodes: 3, cpus: 8, readPercent: 95, tracing: true, owner: registry.OwnerObsInf},
 		{nodes: 3, cpus: 8, readPercent: 0, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 8, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0},
+		{nodes: 3, cpus: 32, readPercent: 0, sharedProcessMT: true},
 		{nodes: 3, cpus: 32, readPercent: 95},
+		{nodes: 3, cpus: 32, readPercent: 95, sharedProcessMT: true},
 		{nodes: 3, cpus: 32, readPercent: 0, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0, globalMVCCRangeTombstone: true},
@@ -304,6 +320,9 @@ func registerKV(r registry.Registry) {
 		}
 		if opts.tracing {
 			nameParts = append(nameParts, "tracing")
+		}
+		if opts.sharedProcessMT {
+			nameParts = append(nameParts, "mt-shared-process")
 		}
 		owner := registry.OwnerTestEng
 		if opts.owner != "" {
@@ -767,7 +786,7 @@ func registerKVScalability(r registry.Registry) {
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
 			i := i // capture loop variable
-			c.Wipe(ctx, c.Range(1, nodes))
+			c.Wipe(ctx, false /* preserveCerts */, c.Range(1, nodes))
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 			t.Status("running workload")

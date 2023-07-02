@@ -83,6 +83,8 @@ type c2cSetup struct {
 
 const maxExpectedLatencyDefault = 2 * time.Minute
 
+const maxCutoverTimeoutDefault = 5 * time.Minute
+
 var c2cPromMetrics = map[string]clusterstats.ClusterStat{
 	"LogicalMegabytes": {
 		LabelName: "node",
@@ -270,6 +272,11 @@ func (kv replicateKV) runDriver(
 }
 
 type replicateBulkOps struct {
+	// short uses less data during the import and rollback steps. Also only runs one rollback.
+	short bool
+
+	// debugSkipRollback skips all rollback steps during the test.
+	debugSkipRollback bool
 }
 
 func (bo replicateBulkOps) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
@@ -286,6 +293,8 @@ func (bo replicateBulkOps) runDriver(
 	runBackupMVCCRangeTombstones(workloadCtx, t, c, mvccRangeTombstoneConfig{
 		skipBackupRestore: true,
 		skipClusterSetup:  true,
+		short:             bo.short,
+		debugSkipRollback: bo.debugSkipRollback,
 		tenantName:        setup.src.name})
 	return nil
 }
@@ -323,6 +332,9 @@ type replicationSpec struct {
 
 	// timeout specifies when the roachtest should fail due to timeout.
 	timeout time.Duration
+
+	// cutoverTimeout specifies how long we expect cutover to take.
+	cutoverTimeout time.Duration
 
 	expectedNodeDeaths int32
 
@@ -552,7 +564,7 @@ func (rd *replicationDriver) stopReplicationStream(
 	ctx context.Context, ingestionJob int, cutoverTime time.Time,
 ) {
 	rd.setup.dst.sysSQL.Exec(rd.t, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`, rd.setup.dst.name, cutoverTime)
-	err := retry.ForDuration(time.Minute*5, func() error {
+	err := retry.ForDuration(rd.rs.cutoverTimeout, func() error {
 		var status string
 		var payloadBytes []byte
 		res := rd.setup.dst.sysSQL.DB.QueryRowContext(ctx, `SELECT status, payload FROM crdb_internal.system_jobs WHERE id = $1`, ingestionJob)
@@ -583,17 +595,12 @@ func (rd *replicationDriver) compareTenantFingerprintsAtTimestamp(
 	rd.t.Status(fmt.Sprintf("comparing tenant fingerprints between start time %s and end time %s",
 		startTime.UTC(), endTime.UTC()))
 
-	// TODO(adityamaru,lidorcarmel): Once we agree on the format and precision we
-	// display all user facing timestamps with, we should revisit how we format
-	// the start time to ensure we are fingerprinting from the most accurate lower
-	// bound.
-	microSecondRFC3339Format := "2006-01-02 15:04:05.999999"
-	startTimeStr := startTime.Format(microSecondRFC3339Format)
+	startTimeDecimal := hlc.Timestamp{WallTime: startTime.UnixNano()}.AsOfSystemTime()
 	aost := hlc.Timestamp{WallTime: endTime.UnixNano()}.AsOfSystemTime()
 	fingerprintQuery := fmt.Sprintf(`
 SELECT *
-FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), '%s'::TIMESTAMPTZ, true)
-AS OF SYSTEM TIME '%s'`, startTimeStr, aost)
+FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), '%s'::DECIMAL, true)
+AS OF SYSTEM TIME '%s'`, startTimeDecimal, aost)
 
 	var srcFingerprint int64
 	fingerPrintMonitor := rd.newMonitor(ctx)
@@ -611,9 +618,19 @@ AS OF SYSTEM TIME '%s'`, startTimeStr, aost)
 		rd.t.L().Printf("fingerprinting the destination tenant took %s", fingerprintingDuration)
 		return nil
 	})
-
 	// If the goroutine gets cancelled or fataled, return before comparing fingerprints.
 	require.NoError(rd.t, fingerPrintMonitor.WaitE())
+	if srcFingerprint != destFingerprint {
+		startHlc := hlc.Timestamp{WallTime: startTime.UnixNano()}
+		endHlc := hlc.Timestamp{WallTime: endTime.UnixNano()}
+		rd.t.L().Printf("fingerpint mismatch: conducting table level fingerprints")
+		srcTenantConn := rd.c.Conn(ctx, rd.t.L(), 1, option.TenantName(rd.setup.src.name))
+		dstTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.rs.srcNodes+1, option.TenantName(rd.setup.dst.name))
+		require.NoError(rd.t, replicationutils.InvestigateFingerprints(ctx, srcTenantConn, dstTenantConn,
+			startHlc,
+			endHlc))
+		rd.t.L().Printf("fingerprints by table seem to match")
+	}
 	require.Equal(rd.t, srcFingerprint, destFingerprint)
 }
 
@@ -629,18 +646,23 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	}
 
 	rd.t.L().Printf("begin workload on src cluster")
-	m := rd.newMonitor(ctx)
-	// The roachtest driver can use the workloadCtx to cancel the workload.
+
+	// Pass a cancellable context to the workload monitor so the driver can cleanly cancel the
+	// workload goroutine.
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	defer workloadCancel()
+	workloadMonitor := rd.newMonitor(workloadCtx)
+	defer func() {
+		workloadCancel()
+		workloadMonitor.Wait()
+	}()
 
 	workloadDoneCh := make(chan struct{})
-	m.Go(func(ctx context.Context) error {
+	workloadMonitor.Go(func(ctx context.Context) error {
 		defer close(workloadDoneCh)
-		err := rd.runWorkload(workloadCtx)
+		err := rd.runWorkload(ctx)
 		// The workload should only return an error if the roachtest driver cancels the
-		// workloadCtx after rd.additionalDuration has elapsed after the initial scan completes.
-		if err != nil && workloadCtx.Err() == nil {
+		// ctx after the rd.additionalDuration has elapsed after the initial scan completes.
+		if err != nil && ctx.Err() == nil {
 			// Implies the workload context was not cancelled and the workload cmd returned a
 			// different error.
 			return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
@@ -660,13 +682,20 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	if rd.rs.maxAcceptedLatency != 0 {
 		maxExpectedLatency = rd.rs.maxAcceptedLatency
 	}
+
+	if rd.rs.cutoverTimeout == 0 {
+		rd.rs.cutoverTimeout = maxCutoverTimeoutDefault
+	}
+
 	lv := makeLatencyVerifier("stream-ingestion", 0, maxExpectedLatency, rd.t.L(),
 		getStreamIngestionJobInfo, rd.t.Status, rd.rs.expectedNodeDeaths > 0)
 	defer lv.maybeLogLatencyHist()
 
-	m.Go(func(ctx context.Context) error {
+	latencyMonitor := rd.newMonitor(ctx)
+	latencyMonitor.Go(func(ctx context.Context) error {
 		return lv.pollLatency(ctx, rd.setup.dst.db, ingestionJobID, time.Second, workloadDoneCh)
 	})
+	defer latencyMonitor.Wait()
 
 	rd.t.L().Printf("waiting for replication stream to finish ingesting initial scan")
 	rd.waitForReplicatedTime(ingestionJobID, rd.rs.timeout/2)
@@ -679,7 +708,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 		rd.t.L().Printf("workload finished on its own")
 	case <-time.After(rd.getWorkloadTimeout()):
 		workloadCancel()
-		rd.t.L().Printf("workload has cancelled after %s", rd.rs.additionalDuration)
+		rd.t.L().Printf("workload was cancelled after %s", rd.rs.additionalDuration)
 	case <-ctx.Done():
 		rd.t.L().Printf(`roachtest context cancelled while waiting for workload duration to complete`)
 		return
@@ -817,15 +846,32 @@ func registerClusterToCluster(r registry.Registry) {
 			skip:               "for local ad hoc testing",
 		},
 		{
-			name:               "c2c/BulkOps",
+			name:               "c2c/BulkOps/full",
 			srcNodes:           4,
 			dstNodes:           4,
 			cpus:               8,
-			pdSize:             500,
+			pdSize:             100,
 			workload:           replicateBulkOps{},
-			timeout:            4 * time.Hour,
+			timeout:            2 * time.Hour,
+			cutoverTimeout:     1 * time.Hour,
 			additionalDuration: 0,
 			cutover:            5 * time.Minute,
+			maxAcceptedLatency: 1 * time.Hour,
+			skip:               "Reveals a bad bug related to replicating an import. See https://github.com/cockroachdb/cockroach/issues/105676 ",
+		},
+		{
+			name:               "c2c/BulkOps/singleImport",
+			srcNodes:           4,
+			dstNodes:           4,
+			cpus:               8,
+			pdSize:             100,
+			workload:           replicateBulkOps{short: true, debugSkipRollback: true},
+			timeout:            2 * time.Hour,
+			cutoverTimeout:     1 * time.Hour,
+			additionalDuration: 0,
+			cutover:            1 * time.Minute,
+			maxAcceptedLatency: 1 * time.Hour,
+			skip:               "Reveals a bad bug related to replicating an import. See https://github.com/cockroachdb/cockroach/issues/105676 ",
 		},
 	} {
 		sp := sp
@@ -833,15 +879,17 @@ func registerClusterToCluster(r registry.Registry) {
 			func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rd := makeReplicationDriver(t, c, sp)
 				rd.setupC2C(ctx, t, c)
+				m := rd.newMonitor(ctx)
 
-				m := c.NewMonitor(ctx)
 				hc := roachtestutil.NewHealthChecker(t, c, rd.crdbNodes())
 				m.Go(func(ctx context.Context) error {
 					require.NoError(t, hc.Runner(ctx))
 					return nil
 				})
-				defer hc.Done()
-
+				defer func() {
+					hc.Done()
+					m.Wait()
+				}()
 				rd.main(ctx)
 			})
 	}
@@ -1118,6 +1166,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 					rrd.main(ctx)
 					return nil
 				})
+				defer m.Wait()
 
 				// Don't begin shutdown process until c2c job is set up.
 				<-shutdownSetupDone
@@ -1188,6 +1237,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 			rd.main(ctx)
 			return nil
 		})
+		defer m.Wait()
 
 		// Dont begin node disconnecion until c2c job is setup.
 		<-shutdownSetupDone
@@ -1219,7 +1269,6 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		getSrcDestNodePairs(rd, ingestionProgressUpdate)
 		blackholeFailer.Cleanup(ctx)
 		rd.t.L().Printf("Nodes reconnected. C2C Job should eventually complete")
-		m.Wait()
 	})
 }
 

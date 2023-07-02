@@ -34,6 +34,7 @@ func TestDoctorCluster(t *testing.T) {
 		"INSERT INTO system.users VALUES ('node', NULL, true, 3)",
 		"GRANT node TO root",
 		"DELETE FROM system.namespace WHERE name = 'foo'",
+		"SELECT pg_catalog.pg_sleep(1)",
 	}, ";\n"),
 	})
 
@@ -68,6 +69,18 @@ func TestDoctorZipDir(t *testing.T) {
 		})
 	})
 
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip-with-quotes")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir_with_quotes"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
 	t.Run("recreate", func(t *testing.T) {
 		out, err := c.RunWithCapture("debug doctor recreate zipdir testdata/doctor/debugzip")
 		if err != nil {
@@ -76,6 +89,18 @@ func TestDoctorZipDir(t *testing.T) {
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
 		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_recreate_zipdir"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
+	t.Run("recreate-json", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor recreate zipdir testdata/doctor/debugzip-json")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_recreate_zipdir-json"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})

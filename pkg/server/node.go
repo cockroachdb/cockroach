@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
@@ -142,6 +143,54 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaBatchRequestsBytes = metric.Metadata{
+		Name:        "batch_requests.bytes",
+		Help:        `Total byte count of batch requests processed`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBatchResponsesBytes = metric.Metadata{
+		Name:        "batch_responses.bytes",
+		Help:        `Total byte count of batch responses received`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCrossRegionBatchRequest = metric.Metadata{
+		Name: "batch_requests.cross_region.bytes",
+		Help: `Total byte count of batch requests processed cross region when region
+		tiers are configured`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCrossRegionBatchResponse = metric.Metadata{
+		Name: "batch_responses.cross_region.bytes",
+		Help: `Total byte count of batch responses received cross region when region
+		tiers are configured`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCrossZoneBatchRequest = metric.Metadata{
+		Name: "batch_requests.cross_zone.bytes",
+		Help: `Total byte count of batch requests processed cross zone within
+		the same region when region and zone tiers are configured. However, if the
+		region tiers are not configured, this count may also include batch data sent
+		between different regions. Ensuring consistent configuration of region and
+		zone tiers across nodes helps to accurately monitor the data transmitted.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaCrossZoneBatchResponse = metric.Metadata{
+		Name: "batch_responses.cross_zone.bytes",
+		Help: `Total byte count of batch responses received cross zone within the
+		same region when region and zone tiers are configured. However, if the
+		region tiers are not configured, this count may also include batch data
+		received between different regions. Ensuring consistent configuration of
+		region and zone tiers across nodes helps to accurately monitor the data
+		transmitted.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // Cluster settings.
@@ -182,8 +231,14 @@ type nodeMetrics struct {
 	Err        *metric.Counter
 	DiskStalls *metric.Counter
 
-	BatchCount   *metric.Counter
-	MethodCounts [kvpb.NumMethods]*metric.Counter
+	BatchCount                    *metric.Counter
+	MethodCounts                  [kvpb.NumMethods]*metric.Counter
+	BatchRequestsBytes            *metric.Counter
+	BatchResponsesBytes           *metric.Counter
+	CrossRegionBatchRequestBytes  *metric.Counter
+	CrossRegionBatchResponseBytes *metric.Counter
+	CrossZoneBatchRequestBytes    *metric.Counter
+	CrossZoneBatchResponseBytes   *metric.Counter
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
@@ -194,10 +249,16 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
 		}),
-		Success:    metric.NewCounter(metaExecSuccess),
-		Err:        metric.NewCounter(metaExecError),
-		DiskStalls: metric.NewCounter(metaDiskStalls),
-		BatchCount: metric.NewCounter(metaInternalBatchRPCCount),
+		Success:                       metric.NewCounter(metaExecSuccess),
+		Err:                           metric.NewCounter(metaExecError),
+		DiskStalls:                    metric.NewCounter(metaDiskStalls),
+		BatchCount:                    metric.NewCounter(metaInternalBatchRPCCount),
+		BatchRequestsBytes:            metric.NewCounter(metaBatchRequestsBytes),
+		BatchResponsesBytes:           metric.NewCounter(metaBatchResponsesBytes),
+		CrossRegionBatchRequestBytes:  metric.NewCounter(metaCrossRegionBatchRequest),
+		CrossRegionBatchResponseBytes: metric.NewCounter(metaCrossRegionBatchResponse),
+		CrossZoneBatchRequestBytes:    metric.NewCounter(metaCrossZoneBatchRequest),
+		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
 	}
 
 	for i := range nm.MethodCounts {
@@ -222,6 +283,42 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 		nm.Success.Inc(1)
 	}
 	nm.Latency.RecordValue(d.Nanoseconds())
+}
+
+// updateCrossLocalityMetricsOnBatchRequest updates nodeMetrics for batch
+// requests processed on the node. The metrics being updated include 1. total
+// byte count of batch requests processed 2. cross-region metrics, which monitor
+// activities across different regions, and 3. cross-zone metrics, which monitor
+// activities across different zones within the same region or in cases where
+// region tiers are not configured. These metrics may include batches that were
+// not successfully sent but were terminated at an early stage.
+func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	nm.BatchRequestsBytes.Inc(inc)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		nm.CrossRegionBatchRequestBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		nm.CrossZoneBatchRequestBytes.Inc(inc)
+	}
+}
+
+// updateCrossLocalityMetricsOnBatchResponse updates nodeMetrics for batch
+// responses that are received back. It updates based on the comparisonResult
+// parameter determined during the initial batch requests check. The underlying
+// assumption is that the response should match the cross-region or cross-zone
+// nature of the requests.
+func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	nm.BatchResponsesBytes.Inc(inc)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		nm.CrossRegionBatchResponseBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		nm.CrossZoneBatchResponseBytes.Inc(inc)
+	}
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -1216,7 +1313,7 @@ func (n *Node) batchInternal(
 	// replica to notice the cancellation and return a response. For this reason,
 	// we log the server-side trace of the cancelled request to help debug what
 	// the request was doing at the time it noticed the cancellation.
-	if pErr != nil && errors.IsAny(pErr.GoError(), context.Canceled, context.DeadlineExceeded) {
+	if pErr != nil && ctx.Err() != nil {
 		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
 			log.Infof(ctx, "batch request %s failed with error: %s\ntrace:\n%s", args.String(),
 				pErr.GoError().Error(), sp.GetConfiguredRecording().String())
@@ -1227,6 +1324,36 @@ func (n *Node) batchInternal(
 	br.Error = pErr
 
 	return br, nil
+}
+
+// getLocalityComparison takes gatewayNodeID as input and returns the locality
+// comparison result between the gateway node and the current node. This result
+// indicates whether the two nodes are located in different regions or zones.
+func (n *Node) getLocalityComparison(
+	ctx context.Context, gatewayNodeID roachpb.NodeID,
+) roachpb.LocalityComparisonType {
+	gossip := n.storeCfg.Gossip
+	if gossip == nil {
+		log.VEventf(ctx, 2, "gossip is not configured")
+		return roachpb.LocalityComparisonType_UNDEFINED
+	}
+
+	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
+	if err != nil {
+		log.VEventf(ctx, 2,
+			"failed to perform look up for node descriptor %v", err)
+		return roachpb.LocalityComparisonType_UNDEFINED
+	}
+
+	comparisonResult, regionErr, zoneErr := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
+	if regionErr != nil {
+		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross region %+v", regionErr)
+	}
+	if zoneErr != nil {
+		log.VEventf(ctx, 2, "unable to determine if the given nodes are cross zone %+v", zoneErr)
+	}
+
+	return comparisonResult
 }
 
 // incrementBatchCounters increments counters to track the batch and composite
@@ -1247,6 +1374,9 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 	// carry the associated log tags forward as doing so makes adding additional
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
+
+	comparisonResult := n.getLocalityComparison(ctx, args.GatewayNodeID)
+	n.metrics.updateCrossLocalityMetricsOnBatchRequest(comparisonResult, int64(args.Size()))
 
 	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
@@ -1291,6 +1421,8 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		}
 		br.Error = kvpb.NewError(err)
 	}
+
+	n.metrics.updateCrossLocalityMetricsOnBatchResponse(comparisonResult, int64(br.Size()))
 	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}
@@ -1892,7 +2024,7 @@ func (n *Node) TenantSettings(
 		})
 	}
 
-	send := func(precedence kvpb.TenantSettingsPrecedence, overrides []kvpb.TenantSetting) error {
+	send := func(precedence kvpb.TenantSettingsEvent_Precedence, overrides []kvpb.TenantSetting) error {
 		log.VInfof(ctx, 1, "sending precedence %d: %v", precedence, overrides)
 		return stream.Send(&kvpb.TenantSettingsEvent{
 			Precedence:  precedence,
@@ -1901,13 +2033,28 @@ func (n *Node) TenantSettings(
 		})
 	}
 
+	// Sanity check: this ensures that someone notices if the proto
+	// definition changes but the code below is not adapted.
+	if numPrecedences := len(kvpb.TenantSettingsEvent_Precedence_value); numPrecedences != 3 {
+		err := errors.AssertionFailedf("programming error: expected 3 precedence values, got %d", numPrecedences)
+		logcrash.ReportOrPanic(ctx, &n.execCfg.Settings.SV, "%w", err)
+		return err
+	}
+
+	// Send the initial state.
+	//
+	// The protocol defines that there is one initial response per
+	// precedence value, with Incremental set to false. This is important:
+	// the client waits for at least one non-incremental message
+	// for each predecende before continuing.
+
 	allOverrides, allCh := w.GetAllTenantOverrides()
-	if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
+	if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
 		return err
 	}
 
 	tenantOverrides, tenantCh := w.GetTenantOverrides(args.TenantID)
-	if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+	if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
 		return err
 	}
 
@@ -1915,15 +2062,19 @@ func (n *Node) TenantSettings(
 		select {
 		case <-allCh:
 			// All-tenant overrides have changed, send them again.
+			// TODO(multitenant): We can optimize this by only sending the delta since the last
+			// update, with Incremental set to true.
 			allOverrides, allCh = w.GetAllTenantOverrides()
-			if err := send(kvpb.AllTenantsOverrides, allOverrides); err != nil {
+			if err := send(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides); err != nil {
 				return err
 			}
 
 		case <-tenantCh:
 			// Tenant-specific overrides have changed, send them again.
+			// TODO(multitenant): We can optimize this by only sending the delta since the last
+			// update, with Incremental set to true.
 			tenantOverrides, tenantCh = w.GetTenantOverrides(args.TenantID)
-			if err := send(kvpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+			if err := send(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides); err != nil {
 				return err
 			}
 

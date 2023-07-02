@@ -161,6 +161,13 @@ type AddDescriptorName struct {
 	Namespace scpb.Namespace
 }
 
+// SetNameInDescriptor sets the name field of the descriptor.
+type SetNameInDescriptor struct {
+	immediateMutationOp
+	DescriptorID descpb.ID
+	Name         string
+}
+
 // MakeDeleteOnlyColumnWriteOnly transitions a column addition mutation from
 // DELETE_ONLY to WRITE_ONLY.
 type MakeDeleteOnlyColumnWriteOnly struct {
@@ -250,6 +257,24 @@ type MakeDeleteOnlyColumnAbsent struct {
 	immediateMutationOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
+}
+
+// AddOwnerBackReferenceInSequence adds a sequence ownership
+// back-reference from a sequence.
+type AddOwnerBackReferenceInSequence struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+	TableID    descpb.ID
+	ColumnID   descpb.ColumnID
+}
+
+// AddSequenceOwner adds a sequence ownership reference from the owning
+// table column.
+type AddSequenceOwner struct {
+	immediateMutationOp
+	TableID         descpb.ID
+	ColumnID        descpb.ColumnID
+	OwnedSequenceID descpb.ID
 }
 
 // RemoveOwnerBackReferenceInSequence removes a sequence ownership
@@ -799,8 +824,21 @@ type CreateSchemaDescriptor struct {
 	SchemaID descpb.ID
 }
 
-type SetSchemaName struct {
+type CreateSequenceDescriptor struct {
 	immediateMutationOp
-	SchemaID descpb.ID
-	Name     string
+	SequenceID descpb.ID
+}
+
+type SetSequenceOptions struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+	Key        string
+	Value      string
+}
+
+type InitSequence struct {
+	immediateMutationOp
+	SequenceID     descpb.ID
+	RestartWith    int64
+	UseRestartWith bool
 }

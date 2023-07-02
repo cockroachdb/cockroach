@@ -120,6 +120,11 @@ func TestValidateMixedVersionElements_alter_table_drop_constraint_uwi(t *testing
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_uwi", sctest.SingleNodeMixedCluster)
 }
+func TestValidateMixedVersionElements_alter_table_multiple_commands(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_multiple_commands", sctest.SingleNodeMixedCluster)
+}
 func TestValidateMixedVersionElements_alter_table_validate_constraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -140,6 +145,11 @@ func TestValidateMixedVersionElements_create_index(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index", sctest.SingleNodeMixedCluster)
 }
+func TestValidateMixedVersionElements_create_index_create_schema_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index_create_schema_separate_statements", sctest.SingleNodeMixedCluster)
+}
 func TestValidateMixedVersionElements_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -149,6 +159,11 @@ func TestValidateMixedVersionElements_create_schema_drop_schema_separate_stateme
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/create_schema_drop_schema_separate_statements", sctest.SingleNodeMixedCluster)
+}
+func TestValidateMixedVersionElements_create_sequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ValidateMixedVersionElements(t, "pkg/sql/schemachanger/testdata/end_to_end/create_sequence", sctest.SingleNodeMixedCluster)
 }
 func TestValidateMixedVersionElements_drop_column_basic(t *testing.T) {
 	defer leaktest.AfterTest(t)()

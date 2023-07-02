@@ -423,7 +423,6 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		DB:                      cfg.DB.KV(),
 		Codec:                   cfg.Codec,
 		Clock:                   cfg.DB.KV().Clock(),
-		Gossip:                  cfg.Gossip,
 		Spans:                   spans,
 		CheckpointSpans:         ca.spec.Checkpoint.Spans,
 		CheckpointTimestamp:     ca.spec.Checkpoint.Timestamp,
@@ -647,9 +646,16 @@ func (ca *changeAggregator) tick() error {
 		a := event.DetachAlloc()
 		a.Release(ca.Ctx())
 		resolved := event.Resolved()
-		if ca.knobs.FilterSpanWithMutation == nil || !ca.knobs.FilterSpanWithMutation(&resolved) {
-			return ca.noteResolvedSpan(resolved)
+		if ca.knobs.FilterSpanWithMutation != nil {
+			shouldFilter, err := ca.knobs.FilterSpanWithMutation(&resolved)
+			if err != nil {
+				return err
+			}
+			if shouldFilter {
+				return nil
+			}
 		}
+		return ca.noteResolvedSpan(resolved)
 	case kvevent.TypeFlush:
 		return ca.flushBufferedEvents()
 	}

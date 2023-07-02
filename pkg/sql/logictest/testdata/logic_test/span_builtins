@@ -41,6 +41,20 @@ SELECT crdb_internal.tenant_span(2)
 
 subtest end
 
+subtest tenant_span_at_uint_boundary
+
+query T
+SELECT crdb_internal.pretty_key(crdb_internal.tenant_span(108)[2], 0)
+----
+/109
+
+query T
+SELECT crdb_internal.pretty_key(crdb_internal.tenant_span(109)[2], 0)
+----
+/110
+
+subtest end
+
 subtest table_span
 
 query T

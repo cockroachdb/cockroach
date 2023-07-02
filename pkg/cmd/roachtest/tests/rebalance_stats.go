@@ -37,8 +37,6 @@ var (
 
 	rebalanceSnapshotSentStat = clusterstats.ClusterStat{
 		LabelName: "node", Query: divQuery("rate(range_snapshots_rebalancing_sent_bytes[5m])", 1<<20)}
-	rebalanceSnapshotRcvdStat = clusterstats.ClusterStat{
-		LabelName: "node", Query: divQuery("rate(range_snapshots_rebalancing_rcvd_bytes[5m])", 1<<20)}
 
 	admissionAvgWaitSecs = clusterstats.ClusterStat{
 		LabelName: "node",

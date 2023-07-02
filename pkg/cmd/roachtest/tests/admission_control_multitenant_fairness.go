@@ -203,11 +203,6 @@ func runMultiTenantFairness(
 
 	// Create the tenants.
 	t.L().Printf("initializing %d tenants (<%s)", numTenants, 5*time.Minute)
-	tenantIDs := make([]int, 0, numTenants)
-	for i := 0; i < numTenants; i++ {
-		tenantIDs = append(tenantIDs, tenantID(i))
-	}
-
 	tenants := make([]*tenantNode, numTenants)
 	for i := 0; i < numTenants; i++ {
 		if !t.SkipInit() {
@@ -216,8 +211,7 @@ func runMultiTenantFairness(
 		}
 
 		tenant := createTenantNode(ctx, t, c,
-			crdbNode, tenantID(i), tenantNodeID(i), tenantHTTPPort(i), tenantSQLPort(i),
-			createTenantOtherTenantIDs(tenantIDs))
+			crdbNode, tenantID(i), tenantNodeID(i), tenantHTTPPort(i), tenantSQLPort(i))
 		defer tenant.stop(ctx, t, c)
 
 		tenants[i] = tenant

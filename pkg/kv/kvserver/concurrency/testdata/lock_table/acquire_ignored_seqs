@@ -85,9 +85,11 @@ num=1
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [2, 5, 8]
 
 # ------------------------------------------------------------------------------
-# Ensure only sequence numbers of unreplicated locks are pruned. That is,
-# replicated locks acquired at a sequence number that is considered ignored
-# should not be pruned.
+# Ensure sequence numbers are only pruned when acquiring unreplicated locks.
+# The interesting case here is when a replicated lock is being acquired and the
+# acquisition struct says a sequence number at which an unreplicated lock is
+# held is considered ignored -- nothing gets pruned in such cases (even though
+# it technically could).
 # ------------------------------------------------------------------------------
 
 # First, add a waiting writer on this lock so that it counts as contended.
@@ -102,42 +104,31 @@ scan r=req6
 ----
 start-waiting: true
 
-acquire r=req5 k=a durability=r
-----
-num=1
- lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: repl epoch: 0, seqs: [8], unrepl epoch: 0, seqs: [2, 5, 8]
-   queued writers:
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 3
-
 new-txn txn=txn1 ts=10,1 epoch=0 seq=9
 ----
 
 new-request r=req7 txn=txn1 ts=10,1 spans=intent@a
 ----
 
-# Note that the lock is acquired as both replicated and un-replicated at
-# sequence number 8. But because the lock is being acquired as replicated, we
-# don't prune the list of unreplicated locks either.
+# Because the lock is being acquired as a replicated lock nothing in the
+# unreplicated sequence number tracking gets pruned.
 
 acquire r=req7 k=a durability=r ignored-seqs=8
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: repl epoch: 0, seqs: [8, 9], unrepl epoch: 0, seqs: [2, 5, 8]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: repl epoch: 0, unrepl epoch: 0, seqs: [2, 5, 8]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
 
-# Similarly, acquire the lock as unreplicated and try to ignore a sequence
-# number (8) at which the lock was acquired as a replicated lock; it shouldn't
-# be pruned.
+# However, unreplicated lock acquisition with the same ignored sequence number
+# (8) will result in the list of sequence numbers getting pruned.
 acquire r=req7 k=a durability=u ignored-seqs=8
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: repl epoch: 0, seqs: [8, 9], unrepl epoch: 0, seqs: [2, 5, 9]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: repl epoch: 0, unrepl epoch: 0, seqs: [2, 5, 9]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
@@ -160,7 +151,7 @@ acquire r=req8 k=a durability=u ignored-seqs=2-5,9
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: repl epoch: 0, seqs: [8, 9], unrepl epoch: 0, seqs: [11]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: repl epoch: 0, unrepl epoch: 0, seqs: [11]
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3

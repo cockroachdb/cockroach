@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -14,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
@@ -49,6 +49,7 @@ go_test(
     deps = [
         ":typedesc",
         "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -75,5 +76,3 @@ go_test(
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
-
-get_x_data(name = "get_x_data")

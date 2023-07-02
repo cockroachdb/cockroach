@@ -285,11 +285,6 @@ object SchemaComment
 SchemaComment :  SchemaID
 SchemaComment :  Comment
 
-object SchemaName
-
-SchemaName :  SchemaID
-SchemaName :  Name
-
 object SchemaParent
 
 SchemaParent :  SchemaID
@@ -309,7 +304,15 @@ SecondaryIndexPartial :  Expression
 object Sequence
 
 Sequence :  SequenceID
+Sequence :  RestartWith
+Sequence :  UseRestartWith
 Sequence :  IsTemporary
+
+object SequenceOption
+
+SequenceOption :  SequenceID
+SequenceOption :  Key
+SequenceOption :  Value
 
 object SequenceOwner
 
@@ -470,11 +473,11 @@ Table <|-- SchemaChild
 View <|-- SchemaChild
 Sequence <|-- SchemaChild
 Schema <|-- SchemaComment
-Schema <|-- SchemaName
 Schema <|-- SchemaParent
 Table <|-- SecondaryIndex
 View <|-- SecondaryIndex
 SecondaryIndex <|-- SecondaryIndexPartial
+Sequence <|-- SequenceOption
 Column <|-- SequenceOwner
 Table <|-- TableComment
 View <|-- TableComment

@@ -115,8 +115,8 @@ type Cluster interface {
 
 	// Deleting CockroachDB data and logs on nodes.
 
-	WipeE(ctx context.Context, l *logger.Logger, opts ...option.Option) error
-	Wipe(ctx context.Context, opts ...option.Option)
+	WipeE(ctx context.Context, l *logger.Logger, preserveCerts bool, opts ...option.Option) error
+	Wipe(ctx context.Context, preserveCerts bool, opts ...option.Option)
 
 	// Internal niche tools.
 
@@ -134,6 +134,7 @@ type Cluster interface {
 	) error
 
 	FetchTimeseriesData(ctx context.Context, l *logger.Logger) error
+	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string) error
 	RefetchCertsFromNode(ctx context.Context, node int) error
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error

@@ -13,6 +13,18 @@ new-txn txn=txn3 ts=11,1 epoch=0
 new-txn txn=txn4 ts=11,1 epoch=0
 ----
 
+new-txn txn=txn5 ts=11,1 epoch=0
+----
+
+new-txn txn=txn6 ts=11,1 epoch=0
+----
+
+new-txn txn=txn7 ts=11,1 epoch=0
+----
+
+new-txn txn=txn8 ts=11,1 epoch=0
+----
+
 # -----------------------------------------------------------------------------
 # req1 waits for replicated locks held by txn2, txn3, and unreplicated lock
 # held by txn4. When txn2 is finalized and req1 scans, it notices it no longer
@@ -35,7 +47,7 @@ add-discovered r=req1 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -43,11 +55,11 @@ add-discovered r=req1 k=b txn=txn2
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -55,15 +67,15 @@ add-discovered r=req1 k=d txn=txn3
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -71,19 +83,19 @@ add-discovered r=req1 k=e txn=txn3
 ----
 num=4
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -95,21 +107,21 @@ acquire r=req2 k=c durability=u
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -117,21 +129,21 @@ dequeue r=req2
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -143,26 +155,26 @@ print
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: true req: 1, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 1
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req1
@@ -177,12 +189,11 @@ print
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 1
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
@@ -191,38 +202,37 @@ num=5
     active: true req: 1, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 1
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn3 status=committed
+pushed-txn-updated txn=txn3 status=committed
 ----
 
 release txn=txn4 span=c
 ----
 num=5
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
-   distinguished req: 1
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, info: repl [holder finalized: aborted] epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 11.000000000,1, info: repl [holder finalized: committed] epoch: 0
    queued writers:
     active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
 
@@ -265,8 +275,10 @@ num=0
 
 # -----------------------------------------------------------------------------
 # req3 waits for replicated and unreplicated locks held by txn2. When txn2 is
-# finalized, the unreplicated lock is removed and the replicated locks are in
-# the list of locks to resolve.
+# finalized, the unreplicated lock is in the list of locks to remove and the
+# replicated locks are in the list of locks to resolve. Requests that are
+# sequencing through the lock table are able to acquire claims on both the
+# replicated and unreplicated locks.
 # -----------------------------------------------------------------------------
 
 new-request r=req3 txn=txn1 ts=10,1 spans=intent@a+intent@b+intent@c
@@ -283,7 +295,7 @@ add-discovered r=req3 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
@@ -291,11 +303,11 @@ add-discovered r=req3 k=c txn=txn2
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
@@ -307,13 +319,13 @@ acquire r=req4 k=b durability=u
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
@@ -321,17 +333,17 @@ dequeue r=req4
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: unrepl epoch: 0, seqs: [0]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req3
@@ -347,8 +359,11 @@ Intents to resolve:
 
 print
 ----
-num=2
+num=3
  lock: "a"
+   queued writers:
+    active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
+ lock: "b"
    queued writers:
     active: false req: 3, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
@@ -383,7 +398,7 @@ add-discovered r=req5 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
 
@@ -391,11 +406,11 @@ add-discovered r=req5 k=b txn=txn2
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
 
@@ -407,16 +422,16 @@ print
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: true req: 5, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 5
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req6
@@ -435,13 +450,13 @@ print
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0
    queued writers:
     active: true req: 5, txn: 00000000-0000-0000-0000-000000000001
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 5
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0
    queued writers:
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
 
@@ -454,7 +469,7 @@ num=2
     active: true req: 6, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 6
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0
    queued writers:
     active: false req: 5, txn: 00000000-0000-0000-0000-000000000001
 
@@ -515,7 +530,7 @@ add-discovered r=req7 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
 
@@ -523,11 +538,11 @@ add-discovered r=req7 k=b txn=txn2
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
 
@@ -543,16 +558,16 @@ print
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: true req: 7, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 7
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 11.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 7, txn: 00000000-0000-0000-0000-000000000001
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req8
@@ -612,39 +627,39 @@ add-discovered r=req9 k=a txn=txn3
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0
 
 add-discovered r=req9 k=b txn=txn3
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0
 
 add-discovered r=req9 k=c txn=txn4
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0
 
 add-discovered r=req9 k=d txn=txn4
 ----
 num=4
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl epoch: 0
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0
 
-txn-finalized txn=txn3 status=aborted
+pushed-txn-updated txn=txn3 status=aborted
 ----
 
 scan r=req9
@@ -659,16 +674,16 @@ print
 ----
 num=4
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl [holder finalized: aborted] epoch: 0
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 12.000000000,1, info: repl [holder finalized: aborted] epoch: 0
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0
    waiting readers:
     req: 9, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 9
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl epoch: 0
 
 scan r=req10
 ----
@@ -681,14 +696,14 @@ Intents to resolve:
  key="a" txn=00000000 status=ABORTED
  key="b" txn=00000000 status=ABORTED
 
-txn-finalized txn=txn4 status=aborted
+pushed-txn-updated txn=txn4 status=aborted
 ----
 
 release txn=txn4 span=c
 ----
 num=1
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000004, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0
 
 guard-state r=req9
 ----
@@ -718,11 +733,11 @@ add-discovered r=req11 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 12.000000000,1, info: repl epoch: 0
    queued writers:
     active: false req: 11, txn: none
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req11
@@ -763,9 +778,9 @@ add-discovered r=req12 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 12.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 12.000000000,1, info: repl epoch: 0
 
-txn-finalized txn=txn2 status=aborted
+pushed-txn-updated txn=txn2 status=aborted
 ----
 
 scan r=req12
@@ -789,3 +804,285 @@ num=0
 clear
 ----
 num=0
+
+# -----------------------------------------------------------------------------
+# Requests that come across unreplicated locks locks that belong to finalized
+# transactions should not wait on them while scanning. They should correctly
+# accumulate their toResolveUnreplicated slice and move on. We check this for
+# locking (transactional) requests, non-locking reads, and non-transactional
+# write requests, using 2 unreplicated locks for each.
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Setup.
+# -----------------------------------------------------------------------------
+
+# Acquire 6 locks, 1 each for each request types we care about.
+new-request r=req13 txn=txn6 ts=11,0 spans=intent@a+intent@b+intent@c+intent@d+intent@e+intent@f
+----
+
+# Locking, transactional request.
+new-request r=req14 txn=txn5 ts=11,0 spans=intent@a+intent@b
+----
+
+# Non-locking, transactional request
+new-request r=req15 txn=txn5 ts=11,0 spans=none@c+none@d
+----
+
+# Non-locking, transactional request
+new-request r=req16 txn=none ts=11,0 spans=intent@e+intent@f
+----
+
+acquire r=req13 k=a durability=u
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+
+acquire r=req13 k=b durability=u
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+
+acquire r=req13 k=c durability=u
+----
+num=3
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+
+acquire r=req13 k=d durability=u
+----
+num=4
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+
+acquire r=req13 k=e durability=u
+----
+num=5
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+
+acquire r=req13 k=f durability=u
+----
+num=6
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+
+pushed-txn-updated txn=txn6 status=aborted
+----
+
+# -----------------------------------------------------------------------------
+# Test.
+# -----------------------------------------------------------------------------
+
+scan r=req14
+----
+start-waiting: false
+
+guard-state r=req14
+----
+new: state=doneWaiting
+
+print
+----
+num=6
+ lock: "a"
+   queued writers:
+    active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+   queued writers:
+    active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
+ lock: "c"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "d"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+
+scan r=req15
+----
+start-waiting: false
+
+guard-state r=req15
+----
+new: state=doneWaiting
+
+print
+----
+num=4
+ lock: "a"
+   queued writers:
+    active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+   queued writers:
+    active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+
+print
+----
+num=4
+ lock: "a"
+   queued writers:
+    active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+   queued writers:
+    active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
+ lock: "e"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+ lock: "f"
+  holder: txn: 00000000-0000-0000-0000-000000000006, ts: 11.000000000,0, info: unrepl [holder finalized: aborted] epoch: 0, seqs: [0]
+
+scan r=req16
+----
+start-waiting: false
+
+guard-state r=req16
+----
+new: state=doneWaiting
+
+print
+----
+num=2
+ lock: "a"
+   queued writers:
+    active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+   queued writers:
+    active: false req: 13, txn: 00000000-0000-0000-0000-000000000005
+
+# -----------------------------------------------------------------------------
+# Ensure a claimant can never simultaneously be a distinguished waiter as well.
+# -----------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req17 txn=txn5 ts=11,0 spans=intent@a+intent@b
+----
+
+scan r=req17
+----
+start-waiting: false
+
+add-discovered r=req17 k=a txn=txn7
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007, ts: 11.000000000,1, info: repl epoch: 0
+   queued writers:
+    active: false req: 16, txn: 00000000-0000-0000-0000-000000000005
+
+add-discovered r=req17 k=b txn=txn8
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007, ts: 11.000000000,1, info: repl epoch: 0
+   queued writers:
+    active: false req: 16, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000008, ts: 11.000000000,1, info: repl epoch: 0
+   queued writers:
+    active: false req: 16, txn: 00000000-0000-0000-0000-000000000005
+
+scan r=req17
+----
+start-waiting: true
+
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007, ts: 11.000000000,1, info: repl epoch: 0
+   queued writers:
+    active: true req: 16, txn: 00000000-0000-0000-0000-000000000005
+   distinguished req: 16
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000008, ts: 11.000000000,1, info: repl epoch: 0
+   queued writers:
+    active: false req: 16, txn: 00000000-0000-0000-0000-000000000005
+
+pushed-txn-updated txn=txn7 status=aborted
+----
+
+scan r=req17
+----
+start-waiting: true
+
+guard-state r=req17
+----
+new: state=waitForDistinguished txn=txn8 key="b" held=true guard-strength=Intent
+
+# Now that req17 is able to wait on lock "b", and claim the lock on "a", it should
+# no longer be the distinguished waiter on lock "a" anymore.
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0
+   queued writers:
+    active: false req: 16, txn: 00000000-0000-0000-0000-000000000005
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000008, ts: 11.000000000,1, info: repl epoch: 0
+   queued writers:
+    active: true req: 16, txn: 00000000-0000-0000-0000-000000000005
+   distinguished req: 16
+
+new-request r=req18 txn=txn8 ts=11,0 spans=intent@a
+----
+
+scan r=req18
+----
+start-waiting: true
+
+# Consequently, req18 should be able to become a distinguished waiter on lock "a".
+print
+----
+num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000007, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0
+   queued writers:
+    active: false req: 16, txn: 00000000-0000-0000-0000-000000000005
+    active: true req: 17, txn: 00000000-0000-0000-0000-000000000008
+   distinguished req: 17
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000008, ts: 11.000000000,1, info: repl epoch: 0
+   queued writers:
+    active: true req: 16, txn: 00000000-0000-0000-0000-000000000005
+   distinguished req: 16

@@ -11,16 +11,15 @@
 package state
 
 import (
-	"math"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -605,9 +604,9 @@ func TestSetNodeLiveness(t *testing.T) {
 
 		// Liveness status returend should ignore time till store dead or the
 		// timestamp given.
-		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1, hlc.Timestamp{}, math.MaxInt64))
-		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2, hlc.Timestamp{}, math.MaxInt64))
-		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3, hlc.Timestamp{}, math.MaxInt64))
+		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1))
+		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2))
+		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3))
 	})
 
 	t.Run("node count fn", func(t *testing.T) {
@@ -687,4 +686,34 @@ US_West
     └── [17 18]
 `, complexTopology.String())
 
+}
+
+func TestCapacityOverride(t *testing.T) {
+	settings := config.DefaultSimulationSettings()
+	tick := settings.StartTime
+	s := LoadClusterInfo(ClusterInfoWithStoreCount(1, 1), settings)
+	storeID, rangeID := StoreID(1), RangeID(1)
+	_, ok := s.AddReplica(rangeID, storeID, roachpb.VOTER_FULL)
+	require.True(t, ok)
+
+	override := NewCapacityOverride()
+	override.QueriesPerSecond = 42
+
+	// Overwrite the QPS store capacity field.
+	s.SetCapacityOverride(storeID, override)
+
+	// Record 100 QPS of load, this should not change the store capacity QPS as
+	// we set it above, however it should change the written keys field.
+	s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{
+		Key:    1,
+		Writes: 500,
+	}})
+	s.TickClock(tick.Add(5 * time.Second))
+
+	capacity := s.StoreDescriptors(false /* cached */, storeID)[0].Capacity
+	require.Equal(t, 42.0, capacity.QueriesPerSecond)
+	// NB: Writes per second isn't used and is currently returned as the sum of
+	// writes to the store - we expect it to be 500 instead of 100 for that
+	// reason.
+	require.Equal(t, 500.0, capacity.WritesPerSecond)
 }

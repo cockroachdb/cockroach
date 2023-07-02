@@ -191,8 +191,11 @@ type localDataView struct {
 
 // testDescriptorData yaml optimized representation of RangeDescriptor
 type testDescriptorData struct {
-	RangeID    roachpb.RangeID         `yaml:"RangeID"`
-	StartKey   string                  `yaml:"StartKey"`
+	RangeID  roachpb.RangeID `yaml:"RangeID"`
+	StartKey string          `yaml:"StartKey"`
+	// EndKey is optional, it will be filled up with next descriptor's StartKey
+	// if omitted
+	EndKey     string                  `yaml:"EndKey"`
 	Replicas   []replicaDescriptorView `yaml:"Replicas,flow"`
 	Generation roachpb.RangeGeneration `yaml:"Generation,omitempty"`
 }
@@ -485,7 +488,7 @@ func raftLogFromPendingDescriptorUpdate(
 	if err != nil {
 		t.Fatalf("failed to serialize raftCommand: %v", err)
 	}
-	data := raftlog.EncodeRaftCommand(
+	data := raftlog.EncodeCommandBytes(
 		raftlog.EntryEncodingStandardWithoutAC, kvserverbase.CmdIDKey(fmt.Sprintf("%08d", entryIndex)), out)
 	ent := raftpb.Entry{
 		Term:  1,
@@ -501,7 +504,7 @@ func raftLogFromPendingDescriptorUpdate(
 }
 
 func parsePrettyKey(t *testing.T, pretty string) roachpb.RKey {
-	scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
+	scanner := keysutil.MakePrettyScanner(nil /* tableParser */, nil /* tenantParser */)
 	key, err := scanner.Scan(pretty)
 	if err != nil {
 		t.Fatalf("failed to parse key %s: %v", pretty, err)
@@ -535,10 +538,14 @@ func (e *quorumRecoveryEnv) handleDescriptorData(t *testing.T, d datadriven.Test
 		if gen == 0 {
 			gen = roachpb.RangeGeneration(maxReplicaID)
 		}
+		endKeyStr := testDesc.EndKey
+		if endKeyStr == "" {
+			endKeyStr = nextStartKey
+		}
 		return roachpb.RangeDescriptor{
 			RangeID:          testDesc.RangeID,
 			StartKey:         parsePrettyKey(t, testDesc.StartKey),
-			EndKey:           parsePrettyKey(t, nextStartKey),
+			EndKey:           parsePrettyKey(t, endKeyStr),
 			InternalReplicas: replicas,
 			Generation:       gen,
 			NextReplicaID:    maxReplicaID + 1,

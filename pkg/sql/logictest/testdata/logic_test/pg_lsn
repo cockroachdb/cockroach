@@ -1,0 +1,82 @@
+# LogicTest: !local-mixed-22.2-23.1
+query T
+SELECT 'A01F0/1AAA'::pg_lsn
+----
+A01F0/1AAA
+
+statement error could not parse pg_lsn
+SELECT 'A/G'::pg_lsn
+
+statement error could not parse pg_lsn
+SELECT '0G'::pg_lsn
+
+statement ok
+CREATE TABLE pg_lsn_table(id pg_lsn PRIMARY KEY, val pg_lsn)
+
+statement ok
+INSERT INTO pg_lsn_table VALUES ('10/10', 'A01/A100'), ('100/100', 'A01/A1000'), ('FFFFF100/100', 'A001/A100')
+
+query TT
+SELECT * FROM pg_lsn_table ORDER BY id
+----
+10/10         A01/A100
+100/100       A01/A1000
+FFFFF100/100  A001/A100
+
+query TT
+SELECT * FROM pg_lsn_table WHERE id = '10/10' ORDER BY id
+----
+10/10  A01/A100
+
+query TT
+SELECT * FROM pg_lsn_table WHERE val = 'A01/A1000' ORDER BY id
+----
+100/100  A01/A1000
+
+statement error cannot convert infinity to pg_lsn
+SELECT '0/0'::pg_lsn + 'Inf'
+
+statement error cannot add NaN to pg_lsn
+SELECT '0/0'::pg_lsn + 'NaN'
+
+statement error pg_lsn out of range
+SELECT '0/0'::pg_lsn - 50
+
+statement error pg_lsn out of range
+SELECT 'FFFFFFFF/FFFFFFFF'::pg_lsn + 50
+
+query T nosort
+SELECT * FROM ( VALUES
+  ('0/0'::pg_lsn + 1),
+  (1.5 + '0/0'::pg_lsn),
+  ('0/0'::pg_lsn + 1.4),
+  ('0/0'::pg_lsn + 1.5),
+  ('0/0'::pg_lsn + 1.6),
+  ('FFFFFFFF/FFFFFFFF'::pg_lsn - 1),
+  ('FFFFFFFF/FFFFFFFF'::pg_lsn - 1.4),
+  ('FFFFFFFF/FFFFFFFF'::pg_lsn - 1.5),
+  ('FFFFFFFF/FFFFFFFF'::pg_lsn - 1.6)
+) AS t(val)
+----
+0/1
+0/2
+0/1
+0/2
+0/2
+FFFFFFFF/FFFFFFFE
+FFFFFFFF/FFFFFFFE
+FFFFFFFF/FFFFFFFE
+FFFFFFFF/FFFFFFFD
+
+query R nosort
+SELECT * FROM ( VALUES
+  ('0/0'::pg_lsn - '10/100'::pg_lsn),
+  ('1500/100' - '10/0'::pg_lsn),
+  ('FFFFFFFF/FFFFFFFF' - '0/0'::pg_lsn),
+  ('0/0'::pg_lsn - 'FFFFFFFF/FFFFFFFF'::pg_lsn)
+) AS t(val)
+----
+-68719476992
+23021024706816
+18446744073709551615
+-18446744073709551615

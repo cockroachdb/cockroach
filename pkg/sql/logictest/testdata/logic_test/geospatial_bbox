@@ -39,7 +39,7 @@ SELECT ST_MakeBox2D('POINT EMPTY', 'POINT (1 0)')
 statement error operation on mixed SRIDs forbidden
 SELECT ST_MakeBox2D('SRID=4326;POINT(1 0)', 'SRID=3857;POINT(1 0)')
 
-query T
+query T nosort
 SELECT ST_MakeBox2D(a::geometry, b::geometry) FROM ( VALUES
   ('POINT (1 0)', 'POINT(5 6)'),
   ('POINT (1 0)', 'POINT(1 0)')
@@ -159,7 +159,7 @@ point 0.5 0.5                  box from origin to 1 1  true   true   false  true
 
 subtest st_combinebbox
 
-query T
+query T nosort
 SELECT st_combinebbox(b::box2d, g::geometry) FROM ( VALUES
   (NULL, NULL),
   ('box(-1 -1, 1 1)', NULL),
@@ -179,7 +179,7 @@ NULL
 
 subtest st_expand
 
-query TT
+query TT nosort
 SELECT
   st_expand(b::box2d, 10),
   st_expand(b::box2d, 10, 20)
@@ -195,7 +195,7 @@ NULL                NULL
 
 subtest cast_test
 
-query T
+query T nosort
 SELECT
   ST_AsEWKT(b::box2d::geometry)
 FROM ( VALUES
@@ -212,7 +212,7 @@ LINESTRING (1 3, 20 3)
 LINESTRING (5.5 -10, 5.5 60)
 POLYGON ((-1 -2, -1 6, 4 6, 4 -2, -1 -2))
 
-query T
+query T nosort
 SELECT
   g::geometry::box2d
 FROM ( VALUES
@@ -229,7 +229,7 @@ BOX(4 5,9 10)
 
 subtest st_xyminmax_on_box2d
 
-query RRRR
+query RRRR nosort
 SELECT
   st_xmin(g::box2d),
   st_ymin(g::box2d),
@@ -249,7 +249,7 @@ FROM ( VALUES
 
 subtest st_box2dfromgeohash
 
-query T
+query T nosort
 SELECT
   g
 FROM ( VALUES
@@ -293,3 +293,19 @@ query T
 SELECT ST_Box2DFromGeoHash(NULL, NULL)::BOX2D;
 ----
 NULL
+
+subtest regression_93541
+
+statement ok
+CREATE TABLE bbox_units (d INT PRIMARY KEY, f FLOAT4);
+
+statement ok
+INSERT INTO bbox_units VALUES (1, 1.0), (2, 'NaN');
+
+query I
+SELECT count(*) FROM bbox_units
+WHERE 'BOX(-10 -10,10 10)'::BOX2D IN (
+  SELECT st_expand('BOX(1 -1, 1 -1)'::BOX2D, t2.f) FROM bbox_units t2
+);
+----
+0

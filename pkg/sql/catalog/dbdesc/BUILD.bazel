@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -11,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/security/username",
         "//pkg/sql/catalog",
@@ -20,7 +20,7 @@ go_library(
         "//pkg/sql/catalog/multiregion",
         "//pkg/sql/privilege",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
@@ -38,6 +38,7 @@ go_test(
     embed = [":dbdesc"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/jobs/jobspb",
         "//pkg/security/username",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
@@ -55,5 +56,3 @@ go_test(
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
-
-get_x_data(name = "get_x_data")

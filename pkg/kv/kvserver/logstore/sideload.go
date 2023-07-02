@@ -126,7 +126,7 @@ func MaybeSideloadEntries(
 		{
 			data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
 			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID)
-			_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
+			_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 			if err != nil {
 				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 			}
@@ -215,7 +215,7 @@ func MaybeInlineSideloadedRaftCommand(
 	{
 		data := make([]byte, raftlog.RaftCommandPrefixLen+e.Cmd.Size())
 		raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID)
-		_, err := protoutil.MarshalTo(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
+		_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
 		}

@@ -154,7 +154,7 @@ SELECT SPAN FROM [SHOW TRACE FOR SESSION] WHERE span = 1 LIMIT 1
 
 # Regression test for #38659: offset on top of limit was broken.
 
-query I
+query I nosort
 SELECT * FROM (select * from generate_series(1,10) a LIMIT 5) OFFSET 3
 ----
 4

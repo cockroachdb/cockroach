@@ -15,7 +15,7 @@ CREATE TABLE information_schema.t (x INT)
 query error database "information_schema" does not exist
 DROP DATABASE information_schema
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM information_schema
 ----
 information_schema  administrable_role_authorizations      table  admin  NULL  NULL
@@ -222,7 +222,7 @@ TRUNCATE TABLE information_schema.session_variables
 
 # Verify information_schema handles reflection correctly.
 
-query TTTTTT
+query TTTTTT rowsort
 SHOW DATABASES
 ----
 defaultdb  root  NULL  NULL  {}  NULL
@@ -230,7 +230,7 @@ postgres   root  NULL  NULL  {}  NULL
 system     node  NULL  NULL  {}  NULL
 test       root  NULL  NULL  {}  NULL
 
-query TTTTIT
+query TTTTIT rowsort
 SHOW TABLES FROM test.information_schema
 ----
 information_schema  administrable_role_authorizations      table  admin  NULL  NULL
@@ -333,7 +333,7 @@ information_schema.tables  CREATE TABLE information_schema.tables (
                              version INT8 NULL
                            )
 
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.tables
 ----
 column_name         data_type  is_nullable  column_default  generation_expression  indices  is_hidden
@@ -365,7 +365,7 @@ test           information_schema  tables      public   SELECT          false
 
 ## information_schema.schemata
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT * FROM information_schema.schemata
 ----
 catalog_name  schema_name         default_character_set_name  sql_path  crdb_is_user_defined
@@ -375,7 +375,7 @@ test          pg_catalog          NULL                        NULL      NO
 test          pg_extension        NULL                        NULL      NO
 test          public              NULL                        NULL      YES
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT * FROM INFormaTION_SCHEMa.schemata
 ----
 catalog_name  schema_name         default_character_set_name  sql_path  crdb_is_user_defined
@@ -429,6 +429,7 @@ crdb_internal       index_spans
 crdb_internal       index_usage_statistics
 crdb_internal       invalid_objects
 crdb_internal       jobs
+crdb_internal       kv_builtin_function_comments
 crdb_internal       kv_catalog_comments
 crdb_internal       kv_catalog_descriptor
 crdb_internal       kv_catalog_namespace
@@ -730,7 +731,7 @@ SELECT table_name FROM information_schema.tables WHERE table_catalog = 'other_db
 ----
 
 # Check that the other_db tables become visible when a prefix is specified
-query T
+query T rowsort
 SELECT table_name FROM other_db.information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
 ----
 xyz
@@ -777,6 +778,7 @@ index_spans
 index_usage_statistics
 invalid_objects
 jobs
+kv_builtin_function_comments
 kv_catalog_comments
 kv_catalog_descriptor
 kv_catalog_namespace
@@ -1056,7 +1058,7 @@ xyz
 abc
 
 # Check that the other_db tables become visible to non-root when the current database is changed.
-query T
+query T rowsort
 SET DATABASE = other_db; SELECT table_name FROM information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
 ----
 xyz
@@ -1065,7 +1067,7 @@ abc
 user root
 
 # Check that root sees everything when there is no current database
-query T
+query T rowsort
 SET DATABASE = ''; SELECT table_name FROM information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
 ----
 xyz
@@ -1129,12 +1131,18 @@ table_columns
 # Check that the metadata is reported properly.
 skipif config local-mixed-22.2-23.1
 query TTTTTI colnames
-SELECT * FROM system.information_schema.tables
+SELECT * FROM system.information_schema.tables ORDER BY table_name, table_schema
 ----
 table_catalog  table_schema        table_name                              table_type   is_insertable_into  version
 system         crdb_internal       active_range_feeds                      SYSTEM VIEW  NO                  1
+system         information_schema  administrable_role_authorizations       SYSTEM VIEW  NO                  1
+system         information_schema  applicable_roles                        SYSTEM VIEW  NO                  1
+system         information_schema  attributes                              SYSTEM VIEW  NO                  1
 system         crdb_internal       backward_dependencies                   SYSTEM VIEW  NO                  1
 system         crdb_internal       builtin_functions                       SYSTEM VIEW  NO                  1
+system         information_schema  character_sets                          SYSTEM VIEW  NO                  1
+system         information_schema  check_constraint_routine_usage          SYSTEM VIEW  NO                  1
+system         information_schema  check_constraints                       SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_contended_indexes               SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_contended_keys                  SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_contended_tables                SYSTEM VIEW  NO                  1
@@ -1151,15 +1159,49 @@ system         crdb_internal       cluster_statement_statistics            SYSTE
 system         crdb_internal       cluster_transaction_statistics          SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_transactions                    SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_txn_execution_insights          SYSTEM VIEW  NO                  1
+system         information_schema  collation_character_set_applicability   SYSTEM VIEW  NO                  1
+system         information_schema  collations                              SYSTEM VIEW  NO                  1
+system         information_schema  column_column_usage                     SYSTEM VIEW  NO                  1
+system         information_schema  column_domain_usage                     SYSTEM VIEW  NO                  1
+system         information_schema  column_options                          SYSTEM VIEW  NO                  1
+system         information_schema  column_privileges                       SYSTEM VIEW  NO                  1
+system         information_schema  column_statistics                       SYSTEM VIEW  NO                  1
+system         information_schema  column_udt_usage                        SYSTEM VIEW  NO                  1
+system         information_schema  columns                                 SYSTEM VIEW  NO                  1
+system         information_schema  columns_extensions                      SYSTEM VIEW  NO                  1
+system         public              comments                                BASE TABLE   YES                 1
+system         information_schema  constraint_column_usage                 SYSTEM VIEW  NO                  1
+system         information_schema  constraint_table_usage                  SYSTEM VIEW  NO                  1
 system         crdb_internal       create_function_statements              SYSTEM VIEW  NO                  1
 system         crdb_internal       create_schema_statements                SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                       SYSTEM VIEW  NO                  1
 system         crdb_internal       create_type_statements                  SYSTEM VIEW  NO                  1
 system         crdb_internal       cross_db_references                     SYSTEM VIEW  NO                  1
+system         information_schema  data_type_privileges                    SYSTEM VIEW  NO                  1
+system         public              database_role_settings                  BASE TABLE   YES                 1
 system         crdb_internal       databases                               SYSTEM VIEW  NO                  1
 system         crdb_internal       default_privileges                      SYSTEM VIEW  NO                  1
+system         public              descriptor                              BASE TABLE   YES                 1
+system         information_schema  domain_constraints                      SYSTEM VIEW  NO                  1
+system         information_schema  domain_udt_usage                        SYSTEM VIEW  NO                  1
+system         information_schema  domains                                 SYSTEM VIEW  NO                  1
+system         information_schema  element_types                           SYSTEM VIEW  NO                  1
+system         information_schema  enabled_roles                           SYSTEM VIEW  NO                  1
+system         information_schema  engines                                 SYSTEM VIEW  NO                  1
+system         public              eventlog                                BASE TABLE   YES                 1
+system         information_schema  events                                  SYSTEM VIEW  NO                  1
+system         public              external_connections                    BASE TABLE   YES                 1
 system         crdb_internal       feature_usage                           SYSTEM VIEW  NO                  1
+system         information_schema  files                                   SYSTEM VIEW  NO                  1
+system         information_schema  foreign_data_wrapper_options            SYSTEM VIEW  NO                  1
+system         information_schema  foreign_data_wrappers                   SYSTEM VIEW  NO                  1
+system         information_schema  foreign_server_options                  SYSTEM VIEW  NO                  1
+system         information_schema  foreign_servers                         SYSTEM VIEW  NO                  1
+system         information_schema  foreign_table_options                   SYSTEM VIEW  NO                  1
+system         information_schema  foreign_tables                          SYSTEM VIEW  NO                  1
 system         crdb_internal       forward_dependencies                    SYSTEM VIEW  NO                  1
+system         pg_extension        geography_columns                       SYSTEM VIEW  NO                  1
+system         pg_extension        geometry_columns                        SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_alerts                           SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_liveness                         SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_network                          SYSTEM VIEW  NO                  1
@@ -1167,8 +1209,15 @@ system         crdb_internal       gossip_nodes                            SYSTE
 system         crdb_internal       index_columns                           SYSTEM VIEW  NO                  1
 system         crdb_internal       index_spans                             SYSTEM VIEW  NO                  1
 system         crdb_internal       index_usage_statistics                  SYSTEM VIEW  NO                  1
+system         information_schema  information_schema_catalog_name         SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                         SYSTEM VIEW  NO                  1
+system         public              job_info                                BASE TABLE   YES                 1
 system         crdb_internal       jobs                                    SYSTEM VIEW  NO                  1
+system         public              jobs                                    BASE TABLE   YES                 1
+system         public              join_tokens                             BASE TABLE   YES                 1
+system         information_schema  key_column_usage                        SYSTEM VIEW  NO                  1
+system         information_schema  keywords                                SYSTEM VIEW  NO                  1
+system         crdb_internal       kv_builtin_function_comments            SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_catalog_comments                     SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_catalog_descriptor                   SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_catalog_namespace                    SYSTEM VIEW  NO                  1
@@ -1182,8 +1231,12 @@ system         crdb_internal       kv_node_liveness                        SYSTE
 system         crdb_internal       kv_node_status                          SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                         SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_system_privileges                    SYSTEM VIEW  NO                  1
+system         public              lease                                   BASE TABLE   YES                 1
 system         crdb_internal       leases                                  SYSTEM VIEW  NO                  1
+system         public              locations                               BASE TABLE   YES                 1
 system         crdb_internal       lost_descriptors_with_data              SYSTEM VIEW  NO                  1
+system         public              migrations                              BASE TABLE   YES                 1
+system         public              namespace                               BASE TABLE   YES                 1
 system         crdb_internal       node_build_info                         SYSTEM VIEW  NO                  1
 system         crdb_internal       node_contention_events                  SYSTEM VIEW  NO                  1
 system         crdb_internal       node_distsql_flows                      SYSTEM VIEW  NO                  1
@@ -1200,118 +1253,10 @@ system         crdb_internal       node_transaction_statistics             SYSTE
 system         crdb_internal       node_transactions                       SYSTEM VIEW  NO                  1
 system         crdb_internal       node_txn_execution_insights             SYSTEM VIEW  NO                  1
 system         crdb_internal       node_txn_stats                          SYSTEM VIEW  NO                  1
-system         crdb_internal       partitions                              SYSTEM VIEW  NO                  1
-system         crdb_internal       pg_catalog_table_is_implemented         SYSTEM VIEW  NO                  1
-system         crdb_internal       ranges                                  SYSTEM VIEW  NO                  1
-system         crdb_internal       ranges_no_leases                        SYSTEM VIEW  NO                  1
-system         crdb_internal       regions                                 SYSTEM VIEW  NO                  1
-system         crdb_internal       schema_changes                          SYSTEM VIEW  NO                  1
-system         crdb_internal       session_trace                           SYSTEM VIEW  NO                  1
-system         crdb_internal       session_variables                       SYSTEM VIEW  NO                  1
-system         crdb_internal       statement_activity                      SYSTEM VIEW  NO                  1
-system         crdb_internal       statement_statistics                    SYSTEM VIEW  NO                  1
-system         crdb_internal       statement_statistics_persisted          SYSTEM VIEW  NO                  1
-system         crdb_internal       statement_statistics_persisted_v22_2    SYSTEM VIEW  NO                  1
-system         crdb_internal       super_regions                           SYSTEM VIEW  NO                  1
-system         crdb_internal       system_jobs                             SYSTEM VIEW  NO                  1
-system         crdb_internal       table_columns                           SYSTEM VIEW  NO                  1
-system         crdb_internal       table_indexes                           SYSTEM VIEW  NO                  1
-system         crdb_internal       table_row_statistics                    SYSTEM VIEW  NO                  1
-system         crdb_internal       table_spans                             SYSTEM VIEW  NO                  1
-system         crdb_internal       tables                                  SYSTEM VIEW  NO                  1
-system         crdb_internal       tenant_usage_details                    SYSTEM VIEW  NO                  1
-system         crdb_internal       transaction_activity                    SYSTEM VIEW  NO                  1
-system         crdb_internal       transaction_contention_events           SYSTEM VIEW  NO                  1
-system         crdb_internal       transaction_statistics                  SYSTEM VIEW  NO                  1
-system         crdb_internal       transaction_statistics_persisted        SYSTEM VIEW  NO                  1
-system         crdb_internal       transaction_statistics_persisted_v22_2  SYSTEM VIEW  NO                  1
-system         crdb_internal       zones                                   SYSTEM VIEW  NO                  1
-system         information_schema  administrable_role_authorizations       SYSTEM VIEW  NO                  1
-system         information_schema  applicable_roles                        SYSTEM VIEW  NO                  1
-system         information_schema  attributes                              SYSTEM VIEW  NO                  1
-system         information_schema  character_sets                          SYSTEM VIEW  NO                  1
-system         information_schema  check_constraint_routine_usage          SYSTEM VIEW  NO                  1
-system         information_schema  check_constraints                       SYSTEM VIEW  NO                  1
-system         information_schema  collation_character_set_applicability   SYSTEM VIEW  NO                  1
-system         information_schema  collations                              SYSTEM VIEW  NO                  1
-system         information_schema  column_column_usage                     SYSTEM VIEW  NO                  1
-system         information_schema  column_domain_usage                     SYSTEM VIEW  NO                  1
-system         information_schema  column_options                          SYSTEM VIEW  NO                  1
-system         information_schema  column_privileges                       SYSTEM VIEW  NO                  1
-system         information_schema  column_statistics                       SYSTEM VIEW  NO                  1
-system         information_schema  column_udt_usage                        SYSTEM VIEW  NO                  1
-system         information_schema  columns                                 SYSTEM VIEW  NO                  1
-system         information_schema  columns_extensions                      SYSTEM VIEW  NO                  1
-system         information_schema  constraint_column_usage                 SYSTEM VIEW  NO                  1
-system         information_schema  constraint_table_usage                  SYSTEM VIEW  NO                  1
-system         information_schema  data_type_privileges                    SYSTEM VIEW  NO                  1
-system         information_schema  domain_constraints                      SYSTEM VIEW  NO                  1
-system         information_schema  domain_udt_usage                        SYSTEM VIEW  NO                  1
-system         information_schema  domains                                 SYSTEM VIEW  NO                  1
-system         information_schema  element_types                           SYSTEM VIEW  NO                  1
-system         information_schema  enabled_roles                           SYSTEM VIEW  NO                  1
-system         information_schema  engines                                 SYSTEM VIEW  NO                  1
-system         information_schema  events                                  SYSTEM VIEW  NO                  1
-system         information_schema  files                                   SYSTEM VIEW  NO                  1
-system         information_schema  foreign_data_wrapper_options            SYSTEM VIEW  NO                  1
-system         information_schema  foreign_data_wrappers                   SYSTEM VIEW  NO                  1
-system         information_schema  foreign_server_options                  SYSTEM VIEW  NO                  1
-system         information_schema  foreign_servers                         SYSTEM VIEW  NO                  1
-system         information_schema  foreign_table_options                   SYSTEM VIEW  NO                  1
-system         information_schema  foreign_tables                          SYSTEM VIEW  NO                  1
-system         information_schema  information_schema_catalog_name         SYSTEM VIEW  NO                  1
-system         information_schema  key_column_usage                        SYSTEM VIEW  NO                  1
-system         information_schema  keywords                                SYSTEM VIEW  NO                  1
 system         information_schema  optimizer_trace                         SYSTEM VIEW  NO                  1
 system         information_schema  parameters                              SYSTEM VIEW  NO                  1
+system         crdb_internal       partitions                              SYSTEM VIEW  NO                  1
 system         information_schema  partitions                              SYSTEM VIEW  NO                  1
-system         information_schema  plugins                                 SYSTEM VIEW  NO                  1
-system         information_schema  processlist                             SYSTEM VIEW  NO                  1
-system         information_schema  profiling                               SYSTEM VIEW  NO                  1
-system         information_schema  referential_constraints                 SYSTEM VIEW  NO                  1
-system         information_schema  resource_groups                         SYSTEM VIEW  NO                  1
-system         information_schema  role_column_grants                      SYSTEM VIEW  NO                  1
-system         information_schema  role_routine_grants                     SYSTEM VIEW  NO                  1
-system         information_schema  role_table_grants                       SYSTEM VIEW  NO                  1
-system         information_schema  role_udt_grants                         SYSTEM VIEW  NO                  1
-system         information_schema  role_usage_grants                       SYSTEM VIEW  NO                  1
-system         information_schema  routine_privileges                      SYSTEM VIEW  NO                  1
-system         information_schema  routines                                SYSTEM VIEW  NO                  1
-system         information_schema  schema_privileges                       SYSTEM VIEW  NO                  1
-system         information_schema  schemata                                SYSTEM VIEW  NO                  1
-system         information_schema  schemata_extensions                     SYSTEM VIEW  NO                  1
-system         information_schema  sequences                               SYSTEM VIEW  NO                  1
-system         information_schema  session_variables                       SYSTEM VIEW  NO                  1
-system         information_schema  sql_features                            SYSTEM VIEW  NO                  1
-system         information_schema  sql_implementation_info                 SYSTEM VIEW  NO                  1
-system         information_schema  sql_parts                               SYSTEM VIEW  NO                  1
-system         information_schema  sql_sizing                              SYSTEM VIEW  NO                  1
-system         information_schema  st_geometry_columns                     SYSTEM VIEW  NO                  1
-system         information_schema  st_spatial_reference_systems            SYSTEM VIEW  NO                  1
-system         information_schema  st_units_of_measure                     SYSTEM VIEW  NO                  1
-system         information_schema  statistics                              SYSTEM VIEW  NO                  1
-system         information_schema  table_constraints                       SYSTEM VIEW  NO                  1
-system         information_schema  table_constraints_extensions            SYSTEM VIEW  NO                  1
-system         information_schema  table_privileges                        SYSTEM VIEW  NO                  1
-system         information_schema  tables                                  SYSTEM VIEW  NO                  1
-system         information_schema  tables_extensions                       SYSTEM VIEW  NO                  1
-system         information_schema  tablespaces                             SYSTEM VIEW  NO                  1
-system         information_schema  tablespaces_extensions                  SYSTEM VIEW  NO                  1
-system         information_schema  transforms                              SYSTEM VIEW  NO                  1
-system         information_schema  triggered_update_columns                SYSTEM VIEW  NO                  1
-system         information_schema  triggers                                SYSTEM VIEW  NO                  1
-system         information_schema  type_privileges                         SYSTEM VIEW  NO                  1
-system         information_schema  udt_privileges                          SYSTEM VIEW  NO                  1
-system         information_schema  usage_privileges                        SYSTEM VIEW  NO                  1
-system         information_schema  user_attributes                         SYSTEM VIEW  NO                  1
-system         information_schema  user_defined_types                      SYSTEM VIEW  NO                  1
-system         information_schema  user_mapping_options                    SYSTEM VIEW  NO                  1
-system         information_schema  user_mappings                           SYSTEM VIEW  NO                  1
-system         information_schema  user_privileges                         SYSTEM VIEW  NO                  1
-system         information_schema  view_column_usage                       SYSTEM VIEW  NO                  1
-system         information_schema  view_routine_usage                      SYSTEM VIEW  NO                  1
-system         information_schema  view_table_usage                        SYSTEM VIEW  NO                  1
-system         information_schema  views                                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_aggregate                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_am                                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_amop                                 SYSTEM VIEW  NO                  1
@@ -1323,6 +1268,7 @@ system         pg_catalog          pg_authid                               SYSTE
 system         pg_catalog          pg_available_extension_versions         SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_available_extensions                 SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_cast                                 SYSTEM VIEW  NO                  1
+system         crdb_internal       pg_catalog_table_is_implemented         SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_class                                SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_collation                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_config                               SYSTEM VIEW  NO                  1
@@ -1441,57 +1387,114 @@ system         pg_catalog          pg_user                                 SYSTE
 system         pg_catalog          pg_user_mapping                         SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_user_mappings                        SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_views                                SYSTEM VIEW  NO                  1
-system         pg_extension        geography_columns                       SYSTEM VIEW  NO                  1
-system         pg_extension        geometry_columns                        SYSTEM VIEW  NO                  1
-system         pg_extension        spatial_ref_sys                         SYSTEM VIEW  NO                  1
-system         public              descriptor                              BASE TABLE   YES                 1
-system         public              users                                   BASE TABLE   YES                 2
-system         public              zones                                   BASE TABLE   YES                 1
-system         public              settings                                BASE TABLE   YES                 1
-system         public              tenants                                 BASE TABLE   YES                 1
-system         public              lease                                   BASE TABLE   YES                 1
-system         public              eventlog                                BASE TABLE   YES                 1
+system         information_schema  plugins                                 SYSTEM VIEW  NO                  1
+system         public              privileges                              BASE TABLE   YES                 1
+system         information_schema  processlist                             SYSTEM VIEW  NO                  1
+system         information_schema  profiling                               SYSTEM VIEW  NO                  1
+system         public              protected_ts_meta                       BASE TABLE   YES                 1
+system         public              protected_ts_records                    BASE TABLE   YES                 1
 system         public              rangelog                                BASE TABLE   YES                 1
-system         public              ui                                      BASE TABLE   YES                 1
-system         public              jobs                                    BASE TABLE   YES                 1
-system         public              web_sessions                            BASE TABLE   YES                 1
-system         public              table_statistics                        BASE TABLE   YES                 1
-system         public              locations                               BASE TABLE   YES                 1
-system         public              role_members                            BASE TABLE   YES                 1
-system         public              comments                                BASE TABLE   YES                 1
+system         crdb_internal       ranges                                  SYSTEM VIEW  NO                  1
+system         crdb_internal       ranges_no_leases                        SYSTEM VIEW  NO                  1
+system         information_schema  referential_constraints                 SYSTEM VIEW  NO                  1
+system         crdb_internal       regions                                 SYSTEM VIEW  NO                  1
 system         public              replication_constraint_stats            BASE TABLE   YES                 1
 system         public              replication_critical_localities         BASE TABLE   YES                 1
 system         public              replication_stats                       BASE TABLE   YES                 1
 system         public              reports_meta                            BASE TABLE   YES                 1
-system         public              namespace                               BASE TABLE   YES                 1
-system         public              protected_ts_meta                       BASE TABLE   YES                 1
-system         public              protected_ts_records                    BASE TABLE   YES                 1
+system         information_schema  resource_groups                         SYSTEM VIEW  NO                  1
+system         information_schema  role_column_grants                      SYSTEM VIEW  NO                  1
+system         public              role_members                            BASE TABLE   YES                 1
 system         public              role_options                            BASE TABLE   YES                 2
-system         public              statement_bundle_chunks                 BASE TABLE   YES                 1
-system         public              statement_diagnostics_requests          BASE TABLE   YES                 1
-system         public              statement_diagnostics                   BASE TABLE   YES                 1
+system         information_schema  role_routine_grants                     SYSTEM VIEW  NO                  1
+system         information_schema  role_table_grants                       SYSTEM VIEW  NO                  1
+system         information_schema  role_udt_grants                         SYSTEM VIEW  NO                  1
+system         information_schema  role_usage_grants                       SYSTEM VIEW  NO                  1
+system         information_schema  routine_privileges                      SYSTEM VIEW  NO                  1
+system         information_schema  routines                                SYSTEM VIEW  NO                  1
 system         public              scheduled_jobs                          BASE TABLE   YES                 1
-system         public              sqlliveness                             BASE TABLE   YES                 1
-system         public              migrations                              BASE TABLE   YES                 1
-system         public              join_tokens                             BASE TABLE   YES                 1
-system         public              statement_statistics                    BASE TABLE   YES                 1
-system         public              transaction_statistics                  BASE TABLE   YES                 1
-system         public              database_role_settings                  BASE TABLE   YES                 1
-system         public              tenant_usage                            BASE TABLE   YES                 1
-system         public              sql_instances                           BASE TABLE   YES                 1
+system         crdb_internal       schema_changes                          SYSTEM VIEW  NO                  1
+system         information_schema  schema_privileges                       SYSTEM VIEW  NO                  1
+system         information_schema  schemata                                SYSTEM VIEW  NO                  1
+system         information_schema  schemata_extensions                     SYSTEM VIEW  NO                  1
+system         information_schema  sequences                               SYSTEM VIEW  NO                  1
+system         crdb_internal       session_trace                           SYSTEM VIEW  NO                  1
+system         crdb_internal       session_variables                       SYSTEM VIEW  NO                  1
+system         information_schema  session_variables                       SYSTEM VIEW  NO                  1
+system         public              settings                                BASE TABLE   YES                 1
 system         public              span_configurations                     BASE TABLE   YES                 1
-system         public              tenant_settings                         BASE TABLE   YES                 1
-system         public              privileges                              BASE TABLE   YES                 1
-system         public              external_connections                    BASE TABLE   YES                 1
-system         public              job_info                                BASE TABLE   YES                 1
-system         public              span_stats_unique_keys                  BASE TABLE   YES                 1
 system         public              span_stats_buckets                      BASE TABLE   YES                 1
 system         public              span_stats_samples                      BASE TABLE   YES                 1
 system         public              span_stats_tenant_boundaries            BASE TABLE   YES                 1
-system         public              task_payloads                           BASE TABLE   YES                 1
-system         public              tenant_tasks                            BASE TABLE   YES                 1
+system         public              span_stats_unique_keys                  BASE TABLE   YES                 1
+system         pg_extension        spatial_ref_sys                         SYSTEM VIEW  NO                  1
+system         information_schema  sql_features                            SYSTEM VIEW  NO                  1
+system         information_schema  sql_implementation_info                 SYSTEM VIEW  NO                  1
+system         public              sql_instances                           BASE TABLE   YES                 1
+system         information_schema  sql_parts                               SYSTEM VIEW  NO                  1
+system         information_schema  sql_sizing                              SYSTEM VIEW  NO                  1
+system         public              sqlliveness                             BASE TABLE   YES                 1
+system         information_schema  st_geometry_columns                     SYSTEM VIEW  NO                  1
+system         information_schema  st_spatial_reference_systems            SYSTEM VIEW  NO                  1
+system         information_schema  st_units_of_measure                     SYSTEM VIEW  NO                  1
+system         crdb_internal       statement_activity                      SYSTEM VIEW  NO                  1
 system         public              statement_activity                      BASE TABLE   YES                 1
+system         public              statement_bundle_chunks                 BASE TABLE   YES                 1
+system         public              statement_diagnostics                   BASE TABLE   YES                 1
+system         public              statement_diagnostics_requests          BASE TABLE   YES                 1
+system         crdb_internal       statement_statistics                    SYSTEM VIEW  NO                  1
+system         public              statement_statistics                    BASE TABLE   YES                 1
+system         crdb_internal       statement_statistics_persisted          SYSTEM VIEW  NO                  1
+system         crdb_internal       statement_statistics_persisted_v22_2    SYSTEM VIEW  NO                  1
+system         information_schema  statistics                              SYSTEM VIEW  NO                  1
+system         crdb_internal       super_regions                           SYSTEM VIEW  NO                  1
+system         crdb_internal       system_jobs                             SYSTEM VIEW  NO                  1
+system         crdb_internal       table_columns                           SYSTEM VIEW  NO                  1
+system         information_schema  table_constraints                       SYSTEM VIEW  NO                  1
+system         information_schema  table_constraints_extensions            SYSTEM VIEW  NO                  1
+system         crdb_internal       table_indexes                           SYSTEM VIEW  NO                  1
+system         information_schema  table_privileges                        SYSTEM VIEW  NO                  1
+system         crdb_internal       table_row_statistics                    SYSTEM VIEW  NO                  1
+system         crdb_internal       table_spans                             SYSTEM VIEW  NO                  1
+system         public              table_statistics                        BASE TABLE   YES                 1
+system         crdb_internal       tables                                  SYSTEM VIEW  NO                  1
+system         information_schema  tables                                  SYSTEM VIEW  NO                  1
+system         information_schema  tables_extensions                       SYSTEM VIEW  NO                  1
+system         information_schema  tablespaces                             SYSTEM VIEW  NO                  1
+system         information_schema  tablespaces_extensions                  SYSTEM VIEW  NO                  1
+system         public              task_payloads                           BASE TABLE   YES                 1
+system         public              tenant_settings                         BASE TABLE   YES                 1
+system         public              tenant_tasks                            BASE TABLE   YES                 1
+system         public              tenant_usage                            BASE TABLE   YES                 1
+system         crdb_internal       tenant_usage_details                    SYSTEM VIEW  NO                  1
+system         public              tenants                                 BASE TABLE   YES                 1
+system         crdb_internal       transaction_activity                    SYSTEM VIEW  NO                  1
 system         public              transaction_activity                    BASE TABLE   YES                 1
+system         crdb_internal       transaction_contention_events           SYSTEM VIEW  NO                  1
+system         crdb_internal       transaction_statistics                  SYSTEM VIEW  NO                  1
+system         public              transaction_statistics                  BASE TABLE   YES                 1
+system         crdb_internal       transaction_statistics_persisted        SYSTEM VIEW  NO                  1
+system         crdb_internal       transaction_statistics_persisted_v22_2  SYSTEM VIEW  NO                  1
+system         information_schema  transforms                              SYSTEM VIEW  NO                  1
+system         information_schema  triggered_update_columns                SYSTEM VIEW  NO                  1
+system         information_schema  triggers                                SYSTEM VIEW  NO                  1
+system         information_schema  type_privileges                         SYSTEM VIEW  NO                  1
+system         information_schema  udt_privileges                          SYSTEM VIEW  NO                  1
+system         public              ui                                      BASE TABLE   YES                 1
+system         information_schema  usage_privileges                        SYSTEM VIEW  NO                  1
+system         information_schema  user_attributes                         SYSTEM VIEW  NO                  1
+system         information_schema  user_defined_types                      SYSTEM VIEW  NO                  1
+system         information_schema  user_mapping_options                    SYSTEM VIEW  NO                  1
+system         information_schema  user_mappings                           SYSTEM VIEW  NO                  1
+system         information_schema  user_privileges                         SYSTEM VIEW  NO                  1
+system         public              users                                   BASE TABLE   YES                 2
+system         information_schema  view_column_usage                       SYSTEM VIEW  NO                  1
+system         information_schema  view_routine_usage                      SYSTEM VIEW  NO                  1
+system         information_schema  view_table_usage                        SYSTEM VIEW  NO                  1
+system         information_schema  views                                   SYSTEM VIEW  NO                  1
+system         public              web_sessions                            BASE TABLE   YES                 1
+system         crdb_internal       zones                                   SYSTEM VIEW  NO                  1
+system         public              zones                                   BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -1509,11 +1512,13 @@ user testuser
 # Check that another user cannot see other_db.adbc any more because they
 # don't have privileges on it.
 query TTTTTI colnames
-SELECT * FROM other_db.information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
+SELECT * FROM other_db.information_schema.tables
+WHERE table_catalog = 'other_db' AND table_schema = 'public'
+ORDER BY table_name
 ----
 table_catalog  table_schema  table_name  table_type  is_insertable_into  version
-other_db       public        xyz         BASE TABLE  YES                 6
 other_db       public        abc         VIEW        NO                  1
+other_db       public        xyz         BASE TABLE  YES                 6
 
 
 user root
@@ -1849,7 +1854,7 @@ system              public             primary                                  
 system              public             29_5_1_not_null                                                                                                 system         public        zones                            CHECK            NO             NO
 system              public             primary                                                                                                         system         public        zones                            PRIMARY KEY      NO             NO
 
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT *
 FROM system.information_schema.character_sets
 ----
@@ -2658,7 +2663,7 @@ SET DATABASE = test
 statement ok
 CREATE TABLE with_defaults (a INT DEFAULT 9, b STRING DEFAULT 'default', c INT, d STRING)
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT table_name, column_name, column_default
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'with_defaults'
@@ -2676,7 +2681,7 @@ DROP TABLE with_defaults
 statement ok
 CREATE TABLE nullability (a INT NOT NULL, b STRING NOT NULL, c INT, d STRING)
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT table_name, column_name, is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'nullability'
@@ -2744,6 +2749,7 @@ query TTTTTTTTTT colnames
 SELECT table_name, column_name, data_type, crdb_sql_type, udt_catalog, udt_schema, udt_name, collation_catalog, collation_schema, collation_name
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'data_types'
+ORDER BY column_name
 ----
 table_name  column_name  data_type                    crdb_sql_type            udt_catalog  udt_schema  udt_name      collation_catalog  collation_schema  collation_name
 data_types  a            bigint                       INT8                     test         pg_catalog  int8          NULL               NULL              NULL
@@ -2757,12 +2763,12 @@ data_types  c            numeric                      DECIMAL                  t
 data_types  cp           numeric                      DECIMAL(3)               test         pg_catalog  numeric       NULL               NULL              NULL
 data_types  cps          numeric                      DECIMAL(3,2)             test         pg_catalog  numeric       NULL               NULL              NULL
 data_types  d            text                         STRING                   test         pg_catalog  text          NULL               NULL              NULL
-data_types  dl           text                         STRING COLLATE en        test         pg_catalog  text          test               pg_catalog        en
 data_types  dc           character                    CHAR                     test         pg_catalog  bpchar        NULL               NULL              NULL
 data_types  dc2          character                    CHAR(2)                  test         pg_catalog  bpchar        NULL               NULL              NULL
+data_types  dl           text                         STRING COLLATE en        test         pg_catalog  text          test               pg_catalog        en
+data_types  dq           "char"                       "char"                   test         pg_catalog  char          NULL               NULL              NULL
 data_types  dv           character varying            VARCHAR                  test         pg_catalog  varchar       NULL               NULL              NULL
 data_types  dv2          character varying            VARCHAR(2)               test         pg_catalog  varchar       NULL               NULL              NULL
-data_types  dq           "char"                       "char"                   test         pg_catalog  char          NULL               NULL              NULL
 data_types  e            bytea                        BYTES                    test         pg_catalog  bytea         NULL               NULL              NULL
 data_types  f            timestamp without time zone  TIMESTAMP                test         pg_catalog  timestamp     NULL               NULL              NULL
 data_types  f6           timestamp without time zone  TIMESTAMP(6)             test         pg_catalog  timestamp     NULL               NULL              NULL
@@ -2803,6 +2809,7 @@ query TTTT colnames
 SELECT column_name, is_generated, generation_expression, is_updatable
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'computed'
+ORDER BY column_name
 ----
 column_name  is_generated  generation_expression  is_updatable
 a            NEVER         ·                      YES
@@ -2820,6 +2827,7 @@ query TTTT colnames
 SELECT column_name, is_identity, identity_generation, is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'generated_as_identity'
+ORDER BY column_name
 ----
 column_name  is_identity  identity_generation  is_nullable
 a            NO           ·                    YES
@@ -2838,7 +2846,7 @@ CREATE TABLE char_len (
   g BIT, h BIT(12),
   i VARBIT, j VARBIT(12))
 
-query TTII colnames
+query TTII colnames,rowsort
 SELECT table_name, column_name, character_maximum_length, character_octet_length
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'char_len'
@@ -2867,7 +2875,7 @@ DROP TABLE char_len
 statement ok
 CREATE TABLE num_prec (a INT, b FLOAT, c FLOAT(23), d DECIMAL, e DECIMAL(12), f DECIMAL(12, 6), g BOOLEAN)
 
-query TTIIII colnames
+query TTIIII colnames,rowsort
 SELECT table_name, column_name, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'num_prec'
@@ -2898,7 +2906,7 @@ CREATE TABLE time_prec (
   i INTERVAL,
   j INTERVAL(6))
 
-query TTIIII colnames
+query TTIIII colnames,rowsort
 SELECT table_name, column_name, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'time_prec'
@@ -2927,16 +2935,16 @@ CREATE TABLE t1 (
   FAMILY "primary" (id, name, rowid)
 )
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT table_catalog, table_schema, table_name, column_name, column_comment
 FROM information_schema.columns
 WHERE table_name = 't1'
 ----
-table_catalog  table_schema  table_name  column_name    column_comment
-test           public        t1          id             ·
-test           public        t1          name           ·
-test           public        t1          class          ·
-test           public        t1          rowid          ·
+table_catalog  table_schema  table_name  column_name  column_comment
+test           public        t1          id           NULL
+test           public        t1          name         NULL
+test           public        t1          class        NULL
+test           public        t1          rowid        NULL
 
 statement ok
 COMMENT ON COLUMN public.t1.id IS 'identification'
@@ -2944,25 +2952,25 @@ COMMENT ON COLUMN public.t1.id IS 'identification'
 statement ok
 COMMENT ON COLUMN public.t1.name IS 'character'
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT table_catalog, table_schema, table_name, column_name, column_comment
 FROM information_schema.columns
 WHERE table_name = 't1'
 ----
-table_catalog  table_schema  table_name  column_name    column_comment
-test           public        t1          id             'identification'
-test           public        t1          name           'character'
-test           public        t1          class          ·
-test           public        t1          rowid          ·
+table_catalog  table_schema  table_name  column_name  column_comment
+test           public        t1          id           identification
+test           public        t1          name         character
+test           public        t1          class        NULL
+test           public        t1          rowid        NULL
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT table_catalog, table_schema, table_name, column_name, column_comment
 FROM information_schema.columns
 WHERE table_name = 't1' AND column_comment != ''
 ----
-table_catalog  table_schema  table_name  column_name    column_comment
-test           public        t1          id             'identification'
-test           public        t1          name           'character'
+table_catalog  table_schema  table_name  column_name  column_comment
+test           public        t1          id           identification
+test           public        t1          name         character
 
 statement ok
 DROP TABLE t1
@@ -3060,7 +3068,7 @@ CREATE DATABASE other_db; SET DATABASE = other_db
 statement ok
 CREATE SCHEMA other_schema
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
@@ -3078,7 +3086,7 @@ root     other_db       public              ALL             YES
 statement ok
 GRANT CONNECT ON DATABASE other_db TO testuser
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
@@ -3096,7 +3104,7 @@ root     other_db       public              ALL             YES
 statement ok
 GRANT CREATE ON SCHEMA other_schema TO testuser
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee   table_catalog  table_schema        privilege_type  is_grantable
@@ -3157,6 +3165,7 @@ NULL     public   system         crdb_internal       index_spans                
 NULL     public   system         crdb_internal       index_usage_statistics                  SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                         SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                    SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_builtin_function_comments            SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_catalog_comments                     SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_catalog_descriptor                   SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_catalog_namespace                    SELECT          NO            YES
@@ -3775,7 +3784,7 @@ NULL     root     system         public              zones                      
 NULL     root     system         public              zones                                   UPDATE          YES           NO
 
 skipif config local-mixed-22.2-23.1
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.role_table_grants
 ----
 grantor  grantee  table_catalog  table_schema        table_name                              privilege_type  is_grantable  with_hierarchy
@@ -3816,6 +3825,7 @@ NULL     public   system         crdb_internal       index_spans                
 NULL     public   system         crdb_internal       index_usage_statistics                  SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                         SELECT          NO            YES
 NULL     public   system         crdb_internal       jobs                                    SELECT          NO            YES
+NULL     public   system         crdb_internal       kv_builtin_function_comments            SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_catalog_comments                     SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_catalog_descriptor                   SELECT          NO            YES
 NULL     public   system         crdb_internal       kv_catalog_namespace                    SELECT          NO            YES
@@ -4446,7 +4456,7 @@ USE test;
 statement ok
 CREATE VIEW other_db.abc AS SELECT i from other_db.xyz
 
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT * FROM other_db.information_schema.table_privileges WHERE TABLE_SCHEMA = 'public'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
@@ -4457,7 +4467,7 @@ NULL     admin     other_db       public        abc         ALL             YES 
 NULL     root      other_db       public        abc         ALL             YES           NO
 NULL     testuser  other_db       public        abc         SELECT          NO            YES
 
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT * FROM other_db.information_schema.role_table_grants WHERE TABLE_SCHEMA = 'public'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
@@ -4471,7 +4481,7 @@ NULL     testuser  other_db       public        abc         SELECT          NO  
 statement ok
 GRANT UPDATE ON other_db.xyz TO testuser
 
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT * FROM other_db.information_schema.table_privileges WHERE TABLE_SCHEMA = 'public'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
@@ -4483,7 +4493,7 @@ NULL     admin     other_db       public        abc         ALL             YES 
 NULL     root      other_db       public        abc         ALL             YES           NO
 NULL     testuser  other_db       public        abc         SELECT          NO            YES
 
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT * FROM other_db.information_schema.role_table_grants WHERE TABLE_SCHEMA = 'public'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
@@ -4501,7 +4511,7 @@ user testuser
 statement ok
 SET DATABASE = other_db
 
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'public'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
@@ -4513,7 +4523,7 @@ NULL     admin     other_db       public        abc         ALL             YES 
 NULL     root      other_db       public        abc         ALL             YES           NO
 NULL     testuser  other_db       public        abc         SELECT          NO            YES
 
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT * FROM information_schema.role_table_grants WHERE TABLE_SCHEMA = 'public'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
@@ -4607,7 +4617,7 @@ root     test           ZONECONFIG      NULL
 statement ok
 SET DATABASE = test
 
-query TTTTIIITTTTT
+query TTTTIIITTTTT rowsort
 SELECT * FROM information_schema.sequences
 ----
 test  public  generated_as_identity_b_seq  bigint  64  2  0  1  1  9223372036854775807  1  NO
@@ -4620,7 +4630,7 @@ statement ok
 CREATE SEQUENCE test_seq_2 INCREMENT -1 MINVALUE 5 MAXVALUE 1000 START WITH 15
 
 
-query TTTTIIITTTTT colnames
+query TTTTIIITTTTT colnames,rowsort
 SELECT * FROM information_schema.sequences
 ----
 sequence_catalog  sequence_schema  sequence_name                data_type  numeric_precision  numeric_precision_radix  numeric_scale  start_value  minimum_value  maximum_value        increment  cycle_option
@@ -4648,7 +4658,7 @@ statement ok
 DROP DATABASE other_db CASCADE
 
 # test information_schema.column_privileges
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.column_privileges
 ----
 column_name     data_type  is_nullable  column_default  generation_expression  indices  is_hidden
@@ -4663,7 +4673,7 @@ is_grantable    STRING     true         NULL            ·                      
 
 
 # test information_schema.routines
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.routines
 ----
 column_name                          data_type    is_nullable  column_default  generation_expression  indices  is_hidden
@@ -4755,7 +4765,7 @@ SELECT * FROM information_schema.routines
 specific_catalog  specific_schema  specific_name  routine_catalog  routine_schema  routine_name  routine_type  module_catalog  module_schema  module_name  udt_catalog  udt_schema  udt_name  data_type  character_maximum_length  character_octet_length  character_set_catalog  character_set_schema  character_set_name  collation_catalog  collation_schema  collation_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision  interval_type  interval_precision  type_udt_catalog  type_udt_schema  type_udt_name  scope_catalog  scope_name  maximum_cardinality  dtd_identifier  routine_body  routine_definition  external_name  external_language  parameter_style  is_deterministic  sql_data_access  is_null_call  sql_path  schema_level_routine  max_dynamic_result_sets  is_user_defined_cast  is_implicitly_invocable  security_type  to_sql_specific_catalog  to_sql_specific_schema  to_sql_specific_name  as_locator  created  last_altered  new_savepoint_level  is_udt_dependent  result_cast_from_data_type  result_cast_as_locator  result_cast_char_max_length  result_cast_char_octet_length  result_cast_char_set_catalog  result_cast_char_set_schema  result_cast_char_set_name  result_cast_collation_catalog  result_cast_collation_schema  result_cast_collation_name  result_cast_numeric_precision  result_cast_numeric_precision_radix  result_cast_numeric_scale  result_cast_datetime_precision  result_cast_interval_type  result_cast_interval_precision  result_cast_type_udt_catalog  result_cast_type_udt_schema  result_cast_type_udt_name  result_cast_scope_catalog  result_cast_scope_schema  result_cast_scope_name  result_cast_maximum_cardinality  result_cast_dtd_identifier
 
 # test information_schema.parameters
-query TTBTTTB colnames
+query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.parameters
 ----
 column_name               data_type  is_nullable  column_default  generation_expression  indices  is_hidden
@@ -4797,7 +4807,7 @@ SELECT * FROM information_schema.parameters
 ----
 specific_catalog  specific_schema  specific_name  ordinal_position  parameter_mode  is_result  as_locator  parameter_name  data_type  character_maximum_length  character_octet_length  character_set_catalog  character_set_schema  character_set_name  collation_catalog  collation_schema  collation_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision  interval_type  interval_precision  udt_catalog  udt_schema  udt_name  scope_catalog  scope_schema  scope_name  maximum_cardinality  dtd_identifier  parameter_default
 
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.column_privileges WHERE table_name = 'eventlog'
 ----
 grantor  grantee  table_catalog  table_schema  table_name  column_name  privilege_type  is_grantable
@@ -4906,7 +4916,7 @@ CREATE TABLE w(
   FOREIGN KEY (c,d) REFERENCES v(x,y) MATCH SIMPLE
   );
 
-query TTTT
+query TTTT rowsort
 SELECT constraint_name, table_name, referenced_table_name, match_option
   FROM information_schema.referential_constraints
 ----
@@ -4953,7 +4963,7 @@ CREATE TYPE typ1 AS ENUM ('hello');
 CREATE TYPE typ2 AS ENUM ('bye');
 CREATE TABLE tb_enum_cols (x typ1, y INT, z typ2, w typ2)
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SELECT * FROM information_schema.type_privileges WHERE type_name IN ('int', 'typ2')
 ----
 grantee  type_catalog  type_schema  type_name  privilege_type  is_grantable
@@ -4967,7 +4977,7 @@ root     test          public       typ2       ALL             YES
 statement ok
 GRANT ALL ON TYPE typ2 TO testuser
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SELECT * FROM information_schema.type_privileges WHERE type_name IN ('int', 'typ2')
 ----
 grantee   type_catalog  type_schema  type_name  privilege_type  is_grantable
@@ -4979,7 +4989,7 @@ public    test          public       typ2       USAGE           NO
 root      test          public       typ2       ALL             YES
 testuser  test          public       typ2       ALL             NO
 
-query TTTTTTT colnames
+query TTTTTTT colnames,rowsort
 SELECT * FROM information_schema.column_udt_usage
 ----
 udt_catalog  udt_schema  udt_name  table_catalog  table_schema  table_name    column_name
@@ -4991,13 +5001,11 @@ test         public      typ2      test           public        tb_enum_cols  w
 subtest collations
 
 query TTTT colnames
-SELECT * FROM information_schema.collations
+SELECT * FROM information_schema.collations ORDER BY collation_name
 ----
 collation_catalog  collation_schema  collation_name       pad_attribute
-test               pg_catalog        default              NO PAD
 test               pg_catalog        C                    NO PAD
 test               pg_catalog        POSIX                NO PAD
-test               pg_catalog        und                  NO PAD
 test               pg_catalog        aa                   NO PAD
 test               pg_catalog        af                   NO PAD
 test               pg_catalog        ar                   NO PAD
@@ -5012,8 +5020,9 @@ test               pg_catalog        ca                   NO PAD
 test               pg_catalog        cs                   NO PAD
 test               pg_catalog        cy                   NO PAD
 test               pg_catalog        da                   NO PAD
-test               pg_catalog        de-u-co-phonebk      NO PAD
 test               pg_catalog        de                   NO PAD
+test               pg_catalog        de-u-co-phonebk      NO PAD
+test               pg_catalog        default              NO PAD
 test               pg_catalog        dz                   NO PAD
 test               pg_catalog        ee                   NO PAD
 test               pg_catalog        el                   NO PAD
@@ -5048,8 +5057,8 @@ test               pg_catalog        km                   NO PAD
 test               pg_catalog        kn                   NO PAD
 test               pg_catalog        ko                   NO PAD
 test               pg_catalog        kok                  NO PAD
-test               pg_catalog        ln-u-co-phonetic     NO PAD
 test               pg_catalog        ln                   NO PAD
+test               pg_catalog        ln-u-co-phonetic     NO PAD
 test               pg_catalog        lt                   NO PAD
 test               pg_catalog        lv                   NO PAD
 test               pg_catalog        mk                   NO PAD
@@ -5084,20 +5093,21 @@ test               pg_catalog        tn                   NO PAD
 test               pg_catalog        to                   NO PAD
 test               pg_catalog        tr                   NO PAD
 test               pg_catalog        uk                   NO PAD
+test               pg_catalog        und                  NO PAD
 test               pg_catalog        ur                   NO PAD
 test               pg_catalog        vi                   NO PAD
 test               pg_catalog        wae                  NO PAD
 test               pg_catalog        yo                   NO PAD
 test               pg_catalog        zh                   NO PAD
-test               pg_catalog        zh-u-co-stroke       NO PAD
-test               pg_catalog        zh-Hant-u-co-pinyin  NO PAD
 test               pg_catalog        zh-Hant              NO PAD
+test               pg_catalog        zh-Hant-u-co-pinyin  NO PAD
+test               pg_catalog        zh-u-co-stroke       NO PAD
 
 
 ## information_schema.collation_character_set_applicability
 subtest collation_character_set_applicability
 
-query TTTTTT colnames
+query TTTTTT colnames,rowsort
 SELECT * FROM information_schema.collation_character_set_applicability
 ----
 collation_catalog  collation_schema  collation_name       character_set_catalog  character_set_schema  character_set_name
@@ -5227,7 +5237,8 @@ WHERE
       'copy_fast_path_enabled',
       'direct_columnar_scans_enabled',
       'multiple_active_portals_enabled'
-    );
+    )
+ORDER BY variable
 ----
 variable                                                   value
 allow_ordinal_column_references                            off
@@ -5458,7 +5469,7 @@ pg_catalog  int8      bigint
 statement ok
 SET DATABASE = "";
 
-query T colnames
+query T colnames,rowsort
 SELECT distinct is_identity FROM information_schema.columns
 ----
 is_identity
@@ -5718,7 +5729,7 @@ DROP TABLE IF EXISTS t
 statement ok
 CREATE TABLE t (i INTEGER PRIMARY KEY, x VARCHAR, y VARCHAR, z VARCHAR GENERATED ALWAYS AS (x || ' ' || y) STORED);
 
-query TT
+query TT rowsort
 SELECT column_name, is_generated FROM information_schema.columns WHERE table_name = 't';
 ----
 i  NEVER

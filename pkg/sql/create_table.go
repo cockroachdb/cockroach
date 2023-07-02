@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -114,7 +116,7 @@ func getSchemaForCreateTable(
 	// Check we are not creating a table which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
-	if tableName.Schema() == tree.PublicSchema {
+	if tableName.Schema() == catconstants.PublicSchemaName {
 		if _, ok := types.PublicSchemaAliases[tableName.Object()]; ok {
 			return nil, sqlerrors.NewTypeAlreadyExistsError(tableName.String())
 		}
@@ -1219,6 +1221,27 @@ func newTableDescIfAs(
 			}
 			d.Nullable.Nullability = tree.SilentNull
 			p.Defs = append(p.Defs, tableDef)
+		}
+	}
+
+	// Check if there is any reference to a user defined type that belongs to
+	// another database which is not allowed.
+	for _, def := range p.Defs {
+		if d, ok := def.(*tree.ColumnTableDef); ok {
+			// In CTAS, ColumnTableDef are generated from resultColumns which are
+			// resolved already. So we may cast it to *types.T directly without
+			// resolving it again.
+			typ := d.Type.(*types.T)
+			if typ.UserDefined() {
+				tn, typDesc, err := params.p.GetTypeDescriptor(params.ctx, typedesc.UserDefinedTypeOIDToID(typ.Oid()))
+				if err != nil {
+					return nil, err
+				}
+				if typDesc.GetParentID() != db.GetID() {
+					return nil, pgerror.Newf(
+						pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
+				}
+			}
 		}
 	}
 

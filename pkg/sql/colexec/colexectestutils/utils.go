@@ -1038,7 +1038,7 @@ func (s *opTestInput) Next() coldata.Batch {
 						setColVal(vec, outputIdx, j, s.evalCtx)
 					case types.TimestampTZFamily:
 						t := timeutil.Unix(rng.Int63n(2000000000), rng.Int63n(1000000))
-						t.Round(tree.TimeFamilyPrecisionToRoundDuration(vec.Type().Precision()))
+						t = t.Round(tree.TimeFamilyPrecisionToRoundDuration(vec.Type().Precision()))
 						setColVal(vec, outputIdx, t, s.evalCtx)
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch vec.Type().Family() {

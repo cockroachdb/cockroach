@@ -107,37 +107,24 @@ vectorized: true
 │ auto commit
 │ arbiter indexes: kv_pkey
 │
-└── • lookup join (inner)
+└── • render
     │ columns: (k, v_default, k)
-    │ estimated row count: 2 (missing stats)
-    │ table: kv@kv_pkey
-    │ equality: (k) = (k)
-    │ equality cols are key
+    │ render k: k
+    │ render v_default: CAST(NULL AS INT8)
+    │ render k: k
     │
-    └── • distinct
-        │ columns: (v_default, k)
+    └── • top-k
+        │ columns: (k, v)
+        │ ordering: -v
         │ estimated row count: 2 (missing stats)
-        │ distinct on: k
-        │ nulls are distinct
-        │ error on duplicate
+        │ order: -v
+        │ k: 2
         │
-        └── • render
-            │ columns: (v_default, k)
-            │ render v_default: CAST(NULL AS INT8)
-            │ render k: k
-            │
-            └── • top-k
-                │ columns: (k, v)
-                │ ordering: -v
-                │ estimated row count: 2 (missing stats)
-                │ order: -v
-                │ k: 2
-                │
-                └── • scan
-                      columns: (k, v)
-                      estimated row count: 1,000 (missing stats)
-                      table: kv@kv_pkey
-                      spans: FULL SCAN
+        └── • scan
+              columns: (k, v)
+              estimated row count: 1,000 (missing stats)
+              table: kv@kv_pkey
+              spans: FULL SCAN
 
 # Use Upsert with indexed table, default columns, computed columns, and check
 # columns.

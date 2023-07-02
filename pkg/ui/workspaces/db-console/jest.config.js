@@ -12,8 +12,9 @@
 
 const path = require("path");
 const { pathsToModuleNameMapper } = require("ts-jest");
-const { compilerOptions } = require("./tsconfig.json");
 const isBazel = !!process.env.BAZEL_TARGET;
+const srcDir = process.cwd();
+const { compilerOptions } = require(path.resolve(srcDir, "./tsconfig.json"));
 
 const bazelOnlySettings = {
   haste: {
@@ -97,7 +98,7 @@ module.exports = {
   // A set of global variables that need to be available in all test environments
   globals: {
     "ts-jest": {
-      tsconfig: path.join(__dirname, "./tsconfig.linting.json"),
+      tsconfig: path.resolve(srcDir, "./tsconfig.linting.json"),
     },
   },
 
@@ -114,12 +115,14 @@ module.exports = {
   moduleNameMapper: Object.assign(
     {},
     pathsToModuleNameMapper(
+      // compilerOptions.paths
       // The TypeScript compiler needs to know how to find Bazel-produced .d.ts
       // files, but those overrides break Jest's module loader. Remove the
       // @cockroachlabs entries from tsconfig.json's 'paths' object.
       Object.fromEntries(
         Object.entries(compilerOptions.paths).filter(([name, _paths]) => !name.includes("@cockroachlabs"))
-      ), { prefix: "<rootDir>/" }),
+      ), { prefix: "<rootDir>/" }
+    ),
     {
       "\\.(jpg|ico|jpeg|eot|otf|webp|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga|gif|png|svg)$":
         "<rootDir>/src/test-utils/file.mock.js",
@@ -129,7 +132,7 @@ module.exports = {
   ),
 
   // An alternative API to setting the NODE_PATH env variable, modulePaths is an array of absolute paths to additional locations to search when resolving modules.
-  modulePaths: ["<rootDir>/", ...module.paths],
+  modulePaths: ["<rootDir>/"],
 
   // An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader
   // modulePathIgnorePatterns: [],
@@ -165,7 +168,7 @@ module.exports = {
   // rootDir: undefined,
 
   // A list of paths to directories that Jest should use to search for files in
-  roots: ["<rootDir>/src", "<rootDir>/ccl"],
+  roots: ["<rootDir>", "<rootDir>/src", "<rootDir>/ccl"],
 
   // Allows you to use a custom runner instead of Jest's default test runner
   // runner: "jest-runner",
@@ -220,7 +223,7 @@ module.exports = {
     "^.+\\.tsx?$": "ts-jest",
     "^.+\\.js?$": [
       "babel-jest",
-      { configFile: path.resolve(__dirname, "babel.config.js") },
+	{ configFile: path.resolve(srcDir, "babel.config.js") },
     ],
   },
 

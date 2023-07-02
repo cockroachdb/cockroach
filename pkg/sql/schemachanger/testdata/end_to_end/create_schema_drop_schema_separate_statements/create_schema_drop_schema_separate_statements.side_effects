@@ -1,0 +1,150 @@
+/* setup */
+----
+
+
+/* test */
+CREATE SCHEMA sc;
+DROP SCHEMA sc;
+CREATE SCHEMA sc;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE SCHEMA
+increment telemetry for sql.schema.create_schema
+write *eventpb.CreateSchema to event log:
+  owner: root
+  schemaName: defaultdb.sc
+  sql:
+    descriptorId: 104
+    statement: CREATE SCHEMA ‹defaultdb›.‹sc›
+    tag: CREATE SCHEMA
+    user: root
+## StatementPhase stage 1 of 1 with 8 MutationType ops
+add schema namespace entry {100 0 sc} -> 104
+upsert descriptor #104
+  -
+  +schema:
+  +  id: 104
+  +  modificationTime: {}
+  +  name: sc
+  +  parentId: 100
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 2
+  +  version: "1"
+upsert descriptor #100
+  ...
+       public:
+         id: 101
+  -  version: "1"
+  +    sc:
+  +      id: 104
+  +  version: "2"
+checking for feature: DROP SCHEMA
+increment telemetry for sql.schema.drop_schema
+increment telemetry for sql.uds.drop_schema
+getting all objects in schema: 104
+write *eventpb.DropSchema to event log:
+  schemaName: defaultdb.sc
+  sql:
+    descriptorId: 104
+    statement: DROP SCHEMA ‹""›.‹sc›
+    tag: DROP SCHEMA
+    user: root
+## StatementPhase stage 1 of 1 with 6 MutationType ops
+delete schema namespace entry {100 0 sc} -> 104
+upsert descriptor #100
+  ...
+       public:
+         id: 101
+  -    sc:
+  -      id: 104
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #104
+  ...
+         withGrantOption: "2"
+       version: 2
+  +  state: DROP
+     version: "1"
+checking for feature: CREATE SCHEMA
+increment telemetry for sql.schema.create_schema
+write *eventpb.CreateSchema to event log:
+  owner: root
+  schemaName: defaultdb.sc
+  sql:
+    descriptorId: 105
+    statement: CREATE SCHEMA ‹defaultdb›.‹sc›
+    tag: CREATE SCHEMA
+    user: root
+## StatementPhase stage 1 of 1 with 8 MutationType ops
+add schema namespace entry {100 0 sc} -> 105
+upsert descriptor #105
+  -
+  +schema:
+  +  id: 105
+  +  modificationTime: {}
+  +  name: sc
+  +  parentId: 100
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 2
+  +  version: "1"
+upsert descriptor #100
+  ...
+       public:
+         id: 101
+  -  version: "1"
+  +    sc:
+  +      id: 105
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 8 MutationType ops
+add schema namespace entry {100 0 sc} -> 105
+upsert descriptor #105
+  -
+  +schema:
+  +  id: 105
+  +  modificationTime: {}
+  +  name: sc
+  +  parentId: 100
+  +  privileges:
+  +    ownerProto: root
+  +    users:
+  +    - privileges: "2"
+  +      userProto: admin
+  +      withGrantOption: "2"
+  +    - privileges: "2"
+  +      userProto: root
+  +      withGrantOption: "2"
+  +    version: 2
+  +  version: "1"
+upsert descriptor #100
+  ...
+       public:
+         id: 101
+  -  version: "1"
+  +    sc:
+  +      id: 105
+  +  version: "2"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

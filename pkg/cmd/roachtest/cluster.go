@@ -254,7 +254,7 @@ func findBinaryOrLibrary(
 	for _, dir := range dirs {
 		var path string
 
-		if path, err = exec.LookPath(filepath.Join(dir, name)); err == nil {
+		if path, err = exec.LookPath(filepath.Join(dir, name+nameSuffix)); err == nil {
 			return validateBinaryFormat(path, arch, checkEA)
 		}
 		for _, archSuffix := range archSuffixes {
@@ -1201,7 +1201,7 @@ func attachToExistingCluster(
 		}
 		if !opt.skipWipe {
 			if clusterWipe {
-				if err := c.WipeE(ctx, l, c.All()); err != nil {
+				if err := c.WipeE(ctx, l, false /* preserveCerts */, c.All()); err != nil {
 					return nil, err
 				}
 			} else {
@@ -1473,8 +1473,8 @@ COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure
 }
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
-// The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error {
+// The logs will be placed at `dest`, relative to the test's artifacts dir.
+func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger, dest string) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
@@ -1486,7 +1486,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 	// Don't hang forever if we can't fetch the debug zip.
 	return timeutil.RunWithTimeout(ctx, "debug zip", 5*time.Minute, func(ctx context.Context) error {
 		const zipName = "debug.zip"
-		path := filepath.Join(c.t.ArtifactsDir(), zipName)
+		path := filepath.Join(c.t.ArtifactsDir(), dest)
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
@@ -1499,10 +1499,13 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error
 			// Ignore the files in the the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
 			excludeFiles := "*.log,*.txt,*.pprof"
-			cmd := fmt.Sprintf(
-				"%s debug zip --include-range-info --exclude-files='%s' --url {pgurl:%d} %s",
-				defaultCockroachPath, excludeFiles, i, zipName,
-			)
+			cmd := roachtestutil.NewCommand("%s debug zip", defaultCockroachPath).
+				Option("include-range-info").
+				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
+				Flag("url", fmt.Sprintf("{pgurl:%d}", i)).
+				MaybeFlag(c.IsSecure(), "certs-dir", "certs").
+				Arg(zipName).
+				String()
 			if err := c.RunE(ctx, c.Node(i), cmd); err != nil {
 				l.Printf("%s debug zip failed on node %d: %v", defaultCockroachPath, i, err)
 				if i < c.spec.NodeCount {
@@ -2096,10 +2099,6 @@ func (c *clusterImpl) StartE(
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.StartE")
 	}
-	// If the test failed (indicated by a canceled ctx), short-circuit.
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
 	c.setStatusForClusterOpt("starting", startOpts.RoachtestOpts.Worker, opts...)
 	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
 
@@ -2134,7 +2133,9 @@ func (c *clusterImpl) StartE(
 		return err
 	}
 
-	if settings.Secure {
+	// Do not refetch certs if that step already happened once (i.e., we
+	// are restarting a node).
+	if settings.Secure && c.localCertsDir == "" {
 		if err := c.RefetchCertsFromNode(ctx, 1); err != nil {
 			return err
 		}
@@ -2248,7 +2249,9 @@ func (c *clusterImpl) Signal(
 
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
-func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, nodes ...option.Option) error {
+func (c *clusterImpl) WipeE(
+	ctx context.Context, l *logger.Logger, preserveCerts bool, nodes ...option.Option,
+) error {
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.WipeE")
 	}
@@ -2258,16 +2261,16 @@ func (c *clusterImpl) WipeE(ctx context.Context, l *logger.Logger, nodes ...opti
 	}
 	c.setStatusForClusterOpt("wiping", false, nodes...)
 	defer c.clearStatusForClusterOpt(false)
-	return roachprod.Wipe(ctx, l, c.MakeNodes(nodes...), false /* preserveCerts */)
+	return roachprod.Wipe(ctx, l, c.MakeNodes(nodes...), preserveCerts)
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
 // c.t.Fatal(). c.t needs to be set.
-func (c *clusterImpl) Wipe(ctx context.Context, nodes ...option.Option) {
+func (c *clusterImpl) Wipe(ctx context.Context, preserveCerts bool, nodes ...option.Option) {
 	if ctx.Err() != nil {
 		return
 	}
-	if err := c.WipeE(ctx, c.l, nodes...); err != nil {
+	if err := c.WipeE(ctx, c.l, preserveCerts, nodes...); err != nil {
 		c.t.Fatal(err)
 	}
 }

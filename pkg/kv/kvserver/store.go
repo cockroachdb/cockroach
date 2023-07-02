@@ -103,10 +103,6 @@ const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount = 10
 
-	// defaultRaftEntryCacheSize is the default size in bytes for a
-	// store's Raft log entry cache.
-	defaultRaftEntryCacheSize = 1 << 24 // 16M
-
 	// replicaQueueExtraSize is the number of requests that a replica's incoming
 	// message queue can keep over RaftConfig.RaftMaxInflightMsgs. When the leader
 	// maxes out RaftMaxInflightMsgs, we want the receiving replica to still have
@@ -119,22 +115,32 @@ const (
 // rounded up such that all stores have the same number of workers (10 workers
 // across 3 stores yields 4 workers per store or 12 in total).
 //
-// For small machines, we scale the scheduler concurrency by the number of
-// CPUs. 8*NumCPU was determined in 9a68241 (April 2017) as the optimal
-// concurrency level on 8 CPU machines. For larger machines, we've seen
-// (#56851) that this scaling curve can be too aggressive and lead to too much
-// contention in the Raft scheduler, so we cap the concurrency level at 96.
-//
-// As of November 2020, this default value could be re-tuned.
+// For small machines, we scale the scheduler concurrency by the number of CPUs.
+// 8*NumCPU was determined in 9a68241 (April 2017) as the optimal concurrency
+// level on 8 CPU machines. For larger machines, we've seen (#56851) that this
+// scaling curve can be too aggressive and lead to too much contention in the
+// Raft scheduler, so we cap the concurrency level at 128. This was revisited in
+// #99063 (June 2023) with Raft scheduler sharding and multi-store worker
+// distribution, and both the scaling and cap were found to still be reasonable,
+// but the cap was increased from 96 to 128 to reduce chance of starvation
+// within shards or on multi-store nodes.
 var defaultRaftSchedulerConcurrency = envutil.EnvOrDefaultInt(
-	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 96))
+	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 128))
 
 // defaultRaftSchedulerShardSize specifies the default maximum number of
 // scheduler worker goroutines per mutex shard. By default, we spin up 8 workers
-// per CPU core, capped at 96, so 16 is equivalent to 2 CPUs per shard, or a
-// maximum of 6 shards. This significantly relieves contention at high core
+// per CPU core, capped at 128, so 16 is equivalent to 2 CPUs per shard, or a
+// maximum of 8 shards. This significantly relieves contention at high core
 // counts, while also avoiding starvation by excessive sharding.
 var defaultRaftSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
+
+// defaultRaftEntryCacheSize is the default size in bytes for a store's Raft
+// entry cache. The Raft entry cache is shared by all Raft groups managed by the
+// store. It is used to cache uncommitted raft log entries such that once those
+// entries are committed, their application can avoid disk reads to retrieve
+// them from the persistent log.
+var defaultRaftEntryCacheSize = envutil.EnvOrDefaultBytes(
+	"COCKROACH_RAFT_ENTRY_CACHE_SIZE", 16<<20 /* 16 MiB */)
 
 // defaultRaftSchedulerPriorityShardSize specifies the default size of the Raft
 // scheduler priority shard, used for certain system ranges. This shard is
@@ -585,18 +591,18 @@ A Replica should be thought of primarily as a State Machine applying commands
 from a replicated log (the log being replicated across the members of the
 Range). The Store's RaftTransport receives Raft messages from Replicas residing
 on other Stores and routes them to the appropriate Replicas via
-Store.HandleRaftRequest (which is part of the RaftMessageHandler interface),
-ultimately resulting in a call to Replica.handleRaftReadyRaftMuLocked, which
-houses the integration with the etcd/raft library (raft.RawNode). This may
-generate Raft messages to be sent to other Stores; these are handed to
-Replica.sendRaftMessages which ultimately hands them to the Store's
-RaftTransport.SendAsync method. Raft uses message passing (not
-request-response), and outgoing messages will use a gRPC stream that differs
-from that used for incoming messages (which makes asymmetric partitions more
-likely in case of stream-specific problems). The steady state is relatively
-straightforward but when Ranges are being reconfigured, an understanding the
-Replica Lifecycle becomes important and upholding the Store's invariants becomes
-more complex.
+Store.HandleRaftRequest (which is part of the IncomingRaftMessageHandler
+interface), ultimately resulting in a call to
+Replica.handleRaftReadyRaftMuLocked, which houses the integration with the
+etcd/raft library (raft.RawNode). This may generate Raft messages to be sent to
+other Stores; these are handed to Replica.sendRaftMessages which ultimately
+hands them to the Store's RaftTransport.SendAsync method. Raft uses message
+passing (not request-response), and outgoing messages will use a gRPC stream
+that differs from that used for incoming messages (which makes asymmetric
+partitions more likely in case of stream-specific problems). The steady state is
+relatively straightforward but when Ranges are being reconfigured, an
+understanding the Replica Lifecycle becomes important and upholding the Store's
+invariants becomes more complex.
 
 A first phenomenon to understand is that of uninitialized Replicas, which is the
 State Machine at applied index zero, i.e. has an empty state. In CockroachDB, an
@@ -1022,6 +1028,8 @@ type Store struct {
 }
 
 var _ kv.Sender = &Store{}
+var _ IncomingRaftMessageHandler = &Store{}
+var _ OutgoingRaftMessageHandler = &Store{}
 
 // A StoreConfig encompasses the auxiliary objects and configuration
 // required to create a store.
@@ -1238,7 +1246,7 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 		sc.RaftSchedulerShardSize = defaultRaftSchedulerShardSize
 	}
 	if sc.RaftEntryCacheSize == 0 {
-		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
+		sc.RaftEntryCacheSize = uint64(defaultRaftEntryCacheSize)
 	}
 	if raftDisableLeaderFollowsLeaseholder {
 		sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
@@ -2059,7 +2067,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Start Raft processing goroutines.
-	s.cfg.Transport.Listen(s.StoreID(), s)
+	s.cfg.Transport.ListenIncomingRaftMessages(s.StoreID(), s)
+	s.cfg.Transport.ListenOutgoingMessage(s.StoreID(), s)
 	s.processRaft(ctx)
 
 	// Register a callback to unquiesce any ranges with replicas on a

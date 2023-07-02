@@ -868,12 +868,12 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.Equal(t, ms, msMerged, "post-merge stats differ from pre-split")
 }
 
-// RaftMessageHandlerInterceptor wraps a storage.RaftMessageHandler. It
-// delegates all methods to the underlying storage.RaftMessageHandler, except
-// that HandleSnapshot calls receiveSnapshotFilter with the snapshot request
-// header before delegating to the underlying HandleSnapshot method.
+// RaftMessageHandlerInterceptor wraps a storage.IncomingRaftMessageHandler. It
+// delegates all methods to the underlying storage.IncomingRaftMessageHandler,
+// except that HandleSnapshot calls receiveSnapshotFilter with the snapshot
+// request header before delegating to the underlying HandleSnapshot method.
 type RaftMessageHandlerInterceptor struct {
-	kvserver.RaftMessageHandler
+	kvserver.IncomingRaftMessageHandler
 	handleSnapshotFilter func(header *kvserverpb.SnapshotRequest_Header)
 }
 
@@ -883,7 +883,7 @@ func (mh RaftMessageHandlerInterceptor) HandleSnapshot(
 	respStream kvserver.SnapshotResponseStream,
 ) error {
 	mh.handleSnapshotFilter(header)
-	return mh.RaftMessageHandler.HandleSnapshot(ctx, header, respStream)
+	return mh.IncomingRaftMessageHandler.HandleSnapshot(ctx, header, respStream)
 }
 
 // TestStoreEmptyRangeSnapshotSize tests that the snapshot request header for a
@@ -923,7 +923,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 		headers []*kvserverpb.SnapshotRequest_Header
 	}{}
 	messageHandler := RaftMessageHandlerInterceptor{
-		RaftMessageHandler: tc.GetFirstStoreFromServer(t, 1),
+		IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, 1),
 		handleSnapshotFilter: func(header *kvserverpb.SnapshotRequest_Header) {
 			// Each snapshot request is handled in a new goroutine, so we need
 			// synchronization.
@@ -932,7 +932,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 			messageRecorder.headers = append(messageRecorder.headers, header)
 		},
 	}
-	tc.Servers[1].RaftTransport().Listen(tc.GetFirstStoreFromServer(t, 1).StoreID(), messageHandler)
+	tc.Servers[1].RaftTransport().ListenIncomingRaftMessages(tc.GetFirstStoreFromServer(t, 1).StoreID(), messageHandler)
 
 	// Replicate the newly-split range to trigger a snapshot request from store 0
 	// to store 1.
@@ -2185,24 +2185,34 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	}
 }
 
-// TestLeaderAfterSplit verifies that a raft group created by a split
-// elects a leader without waiting for an election timeout.
+// TestLeaderAfterSplit verifies that a raft group created by a split elects a
+// leader without waiting for an election timeout. It also tests that we don't
+// get an election tie, because we only allow the leaseholder to campaign if
+// there is a valid lease.
 func TestLeaderAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				RaftConfig: base.RaftConfig{
-					RaftElectionTimeoutTicks: 1000000,
-				},
+	// Timing-sensitive test, disable under deadlock and stressrace.
+	skip.UnderDeadlock(t)
+	skip.UnderStressRace(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // time out early
+	defer cancel()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				RangeLeaseDuration:       time.Hour, // don't expire leases
+				RaftElectionTimeoutTicks: 1000000,   // disable elections
 			},
-		})
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
+
 	store := tc.GetFirstStoreFromServer(t, 0)
+	sender := tc.Servers[0].DistSender()
 
 	leftKey := roachpb.Key("a")
 	splitKey := roachpb.Key("m")
@@ -2212,20 +2222,17 @@ func TestLeaderAfterSplit(t *testing.T) {
 	require.NotNil(t, repl)
 	tc.AddVotersOrFatal(t, repl.Desc().StartKey.AsRawKey(), tc.Targets(1, 2)...)
 
-	splitArgs := adminSplitArgs(splitKey)
-	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), splitArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	// Split the range.
+	_, pErr := kv.SendWrapped(ctx, sender, adminSplitArgs(splitKey))
+	require.NoError(t, pErr.GoError())
 
-	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), incArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	// Make sure both the LHS and RHS can replicate a write request. This will
+	// time out if the RHS can't elect a Raft leader.
+	_, pErr = kv.SendWrapped(ctx, sender, incrementArgs(leftKey, 1))
+	require.NoError(t, pErr.GoError())
 
-	incArgs = incrementArgs(rightKey, 2)
-	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), incArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, pErr = kv.SendWrapped(ctx, sender, incrementArgs(rightKey, 1))
+	require.NoError(t, pErr.GoError())
 }
 
 func BenchmarkStoreRangeSplit(b *testing.B) {
@@ -3383,9 +3390,9 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	})
 
 	store, _ := getFirstStoreReplica(t, tc.Server(1), k)
-	tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
-		rangeID:            desc.RangeID,
-		RaftMessageHandler: store,
+	tc.Servers[1].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
+		rangeID:                    desc.RangeID,
+		IncomingRaftMessageHandler: store,
 	})
 
 	_, kRHS := k, k.Next()
@@ -3461,7 +3468,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 
 	// Re-enable raft and wait for the lhs to catch up to the post-split
 	// descriptor. This used to panic with "raft group deleted".
-	tc.Servers[1].RaftTransport().Listen(store.StoreID(), store)
+	tc.Servers[1].RaftTransport().ListenIncomingRaftMessages(store.StoreID(), store)
 	testutils.SucceedsSoon(t, func() error {
 		repl, err := store.GetReplica(descLHS.RangeID)
 		if err != nil {

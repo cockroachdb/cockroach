@@ -61,3 +61,18 @@ const (
 	// SchemaUserDefined represents a user defined schema.
 	SchemaUserDefined
 )
+
+func (kind ResolvedSchemaKind) String() string {
+	switch kind {
+	case SchemaPublic:
+		return "public"
+	case SchemaVirtual:
+		return "virtual"
+	case SchemaTemporary:
+		return "temporary"
+	case SchemaUserDefined:
+		return "user defined"
+	default:
+		panic("unknown kind")
+	}
+}

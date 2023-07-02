@@ -391,6 +391,9 @@ func (r *Replica) adminSplitWithDescriptor(
 		if !storage.IsValidSplitKey(foundSplitKey) {
 			return reply, errors.Errorf("cannot split range at key %s", splitKey)
 		}
+		if _, _, err := keys.DecodeTenantPrefixE(splitKey.AsRawKey()); err != nil {
+			return reply, errors.Wrapf(err, "checking for valid tenantID")
+		}
 	}
 
 	// If the range starts at the splitKey, we treat the AdminSplit
@@ -2894,7 +2897,7 @@ func (r *Replica) sendSnapshotUsingDelegate(
 
 // validateSnapshotDelegationRequest will validate that this replica can send
 // the snapshot that the coordinator requested. The main reasons a request can't
-// be delegated are if the Generation or Term of the replica is not equal to the
+// be delegated are if the Generation or Term of the replica are less than the
 // Generation or Term of the coordinator's request or the applied index on this
 // replica is behind the truncated index of the coordinator. Note that the request
 // is validated twice, once before "queueing" and once after. This reduces the
@@ -2906,18 +2909,22 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
 ) error {
 	desc := r.Desc()
-	// If the generation has changed, this snapshot may be useless, so don't
-	// attempt to send it.
-	// NB: This is an overly strict check. If other delegates are added to this
-	// snapshot, we don't necessarily need to reject sending the snapshot, however
-	// if there are merges or splits, it is safer to reject.
-	if desc.Generation != req.DescriptorGeneration {
+	// If the delegate doesn't know about a generation change (its index is lower
+	// than the leaseholders) the snapshot it sends may be useless, so don't
+	// attempt to send it and instead return an error.
+	// NB: This is an overly strict check. Some generation changes are acceptable
+	// even if the delegate doesn't know about them. Changes like splits or merges
+	// we don't know about can invalidate the snapshot we would otherwise send. If
+	// the delegates generations is higher than the request generation, then the
+	// snapshot will still be valid since the leaseholder is also on this
+	// generation by now.
+	if desc.Generation < req.DescriptorGeneration {
 		log.VEventf(ctx, 2,
-			"%s: generation has changed since snapshot was generated %s != %s",
+			"%s: generation has changed since snapshot was generated %s < %s",
 			r, req.DescriptorGeneration, desc.Generation,
 		)
 		return errors.Errorf(
-			"%s: generation has changed since snapshot was generated %s != %s",
+			"%s: generation has changed since snapshot was generated %s < %s",
 			r, req.DescriptorGeneration, desc.Generation,
 		)
 	}
@@ -2956,13 +2963,15 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	replTerm := kvpb.RaftTerm(status.Term)
 	r.mu.RUnlock()
 
-	// Delegate has a different term than the coordinator. This typically means
-	// the lease has been transferred, and we should not process this request.
-	// There is a potential race where the leaseholder sends a delegate request
-	// and then the term changes before this request is processed. In that
-	// case this code path will not be checked and the snapshot will still be
-	// sent.
-	if replTerm != req.Term {
+	// Delegate has a lower term than the coordinator. This typically means the
+	// lease has been transferred, and we should not process this request. There
+	// is a potential race where the leaseholder sends a delegate request and then
+	// the term changes before this request is processed. In that case the
+	// snapshot will still be sent. There isn't a problem sending a snapshot with
+	// a lower term, however the new leaseholder may think we need a snapshot and
+	// send an additional one. This check attempts to minimize the change of the
+	// double snapshot being sent.
+	if replTerm < req.Term {
 		log.Infof(
 			ctx,
 			"sender: %v is not fit to send snapshot for %v; sender term: %v coordinator term: %v",
@@ -3142,6 +3151,8 @@ func (r *Replica) followerSendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
+	comparisonResult := r.store.getLocalityComparison(ctx, req.CoordinatorReplica.NodeID,
+		req.RecipientReplica.NodeID)
 
 	recordBytesSent := func(inc int64) {
 		// Only counts for delegated bytes if we are not self-delegating.
@@ -3149,8 +3160,7 @@ func (r *Replica) followerSendSnapshot(
 			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
 		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
-		r.store.updateCrossLocalitySnapshotMetrics(
-			ctx, req.CoordinatorReplica, req.RecipientReplica, inc, true /* isSent */)
+		r.store.metrics.updateCrossLocalityMetricsOnSnapshotSent(comparisonResult, inc)
 
 		switch header.Priority {
 		case kvserverpb.SnapshotRequest_RECOVERY:

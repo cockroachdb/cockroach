@@ -124,6 +124,14 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 				"TSVector/TSQuery not supported until version 23.1")
 		}
 
+	case types.PGLSNFamily:
+		if !version.IsActive(ctx, clusterversion.V23_2) {
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"pg_lsn not supported until version 23.2",
+			)
+		}
+
 	default:
 		return pgerror.Newf(pgcode.InvalidTableDefinition,
 			"value type %s cannot be used for table columns", t.String())

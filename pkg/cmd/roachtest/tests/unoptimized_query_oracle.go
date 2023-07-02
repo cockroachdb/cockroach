@@ -55,6 +55,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 					"unoptimized-query-oracle/disable-rules=%s/%s", disableRuleSpec.disableRules, setupName,
 				),
 				Owner:           registry.OwnerSQLQueries,
+				NativeLibs:      registry.LibGEOS,
 				Timeout:         time.Hour * 1,
 				RequiresLicense: true,
 				Tags:            nil,

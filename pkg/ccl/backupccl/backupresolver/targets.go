@@ -205,9 +205,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			r.ObjIDsBySchema[desc.GetID()] = make(map[string]*catalog.DescriptorIDSet)
 
 			if !desc.(catalog.DatabaseDescriptor).HasPublicSchemaWithDescriptor() {
-				r.ObjsByName[desc.GetID()][tree.PublicSchema] = make(map[string]descpb.ID)
-				r.SchemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaIDForBackup
-				r.ObjIDsBySchema[desc.GetID()][tree.PublicSchema] = &catalog.DescriptorIDSet{}
+				r.ObjsByName[desc.GetID()][catconstants.PublicSchemaName] = make(map[string]descpb.ID)
+				r.SchemasByName[desc.GetID()][catconstants.PublicSchemaName] = keys.PublicSchemaIDForBackup
+				r.ObjIDsBySchema[desc.GetID()][catconstants.PublicSchemaName] = &catalog.DescriptorIDSet{}
 			}
 		}
 
@@ -267,7 +267,7 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 		// TODO(richardjcai): We can remove this in 22.2, still have to handle
 		// this case in the mixed version cluster.
 		if scID == keys.PublicSchemaIDForBackup {
-			scName = tree.PublicSchema
+			scName = catconstants.PublicSchemaName
 		} else {
 			scDescI, ok := r.DescByID[scID]
 			if !ok {
@@ -398,19 +398,23 @@ func DescriptorsMatchingTargets(
 		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			schemaDesc := r.DescByID[id]
-			if schemaDesc == nil || !schemaDesc.Public() {
+			if schemaDesc == nil {
 				if requirePublic {
-					return errors.Wrapf(err, "schema %d was expected to be PUBLIC", id)
-				} else if schemaDesc == nil || !schemaDesc.Offline() {
-					// If the schema is not public, but we don't require it to be, ignore
-					// it.
-					return nil
+					return errors.Wrapf(err, "cannot find schema %d", id)
 				}
+				return nil
+			}
+			// Ignore schemas in `DROP` state. This means we will include `PUBLIC`,
+			// `OFFLINE`, and `ADD` schemas into the backup.
+			if schemaDesc.Dropped() {
+				if requirePublic {
+					return errors.Wrapf(err, "schema %d was expected to be PUBLIC; get DROP", id)
+				}
+				return nil
 			}
 			alreadyRequestedSchemas[id] = struct{}{}
 			ret.Descs = append(ret.Descs, r.DescByID[id])
 		}
-
 		return nil
 	}
 	getSchemaIDByName := func(scName string, dbID descpb.ID) (descpb.ID, error) {

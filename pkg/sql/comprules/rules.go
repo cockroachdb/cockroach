@@ -266,21 +266,19 @@ func completeObjectInCurrentDatabase(
 	//    - when the completion prefix already includes the `pg_` prefix,
 	//      in which case we can assume the user wants to see these tables.
 	const queryT = `
-WITH n AS (SELECT oid, nspname FROM pg_catalog.pg_namespace WHERE nspname %s),
-     t AS (SELECT c.oid, relname FROM pg_catalog.pg_class c
-             JOIN n ON n.oid = c.relnamespace
-            WHERE reltype != 0
-              AND left(relname, length($1:::STRING)) = $1::STRING
-              AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_'))
-SELECT relname AS completion,
-       'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
-       $2:::INT AS start,
-       $3:::INT AS end
-  FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.oid = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+         SELECT c.relname AS completion,
+                'relation' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_class c
+           JOIN pg_catalog.pg_namespace n
+                ON c.relnamespace = n.oid AND n.nspname %s
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON c.oid = d.objoid AND d.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
+          WHERE c.reltype != 0
+            AND left(relname, length($1:::STRING)) = $1::STRING
+            AND (nspname != 'pg_catalog' OR $4:::BOOL OR left($1:::STRING, 3) = 'pg_')
 `
 	query := fmt.Sprintf(queryT, schema)
 	iter, err := c.Query(ctx, query, prefix, start, end, hasSchemaPrefix)
@@ -312,14 +310,14 @@ func completeSchemaInCurrentDatabase(
 
 	c.Trace("completing for %q (%d,%d)", prefix, start, end)
 	const query = `
-SELECT nspname AS completion,
-       'schema' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
-       $2:::INT AS start,
-       $3:::INT AS end
-  FROM pg_catalog.pg_namespace t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.oid = cc.object_id AND cc.type = 'SchemaCommentType'
+         SELECT n.nspname AS completion,
+                'schema' AS category,
+                substr(COALESCE(d.description, ''), e'[^\n]{0,80}') as description,
+                $2:::INT AS start,
+                $3:::INT AS end
+           FROM pg_catalog.pg_namespace n
+LEFT OUTER JOIN pg_catalog.pg_description d
+                ON n.oid = d.objoid AND d.classoid = 'pg_catalog.pg_namespace'::REGCLASS::OID
  WHERE left(nspname, length($1:::STRING)) = $1::STRING
 ORDER BY 1,3,4,5
 `
@@ -435,13 +433,12 @@ SELECT name, table_id
 )
 SELECT name AS completion,
        'relation' AS category,
-       substr(COALESCE(cc.comment, ''), e'[^\n]{0,80}') as description,
+       substr(COALESCE(cc.description, ''), e'[^\n]{0,80}') as description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM t
-LEFT OUTER JOIN "".crdb_internal.kv_catalog_comments cc
-    ON t.table_id = cc.object_id AND cc.type = 'TableCommentType'
-ORDER BY 1,3,4,5
+LEFT OUTER JOIN "".pg_catalog.pg_description cc
+    ON t.table_id = cc.objoid AND cc.classoid = 'pg_catalog.pg_class'::REGCLASS::OID
 `
 	iter, err := c.Query(ctx, query, prefix, start, end, dbname, schema)
 	return iter, err

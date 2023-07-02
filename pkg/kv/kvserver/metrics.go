@@ -1044,6 +1044,12 @@ var (
 		Measurement: "Leader Transfers",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeRaftLeaderRemovals = metric.Metadata{
+		Name:        "range.raftleaderremovals",
+		Help:        "Number of times the current Raft leader was removed from a range",
+		Measurement: "Raft leader removals",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeLossOfQuorumRecoveries = metric.Metadata{
 		Name: "range.recoveries",
 		Help: `Count of offline loss of quorum recovery operations performed on ranges.
@@ -1105,6 +1111,20 @@ or the delegate being too busy to send.
 		Name:        "raft.ticks",
 		Help:        "Number of Raft ticks queued",
 		Measurement: "Ticks",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftProposalsDropped = metric.Metadata{
+		Name:        "raft.dropped",
+		Help:        "Number of Raft proposals dropped (this counts individial raftpb.Entry, not raftpb.MsgProp)",
+		Measurement: "Proposals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftProposalsDroppedLeader = metric.Metadata{
+		Name: "raft.dropped_leader",
+		Help: "Number of Raft proposals dropped by a Replica that believes itself to be the leader; " +
+			"each update also increments `raft.dropped` " +
+			"(this counts individial raftpb.Entry, not raftpb.MsgProp)",
+		Measurement: "Proposals",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRaftWorkingDurationNanos = metric.Metadata{
@@ -1357,6 +1377,59 @@ Raft ready handling and size the size of an entry is dominated by the contained 
 on average the rate at which this metric increases is a good proxy for the rate at which Raft ready
 handling consumes writes.
 `,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+
+	metaRaftRcvdBytes = metric.Metadata{
+		Name: "raft.rcvd.bytes",
+		Help: `Number of bytes in Raft messages received by this store. Note
+		that this does not include raft snapshot received.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftRcvdCrossRegionBytes = metric.Metadata{
+		Name: "raft.rcvd.cross_region.bytes",
+		Help: `Number of bytes received by this store for cross region Raft messages
+		(when region tiers are configured). Note that this does not include raft
+		snapshot received.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftRcvdCrossZoneBytes = metric.Metadata{
+		Name: "raft.rcvd.cross_zone.bytes",
+		Help: `Number of bytes received by this store for cross zone, same region
+		Raft messages (when region and zone tiers are configured). If region tiers
+		are not configured, this count may include data sent between different
+		regions. To ensure accurate monitoring of transmitted data, it is important
+		to set up a consistent locality configuration across nodes. Note that this
+		does not include raft snapshot received.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftSentBytes = metric.Metadata{
+		Name: "raft.sent.bytes",
+		Help: `Number of bytes in Raft messages sent by this store. Note that
+		this does not include raft snapshot sent.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftSentCrossRegionBytes = metric.Metadata{
+		Name: "raft.sent.cross_region.bytes",
+		Help: `Number of bytes sent by this store for cross region Raft messages
+		(when region tiers are configured). Note that this does not include raft
+		snapshot sent.`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRaftSentCrossZoneBytes = metric.Metadata{
+		Name: "raft.sent.cross_zone.bytes",
+		Help: `Number of bytes sent by this store for cross zone, same region Raft
+		messages (when region and zone tiers are configured). If region tiers are
+		not configured, this count may include data sent between different regions.
+		To ensure accurate monitoring of transmitted data, it is important to set up
+		a consistent locality configuration across nodes. Note that this does not
+		include raft snapshot sent.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -2013,7 +2086,18 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Flush Utilization",
 		Unit:        metric.Unit_PERCENT,
 	}
-
+	metaWALBytesWritten = metric.Metadata{
+		Name:        "storage.wal.bytes_written",
+		Help:        "The number of bytes the storage engine has written to the WAL",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaWALBytesIn = metric.Metadata{
+		Name:        "storage.wal.bytes_in",
+		Help:        "The number of logical bytes the storage engine has written to the WAL",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaStorageFsyncLatency = metric.Metadata{
 		Name:        "storage.wal.fsync.latency",
 		Help:        "The write ahead log fsync latency",
@@ -2199,6 +2283,7 @@ type StoreMetrics struct {
 	RangeAdds                   *metric.Counter
 	RangeRemoves                *metric.Counter
 	RangeRaftLeaderTransfers    *metric.Counter
+	RangeRaftLeaderRemovals     *metric.Counter
 	RangeLossOfQuorumRecoveries *metric.Counter
 
 	// Range snapshot metrics.
@@ -2238,27 +2323,37 @@ type StoreMetrics struct {
 	DelegateSnapshotInProgress *metric.Gauge
 
 	// Raft processing metrics.
-	RaftTicks                 *metric.Counter
-	RaftQuotaPoolPercentUsed  metric.IHistogram
-	RaftWorkingDurationNanos  *metric.Counter
-	RaftTickingDurationNanos  *metric.Counter
-	RaftCommandsApplied       *metric.Counter
-	RaftLogCommitLatency      metric.IHistogram
-	RaftCommandCommitLatency  metric.IHistogram
-	RaftHandleReadyLatency    metric.IHistogram
-	RaftApplyCommittedLatency metric.IHistogram
-	RaftSchedulerLatency      metric.IHistogram
-	RaftTimeoutCampaign       *metric.Counter
-	RaftStorageReadBytes      *metric.Counter
+	RaftTicks                  *metric.Counter
+	RaftProposalsDropped       *metric.Counter
+	RaftProposalsDroppedLeader *metric.Counter
+	RaftQuotaPoolPercentUsed   metric.IHistogram
+	RaftWorkingDurationNanos   *metric.Counter
+	RaftTickingDurationNanos   *metric.Counter
+	RaftCommandsApplied        *metric.Counter
+	RaftLogCommitLatency       metric.IHistogram
+	RaftCommandCommitLatency   metric.IHistogram
+	RaftHandleReadyLatency     metric.IHistogram
+	RaftApplyCommittedLatency  metric.IHistogram
+	RaftSchedulerLatency       metric.IHistogram
+	RaftTimeoutCampaign        *metric.Counter
+	RaftStorageReadBytes       *metric.Counter
+	WALBytesWritten            *metric.Gauge
+	WALBytesIn                 *metric.Gauge
 
 	// Raft message metrics.
 	//
 	// An array for conveniently finding the appropriate metric.
-	RaftRcvdMessages     [maxRaftMsgType + 1]*metric.Counter
-	RaftRcvdDropped      *metric.Counter
-	RaftRcvdDroppedBytes *metric.Counter
-	RaftRcvdQueuedBytes  *metric.Gauge
-	RaftRcvdSteppedBytes *metric.Counter
+	RaftRcvdMessages         [maxRaftMsgType + 1]*metric.Counter
+	RaftRcvdDropped          *metric.Counter
+	RaftRcvdDroppedBytes     *metric.Counter
+	RaftRcvdQueuedBytes      *metric.Gauge
+	RaftRcvdSteppedBytes     *metric.Counter
+	RaftRcvdBytes            *metric.Counter
+	RaftRcvdCrossRegionBytes *metric.Counter
+	RaftRcvdCrossZoneBytes   *metric.Counter
+	RaftSentBytes            *metric.Counter
+	RaftSentCrossRegionBytes *metric.Counter
+	RaftSentCrossZoneBytes   *metric.Counter
 
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
@@ -2813,6 +2908,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BatchCommitL0StallDuration:    metric.NewGauge(metaBatchCommitL0StallDuration),
 		BatchCommitWALRotWaitDuration: metric.NewGauge(metaBatchCommitWALRotDuration),
 		BatchCommitCommitWaitDuration: metric.NewGauge(metaBatchCommitCommitWaitDuration),
+		WALBytesWritten:               metric.NewGauge(metaWALBytesWritten),
+		WALBytesIn:                    metric.NewGauge(metaWALBytesIn),
 
 		// Ingestion metrics
 		IngestCount: metric.NewGauge(metaIngestCount),
@@ -2855,6 +2952,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotSendQueueSize:                   metric.NewGauge(metaRangeSnapshotSendQueueSize),
 		RangeSnapshotRecvQueueSize:                   metric.NewGauge(metaRangeSnapshotRecvQueueSize),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
+		RangeRaftLeaderRemovals:                      metric.NewCounter(metaRangeRaftLeaderRemovals),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
 		DelegateSnapshotSendBytes:                    metric.NewCounter(metaDelegateSnapshotSendBytes),
 		DelegateSnapshotSuccesses:                    metric.NewCounter(metaDelegateSnapshotSuccesses),
@@ -2862,7 +2960,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DelegateSnapshotInProgress:                   metric.NewGauge(metaDelegateSnapshotInProgress),
 
 		// Raft processing metrics.
-		RaftTicks: metric.NewCounter(metaRaftTicks),
+		RaftTicks:                  metric.NewCounter(metaRaftTicks),
+		RaftProposalsDropped:       metric.NewCounter(metaRaftProposalsDropped),
+		RaftProposalsDroppedLeader: metric.NewCounter(metaRaftProposalsDroppedLeader),
 		RaftQuotaPoolPercentUsed: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaRaftQuotaPoolPercentUsed,
 			Duration: histogramWindow,
@@ -2921,10 +3021,16 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			raftpb.MsgTransferLeader: metric.NewCounter(metaRaftRcvdTransferLeader),
 			raftpb.MsgTimeoutNow:     metric.NewCounter(metaRaftRcvdTimeoutNow),
 		},
-		RaftRcvdDropped:      metric.NewCounter(metaRaftRcvdDropped),
-		RaftRcvdDroppedBytes: metric.NewCounter(metaRaftRcvdDroppedBytes),
-		RaftRcvdQueuedBytes:  metric.NewGauge(metaRaftRcvdQueuedBytes),
-		RaftRcvdSteppedBytes: metric.NewCounter(metaRaftRcvdSteppedBytes),
+		RaftRcvdDropped:          metric.NewCounter(metaRaftRcvdDropped),
+		RaftRcvdDroppedBytes:     metric.NewCounter(metaRaftRcvdDroppedBytes),
+		RaftRcvdQueuedBytes:      metric.NewGauge(metaRaftRcvdQueuedBytes),
+		RaftRcvdSteppedBytes:     metric.NewCounter(metaRaftRcvdSteppedBytes),
+		RaftRcvdBytes:            metric.NewCounter(metaRaftRcvdBytes),
+		RaftRcvdCrossRegionBytes: metric.NewCounter(metaRaftRcvdCrossRegionBytes),
+		RaftRcvdCrossZoneBytes:   metric.NewCounter(metaRaftRcvdCrossZoneBytes),
+		RaftSentBytes:            metric.NewCounter(metaRaftSentBytes),
+		RaftSentCrossRegionBytes: metric.NewCounter(metaRaftSentCrossRegionBytes),
+		RaftSentCrossZoneBytes:   metric.NewCounter(metaRaftSentCrossZoneBytes),
 
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
@@ -3172,6 +3278,8 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
 	sm.FlushableIngestTableSize.Update(int64(m.Flush.AsIngestBytes))
 	sm.IngestCount.Update(int64(m.Ingest.Count))
+	sm.WALBytesWritten.Update(int64(m.WAL.BytesWritten))
+	sm.WALBytesIn.Update(int64(m.WAL.BytesIn))
 	sm.BatchCommitCount.Update(int64(m.BatchCommitStats.Count))
 	sm.BatchCommitDuration.Update(int64(m.BatchCommitStats.TotalDuration))
 	sm.BatchCommitSemWaitDuration.Update(int64(m.BatchCommitStats.SemaphoreWaitDuration))
@@ -3180,6 +3288,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitL0StallDuration.Update(int64(m.BatchCommitStats.L0ReadAmpWriteStallDuration))
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
+
 	// Update the maximum number of L0 sub-levels seen.
 	sm.l0SublevelsTracker.Lock()
 	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
@@ -3191,6 +3300,81 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 		sm.RdbBytesIngested[level].Update(int64(stats.BytesIngested))
 		sm.RdbLevelSize[level].Update(stats.Size)
 		sm.RdbLevelScore[level].Update(stats.Score)
+	}
+}
+
+// updateCrossLocalityMetricsOnSnapshotSent updates cross-locality related store
+// metrics when outgoing snapshots are sent to the outgoingSnapshotStream. The
+// metrics being updated include 1. cross-region metrics, which monitor
+// activities across different regions, and 2. cross-zone metrics, which monitor
+// activities across different zones within the same region or in cases where
+// region tiers are not configured.
+func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotSent(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		sm.RangeSnapShotCrossRegionSentBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		sm.RangeSnapShotCrossZoneSentBytes.Inc(inc)
+	}
+}
+
+// updateCrossLocalityMetricsOnSnapshotRcvd updates cross-locality related store
+// metrics when receiving SnapshotRequests through streaming and constructing
+// incoming snapshots. The metrics being updated include 1. cross-region
+// metrics, which monitor activities across different regions, and 2. cross-zone
+// metrics, which monitor activities across different zones within the same
+// region or in cases where region tiers are not configured.
+func (sm *StoreMetrics) updateCrossLocalityMetricsOnSnapshotRcvd(
+	comparisonResult roachpb.LocalityComparisonType, inc int64,
+) {
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		sm.RangeSnapShotCrossRegionRcvdBytes.Inc(inc)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		sm.RangeSnapShotCrossZoneRcvdBytes.Inc(inc)
+	}
+}
+
+// updateCrossLocalityMetricsOnIncomingRaftMsg updates store metrics for raft
+// messages that have been received via HandleRaftRequest. In the cases of
+// messages containing heartbeats or heartbeat_resps, they capture the byte
+// count of requests with coalesced heartbeats before any uncoalescing happens.
+// The metrics being updated include 1. total byte count of messages received 2.
+// cross-region metrics, which monitor activities across different regions, and
+// 3. cross-zone metrics, which monitor activities across different zones within
+// the same region or in cases where region tiers are not configured.
+func (sm *StoreMetrics) updateCrossLocalityMetricsOnIncomingRaftMsg(
+	comparisonResult roachpb.LocalityComparisonType, msgSize int64,
+) {
+	sm.RaftRcvdBytes.Inc(msgSize)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		sm.RaftRcvdCrossRegionBytes.Inc(msgSize)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		sm.RaftRcvdCrossZoneBytes.Inc(msgSize)
+	}
+}
+
+// updateCrossLocalityMetricsOnOutgoingRaftMsg updates store metrics for raft
+// messages that are about to be sent via raftSendQueue. In the cases of
+// messages containing heartbeats or heartbeat_resps, they capture the byte
+// count of requests with coalesced heartbeats. The metrics being updated
+// include 1. total byte count of messages sent 2. cross-region metrics, which
+// monitor activities across different regions, and 3. cross-zone metrics, which
+// monitor activities across different zones within the same region or in cases
+// where region tiers are not configured. Note that these metrics may include
+// messages that get dropped by `SendAsync` due to a full outgoing queue.
+func (sm *StoreMetrics) updateCrossLocalityMetricsOnOutgoingRaftMsg(
+	comparisonResult roachpb.LocalityComparisonType, msgSize int64,
+) {
+	sm.RaftSentBytes.Inc(msgSize)
+	switch comparisonResult {
+	case roachpb.LocalityComparisonType_CROSS_REGION:
+		sm.RaftSentCrossRegionBytes.Inc(msgSize)
+	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
+		sm.RaftSentCrossZoneBytes.Inc(msgSize)
 	}
 }
 

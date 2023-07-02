@@ -16,14 +16,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"go.etcd.io/raft/v3"
 )
+
+// useReproposalsV2 activates prototype code that instead of reproposing using a
+// modified lease index makes a new proposal (different CmdID), transfers the
+// waiting caller (if any) to it, and proposes that. With this strategy, the
+// *RaftCommand associated to a proposal becomes immutable, which simplifies the
+// mental model and allows various simplifications in the proposal pipeline. For
+// now, the old and new behavior coexist, and we want to keep exercising both.
+// Once we have confidence, we'll hard-code true and remove all old code paths.
+var useReproposalsV2 = util.ConstantWithMetamorphicTestBool("reproposals-v2", true)
 
 // replica_application_*.go files provide concrete implementations of
 // the interfaces defined in the storage/apply package:
@@ -104,6 +116,16 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 		case kvserverbase.ProposalRejectionPermanent:
 			cmd.response.Err = pErr
 		case kvserverbase.ProposalRejectionIllegalLeaseIndex:
+			if useReproposalsV2 {
+				// If we're using V2 reproposals, this proposal is actually going to
+				// be fully rejected, but the client won't be listening to it at that
+				// point any more. But we should set the error. (This ends up being
+				// inconsequential but it's the right thing to do).
+				//
+				// TODO(tbg): once useReproposalsV2 is baked in, set the error unconditionally
+				// above the `switch`.
+				cmd.response.Err = pErr
+			}
 			// Reset the error as it's now going to be determined by the outcome of
 			// reproposing (or not); note that tryReproposeWithNewLeaseIndex will
 			// return `nil` if the entry is not eligible for reproposals.
@@ -163,7 +185,27 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			//
 			// These many possible worlds are a major source of complexity, a
 			// reduction of which is postponed.
-			pErr = r.tryReproposeWithNewLeaseIndex(ctx, cmd)
+			pErr = nil
+			if fn := r.store.TestingKnobs().InjectReproposalError; fn != nil {
+				if err := fn(cmd.proposal); err != nil {
+					pErr = kvpb.NewError(err)
+				}
+			}
+			if pErr == nil { // since we might have injected an error
+				if useReproposalsV2 {
+					pErr = kvpb.NewError(r.tryReproposeWithNewLeaseIndexV2(ctx, cmd))
+					if pErr == nil {
+						// Avoid falling through below. We managed to repropose, but this
+						// proposal is still erroring out. We don't want to assign to
+						// localResult. If there is an error though, we do fall through into
+						// the existing tangle of correct but unreadable handling below.
+						return
+					}
+				} else {
+					pErr = r.tryReproposeWithNewLeaseIndex(ctx, cmd)
+				}
+			}
+
 			if pErr != nil {
 				// An error from tryReproposeWithNewLeaseIndex implies that the current
 				// entry is not superseded (i.e. we don't have a reproposal at a higher
@@ -200,10 +242,16 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 				// https://github.com/cockroachdb/cockroach/issues/97633
 				log.Infof(ctx, "failed to repropose %s at idx %d with new lease index: %s", cmd.ID, cmd.Index(), pErr)
 				cmd.response.Err = pErr
-			} else {
+				// Fall through.
+			} else if !useReproposalsV2 {
 				// Unbind the entry's local proposal because we just succeeded
 				// in reproposing it and we don't want to acknowledge the client
 				// yet.
+				//
+				// NB: in v2, reproposing already moved the waiting caller over to a new
+				// proposal, and by design we don't change the "Localness" of the old
+				// proposal mid-application but instead let it fail as a local proposal
+				// (which signals into an throwaway channel).
 				cmd.proposal = nil
 				return
 			}
@@ -215,6 +263,14 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	} else {
 		log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", cmd.proposal)
 	}
+
+	// The current proposal has no error (and wasn't reproposed successfully or we
+	// would've early returned already) OR it has an error AND we failed to
+	// repropose it.
+	//
+	// TODO(tbg): it doesn't make sense to assign to `cmd.response` unconditionally.
+	// We're returning an error; the response should be nil. The error tracking in
+	// this method should be cleaned up.
 	cmd.response.EncounteredIntents = cmd.proposal.Local.DetachEncounteredIntents()
 	cmd.response.EndTxns = cmd.proposal.Local.DetachEndTxns(pErr != nil)
 	if pErr == nil {
@@ -222,6 +278,133 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 	} else if cmd.localResult != nil {
 		log.Fatalf(ctx, "shouldn't have a local result if command processing failed. pErr: %s", pErr)
 	}
+}
+
+func (r *Replica) tryReproposeWithNewLeaseIndexV2(
+	ctx context.Context, origCmd *replicatedCmd,
+) error {
+	// NB: `origCmd` remains "Local". It's just not going to signal anyone
+	// or release any latches.
+
+	origP := origCmd.proposal
+
+	// We want to move a few items from origCmd to the new command, but only if we
+	// managed to propose the new command. For example, if we move the latches
+	// over too early but then fail to actually get the new proposal started, the
+	// old proposal will not release the latches. This would result in a lost
+	// latch.
+	var success bool
+
+	// Go through the original proposal field by field and decide what transfers
+	// to the new proposal (and how that affects the old proposal). The overall
+	// goal is that the old proposal remains a local proposal (switching it to
+	// non-local now invites logic bugs) but not bound to the caller.
+
+	// NB: quotaAlloc is always nil here, because we already
+	// released the quota unconditionally in retrieveLocalProposalsV2.
+	// So the below is a no-op.
+	//
+	// TODO(tbg): if we shifted the release of proposal quota to *after*
+	// successful application, we could move the quota over
+	// prematurely releasing it here.
+	newQuotaAlloc := origP.quotaAlloc
+	defer func() {
+		if success {
+			origP.quotaAlloc = nil
+		}
+	}()
+
+	newCommand := kvserverpb.RaftCommand{
+		ProposerLeaseSequence: origP.command.ProposerLeaseSequence,
+		ReplicatedEvalResult:  origP.command.ReplicatedEvalResult,
+		WriteBatch:            origP.command.WriteBatch,
+		LogicalOpLog:          origP.command.LogicalOpLog,
+		TraceData:             origP.command.TraceData,
+
+		MaxLeaseIndex:       0,   // assigned on flush
+		ClosedTimestamp:     nil, // assigned on flush
+		AdmissionPriority:   0,   // assigned on flush
+		AdmissionCreateTime: 0,   // assigned on flush
+		AdmissionOriginNode: 0,   // assigned on flush
+	}
+
+	// Now we construct the remainder of the ProposalData. First, the pieces
+	// that actively "move over", i.e. those that have to do with the latches
+	// held and the caller waiting to be signaled.
+
+	// `ec` (latches, etc) transfers to the new proposal.
+	newEC := origP.ec
+	defer func() {
+		if success {
+			origP.ec = endCmds{}
+		}
+	}()
+
+	// Ditto doneCh (signal to proposer).
+	newDoneCh := origP.doneCh
+	defer func() {
+		if success {
+			origP.doneCh = nil
+		}
+	}()
+
+	r.mu.RLock()
+	ticks := r.mu.ticks
+	r.mu.RUnlock()
+
+	// TODO(tbg): work on the lifecycle of ProposalData. This struct (and the
+	// surrounding replicatedCmd) are populated in an overly ad-hoc manner.
+	// TODO(tbg): the fields are spelled out here to make explicit what is being copied
+	// here. Add a unit test that fails on addition of a new field and points at the
+	// need to double check what the intended behavior of the new field in this method
+	// is.
+	newProposal := &ProposalData{
+		// The proposal's context and span carry over. Recall that they are *not*
+		// used for command application; `cmd.{ctx,sp}` are; and since this last
+		// span "follows from" the proposal's span, if the proposal sticks around
+		// for (some reincarnation of) the command to eventually apply, its trace
+		// will reflect the reproposal as well.
+		ctx:             origP.ctx,
+		sp:              origP.sp, // NB: special handling below
+		idKey:           raftlog.MakeCmdIDKey(),
+		proposedAtTicks: 0, // set in registerProposalLocked
+		createdAtTicks:  ticks,
+		command:         &newCommand,
+		quotaAlloc:      newQuotaAlloc,
+		ec:              newEC,
+		applied:         false,
+		doneCh:          newDoneCh,
+		// Local is copied over. It won't be used on the old proposal (since that
+		// proposal got rejected), but since it's still "local" we don't want to put
+		// it into  an undefined state by removing its response. The same goes for
+		// Request.
+		Local:                   origP.Local,
+		Request:                 origP.Request,
+		leaseStatus:             origP.leaseStatus,
+		tok:                     TrackedRequestToken{}, // filled in in `propose`
+		encodedCommand:          nil,
+		raftAdmissionMeta:       nil,
+		v2SeenDuringApplication: false,
+	}
+	// If the original proposal had an explicit span, it's an async consensus
+	// proposal and the span would be finished momentarily (when we return to
+	// the caller) if we didn't unlink it here, but we want it to continue
+	// tracking newProposal. We leave it in `origP.ctx` though, since that
+	// context will become unused once the application of this (soft-failed)
+	// proposal concludes, i.e. soon after this method returns, in case there
+	// is anything left to log into it.
+	defer func() {
+		if success {
+			origP.sp = nil
+		}
+	}()
+
+	if err := r.tryReproposeWithNewLeaseIndexShared(ctx, newProposal).GoError(); err != nil {
+		return err
+	}
+
+	success = true
+	return nil
 }
 
 // tryReproposeWithNewLeaseIndex is used by prepareLocalResult to repropose
@@ -257,7 +440,12 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 		// succeeding in the Raft log for a given command.
 		return nil
 	}
+	return r.tryReproposeWithNewLeaseIndexShared(ctx, cmd.proposal)
+}
 
+func (r *Replica) tryReproposeWithNewLeaseIndexShared(
+	ctx context.Context, p *ProposalData,
+) *kvpb.Error {
 	// We need to track the request again in order to protect its timestamp until
 	// it gets reproposed.
 	// TODO(andrei): Only track if the request consults the ts cache. Some
@@ -289,7 +477,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	if pErr != nil {
 		return pErr
 	}
-	log.VEventf(ctx, 2, "reproposed command %x", cmd.ID)
+	log.VEventf(ctx, 2, "reproposed command %x", p.idKey)
 	return nil
 }
 
@@ -420,6 +608,12 @@ func (r *Replica) handleChangeReplicasResult(
 	// responsible.
 	if log.V(1) {
 		log.Infof(ctx, "removing replica due to ChangeReplicasTrigger: %v", chng)
+	}
+
+	// This is currently executed before the conf change is applied to the Raft
+	// node, so we still see ourselves as the leader.
+	if r.raftBasicStatusRLocked().RaftState == raft.StateLeader {
+		r.store.metrics.RangeRaftLeaderRemovals.Inc(1)
 	}
 
 	if _, err := r.store.removeInitializedReplicaRaftMuLocked(ctx, r, chng.NextReplicaID(), RemoveOptions{

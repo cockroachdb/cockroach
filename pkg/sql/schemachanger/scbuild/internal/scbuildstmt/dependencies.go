@@ -71,7 +71,6 @@ type ClusterAndSessionInfo interface {
 // its internal state to anything that ends up using it and only allowing
 // state changes via the provided methods.
 type BuilderState interface {
-	scpb.ElementStatusIterator
 	ElementReferences
 	NameResolver
 	PrivilegeChecker
@@ -149,6 +148,10 @@ type TreeAnnotator interface {
 // Telemetry allows incrementing schema change telemetry counters.
 type Telemetry interface {
 
+	// IncrementSchemaChangeCreateCounter increments the selected CREATE telemetry
+	// counter.
+	IncrementSchemaChangeCreateCounter(counterType string)
+
 	// IncrementSchemaChangeAlterCounter increments the selected ALTER telemetry
 	// counter.
 	IncrementSchemaChangeAlterCounter(counterType string, extra ...string)
@@ -193,6 +196,10 @@ type SchemaFeatureChecker interface {
 	CanPerformDropOwnedBy(
 		ctx context.Context, role username.SQLUsername,
 	) (bool, error)
+
+	// CanCreateCrossDBSequenceOwnerRef returns if cross database sequence
+	// owner references are allowed.
+	CanCreateCrossDBSequenceOwnerRef() error
 }
 
 // PrivilegeChecker checks an element's privileges.
@@ -226,7 +233,7 @@ type TableHelpers interface {
 
 	// NextTableIndexID returns the ID that should be used for any new index added
 	// to this table.
-	NextTableIndexID(table *scpb.Table) catid.IndexID
+	NextTableIndexID(tableID catid.DescID) catid.IndexID
 
 	// NextViewIndexID returns the ID that should be used for any new index added
 	// to this materialized view.
@@ -234,7 +241,17 @@ type TableHelpers interface {
 
 	// NextTableConstraintID returns the ID that should be used for any new constraint
 	// added to this table.
-	NextTableConstraintID(id catid.DescID) catid.ConstraintID
+	NextTableConstraintID(tableID catid.DescID) catid.ConstraintID
+
+	// NextTableTentativeIndexID returns the tentative ID, starting from
+	// scbuild.TABLE_TENTATIVE_IDS_START, that should be used for any new index added to
+	// this table.
+	NextTableTentativeIndexID(tableID catid.DescID) catid.IndexID
+
+	// NextTableTentativeConstraintID parallels NextTableTentativeIndexID and
+	// returns tentative constraint ID, starting from scbuild.TABLE_TENTATIVE_IDS_START,
+	// that should be used for any new index added to this table.
+	NextTableTentativeConstraintID(tableID catid.DescID) catid.ConstraintID
 
 	// IndexPartitioningDescriptor creates a new partitioning descriptor
 	// for the secondary index element, or panics.
@@ -272,16 +289,7 @@ type SchemaHelpers interface {
 	ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix)
 }
 
-// ElementResultSet wraps the results of an element query.
-type ElementResultSet interface {
-	scpb.ElementStatusIterator
-
-	// IsEmpty returns true iff there are no elements in the result set.
-	IsEmpty() bool
-
-	// Filter returns a subset of this result set according to the predicate.
-	Filter(predicate func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool) ElementResultSet
-}
+type ElementResultSet = *scpb.ElementCollection[scpb.Element]
 
 // ElementReferences looks up an element's forward and backward references.
 type ElementReferences interface {

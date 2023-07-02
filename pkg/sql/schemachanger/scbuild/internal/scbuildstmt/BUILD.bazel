@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -16,6 +15,7 @@ go_library(
         "create_function.go",
         "create_index.go",
         "create_schema.go",
+        "create_sequence.go",
         "dependencies.go",
         "drop_database.go",
         "drop_function.go",
@@ -78,5 +78,3 @@ go_library(
         "@com_github_lib_pq//oid",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -335,7 +335,7 @@ SELECT json_agg((3808362714,))
 
 ## json_array_elements and jsonb_array_elements
 
-query T colnames
+query T colnames,nosort
 SELECT json_array_elements('[1, 2, 3]'::JSON)
 ----
 json_array_elements
@@ -343,7 +343,7 @@ json_array_elements
 2
 3
 
-query T colnames
+query T colnames,nosort
 SELECT * FROM json_array_elements('[1, 2, 3]'::JSON)
 ----
 value
@@ -351,7 +351,7 @@ value
 2
 3
 
-query T colnames
+query T colnames,nosort
 SELECT jsonb_array_elements('[1, 2, 3]'::JSON)
 ----
 jsonb_array_elements
@@ -359,7 +359,7 @@ jsonb_array_elements
 2
 3
 
-query T colnames
+query T colnames,nosort
 SELECT * FROM jsonb_array_elements('[1, 2, 3]'::JSON)
 ----
 value
@@ -367,7 +367,7 @@ value
 2
 3
 
-query T colnames
+query T colnames,nosort
 SELECT json_array_elements('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
 ----
 json_array_elements
@@ -379,7 +379,7 @@ null
 {"2": 3, "4": "5"}
 [1, 2, 3]
 
-query T colnames
+query T colnames,nosort
 SELECT * FROM json_array_elements('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
 ----
 value
@@ -405,7 +405,7 @@ SELECT jsonb_array_elements('{"1": 2}'::JSON)
 
 ## json_array_elements_text and jsonb_array_elements_text
 
-query T colnames
+query T colnames,nosort
 SELECT json_array_elements_text('[1, 2, 3]'::JSON)
 ----
 json_array_elements_text
@@ -413,7 +413,7 @@ json_array_elements_text
 2
 3
 
-query T colnames
+query T colnames,nosort
 SELECT * FROM json_array_elements_text('[1, 2, 3]'::JSON)
 ----
 value
@@ -421,7 +421,7 @@ value
 2
 3
 
-query T colnames
+query T colnames,nosort
 SELECT json_array_elements_text('[1, 2, 3]'::JSON)
 ----
 json_array_elements_text
@@ -429,7 +429,7 @@ json_array_elements_text
 2
 3
 
-query T colnames
+query T colnames,nosort
 SELECT * FROM json_array_elements_text('[1, 2, 3]'::JSON)
 ----
 value
@@ -437,7 +437,7 @@ value
 2
 3
 
-query T
+query T nosort
 SELECT json_array_elements_text('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
 ----
 1
@@ -461,13 +461,13 @@ SELECT jsonb_array_elements_text('{"1": 2}'::JSON)
 
 ## json_object_keys and jsonb_object_keys
 
-query T
+query T nosort
 SELECT json_object_keys('{"1": 2, "3": 4}'::JSON)
 ----
 1
 3
 
-query T
+query T nosort
 SELECT jsonb_object_keys('{"1": 2, "3": 4}'::JSON)
 ----
 1
@@ -483,7 +483,7 @@ SELECT json_object_keys('{"\"1\"": 2}'::JSON)
 "1"
 
 # Keys are sorted.
-query T colnames
+query T colnames,nosort
 SELECT json_object_keys('{"a": 1, "1": 2, "3": {"4": 5, "6": 7}}'::JSON)
 ----
 json_object_keys
@@ -491,7 +491,7 @@ json_object_keys
 3
 a
 
-query T colnames
+query T colnames,nosort
 SELECT * FROM json_object_keys('{"a": 1, "1": 2, "3": {"4": 5, "6": 7}}'::JSON)
 ----
 json_object_keys
@@ -550,7 +550,7 @@ SELECT json_build_object('\a', 1)
 ----
 {"\\a": 1}
 
-query T
+query T nosort
 SELECT json_build_object(json_object_keys('{"x":3, "y":4}'::JSON), 2)
 ----
 {"x": 2}
@@ -850,7 +850,7 @@ query TT
 SELECT * FROM json_each('{}') q
 ----
 
-query T colnames
+query T colnames,nosort
 SELECT json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}')
 ----
 json_each
@@ -860,7 +860,7 @@ json_each
 (f5,99)
 (f6,"""stringy""")
 
-query TT colnames
+query TT colnames,nosort
 SELECT * FROM json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 key  value
@@ -880,7 +880,7 @@ query TT
 SELECT * FROM jsonb_each('{}') q
 ----
 
-query T colnames
+query T colnames,nosort
 SELECT jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}')
 ----
 jsonb_each
@@ -890,7 +890,7 @@ jsonb_each
 (f5,99)
 (f6,"""stringy""")
 
-query TT colnames
+query TT colnames,nosort
 SELECT * FROM jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 key  value
@@ -910,7 +910,7 @@ query TT
 SELECT * FROM jsonb_each_text('{}') q
 ----
 
-query T colnames
+query T colnames,nosort
 SELECT jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}')
 ----
 jsonb_each_text
@@ -920,7 +920,7 @@ jsonb_each_text
 (f5,99)
 (f6,stringy)
 
-query T colnames
+query T colnames,nosort
 SELECT jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 q
@@ -930,7 +930,7 @@ q
 (f5,99)
 (f6,stringy)
 
-query TT colnames
+query TT colnames,nosort
 SELECT * FROM jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 key  value
@@ -954,7 +954,7 @@ query TT
 SELECT * FROM json_each_text('{}') q
 ----
 
-query T colnames
+query T colnames,nosort
 SELECT json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}')
 ----
 json_each_text
@@ -964,7 +964,7 @@ json_each_text
 (f5,99)
 (f6,stringy)
 
-query T colnames
+query T colnames,nosort
 SELECT json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 q
@@ -974,7 +974,7 @@ q
 (f5,99)
 (f6,stringy)
 
-query TT colnames
+query TT colnames,nosort
 SELECT * FROM json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
 key  value
@@ -1335,14 +1335,14 @@ SELECT * FROM json_populate_record(((3,) AS a), NULL)
 ----
 3
 
-query FIII colnames
+query FIII colnames,nosort
 SELECT *, c FROM json_populate_recordset(((1.01, 2, 3) AS d, c, a), '[{"a": 3, "c": 10, "d": 11.001}, {}]')
 ----
 d       c   a  c
 11.001  10  3  10
 1.01    2   3  2
 
-query FITI colnames
+query FITI colnames,nosort
 SELECT *, c FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '[{"a": 3, "c": 10, "d": 11.001}, {}]')
 ----
 d       c   a  c
@@ -1375,7 +1375,7 @@ SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c,
 query error argument of json_populate_recordset must be an array of objects
 SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '[{"foo":"bar"}, 3]')
 
-query ITTTTT
+query ITTTTT nosort
 SELECT * FROM json_populate_recordset(NULL::testtab, '[{"i": 3, "ia": [1,2,3], "t": "foo", "ta": ["a", "b"], "ts": "2017-01-01 00:00", "j": {"a": "b", "c": 3, "d": [1,false,true,null,{"1":"2"}]}}, {}]'::JSON)
 ----
 3     {1,2,3}  foo   {a,b}  2017-01-01 00:00:00 +0000 +0000  {"a": "b", "c": 3, "d": [1, false, true, null, {"1": "2"}]}

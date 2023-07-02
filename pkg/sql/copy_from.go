@@ -297,6 +297,7 @@ func newCopyMachine(
 	}
 	// We need a planner to do the initial planning, in addition
 	// to those used for the main execution of the COPY afterwards.
+	txnOpt.initPlanner(ctx, c.p)
 	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, false /* finalBatch */, c.implicitTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
@@ -1112,7 +1113,6 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 		},
 		Returning: tree.AbsentReturningClause,
 	}
-	c.txnOpt.initPlanner(ctx, c.p)
 
 	// TODO(cucaroach): We shouldn't need to do this for every batch.
 	if err := c.p.makeOptimizerPlan(ctx); err != nil {
@@ -1129,7 +1129,7 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	}
 
 	if rows := res.RowsAffected(); rows != numRows {
-		log.Fatalf(ctx, "didn't insert all buffered rows and yet no error was reported. "+
+		return errors.AssertionFailedf("COPY didn't insert all buffered rows and yet no error was reported. "+
 			"Inserted %d out of %d rows.", rows, numRows)
 	}
 	c.insertedRows += numRows

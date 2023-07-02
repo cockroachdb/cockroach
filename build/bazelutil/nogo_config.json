@@ -8,9 +8,6 @@
         }
     },
     "composites": {
-        "exclude_files": {
-            "cockroach/pkg/.*_test.go$": "many existing failures"
-        },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code",
             "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
@@ -289,7 +286,8 @@
             "pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "pkg/.*_generated\\.go$": "generated code"
+            "pkg/.*_generated\\.go$": "generated code",
+            "pkg/sql/sem/builtins/aggregate_builtins_test\\.go": "false positive, apparently"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code",
@@ -1698,7 +1696,7 @@
             "cockroach/pkg/sql/schemachanger/scplan/internal/rules/.*/.*.go$":  "schema changer rules"
         },
         "only_files": {
-            "cockroachdb_cockroach/pkg/.*$": "first-party code",
+            "cockroach/pkg/.*$": "first-party code",
             "cockroach/bazel-out/.*/bin/pkg/.*$": "first-party code"
         }
     },

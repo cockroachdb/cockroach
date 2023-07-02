@@ -1,0 +1,22 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY, k INT);
+CREATE SEQUENCE db.public.sq1;
+INSERT INTO db.public.tbl VALUES(-1);
+INSERT INTO db.public.tbl VALUES(-2);
+INSERT INTO db.public.tbl VALUES(-3);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42;
+----
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index tbl_pkey- in relation tbl
+ │    └── into tbl_pkey+ (i; k, j+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation tbl
+ │    └── from tbl@[3] into tbl_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index tbl_pkey+ in relation tbl
+ ├── validate NOT NULL constraint on column j+ in index tbl_pkey+ in relation tbl
+ └── execute 3 system table mutations transactions

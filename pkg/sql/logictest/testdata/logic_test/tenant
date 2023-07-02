@@ -74,7 +74,7 @@ SHOW TENANT three
 id  name   data_state  service_mode
 4   three  ready       none
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name        data_state  service_mode
@@ -211,7 +211,7 @@ GRANT SYSTEM MANAGETENANT TO testuser
 
 user testuser
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name        data_state  service_mode
@@ -285,7 +285,7 @@ CREATE TENANT "1";
 CREATE TENANT "a-b";
 CREATE TENANT "hello-100"
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name             data_state  service_mode
@@ -325,7 +325,7 @@ DROP TENANT two
 statement error cannot drop tenant.*in service mode external
 DROP TENANT 'tenant-one'
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name             data_state  service_mode
@@ -344,7 +344,7 @@ ALTER TENANT two STOP SERVICE
 statement ok
 ALTER TENANT 'tenant-one' STOP SERVICE
 
-query ITTT colnames
+query ITTT colnames,rowsort
 SHOW TENANTS
 ----
 id  name             data_state  service_mode
@@ -503,3 +503,50 @@ RESET disable_drop_tenant
 
 statement ok
 DROP TENANT nodelete
+
+subtest regression_105115
+
+statement ok
+CREATE TENANT noservice
+
+statement error shared service not enabled for tenant "noservice"
+SET CLUSTER SETTING server.controller.default_tenant = noservice
+
+statement ok
+SET CLUSTER SETTING server.controller.default_tenant.check_service.enabled = false
+
+statement ok
+SET CLUSTER SETTING server.controller.default_tenant = noservice
+
+statement ok
+RESET CLUSTER SETTING server.controller.default_tenant.check_service.enabled
+
+statement ok
+RESET CLUSTER SETTING server.controller.default_tenant
+
+statement ok
+DROP TENANT noservice;
+CREATE TENANT withservice;
+ALTER TENANT withservice START SERVICE SHARED
+
+statement ok
+SET CLUSTER SETTING server.controller.default_tenant = withservice
+
+statement error cannot stop service while tenant is selected as default
+ALTER TENANT withservice STOP SERVICE
+
+statement ok
+SET CLUSTER SETTING server.controller.default_tenant.check_service.enabled = false
+
+statement ok
+ALTER TENANT withservice STOP SERVICE
+
+# clean up
+statement ok
+RESET CLUSTER SETTING server.controller.default_tenant.check_service.enabled
+
+statement ok
+RESET CLUSTER SETTING server.controller.default_tenant
+
+statement ok
+DROP TENANT withservice

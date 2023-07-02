@@ -5651,6 +5651,79 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 	require.Equal(t, ds.metrics.ErrCounts[kvpb.ConditionFailedErrType].Count(), int64(1))
 }
 
+// TestDistSenderCrossLocalityMetrics verifies that
+// updateCrossLocalityMetricsOnReplicaAddressedBatch{Request|Response} correctly
+// updates cross-region, cross-zone byte count metrics for batch requests sent
+// and batch responses received.
+func TestDistSenderCrossLocalityMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const expectedInc = 10
+
+	metricsNames := []string{
+		"distsender.batch_requests.replica_addressed.bytes",
+		"distsender.batch_requests.cross_region.bytes",
+		"distsender.batch_requests.cross_zone.bytes",
+		"distsender.batch_responses.replica_addressed.bytes",
+		"distsender.batch_responses.cross_region.bytes",
+		"distsender.batch_responses.cross_zone.bytes",
+	}
+	for _, tc := range []struct {
+		crossLocalityType    roachpb.LocalityComparisonType
+		expectedMetricChange [6]int64
+		forRequest           bool
+	}{
+		{crossLocalityType: roachpb.LocalityComparisonType_CROSS_REGION,
+			expectedMetricChange: [6]int64{expectedInc, expectedInc, 0, 0, 0, 0},
+			forRequest:           true,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE,
+			expectedMetricChange: [6]int64{expectedInc, 0, expectedInc, 0, 0, 0},
+			forRequest:           true,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE,
+			expectedMetricChange: [6]int64{expectedInc, 0, 0, 0, 0, 0},
+			forRequest:           true,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_CROSS_REGION,
+			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, expectedInc, 0},
+			forRequest:           false,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE,
+			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, 0, expectedInc},
+			forRequest:           false,
+		},
+		{crossLocalityType: roachpb.LocalityComparisonType_SAME_REGION_SAME_ZONE,
+			expectedMetricChange: [6]int64{0, 0, 0, expectedInc, 0, 0},
+			forRequest:           false,
+		},
+	} {
+		t.Run(fmt.Sprintf("%-v", tc.crossLocalityType), func(t *testing.T) {
+			metrics := makeDistSenderMetrics()
+			beforeMetrics, err := metrics.getDistSenderCounterMetrics(metricsNames)
+			if err != nil {
+				t.Error(err)
+			}
+			if tc.forRequest {
+				metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(tc.crossLocalityType, expectedInc)
+			} else {
+				metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchResponse(tc.crossLocalityType, expectedInc)
+			}
+
+			afterMetrics, err := metrics.getDistSenderCounterMetrics(metricsNames)
+			if err != nil {
+				t.Error(err)
+			}
+			metricsDiff := getMapsDiff(beforeMetrics, afterMetrics)
+			expectedDiff := make(map[string]int64, 6)
+			for i, inc := range tc.expectedMetricChange {
+				expectedDiff[metricsNames[i]] = inc
+			}
+			require.Equal(t, metricsDiff, expectedDiff)
+		})
+	}
+}
+
 // TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff
 // ensures that a NLHE from an uninitialized replica, which points to a replica
 // that isn't part of the range, doesn't result in the dist sender getting

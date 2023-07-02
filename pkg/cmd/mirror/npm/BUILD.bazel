@@ -1,15 +1,17 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
-load("@build_bazel_rules_nodejs//:index.bzl", "js_library", "nodejs_binary", "npm_package_bin")
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_library")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
 load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@npm_mirror_npm//:defs.bzl", "npm_link_all_packages")
 load(":index.bzl", "json_to_yarn_lock", "yarn_lock_to_json")
 
-# Declare a pair of JS libraries that we can excute with nodejs_binary.
+npm_link_all_packages(name = "node_modules")
+
+# Declare a JS library that we can excute with nodejs_binary.
 js_library(
     name = "yarn-lock-json__lib",
-    package_name = "@cockroachlabs/yarn-lock-json",
     srcs = [
         "package.json",
         "parse.js",
@@ -17,7 +19,7 @@ js_library(
     ],
     visibility = ["//visibility:private"],
     deps = [
-        "@npm_mirror_npm//:node_modules",
+        ":node_modules",
     ],
 )
 
@@ -31,7 +33,7 @@ _LOCKFILES = {
 }
 
 # Declare a task that's executable with 'bazel run' only.
-nodejs_binary(
+js_binary(
     name = "yarn-lock-parse",
     data = [
         ":yarn-lock-json__lib",
@@ -41,7 +43,7 @@ nodejs_binary(
 )
 
 # Declare a task that's executable with 'bazel run' only.
-nodejs_binary(
+js_binary(
     name = "yarn-lock-stringify",
     data = [
         ":yarn-lock-json__lib",
@@ -50,16 +52,27 @@ nodejs_binary(
     visibility = ["//visibility:private"],
 )
 
-# Convert all yarn.lock files to their JSON representations...
+# rules_js will complain if the yarn.lock files aren't in the right directory.
+# We rename these files to something else so this check doesn't kick in.
 [
-    yarn_lock_to_json(
-        name = k + ".yarn.json",
-        yarn_lock = v,
+    copy_file(
+        name = k + "-copy",
+        src = v,
+        out = k + ".yarn.lock.copy",
     )
     for [
         k,
         v,
     ] in _LOCKFILES.items()
+]
+
+# Convert all yarn.lock files to their JSON representations...
+[
+    yarn_lock_to_json(
+        name = k + ".yarn.json",
+        yarn_lock = ":" + k + ".yarn.lock.copy",
+    )
+    for k in _LOCKFILES
 ]
 
 # ...use JSON representations to mirror dependencies to GCS
@@ -230,5 +243,3 @@ go_library(
         "@org_golang_x_sync//errgroup",
     ],
 )
-
-get_x_data(name = "get_x_data")

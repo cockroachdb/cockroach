@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -247,7 +246,9 @@ go_test(
         "batch_spanset_test.go",
         "below_raft_protos_test.go",
         "client_atomic_membership_change_test.go",
+        "client_invalidsplit_test.go",
         "client_lease_test.go",
+        "client_manual_proposal_test.go",
         "client_merge_test.go",
         "client_metrics_test.go",
         "client_migration_test.go",
@@ -296,6 +297,7 @@ go_test(
         "range_log_test.go",
         "rebalance_objective_test.go",
         "replica_application_cmd_buf_test.go",
+        "replica_application_result_test.go",
         "replica_application_state_machine_test.go",
         "replica_batch_updates_test.go",
         "replica_circuit_breaker_test.go",
@@ -407,6 +409,7 @@ go_test(
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/kv/kvserver/protectedts/ptutil",
+        "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/raftlog",
         "//pkg/kv/kvserver/raftutil",
         "//pkg/kv/kvserver/rditer",
@@ -464,6 +467,7 @@ go_test(
         "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/allstacks",
         "//pkg/util/caller",
         "//pkg/util/circuit",
         "//pkg/util/ctxgroup",
@@ -512,7 +516,6 @@ go_test(
         "@io_etcd_go_raft_v3//tracker",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//metadata",
-        "@org_golang_x_net//trace",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sync//syncmap",
         "@org_golang_x_time//rate",
@@ -554,5 +557,3 @@ stringer(
     src = "replica_raft.go",
     typ = "refreshRaftReason",
 )
-
-get_x_data(name = "get_x_data")

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -358,7 +359,15 @@ func startConnExecutor(
 	sqlMetrics := MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 
 	onDefaultIntSizeChange := func(int32) {}
-	conn, err := s.SetupConn(ctx, SessionArgs{}, buf, cc, sqlMetrics, onDefaultIntSizeChange)
+	conn, err := s.SetupConn(
+		ctx,
+		SessionArgs{},
+		buf,
+		cc,
+		sqlMetrics,
+		onDefaultIntSizeChange,
+		clusterunique.ID{},
+	)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -368,7 +377,12 @@ func startConnExecutor(
 	// routine, we're going to push commands into the StmtBuf and, from time to
 	// time, collect and check their results.
 	go func() {
-		finished <- s.ServeConn(ctx, conn, &mon.BoundAccount{}, nil /* cancel */)
+		finished <- s.ServeConn(
+			ctx,
+			conn,
+			&mon.BoundAccount{},
+			nil, /* cancel */
+		)
 	}()
 	return buf, syncResults, finished, stopper, resultChannel, nil
 }
@@ -394,7 +408,15 @@ func TestSessionCloseWithPendingTempTableInTxn(t *testing.T) {
 		},
 	}
 	onDefaultIntSizeChange := func(int32) {}
-	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: username.RootUserName()}, stmtBuf, clientComm, MemoryMetrics{}, onDefaultIntSizeChange)
+	connHandler, err := srv.SetupConn(
+		ctx,
+		SessionArgs{User: username.RootUserName()},
+		stmtBuf,
+		clientComm,
+		MemoryMetrics{},
+		onDefaultIntSizeChange,
+		clusterunique.ID{},
+	)
 	require.NoError(t, err)
 
 	stmts, err := parser.Parse(`
@@ -412,7 +434,12 @@ CREATE TEMPORARY TABLE foo();
 
 	done := make(chan error)
 	go func() {
-		done <- srv.ServeConn(ctx, connHandler, &mon.BoundAccount{}, nil /* cancel */)
+		done <- srv.ServeConn(
+			ctx,
+			connHandler,
+			&mon.BoundAccount{},
+			nil, /* cancel */
+		)
 	}()
 	results := <-flushed
 	require.Len(t, results, 6) // We expect results for 5 statements + sync.

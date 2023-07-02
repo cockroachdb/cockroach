@@ -47,9 +47,7 @@ func alterTableDropConstraint(
 
 	_, _, constraintNameElem := scpb.FindConstraintWithoutIndexName(constraintElems)
 	constraintID := constraintNameElem.ConstraintID
-	constraintElems.ForEachElementStatus(func(
-		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
-	) {
+	constraintElems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		b.Drop(e)
 	})
 

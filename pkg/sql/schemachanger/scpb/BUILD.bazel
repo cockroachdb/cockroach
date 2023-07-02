@@ -1,12 +1,12 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "scpb",
     srcs = [
         "constants.go",
+        "element_collection.go",
         "migration.go",
         "name_mappings.go",
         "state.go",
@@ -113,4 +113,10 @@ genrule(
     ],
 )
 
-get_x_data(name = "get_x_data")
+go_test(
+    name = "scpb_test",
+    srcs = ["element_collection_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":scpb"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

@@ -40,13 +40,11 @@ func registerDatabaseDrop(r registry.Registry) {
 	clusterSpec.GCEVolumeType = "pd-ssd"
 
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/database-drop",
-		Timeout:   10 * time.Hour,
-		Owner:     registry.OwnerAdmissionControl,
-		Benchmark: true,
-		Skip:      "TC builder agents need new GCE permissions",
-		// TODO(irfansharif): Reduce to weekly cadence once stabilized.
-		// Tags:            registry.Tags(`weekly`),
+		Name:            "admission-control/database-drop",
+		Timeout:         10 * time.Hour,
+		Owner:           registry.OwnerAdmissionControl,
+		Benchmark:       true,
+		Tags:            registry.Tags(`weekly`),
 		Cluster:         clusterSpec,
 		RequiresLicense: true,
 		SnapshotPrefix:  "droppable-database-tpce-100k",
@@ -82,70 +80,31 @@ func registerDatabaseDrop(r registry.Registry) {
 				// explicit throughout. It works, but too tacitly.
 				c.Run(ctx, c.All(), fmt.Sprintf("cp %s ./cockroach", path))
 
-				// Opportunistically try to make use of the tpce-100k snapshot,
-				// which another test creates.
-				tpce100kSnapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
-					NamePrefix: tpce100kSnapshotPrefix,
+				// Set up TPC-E with 100k customers.
+				//
+				// TODO(irfansharif): We can't simply re-use the snapshots
+				// already created by admission_control_index_backfill.go,
+				// though that'd be awfully convenient. When the two tests run
+				// simultaneously, the two clusters end up using the same
+				// cluster ID and there's cross-talk from persisted gossip state
+				// where we record IP addresses.
+
+				runTPCE(ctx, t, c, tpceOptions{
+					start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
+						if err := c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, crdbNodes)); err != nil {
+							t.Fatal(err)
+						}
+					},
+					customers:          100_000,
+					disablePrometheus:  true,
+					setupType:          usingTPCEInit,
+					estimatedSetupTime: 4 * time.Hour,
+					nodes:              crdbNodes,
+					cpus:               clusterSpec.CPUs,
+					ssds:               1,
+					onlySetup:          true,
 				})
-				if err != nil {
-					t.Fatal(err)
-				}
-				if len(tpce100kSnapshots) == 0 {
-					// Welp -- we don't have that either. Start from the start
-					// of time, by creating the first TPC-E 100k data set.
-					t.L().Printf("inner: no existing snapshots found for %s, doing pre-work",
-						t.SnapshotPrefix())
-
-					// Set up TPC-E with 100k customers. Do so using a published
-					// CRDB release, since we'll use this state to generate disk
-					// snapshots.
-					runTPCE(ctx, t, c, tpceOptions{
-						start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-							settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
-							if err := c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, crdbNodes)); err != nil {
-								t.Fatal(err)
-							}
-						},
-						customers:          100_000,
-						disablePrometheus:  true,
-						setupType:          usingTPCEInit,
-						estimatedSetupTime: 4 * time.Hour,
-						nodes:              crdbNodes,
-						cpus:               clusterSpec.CPUs,
-						ssds:               1,
-						onlySetup:          true,
-					})
-
-					// NB: Intentionally don't try to create tpce-100k snapshots
-					// here. There's no way to guarantee that there's only one
-					// writer writing these snapshots, and we leave it to the
-					// test that actually defined these tests.
-					//
-					// TODO(irfansharif): This is a bit awkward. Using snapshots
-					// across tests that use the same cluster spec is a
-					// reasonable pattern. We could do the
-					// following:
-					// - Creating snapshot-creation-only tests.
-					// - Including a UUID when creating snapshots, and then when
-					//   listing them, listing only the one that sorts earliest
-					//   alphabetically. This circumvents the multi-writer
-					//   problem.
-					// - Opportunistically prune lower-sorted snapshots since
-					//   they're not actually being used.
-				} else {
-					// Great! We can start with an existing tpce-100k dataset.
-					// Apply it and then make relevant changes on top.
-					t.L().Printf("inner: using %d pre-existing snapshot(s) with prefix %q",
-						len(tpce100kSnapshots), "tpce-100k")
-					if err := c.ApplySnapshots(ctx, tpce100kSnapshots); err != nil {
-						t.Fatal(err)
-					}
-
-					settings := install.MakeClusterSettings(install.NumRacksOption(crdbNodes))
-					if err := c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Range(1, crdbNodes)); err != nil {
-						t.Fatal(err)
-					}
-				}
 
 				// We have to create the droppable database next. We're going to
 				// do it by renaming the existing TPC-E database and re-creating
@@ -228,7 +187,10 @@ func registerDatabaseDrop(r registry.Registry) {
 			// heavy and in the short spurt where we there's a burst of
 			// compactions, we're not using disk bandwidth sufficiently to need
 			// something like disk bandwidth tokens. Find a more appropriate
-			// foreground load to run and refresh this test.
+			// foreground load to run and refresh this test. Look at the
+			// clearrange tests -- it seems more appropriate and there's already
+			// sustained IO token exhaustion, so perhaps just cargocult that
+			// test and use disk snapshots?
 			runTPCE(ctx, t, c, tpceOptions{
 				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					c.Put(ctx, t.Cockroach(), "./cockroach", c.All())

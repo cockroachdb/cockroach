@@ -260,6 +260,7 @@ var fnCost = map[string]memo.Cost{
 	"st_askml":                    100 * cpuCostFactor,
 	"st_aslatlontext":             100 * cpuCostFactor,
 	"st_assvg":                    100 * cpuCostFactor,
+	"st_asmvtgeom":                100 * cpuCostFactor,
 	"st_astext":                   100 * cpuCostFactor,
 	"st_astwkb":                   1000 * cpuCostFactor,
 	"st_asx3d":                    100 * cpuCostFactor,

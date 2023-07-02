@@ -326,6 +326,13 @@ hosts file.
 							}
 						}
 						timeRemaining := c.LifetimeRemaining().Round(time.Second)
+						formatTTL := func(ttl time.Duration) string {
+							if c.VMs[0].Preemptible {
+								return color.HiMagentaString(ttl.String())
+							} else {
+								return color.HiBlueString(ttl.String())
+							}
+						}
 						cost := c.CostPerHour
 						totalCostPerHour += cost
 						alive := timeutil.Since(c.CreatedAt).Round(time.Minute)
@@ -336,14 +343,14 @@ hosts file.
 								color.HiGreenString(p.Sprintf("$%.2f", cost)),
 								colorByCostBucket(costSinceCreation)(p.Sprintf("$%.2f", costSinceCreation)),
 								color.HiWhiteString(alive.String()),
-								color.HiBlueString(timeRemaining.String()),
+								formatTTL(timeRemaining),
 								colorByCostBucket(costRemaining)(p.Sprintf("$%.2f", costRemaining)))
 						} else {
 							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
 								color.HiGreenString(""),
 								color.HiGreenString(""),
 								color.HiWhiteString(alive.String()),
-								color.HiBlueString(timeRemaining.String()),
+								formatTTL(timeRemaining),
 								color.HiGreenString(""))
 						}
 					} else {

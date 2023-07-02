@@ -12,7 +12,7 @@ USE d;
 statement ok
 CREATE TYPE testuser_t AS ENUM();
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE testuser_t;
 ----
 database_name  schema_name  type_name   grantee   privilege_type  is_grantable
@@ -30,7 +30,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE USAGE ON TYPES FROM public;
 statement ok
 CREATE TYPE testuser_t2 AS ENUM();
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE testuser_t2
 ----
 database_name  schema_name  type_name    grantee   privilege_type  is_grantable
@@ -52,7 +52,7 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON TYPES TO testuser, testuser2
 statement ok
 CREATE TYPE t AS ENUM()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE t
 ----
 database_name  schema_name  type_name  grantee    privilege_type  is_grantable
@@ -68,7 +68,7 @@ ALTER DEFAULT PRIVILEGES REVOKE USAGE ON TYPES FROM testuser, testuser2
 statement ok
 CREATE TYPE t2 AS ENUM()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE t2
 ----
 database_name  schema_name  type_name  grantee  privilege_type  is_grantable
@@ -82,7 +82,7 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON TYPES FROM testuser, testuser2
 statement ok
 CREATE TYPE t3 AS ENUM()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE t3
 ----
 database_name  schema_name  type_name  grantee  privilege_type  is_grantable
@@ -103,7 +103,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TYPES FROM testuser, te
 statement ok
 CREATE TYPE t4 AS ENUM()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE t4
 ----
 database_name  schema_name  type_name  grantee   privilege_type  is_grantable
@@ -128,7 +128,7 @@ USE d
 statement ok
 CREATE TYPE t5 AS ENUM()
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE t5
 ----
 database_name  schema_name  type_name  grantee   privilege_type  is_grantable

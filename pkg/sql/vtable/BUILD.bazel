@@ -1,19 +1,18 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "vtable",
     srcs = [
+        "crdb_internal.go",
         "information_schema.go",
         "pg_catalog.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vtable",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/sem/catconstants"],
 )
 
 exports_files([
     "pg_catalog.go",
     "information_schema.go",
 ])
-
-get_x_data(name = "get_x_data")

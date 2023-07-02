@@ -16,7 +16,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -57,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbackup"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -150,7 +150,6 @@ func rewriteBackupSpanKey(
 func restoreWithRetry(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
-	numNodes int,
 	backupManifests []backuppb.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
@@ -178,7 +177,6 @@ func restoreWithRetry(
 			res, err = restore(
 				restoreCtx,
 				execCtx,
-				numNodes,
 				backupManifests,
 				backupLocalityInfo,
 				endTime,
@@ -256,7 +254,6 @@ func makeBackupLocalityMap(
 func restore(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
-	numNodes int,
 	backupManifests []backuppb.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
@@ -413,7 +410,6 @@ func restore(
 			details.URIs,
 			backupLocalityInfo,
 			filter,
-			numNodes,
 			numImportSpans,
 			simpleImportSpans,
 			progCh,
@@ -1463,13 +1459,13 @@ func remapPublicSchemas(
 
 		includeCreatePriv := sql.PublicSchemaCreatePrivilegeEnabled.Get(p.ExecCfg().SV())
 
-		db.AddSchemaToDatabase(tree.PublicSchema, descpb.DatabaseDescriptor_SchemaInfo{ID: id})
+		db.AddSchemaToDatabase(catconstants.PublicSchemaName, descpb.DatabaseDescriptor_SchemaInfo{ID: id})
 		// Every database must be initialized with the public schema.
 		// Create the SchemaDescriptor.
 		publicSchemaPrivileges := catpb.NewPublicSchemaPrivilegeDescriptor(includeCreatePriv)
 		publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 			ParentID:   db.GetID(),
-			Name:       tree.PublicSchema,
+			Name:       catconstants.PublicSchemaName,
 			ID:         id,
 			Privileges: publicSchemaPrivileges,
 			Version:    1,
@@ -1644,22 +1640,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
-	numNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
-	if err != nil {
-		if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
-			return err
-		}
-		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
-		numNodes = 1
-	}
-
 	var resTotal roachpb.RowCount
 
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
 			ctx,
 			p,
-			numNodes,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
@@ -1696,7 +1682,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		res, err := restoreWithRetry(
 			ctx,
 			p,
-			numNodes,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
@@ -1718,7 +1703,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		res, err := restoreWithRetry(
 			ctx,
 			p,
-			numNodes,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
@@ -1812,6 +1796,18 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	// Emit an event now that the restore job has completed.
 	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+
+	// Restore used all available SQL instances.
+	_, sqlInstanceIDs, err := p.DistSQLPlanner().SetupAllNodesPlanning(ctx, p.ExtendedEvalContext(), p.ExecCfg())
+	if err != nil {
+		return err
+	}
+	numNodes := len(sqlInstanceIDs)
+	if numNodes == 0 {
+		// This shouldn't ever happen, but we know that we have at least one
+		// instance (which is running this code right now).
+		numNodes = 1
+	}
 
 	// Collect telemetry.
 	{
@@ -2163,7 +2159,7 @@ func (r *restoreResumer) publishDescriptors(
 
 	// Go through the descriptors and find any declarative schema change jobs
 	// affecting them.
-	if err := scbackup.CreateDeclarativeSchemaChangeJobs(
+	if _, err := scbackup.CreateDeclarativeSchemaChangeJobs(
 		ctx, r.execCfg.JobRegistry, txn, all,
 	); err != nil {
 		return err

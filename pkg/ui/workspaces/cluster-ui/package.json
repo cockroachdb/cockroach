@@ -1,6 +1,6 @@
 {
   "name": "@cockroachlabs/cluster-ui",
-  "version": "23.1.0-prerelease.5",
+  "version": "23.2.0-prerelease.1",
   "description": "Cluster UI is a library of large features shared between CockroachDB and CockroachCloud",
   "repository": {
     "type": "git",
@@ -31,7 +31,19 @@
   "keywords": [],
   "license": "MIT",
   "dependencies": {
-    "@babel/runtime": "^7.12.13"
+    "@babel/runtime": "^7.12.13",
+    "@redux-saga/core": "1.1.3",
+    "@redux-saga/is": "1.1.2",
+    "@redux-saga/symbols": "1.1.2",
+    "@redux-saga/types": "1.1.0",
+    "@types/history": "4.7.8",
+    "copy-to-clipboard": "3.3.1",
+    "css-loader": "3.6.0",
+    "history": "4.10.1",
+    "immer": "^9.0.3",
+    "lodash": "4.17.21",
+    "rc-progress": "2.5.3",
+    "react-router": "5.3.1"
   },
   "devDependencies": {
     "@babel/cli": "^7.8.3",
@@ -83,6 +95,7 @@
     "@types/sinon": "^9.0.4",
     "@typescript-eslint/eslint-plugin": "^4.22.0",
     "@typescript-eslint/parser": "^4.22.0",
+    "@typescript-eslint/utils": "5.26.0",
     "antd": "^3.25.2",
     "astroturf": "^0.10.2",
     "babel-jest": "^27.5.1",
@@ -91,7 +104,7 @@
     "babel-polyfill": "^6.26.0",
     "babel-preset-react-app": "^9.1.2",
     "chai": "^4.2.0",
-    "classnames": "^2.2.6",
+    "classnames": "2.3.2",
     "connected-react-router": "^6.8.0",
     "d3-array": "^2.8.0",
     "d3-format": "^2.0.0",
@@ -116,6 +129,7 @@
     "jest-environment-enzyme": "^7.1.2",
     "jest-enzyme": "^7.1.2",
     "jest-fetch-mock": "^3.0.3",
+    "jest-junit": "^16.0.0",
     "less": "^3.12.2",
     "less-loader": "^6.2.0",
     "long": "^4.0.0",
@@ -141,6 +155,7 @@
     "sass": "^1.34.0",
     "sass-loader": "^10.2.0",
     "sinon": "^9.0.2",
+    "source-map": "0.6.1",
     "source-map-loader": "^0.2.4",
     "style-loader": "^1.1.3",
     "ts-jest": "^27.1.3",
@@ -161,17 +176,17 @@
     "redux-saga": ">=1.1.3"
   },
   "resolutions": {
-    "**/@typescript-eslint/eslint-plugin": "^4.1.1",
-    "**/@typescript-eslint/parser": "^4.1.1",
-    "**/react": "^16.12.0",
-    "**/react-dom": "^16.12.0",
-    "**/redux": "^4.1.0",
-    "**/@types/react": "^16.14.8",
+    "@typescript-eslint/eslint-plugin": "^4.1.1",
+    "@typescript-eslint/parser": "^4.1.1",
+    "react": "^16.12.0",
+    "react-dom": "^16.12.0",
+    "redux": "^4.1.0",
+    "@types/react": "^16.14.8",
     "node-fetch": "~2.6.1",
     "serialize-javascript": "~3.1.0",
     "yargs-parser": "~13.1.2",
     "protobufjs": "6.8.6",
-    "**/jest-environment-jsdom": "^27.5.1",
+    "jest-environment-jsdom": "^27.5.1",
     "aria-query": "5.0.1",
     "esbuild": "0.14.43"
   }

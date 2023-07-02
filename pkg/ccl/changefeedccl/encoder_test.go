@@ -1151,7 +1151,7 @@ func TestJsonRountrip(t *testing.T) {
 			switch typ {
 			case types.Jsonb:
 				// Unsupported by sql/catalog/colinfo
-			case types.TSQuery, types.TSVector:
+			case types.TSQuery, types.TSVector, types.PGLSN:
 				// Unsupported by pkg/sql/parser
 			default:
 				if arrayTyp.InternalType.ArrayContents == typ {

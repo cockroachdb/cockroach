@@ -1571,6 +1571,16 @@ func (m *CommonConnectionDetails) AppendJSONFields(printComma bool, b redact.Red
 		b = append(b, '"')
 	}
 
+	if m.SessionID != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SessionID\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SessionID)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 
@@ -4808,6 +4818,16 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		printComma = true
 		b = append(b, "\"MvccRangeKeySkippedPoints\":"...)
 		b = strconv.AppendInt(b, int64(m.MvccRangeKeySkippedPoints), 10)
+	}
+
+	if m.SchemaChangerMode != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SchemaChangerMode\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SchemaChangerMode)))
+		b = append(b, '"')
 	}
 
 	return printComma, b

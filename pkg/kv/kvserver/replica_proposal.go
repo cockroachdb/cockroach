@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -45,23 +46,103 @@ import (
 // ProposalData is data about a command which allows it to be
 // evaluated, proposed to raft, and for the result of the command to
 // be returned to the caller.
+//
+// A proposal (=ProposalData) is created during write request evaluation and
+// then handed to the proposal buffer (Replica.mu.proposalBuf) via
+// propBuf.Insert. In the common case, the proposal transfers from there into
+// Replica.mu.proposals (and the raft log) via propBuf.FlushLockedWithRaftGroup
+// (called from handleRaftReady). But if the proposal buffer is full, Insert may
+// also flush the buffer to make room for a new proposal. ProposalData itself
+// has no mutex and locking is provided by `Replica.mu` which must always be
+// held when accessing a ProposalData (except before the first insertion into
+// the proposal buffer). However, at the time of writing, this locking is
+// possibly insufficient and the above rule is not adhered to at all times. In
+// particular, during raft application, the ProposalData is mutated without the
+// Replica.mu lock being held in all places. As log application is a
+// well-trodden code path and no relevant data races are known, they are either
+// absent or extremely rare. Still, an improvement seems advisable.
+//
+// This goes for the locking, but also for the lifecycle of ProposalData in
+// aggregate. It is extremely complex due to internal reproposals and the
+// multiple, poorly synchronized, and circular hand-offs that exist between the
+// proposals map and the proposal buffer. The following diagram attempts to
+// describe the status quo.
+//
+//	         created
+//	           │                proposal map, apply
+//	           │[1]             goroutine, and propBuf
+//	           ▼                        ▲    │
+//	┌─┬────►propBuf  ┌────────────┐     │[6] │[2]
+//	│ │        │     │            │     │    ▼
+//	│ │        │[2]  │         proposal map and
+//	│ │        ▼     ▼         apply goroutine
+//	│ │   proposal map────┐       ▲
+//	│ │        │     │    │  [4]  │
+//	│ │[5]     │[3]  │[6] └───────┘
+//	│ │        │     │
+//	│ │        ▼     └──────►proposal map
+//	│ └─apply goroutine      and propBuf
+//	│          │                 │[7]
+//	│          ▼                 ▼
+//	│[8]    finished         apply goroutine and propBuf
+//	│                            │
+//	└────────────────────────────┘
+//
+// [1]: `(*Replica).propose` calls `(*proposalBuf).Insert`
+// [2]: `(*proposalBuf).FlushLockedWithRaftGroup` on the `handleRaftReady`
+// goroutine, or `(*proposalBuf).Insert` for another command on a full
+// `proposalBuf`, or `FlushLockedWithoutProposing` (less interesting).
+// [3]: picked up by `(*replicaDecoder).retrieveLocalProposals` when the log
+// entry has the most recent MaxLeaseIndex (common path)
+// [4]: picked up by `(*replicaDecoder).retrieveLocalProposals` but the log
+// entry is a past incarnation, i.e. `MaxLeaseIndex` of `ProposalData` is newer.
+// In this case, the command will be rejected (apply as a no-op and not signal a
+// result) since a newer copy of it is inflight. (Unhappy path).
+// [5]: log entry failed MaxLeaseIndex check, and we are reproposing with a
+// newer MaxLeaseIndex in `(*Replica).tryReproposeWithNewLeaseIndex`.
+// [6]: while being applied (rejected), the `*ProposalData` may be reinserted
+// into the `propBuf` by `(*Replica).refreshProposalsLocked`, which finds it in
+// the map.
+// [7]: like [3] but the goroutine is now also in the propBuf.
+// [8]: either [5] or the proposal applies successfully but is still in the
+// propBuf since it was there initially. In that latter case we now have a
+// finished proposal in the propBuf
+// (https://github.com/cockroachdb/cockroach/issues/97605)
+//
+// See also the prose near the call to `tryReproposeWithNewLeaseIndex`.
 type ProposalData struct {
 	// The caller's context, used for logging proposals, reproposals, message
 	// sends, but not command application. In order to enable safely tracing events
 	// beneath, modifying this ctx field in *ProposalData requires holding the
 	// raftMu.
+	//
+	// This is either the caller's context (if they are waiting for the result)
+	// or a "background" context, perhaps with a span in it (for async consensus
+	// or in case the caller has given up).
+	//
+	// Note that there is also replicatedCmd.{ctx,sp} and so confusion may arise
+	// about which one to log to. Generally if p.ctx has a span, replicatedCmd.ctx
+	// has a span that follows from it. However, if p.ctx has no span or the
+	// replicatedCmd is not associated to a local ProposalData, replicatedCmd.ctx
+	// may still have a span, if the remote proposer requested tracing. It follows
+	// that during command application one should always use `replicatedCmd.ctx`
+	// for best coverage. `p.ctx` should be used when a `replicatedCmd` is not in
+	// scope, i.e. outside of raft command application.
+	//
+	// TODO(tbg): under useReproposalsV2, the field can be modified safely as long
+	// as the ProposalData is still in `r.mu.proposals` and `r.mu` is held. If it's
+	// not in that map, we are log application and have exclusive access. Add a more
+	// general comment that explains what can be accessed where (I think I wrote one
+	// somewhere but it should live on ProposalData).
 	ctx context.Context
 
-	// An optional tracing span bound to the proposal. Will be cleaned
-	// up when the proposal finishes.
+	// An optional tracing span bound to the proposal in the case of async
+	// consensus (it will be referenced by p.ctx). We need to finish this span
+	// after applying this proposal, since we created it. It is not used for
+	// anything else (all tracing goes through `p.ctx`).
 	sp *tracing.Span
 
 	// idKey uniquely identifies this proposal.
-	// TODO(andrei): idKey is legacy at this point: We could easily key commands
-	// by their MaxLeaseIndex, and doing so should be ok with a stop- the-world
-	// migration. However, various test facilities depend on the command ID for
-	// e.g. replay protection. Later edit: the MaxLeaseIndex assignment has,
-	// however, moved to happen later, at proposal time.
 	idKey kvserverbase.CmdIDKey
 
 	// proposedAtTicks is the (logical) time at which this command was
@@ -74,6 +155,9 @@ type ProposalData struct {
 
 	// command is serialized and proposed to raft. In the event of
 	// reproposals its MaxLeaseIndex field is mutated.
+	//
+	// TODO(tbg): when useReproposalsV2==true is baked in, the above comment
+	// is stale - MLI never gets mutated.
 	command *kvserverpb.RaftCommand
 
 	// encodedCommand is the encoded Raft command, with an optional prefix
@@ -130,6 +214,29 @@ type ProposalData struct {
 	// raftAdmissionMeta captures the metadata we encode as part of the command
 	// when first proposed for replication admission control.
 	raftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
+
+	// v2SeenDuringApplication is set to true right at the very beginning of
+	// processing this proposal for application (regardless of what the outcome of
+	// application is). Under useReproposalsV2, a local proposal is bound to an
+	// entry only once and the proposals map entry removed. This flag makes sure
+	// that the proposal buffer won't accidentally reinsert the proposal into the
+	// map. In doing so, this field also addresses locking concerns. As long as
+	// the ProposalData is in the `proposals` map, replicaMu must be held. But
+	// command application unlinks the command from the map and wants to be able
+	// to access it without acquiring replicaMu. The only other actor that can
+	// access the proposal while it is being applied is the proposal buffer (which
+	// always holds replicaMu); since v2SeenDuringApplication is flipped while
+	// under the lock (which log application holds at that point in time) and is
+	// never mutated afterwards, the proposal buffer is allowed to access that
+	// particular field and use it to avoid touching the ProposalData. A similar
+	// strategy is not possible under !useReproposalsV2 because by "design",
+	// proposals may repeatedly leave and re-enter the map and ultimately still
+	// apply successfully.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/97605
+	//
+	// Never set unless useReproposalsV2 is active.
+	v2SeenDuringApplication bool
 }
 
 // useReplicationAdmissionControl indicates whether this raft command should
@@ -167,6 +274,12 @@ func (proposal *ProposalData) finishApplication(ctx context.Context, pr proposal
 //
 // The method is safe to call more than once, but only the first result will be
 // returned to the client.
+//
+// TODO(tbg): a stricter invariant should hold: if a proposal is signaled
+// multiple times, at most one of them is not an AmbiguousResultError. In
+// other words, we get at most one result from log application, all other
+// results are from mechanisms that unblock the client despite not knowing
+// the outcome of the proposal.
 func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 	if proposal.doneCh != nil {
 		proposal.doneCh <- pr
@@ -363,13 +476,6 @@ func (r *Replica) leasePostApplyLocked(
 
 	now := r.store.Clock().NowAsClockTimestamp()
 
-	// NB: ProposedTS is non-nil in practice, but we never fully migrated it
-	// in so we need to assume that it can be nil.
-	const slowLeaseWarningEnabled = false // see https://github.com/cockroachdb/cockroach/issues/97209
-	if slowLeaseWarningEnabled && iAmTheLeaseHolder && leaseChangingHands && newLease.ProposedTS != nil {
-		maybeLogSlowLeaseApplyWarning(ctx, time.Duration(now.WallTime-newLease.ProposedTS.WallTime), prevLease, newLease)
-	}
-
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
 	// lease request and attempt to gossip the first range.
@@ -377,15 +483,9 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
-	// Log acquisition of meta and liveness range leases. These are critical to
-	// cluster health, so it's useful to know their location over time.
-	if leaseChangingHands && iAmTheLeaseHolder &&
-		r.descRLocked().StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
-		if r.ownsValidLeaseRLocked(ctx, now) {
-			log.Health.Infof(ctx, "acquired system range lease: %s", newLease)
-		} else {
-			log.Health.Warningf(ctx, "applied system range lease after it expired: %s", newLease)
-		}
+	// Log the lease acquisition, if appropriate.
+	if leaseChangingHands && iAmTheLeaseHolder {
+		r.maybeLogLeaseAcquisition(ctx, now, prevLease, newLease)
 	}
 
 	st := r.leaseStatusAtRLocked(ctx, now)
@@ -463,14 +563,26 @@ func (r *Replica) leasePostApplyLocked(
 	}
 }
 
-// maybeLogSlowLeaseApplyWarning is called when the lease changes hands on the
-// new leaseholder. It logs if either the new lease was proposed well before it
-// became visible on the leaseholder (indicating replication lag) or if the
-// previous lease looks like we transferred a lease to a behind/offline replica.
-func maybeLogSlowLeaseApplyWarning(
-	ctx context.Context, newLeaseAppDelay time.Duration, prevLease, newLease *roachpb.Lease,
+// maybeLogLeaseAcquisition is called on the new leaseholder when the lease
+// changes hands, to log the lease acquisition if appropriate.
+func (r *Replica) maybeLogLeaseAcquisition(
+	ctx context.Context, now hlc.ClockTimestamp, prevLease, newLease *roachpb.Lease,
 ) {
-	const slowLeaseApplyWarnThreshold = 500 * time.Millisecond
+	// Log acquisition of meta and liveness range leases. These are critical to
+	// cluster health, so it's useful to know their location over time.
+	if r.descRLocked().StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
+		if r.ownsValidLeaseRLocked(ctx, now) {
+			log.Health.Infof(ctx, "acquired system range lease: %s", newLease)
+		} else {
+			log.Health.Warningf(ctx, "applied system range lease after it expired: %s", newLease)
+		}
+	}
+
+	const slowLeaseApplyWarnThreshold = time.Second
+	var newLeaseAppDelay time.Duration
+	if newLease.ProposedTS != nil { // non-nil in practice, but never migrated
+		newLeaseAppDelay = time.Duration(now.WallTime - newLease.ProposedTS.WallTime)
+	}
 	if newLeaseAppDelay > slowLeaseApplyWarnThreshold {
 		// If we hold the lease now and the lease was proposed "earlier", there
 		// must have been replication lag, and possibly reads and/or writes were
@@ -486,23 +598,22 @@ func maybeLogSlowLeaseApplyWarning(
 		// case, which is good enough here.
 		//
 		// [^1]: https://github.com/cockroachdb/cockroach/pull/82758
-		log.Warningf(ctx,
-			"lease %v active after replication lag of ~%.2fs; foreground traffic may have been impacted [prev=%v]",
-			newLease, newLeaseAppDelay.Seconds(), prevLease,
-		)
+		log.Health.Warningf(ctx,
+			"applied lease after ~%.2fs replication lag, client traffic may have been delayed [lease=%v prev=%v]",
+			newLeaseAppDelay.Seconds(), newLease, prevLease)
 	} else if prevLease.Type() == roachpb.LeaseExpiration &&
 		newLease.Type() == roachpb.LeaseEpoch &&
-		newLease.AcquisitionType == roachpb.LeaseAcquisitionType_Request {
+		prevLease.Expiration != nil && // nil when there is no previous lease
+		prevLease.Expiration.LessEq(newLease.Start.ToTimestamp()) {
 		// If the previous lease is expiration-based, but the new lease is not and
-		// the acquisition was non-cooperative, it is likely that a lease transfer
-		// (which is expiration-based) went to a follower that then couldn't hold
-		// the lease alive (for example, didn't apply it in time for it to
+		// starts at or after its expiration, it is likely that a lease transfer
+		// (which is expiration-based) went to a follower that then couldn't upgrade
+		// it to an epoch lease (for example, didn't apply it in time for it to
 		// actually serve any traffic). The result was likely an outage which
 		// resolves right now, so log to point this out.
-		log.Warningf(ctx,
-			"lease %v expired before being followed by lease %s; foreground traffic may have been impacted",
-			prevLease, newLease,
-		)
+		log.Health.Warningf(ctx,
+			"lease expired before epoch lease upgrade, client traffic may have been delayed [lease=%v prev=%v]",
+			newLease, prevLease)
 	}
 }
 

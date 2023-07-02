@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -18,6 +17,7 @@ go_library(
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/allocator/plan",
         "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/constraint",
         "//pkg/kv/kvserver/kvserverpb",
@@ -48,5 +48,3 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

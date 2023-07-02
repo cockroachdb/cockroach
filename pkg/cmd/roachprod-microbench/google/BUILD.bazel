@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
@@ -7,13 +6,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-microbench/model",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_google_api//drive/v3:drive",
         "@org_golang_google_api//googleapi",
         "@org_golang_google_api//option",
         "@org_golang_google_api//sheets/v4:sheets",
-        "@org_golang_x_perf//benchstat",
+        "@org_golang_x_exp//maps",
     ],
 )
-
-get_x_data(name = "get_x_data")

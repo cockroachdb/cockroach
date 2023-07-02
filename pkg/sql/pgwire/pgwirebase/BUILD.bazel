@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -25,6 +24,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/lex",
         "//pkg/sql/oidext",
+        "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/eval",
@@ -81,5 +81,3 @@ stringer(
     src = "msg.go",
     typ = "PrepareType",
 )
-
-get_x_data(name = "get_x_data")

@@ -247,6 +247,9 @@ export class StatementDetails extends React.Component<
     this.props.diagnosticsReports.length > 0;
 
   changeTimeScale = (ts: TimeScale): void => {
+    if (ts.key !== "Custom") {
+      ts.fixedWindowEnd = moment();
+    }
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
@@ -427,6 +430,7 @@ export class StatementDetails extends React.Component<
             renderError={() =>
               LoadingError({
                 statsType: "statements",
+                error: error,
               })
             }
           />
@@ -491,7 +495,7 @@ export class StatementDetails extends React.Component<
           <TimeScaleDropdown
             options={timeScale1hMinOptions}
             currentScale={this.props.timeScale}
-            setTimeScale={this.props.onTimeScaleChange}
+            setTimeScale={this.changeTimeScale}
           />
         </PageConfigItem>
       </PageConfig>
@@ -510,7 +514,7 @@ export class StatementDetails extends React.Component<
           <TimeScaleDropdown
             options={timeScale1hMinOptions}
             currentScale={this.props.timeScale}
-            setTimeScale={this.props.onTimeScaleChange}
+            setTimeScale={this.changeTimeScale}
           />
         </PageConfigItem>
       </PageConfig>
@@ -531,7 +535,7 @@ export class StatementDetails extends React.Component<
             intent="danger"
             title={LoadingError({
               statsType: "statements",
-              timeout: true,
+              error: this.props.statementsError,
             })}
           />
         )}
@@ -944,7 +948,7 @@ export class StatementDetails extends React.Component<
         }
         onSortingChange={this.props.onSortingChange}
         currentScale={this.props.timeScale}
-        onChangeTimeScale={this.props.onTimeScaleChange}
+        onChangeTimeScale={this.changeTimeScale}
       />
     );
   };

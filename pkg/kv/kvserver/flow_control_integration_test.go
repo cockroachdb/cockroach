@@ -100,10 +100,10 @@ func TestFlowControlBasic(t *testing.T) {
 		for i := 0; i < numNodes; i++ {
 			si, err := tc.Server(i).GetStores().(*kvserver.Stores).GetStore(tc.Server(i).GetFirstStoreID())
 			require.NoError(t, err)
-			tc.Servers[i].RaftTransport().Listen(si.StoreID(),
+			tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(si.StoreID(),
 				&unreliableRaftHandler{
-					rangeID:            desc.RangeID,
-					RaftMessageHandler: si,
+					rangeID:                    desc.RangeID,
+					IncomingRaftMessageHandler: si,
 					unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 						dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 							// Install a raft handler to get verbose raft logging.
@@ -1907,10 +1907,10 @@ func TestFlowControlUnquiescedRange(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		si, err := tc.Server(i).GetStores().(*kvserver.Stores).GetStore(tc.Server(i).GetFirstStoreID())
 		require.NoError(t, err)
-		tc.Servers[i].RaftTransport().Listen(si.StoreID(),
+		tc.Servers[i].RaftTransport().ListenIncomingRaftMessages(si.StoreID(),
 			&unreliableRaftHandler{
-				rangeID:            desc.RangeID,
-				RaftMessageHandler: si,
+				rangeID:                    desc.RangeID,
+				IncomingRaftMessageHandler: si,
 				unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 					dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 						// Install a raft handler to get verbose raft logging.
@@ -1975,7 +1975,8 @@ ORDER BY name ASC;
 
 	h.comment(`-- (Unquiesce the range.)`)
 	testutils.SucceedsSoon(t, func() error {
-		tc.GetRaftLeader(t, roachpb.RKey(k)).MaybeUnquiesceAndWakeLeader()
+		_, err := tc.GetRaftLeader(t, roachpb.RKey(k)).MaybeUnquiesceAndPropose()
+		require.NoError(t, err)
 		return h.checkAllTokensReturned(ctx, 3)
 	})
 

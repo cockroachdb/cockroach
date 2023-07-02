@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -372,7 +373,7 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		// Resolve the descriptor so we can mutate it.
-		tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "tbl")
+		tn := tree.MakeTableNameWithSchema("db", catconstants.PublicSchemaName, "tbl")
 		_, desc, err := descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn.KV()).MaybeGet(), &tn)
 		require.NotNil(t, desc)
 		require.NoError(t, err)

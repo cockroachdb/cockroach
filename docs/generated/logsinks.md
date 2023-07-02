@@ -81,6 +81,7 @@ Configuration options shared across all sink types:
 |--|--|
 | `filter` | specifies the default minimum severity for log events to be emitted to this sink, when not otherwise specified by the 'channels' sink attribute. |
 | `format` | the entry format to use. |
+| `format-options` | additional options for the format. |
 | `redact` | whether to strip sensitive information before log events are emitted to this sink. |
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
@@ -163,6 +164,7 @@ Configuration options shared across all sink types:
 |--|--|
 | `filter` | specifies the default minimum severity for log events to be emitted to this sink, when not otherwise specified by the 'channels' sink attribute. |
 | `format` | the entry format to use. |
+| `format-options` | additional options for the format. |
 | `redact` | whether to strip sensitive information before log events are emitted to this sink. |
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
@@ -220,6 +222,8 @@ Type-specific configuration options:
 | `unsafe-tls` | enables certificate authentication to be bypassed. Defaults to false. Inherited from `http-defaults.unsafe-tls` if not specified. |
 | `timeout` | the HTTP timeout. Defaults to 0 for no timeout. Inherited from `http-defaults.timeout` if not specified. |
 | `disable-keep-alives` | causes the logging sink to re-establish a new connection for every outgoing log message. This option is intended for testing only and can cause excessive network overhead in production systems. Inherited from `http-defaults.disable-keep-alives` if not specified. |
+| `headers` | a list of headers to attach to each HTTP request Inherited from `http-defaults.headers` if not specified. |
+| `compression` | can be "none" or "gzip" to enable gzip compression. Set to "gzip" by default. Inherited from `http-defaults.compression` if not specified. |
 
 
 Configuration options shared across all sink types:
@@ -228,6 +232,7 @@ Configuration options shared across all sink types:
 |--|--|
 | `filter` | specifies the default minimum severity for log events to be emitted to this sink, when not otherwise specified by the 'channels' sink attribute. |
 | `format` | the entry format to use. |
+| `format-options` | additional options for the format. |
 | `redact` | whether to strip sensitive information before log events are emitted to this sink. |
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
@@ -277,7 +282,7 @@ Type-specific configuration options:
 | Field | Description |
 |--|--|
 | `channels` | the list of logging channels that use this sink. See the [channel selection configuration](#channel-format) section for details.  |
-| `no-color` | forces the omission of VT color codes in the output even when stderr is a terminal. |
+| `no-color` | forces the omission of VT color codes in the output even when stderr is a terminal. This option is deprecated; its effects are equivalent to 'format-options: {colors: none}'. |
 
 
 Configuration options shared across all sink types:
@@ -286,6 +291,7 @@ Configuration options shared across all sink types:
 |--|--|
 | `filter` | specifies the default minimum severity for log events to be emitted to this sink, when not otherwise specified by the 'channels' sink attribute. |
 | `format` | the entry format to use. |
+| `format-options` | additional options for the format. |
 | `redact` | whether to strip sensitive information before log events are emitted to this sink. |
 | `redactable` | whether to keep redaction markers in the sink's output. The presence of redaction markers makes it possible to strip sensitive data reliably. |
 | `exit-on-error` | whether the logging system should terminate the process if an error is encountered while writing to this sink. |
@@ -402,5 +408,6 @@ set to "NONE" to disable buffering. Example configuration:
 | `max-staleness` | the maximum time a log message will sit in the buffer before a flush is triggered. |
 | `flush-trigger-size` | the number of bytes that will trigger the buffer to flush. |
 | `max-buffer-size` | the limit on the size of the messages that are buffered. If this limit is exceeded, messages are dropped. The limit is expected to be higher than FlushTriggerSize. A buffer is flushed as soon as FlushTriggerSize is reached, and a new buffer is created once the flushing is started. Only one flushing operation is active at a time. |
+| `format` | describes how the buffer output should be formatted. Currently 2 options: newline: default option - separates buffer entries with newline char json-array: separates entries with ',' and wraps buffer contents in square brackets |
 
 

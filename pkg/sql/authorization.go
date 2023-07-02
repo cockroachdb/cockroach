@@ -848,8 +848,7 @@ func (p *planner) canCreateOnSchema(
 		// Callers must check whether temporary schemas are valid to create in.
 		return nil
 	case catalog.SchemaVirtual:
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"cannot CREATE on schema %s", scDesc.GetName())
+		return sqlerrors.NewCannotModifyVirtualSchemaError(scDesc.GetName())
 	case catalog.SchemaUserDefined:
 		return p.CheckPrivilegeForUser(ctx, scDesc, privilege.CREATE, user)
 	default:
@@ -966,12 +965,7 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 	} else if hasAdmin {
 		return true, nil
 	}
-	if hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY, p.User()); err != nil {
-		return false, err
-	} else if hasView {
-		return true, nil
-	}
-	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
+	if hasView, err := p.HasViewActivity(ctx); err != nil {
 		return false, err
 	} else if hasView {
 		return true, nil
@@ -993,6 +987,20 @@ func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
 	if hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED); err != nil {
 		return false, err
 	} else if hasViewRedacted {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (p *planner) HasViewActivity(ctx context.Context) (bool, error) {
+	if hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY, p.User()); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
+	}
+	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
+		return false, err
+	} else if hasView {
 		return true, nil
 	}
 	return false, nil

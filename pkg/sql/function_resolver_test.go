@@ -379,7 +379,7 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING VOLATILE LANGUAGE SQL AS $$ S
 			exprStr:          "lower('HI')",
 			searchPath:       []string{"sc1", "sc2", "pg_catalog"},
 			expectedFuncOID:  100109,
-			expectedFuncBody: "SELECT lower('HI');",
+			expectedFuncBody: "SELECT lower('HI':::STRING);",
 			desiredType:      types.String,
 		},
 	}

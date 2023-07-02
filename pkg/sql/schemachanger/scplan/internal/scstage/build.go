@@ -63,9 +63,10 @@ func BuildStages(
 			}
 			return m
 		}(),
-		startingPhase:    phase,
-		descIDs:          screl.AllTargetDescIDs(init.TargetState),
-		withSanityChecks: withSanityChecks,
+		startingPhase:          phase,
+		descIDs:                screl.AllTargetDescIDs(init.TargetState),
+		withSanityChecks:       withSanityChecks,
+		anyRemainingOpsCanFail: checkIfAnyRemainingOpsCanFail(init.TargetState, g),
 	}
 	// Build stages for all remaining phases.
 	stages := buildStages(bc)
@@ -98,17 +99,57 @@ func BuildStages(
 // buildContext contains the global constants for building the stages.
 // It's read-only everywhere after being initialized in BuildStages.
 type buildContext struct {
-	ctx              context.Context
-	rollback         bool
-	g                *scgraph.Graph
-	scJobID          func() jobspb.JobID
-	targetState      scpb.TargetState
-	initial          []scpb.Status
-	current          []scpb.Status
-	targetToIdx      map[*scpb.Target]int
-	startingPhase    scop.Phase
-	descIDs          catalog.DescriptorIDSet
-	withSanityChecks bool
+	ctx                    context.Context
+	rollback               bool
+	g                      *scgraph.Graph
+	scJobID                func() jobspb.JobID
+	targetState            scpb.TargetState
+	initial                []scpb.Status
+	current                []scpb.Status
+	targetToIdx            map[*scpb.Target]int
+	startingPhase          scop.Phase
+	descIDs                catalog.DescriptorIDSet
+	anyRemainingOpsCanFail map[*screl.Node]bool
+	withSanityChecks       bool
+}
+
+// checkIfAnyRemainingOpsCanFail returns a map which indicates if
+// a given screl.Node can encounter a failure in the future due to
+// either validation or backfill.
+func checkIfAnyRemainingOpsCanFail(
+	targetState scpb.TargetState, g *scgraph.Graph,
+) map[*screl.Node]bool {
+	// Determine which op edges can potentially fail later on due to backfill
+	// failures.
+	anyRemainingOpsCanFail := make(map[*screl.Node]bool)
+	for i := range targetState.Targets {
+		t := &targetState.Targets[i]
+		currentStatus := t.TargetStatus
+		anyRemainingCanFail := false
+		for {
+			if n, ok := g.GetNode(t, currentStatus); ok {
+				if oe, ok := g.GetOpEdgeTo(n); ok {
+					anyRemainingOpsCanFail[n] = anyRemainingCanFail
+					// If this can potentially lead to failures, validate
+					// we have ops which are non-mutation types.
+					if oe.CanFail() {
+						for _, op := range oe.Op() {
+							anyRemainingCanFail = anyRemainingCanFail ||
+								op.Type() != scop.MutationType
+						}
+					}
+					currentStatus = oe.From().CurrentStatus
+				} else {
+					// Terminal status
+					anyRemainingOpsCanFail[n] = anyRemainingCanFail
+					break
+				}
+			} else {
+				break
+			}
+		}
+	}
+	return anyRemainingOpsCanFail
 }
 
 // buildStages builds all stages according to the starting parameters
@@ -320,12 +361,10 @@ func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) 
 		// Determine whether there are any backfill or validation operations
 		// remaining which should prevent the scheduling of any non-revertible
 		// operations. This information will be used when building the current
-		// set of targets below.
+		// set of targets below. We will do this over the set of generated operations,
+		// since some of these may be no-oped for newly created tables.
 		for _, n := range nodes {
-			if oe, ok := bc.g.GetOpEdgeFrom(n); ok && oe.CanFail() {
-				sb.anyRemainingOpsCanFail = true
-				break
-			}
+			sb.anyRemainingOpsCanFail = sb.anyRemainingOpsCanFail || bc.anyRemainingOpsCanFail[n]
 		}
 
 		for i, n := range nodes {
@@ -472,8 +511,7 @@ func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState 
 // dependencies which aren't yet met.
 //
 // In plain english: we can only schedule this node in this stage if all the
-// other nodes which need to be scheduled not after it have already been
-// scheduled.
+// other nodes which need to be scheduled before it have already been scheduled.
 func (sb stageBuilder) hasUnmetInboundDeps(n *screl.Node) (ret bool) {
 	_ = sb.bc.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
 		if ret = sb.isUnmetInboundDep(de); ret {

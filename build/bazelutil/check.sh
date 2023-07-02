@@ -11,6 +11,7 @@ GIT_GREP="git $CONFIGS grep"
 
 EXISTING_GO_GENERATE_COMMENTS="
 pkg/config/field.go://go:generate stringer --type=Field --linecomment
+pkg/rpc/context.go://go:generate mockgen -destination=mocks_generated_test.go --package=. Dialbacker
 pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
 pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
 pkg/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
@@ -29,7 +30,6 @@ pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination
 pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
 pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
 pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go
-pkg/server/api_v2.go://-go:generate swagger generate spec -w . -o ../../docs/generated/swagger/spec.json --scan-models
 pkg/spanconfig/spanconfigstore/span_store.go://go:generate ../../util/interval/generic/gen.sh *entry spanconfigstore
 pkg/sql/conn_fsm.go://go:generate ../util/fsm/gen/reports.sh TxnStateTransitions stateNoTxn
 pkg/sql/opt/optgen/lang/gen.go://go:generate langgen -out expr.og.go exprs lang.opt

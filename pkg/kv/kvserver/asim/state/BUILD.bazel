@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -31,6 +30,9 @@ go_library(
         "//pkg/kv/kvserver/split",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigreporter",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -59,9 +61,6 @@ go_test(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/load",
         "//pkg/roachpb",
-        "//pkg/util/hlc",
         "@com_github_stretchr_testify//require",
     ],
 )
-
-get_x_data(name = "get_x_data")

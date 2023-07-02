@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -92,6 +93,20 @@ type DescriptorBuilder interface {
 	// This is to compensate for the fact that these are not subject to cluster
 	// upgrade migrations
 	RunRestoreChanges(version clusterversion.ClusterVersion, descLookupFn func(id descpb.ID) Descriptor) error
+
+	// StripDanglingBackReferences attempts to remove any back-references in the
+	// descriptor which are known to be dangling references. In other words, if
+	// there is a back-reference to a descriptor or a job and we know that the
+	// ID isn't valid, then this method removes this back-reference.
+	//
+	// Back-references are only ever checked when performing schema changes and
+	// usually aren't needed by the query planner so any corruption there can
+	// remain undetected for a long time. This method provides a mechanism for
+	// brute-force repair.
+	StripDanglingBackReferences(
+		descIDMightExist func(id descpb.ID) bool,
+		nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
+	) error
 
 	// SetRawBytesInStorage sets `rawBytesInStorage` field by deep-copying `rawBytes`.
 	SetRawBytesInStorage(rawBytes []byte)
@@ -776,9 +791,6 @@ type TypeDescriptor interface {
 	// GetReferencingDescriptorID returns the ID of the referencing descriptor at
 	// ordinal refOrdinal.
 	GetReferencingDescriptorID(refOrdinal int) descpb.ID
-	// GetReferencingDescriptorIDs returns IDs of descriptors referencing this
-	// type.
-	GetReferencingDescriptorIDs() []descpb.ID
 
 	// AsEnumTypeDescriptor returns this instance cast to EnumTypeDescriptor
 	// if this type is an enum type, nil otherwise.

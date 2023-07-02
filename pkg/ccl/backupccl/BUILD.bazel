@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -55,7 +54,6 @@ go_library(
         "//pkg/cloud/cloudprivilege",
         "//pkg/clusterversion",
         "//pkg/featureflag",
-        "//pkg/gossip",
         "//pkg/jobs",
         "//pkg/jobs/joberror",
         "//pkg/jobs/jobspb",
@@ -290,8 +288,8 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/distsqlutils",
+        "//pkg/testutils/fingerprintutils",
         "//pkg/testutils/jobutils",
-        "//pkg/testutils/keysutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
@@ -352,9 +350,7 @@ stringer(
 
 genrule(
     name = "gen-backupccl-tests",
-    srcs = [
-        "//pkg/ccl/backupccl:testdata",
-    ],
+    srcs = glob(["testdata/**"]),
     outs = [
         "restore_memory_monitoring_generated_test.go",
         "data_driven_generated_test.go",
@@ -374,5 +370,3 @@ genrule(
         "//pkg/gen:__pkg__",
     ],
 )
-
-get_x_data(name = "get_x_data")

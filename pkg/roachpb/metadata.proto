@@ -405,15 +405,6 @@ message StoreDescriptor {
   optional StoreProperties properties = 5 [(gogoproto.nullable) = false];
 }
 
-// StoreDeadReplicas holds a storeID and a list of dead replicas on that store.
-// Used to let the range lease holder know about corrupted or otherwise
-// destroyed replicas that should be transferred to a different store.
-message StoreDeadReplicas {
-  optional int32 store_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
-  repeated ReplicaIdent replicas = 2 [(gogoproto.nullable) = false];
-}
-
 // Locality is an ordered set of key value Tiers that describe a node's
 // location. The tier keys should be the same across all nodes.
 message Locality {
@@ -432,6 +423,22 @@ message Tier {
   optional string key = 1 [(gogoproto.nullable) = false];
   // Value is node specific value corresponding to the key.
   optional string value = 2 [(gogoproto.nullable) = false];
+}
+
+// LocalityComparisonType represents different types of comparison results that
+// indicate the relationship between two localities.
+enum LocalityComparisonType {
+  // UNDEFINED represents an undefined comparison result, indicating error
+  // behavior.
+  UNDEFINED = 0;
+  // CROSS_REGION indicates that the two localities have different region tiers.
+  CROSS_REGION = 1;
+  // SAME_REGION_CROSS_ZONE indicates that the two localities have the same
+  // region tiers but different zone tiers.
+  SAME_REGION_CROSS_ZONE = 2;
+  // SAME_REGION_SAME_ZONE indicates that the two localities have same region
+  // and same zone tiers.
+  SAME_REGION_SAME_ZONE = 3;
 }
 
 message Version {

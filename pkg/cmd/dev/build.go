@@ -135,7 +135,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	defer func() {
 		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
 			// Retry.
-			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil && d.debug {
 				log.Printf("Internal Error: Sending BEP file to beaver hub failed - %v", err)
 			}
 		}
@@ -209,12 +209,6 @@ func (d *dev) crossBuild(
 	var script strings.Builder
 	script.WriteString("set -euxo pipefail\n")
 	script.WriteString(fmt.Sprintf("bazel %s\n", shellescape.QuoteCommand(bazelArgs)))
-	for _, arg := range bazelArgs {
-		if arg == "--config=with_ui" {
-			script.WriteString("bazel run @yarn//:yarn -- --check-files --cwd pkg/ui --offline\n")
-			break
-		}
-	}
 	var bazelBinSet bool
 	script.WriteString("set +x\n")
 	for _, target := range targets {
@@ -450,15 +444,6 @@ func (d *dev) getBasicBuildArgs(
 		}
 	}
 
-	// Add --config=with_ui iff we're building a target that needs it.
-	for _, target := range buildTargets {
-		if target.fullName == buildTargetMapping["cockroach"] ||
-			target.fullName == buildTargetMapping["cockroach-oss"] ||
-			target.fullName == buildTargetMapping["obsservice"] {
-			args = append(args, "--config=with_ui")
-			break
-		}
-	}
 	if shouldBuildWithTestConfig {
 		args = append(args, "--config=test")
 	}

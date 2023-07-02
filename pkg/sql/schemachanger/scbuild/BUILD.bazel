@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -50,6 +49,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/mon",
@@ -104,5 +104,3 @@ go_test(
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
-
-get_x_data(name = "get_x_data")

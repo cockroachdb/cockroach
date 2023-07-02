@@ -9,6 +9,10 @@ The Obs Service is developed as a library (in the `obslib` package) and a binary
 embed and extend the library (for example we imagine CockroachCloud doing so in
 the future).
 
+**Note**: Serving DB Console is no longer a core part of the planned utility of the
+Obs Service. However, as the functionality to serve the DB Console is maintained for
+now, in case it proves useful down the line.
+
 ## Building the Obs Service
 
 Build with
@@ -17,8 +21,7 @@ Build with
 ./dev build obsservice
 ```
 
-which will include the DB Console UI served on the HTTP port. This adds the
-`"--config=with_ui"` bazel flag that embeds the UI.
+which will include the DB Console UI served on the HTTP port.
 
 You can also build without the UI using:
 
@@ -47,7 +50,8 @@ exporters:
     tls:
       insecure: true
 ```
-- `--http-addr` is the address on which the DB Console is served.
+- `--http-addr` is the address on which the DB Console is served. NB: This feature may
+  be removed in the future. See note above in [header section](#CockroachDB-Observability-Service)
 - `--crdb-http-url` is CRDB's HTTP address. For a multi-node CRDB cluster, this
   can point to a load-balancer. It can be either a HTTP or an HTTPS address,
   depending on whether the CRDB cluster is running as `--insecure`.
@@ -71,29 +75,20 @@ exporters:
   one created with `cockroach cert create-ca`). If specified, HTTP requests are
   only proxied to CRDB nodes that present certificates signed by this CA. If not
   specified, the system's CA list is used.
-- `--sink-pgurl` is the connection string for the sink cluster. If the pgurl
-  contains a database name, that database will be used; otherwise `obsservice`
-  will be used. If not specified, a connection to a local cluster will be
-  attempted.
 
 ## Functionality
 
 In the current fledgling state, the Obs Service does a couple of things:
 
-1. The Obs Service serves the DB Console, when built with `--config=with_ui`.
+1. The Obs Service serves the DB Console.
 
 2. The Obs Service reverse-proxies some HTTP routes to
    CRDB (`/_admin/`, `/_status/`, `/ts/`, `/api/v2/`).
 
 3. The Obs Service exposes the OTLP Logs gRPC service and is able to ingest
    events received through calls to this RPC service. Only insecure gRPC
-   connections are supported at the moment.
-
-4. The Obs Service connects to a sink cluster identified by `--sink-pgurl`. The
-   required schema is automatically created using SQL migrations run with
-   [goose](https://github.com/pressly/goose). The state of migrations in a sink
-   cluster can be inspected through the `observice.obs_admin.migrations` table.
-   The ingested events are saved in the sink cluster.
+   connections are supported at the moment. Events are ingested into the
+   Obs Service for aggregation and eventual storage. 
 
 ## Event ingestion
 
@@ -107,21 +102,9 @@ and,within that, into
 [`ScopeLogs`](https://github.com/open-telemetry/opentelemetry-proto/blob/200ccff768a29f8bd431e0a4a463da7ed58be557/opentelemetry/proto/logs/v1/logs.proto#L64).
 A resource identifies the cluster/node/tenant that is emitting the respective
 events. A scope identifies the type of event; events of different types get
-persisted in different tables, based on this event type. Events of unrecognized
-types are dropped. Currently, a single event type is supported: `"eventlog"`.
+routed to different processing pipelines, based on this event type. Events of 
+unrecognized types are dropped. Currently, a single event type is supported: `"eventlog"`.
 The log records carry attributes and a JSON payload representing the event.
-
-The mapping between event types and tables is listed in the table below:
-
-| Event type | Table          | Attributes   |
-|------------|----------------|--------------|
-| eventlog   | cluster_events | {event_type} |
-
-Each table storing events can have a different schema. It is expected that these
-tables store some event fields as columns and otherwise store the raw event in a
-JSON column. The values of the different columns can come from the attributes of
-the log record (listed in the table above), or from the JSON itself. Virtual or
-computed columns can be used to extract data from the JSON directly.
 
 ## Licensing
 

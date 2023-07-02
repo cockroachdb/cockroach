@@ -1,0 +1,68 @@
+gen_cluster nodes=5
+----
+
+gen_ranges ranges=500 bytes=300000000
+----
+
+gen_load rate=500 max_block=128000 min_block=128000
+----
+
+set_capacity store=5 capacity=45000000000
+----
+
+eval duration=30m seed=42
+----
+OK
+
+# Plot the replicas over time per store. With a steady state of writes, we will
+# repeatedly hit the disk fullness threshold which causes shedding replicas on
+# store 5. This is shown below as it sheds replicas.
+plot stat=replicas
+----
+----
+
+ 336 ┤                                       ╭╮   ╭╭╮╭╮─╭╮╭╭╮              ╭╮╭──╮╮╭╭─
+ 325 ┤                            ╭╮╭────╮╭────────╯╰╯╰─╯╰─╯╰──────────────╮╭╯─╯╰──╯╯
+ 314 ┤                   ╭╭╭╮╭─╭──╯╰╯╯╰╯╰╰╯             ╰╯       ╰╯ ╰╯╰╯╰╯ ╰╯
+ 302 ┼───────────────╮─────────╯
+ 291 ┤               ╰───╮
+ 280 ┤                   ╰╮ ╭╮
+ 269 ┤                    ╰─╯╰╮
+ 258 ┤                        ╰╮
+ 246 ┤                         ╰──╮
+ 235 ┤                            ╰╮
+ 224 ┤                             ╰╮
+ 213 ┤                              ╰╮╭────╮                            ╭╮
+ 202 ┤                               ╰╯    ╰╮                ╭──────────╯╰───╮
+ 190 ┤                                      ╰─────╮   ╭───╮ ╭╯               │
+ 179 ┤                                            ╰───╯   ╰─╯                ╰─╮ ╭──╮
+ 168 ┤                                                                         ╰─╯  ╰
+                                          replicas
+----
+----
+
+# Plot the % of disk storage capacity used. We should see s5 hovering right
+# around 92.5-95% (the storage capacity threshold value).
+plot stat=disk_fraction_used
+----
+----
+
+ 0.98 ┤              ╭─╮ ╭╮  ╭╮╭─╮╭──╮  ╭──────╮╭─╮    ╭───╮    ╭╮  ╭╮╭─╮  ╭───╮   ╭─╮
+ 0.91 ┤      ╭───────╯ ╰─╯╰──╯╰╯ ╰╯  ╰──╯      ╰╯ ╰────╯   ╰────╯╰──╯╰╯ ╰──╯   ╰───╯ ╰
+ 0.85 ┼──────╯
+ 0.78 ┤
+ 0.72 ┤
+ 0.65 ┤
+ 0.59 ┤
+ 0.52 ┤
+ 0.46 ┤
+ 0.39 ┤
+ 0.33 ┤
+ 0.26 ┤
+ 0.20 ┤
+ 0.13 ┤
+ 0.07 ┤
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                      disk_fraction_used
+----
+----

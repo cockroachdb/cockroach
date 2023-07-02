@@ -137,17 +137,17 @@ func InstallFixtures(
 	return nil
 }
 
-// StartWithBinary starts a cockroach binary, assumed to already be
-// present in the nodes in the path given.
-func StartWithBinary(
+// StartWithSettings starts cockroach and constructs settings according
+// to the setting options passed.
+func StartWithSettings(
 	ctx context.Context,
 	l *logger.Logger,
 	c cluster.Cluster,
 	nodes option.NodeListOption,
-	binaryPath string,
 	startOpts option.StartOpts,
+	opts ...install.ClusterSettingOption,
 ) error {
-	settings := install.MakeClusterSettings(install.BinaryOption(binaryPath))
+	settings := install.MakeClusterSettings(opts...)
 	return c.StartE(ctx, l, startOpts, settings, nodes)
 }
 
@@ -171,6 +171,7 @@ func RestartNodesWithNewBinary(
 	nodes option.NodeListOption,
 	startOpts option.StartOpts,
 	newVersion string,
+	settings ...install.ClusterSettingOption,
 ) error {
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
@@ -200,7 +201,9 @@ func RestartNodesWithNewBinary(
 		if err != nil {
 			return err
 		}
-		if err := StartWithBinary(ctx, l, c, c.Node(node), binary, startOpts); err != nil {
+		if err := StartWithSettings(
+			ctx, l, c, c.Node(node), startOpts, append(settings, install.BinaryOption(binary))...,
+		); err != nil {
 			return err
 		}
 

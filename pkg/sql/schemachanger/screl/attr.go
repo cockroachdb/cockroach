@@ -239,6 +239,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(ReferencedTypeIDs, "ClosedTypeIDs"),
 	),
+	rel.EntityMapping(t((*scpb.SequenceOption)(nil)),
+		rel.EntityAttr(DescID, "SequenceID"),
+		rel.EntityAttr(Name, "Key"),
+	),
 	rel.EntityMapping(t((*scpb.SequenceOwner)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
@@ -303,10 +307,6 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.DatabaseRoleSetting)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),
 		rel.EntityAttr(Name, "RoleName"),
-	),
-	// Schema elements.
-	rel.EntityMapping(t((*scpb.SchemaName)(nil)),
-		rel.EntityAttr(DescID, "SchemaID"),
 	),
 	// Parent elements.
 	rel.EntityMapping(t((*scpb.SchemaParent)(nil)),

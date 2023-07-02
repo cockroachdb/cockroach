@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
@@ -186,6 +185,7 @@ go_library(
         "//pkg/ts/tsutil",
         "//pkg/upgrade/upgrades",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/cgroups",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
@@ -236,6 +236,7 @@ go_library(
         "@com_github_cockroachdb_errors//hintdetail",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_pebble//objstorage/shared",
         "@com_github_cockroachdb_pebble//tool",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
@@ -405,7 +406,6 @@ go_test(
         "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
-        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
@@ -448,5 +448,3 @@ disallowed_imports_test(
         #"pkg/testutils",
     ],
 )
-
-get_x_data(name = "get_x_data")

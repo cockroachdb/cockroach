@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -32,9 +33,10 @@ import (
 // test, and enforces that logging output is not written to this
 // directory beyond the lifetime of the scope.
 type TestLogScope struct {
-	logDir    string
-	cleanupFn func()
-	previous  struct {
+	logDir               string
+	cleanupFn            func()
+	undeclaredOutputsDir string
+	previous             struct {
 		appliedConfig           string
 		stderrSinkInfoTemplate  sinkInfo
 		stderrSinkInfo          *sinkInfo
@@ -140,7 +142,11 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 	logging.mu.Unlock()
 
 	err := func() error {
-		tempDir, err := os.MkdirTemp("", "log"+fileutil.EscapeFilename(t.Name()))
+		isRemote := os.Getenv("REMOTE_EXEC")
+		if len(isRemote) > 0 {
+			sc.undeclaredOutputsDir = os.Getenv("TEST_UNDECLARED_OUTPUTS_DIR")
+		}
+		tempDir, err := os.MkdirTemp(sc.undeclaredOutputsDir, "log"+fileutil.EscapeFilename(t.Name()))
 		if err != nil {
 			return err
 		}
@@ -158,7 +164,7 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 			return err
 		}
 
-		t.Logf("test logs captured to: %s", sc.logDir)
+		t.Logf("test logs captured to: %s", sc.printableLogDirectory())
 		return nil
 	}()
 	if err != nil {
@@ -353,6 +359,15 @@ func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
 	return cleanup
 }
 
+// printableLogDirectory returns a human-readable version of the log directory
+// suitable for printing to the console.
+func (l *TestLogScope) printableLogDirectory() string {
+	if len(l.undeclaredOutputsDir) > 0 {
+		return "outputs.zip/" + strings.TrimPrefix(l.logDir, l.undeclaredOutputsDir+"/")
+	}
+	return l.logDir
+}
+
 // GetDirectory retrieves the log directory for this scope.
 func (l *TestLogScope) GetDirectory() string {
 	return l.logDir
@@ -405,7 +420,7 @@ func (l *TestLogScope) Close(t tShim) {
 						"Details cannot be printed yet because we are still unwinding.\n"+
 						"Hopefully the test harness prints the panic below, otherwise check the test logs.\n\n")
 				}
-				fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
+				fmt.Fprintln(OrigStderr, "test logs left over in:", l.printableLogDirectory())
 			} else {
 				// Clean up.
 				if err := os.RemoveAll(l.logDir); err != nil {

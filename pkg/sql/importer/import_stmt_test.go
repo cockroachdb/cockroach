@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -137,15 +138,14 @@ ORDER BY table_name
 	sqlDB.Exec(t, `SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true`)
 
 	tests := []struct {
-		name      string
-		create    string
-		with      string
-		typ       string
-		data      string
-		err       string
-		rejected  string
-		query     map[string][][]string
-		skipIssue int
+		name     string
+		create   string
+		with     string
+		typ      string
+		data     string
+		err      string
+		rejected string
+		query    map[string][][]string
 	}{
 		{
 			name: "duplicate unique index key",
@@ -1340,10 +1340,6 @@ COPY public.t (a, b) FROM stdin;
 				}
 			}
 			t.Run(fmt.Sprintf("%s/%s: save_rejected=%v", tc.typ, tc.name, saveRejected), func(t *testing.T) {
-				if tc.skipIssue != 0 {
-					skip.WithIssue(t, tc.skipIssue)
-					return
-				}
 				dbName := fmt.Sprintf("d%d", i)
 				if saveRejected {
 					dbName = dbName + "_save"
@@ -2449,7 +2445,7 @@ func TestImportCSVStmt(t *testing.T) {
 				intodb)).Scan(&intodbID)
 			var publicSchemaID descpb.ID
 			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s' AND "parentID" = %d`,
-				tree.PublicSchema, intodbID)).Scan(&publicSchemaID)
+				catconstants.PublicSchemaName, intodbID)).Scan(&publicSchemaID)
 			var tableID int64
 			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE "parentID" = $1 AND "parentSchemaID" = $2`,
 				intodbID, publicSchemaID).Scan(&tableID)
@@ -5421,7 +5417,9 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 102839, "flaky test")
+	skip.UnderStressWithIssue(t, 102839, "flaky test")
+	skip.UnderDeadlockWithIssue(t, 102839, "flaky test")
+	skip.UnderRaceWithIssue(t, 102839, "flaky test")
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}

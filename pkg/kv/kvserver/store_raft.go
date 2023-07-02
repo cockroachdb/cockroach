@@ -269,9 +269,11 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *kvpb.Error {
-	// NB: unlike the other two RaftMessageHandler methods implemented by Store,
-	// this one doesn't need to directly run through a Stopper task because it
-	// delegates all work through a raftScheduler, whose workers' lifetimes are
+	comparisonResult := s.getLocalityComparison(ctx, req.FromReplica.NodeID, req.ToReplica.NodeID)
+	s.metrics.updateCrossLocalityMetricsOnIncomingRaftMsg(comparisonResult, int64(req.Size()))
+	// NB: unlike the other two IncomingRaftMessageHandler methods implemented by
+	// Store, this one doesn't need to directly run through a Stopper task because
+	// it delegates all work through a raftScheduler, whose workers' lifetimes are
 	// already tied to the Store's Stopper.
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		if req.RangeID != 0 {
@@ -318,6 +320,18 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		return false
 	}
 	return enqueue
+}
+
+// HandleRaftRequestSent is called to capture outgoing Raft messages just prior
+// to their transmission to the raftSendQueue. Note that the message might not
+// be successfully queued if it gets dropped by SendAsync due to a full outgoing
+// queue. Currently, this is only used for metrics update which is why it only
+// takes specific properties of the request as arguments.
+func (s *Store) HandleRaftRequestSent(
+	ctx context.Context, fromNodeID roachpb.NodeID, toNodeID roachpb.NodeID, msgSize int64,
+) {
+	comparisonResult := s.getLocalityComparison(ctx, fromNodeID, toNodeID)
+	s.metrics.updateCrossLocalityMetricsOnOutgoingRaftMsg(comparisonResult, msgSize)
 }
 
 // withReplicaForRequest calls the supplied function with the (lazily
@@ -476,10 +490,10 @@ func (s *Store) processRaftSnapshotRequest(
 	})
 }
 
-// HandleRaftResponse implements the RaftMessageHandler interface. Per the
-// interface specification, an error is returned if and only if the underlying
-// Raft connection should be closed.
-// It requires that s.mu is not held.
+// HandleRaftResponse implements the IncomingRaftMessageHandler interface. Per
+// the interface specification, an error is returned if and only if the
+// underlying Raft connection should be closed. It requires that s.mu is not
+// held.
 func (s *Store) HandleRaftResponse(
 	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
@@ -705,7 +719,7 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		lagging := r.mu.laggingFollowersOnQuiesce
 		r.mu.RUnlock()
 		if quiescent && lagging.MemberStale(l) {
-			r.maybeUnquiesce()
+			r.maybeUnquiesce(false /* wakeLeader */, false /* mayCampaign */) // already leader
 		}
 	})
 }
@@ -720,7 +734,8 @@ func (s *Store) processRaft(ctx context.Context) {
 	_ = s.stopper.RunAsyncTask(ctx, "sched-tick-loop", s.raftTickLoop)
 	_ = s.stopper.RunAsyncTask(ctx, "coalesced-hb-loop", s.coalescedHeartbeatsLoop)
 	s.stopper.AddCloser(stop.CloserFn(func() {
-		s.cfg.Transport.Stop(s.StoreID())
+		s.cfg.Transport.StopIncomingRaftMessages(s.StoreID())
+		s.cfg.Transport.StopOutgoingMessage(s.StoreID())
 	}))
 
 	s.syncWaiter.Start(ctx, s.stopper)
@@ -811,14 +826,14 @@ func (s *Store) updateLivenessMap() {
 		// that this policy is different from the one governing the releasing of
 		// proposal quota; see comments over there.
 		//
-		// NB: This has false negatives. If a node doesn't have a conn open to it
-		// when ConnHealth is called, then ConnHealth will return
-		// rpc.ErrNotHeartbeated regardless of whether the node is up or not. That
-		// said, for the nodes that matter, we're likely talking to them via the
-		// Raft transport, so ConnHealth should usually indicate a real problem if
-		// it gives us an error back. The check can also have false positives if the
-		// node goes down after populating the map, but that matters even less.
-		entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
+		// NB: This has false negatives when we haven't attempted to connect to the
+		// node yet, where it will return rpc.ErrNotHeartbeated regardless of
+		// whether the node is up or not. Once connected, the RPC circuit breakers
+		// will continually probe the connection. The check can also have false
+		// positives if the node goes down after populating the map, but that
+		// matters even less.
+		entry.IsLive = !s.TestingKnobs().DisableLivenessMapConnHealth &&
+			(s.cfg.NodeDialer.ConnHealth(nodeID, rpc.SystemClass) == nil)
 		nextMap[nodeID] = entry
 	}
 	s.livenessMap.Store(nextMap)

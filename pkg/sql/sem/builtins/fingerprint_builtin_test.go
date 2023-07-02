@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -89,10 +89,11 @@ func TestFingerprint(t *testing.T) {
 	}
 
 	fingerprint := func(t *testing.T, startKey, endKey string, startTime, endTime hlc.Timestamp, allRevisions bool) int64 {
-		decimal := eval.TimestampToDecimal(endTime)
+		aost := endTime.AsOfSystemTime()
 		var fingerprint int64
-		query := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(ARRAY[$1::BYTES, $2::BYTES], $3, $4) AS OF SYSTEM TIME %s`, decimal.String())
-		require.NoError(t, sqlDB.QueryRow(query, roachpb.Key(startKey), roachpb.Key(endKey), startTime.GoTime(), allRevisions).Scan(&fingerprint))
+		query := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(ARRAY[$1::BYTES, $2::BYTES],$3::DECIMAL, $4) AS OF SYSTEM TIME '%s'`, aost)
+		require.NoError(t, sqlDB.QueryRow(query, roachpb.Key(startKey), roachpb.Key(endKey),
+			startTime.AsOfSystemTime(), allRevisions).Scan(&fingerprint))
 		return fingerprint
 	}
 
@@ -288,9 +289,9 @@ func TestFingerprintStripped(t *testing.T) {
 	// Create the same sql rows in a different table, committed at a different timestamp.
 	db.Exec(t, "CREATE TABLE test.test2 (k PRIMARY KEY) AS SELECT generate_series(1, 10)")
 
-	strippedFingerprint := func(tableName string) int {
-		tableID := sqlutils.QueryTableID(t, sqlDB, "test", "public", tableName)
-		return sqlutils.FingerprintTable(t, db, tableID)
-	}
-	require.Equal(t, strippedFingerprint("test"), strippedFingerprint("test2"))
+	fingerprints, err := fingerprintutils.FingerprintDatabase(ctx, sqlDB, "test",
+		fingerprintutils.Stripped())
+	require.NoError(t, err)
+
+	require.Equal(t, fingerprints["test"], fingerprints["test2"])
 }

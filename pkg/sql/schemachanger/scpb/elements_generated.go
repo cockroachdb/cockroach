@@ -14,10 +14,6 @@ package scpb
 
 import "fmt"
 
-type ElementStatusIterator interface {
-	ForEachElementStatus(fn func(current Status, target TargetStatus, e Element))
-}
-
 
 func (e AliasType) element() {}
 
@@ -27,32 +23,33 @@ func (e * ElementProto_AliasType) Element() Element {
 }
 
 // ForEachAliasType iterates over elements of type AliasType.
+// Deprecated
 func ForEachAliasType(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *AliasType),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *AliasType),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*AliasType); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterAliasType().ForEach(fn)
 }
 
 // FindAliasType finds the first element of type AliasType.
-func FindAliasType(b ElementStatusIterator) (current Status, target TargetStatus, element *AliasType) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*AliasType); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindAliasType(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *AliasType) {
+	if tc := c.FilterAliasType(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*AliasType)
+	}
 	return current, target, element
+}
+
+// AliasTypeElements filters elements of type AliasType.
+func (c *ElementCollection[E]) FilterAliasType() *ElementCollection[*AliasType] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*AliasType)
+		return ok
+	})
+	return (*ElementCollection[*AliasType])(ret)
 }
 
 func (e CheckConstraint) element() {}
@@ -63,32 +60,33 @@ func (e * ElementProto_CheckConstraint) Element() Element {
 }
 
 // ForEachCheckConstraint iterates over elements of type CheckConstraint.
+// Deprecated
 func ForEachCheckConstraint(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CheckConstraint),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CheckConstraint),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*CheckConstraint); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterCheckConstraint().ForEach(fn)
 }
 
 // FindCheckConstraint finds the first element of type CheckConstraint.
-func FindCheckConstraint(b ElementStatusIterator) (current Status, target TargetStatus, element *CheckConstraint) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*CheckConstraint); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindCheckConstraint(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *CheckConstraint) {
+	if tc := c.FilterCheckConstraint(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*CheckConstraint)
+	}
 	return current, target, element
+}
+
+// CheckConstraintElements filters elements of type CheckConstraint.
+func (c *ElementCollection[E]) FilterCheckConstraint() *ElementCollection[*CheckConstraint] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*CheckConstraint)
+		return ok
+	})
+	return (*ElementCollection[*CheckConstraint])(ret)
 }
 
 func (e CheckConstraintUnvalidated) element() {}
@@ -99,32 +97,33 @@ func (e * ElementProto_CheckConstraintUnvalidated) Element() Element {
 }
 
 // ForEachCheckConstraintUnvalidated iterates over elements of type CheckConstraintUnvalidated.
+// Deprecated
 func ForEachCheckConstraintUnvalidated(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CheckConstraintUnvalidated),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CheckConstraintUnvalidated),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*CheckConstraintUnvalidated); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterCheckConstraintUnvalidated().ForEach(fn)
 }
 
 // FindCheckConstraintUnvalidated finds the first element of type CheckConstraintUnvalidated.
-func FindCheckConstraintUnvalidated(b ElementStatusIterator) (current Status, target TargetStatus, element *CheckConstraintUnvalidated) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*CheckConstraintUnvalidated); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindCheckConstraintUnvalidated(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *CheckConstraintUnvalidated) {
+	if tc := c.FilterCheckConstraintUnvalidated(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*CheckConstraintUnvalidated)
+	}
 	return current, target, element
+}
+
+// CheckConstraintUnvalidatedElements filters elements of type CheckConstraintUnvalidated.
+func (c *ElementCollection[E]) FilterCheckConstraintUnvalidated() *ElementCollection[*CheckConstraintUnvalidated] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*CheckConstraintUnvalidated)
+		return ok
+	})
+	return (*ElementCollection[*CheckConstraintUnvalidated])(ret)
 }
 
 func (e Column) element() {}
@@ -135,32 +134,33 @@ func (e * ElementProto_Column) Element() Element {
 }
 
 // ForEachColumn iterates over elements of type Column.
+// Deprecated
 func ForEachColumn(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Column),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Column),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*Column); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterColumn().ForEach(fn)
 }
 
 // FindColumn finds the first element of type Column.
-func FindColumn(b ElementStatusIterator) (current Status, target TargetStatus, element *Column) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*Column); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindColumn(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Column) {
+	if tc := c.FilterColumn(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Column)
+	}
 	return current, target, element
+}
+
+// ColumnElements filters elements of type Column.
+func (c *ElementCollection[E]) FilterColumn() *ElementCollection[*Column] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Column)
+		return ok
+	})
+	return (*ElementCollection[*Column])(ret)
 }
 
 func (e ColumnComment) element() {}
@@ -171,32 +171,33 @@ func (e * ElementProto_ColumnComment) Element() Element {
 }
 
 // ForEachColumnComment iterates over elements of type ColumnComment.
+// Deprecated
 func ForEachColumnComment(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnComment),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnComment),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnComment); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterColumnComment().ForEach(fn)
 }
 
 // FindColumnComment finds the first element of type ColumnComment.
-func FindColumnComment(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnComment) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnComment); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindColumnComment(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnComment) {
+	if tc := c.FilterColumnComment(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnComment)
+	}
 	return current, target, element
+}
+
+// ColumnCommentElements filters elements of type ColumnComment.
+func (c *ElementCollection[E]) FilterColumnComment() *ElementCollection[*ColumnComment] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnComment)
+		return ok
+	})
+	return (*ElementCollection[*ColumnComment])(ret)
 }
 
 func (e ColumnDefaultExpression) element() {}
@@ -207,32 +208,33 @@ func (e * ElementProto_ColumnDefaultExpression) Element() Element {
 }
 
 // ForEachColumnDefaultExpression iterates over elements of type ColumnDefaultExpression.
+// Deprecated
 func ForEachColumnDefaultExpression(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnDefaultExpression),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnDefaultExpression),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnDefaultExpression); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterColumnDefaultExpression().ForEach(fn)
 }
 
 // FindColumnDefaultExpression finds the first element of type ColumnDefaultExpression.
-func FindColumnDefaultExpression(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnDefaultExpression) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnDefaultExpression); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindColumnDefaultExpression(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnDefaultExpression) {
+	if tc := c.FilterColumnDefaultExpression(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnDefaultExpression)
+	}
 	return current, target, element
+}
+
+// ColumnDefaultExpressionElements filters elements of type ColumnDefaultExpression.
+func (c *ElementCollection[E]) FilterColumnDefaultExpression() *ElementCollection[*ColumnDefaultExpression] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnDefaultExpression)
+		return ok
+	})
+	return (*ElementCollection[*ColumnDefaultExpression])(ret)
 }
 
 func (e ColumnFamily) element() {}
@@ -243,32 +245,33 @@ func (e * ElementProto_ColumnFamily) Element() Element {
 }
 
 // ForEachColumnFamily iterates over elements of type ColumnFamily.
+// Deprecated
 func ForEachColumnFamily(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnFamily),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnFamily),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnFamily); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterColumnFamily().ForEach(fn)
 }
 
 // FindColumnFamily finds the first element of type ColumnFamily.
-func FindColumnFamily(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnFamily) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnFamily); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindColumnFamily(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnFamily) {
+	if tc := c.FilterColumnFamily(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnFamily)
+	}
 	return current, target, element
+}
+
+// ColumnFamilyElements filters elements of type ColumnFamily.
+func (c *ElementCollection[E]) FilterColumnFamily() *ElementCollection[*ColumnFamily] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnFamily)
+		return ok
+	})
+	return (*ElementCollection[*ColumnFamily])(ret)
 }
 
 func (e ColumnName) element() {}
@@ -279,32 +282,33 @@ func (e * ElementProto_ColumnName) Element() Element {
 }
 
 // ForEachColumnName iterates over elements of type ColumnName.
+// Deprecated
 func ForEachColumnName(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnName),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnName),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnName); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterColumnName().ForEach(fn)
 }
 
 // FindColumnName finds the first element of type ColumnName.
-func FindColumnName(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnName) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnName); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindColumnName(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnName) {
+	if tc := c.FilterColumnName(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnName)
+	}
 	return current, target, element
+}
+
+// ColumnNameElements filters elements of type ColumnName.
+func (c *ElementCollection[E]) FilterColumnName() *ElementCollection[*ColumnName] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnName)
+		return ok
+	})
+	return (*ElementCollection[*ColumnName])(ret)
 }
 
 func (e ColumnNotNull) element() {}
@@ -315,32 +319,33 @@ func (e * ElementProto_ColumnNotNull) Element() Element {
 }
 
 // ForEachColumnNotNull iterates over elements of type ColumnNotNull.
+// Deprecated
 func ForEachColumnNotNull(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnNotNull),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnNotNull),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnNotNull); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterColumnNotNull().ForEach(fn)
 }
 
 // FindColumnNotNull finds the first element of type ColumnNotNull.
-func FindColumnNotNull(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnNotNull) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnNotNull); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindColumnNotNull(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnNotNull) {
+	if tc := c.FilterColumnNotNull(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnNotNull)
+	}
 	return current, target, element
+}
+
+// ColumnNotNullElements filters elements of type ColumnNotNull.
+func (c *ElementCollection[E]) FilterColumnNotNull() *ElementCollection[*ColumnNotNull] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnNotNull)
+		return ok
+	})
+	return (*ElementCollection[*ColumnNotNull])(ret)
 }
 
 func (e ColumnOnUpdateExpression) element() {}
@@ -351,32 +356,33 @@ func (e * ElementProto_ColumnOnUpdateExpression) Element() Element {
 }
 
 // ForEachColumnOnUpdateExpression iterates over elements of type ColumnOnUpdateExpression.
+// Deprecated
 func ForEachColumnOnUpdateExpression(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnOnUpdateExpression),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnOnUpdateExpression),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnOnUpdateExpression); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterColumnOnUpdateExpression().ForEach(fn)
 }
 
 // FindColumnOnUpdateExpression finds the first element of type ColumnOnUpdateExpression.
-func FindColumnOnUpdateExpression(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnOnUpdateExpression) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnOnUpdateExpression); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindColumnOnUpdateExpression(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnOnUpdateExpression) {
+	if tc := c.FilterColumnOnUpdateExpression(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnOnUpdateExpression)
+	}
 	return current, target, element
+}
+
+// ColumnOnUpdateExpressionElements filters elements of type ColumnOnUpdateExpression.
+func (c *ElementCollection[E]) FilterColumnOnUpdateExpression() *ElementCollection[*ColumnOnUpdateExpression] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnOnUpdateExpression)
+		return ok
+	})
+	return (*ElementCollection[*ColumnOnUpdateExpression])(ret)
 }
 
 func (e ColumnType) element() {}
@@ -387,32 +393,33 @@ func (e * ElementProto_ColumnType) Element() Element {
 }
 
 // ForEachColumnType iterates over elements of type ColumnType.
+// Deprecated
 func ForEachColumnType(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnType),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnType),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnType); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterColumnType().ForEach(fn)
 }
 
 // FindColumnType finds the first element of type ColumnType.
-func FindColumnType(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnType) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ColumnType); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindColumnType(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnType) {
+	if tc := c.FilterColumnType(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnType)
+	}
 	return current, target, element
+}
+
+// ColumnTypeElements filters elements of type ColumnType.
+func (c *ElementCollection[E]) FilterColumnType() *ElementCollection[*ColumnType] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnType)
+		return ok
+	})
+	return (*ElementCollection[*ColumnType])(ret)
 }
 
 func (e CompositeType) element() {}
@@ -423,32 +430,33 @@ func (e * ElementProto_CompositeType) Element() Element {
 }
 
 // ForEachCompositeType iterates over elements of type CompositeType.
+// Deprecated
 func ForEachCompositeType(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeType),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CompositeType),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*CompositeType); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterCompositeType().ForEach(fn)
 }
 
 // FindCompositeType finds the first element of type CompositeType.
-func FindCompositeType(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeType) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*CompositeType); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindCompositeType(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *CompositeType) {
+	if tc := c.FilterCompositeType(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*CompositeType)
+	}
 	return current, target, element
+}
+
+// CompositeTypeElements filters elements of type CompositeType.
+func (c *ElementCollection[E]) FilterCompositeType() *ElementCollection[*CompositeType] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*CompositeType)
+		return ok
+	})
+	return (*ElementCollection[*CompositeType])(ret)
 }
 
 func (e CompositeTypeAttrName) element() {}
@@ -459,32 +467,33 @@ func (e * ElementProto_CompositeTypeAttrName) Element() Element {
 }
 
 // ForEachCompositeTypeAttrName iterates over elements of type CompositeTypeAttrName.
+// Deprecated
 func ForEachCompositeTypeAttrName(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeTypeAttrName),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CompositeTypeAttrName),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*CompositeTypeAttrName); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterCompositeTypeAttrName().ForEach(fn)
 }
 
 // FindCompositeTypeAttrName finds the first element of type CompositeTypeAttrName.
-func FindCompositeTypeAttrName(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeTypeAttrName) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*CompositeTypeAttrName); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindCompositeTypeAttrName(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *CompositeTypeAttrName) {
+	if tc := c.FilterCompositeTypeAttrName(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*CompositeTypeAttrName)
+	}
 	return current, target, element
+}
+
+// CompositeTypeAttrNameElements filters elements of type CompositeTypeAttrName.
+func (c *ElementCollection[E]) FilterCompositeTypeAttrName() *ElementCollection[*CompositeTypeAttrName] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*CompositeTypeAttrName)
+		return ok
+	})
+	return (*ElementCollection[*CompositeTypeAttrName])(ret)
 }
 
 func (e CompositeTypeAttrType) element() {}
@@ -495,32 +504,33 @@ func (e * ElementProto_CompositeTypeAttrType) Element() Element {
 }
 
 // ForEachCompositeTypeAttrType iterates over elements of type CompositeTypeAttrType.
+// Deprecated
 func ForEachCompositeTypeAttrType(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeTypeAttrType),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CompositeTypeAttrType),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*CompositeTypeAttrType); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterCompositeTypeAttrType().ForEach(fn)
 }
 
 // FindCompositeTypeAttrType finds the first element of type CompositeTypeAttrType.
-func FindCompositeTypeAttrType(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeTypeAttrType) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*CompositeTypeAttrType); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindCompositeTypeAttrType(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *CompositeTypeAttrType) {
+	if tc := c.FilterCompositeTypeAttrType(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*CompositeTypeAttrType)
+	}
 	return current, target, element
+}
+
+// CompositeTypeAttrTypeElements filters elements of type CompositeTypeAttrType.
+func (c *ElementCollection[E]) FilterCompositeTypeAttrType() *ElementCollection[*CompositeTypeAttrType] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*CompositeTypeAttrType)
+		return ok
+	})
+	return (*ElementCollection[*CompositeTypeAttrType])(ret)
 }
 
 func (e ConstraintComment) element() {}
@@ -531,32 +541,33 @@ func (e * ElementProto_ConstraintComment) Element() Element {
 }
 
 // ForEachConstraintComment iterates over elements of type ConstraintComment.
+// Deprecated
 func ForEachConstraintComment(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ConstraintComment),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ConstraintComment),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ConstraintComment); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterConstraintComment().ForEach(fn)
 }
 
 // FindConstraintComment finds the first element of type ConstraintComment.
-func FindConstraintComment(b ElementStatusIterator) (current Status, target TargetStatus, element *ConstraintComment) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ConstraintComment); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindConstraintComment(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ConstraintComment) {
+	if tc := c.FilterConstraintComment(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ConstraintComment)
+	}
 	return current, target, element
+}
+
+// ConstraintCommentElements filters elements of type ConstraintComment.
+func (c *ElementCollection[E]) FilterConstraintComment() *ElementCollection[*ConstraintComment] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ConstraintComment)
+		return ok
+	})
+	return (*ElementCollection[*ConstraintComment])(ret)
 }
 
 func (e ConstraintWithoutIndexName) element() {}
@@ -567,32 +578,33 @@ func (e * ElementProto_ConstraintWithoutIndexName) Element() Element {
 }
 
 // ForEachConstraintWithoutIndexName iterates over elements of type ConstraintWithoutIndexName.
+// Deprecated
 func ForEachConstraintWithoutIndexName(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ConstraintWithoutIndexName),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ConstraintWithoutIndexName),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ConstraintWithoutIndexName); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterConstraintWithoutIndexName().ForEach(fn)
 }
 
 // FindConstraintWithoutIndexName finds the first element of type ConstraintWithoutIndexName.
-func FindConstraintWithoutIndexName(b ElementStatusIterator) (current Status, target TargetStatus, element *ConstraintWithoutIndexName) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ConstraintWithoutIndexName); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindConstraintWithoutIndexName(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ConstraintWithoutIndexName) {
+	if tc := c.FilterConstraintWithoutIndexName(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ConstraintWithoutIndexName)
+	}
 	return current, target, element
+}
+
+// ConstraintWithoutIndexNameElements filters elements of type ConstraintWithoutIndexName.
+func (c *ElementCollection[E]) FilterConstraintWithoutIndexName() *ElementCollection[*ConstraintWithoutIndexName] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ConstraintWithoutIndexName)
+		return ok
+	})
+	return (*ElementCollection[*ConstraintWithoutIndexName])(ret)
 }
 
 func (e Database) element() {}
@@ -603,32 +615,33 @@ func (e * ElementProto_Database) Element() Element {
 }
 
 // ForEachDatabase iterates over elements of type Database.
+// Deprecated
 func ForEachDatabase(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Database),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Database),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*Database); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterDatabase().ForEach(fn)
 }
 
 // FindDatabase finds the first element of type Database.
-func FindDatabase(b ElementStatusIterator) (current Status, target TargetStatus, element *Database) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*Database); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindDatabase(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Database) {
+	if tc := c.FilterDatabase(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Database)
+	}
 	return current, target, element
+}
+
+// DatabaseElements filters elements of type Database.
+func (c *ElementCollection[E]) FilterDatabase() *ElementCollection[*Database] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Database)
+		return ok
+	})
+	return (*ElementCollection[*Database])(ret)
 }
 
 func (e DatabaseComment) element() {}
@@ -639,32 +652,33 @@ func (e * ElementProto_DatabaseComment) Element() Element {
 }
 
 // ForEachDatabaseComment iterates over elements of type DatabaseComment.
+// Deprecated
 func ForEachDatabaseComment(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseComment),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseComment),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*DatabaseComment); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterDatabaseComment().ForEach(fn)
 }
 
 // FindDatabaseComment finds the first element of type DatabaseComment.
-func FindDatabaseComment(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseComment) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*DatabaseComment); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindDatabaseComment(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DatabaseComment) {
+	if tc := c.FilterDatabaseComment(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DatabaseComment)
+	}
 	return current, target, element
+}
+
+// DatabaseCommentElements filters elements of type DatabaseComment.
+func (c *ElementCollection[E]) FilterDatabaseComment() *ElementCollection[*DatabaseComment] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DatabaseComment)
+		return ok
+	})
+	return (*ElementCollection[*DatabaseComment])(ret)
 }
 
 func (e DatabaseData) element() {}
@@ -675,32 +689,33 @@ func (e * ElementProto_DatabaseData) Element() Element {
 }
 
 // ForEachDatabaseData iterates over elements of type DatabaseData.
+// Deprecated
 func ForEachDatabaseData(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseData),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseData),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*DatabaseData); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterDatabaseData().ForEach(fn)
 }
 
 // FindDatabaseData finds the first element of type DatabaseData.
-func FindDatabaseData(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseData) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*DatabaseData); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindDatabaseData(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DatabaseData) {
+	if tc := c.FilterDatabaseData(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DatabaseData)
+	}
 	return current, target, element
+}
+
+// DatabaseDataElements filters elements of type DatabaseData.
+func (c *ElementCollection[E]) FilterDatabaseData() *ElementCollection[*DatabaseData] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DatabaseData)
+		return ok
+	})
+	return (*ElementCollection[*DatabaseData])(ret)
 }
 
 func (e DatabaseRegionConfig) element() {}
@@ -711,32 +726,33 @@ func (e * ElementProto_DatabaseRegionConfig) Element() Element {
 }
 
 // ForEachDatabaseRegionConfig iterates over elements of type DatabaseRegionConfig.
+// Deprecated
 func ForEachDatabaseRegionConfig(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseRegionConfig),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseRegionConfig),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*DatabaseRegionConfig); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterDatabaseRegionConfig().ForEach(fn)
 }
 
 // FindDatabaseRegionConfig finds the first element of type DatabaseRegionConfig.
-func FindDatabaseRegionConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseRegionConfig) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*DatabaseRegionConfig); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindDatabaseRegionConfig(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DatabaseRegionConfig) {
+	if tc := c.FilterDatabaseRegionConfig(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DatabaseRegionConfig)
+	}
 	return current, target, element
+}
+
+// DatabaseRegionConfigElements filters elements of type DatabaseRegionConfig.
+func (c *ElementCollection[E]) FilterDatabaseRegionConfig() *ElementCollection[*DatabaseRegionConfig] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DatabaseRegionConfig)
+		return ok
+	})
+	return (*ElementCollection[*DatabaseRegionConfig])(ret)
 }
 
 func (e DatabaseRoleSetting) element() {}
@@ -747,32 +763,33 @@ func (e * ElementProto_DatabaseRoleSetting) Element() Element {
 }
 
 // ForEachDatabaseRoleSetting iterates over elements of type DatabaseRoleSetting.
+// Deprecated
 func ForEachDatabaseRoleSetting(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseRoleSetting),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *DatabaseRoleSetting),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*DatabaseRoleSetting); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterDatabaseRoleSetting().ForEach(fn)
 }
 
 // FindDatabaseRoleSetting finds the first element of type DatabaseRoleSetting.
-func FindDatabaseRoleSetting(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseRoleSetting) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*DatabaseRoleSetting); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindDatabaseRoleSetting(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *DatabaseRoleSetting) {
+	if tc := c.FilterDatabaseRoleSetting(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*DatabaseRoleSetting)
+	}
 	return current, target, element
+}
+
+// DatabaseRoleSettingElements filters elements of type DatabaseRoleSetting.
+func (c *ElementCollection[E]) FilterDatabaseRoleSetting() *ElementCollection[*DatabaseRoleSetting] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*DatabaseRoleSetting)
+		return ok
+	})
+	return (*ElementCollection[*DatabaseRoleSetting])(ret)
 }
 
 func (e EnumType) element() {}
@@ -783,32 +800,33 @@ func (e * ElementProto_EnumType) Element() Element {
 }
 
 // ForEachEnumType iterates over elements of type EnumType.
+// Deprecated
 func ForEachEnumType(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *EnumType),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *EnumType),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*EnumType); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterEnumType().ForEach(fn)
 }
 
 // FindEnumType finds the first element of type EnumType.
-func FindEnumType(b ElementStatusIterator) (current Status, target TargetStatus, element *EnumType) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*EnumType); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindEnumType(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *EnumType) {
+	if tc := c.FilterEnumType(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*EnumType)
+	}
 	return current, target, element
+}
+
+// EnumTypeElements filters elements of type EnumType.
+func (c *ElementCollection[E]) FilterEnumType() *ElementCollection[*EnumType] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*EnumType)
+		return ok
+	})
+	return (*ElementCollection[*EnumType])(ret)
 }
 
 func (e EnumTypeValue) element() {}
@@ -819,32 +837,33 @@ func (e * ElementProto_EnumTypeValue) Element() Element {
 }
 
 // ForEachEnumTypeValue iterates over elements of type EnumTypeValue.
+// Deprecated
 func ForEachEnumTypeValue(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *EnumTypeValue),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *EnumTypeValue),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*EnumTypeValue); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterEnumTypeValue().ForEach(fn)
 }
 
 // FindEnumTypeValue finds the first element of type EnumTypeValue.
-func FindEnumTypeValue(b ElementStatusIterator) (current Status, target TargetStatus, element *EnumTypeValue) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*EnumTypeValue); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindEnumTypeValue(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *EnumTypeValue) {
+	if tc := c.FilterEnumTypeValue(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*EnumTypeValue)
+	}
 	return current, target, element
+}
+
+// EnumTypeValueElements filters elements of type EnumTypeValue.
+func (c *ElementCollection[E]) FilterEnumTypeValue() *ElementCollection[*EnumTypeValue] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*EnumTypeValue)
+		return ok
+	})
+	return (*ElementCollection[*EnumTypeValue])(ret)
 }
 
 func (e ForeignKeyConstraint) element() {}
@@ -855,32 +874,33 @@ func (e * ElementProto_ForeignKeyConstraint) Element() Element {
 }
 
 // ForEachForeignKeyConstraint iterates over elements of type ForeignKeyConstraint.
+// Deprecated
 func ForEachForeignKeyConstraint(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ForeignKeyConstraint),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ForeignKeyConstraint),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ForeignKeyConstraint); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterForeignKeyConstraint().ForEach(fn)
 }
 
 // FindForeignKeyConstraint finds the first element of type ForeignKeyConstraint.
-func FindForeignKeyConstraint(b ElementStatusIterator) (current Status, target TargetStatus, element *ForeignKeyConstraint) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ForeignKeyConstraint); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindForeignKeyConstraint(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ForeignKeyConstraint) {
+	if tc := c.FilterForeignKeyConstraint(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ForeignKeyConstraint)
+	}
 	return current, target, element
+}
+
+// ForeignKeyConstraintElements filters elements of type ForeignKeyConstraint.
+func (c *ElementCollection[E]) FilterForeignKeyConstraint() *ElementCollection[*ForeignKeyConstraint] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ForeignKeyConstraint)
+		return ok
+	})
+	return (*ElementCollection[*ForeignKeyConstraint])(ret)
 }
 
 func (e ForeignKeyConstraintUnvalidated) element() {}
@@ -891,32 +911,33 @@ func (e * ElementProto_ForeignKeyConstraintUnvalidated) Element() Element {
 }
 
 // ForEachForeignKeyConstraintUnvalidated iterates over elements of type ForeignKeyConstraintUnvalidated.
+// Deprecated
 func ForEachForeignKeyConstraintUnvalidated(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ForeignKeyConstraintUnvalidated),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ForeignKeyConstraintUnvalidated),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*ForeignKeyConstraintUnvalidated); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterForeignKeyConstraintUnvalidated().ForEach(fn)
 }
 
 // FindForeignKeyConstraintUnvalidated finds the first element of type ForeignKeyConstraintUnvalidated.
-func FindForeignKeyConstraintUnvalidated(b ElementStatusIterator) (current Status, target TargetStatus, element *ForeignKeyConstraintUnvalidated) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*ForeignKeyConstraintUnvalidated); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindForeignKeyConstraintUnvalidated(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ForeignKeyConstraintUnvalidated) {
+	if tc := c.FilterForeignKeyConstraintUnvalidated(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ForeignKeyConstraintUnvalidated)
+	}
 	return current, target, element
+}
+
+// ForeignKeyConstraintUnvalidatedElements filters elements of type ForeignKeyConstraintUnvalidated.
+func (c *ElementCollection[E]) FilterForeignKeyConstraintUnvalidated() *ElementCollection[*ForeignKeyConstraintUnvalidated] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ForeignKeyConstraintUnvalidated)
+		return ok
+	})
+	return (*ElementCollection[*ForeignKeyConstraintUnvalidated])(ret)
 }
 
 func (e Function) element() {}
@@ -927,32 +948,33 @@ func (e * ElementProto_Function) Element() Element {
 }
 
 // ForEachFunction iterates over elements of type Function.
+// Deprecated
 func ForEachFunction(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Function),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Function),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*Function); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterFunction().ForEach(fn)
 }
 
 // FindFunction finds the first element of type Function.
-func FindFunction(b ElementStatusIterator) (current Status, target TargetStatus, element *Function) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*Function); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindFunction(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Function) {
+	if tc := c.FilterFunction(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Function)
+	}
 	return current, target, element
+}
+
+// FunctionElements filters elements of type Function.
+func (c *ElementCollection[E]) FilterFunction() *ElementCollection[*Function] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Function)
+		return ok
+	})
+	return (*ElementCollection[*Function])(ret)
 }
 
 func (e FunctionBody) element() {}
@@ -963,32 +985,33 @@ func (e * ElementProto_FunctionBody) Element() Element {
 }
 
 // ForEachFunctionBody iterates over elements of type FunctionBody.
+// Deprecated
 func ForEachFunctionBody(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionBody),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionBody),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionBody); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterFunctionBody().ForEach(fn)
 }
 
 // FindFunctionBody finds the first element of type FunctionBody.
-func FindFunctionBody(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionBody) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionBody); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindFunctionBody(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *FunctionBody) {
+	if tc := c.FilterFunctionBody(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*FunctionBody)
+	}
 	return current, target, element
+}
+
+// FunctionBodyElements filters elements of type FunctionBody.
+func (c *ElementCollection[E]) FilterFunctionBody() *ElementCollection[*FunctionBody] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*FunctionBody)
+		return ok
+	})
+	return (*ElementCollection[*FunctionBody])(ret)
 }
 
 func (e FunctionLeakProof) element() {}
@@ -999,32 +1022,33 @@ func (e * ElementProto_FunctionLeakProof) Element() Element {
 }
 
 // ForEachFunctionLeakProof iterates over elements of type FunctionLeakProof.
+// Deprecated
 func ForEachFunctionLeakProof(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionLeakProof),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionLeakProof),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionLeakProof); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterFunctionLeakProof().ForEach(fn)
 }
 
 // FindFunctionLeakProof finds the first element of type FunctionLeakProof.
-func FindFunctionLeakProof(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionLeakProof) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionLeakProof); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindFunctionLeakProof(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *FunctionLeakProof) {
+	if tc := c.FilterFunctionLeakProof(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*FunctionLeakProof)
+	}
 	return current, target, element
+}
+
+// FunctionLeakProofElements filters elements of type FunctionLeakProof.
+func (c *ElementCollection[E]) FilterFunctionLeakProof() *ElementCollection[*FunctionLeakProof] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*FunctionLeakProof)
+		return ok
+	})
+	return (*ElementCollection[*FunctionLeakProof])(ret)
 }
 
 func (e FunctionName) element() {}
@@ -1035,32 +1059,33 @@ func (e * ElementProto_FunctionName) Element() Element {
 }
 
 // ForEachFunctionName iterates over elements of type FunctionName.
+// Deprecated
 func ForEachFunctionName(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionName),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionName),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionName); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterFunctionName().ForEach(fn)
 }
 
 // FindFunctionName finds the first element of type FunctionName.
-func FindFunctionName(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionName) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionName); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindFunctionName(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *FunctionName) {
+	if tc := c.FilterFunctionName(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*FunctionName)
+	}
 	return current, target, element
+}
+
+// FunctionNameElements filters elements of type FunctionName.
+func (c *ElementCollection[E]) FilterFunctionName() *ElementCollection[*FunctionName] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*FunctionName)
+		return ok
+	})
+	return (*ElementCollection[*FunctionName])(ret)
 }
 
 func (e FunctionNullInputBehavior) element() {}
@@ -1071,32 +1096,33 @@ func (e * ElementProto_FunctionNullInputBehavior) Element() Element {
 }
 
 // ForEachFunctionNullInputBehavior iterates over elements of type FunctionNullInputBehavior.
+// Deprecated
 func ForEachFunctionNullInputBehavior(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionNullInputBehavior),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionNullInputBehavior),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionNullInputBehavior); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterFunctionNullInputBehavior().ForEach(fn)
 }
 
 // FindFunctionNullInputBehavior finds the first element of type FunctionNullInputBehavior.
-func FindFunctionNullInputBehavior(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionNullInputBehavior) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionNullInputBehavior); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindFunctionNullInputBehavior(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *FunctionNullInputBehavior) {
+	if tc := c.FilterFunctionNullInputBehavior(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*FunctionNullInputBehavior)
+	}
 	return current, target, element
+}
+
+// FunctionNullInputBehaviorElements filters elements of type FunctionNullInputBehavior.
+func (c *ElementCollection[E]) FilterFunctionNullInputBehavior() *ElementCollection[*FunctionNullInputBehavior] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*FunctionNullInputBehavior)
+		return ok
+	})
+	return (*ElementCollection[*FunctionNullInputBehavior])(ret)
 }
 
 func (e FunctionParamDefaultExpression) element() {}
@@ -1107,32 +1133,33 @@ func (e * ElementProto_FunctionParamDefaultExpression) Element() Element {
 }
 
 // ForEachFunctionParamDefaultExpression iterates over elements of type FunctionParamDefaultExpression.
+// Deprecated
 func ForEachFunctionParamDefaultExpression(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionParamDefaultExpression),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionParamDefaultExpression),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionParamDefaultExpression); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterFunctionParamDefaultExpression().ForEach(fn)
 }
 
 // FindFunctionParamDefaultExpression finds the first element of type FunctionParamDefaultExpression.
-func FindFunctionParamDefaultExpression(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionParamDefaultExpression) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionParamDefaultExpression); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindFunctionParamDefaultExpression(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *FunctionParamDefaultExpression) {
+	if tc := c.FilterFunctionParamDefaultExpression(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*FunctionParamDefaultExpression)
+	}
 	return current, target, element
+}
+
+// FunctionParamDefaultExpressionElements filters elements of type FunctionParamDefaultExpression.
+func (c *ElementCollection[E]) FilterFunctionParamDefaultExpression() *ElementCollection[*FunctionParamDefaultExpression] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*FunctionParamDefaultExpression)
+		return ok
+	})
+	return (*ElementCollection[*FunctionParamDefaultExpression])(ret)
 }
 
 func (e FunctionVolatility) element() {}
@@ -1143,32 +1170,33 @@ func (e * ElementProto_FunctionVolatility) Element() Element {
 }
 
 // ForEachFunctionVolatility iterates over elements of type FunctionVolatility.
+// Deprecated
 func ForEachFunctionVolatility(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionVolatility),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionVolatility),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionVolatility); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterFunctionVolatility().ForEach(fn)
 }
 
 // FindFunctionVolatility finds the first element of type FunctionVolatility.
-func FindFunctionVolatility(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionVolatility) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*FunctionVolatility); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindFunctionVolatility(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *FunctionVolatility) {
+	if tc := c.FilterFunctionVolatility(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*FunctionVolatility)
+	}
 	return current, target, element
+}
+
+// FunctionVolatilityElements filters elements of type FunctionVolatility.
+func (c *ElementCollection[E]) FilterFunctionVolatility() *ElementCollection[*FunctionVolatility] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*FunctionVolatility)
+		return ok
+	})
+	return (*ElementCollection[*FunctionVolatility])(ret)
 }
 
 func (e IndexColumn) element() {}
@@ -1179,32 +1207,33 @@ func (e * ElementProto_IndexColumn) Element() Element {
 }
 
 // ForEachIndexColumn iterates over elements of type IndexColumn.
+// Deprecated
 func ForEachIndexColumn(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexColumn),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexColumn),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*IndexColumn); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterIndexColumn().ForEach(fn)
 }
 
 // FindIndexColumn finds the first element of type IndexColumn.
-func FindIndexColumn(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexColumn) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*IndexColumn); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindIndexColumn(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *IndexColumn) {
+	if tc := c.FilterIndexColumn(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*IndexColumn)
+	}
 	return current, target, element
+}
+
+// IndexColumnElements filters elements of type IndexColumn.
+func (c *ElementCollection[E]) FilterIndexColumn() *ElementCollection[*IndexColumn] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*IndexColumn)
+		return ok
+	})
+	return (*ElementCollection[*IndexColumn])(ret)
 }
 
 func (e IndexComment) element() {}
@@ -1215,32 +1244,33 @@ func (e * ElementProto_IndexComment) Element() Element {
 }
 
 // ForEachIndexComment iterates over elements of type IndexComment.
+// Deprecated
 func ForEachIndexComment(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexComment),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexComment),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*IndexComment); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterIndexComment().ForEach(fn)
 }
 
 // FindIndexComment finds the first element of type IndexComment.
-func FindIndexComment(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexComment) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*IndexComment); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindIndexComment(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *IndexComment) {
+	if tc := c.FilterIndexComment(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*IndexComment)
+	}
 	return current, target, element
+}
+
+// IndexCommentElements filters elements of type IndexComment.
+func (c *ElementCollection[E]) FilterIndexComment() *ElementCollection[*IndexComment] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*IndexComment)
+		return ok
+	})
+	return (*ElementCollection[*IndexComment])(ret)
 }
 
 func (e IndexData) element() {}
@@ -1251,32 +1281,33 @@ func (e * ElementProto_IndexData) Element() Element {
 }
 
 // ForEachIndexData iterates over elements of type IndexData.
+// Deprecated
 func ForEachIndexData(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexData),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexData),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*IndexData); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterIndexData().ForEach(fn)
 }
 
 // FindIndexData finds the first element of type IndexData.
-func FindIndexData(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexData) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*IndexData); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindIndexData(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *IndexData) {
+	if tc := c.FilterIndexData(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*IndexData)
+	}
 	return current, target, element
+}
+
+// IndexDataElements filters elements of type IndexData.
+func (c *ElementCollection[E]) FilterIndexData() *ElementCollection[*IndexData] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*IndexData)
+		return ok
+	})
+	return (*ElementCollection[*IndexData])(ret)
 }
 
 func (e IndexName) element() {}
@@ -1287,32 +1318,33 @@ func (e * ElementProto_IndexName) Element() Element {
 }
 
 // ForEachIndexName iterates over elements of type IndexName.
+// Deprecated
 func ForEachIndexName(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexName),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexName),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*IndexName); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterIndexName().ForEach(fn)
 }
 
 // FindIndexName finds the first element of type IndexName.
-func FindIndexName(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexName) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*IndexName); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindIndexName(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *IndexName) {
+	if tc := c.FilterIndexName(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*IndexName)
+	}
 	return current, target, element
+}
+
+// IndexNameElements filters elements of type IndexName.
+func (c *ElementCollection[E]) FilterIndexName() *ElementCollection[*IndexName] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*IndexName)
+		return ok
+	})
+	return (*ElementCollection[*IndexName])(ret)
 }
 
 func (e IndexPartitioning) element() {}
@@ -1323,32 +1355,33 @@ func (e * ElementProto_IndexPartitioning) Element() Element {
 }
 
 // ForEachIndexPartitioning iterates over elements of type IndexPartitioning.
+// Deprecated
 func ForEachIndexPartitioning(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexPartitioning),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexPartitioning),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*IndexPartitioning); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterIndexPartitioning().ForEach(fn)
 }
 
 // FindIndexPartitioning finds the first element of type IndexPartitioning.
-func FindIndexPartitioning(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexPartitioning) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*IndexPartitioning); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindIndexPartitioning(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *IndexPartitioning) {
+	if tc := c.FilterIndexPartitioning(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*IndexPartitioning)
+	}
 	return current, target, element
+}
+
+// IndexPartitioningElements filters elements of type IndexPartitioning.
+func (c *ElementCollection[E]) FilterIndexPartitioning() *ElementCollection[*IndexPartitioning] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*IndexPartitioning)
+		return ok
+	})
+	return (*ElementCollection[*IndexPartitioning])(ret)
 }
 
 func (e IndexZoneConfig) element() {}
@@ -1359,32 +1392,33 @@ func (e * ElementProto_IndexZoneConfig) Element() Element {
 }
 
 // ForEachIndexZoneConfig iterates over elements of type IndexZoneConfig.
+// Deprecated
 func ForEachIndexZoneConfig(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexZoneConfig),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexZoneConfig),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*IndexZoneConfig); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterIndexZoneConfig().ForEach(fn)
 }
 
 // FindIndexZoneConfig finds the first element of type IndexZoneConfig.
-func FindIndexZoneConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexZoneConfig) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*IndexZoneConfig); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindIndexZoneConfig(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *IndexZoneConfig) {
+	if tc := c.FilterIndexZoneConfig(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*IndexZoneConfig)
+	}
 	return current, target, element
+}
+
+// IndexZoneConfigElements filters elements of type IndexZoneConfig.
+func (c *ElementCollection[E]) FilterIndexZoneConfig() *ElementCollection[*IndexZoneConfig] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*IndexZoneConfig)
+		return ok
+	})
+	return (*ElementCollection[*IndexZoneConfig])(ret)
 }
 
 func (e Namespace) element() {}
@@ -1395,32 +1429,33 @@ func (e * ElementProto_Namespace) Element() Element {
 }
 
 // ForEachNamespace iterates over elements of type Namespace.
+// Deprecated
 func ForEachNamespace(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Namespace),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Namespace),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*Namespace); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterNamespace().ForEach(fn)
 }
 
 // FindNamespace finds the first element of type Namespace.
-func FindNamespace(b ElementStatusIterator) (current Status, target TargetStatus, element *Namespace) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*Namespace); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindNamespace(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Namespace) {
+	if tc := c.FilterNamespace(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Namespace)
+	}
 	return current, target, element
+}
+
+// NamespaceElements filters elements of type Namespace.
+func (c *ElementCollection[E]) FilterNamespace() *ElementCollection[*Namespace] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Namespace)
+		return ok
+	})
+	return (*ElementCollection[*Namespace])(ret)
 }
 
 func (e Owner) element() {}
@@ -1431,32 +1466,33 @@ func (e * ElementProto_Owner) Element() Element {
 }
 
 // ForEachOwner iterates over elements of type Owner.
+// Deprecated
 func ForEachOwner(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Owner),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Owner),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*Owner); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterOwner().ForEach(fn)
 }
 
 // FindOwner finds the first element of type Owner.
-func FindOwner(b ElementStatusIterator) (current Status, target TargetStatus, element *Owner) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*Owner); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindOwner(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Owner) {
+	if tc := c.FilterOwner(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Owner)
+	}
 	return current, target, element
+}
+
+// OwnerElements filters elements of type Owner.
+func (c *ElementCollection[E]) FilterOwner() *ElementCollection[*Owner] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Owner)
+		return ok
+	})
+	return (*ElementCollection[*Owner])(ret)
 }
 
 func (e PrimaryIndex) element() {}
@@ -1467,32 +1503,33 @@ func (e * ElementProto_PrimaryIndex) Element() Element {
 }
 
 // ForEachPrimaryIndex iterates over elements of type PrimaryIndex.
+// Deprecated
 func ForEachPrimaryIndex(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *PrimaryIndex),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *PrimaryIndex),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*PrimaryIndex); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterPrimaryIndex().ForEach(fn)
 }
 
 // FindPrimaryIndex finds the first element of type PrimaryIndex.
-func FindPrimaryIndex(b ElementStatusIterator) (current Status, target TargetStatus, element *PrimaryIndex) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*PrimaryIndex); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindPrimaryIndex(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *PrimaryIndex) {
+	if tc := c.FilterPrimaryIndex(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*PrimaryIndex)
+	}
 	return current, target, element
+}
+
+// PrimaryIndexElements filters elements of type PrimaryIndex.
+func (c *ElementCollection[E]) FilterPrimaryIndex() *ElementCollection[*PrimaryIndex] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*PrimaryIndex)
+		return ok
+	})
+	return (*ElementCollection[*PrimaryIndex])(ret)
 }
 
 func (e RowLevelTTL) element() {}
@@ -1503,32 +1540,33 @@ func (e * ElementProto_RowLevelTTL) Element() Element {
 }
 
 // ForEachRowLevelTTL iterates over elements of type RowLevelTTL.
+// Deprecated
 func ForEachRowLevelTTL(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *RowLevelTTL),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *RowLevelTTL),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*RowLevelTTL); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterRowLevelTTL().ForEach(fn)
 }
 
 // FindRowLevelTTL finds the first element of type RowLevelTTL.
-func FindRowLevelTTL(b ElementStatusIterator) (current Status, target TargetStatus, element *RowLevelTTL) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*RowLevelTTL); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindRowLevelTTL(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *RowLevelTTL) {
+	if tc := c.FilterRowLevelTTL(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*RowLevelTTL)
+	}
 	return current, target, element
+}
+
+// RowLevelTTLElements filters elements of type RowLevelTTL.
+func (c *ElementCollection[E]) FilterRowLevelTTL() *ElementCollection[*RowLevelTTL] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*RowLevelTTL)
+		return ok
+	})
+	return (*ElementCollection[*RowLevelTTL])(ret)
 }
 
 func (e Schema) element() {}
@@ -1539,32 +1577,33 @@ func (e * ElementProto_Schema) Element() Element {
 }
 
 // ForEachSchema iterates over elements of type Schema.
+// Deprecated
 func ForEachSchema(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Schema),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Schema),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*Schema); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterSchema().ForEach(fn)
 }
 
 // FindSchema finds the first element of type Schema.
-func FindSchema(b ElementStatusIterator) (current Status, target TargetStatus, element *Schema) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*Schema); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindSchema(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Schema) {
+	if tc := c.FilterSchema(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Schema)
+	}
 	return current, target, element
+}
+
+// SchemaElements filters elements of type Schema.
+func (c *ElementCollection[E]) FilterSchema() *ElementCollection[*Schema] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Schema)
+		return ok
+	})
+	return (*ElementCollection[*Schema])(ret)
 }
 
 func (e SchemaChild) element() {}
@@ -1575,32 +1614,33 @@ func (e * ElementProto_SchemaChild) Element() Element {
 }
 
 // ForEachSchemaChild iterates over elements of type SchemaChild.
+// Deprecated
 func ForEachSchemaChild(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaChild),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SchemaChild),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaChild); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterSchemaChild().ForEach(fn)
 }
 
 // FindSchemaChild finds the first element of type SchemaChild.
-func FindSchemaChild(b ElementStatusIterator) (current Status, target TargetStatus, element *SchemaChild) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaChild); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindSchemaChild(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *SchemaChild) {
+	if tc := c.FilterSchemaChild(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*SchemaChild)
+	}
 	return current, target, element
+}
+
+// SchemaChildElements filters elements of type SchemaChild.
+func (c *ElementCollection[E]) FilterSchemaChild() *ElementCollection[*SchemaChild] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*SchemaChild)
+		return ok
+	})
+	return (*ElementCollection[*SchemaChild])(ret)
 }
 
 func (e SchemaComment) element() {}
@@ -1611,68 +1651,33 @@ func (e * ElementProto_SchemaComment) Element() Element {
 }
 
 // ForEachSchemaComment iterates over elements of type SchemaComment.
+// Deprecated
 func ForEachSchemaComment(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaComment),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SchemaComment),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaComment); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterSchemaComment().ForEach(fn)
 }
 
 // FindSchemaComment finds the first element of type SchemaComment.
-func FindSchemaComment(b ElementStatusIterator) (current Status, target TargetStatus, element *SchemaComment) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaComment); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindSchemaComment(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *SchemaComment) {
+	if tc := c.FilterSchemaComment(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*SchemaComment)
+	}
 	return current, target, element
 }
 
-func (e SchemaName) element() {}
-
-// Element implements ElementGetter.
-func (e * ElementProto_SchemaName) Element() Element {
-	return e.SchemaName
-}
-
-// ForEachSchemaName iterates over elements of type SchemaName.
-func ForEachSchemaName(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaName),
-) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaName); ok {
-			fn(current, target, elt)
-		}
+// SchemaCommentElements filters elements of type SchemaComment.
+func (c *ElementCollection[E]) FilterSchemaComment() *ElementCollection[*SchemaComment] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*SchemaComment)
+		return ok
 	})
-}
-
-// FindSchemaName finds the first element of type SchemaName.
-func FindSchemaName(b ElementStatusIterator) (current Status, target TargetStatus, element *SchemaName) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaName); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
-	return current, target, element
+	return (*ElementCollection[*SchemaComment])(ret)
 }
 
 func (e SchemaParent) element() {}
@@ -1683,32 +1688,33 @@ func (e * ElementProto_SchemaParent) Element() Element {
 }
 
 // ForEachSchemaParent iterates over elements of type SchemaParent.
+// Deprecated
 func ForEachSchemaParent(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SchemaParent),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SchemaParent),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaParent); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterSchemaParent().ForEach(fn)
 }
 
 // FindSchemaParent finds the first element of type SchemaParent.
-func FindSchemaParent(b ElementStatusIterator) (current Status, target TargetStatus, element *SchemaParent) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*SchemaParent); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindSchemaParent(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *SchemaParent) {
+	if tc := c.FilterSchemaParent(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*SchemaParent)
+	}
 	return current, target, element
+}
+
+// SchemaParentElements filters elements of type SchemaParent.
+func (c *ElementCollection[E]) FilterSchemaParent() *ElementCollection[*SchemaParent] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*SchemaParent)
+		return ok
+	})
+	return (*ElementCollection[*SchemaParent])(ret)
 }
 
 func (e SecondaryIndex) element() {}
@@ -1719,32 +1725,33 @@ func (e * ElementProto_SecondaryIndex) Element() Element {
 }
 
 // ForEachSecondaryIndex iterates over elements of type SecondaryIndex.
+// Deprecated
 func ForEachSecondaryIndex(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SecondaryIndex),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SecondaryIndex),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*SecondaryIndex); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterSecondaryIndex().ForEach(fn)
 }
 
 // FindSecondaryIndex finds the first element of type SecondaryIndex.
-func FindSecondaryIndex(b ElementStatusIterator) (current Status, target TargetStatus, element *SecondaryIndex) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*SecondaryIndex); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindSecondaryIndex(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *SecondaryIndex) {
+	if tc := c.FilterSecondaryIndex(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*SecondaryIndex)
+	}
 	return current, target, element
+}
+
+// SecondaryIndexElements filters elements of type SecondaryIndex.
+func (c *ElementCollection[E]) FilterSecondaryIndex() *ElementCollection[*SecondaryIndex] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*SecondaryIndex)
+		return ok
+	})
+	return (*ElementCollection[*SecondaryIndex])(ret)
 }
 
 func (e SecondaryIndexPartial) element() {}
@@ -1755,32 +1762,33 @@ func (e * ElementProto_SecondaryIndexPartial) Element() Element {
 }
 
 // ForEachSecondaryIndexPartial iterates over elements of type SecondaryIndexPartial.
+// Deprecated
 func ForEachSecondaryIndexPartial(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SecondaryIndexPartial),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SecondaryIndexPartial),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*SecondaryIndexPartial); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterSecondaryIndexPartial().ForEach(fn)
 }
 
 // FindSecondaryIndexPartial finds the first element of type SecondaryIndexPartial.
-func FindSecondaryIndexPartial(b ElementStatusIterator) (current Status, target TargetStatus, element *SecondaryIndexPartial) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*SecondaryIndexPartial); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindSecondaryIndexPartial(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *SecondaryIndexPartial) {
+	if tc := c.FilterSecondaryIndexPartial(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*SecondaryIndexPartial)
+	}
 	return current, target, element
+}
+
+// SecondaryIndexPartialElements filters elements of type SecondaryIndexPartial.
+func (c *ElementCollection[E]) FilterSecondaryIndexPartial() *ElementCollection[*SecondaryIndexPartial] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*SecondaryIndexPartial)
+		return ok
+	})
+	return (*ElementCollection[*SecondaryIndexPartial])(ret)
 }
 
 func (e Sequence) element() {}
@@ -1791,32 +1799,70 @@ func (e * ElementProto_Sequence) Element() Element {
 }
 
 // ForEachSequence iterates over elements of type Sequence.
+// Deprecated
 func ForEachSequence(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Sequence),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Sequence),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*Sequence); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterSequence().ForEach(fn)
 }
 
 // FindSequence finds the first element of type Sequence.
-func FindSequence(b ElementStatusIterator) (current Status, target TargetStatus, element *Sequence) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*Sequence); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindSequence(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Sequence) {
+	if tc := c.FilterSequence(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Sequence)
+	}
 	return current, target, element
+}
+
+// SequenceElements filters elements of type Sequence.
+func (c *ElementCollection[E]) FilterSequence() *ElementCollection[*Sequence] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Sequence)
+		return ok
+	})
+	return (*ElementCollection[*Sequence])(ret)
+}
+
+func (e SequenceOption) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_SequenceOption) Element() Element {
+	return e.SequenceOption
+}
+
+// ForEachSequenceOption iterates over elements of type SequenceOption.
+// Deprecated
+func ForEachSequenceOption(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SequenceOption),
+) {
+  c.FilterSequenceOption().ForEach(fn)
+}
+
+// FindSequenceOption finds the first element of type SequenceOption.
+// Deprecated
+func FindSequenceOption(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *SequenceOption) {
+	if tc := c.FilterSequenceOption(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*SequenceOption)
+	}
+	return current, target, element
+}
+
+// SequenceOptionElements filters elements of type SequenceOption.
+func (c *ElementCollection[E]) FilterSequenceOption() *ElementCollection[*SequenceOption] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*SequenceOption)
+		return ok
+	})
+	return (*ElementCollection[*SequenceOption])(ret)
 }
 
 func (e SequenceOwner) element() {}
@@ -1827,32 +1873,33 @@ func (e * ElementProto_SequenceOwner) Element() Element {
 }
 
 // ForEachSequenceOwner iterates over elements of type SequenceOwner.
+// Deprecated
 func ForEachSequenceOwner(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *SequenceOwner),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SequenceOwner),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*SequenceOwner); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterSequenceOwner().ForEach(fn)
 }
 
 // FindSequenceOwner finds the first element of type SequenceOwner.
-func FindSequenceOwner(b ElementStatusIterator) (current Status, target TargetStatus, element *SequenceOwner) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*SequenceOwner); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindSequenceOwner(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *SequenceOwner) {
+	if tc := c.FilterSequenceOwner(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*SequenceOwner)
+	}
 	return current, target, element
+}
+
+// SequenceOwnerElements filters elements of type SequenceOwner.
+func (c *ElementCollection[E]) FilterSequenceOwner() *ElementCollection[*SequenceOwner] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*SequenceOwner)
+		return ok
+	})
+	return (*ElementCollection[*SequenceOwner])(ret)
 }
 
 func (e Table) element() {}
@@ -1863,32 +1910,33 @@ func (e * ElementProto_Table) Element() Element {
 }
 
 // ForEachTable iterates over elements of type Table.
+// Deprecated
 func ForEachTable(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Table),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *Table),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*Table); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTable().ForEach(fn)
 }
 
 // FindTable finds the first element of type Table.
-func FindTable(b ElementStatusIterator) (current Status, target TargetStatus, element *Table) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*Table); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTable(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *Table) {
+	if tc := c.FilterTable(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*Table)
+	}
 	return current, target, element
+}
+
+// TableElements filters elements of type Table.
+func (c *ElementCollection[E]) FilterTable() *ElementCollection[*Table] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*Table)
+		return ok
+	})
+	return (*ElementCollection[*Table])(ret)
 }
 
 func (e TableComment) element() {}
@@ -1899,32 +1947,33 @@ func (e * ElementProto_TableComment) Element() Element {
 }
 
 // ForEachTableComment iterates over elements of type TableComment.
+// Deprecated
 func ForEachTableComment(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableComment),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableComment),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TableComment); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTableComment().ForEach(fn)
 }
 
 // FindTableComment finds the first element of type TableComment.
-func FindTableComment(b ElementStatusIterator) (current Status, target TargetStatus, element *TableComment) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TableComment); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTableComment(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableComment) {
+	if tc := c.FilterTableComment(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableComment)
+	}
 	return current, target, element
+}
+
+// TableCommentElements filters elements of type TableComment.
+func (c *ElementCollection[E]) FilterTableComment() *ElementCollection[*TableComment] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableComment)
+		return ok
+	})
+	return (*ElementCollection[*TableComment])(ret)
 }
 
 func (e TableData) element() {}
@@ -1935,32 +1984,33 @@ func (e * ElementProto_TableData) Element() Element {
 }
 
 // ForEachTableData iterates over elements of type TableData.
+// Deprecated
 func ForEachTableData(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableData),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableData),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TableData); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTableData().ForEach(fn)
 }
 
 // FindTableData finds the first element of type TableData.
-func FindTableData(b ElementStatusIterator) (current Status, target TargetStatus, element *TableData) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TableData); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTableData(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableData) {
+	if tc := c.FilterTableData(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableData)
+	}
 	return current, target, element
+}
+
+// TableDataElements filters elements of type TableData.
+func (c *ElementCollection[E]) FilterTableData() *ElementCollection[*TableData] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableData)
+		return ok
+	})
+	return (*ElementCollection[*TableData])(ret)
 }
 
 func (e TableLocalityGlobal) element() {}
@@ -1971,32 +2021,33 @@ func (e * ElementProto_TableLocalityGlobal) Element() Element {
 }
 
 // ForEachTableLocalityGlobal iterates over elements of type TableLocalityGlobal.
+// Deprecated
 func ForEachTableLocalityGlobal(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalityGlobal),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableLocalityGlobal),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TableLocalityGlobal); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTableLocalityGlobal().ForEach(fn)
 }
 
 // FindTableLocalityGlobal finds the first element of type TableLocalityGlobal.
-func FindTableLocalityGlobal(b ElementStatusIterator) (current Status, target TargetStatus, element *TableLocalityGlobal) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TableLocalityGlobal); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTableLocalityGlobal(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableLocalityGlobal) {
+	if tc := c.FilterTableLocalityGlobal(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableLocalityGlobal)
+	}
 	return current, target, element
+}
+
+// TableLocalityGlobalElements filters elements of type TableLocalityGlobal.
+func (c *ElementCollection[E]) FilterTableLocalityGlobal() *ElementCollection[*TableLocalityGlobal] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableLocalityGlobal)
+		return ok
+	})
+	return (*ElementCollection[*TableLocalityGlobal])(ret)
 }
 
 func (e TableLocalityPrimaryRegion) element() {}
@@ -2007,32 +2058,33 @@ func (e * ElementProto_TableLocalityPrimaryRegion) Element() Element {
 }
 
 // ForEachTableLocalityPrimaryRegion iterates over elements of type TableLocalityPrimaryRegion.
+// Deprecated
 func ForEachTableLocalityPrimaryRegion(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalityPrimaryRegion),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableLocalityPrimaryRegion),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TableLocalityPrimaryRegion); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTableLocalityPrimaryRegion().ForEach(fn)
 }
 
 // FindTableLocalityPrimaryRegion finds the first element of type TableLocalityPrimaryRegion.
-func FindTableLocalityPrimaryRegion(b ElementStatusIterator) (current Status, target TargetStatus, element *TableLocalityPrimaryRegion) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TableLocalityPrimaryRegion); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTableLocalityPrimaryRegion(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableLocalityPrimaryRegion) {
+	if tc := c.FilterTableLocalityPrimaryRegion(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableLocalityPrimaryRegion)
+	}
 	return current, target, element
+}
+
+// TableLocalityPrimaryRegionElements filters elements of type TableLocalityPrimaryRegion.
+func (c *ElementCollection[E]) FilterTableLocalityPrimaryRegion() *ElementCollection[*TableLocalityPrimaryRegion] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableLocalityPrimaryRegion)
+		return ok
+	})
+	return (*ElementCollection[*TableLocalityPrimaryRegion])(ret)
 }
 
 func (e TableLocalityRegionalByRow) element() {}
@@ -2043,32 +2095,33 @@ func (e * ElementProto_TableLocalityRegionalByRow) Element() Element {
 }
 
 // ForEachTableLocalityRegionalByRow iterates over elements of type TableLocalityRegionalByRow.
+// Deprecated
 func ForEachTableLocalityRegionalByRow(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalityRegionalByRow),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableLocalityRegionalByRow),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TableLocalityRegionalByRow); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTableLocalityRegionalByRow().ForEach(fn)
 }
 
 // FindTableLocalityRegionalByRow finds the first element of type TableLocalityRegionalByRow.
-func FindTableLocalityRegionalByRow(b ElementStatusIterator) (current Status, target TargetStatus, element *TableLocalityRegionalByRow) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TableLocalityRegionalByRow); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTableLocalityRegionalByRow(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableLocalityRegionalByRow) {
+	if tc := c.FilterTableLocalityRegionalByRow(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableLocalityRegionalByRow)
+	}
 	return current, target, element
+}
+
+// TableLocalityRegionalByRowElements filters elements of type TableLocalityRegionalByRow.
+func (c *ElementCollection[E]) FilterTableLocalityRegionalByRow() *ElementCollection[*TableLocalityRegionalByRow] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableLocalityRegionalByRow)
+		return ok
+	})
+	return (*ElementCollection[*TableLocalityRegionalByRow])(ret)
 }
 
 func (e TableLocalitySecondaryRegion) element() {}
@@ -2079,32 +2132,33 @@ func (e * ElementProto_TableLocalitySecondaryRegion) Element() Element {
 }
 
 // ForEachTableLocalitySecondaryRegion iterates over elements of type TableLocalitySecondaryRegion.
+// Deprecated
 func ForEachTableLocalitySecondaryRegion(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableLocalitySecondaryRegion),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableLocalitySecondaryRegion),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TableLocalitySecondaryRegion); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTableLocalitySecondaryRegion().ForEach(fn)
 }
 
 // FindTableLocalitySecondaryRegion finds the first element of type TableLocalitySecondaryRegion.
-func FindTableLocalitySecondaryRegion(b ElementStatusIterator) (current Status, target TargetStatus, element *TableLocalitySecondaryRegion) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TableLocalitySecondaryRegion); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTableLocalitySecondaryRegion(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableLocalitySecondaryRegion) {
+	if tc := c.FilterTableLocalitySecondaryRegion(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableLocalitySecondaryRegion)
+	}
 	return current, target, element
+}
+
+// TableLocalitySecondaryRegionElements filters elements of type TableLocalitySecondaryRegion.
+func (c *ElementCollection[E]) FilterTableLocalitySecondaryRegion() *ElementCollection[*TableLocalitySecondaryRegion] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableLocalitySecondaryRegion)
+		return ok
+	})
+	return (*ElementCollection[*TableLocalitySecondaryRegion])(ret)
 }
 
 func (e TablePartitioning) element() {}
@@ -2115,32 +2169,33 @@ func (e * ElementProto_TablePartitioning) Element() Element {
 }
 
 // ForEachTablePartitioning iterates over elements of type TablePartitioning.
+// Deprecated
 func ForEachTablePartitioning(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TablePartitioning),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TablePartitioning),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TablePartitioning); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTablePartitioning().ForEach(fn)
 }
 
 // FindTablePartitioning finds the first element of type TablePartitioning.
-func FindTablePartitioning(b ElementStatusIterator) (current Status, target TargetStatus, element *TablePartitioning) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TablePartitioning); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTablePartitioning(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TablePartitioning) {
+	if tc := c.FilterTablePartitioning(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TablePartitioning)
+	}
 	return current, target, element
+}
+
+// TablePartitioningElements filters elements of type TablePartitioning.
+func (c *ElementCollection[E]) FilterTablePartitioning() *ElementCollection[*TablePartitioning] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TablePartitioning)
+		return ok
+	})
+	return (*ElementCollection[*TablePartitioning])(ret)
 }
 
 func (e TableSchemaLocked) element() {}
@@ -2151,32 +2206,33 @@ func (e * ElementProto_TableSchemaLocked) Element() Element {
 }
 
 // ForEachTableSchemaLocked iterates over elements of type TableSchemaLocked.
+// Deprecated
 func ForEachTableSchemaLocked(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableSchemaLocked),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableSchemaLocked),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TableSchemaLocked); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTableSchemaLocked().ForEach(fn)
 }
 
 // FindTableSchemaLocked finds the first element of type TableSchemaLocked.
-func FindTableSchemaLocked(b ElementStatusIterator) (current Status, target TargetStatus, element *TableSchemaLocked) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TableSchemaLocked); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTableSchemaLocked(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableSchemaLocked) {
+	if tc := c.FilterTableSchemaLocked(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableSchemaLocked)
+	}
 	return current, target, element
+}
+
+// TableSchemaLockedElements filters elements of type TableSchemaLocked.
+func (c *ElementCollection[E]) FilterTableSchemaLocked() *ElementCollection[*TableSchemaLocked] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableSchemaLocked)
+		return ok
+	})
+	return (*ElementCollection[*TableSchemaLocked])(ret)
 }
 
 func (e TableZoneConfig) element() {}
@@ -2187,32 +2243,33 @@ func (e * ElementProto_TableZoneConfig) Element() Element {
 }
 
 // ForEachTableZoneConfig iterates over elements of type TableZoneConfig.
+// Deprecated
 func ForEachTableZoneConfig(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableZoneConfig),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableZoneConfig),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TableZoneConfig); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTableZoneConfig().ForEach(fn)
 }
 
 // FindTableZoneConfig finds the first element of type TableZoneConfig.
-func FindTableZoneConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *TableZoneConfig) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TableZoneConfig); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTableZoneConfig(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableZoneConfig) {
+	if tc := c.FilterTableZoneConfig(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableZoneConfig)
+	}
 	return current, target, element
+}
+
+// TableZoneConfigElements filters elements of type TableZoneConfig.
+func (c *ElementCollection[E]) FilterTableZoneConfig() *ElementCollection[*TableZoneConfig] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableZoneConfig)
+		return ok
+	})
+	return (*ElementCollection[*TableZoneConfig])(ret)
 }
 
 func (e TemporaryIndex) element() {}
@@ -2223,32 +2280,33 @@ func (e * ElementProto_TemporaryIndex) Element() Element {
 }
 
 // ForEachTemporaryIndex iterates over elements of type TemporaryIndex.
+// Deprecated
 func ForEachTemporaryIndex(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TemporaryIndex),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TemporaryIndex),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*TemporaryIndex); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterTemporaryIndex().ForEach(fn)
 }
 
 // FindTemporaryIndex finds the first element of type TemporaryIndex.
-func FindTemporaryIndex(b ElementStatusIterator) (current Status, target TargetStatus, element *TemporaryIndex) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*TemporaryIndex); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindTemporaryIndex(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TemporaryIndex) {
+	if tc := c.FilterTemporaryIndex(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TemporaryIndex)
+	}
 	return current, target, element
+}
+
+// TemporaryIndexElements filters elements of type TemporaryIndex.
+func (c *ElementCollection[E]) FilterTemporaryIndex() *ElementCollection[*TemporaryIndex] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TemporaryIndex)
+		return ok
+	})
+	return (*ElementCollection[*TemporaryIndex])(ret)
 }
 
 func (e UniqueWithoutIndexConstraint) element() {}
@@ -2259,32 +2317,33 @@ func (e * ElementProto_UniqueWithoutIndexConstraint) Element() Element {
 }
 
 // ForEachUniqueWithoutIndexConstraint iterates over elements of type UniqueWithoutIndexConstraint.
+// Deprecated
 func ForEachUniqueWithoutIndexConstraint(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraint),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraint),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*UniqueWithoutIndexConstraint); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterUniqueWithoutIndexConstraint().ForEach(fn)
 }
 
 // FindUniqueWithoutIndexConstraint finds the first element of type UniqueWithoutIndexConstraint.
-func FindUniqueWithoutIndexConstraint(b ElementStatusIterator) (current Status, target TargetStatus, element *UniqueWithoutIndexConstraint) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*UniqueWithoutIndexConstraint); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindUniqueWithoutIndexConstraint(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *UniqueWithoutIndexConstraint) {
+	if tc := c.FilterUniqueWithoutIndexConstraint(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*UniqueWithoutIndexConstraint)
+	}
 	return current, target, element
+}
+
+// UniqueWithoutIndexConstraintElements filters elements of type UniqueWithoutIndexConstraint.
+func (c *ElementCollection[E]) FilterUniqueWithoutIndexConstraint() *ElementCollection[*UniqueWithoutIndexConstraint] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*UniqueWithoutIndexConstraint)
+		return ok
+	})
+	return (*ElementCollection[*UniqueWithoutIndexConstraint])(ret)
 }
 
 func (e UniqueWithoutIndexConstraintUnvalidated) element() {}
@@ -2295,32 +2354,33 @@ func (e * ElementProto_UniqueWithoutIndexConstraintUnvalidated) Element() Elemen
 }
 
 // ForEachUniqueWithoutIndexConstraintUnvalidated iterates over elements of type UniqueWithoutIndexConstraintUnvalidated.
+// Deprecated
 func ForEachUniqueWithoutIndexConstraintUnvalidated(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraintUnvalidated),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraintUnvalidated),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*UniqueWithoutIndexConstraintUnvalidated); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterUniqueWithoutIndexConstraintUnvalidated().ForEach(fn)
 }
 
 // FindUniqueWithoutIndexConstraintUnvalidated finds the first element of type UniqueWithoutIndexConstraintUnvalidated.
-func FindUniqueWithoutIndexConstraintUnvalidated(b ElementStatusIterator) (current Status, target TargetStatus, element *UniqueWithoutIndexConstraintUnvalidated) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*UniqueWithoutIndexConstraintUnvalidated); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindUniqueWithoutIndexConstraintUnvalidated(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *UniqueWithoutIndexConstraintUnvalidated) {
+	if tc := c.FilterUniqueWithoutIndexConstraintUnvalidated(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*UniqueWithoutIndexConstraintUnvalidated)
+	}
 	return current, target, element
+}
+
+// UniqueWithoutIndexConstraintUnvalidatedElements filters elements of type UniqueWithoutIndexConstraintUnvalidated.
+func (c *ElementCollection[E]) FilterUniqueWithoutIndexConstraintUnvalidated() *ElementCollection[*UniqueWithoutIndexConstraintUnvalidated] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*UniqueWithoutIndexConstraintUnvalidated)
+		return ok
+	})
+	return (*ElementCollection[*UniqueWithoutIndexConstraintUnvalidated])(ret)
 }
 
 func (e UserPrivileges) element() {}
@@ -2331,32 +2391,33 @@ func (e * ElementProto_UserPrivileges) Element() Element {
 }
 
 // ForEachUserPrivileges iterates over elements of type UserPrivileges.
+// Deprecated
 func ForEachUserPrivileges(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *UserPrivileges),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *UserPrivileges),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*UserPrivileges); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterUserPrivileges().ForEach(fn)
 }
 
 // FindUserPrivileges finds the first element of type UserPrivileges.
-func FindUserPrivileges(b ElementStatusIterator) (current Status, target TargetStatus, element *UserPrivileges) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*UserPrivileges); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindUserPrivileges(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *UserPrivileges) {
+	if tc := c.FilterUserPrivileges(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*UserPrivileges)
+	}
 	return current, target, element
+}
+
+// UserPrivilegesElements filters elements of type UserPrivileges.
+func (c *ElementCollection[E]) FilterUserPrivileges() *ElementCollection[*UserPrivileges] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*UserPrivileges)
+		return ok
+	})
+	return (*ElementCollection[*UserPrivileges])(ret)
 }
 
 func (e View) element() {}
@@ -2367,32 +2428,33 @@ func (e * ElementProto_View) Element() Element {
 }
 
 // ForEachView iterates over elements of type View.
+// Deprecated
 func ForEachView(
-	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *View),
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *View),
 ) {
-  if b == nil {
-    return
-  }
-	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
-		if elt, ok := e.(*View); ok {
-			fn(current, target, elt)
-		}
-	})
+  c.FilterView().ForEach(fn)
 }
 
 // FindView finds the first element of type View.
-func FindView(b ElementStatusIterator) (current Status, target TargetStatus, element *View) {
-  if b == nil {
-    return current, target, element
-  }
-	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
-		if elt, ok := e.(*View); ok {
-			element = elt
-			current = c
-			target = t
-		}
-	})
+// Deprecated
+func FindView(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *View) {
+	if tc := c.FilterView(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*View)
+	}
 	return current, target, element
+}
+
+// ViewElements filters elements of type View.
+func (c *ElementCollection[E]) FilterView() *ElementCollection[*View] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*View)
+		return ok
+	})
+	return (*ElementCollection[*View])(ret)
 }//
 // SetElements sets the element inside the protobuf.
 func (e* ElementProto) SetElement(element Element) {
@@ -2490,8 +2552,6 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_SchemaChild{ SchemaChild: t}
 		case *SchemaComment:
 			e.ElementOneOf = &ElementProto_SchemaComment{ SchemaComment: t}
-		case *SchemaName:
-			e.ElementOneOf = &ElementProto_SchemaName{ SchemaName: t}
 		case *SchemaParent:
 			e.ElementOneOf = &ElementProto_SchemaParent{ SchemaParent: t}
 		case *SecondaryIndex:
@@ -2500,6 +2560,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_SecondaryIndexPartial{ SecondaryIndexPartial: t}
 		case *Sequence:
 			e.ElementOneOf = &ElementProto_Sequence{ Sequence: t}
+		case *SequenceOption:
+			e.ElementOneOf = &ElementProto_SequenceOption{ SequenceOption: t}
 		case *SequenceOwner:
 			e.ElementOneOf = &ElementProto_SequenceOwner{ SequenceOwner: t}
 		case *Table:
@@ -2583,11 +2645,11 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_Schema)(nil)),
 	((*ElementProto_SchemaChild)(nil)),
 	((*ElementProto_SchemaComment)(nil)),
-	((*ElementProto_SchemaName)(nil)),
 	((*ElementProto_SchemaParent)(nil)),
 	((*ElementProto_SecondaryIndex)(nil)),
 	((*ElementProto_SecondaryIndexPartial)(nil)),
 	((*ElementProto_Sequence)(nil)),
+	((*ElementProto_SequenceOption)(nil)),
 	((*ElementProto_SequenceOwner)(nil)),
 	((*ElementProto_Table)(nil)),
 	((*ElementProto_TableComment)(nil)),
@@ -2656,11 +2718,11 @@ func GetElementTypes() []interface{} {
 	((*Schema)(nil)),
 	((*SchemaChild)(nil)),
 	((*SchemaComment)(nil)),
-	((*SchemaName)(nil)),
 	((*SchemaParent)(nil)),
 	((*SecondaryIndex)(nil)),
 	((*SecondaryIndexPartial)(nil)),
 	((*Sequence)(nil)),
+	((*SequenceOption)(nil)),
 	((*SequenceOwner)(nil)),
 	((*Table)(nil)),
 	((*TableComment)(nil)),

@@ -298,10 +298,6 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 	return recv.commErr
 }
 
-func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
-	evalCtx.SessionID = sessionID
-}
-
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
 // internal SQL pool before the pool starts explicitly logging overall usage
 // growth in the log.
@@ -506,12 +502,14 @@ func internalExtendedEvalCtx(
 	var sqlStatsController eval.SQLStatsController
 	var schemaTelemetryController eval.SchemaTelemetryController
 	var indexUsageStatsController eval.IndexUsageStatsController
+	var sqlStatsProvider *persistedsqlstats.PersistedSQLStats
 	if ief := execCfg.InternalDB; ief != nil {
 		if ief.server != nil {
 			indexUsageStats = ief.server.indexUsageStats
 			sqlStatsController = ief.server.sqlStatsController
 			schemaTelemetryController = ief.server.schemaTelemetryController
 			indexUsageStatsController = ief.server.indexUsageStatsController
+			sqlStatsProvider = ief.server.sqlStats
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
 			// index usage stats collector. The sql.Server in the ExecutorConfig
@@ -522,6 +520,7 @@ func internalExtendedEvalCtx(
 			sqlStatsController = &persistedsqlstats.Controller{}
 			schemaTelemetryController = &schematelemetrycontroller.Controller{}
 			indexUsageStatsController = &idxusage.Controller{}
+			sqlStatsProvider = &persistedsqlstats.PersistedSQLStats{}
 		}
 	}
 	ret := extendedEvalContext{
@@ -544,6 +543,8 @@ func internalExtendedEvalCtx(
 		Tracing:         &SessionTracing{},
 		Descs:           tables,
 		indexUsageStats: indexUsageStats,
+		statsProvider:   sqlStatsProvider,
+		jobs:            newTxnJobsCollection(),
 	}
 	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)

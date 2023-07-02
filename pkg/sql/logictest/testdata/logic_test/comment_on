@@ -4,7 +4,7 @@ CREATE DATABASE db
 statement ok
 COMMENT ON DATABASE db IS 'A'
 
-query TTTTTTT colnames
+query TTTTTTT colnames,rowsort
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
@@ -17,7 +17,7 @@ test           root   NULL            NULL              {}       NULL           
 statement ok
 COMMENT ON DATABASE db IS 'AAA'
 
-query TTTTTTT colnames
+query TTTTTTT colnames,rowsort
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
@@ -30,7 +30,7 @@ test           root   NULL            NULL              {}       NULL           
 statement ok
 COMMENT ON DATABASE db IS NULL;
 
-query TTTTTTT colnames
+query TTTTTTT colnames,rowsort
 SHOW DATABASES WITH COMMENT
 ----
 database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
@@ -265,7 +265,7 @@ CREATE TABLE t_99316(a INT);
 statement ok
 INSERT INTO system.comments VALUES (4294967122, 't_99316'::regclass::OID, 0, 'bar');
 
-statement error pgcode XX000 internal error: select-comments: invalid comment type 4294967122
+statement error pgcode XX000 internal error: invalid comment type 4294967122
 SELECT * FROM pg_catalog.pg_description WHERE objoid = 't'::regclass::OID;
 
 statement ok

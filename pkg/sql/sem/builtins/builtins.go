@@ -4938,6 +4938,7 @@ value if you rely on the HLC for accuracy.`,
  'external'))`,
 			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id, "service_mode": "external"}'::jsonb)`,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		// This overload is provided for use in tests.
 		tree.Overload{
@@ -4949,6 +4950,7 @@ value if you rely on the HLC for accuracy.`,
 			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'name', $2))`,
 			Info:       `create_tenant(id, name) is an alias for create_tenant('{"id": id, "name": name}'::jsonb)`,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		// This overload is deprecated. Use CREATE TENANT instead.
 		tree.Overload{
@@ -4960,6 +4962,7 @@ value if you rely on the HLC for accuracy.`,
 			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
 DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 	),
 
@@ -4995,6 +4998,7 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Body:       `SELECT crdb_internal.destroy_tenant($1, false)`,
 			Info:       "DO NOT USE -- USE 'DROP TENANT' INSTEAD.",
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -5119,7 +5123,83 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
-				ret, err := evalCtx.CatalogBuiltins.DescriptorWithPostDeserializationChanges(ctx, []byte(s))
+				descIDAlwaysValid := func(id descpb.ID) bool {
+					return true
+				}
+				jobIDAlwaysValid := func(id jobspb.JobID) bool {
+					return true
+				}
+				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
+					ctx, []byte(s), descIDAlwaysValid, jobIDAlwaysValid,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(ret)), nil
+			},
+			Info:       "This function is used to update descriptor representations",
+			Volatility: volatility.Stable,
+		},
+	),
+	"crdb_internal.repaired_descriptor": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "descriptor", Typ: types.Bytes},
+				{Name: "valid_descriptor_ids", Typ: types.IntArray},
+				{Name: "valid_job_ids", Typ: types.IntArray},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				s, ok := tree.AsDBytes(args[0])
+				if !ok {
+					return nil, errors.Newf("expected bytes value, got %T", args[0])
+				}
+				descIDMightExist := func(id descpb.ID) bool { return true }
+				if args[1] != tree.DNull {
+					descIDs, ok := tree.AsDArray(args[1])
+					if !ok {
+						return nil, errors.Newf("expected array value, got %T", args[1])
+					}
+					descIDMap := make(map[descpb.ID]struct{}, descIDs.Len())
+					for i, n := 0, descIDs.Len(); i < n; i++ {
+						id, isInt := tree.AsDInt(descIDs.Array[i])
+						if !isInt {
+							return nil, errors.Newf("expected int value, got %T", descIDs.Array[i])
+						}
+						descIDMap[descpb.ID(id)] = struct{}{}
+					}
+					descIDMightExist = func(id descpb.ID) bool {
+						_, found := descIDMap[id]
+						return found
+					}
+				}
+				nonTerminalJobIDMightExist := func(id jobspb.JobID) bool { return true }
+				if args[2] != tree.DNull {
+					jobIDs, ok := tree.AsDArray(args[2])
+					if !ok {
+						return nil, errors.Newf("expected array value, got %T", args[2])
+					}
+					jobIDMap := make(map[jobspb.JobID]struct{}, jobIDs.Len())
+					for i, n := 0, jobIDs.Len(); i < n; i++ {
+						id, isInt := tree.AsDInt(jobIDs.Array[i])
+						if !isInt {
+							return nil, errors.Newf("expected int value, got %T", jobIDs.Array[i])
+						}
+						jobIDMap[jobspb.JobID(id)] = struct{}{}
+					}
+					nonTerminalJobIDMightExist = func(id jobspb.JobID) bool {
+						_, found := jobIDMap[id]
+						return found
+					}
+				}
+				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
+					ctx, []byte(s), descIDMightExist, nonTerminalJobIDMightExist,
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -5428,19 +5508,8 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				if err != nil {
 					return nil, err
 				}
-				start := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(uint64(sTenID)))
-				end := start.PrefixEnd()
-
-				result := tree.NewDArray(types.Bytes)
-				if err := result.Append(tree.NewDBytes(tree.DBytes(start))); err != nil {
-					return nil, err
-				}
-
-				if err := result.Append(tree.NewDBytes(tree.DBytes(end))); err != nil {
-					return nil, err
-				}
-
-				return result, nil
+				codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(uint64(sTenID)))
+				return spanToDatum(codec.TenantSpan())
 			},
 			Info:       "This function returns the span that contains the keys for the given tenant.",
 			Volatility: volatility.Immutable,
@@ -5457,11 +5526,7 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				if err != nil {
 					return nil, err
 				}
-				start := keys.MakeTenantPrefix(tid)
-				return spanToDatum(roachpb.Span{
-					Key:    start,
-					EndKey: start.PrefixEnd(),
-				})
+				return spanToDatum(keys.MakeSQLCodec(tid).TenantSpan())
 			},
 			Info:       "This function returns the span that contains the keys for the given tenant.",
 			Volatility: volatility.Immutable,
@@ -6384,6 +6449,7 @@ generate_test_objects(pat, num) is an alias for
 generate_test_objects('{"names":pat, "counts":[num]}'::jsonb)
 `,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -6399,6 +6465,7 @@ generate_test_objects(pat, counts) is an alias for
 generate_test_objects('{"names":pat, "counts":counts}'::jsonb)
 `,
 			Volatility: volatility.Volatile,
+			Language:   tree.FunctionLangSQL,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -7630,6 +7697,22 @@ expires until the statement bundle is collected`,
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "span", Typ: types.BytesArray},
+				{Name: "start_time", Typ: types.Decimal},
+				{Name: "all_revisions", Typ: types.Bool},
+				// NB: The function can be called with an AOST clause that will be used
+				// as the `end_time` when issuing the ExportRequests for the purposes of
+				// fingerprinting.
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return verboseFingerprint(ctx, evalCtx, args)
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "span", Typ: types.BytesArray},
 				{Name: "start_time", Typ: types.TimestampTZ},
 				{Name: "all_revisions", Typ: types.Bool},
 				// NB: The function can be called with an AOST clause that will be used
@@ -7638,17 +7721,7 @@ expires until the statement bundle is collected`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if len(args) != 3 {
-					return nil, errors.New("argument list must have three elements")
-				}
-				span, err := parseSpan(args[0])
-				if err != nil {
-					return nil, err
-				}
-				startTime := tree.MustBeDTimestampTZ(args[1]).Time
-				startTimestamp := hlc.Timestamp{WallTime: startTime.UnixNano()}
-				allRevisions := bool(tree.MustBeDBool(args[2]))
-				return fingerprint(ctx, evalCtx, span, startTimestamp, allRevisions /* stripped */, false)
+				return verboseFingerprint(ctx, evalCtx, args)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Stable,
@@ -10260,7 +10333,7 @@ func asJSONBuildObjectKey(
 	case *tree.DBitArray, *tree.DBool, *tree.DBox2D, *tree.DBytes, *tree.DDate,
 		*tree.DDecimal, *tree.DEnum, *tree.DFloat, *tree.DGeography,
 		*tree.DGeometry, *tree.DIPAddr, *tree.DInt, *tree.DInterval, *tree.DOid,
-		*tree.DOidWrapper, *tree.DTime, *tree.DTimeTZ, *tree.DTimestamp,
+		*tree.DOidWrapper, *tree.DPGLSN, *tree.DTime, *tree.DTimeTZ, *tree.DTimestamp,
 		*tree.DTSQuery, *tree.DTSVector, *tree.DUuid, *tree.DVoid:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	default:
