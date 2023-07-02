@@ -37,6 +37,9 @@ func registerImportCancellation(r registry.Registry) {
 			Timeout:   4 * time.Hour,
 			Cluster:   r.MakeClusterSpec(6, spec.CPU(32)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.Spec().Cloud != spec.GCE {
+					t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
+				}
 				runImportCancellation(ctx, t, c, rangeTombstones)
 			},
 		})
