@@ -229,9 +229,17 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		"SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]",
 		[][]string{{"true"}})
 
+	tenant11aRunner, tenant11aRunnerCloser := openDBAndMakeSQLRunner(t, tenant11a.pgURL)
+	defer tenant11aRunnerCloser()
+
+	finalVersion := tenant11aRunner.QueryStr(t, "SELECT * FROM crdb_internal.node_executable_version();")[0][0]
+	// Remove patch release from predecessorVersion.
+	predecessorVersion := predecessor[:strings.LastIndex(predecessor, ".")]
+
 	t.Status("migrating first tenant 11 server to the current version after system tenant is finalized which should fail because second server is still on old binary - expecting a failure here too")
 	expectErr(t, tenant11a.pgURL,
-		`pq: error validating the version of one or more SQL server instances: validate cluster version failed: some tenant pods running on binary less than 23.1`,
+		fmt.Sprintf(`pq: error validating the version of one or more SQL server instances: rpc error: code = Unknown desc = sql server 2 is running a binary version %s which is less than the attempted upgrade version %s
+HINT: check the binary versions of all running SQL server instances to ensure that they are compatible with the attempted upgrade version`, predecessorVersion, finalVersion),
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
 	// Note that here we'd like to validate that the first tenant 11 server can
