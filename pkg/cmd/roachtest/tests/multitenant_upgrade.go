@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -70,6 +71,14 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 //   - Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //   - Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
 func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, v version.Version) {
+	// Update this map with every new release.
+	versionToMinSupportedVersion := map[string]string{
+		"23.2": "22.2",
+	}
+	curBinaryMajorAndMinorVersion := getMajorAndMinorVersionOnly(v)
+	currentBinaryMinSupportedVersion, ok := versionToMinSupportedVersion[curBinaryMajorAndMinorVersion]
+	require.True(t, ok, "current binary '%s' not found in 'versionToMinSupportedVersion' map", curBinaryMajorAndMinorVersion)
+
 	predecessor, err := version.PredecessorVersion(v)
 	require.NoError(t, err)
 
@@ -192,7 +201,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{currentBinaryMinSupportedVersion}}),
 	)
 
 	t.Status("stopping the first tenant 11 server ahead of upgrading")
@@ -396,4 +405,10 @@ func expectErr(t test.Test, url string, error string, query string) {
 	runner, closer := openDBAndMakeSQLRunner(t, url)
 	defer closer()
 	runner.ExpectErr(t, error, query)
+}
+
+func getMajorAndMinorVersionOnly(v version.Version) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d.%d", v.Major(), v.Minor())
+	return b.String()
 }
