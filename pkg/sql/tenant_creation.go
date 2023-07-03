@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -205,6 +205,40 @@ func (p *planner) createTenantInternal(
 			return tid, err
 		}
 		kvs = append(kvs, tenantSettingKV)
+	}
+
+	if targetUser := copyUserPassword.Get(&p.ExecCfg().Settings.SV); targetUser != "" {
+		isAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
+			return tid, err
+		}
+		if !isAdmin {
+			return tid, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to initialize user records for new tenants")
+		}
+		if targetUser == username.RootUser || targetUser == username.AdminRole {
+			return tid, errors.WithHint(
+				errors.Newf("cannot initialize password for reserved user %q", targetUser),
+				"Set the copy_password cluster setting to a different username.")
+		}
+
+		row, err := p.InternalSQLTxn().QueryRowEx(ctx,
+			"get-current-pwd", p.Txn(),
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			`SELECT "hashedPassword" FROM system.users WHERE username = $1`,
+			p.User())
+		if err != nil {
+			return tid, err
+		}
+		hashedPassword, ok := row[0].(*tree.DBytes)
+		if !ok {
+			return tid, errors.AssertionFailedf("unexpected type for hashedPassword: %T", hashedPassword)
+		}
+		userKVs, err := generateTenantUserPasswordKV(codec, targetUser, hashedPassword)
+		if err != nil {
+			return tid, err
+		}
+		kvs = append(kvs, userKVs...)
 	}
 
 	b := p.Txn().NewBatch()
@@ -685,6 +719,13 @@ func updateTenantIDSequence(ctx context.Context, txn isql.Txn, newID uint64) err
 	return nil
 }
 
+var copyUserPassword = settings.RegisterStringSetting(
+	settings.SystemOnly,
+	"sql.create_tenant.copy_password.target_username",
+	"if non-empty, copy the password of the current user from the system tenant to a user record in the new tenant with the given username",
+	"",
+)
+
 // generateTenantClusterSettingKV generates the kv to be written to the store
 // to populate the system.settings table of the tenant implied by codec. This
 // bootstraps the cluster version for the new tenant.
@@ -701,18 +742,13 @@ func generateTenantClusterSettingKV(
 		return roachpb.KeyValue{}, errors.NewAssertionErrorWithWrappedErrf(err,
 			"failed to represent the current time")
 	}
-	kvs, err := rowenc.EncodePrimaryIndex(
-		codec,
-		systemschema.SettingsTable,
-		systemschema.SettingsTable.GetPrimaryIndex(),
-		catalog.ColumnIDToOrdinalMap(systemschema.SettingsTable.PublicColumns()),
-		[]tree.Datum{
-			tree.NewDString(clusterversion.KeyVersionSetting), // name
-			tree.NewDString(string(encoded)),                  // value
-			ts,                                                // lastUpdated
-			tree.NewDString((*settings.VersionSetting)(nil).Typ()), // type
-		},
-		false, /* includeEmpty */
+
+	w := bootstrap.MakeKVWriter(codec, systemschema.SettingsTable)
+	kvs, err := w.RecordToKeyValues(
+		tree.NewDString(clusterversion.KeyVersionSetting), // name
+		tree.NewDString(string(encoded)),                  // value
+		ts,                                                // lastUpdated
+		tree.NewDString((*settings.VersionSetting)(nil).Typ()), // type
 	)
 	if err != nil {
 		return roachpb.KeyValue{}, errors.NewAssertionErrorWithWrappedErrf(err,
@@ -722,8 +758,43 @@ func generateTenantClusterSettingKV(
 		return roachpb.KeyValue{}, errors.AssertionFailedf(
 			"failed to encode cluster setting: expected 1 key-value, got %d", len(kvs))
 	}
-	return roachpb.KeyValue{
-		Key:   kvs[0].Key,
-		Value: kvs[0].Value,
-	}, nil
+	return kvs[0], nil
+}
+
+// generateTenantUserPasswordKV generates the kv to be written to the store
+// to populate the system.users table of the tenant implied by codec.
+func generateTenantUserPasswordKV(
+	codec keys.SQLCodec, targetUsername string, hashedPassword *tree.DBytes,
+) ([]roachpb.KeyValue, error) {
+	// NB: user IDs 1 and 2 are reserved by 'root' and 'admin'.
+	// NB: we do not need to increase RoleIDSequence because
+	// the sequence is initialized to start at 100 already.
+	const tenantUserID = 3
+
+	w1 := bootstrap.MakeKVWriter(codec, systemschema.UsersTable)
+	kvs, err := w1.RecordToKeyValues(
+		tree.NewDString(targetUsername), // username
+		hashedPassword,                  // hashedPassword
+		tree.DBoolFalse,                 // isRole
+		tree.NewDOid(tenantUserID),      // user_id
+	)
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			"failed to encode user entry")
+	}
+
+	w2 := bootstrap.MakeKVWriter(codec, systemschema.RoleMembersTable)
+	kvs2, err := w2.RecordToKeyValues(
+		tree.NewDString(username.AdminRole), // role
+		tree.NewDString(targetUsername),     // member
+		tree.DBoolTrue,                      // isAdmin
+		tree.NewDOid(username.AdminRoleID),  // role_id
+		tree.NewDOid(tenantUserID),          // member_id
+	)
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+			"failed to encode role membership entry")
+	}
+
+	return append(kvs, kvs2...), nil
 }
