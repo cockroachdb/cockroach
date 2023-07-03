@@ -161,12 +161,7 @@ func (r *Replica) evalAndPropose(
 		// example, discovered intents should be pushed to make sure they get
 		// dealt with proactively rather than waiting for a future command to
 		// find them.
-		pr := proposalResult{
-			Reply:              proposal.Local.Reply,
-			Err:                pErr,
-			EncounteredIntents: intents,
-			EndTxns:            endTxns,
-		}
+		pr := makeProposalResult(proposal.Local.Reply, pErr, intents, endTxns)
 		proposal.finishApplication(ctx, pr)
 		return proposalCh, func() {}, "", nil, nil
 	}
@@ -218,10 +213,7 @@ func (r *Replica) evalAndPropose(
 		// Signal the proposal's response channel immediately.
 		reply := *proposal.Local.Reply
 		reply.Responses = append([]kvpb.ResponseUnion(nil), reply.Responses...)
-		pr := proposalResult{
-			Reply:              &reply,
-			EncounteredIntents: proposal.Local.DetachEncounteredIntents(),
-		}
+		pr := makeProposalResult(&reply, nil /* pErr */, proposal.Local.DetachEncounteredIntents(), nil /* eti */)
 		proposal.signalProposalResult(pr)
 
 		// Continue with proposal...
