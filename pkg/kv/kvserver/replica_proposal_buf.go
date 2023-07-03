@@ -1449,5 +1449,5 @@ func (rp *replicaProposer) rejectProposalWithErrLocked(
 	ctx context.Context, prop *ProposalData, pErr *kvpb.Error,
 ) {
 	(*Replica)(rp).cleanupFailedProposalLocked(prop)
-	prop.finishApplication(ctx, proposalResult{Err: pErr})
+	prop.finishApplication(ctx, makeProposalResultPErr(pErr))
 }
