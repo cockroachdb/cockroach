@@ -130,6 +130,23 @@ func newMockReplica(id roachpb.RangeID, nodes ...roachpb.NodeID) *mockReplica {
 	return r
 }
 
+func newMockReplicaEx(id roachpb.RangeID, replicas ...roachpb.ReplicationTarget) *mockReplica {
+	var desc roachpb.RangeDescriptor
+	desc.RangeID = id
+	for _, r := range replicas {
+		desc.AddReplica(r.NodeID, r.StoreID, roachpb.VOTER_FULL)
+	}
+	r := &mockReplica{
+		storeID: 1,
+		rangeID: id,
+		canBump: true,
+		lai:     5,
+		policy:  roachpb.LAG_BY_CLUSTER_SETTING,
+	}
+	r.mu.desc = desc
+	return r
+}
+
 func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdate {
 	targetForPolicy := func(pol roachpb.RangeClosedTimestampPolicy) hlc.Timestamp {
 		return closedts.TargetForPolicy(
@@ -251,6 +268,48 @@ func TestSenderConnectionChanges(t *testing.T) {
 	// - check conns to 3, 4.
 	// Remove followers for range 3.
 	// - check conns to 4.
+}
+
+func TestSenderColocateReplicasOnSameNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	connFactory := &mockConnFactory{}
+	s, stopper := newMockSender(connFactory)
+	defer stopper.Stop(ctx)
+
+	rt := func(node, store int) roachpb.ReplicationTarget {
+		return roachpb.ReplicationTarget{
+			NodeID:  roachpb.NodeID(node),
+			StoreID: roachpb.StoreID(store),
+		}
+	}
+
+	// Add a leaseholder that can close.
+	r1 := newMockReplicaEx(15, rt(1, 1), rt(1, 2), rt(2, 3))
+	s.RegisterLeaseholder(ctx, r1, 1)
+	now := s.publish(ctx)
+	require.Len(t, s.trackedMu.tracked, 1)
+	require.Equal(t, map[roachpb.RangeID]trackedRange{
+		15: {lai: 5, policy: roachpb.LAG_BY_CLUSTER_SETTING},
+	}, s.trackedMu.tracked)
+	require.Len(t, s.leaseholdersMu.leaseholders, 1)
+	// Ensure that we have two connections, one for remote node and one for local.
+	// This is required for colocated replica in store 2.
+	require.Len(t, s.connsMu.conns, 2)
+
+	// Sanity check that buffer contains our leaseholder.
+	require.Equal(t, ctpb.SeqNum(1), s.trackedMu.lastSeqNum)
+	up, ok := s.buf.GetBySeq(ctx, 1)
+	require.True(t, ok)
+	require.Equal(t, roachpb.NodeID(1), up.NodeID)
+	require.Equal(t, ctpb.SeqNum(1), up.SeqNum)
+	require.Equal(t, true, up.Snapshot)
+	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
+	require.Nil(t, up.Removed)
+	require.Equal(t, []ctpb.Update_RangeUpdate{
+		{RangeID: 15, LAI: 5, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
+	}, up.AddedOrUpdated)
 }
 
 func TestSenderSameRangeDifferentStores(t *testing.T) {
