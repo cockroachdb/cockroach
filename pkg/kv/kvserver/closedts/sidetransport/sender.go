@@ -388,7 +388,12 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 		// connections to the other nodes.
 		repls := closeRes.Desc.Replicas().Descriptors()
 		for i := range repls {
-			nodesWithFollowers.Add(int(repls[i].NodeID))
+			// We want to track all followers including ones running on the same node
+			// but different store. We want to bump side transport to update followers
+			// even if two replicas are colocated on the same node during rebalancing.
+			if repls[i].StoreID != lh.StoreID() {
+				nodesWithFollowers.Add(int(repls[i].NodeID))
+			}
 		}
 
 		if !closeRes.OK {
@@ -444,10 +449,13 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 		// Open connections to any node that needs info from us and is missing a conn.
 		nodesWithFollowers.ForEach(func(nid int) {
 			nodeID := roachpb.NodeID(nid)
-			// Note that we don't open a connection to ourselves. The timestamps that
-			// we're closing are written directly to the sideTransportClosedTimestamp
-			// fields of the local replicas in BumpSideTransportClosed.
-			if _, ok := s.connsMu.conns[nodeID]; !ok && nodeID != s.nodeID {
+			// We don't need to update leaseholders because timestamps we are closing
+			// are written directly to the sideTransportClosedTimestamp fields of the
+			// local replicas in BumpSideTransportClosed.
+			// At the same time we can have followers colocated on the same node in
+			// different stores (e.g. during store rebalancing) so we can create
+			// connection to ourselves if we find such replicas.
+			if _, ok := s.connsMu.conns[nodeID]; !ok {
 				c := s.connFactory.new(s, nodeID)
 				c.run(ctx, s.stopper)
 				s.connsMu.conns[nodeID] = c
