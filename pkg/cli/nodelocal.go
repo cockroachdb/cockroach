@@ -11,7 +11,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -27,7 +26,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const chunkSize = 4 * 1024
+var chunkSize = 4 * 1024
 
 var nodeLocalUploadCmd = &cobra.Command{
 	Use:   "upload <source> <destination>",
@@ -72,11 +71,61 @@ func openSourceFile(source string) (io.ReadCloser, error) {
 	return f, nil
 }
 
+// escapingReader is an io.Reader that escapes characters from the
+// underlying reader for processing by the pgwire COPY protocol.
+//
+// TODO(ssd): Can we replace this with something that uses the binary
+// COPY format.
+type escapingReader struct {
+	r io.Reader
+
+	readChunk []byte
+	buf       []byte
+}
+
+func (er *escapingReader) copyBufferTo(b []byte) (int, error) {
+	end := len(b)
+	if end > len(er.buf) {
+		end = len(er.buf)
+	}
+	n := copy(b, er.buf[:end])
+	er.buf = er.buf[end:]
+	return n, nil
+}
+
+func (er *escapingReader) Read(b []byte) (int, error) {
+	// If we have anything left in the buffer from last time,
+	// return it now.
+	if len(er.buf) > 0 {
+		return er.copyBufferTo(b)
+	}
+	if (er.readChunk) == nil {
+		er.readChunk = make([]byte, chunkSize)
+	}
+	for {
+		n, err := er.r.Read(er.readChunk)
+		if n > 0 {
+			er.buf = appendEscapedText(er.buf, er.readChunk[:n])
+			if len(er.buf)+chunkSize > len(b) {
+				break
+			}
+		} else if err == io.EOF {
+			break
+		} else if err != nil {
+			return 0, err
+		}
+	}
+	if len(er.buf) > 0 {
+		return er.copyBufferTo(b)
+	}
+	return 0, io.EOF
+}
+
 // appendEscapedText escapes the input text for processing by the pgwire COPY
 // protocol. The result is appended to the []byte given by buf.
 // This implementation is copied from lib/pq.
 // https://github.com/lib/pq/blob/8c6de565f76fb5cd40a5c1b8ce583fbc3ba1bd0e/encode.go#L138
-func appendEscapedText(buf []byte, text string) []byte {
+func appendEscapedText(buf []byte, text []byte) []byte {
 	escapeNeeded := false
 	startPos := 0
 	var c byte
@@ -130,21 +179,7 @@ func uploadFile(
 		Path:   destination,
 	}
 	stmt := sql.CopyInFileStmt(nodelocalURL.String(), sql.CrdbInternalName, sql.NodelocalFileUploadTable)
-
-	send := make([]byte, 0)
-	tmp := make([]byte, chunkSize)
-	for {
-		n, err := reader.Read(tmp)
-		if n > 0 {
-			send = appendEscapedText(send, string(tmp[:n]))
-		} else if err == io.EOF {
-			break
-		} else if err != nil {
-			return err
-		}
-	}
-
-	if _, err := ex.CopyFrom(ctx, bytes.NewReader(send), stmt); err != nil {
+	if _, err := ex.CopyFrom(ctx, &escapingReader{r: reader}, stmt); err != nil {
 		return err
 	}
 
