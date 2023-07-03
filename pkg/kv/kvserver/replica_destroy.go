@@ -180,10 +180,7 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		r.cleanupFailedProposalLocked(p)
 		// NB: each proposal needs its own version of the error (i.e. don't try to
 		// share the error across proposals).
-		p.finishApplication(ctx, proposalResult{
-			Err: kvpb.NewError(
-				kvpb.NewAmbiguousResultError(apply.ErrRemoved)),
-		})
+		p.finishApplication(ctx, makeProposalResultErr(kvpb.NewAmbiguousResultError(apply.ErrRemoved)))
 	}
 	r.mu.internalRaftGroup = nil
 }
