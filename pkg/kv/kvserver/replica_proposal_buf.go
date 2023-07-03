@@ -603,13 +603,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 
 			// We don't want deduct flow tokens for reproposed commands, and of
 			// course for proposals that didn't integrate with kvflowcontrol.
-			//
-			// TODO(tbg): with useReproposalsV2, we make new proposals in
-			// tryReproposeWithNewLeaseIndex that will have createdAtTicks ==
-			// proposedAtTicks. They will have !reproposal but raftAdmissionMeta=nil.
-			// What is createdAtTicks==proposedAtTicks even good for? The !reproposal
-			// condition already handles the case in which it isn't.
-			shouldAdmit := p.createdAtTicks == p.proposedAtTicks && !reproposal && p.raftAdmissionMeta != nil
+			shouldAdmit := !reproposal && p.raftAdmissionMeta != nil
 			if !shouldAdmit {
 				admitHandles = append(admitHandles, admitEntHandle{})
 			} else {
