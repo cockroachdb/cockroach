@@ -174,7 +174,8 @@ func (r *Replica) executeWriteBatch(
 
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
-	// evalAndPropose.
+	// evalAndPropose. If we return with an error from executeWriteBatch, the
+	// caller reassumes ownership over the Guard.
 	ch, abandon, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {

@@ -1156,6 +1156,29 @@ state machines on this node.`,
 		Measurement: "Commands",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaGuardReplicatedLatency = metric.Metadata{
+		Name: "kv.guard_latency.replicated",
+		Help: `The lifetime of the concurrency Guard for requests that undergo consensus
+replication.
+
+This closes over evaluation, quota pool, replication (including reproposals),
+and application, but notably *not* over sequencing latency, i.e. contention and
+latch acquisition).
+
+This excludes read-only commands as well as read-write commands which end up not
+writing (such as a DeleteRange on an empty span). It also excludes commands that
+result in 'above-replication' errors (i.e. txn retries, etc) but includes errors
+that occur while waiting for the in-flight replication result or result from
+application of the command.
+
+Note that using async consensus (i.e. client returns without waiting to see
+their command apply) doesn't shorten the Guard's lifetime. Note also that we
+signal commands at the beginning of application, but the Guard is held until the
+end of application, i.e. slightly longer.`,
+		Measurement: "Proposals",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	metaRaftLogCommitLatency = metric.Metadata{
 		Name: "raft.process.logcommit.latency",
 		Help: `Latency histogram for committing Raft log entries to stable storage
@@ -2326,6 +2349,7 @@ type StoreMetrics struct {
 	RaftTicks                  *metric.Counter
 	RaftProposalsDropped       *metric.Counter
 	RaftProposalsDroppedLeader *metric.Counter
+	GuardReplicatedLatency     metric.IHistogram
 	RaftQuotaPoolPercentUsed   metric.IHistogram
 	RaftWorkingDurationNanos   *metric.Counter
 	RaftTickingDurationNanos   *metric.Counter
@@ -2963,6 +2987,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RaftTicks:                  metric.NewCounter(metaRaftTicks),
 		RaftProposalsDropped:       metric.NewCounter(metaRaftProposalsDropped),
 		RaftProposalsDroppedLeader: metric.NewCounter(metaRaftProposalsDroppedLeader),
+		GuardReplicatedLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePrometheus,
+			Metadata: metaGuardReplicatedLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.NetworkLatencyBuckets,
+		}),
 		RaftQuotaPoolPercentUsed: metric.NewHistogram(metric.HistogramOptions{
 			Metadata: metaRaftQuotaPoolPercentUsed,
 			Duration: histogramWindow,

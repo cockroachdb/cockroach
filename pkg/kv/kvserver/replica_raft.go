@@ -133,9 +133,10 @@ func (r *Replica) evalAndPropose(
 		return nil, nil, "", nil, pErr
 	}
 
-	// Attach the endCmds to the proposal and assume responsibility for
-	// releasing the concurrency guard if the proposal makes it to Raft.
-	proposal.ec = makeEndCmds(r, g, *st)
+	// Attach the endCmds to the proposal and assume responsibility for releasing
+	// the concurrency guard if the proposal makes it to Raft. If this method
+	// returns with an error, the caller still has ownership over the Guard.
+	proposal.ec = makeEndCmds(r, g, *st, false /* replicated */)
 
 	// Pull out proposal channel to return. proposal.doneCh may be set to
 	// nil if it is signaled in this function.
