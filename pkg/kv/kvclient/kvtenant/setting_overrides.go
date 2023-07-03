@@ -61,7 +61,8 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			}
 			if e.Error != (errorspb.EncodedError{}) {
 				// Hard logical error. We expect io.EOF next.
-				log.Errorf(ctx, "error consuming TenantSettings RPC: %v", e.Error)
+				err := errors.DecodeError(ctx, e.Error)
+				log.Errorf(ctx, "error consuming TenantSettings RPC: %v", err)
 				continue
 			}
 
