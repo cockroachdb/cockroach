@@ -264,6 +264,9 @@ var defaultConfig = func() (cfg *awsConfig) {
 // defaultCreateZones is the list of availability zones used by default for
 // cluster creation. If the geo flag is specified, nodes are distributed between
 // zones.
+// NOTE: a number of AWS roachtests are dependent on us-east-2 for loading fixtures,
+// out of s3://cockroach-fixtures-us-east-2. AWS doesn't support multi-regional buckets, thus resulting in material
+// egress cost if the test loads from a different region. See https://github.com/cockroachdb/cockroach/issues/105968.
 var defaultCreateZones = []string{
 	// N.B. us-east-2a is the default zone for non-geo distributed clusters. It appears to have a higher on-demand
 	// capacity of c7g.8xlarge (graviton3) than us-east-2b.

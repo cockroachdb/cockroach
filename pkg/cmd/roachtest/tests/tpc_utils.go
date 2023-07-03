@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -42,6 +43,10 @@ func loadTPCHDataset(
 	roachNodes option.NodeListOption,
 	disableMergeQueue bool,
 ) (retErr error) {
+	if c.Spec().Cloud != spec.GCE {
+		t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
+	}
+
 	_, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
 	if retErr != nil {
 		return err
