@@ -149,6 +149,7 @@ func newFileUploadMachine(
 	c.parsingEvalCtx = c.p.EvalContext()
 	c.initMonitoring(ctx, parentMon)
 	c.processRows = f.writeFile
+	c.singleRowExpected = true
 	c.forceNotNull = true
 	c.format = tree.CopyFormatText
 	c.null = `\N`

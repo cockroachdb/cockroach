@@ -265,6 +265,12 @@ type copyMachine struct {
 	implicitTxn      bool
 	copyFastPath     bool
 	vectorized       bool
+
+	// singleRowExpected avoids extra copying for text formatted
+	// rows in the case where the callers expects there to only be
+	// one row.
+	singleRowExpected               bool
+	nextSingleRowLineEndSearchStart int
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -692,6 +698,17 @@ func (c *copyMachine) currentBatchSize() int {
 }
 
 func (c *copyMachine) readTextData(ctx context.Context, final bool) (brk bool, err error) {
+	// If we only expect a single row, we avoid unnecessary copies
+	// and quadratic search behaviour by assuming we won't find
+	// the delimiter.
+	if c.singleRowExpected {
+		if !final && !bytes.Contains(c.buf.Bytes()[c.nextSingleRowLineEndSearchStart:], []byte{lineDelim}) {
+			c.nextSingleRowLineEndSearchStart = c.buf.Len()
+			return true, nil
+		}
+		c.nextSingleRowLineEndSearchStart = 0
+	}
+
 	line, err := c.buf.ReadBytes(lineDelim)
 	if err != nil {
 		if err != io.EOF {
