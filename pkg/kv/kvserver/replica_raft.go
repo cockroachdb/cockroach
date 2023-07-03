@@ -165,6 +165,9 @@ func (r *Replica) evalAndPropose(
 		proposal.finishApplication(ctx, pr)
 		return proposalCh, func() {}, "", nil, nil
 	}
+	// Mark the proposal as truly going through replication for metrics
+	// tracking.
+	proposal.ec.replicated = true
 
 	log.VEventf(proposal.ctx, 2,
 		"proposing command to write %d new keys, %d new values, %d new intents, "+

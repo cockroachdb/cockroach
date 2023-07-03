@@ -1259,13 +1259,16 @@ func (r *Replica) collectSpans(
 // either after a write request has achieved consensus and been applied to Raft
 // or after a read-only request has finished evaluation.
 type endCmds struct {
-	repl *Replica
-	g    *concurrency.Guard
-	st   kvserverpb.LeaseStatus // empty for follower reads
+	repl       *Replica
+	g          *concurrency.Guard
+	st         kvserverpb.LeaseStatus // empty for follower reads
+	replicated bool
 }
 
-func makeEndCmds(repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus) endCmds {
-	return endCmds{repl: repl, g: g, st: st}
+func makeEndCmds(
+	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus, replicated bool,
+) endCmds {
+	return endCmds{repl: repl, g: g, st: st, replicated: replicated}
 }
 
 func makeEmptyEndCmds() endCmds {
