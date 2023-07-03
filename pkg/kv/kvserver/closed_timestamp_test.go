@@ -58,6 +58,11 @@ import (
 
 var aggressiveResolvedTimestampClusterArgs = base.TestClusterArgs{
 	ServerArgs: base.TestServerArgs{
+		RaftConfig: base.RaftConfig{
+			// With expiration-based leases, we may be unable to maintain leases under
+			// race and stress, so use a longer lease duration.
+			RangeLeaseDuration: time.Minute,
+		},
 		Knobs: base.TestingKnobs{
 			Store: aggressiveResolvedTimestampPushKnobs(),
 		},
