@@ -58,7 +58,7 @@ type TestCLI struct {
 
 	// t is the testing.T instance used for this test.
 	// Example_xxx tests may have this set to nil.
-	t *testing.T
+	t testing.TB
 	// logScope binds the lifetime of the log files to this test, when t
 	// is not nil.
 	logScope *log.TestLogScope
@@ -72,7 +72,7 @@ type TestCLI struct {
 
 // TestCLIParams contains parameters used by TestCLI.
 type TestCLIParams struct {
-	T        *testing.T
+	T        testing.TB
 	Insecure bool
 	// NoServer, if true, starts the test without a DB server.
 	NoServer bool
