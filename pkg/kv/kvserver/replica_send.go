@@ -1317,6 +1317,9 @@ func (ec *endCmds) done(
 ) {
 	if ec.repl == nil {
 		// The endCmds were cleared.
+		//
+		// TODO(tbg): we shouldn't double-clear a proposal under useReproposalsV2. Verify that.
+		_ = useReproposalsV2
 		return
 	}
 	defer ec.move() // clear
