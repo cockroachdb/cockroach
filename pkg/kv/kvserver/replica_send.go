@@ -1264,11 +1264,19 @@ type endCmds struct {
 	st   kvserverpb.LeaseStatus // empty for follower reads
 }
 
+func makeEndCmds(repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus) endCmds {
+	return endCmds{repl: repl, g: g, st: st}
+}
+
+func makeEmptyEndCmds() endCmds {
+	return endCmds{}
+}
+
 // move moves the endCmds into the return value, clearing and making a call to
 // done on the receiver a no-op.
 func (ec *endCmds) move() endCmds {
 	res := *ec
-	*ec = endCmds{}
+	*ec = makeEmptyEndCmds()
 	return res
 }
 
