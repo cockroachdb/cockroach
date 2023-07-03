@@ -3598,6 +3598,10 @@ func (m *sessionDataMutator) SetUnboundedParallelScans(val bool) {
 	m.data.UnboundedParallelScans = val
 }
 
+func (m *sessionDataMutator) SetReplicationMode(val sessiondatapb.ReplicationMode) {
+	m.data.ReplicationMode = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
