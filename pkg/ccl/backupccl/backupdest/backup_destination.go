@@ -311,9 +311,16 @@ func FindLatestFile(
 	// in the base directory if the first attempt fails.
 
 	// We name files such that the most recent latest file will always
-	// be at the top, so just grab the first filename.
+	// be at the top, so just grab the first filename _unless_ it's the
+	// empty object with a trailing '/'. The latter is never created by our code
+	// but can be created by other tools, e.g., AWS DataSync to transfer an existing backup to
+	// another bucket. (See https://github.com/cockroachdb/cockroach/issues/106070.)
 	err := exportStore.List(ctx, backupbase.LatestHistoryDirectory, "", func(p string) error {
 		p = strings.TrimPrefix(p, "/")
+		if p == "" {
+			// N.B. skip the empty object with a trailing '/', created by a third-party tool.
+			return nil
+		}
 		latestFile = p
 		latestFileFound = true
 		// We only want the first latest file so return an error that it is
