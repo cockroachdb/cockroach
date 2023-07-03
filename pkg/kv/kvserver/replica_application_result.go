@@ -336,7 +336,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndexV2(
 	newEC := origP.ec
 	defer func() {
 		if success {
-			origP.ec = endCmds{}
+			origP.ec = makeEmptyEndCmds()
 		}
 	}()
 
