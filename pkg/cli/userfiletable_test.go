@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -357,13 +358,13 @@ func Example_userfile_upload_recursive() {
 
 func checkUserFileContent(
 	ctx context.Context,
-	t *testing.T,
-	execcCfg interface{},
+	t testing.TB,
+	execCfg interface{},
 	user username.SQLUsername,
 	userfileURI string,
 	expectedContent []byte,
 ) {
-	store, err := execcCfg.(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx,
+	store, err := execCfg.(sql.ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx,
 		userfileURI, user)
 	require.NoError(t, err)
 	reader, _, err := store.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
@@ -371,6 +372,30 @@ func checkUserFileContent(
 	got, err := ioctx.ReadAll(ctx, reader)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(got, expectedContent))
+}
+
+func BenchmarkUserfileUpload(b *testing.B) {
+	c := NewCLITest(TestCLIParams{T: b})
+	defer c.Cleanup()
+
+	dir, cleanFn := testutils.TempDir(b)
+	defer cleanFn()
+
+	dataSize := 64 << 20
+	rnd, _ := randutil.NewTestRand()
+	content := randutil.RandBytes(rnd, dataSize)
+
+	filePath := filepath.Join(dir, "testfile")
+	err := os.WriteFile(filePath, content, 0666)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	b.SetBytes(int64(dataSize))
+	for n := 0; n < b.N; n++ {
+		_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath, fmt.Sprintf("%s-%d", filePath, n)))
+		require.NoError(b, err)
+	}
 }
 
 func TestUserFileUploadRecursive(t *testing.T) {
