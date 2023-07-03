@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -663,6 +664,7 @@ var guardPool = sync.Pool{
 func newGuard(req Request) *Guard {
 	g := guardPool.Get().(*Guard)
 	g.Req = req
+	g.Created = timeutil.Now()
 	return g
 }
 

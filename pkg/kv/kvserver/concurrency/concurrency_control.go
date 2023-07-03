@@ -433,10 +433,11 @@ type Request struct {
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
 // Manager.FinishReq to release the request's resources when it has completed.
 type Guard struct {
-	Req Request
-	lg  latchGuard
-	lm  latchManager
-	ltg lockTableGuard
+	Req     Request
+	Created time.Time
+	lg      latchGuard
+	lm      latchManager
+	ltg     lockTableGuard
 	// The latest RequestEvalKind passed to SequenceReq.
 	EvalKind RequestEvalKind
 }
