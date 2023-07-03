@@ -815,6 +815,17 @@ type proposalResult struct {
 	EndTxns            []result.EndTxnIntents
 }
 
+func makeProposalResult(
+	br *kvpb.BatchResponse, pErr *kvpb.Error, ei []roachpb.Intent, eti []result.EndTxnIntents,
+) proposalResult {
+	return proposalResult{
+		Reply:              br,
+		Err:                pErr,
+		EncounteredIntents: ei,
+		EndTxns:            eti,
+	}
+}
+
 func makeProposalResultPErr(err *kvpb.Error) proposalResult {
 	return proposalResult{Err: err}
 }
