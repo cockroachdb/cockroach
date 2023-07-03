@@ -156,6 +156,11 @@ func (r *Replica) evalAndPropose(
 		endTxns := proposal.Local.DetachEndTxns(pErr != nil /* alwaysOnly */)
 		r.handleReadWriteLocalEvalResult(ctx, *proposal.Local)
 
+		// NB: it is intentional that this returns both an error and results.
+		// Some actions should also be taken if the command itself fails. For
+		// example, discovered intents should be pushed to make sure they get
+		// dealt with proactively rather than waiting for a future command to
+		// find them.
 		pr := proposalResult{
 			Reply:              proposal.Local.Reply,
 			Err:                pErr,
@@ -1420,13 +1425,10 @@ func (r *Replica) refreshProposalsLocked(
 			if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
 				r.cleanupFailedProposalLocked(p)
 				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-				p.finishApplication(ctx, proposalResult{
-					Err: kvpb.NewError(
-						kvpb.NewAmbiguousResultErrorf(
-							"unable to determine whether command was applied via snapshot",
-						),
-					),
-				})
+				p.finishApplication(ctx, makeProposalResultErr(
+					kvpb.NewAmbiguousResultErrorf(
+						"unable to determine whether command was applied via snapshot",
+					)))
 			}
 			continue
 
@@ -1492,9 +1494,8 @@ func (r *Replica) refreshProposalsLocked(
 			p.idKey, p.command.MaxLeaseIndex, p.command.ClosedTimestamp, reason)
 		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
 			r.cleanupFailedProposalLocked(p)
-			p.finishApplication(ctx, proposalResult{
-				Err: kvpb.NewError(kvpb.NewAmbiguousResultError(err)),
-			})
+			p.finishApplication(ctx, makeProposalResultErr(
+				kvpb.NewAmbiguousResultError(err)))
 		}
 	}
 }
@@ -1512,7 +1513,7 @@ func (r *Replica) poisonInflightLatches(err error) {
 			aErr := kvpb.NewAmbiguousResultError(err)
 			// NB: this does not release the request's latches. It's important that
 			// the latches stay in place, since the command could still apply.
-			p.signalProposalResult(proposalResult{Err: kvpb.NewError(aErr)})
+			p.signalProposalResult(makeProposalResultErr(aErr))
 		}
 	}
 }
