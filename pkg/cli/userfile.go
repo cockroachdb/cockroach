@@ -11,7 +11,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -609,20 +608,7 @@ func uploadUserFile(
 	}
 	stmt := sql.CopyInFileStmt(unescapedUserfileURL, sql.CrdbInternalName, sql.UserFileUploadTable)
 
-	send := make([]byte, 0)
-	tmp := make([]byte, chunkSize)
-	for {
-		n, err := reader.Read(tmp)
-		if n > 0 {
-			send = appendEscapedText(send, string(tmp[:n]))
-		} else if err == io.EOF {
-			break
-		} else if err != nil {
-			return "", err
-		}
-	}
-
-	if _, err := ex.CopyFrom(ctx, bytes.NewReader(send), stmt); err != nil {
+	if _, err := ex.CopyFrom(ctx, &escapingReader{r: reader}, stmt); err != nil {
 		return "", err
 	}
 
