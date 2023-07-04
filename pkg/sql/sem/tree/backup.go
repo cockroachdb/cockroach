@@ -469,7 +469,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 
 	if o.AsTenant != nil {
 		maybeAddSep()
-		ctx.WriteString("tenant_name = ")
+		ctx.WriteString("virtual_cluster_name = ")
 		ctx.FormatNode(o.AsTenant)
 	}
 

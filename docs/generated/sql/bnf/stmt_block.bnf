@@ -1453,6 +1453,7 @@ unreserved_keyword ::=
 	| 'VIEWCLUSTERMETADATA'
 	| 'VIEWCLUSTERSETTING'
 	| 'VIEWDEBUG'
+	| 'VIRTUAL_CLUSTER_NAME'
 	| 'VISIBLE'
 	| 'VOLATILE'
 	| 'VOTERS'
@@ -2667,7 +2668,7 @@ restore_options ::=
 	| include_all_clusters
 	| include_all_clusters '=' a_expr
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
-	| 'TENANT_NAME' '=' string_or_placeholder
+	| virtual_cluster_name '=' string_or_placeholder
 	| 'TENANT' '=' string_or_placeholder
 	| 'SCHEMA_ONLY'
 	| 'VERIFY_BACKUP_TABLE_DATA'
@@ -3213,6 +3214,9 @@ labeled_row ::=
 array_expr ::=
 	'[' opt_expr_list ']'
 	| '[' array_expr_list ']'
+
+virtual_cluster_name ::=
+	'VIRTUAL_CLUSTER_NAME'
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -4026,6 +4030,7 @@ bare_label_keywords ::=
 	| 'VIEWCLUSTERSETTING'
 	| 'VIEWDEBUG'
 	| 'VIRTUAL'
+	| 'VIRTUAL_CLUSTER_NAME'
 	| 'VISIBLE'
 	| 'VOLATILE'
 	| 'VOTERS'

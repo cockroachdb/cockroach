@@ -1644,7 +1644,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "restore_options",
-		inline: []string{"include_all_clusters"},
+		inline: []string{"include_all_clusters", "virtual_cluster_name"},
 	},
 }
 
