@@ -1171,7 +1171,7 @@ func restorePlanHook(
 	var restoreAllTenants bool
 	if restoreStmt.Options.IncludeAllSecondaryTenants != nil {
 		if restoreStmt.DescriptorCoverage != tree.AllDescriptors {
-			return nil, nil, nil, false, errors.New("the include_all_secondary_tenants option is only supported for full cluster restores")
+			return nil, nil, nil, false, errors.New("the include_all_virtual_clusters option is only supported for full cluster restores")
 		}
 		var err error
 		restoreAllTenants, err = exprEval.Bool(ctx, restoreStmt.Options.IncludeAllSecondaryTenants)
