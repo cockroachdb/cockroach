@@ -109,7 +109,7 @@ func TestReplicationConnect(t *testing.T) {
 			}
 			require.NoError(t, err)
 			var val string
-			require.NoError(t, conn.QueryRow(ctx, "SELECT current_setting('replication')").Scan(&val))
+			require.NoError(t, conn.QueryRow(ctx, "SELECT current_setting('replication')", pgx.QueryExecModeSimpleProtocol).Scan(&val))
 			require.Equal(t, tc.expectedSessionVar, val)
 		})
 	}

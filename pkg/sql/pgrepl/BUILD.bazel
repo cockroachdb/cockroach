@@ -4,6 +4,7 @@ go_test(
     name = "pgrepl_test",
     srcs = [
         "connect_test.go",
+        "extended_protocol_test.go",
         "pgrepl_test.go",
     ],
     args = ["-test.timeout=295s"],
@@ -21,6 +22,7 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_jackc_pgx_v5//pgconn",
+        "@com_github_jackc_pgx_v5//pgproto3",
         "@com_github_stretchr_testify//require",
     ],
 )
