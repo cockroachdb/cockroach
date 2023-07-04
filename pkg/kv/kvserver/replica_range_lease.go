@@ -1521,7 +1521,7 @@ func (r *Replica) leaseViolatesPreferences(ctx context.Context) bool {
 		return false
 	}
 	for _, preference := range conf.LeasePreferences {
-		if constraint.ConjunctionsCheck(*storeDesc, preference.Constraints) {
+		if constraint.CheckStoreConjunction(*storeDesc, preference.Constraints) {
 			return false
 		}
 	}
