@@ -8859,16 +8859,18 @@ backup_targets:
   }
 // TODO(knz): This should learn how to parse more complex expressions
 // and placeholders.
-| TENANT iconst64
+| virtual_cluster iconst64
   {
+    /* SKIP DOC */
     tenID := uint64($2.int64())
     if tenID == 0 {
       return setErr(sqllex, errors.New("invalid tenant ID"))
     }
     $$.val = tree.BackupTargetList{TenantID: tree.TenantID{Specified: true, ID: tenID}}
   }
-| TENANT IDENT
+| virtual_cluster IDENT
   {
+    /* SKIP DOC */
     // TODO(knz): This rule can go away once the main clause above supports
     // arbitrary expressions.
     if $2 != "_" {

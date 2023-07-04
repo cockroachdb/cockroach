@@ -722,8 +722,6 @@ backup_targets ::=
 	| complex_table_pattern
 	| table_pattern ',' table_pattern_list
 	| 'TABLE' table_pattern_list
-	| 'TENANT' iconst64
-	| 'TENANT' 'identifier'
 	| 'DATABASE' name_list
 
 resume_jobs_stmt ::=
@@ -1857,9 +1855,6 @@ var_name ::=
 restore_options_list ::=
 	( restore_options ) ( ( ',' restore_options ) )*
 
-iconst64 ::=
-	'ICONST'
-
 opt_scrub_options_clause ::=
 	'WITH' 'OPTIONS' scrub_option_list
 	| 
@@ -2258,6 +2253,9 @@ alter_func_set_schema_stmt ::=
 
 alter_func_dep_extension_stmt ::=
 	'ALTER' 'FUNCTION' function_with_paramtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name
+
+iconst64 ::=
+	'ICONST'
 
 alter_backup_schedule_cmds ::=
 	( alter_backup_schedule_cmd ) ( ( ',' alter_backup_schedule_cmd ) )*
