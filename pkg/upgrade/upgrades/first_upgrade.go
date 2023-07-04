@@ -12,6 +12,7 @@ package upgrades
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -105,13 +107,68 @@ func upgradeDescriptors(
 func FirstUpgradeFromReleasePrecondition(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	const q = `SELECT count(*) FROM "".crdb_internal.invalid_objects AS OF SYSTEM TIME '-10s'`
-	row, err := d.InternalExecutor.QueryRow(ctx, "query-invalid-objects", nil /* txn */, q)
-	if err != nil {
+	// For performance reasons, we look back in time when performing
+	// a diagnostic query. If no corruptions were found back then, we assume that
+	// there are no corruptions now. Otherwise, we retry and do everything
+	// without an AOST clause henceforth.
+	withAOST := true
+	diagnose := func(tbl string) (hasRows bool, err error) {
+		q := fmt.Sprintf("SELECT count(*) FROM \"\".crdb_internal.%s", tbl)
+		if withAOST {
+			q = q + " AS OF SYSTEM TIME '-10s'"
+		}
+		row, err := d.InternalExecutor.QueryRow(ctx, "query-"+tbl, nil /* txn */, q)
+		if err == nil && row[0].String() != "0" {
+			hasRows = true
+		}
+		return hasRows, err
+	}
+	// Check for possibility of time travel.
+	if hasRows, err := diagnose("databases"); err != nil {
 		return err
+	} else if !hasRows {
+		// We're looking back in time to before the cluster was bootstrapped
+		// and no databases exist at that point. Disable time-travel henceforth.
+		withAOST = false
 	}
-	if n := row[0].String(); n != "0" {
-		return errors.AssertionFailedf("%s row(s) found in \"\".crdb_internal.invalid_objects, expected none", n)
+	// Check for repairable catalog corruptions.
+	if hasRows, err := diagnose("kv_repairable_catalog_corruptions"); err != nil {
+		return err
+	} else if hasRows {
+		// Attempt to repair catalog corruptions.
+		log.Info(ctx, "auto-repairing catalog corruptions detected during upgrade attempt")
+		const repairQuery = `
+			SELECT crdb_internal.repair_catalog_corruption(id, corruption)
+			FROM "".crdb_internal.kv_repairable_catalog_corruptions`
+		if rows, err := d.InternalExecutor.QueryBuffered(
+			ctx, "repair-catalog-corruptions", nil /* txn */, repairQuery,
+		); err != nil {
+			return err
+		} else if len(rows) > 0 {
+			log.Infof(ctx, "%d catalog corruption(s) might have been repaired", len(rows))
+			// Repairs have actually been performed: stop all time travel henceforth.
+			withAOST = false
+		} else {
+			log.Info(ctx, "no catalog corruptions found to repair during upgrade attempt")
+		}
 	}
-	return nil
+	// Check for all known catalog corruptions.
+	if hasRows, err := diagnose("invalid_objects"); err != nil {
+		return err
+	} else if !hasRows {
+		return nil
+	}
+	if !withAOST {
+		return errors.AssertionFailedf("\"\".crdb_internal.invalid_objects is not empty")
+	}
+	// At this point, corruptions were found using the AS OF SYSTEM TIME clause.
+	// Re-run the diagnosis without the clause, because we might not be seeing
+	// repairs which might have taken place recently.
+	withAOST = false
+	if hasRows, err := diagnose("invalid_objects"); err != nil {
+		return err
+	} else if !hasRows {
+		return nil
+	}
+	return errors.AssertionFailedf("\"\".crdb_internal.invalid_objects is not empty")
 }
