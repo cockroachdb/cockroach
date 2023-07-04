@@ -117,6 +117,7 @@ ${cchar}Release note (enterprise change): \\
 ${cchar}              ^-- e.g., change to backup/restore\\
 ${cchar}Release note (backwards-incompatible change): \\
 ${cchar}Release note (performance improvement): \\
+${cchar}Release note (cluster virtualization): \\
 ${cchar}Release note (bug fix): \\
 
 ;

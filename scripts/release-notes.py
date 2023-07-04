@@ -165,6 +165,7 @@ relnotetitles = {
     'performance improvement': "Performance improvements",
     'bug fix': "Bug fixes",
     'security update': "Security updates",
+    'cluster virtualization': "Cluster virtualization and multi-tenancy",
 }
 
 # Order in which to show the sections.
@@ -175,6 +176,7 @@ relnote_sec_order = [
     'enterprise change',
     'sql change',
     'ops change',
+    'cluster virtualization',
     'cli change',
     'ui change',
     'bug fix',
@@ -197,6 +199,10 @@ cat_misspells = {
     'enterprise': 'enterprise change',
     'security': 'security update',
     'security change': 'security update',
+    'multi-tenant': 'cluster virtualization',
+    'multi tenant': 'cluster virtualization',
+    'multi tenancy': 'cluster virtualization',
+    'virtualization': 'cluster virtualization',
 }
 
 #
