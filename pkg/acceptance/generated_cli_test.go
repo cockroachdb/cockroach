@@ -347,6 +347,13 @@ func TestDockerCLI_test_reconnect(t *testing.T) {
 	runTestDockerCLI(t, "test_reconnect", "../cli/interactive_tests/test_reconnect.tcl")
 }
 
+func TestDockerCLI_test_replication_protocol(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_replication_protocol", "../cli/interactive_tests/test_replication_protocol.tcl")
+}
+
 func TestDockerCLI_test_secure(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
