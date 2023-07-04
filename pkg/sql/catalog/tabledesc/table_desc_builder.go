@@ -191,72 +191,68 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 func (tdb *tableDescriptorBuilder) StripDanglingBackReferences(
 	descIDMightExist func(id descpb.ID) bool, nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 ) error {
+	tbl := tdb.maybeModified
 	// Strip dangling back-references in depended_on_by,
 	{
 		sliceIdx := 0
-		for _, backref := range tdb.maybeModified.DependedOnBy {
-			tdb.maybeModified.DependedOnBy[sliceIdx] = backref
+		for _, backref := range tbl.DependedOnBy {
+			tbl.DependedOnBy[sliceIdx] = backref
 			if descIDMightExist(backref.ID) {
 				sliceIdx++
 			}
 		}
-		if sliceIdx < len(tdb.maybeModified.DependedOnBy) {
-			tdb.maybeModified.DependedOnBy = tdb.maybeModified.DependedOnBy[:sliceIdx]
+		if sliceIdx < len(tbl.DependedOnBy) {
+			tbl.DependedOnBy = tbl.DependedOnBy[:sliceIdx]
 			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 		}
 	}
 	// ... in inbound foreign keys,
 	{
 		sliceIdx := 0
-		for _, backref := range tdb.maybeModified.InboundFKs {
-			tdb.maybeModified.InboundFKs[sliceIdx] = backref
+		for _, backref := range tbl.InboundFKs {
+			tbl.InboundFKs[sliceIdx] = backref
 			if descIDMightExist(backref.OriginTableID) {
 				sliceIdx++
 			}
 		}
-		if sliceIdx < len(tdb.maybeModified.InboundFKs) {
-			tdb.maybeModified.InboundFKs = tdb.maybeModified.InboundFKs[:sliceIdx]
+		if sliceIdx < len(tbl.InboundFKs) {
+			tbl.InboundFKs = tbl.InboundFKs[:sliceIdx]
 			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 		}
 	}
 	// ... in the replacement_of field,
-	if id := tdb.maybeModified.ReplacementOf.ID; id != descpb.InvalidID && !descIDMightExist(id) {
-		tdb.maybeModified.ReplacementOf.Reset()
+	if id := tbl.ReplacementOf.ID; id != descpb.InvalidID && !descIDMightExist(id) {
+		tbl.ReplacementOf.Reset()
 		tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 	}
 	// ... in the drop_job field,
-	if id := tdb.maybeModified.DropJobID; id != jobspb.InvalidJobID && !nonTerminalJobIDMightExist(id) {
-		tdb.maybeModified.DropJobID = jobspb.InvalidJobID
+	if id := tbl.DropJobID; id != jobspb.InvalidJobID && !nonTerminalJobIDMightExist(id) {
+		tbl.DropJobID = jobspb.InvalidJobID
 		tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 	}
 	// ... in the mutation_jobs slice,
 	{
-		var mutationIDs intsets.Fast
-		for _, m := range tdb.maybeModified.Mutations {
-			mutationIDs.Add(int(m.MutationID))
-		}
 		sliceIdx := 0
-		for _, backref := range tdb.maybeModified.MutationJobs {
-			tdb.maybeModified.MutationJobs[sliceIdx] = backref
-			if nonTerminalJobIDMightExist(backref.JobID) &&
-				mutationIDs.Contains(int(backref.MutationID)) {
+		for _, backref := range tbl.MutationJobs {
+			tbl.MutationJobs[sliceIdx] = backref
+			if nonTerminalJobIDMightExist(backref.JobID) {
 				sliceIdx++
 			}
 		}
-		if sliceIdx < len(tdb.maybeModified.MutationJobs) {
-			tdb.maybeModified.MutationJobs = tdb.maybeModified.MutationJobs[:sliceIdx]
+		if sliceIdx < len(tbl.MutationJobs) {
+			tbl.MutationJobs = tbl.MutationJobs[:sliceIdx]
 			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 		}
 	}
 	// ... in the row_level_ttl field,
-	if ttl := tdb.maybeModified.RowLevelTTL; ttl != nil {
+	if ttl := tbl.RowLevelTTL; ttl != nil {
 		if id := jobspb.JobID(ttl.ScheduleID); id != jobspb.InvalidJobID && !nonTerminalJobIDMightExist(id) {
-			tdb.maybeModified.RowLevelTTL = nil
+			tbl.RowLevelTTL = nil
 			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 		}
 	}
 	// ... in the sequence ownership field.
-	if seq := tdb.maybeModified.SequenceOpts; seq != nil {
+	if seq := tbl.SequenceOpts; seq != nil {
 		if id := seq.SequenceOwner.OwnerTableID; id != descpb.InvalidID && !descIDMightExist(id) {
 			seq.SequenceOwner.Reset()
 			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
@@ -398,6 +394,7 @@ func maybeFillInDescriptor(
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
 	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
+	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(desc))
 	return changes, nil
 }
 
@@ -972,6 +969,32 @@ func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged 
 		}
 		if !colIDsUsed.Empty() {
 			ck.ColumnIDs = colIDsUsed.Ordered()
+			hasChanged = true
+		}
+	}
+	return hasChanged
+}
+
+// maybeStripDanglingSelfBackReferences removes any references to things
+// within the table descriptor itself which don't exist.
+//
+// TODO(postamar): extend as needed to column references and whatnot
+func maybeStripDanglingSelfBackReferences(tbl *descpb.TableDescriptor) (hasChanged bool) {
+	var mutationIDs intsets.Fast
+	for _, m := range tbl.Mutations {
+		mutationIDs.Add(int(m.MutationID))
+	}
+	// Remove mutation_jobs entries which don't reference a valid mutation ID.
+	{
+		sliceIdx := 0
+		for _, backref := range tbl.MutationJobs {
+			tbl.MutationJobs[sliceIdx] = backref
+			if mutationIDs.Contains(int(backref.MutationID)) {
+				sliceIdx++
+			}
+		}
+		if sliceIdx < len(tbl.MutationJobs) {
+			tbl.MutationJobs = tbl.MutationJobs[:sliceIdx]
 			hasChanged = true
 		}
 	}
