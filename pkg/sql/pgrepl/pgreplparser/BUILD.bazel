@@ -38,6 +38,7 @@ go_library(
     deps = [
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgrepl/pgrepltree",
         "//pkg/sql/pgwire/pgcode",

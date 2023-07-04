@@ -52,20 +52,20 @@ func TestParser(t *testing.T) {
 					return msg
 				}
 				require.NoError(t, err)
-				ref := p.String()
+				ref := tree.AsString(p.AST)
 				note := ""
 				if ref != td.Input {
 					note = " -- normalized!"
 				}
 				var buf bytes.Buffer
 				fmt.Fprintf(&buf, "%s%s\n", ref, note)
-				constantsHidden := tree.AsStringWithFlags(p, tree.FmtHideConstants)
+				constantsHidden := tree.AsStringWithFlags(p.AST, tree.FmtHideConstants)
 				fmt.Fprintln(&buf, constantsHidden, "-- literals removed")
 
 				// Test roundtrip.
-				reparsed, err := Parse(p.String())
+				reparsed, err := Parse(ref)
 				require.NoError(t, err)
-				assert.Equal(t, p.String(), reparsed.String())
+				assert.Equal(t, ref, tree.AsString(reparsed.AST))
 
 				return buf.String()
 			default:

@@ -1,0 +1,19 @@
+# valid identify_system usages
+identify_system
+----
+systemid: some_cluster_id
+timeline: 1
+xlogpos: some_lsn
+dbname: defaultdb
+
+
+# invalid identify_system usages
+simple_query error
+IDENTIFY_SYSTEM; IDENTIFY_SYSTEM;
+----
+ERROR: at or near "IDENTIFY_SYSTEM": syntax error (SQLSTATE 42601)
+
+simple_query error
+identify_system;
+----
+ERROR: at or near "identify_system": syntax error (SQLSTATE 42601)
