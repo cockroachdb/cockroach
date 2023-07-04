@@ -167,7 +167,7 @@ eexpect ":/# "
 # Check that the cookies work.
 set pyfile [file join [file dirname $argv0] test_auth_cookie.py]
 
-send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?tenant_name=system'\r"
+send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?cluster=system'\r"
 eexpect "username"
 eexpect "demo"
 # No tenant name specified -> use default tenant.
@@ -190,7 +190,7 @@ eexpect "defaultdb>"
 
 set spawn_id $shell_spawn_id
 
-send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?tenant_name=system'\r"
+send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?cluster=system'\r"
 eexpect "username"
 eexpect "demo"
 # No tenant name specified -> use default tenant.
