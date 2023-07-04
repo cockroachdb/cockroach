@@ -434,7 +434,8 @@ SELECT count(replicas)
 		` ./cockroach start --insecure --background --store={store-dir} `+
 			`--log-dir={log-dir} --cache=10% --max-sql-memory=10% `+
 			`--listen-addr=:$[{pgport:1}+10000] --http-port=$[{pgport:1}+1] `+
-			`--join={pghost:1}:{pgport:1}`+
+			`--join={pghost:1}:{pgport:1} `+
+			`--advertise-addr={pghost:1}:$[{pgport:1}+10000] `+
 			`> {log-dir}/cockroach.stdout 2> {log-dir}/cockroach.stderr`)
 	if err != nil {
 		t.Fatal(err)
