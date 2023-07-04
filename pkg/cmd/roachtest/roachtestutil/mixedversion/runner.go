@@ -173,15 +173,7 @@ func (tr *testRunner) run() error {
 // recursively in the case of sequentialRunStep and concurrentRunStep.
 func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	if ss, ok := step.(singleStep); ok {
-		if ss.ID() == 1 {
-			// if this is the first singleStep of the plan, ensure it is an
-			// "initialization step" (i.e., cockroach nodes are ready after
-			// it executes). This is an assumption of the test runner and
-			// makes for clear error messages if that assumption is broken.
-			if err := tr.ensureInitializationStep(ss); err != nil {
-				return err
-			}
-		} else {
+		if ss.ID() > tr.plan.startClusterID {
 			// update the runner's view of the cluster's binary and cluster
 			// versions before every non-initialization `singleStep` is
 			// executed
@@ -407,15 +399,6 @@ func (tr *testRunner) refreshClusterVersions() error {
 	}
 
 	tr.clusterVersions.Store(newClusterVersions)
-	return nil
-}
-
-func (tr *testRunner) ensureInitializationStep(ss singleStep) error {
-	_, isInit := ss.(startFromCheckpointStep)
-	if !isInit {
-		return fmt.Errorf("unexpected initialization type in mixed-version test: %T", ss)
-	}
-
 	return nil
 }
 
