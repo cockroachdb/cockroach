@@ -1,0 +1,55 @@
+parse
+DROP VIRTUAL CLUSTER foo
+----
+DROP VIRTUAL CLUSTER foo
+DROP VIRTUAL CLUSTER (foo) -- fully parenthesized
+DROP VIRTUAL CLUSTER foo -- literals removed
+DROP VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+DROP TENANT foo
+----
+DROP VIRTUAL CLUSTER foo -- normalized!
+DROP VIRTUAL CLUSTER (foo) -- fully parenthesized
+DROP VIRTUAL CLUSTER foo -- literals removed
+DROP VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+DROP VIRTUAL CLUSTER "foo-with-hyphen"
+----
+DROP VIRTUAL CLUSTER "foo-with-hyphen"
+DROP VIRTUAL CLUSTER ("foo-with-hyphen") -- fully parenthesized
+DROP VIRTUAL CLUSTER "foo-with-hyphen" -- literals removed
+DROP VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+DROP VIRTUAL CLUSTER IF EXISTS foo
+----
+DROP VIRTUAL CLUSTER IF EXISTS foo
+DROP VIRTUAL CLUSTER IF EXISTS (foo) -- fully parenthesized
+DROP VIRTUAL CLUSTER IF EXISTS foo -- literals removed
+DROP VIRTUAL CLUSTER IF EXISTS _ -- identifiers removed
+
+parse
+DROP VIRTUAL CLUSTER [123]
+----
+DROP VIRTUAL CLUSTER [123]
+DROP VIRTUAL CLUSTER [(123)] -- fully parenthesized
+DROP VIRTUAL CLUSTER [_] -- literals removed
+DROP VIRTUAL CLUSTER [123] -- identifiers removed
+
+parse
+DROP VIRTUAL CLUSTER [123::INT]
+----
+DROP VIRTUAL CLUSTER [123::INT8] -- normalized!
+DROP VIRTUAL CLUSTER [((123)::INT8)] -- fully parenthesized
+DROP VIRTUAL CLUSTER [_::INT8] -- literals removed
+DROP VIRTUAL CLUSTER [123::INT8] -- identifiers removed
+
+parse
+DROP VIRTUAL CLUSTER foo IMMEDIATE
+----
+DROP VIRTUAL CLUSTER foo IMMEDIATE
+DROP VIRTUAL CLUSTER (foo) IMMEDIATE -- fully parenthesized
+DROP VIRTUAL CLUSTER foo IMMEDIATE -- literals removed
+DROP VIRTUAL CLUSTER _ IMMEDIATE -- identifiers removed
