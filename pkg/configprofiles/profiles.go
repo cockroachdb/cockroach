@@ -101,7 +101,7 @@ var multitenantClusterInitTasks = []autoconfigpb.Task{
 		/* txnSQL */
 		[]string{
 			// Create a main secondary tenant template.
-			"CREATE TENANT template",
+			"CREATE VIRTUAL CLUSTER template",
 			"ALTER TENANT template GRANT ALL CAPABILITIES",
 			// Enable admin scatter/split in tenant SQL.
 			// TODO(knz): Move this to in-tenant config task.
@@ -110,7 +110,7 @@ var multitenantClusterInitTasks = []autoconfigpb.Task{
 		},
 	),
 	// Finally.
-	makeTask("use the application tenant template by default in CREATE TENANT",
+	makeTask("use the application tenant template by default in CREATE VIRTUAL CLUSTER",
 		/* nonTxnSQL */ []string{
 			"SET CLUSTER SETTING sql.create_tenant.default_template = 'template'",
 		},
@@ -124,7 +124,7 @@ var multitenantClusterWithAppServiceInitTasks = append(
 		nil, /* nonTxnSQL */
 		/* txnSQL */ []string{
 			// Create the app tenant record.
-			"CREATE TENANT application",
+			"CREATE VIRTUAL CLUSTER application",
 			// Run the service for the application tenant.
 			"ALTER TENANT application START SERVICE SHARED",
 		},

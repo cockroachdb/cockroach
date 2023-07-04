@@ -25,13 +25,13 @@ type createTenantNode struct {
 }
 
 func (p *planner) CreateTenantNode(ctx context.Context, n *tree.CreateTenant) (planNode, error) {
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "CREATE TENANT")
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "CREATE VIRTUAL CLUSTER")
 	if err != nil {
 		return nil, err
 	}
 	var likeTenantSpec tenantSpec
 	if n.Like.OtherTenant != nil {
-		likeTenantSpec, err = p.planTenantSpec(ctx, n.Like.OtherTenant, "CREATE TENANT LIKE")
+		likeTenantSpec, err = p.planTenantSpec(ctx, n.Like.OtherTenant, "CREATE VIRTUAL CLUSTER LIKE")
 		if err != nil {
 			return nil, err
 		}

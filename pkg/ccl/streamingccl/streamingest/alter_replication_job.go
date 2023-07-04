@@ -40,7 +40,7 @@ var alterReplicationCutoverHeader = colinfo.ResultColumns{
 }
 
 // ResolvedTenantReplicationOptions represents options from an
-// evaluated CREATE TENANT FROM REPLICATION command.
+// evaluated CREATE VIRTUAL CLUSTER FROM REPLICATION command.
 type resolvedTenantReplicationOptions struct {
 	retention *int32
 }
