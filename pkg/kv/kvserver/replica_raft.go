@@ -157,14 +157,15 @@ func (r *Replica) evalAndPropose(
 		// example, discovered intents should be pushed to make sure they get
 		// dealt with proactively rather than waiting for a future command to
 		// find them.
-		proposal.ec = makeEndCmds(r, g, *st)
+		proposal.ec = makeUnreplicatedEndCmds(r, g, *st)
 		pr := makeProposalResult(proposal.Local.Reply, pErr, intents, endTxns)
 		proposal.finishApplication(ctx, pr)
 		return proposalCh, func() {}, "", nil, nil
 	}
 
-	// Make it a truly replicated proposal.
-	proposal.ec = makeEndCmds(r, g, *st)
+	// Make it a truly replicated proposal. We measure the replication latency
+	// from this point on.
+	proposal.ec = makeReplicatedEndCmds(r, g, *st)
 
 	log.VEventf(proposal.ctx, 2,
 		"proposing command to write %d new keys, %d new values, %d new intents, "+

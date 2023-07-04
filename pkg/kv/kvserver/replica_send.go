@@ -14,6 +14,7 @@ import (
 	"context"
 	"reflect"
 	"runtime/pprof"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -1264,7 +1265,13 @@ type endCmds struct {
 	st   kvserverpb.LeaseStatus // empty for follower reads
 }
 
-func makeEndCmds(repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus) endCmds {
+func makeUnreplicatedEndCmds(
+	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus,
+) endCmds {
+	return makeReplicatedEndCmds(repl, g, st, time.Time{})
+}
+
+func makeReplicatedEndCmds(repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus) endCmds {
 	return endCmds{repl: repl, g: g, st: st}
 }
 
