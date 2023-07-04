@@ -1264,7 +1264,13 @@ type endCmds struct {
 	st   kvserverpb.LeaseStatus // empty for follower reads
 }
 
-func makeEndCmds(repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus) endCmds {
+func makeUnreplicatedEndCmds(
+	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus,
+) endCmds {
+	return makeReplicatedEndCmds(repl, g, st)
+}
+
+func makeReplicatedEndCmds(repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus) endCmds {
 	return endCmds{repl: repl, g: g, st: st}
 }
 
