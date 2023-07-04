@@ -1,7 +1,7 @@
 profile
-multitenant+app+sharedservice
+virtual+app+sharedservice+repl
 ----
-canonical profile name: multitenant+app+sharedservice
+canonical profile name: virtual+app+sharedservice+repl
 server started
 
 connect-tenant

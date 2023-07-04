@@ -1,7 +1,7 @@
 profile
-multitenant+noapp+repl
+virtual+noapp+repl
 ----
-canonical profile name: multitenant+noapp+repl
+canonical profile name: virtual+noapp+repl
 server started
 
 system-sql

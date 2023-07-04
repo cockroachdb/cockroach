@@ -107,6 +107,9 @@ var profileHelp = func() string {
 		if _, ok := staticProfiles[a.aliasTarget]; !ok {
 			panic(errors.AssertionFailedf("alias %q refers to non-existent profile %q", name, a.aliasTarget))
 		}
+		if a.hidden {
+			continue
+		}
 		allNames = append(allNames, name)
 	}
 	sort.Strings(allNames)

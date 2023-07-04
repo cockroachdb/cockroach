@@ -20,17 +20,20 @@ import (
 type alias struct {
 	aliasTarget string
 	description string
+	hidden      bool
 }
 
 var aliases = map[string]alias{
 	"replication-source": {
-		aliasTarget: "multitenant+app+sharedservice+repl",
+		aliasTarget: "virtual+app+sharedservice+repl",
 		description: "configuration suitable for a replication source cluster",
 	},
 	"replication-target": {
-		aliasTarget: "multitenant+noapp+repl",
+		aliasTarget: "virtual+noapp+repl",
 		description: "configuration suitable for a replication target cluster",
 	},
+	"multitenant+app+sharedservice+repl": {aliasTarget: "virtual+app+sharedservice+repl", hidden: true},
+	"multitenant+noapp+repl":             {aliasTarget: "virtual+noapp+repl", hidden: true},
 }
 
 const defaultProfileName = "default"
@@ -60,20 +63,20 @@ var staticProfiles = map[string]configProfile{
 			),
 		},
 	},
-	"multitenant+noapp": {
-		description: "multi-tenant cluster with no secondary tenant defined yet",
+	"virtual+noapp": {
+		description: "virtualization enabled but no virtual cluster defined yet",
 		tasks:       multitenantClusterInitTasks,
 	},
-	"multitenant+noapp+repl": {
-		description: "multi-tenant cluster with no secondary tenant defined yet, with replication enabled",
+	"virtual+noapp+repl": {
+		description: "virtualization enabled but no virtual cluster defined yet, with replication enabled",
 		tasks:       enableReplication(multitenantClusterInitTasks),
 	},
-	"multitenant+app+sharedservice": {
-		description: "multi-tenant cluster with one secondary tenant configured to serve SQL application traffic",
+	"virtual+app+sharedservice": {
+		description: "one virtual cluster configured to serve SQL application traffic",
 		tasks:       multitenantClusterWithAppServiceInitTasks,
 	},
-	"multitenant+app+sharedservice+repl": {
-		description: "multi-tenant cluster with one secondary tenant configured to serve SQL application traffic, with replication enabled",
+	"virtual+app+sharedservice+repl": {
+		description: "one virtual cluster configured to serve SQL application traffic, with replication enabled",
 		tasks:       enableReplication(multitenantClusterWithAppServiceInitTasks),
 	},
 }
