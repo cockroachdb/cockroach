@@ -133,10 +133,6 @@ func (r *Replica) evalAndPropose(
 		return nil, nil, "", nil, pErr
 	}
 
-	// Attach the endCmds to the proposal and assume responsibility for
-	// releasing the concurrency guard if the proposal makes it to Raft.
-	proposal.ec = makeEndCmds(r, g, *st)
-
 	// Pull out proposal channel to return. proposal.doneCh may be set to
 	// nil if it is signaled in this function.
 	proposalCh := proposal.doneCh
@@ -156,6 +152,12 @@ func (r *Replica) evalAndPropose(
 		endTxns := proposal.Local.DetachEndTxns(pErr != nil /* alwaysOnly */)
 		r.handleReadWriteLocalEvalResult(ctx, *proposal.Local)
 
+		// NB: it is intentional that this returns both an error and results.
+		// Some actions should also be taken if the command itself fails. For
+		// example, discovered intents should be pushed to make sure they get
+		// dealt with proactively rather than waiting for a future command to
+		// find them.
+		proposal.ec = makeEndCmds(r, g, *st)
 		pr := proposalResult{
 			Reply:              proposal.Local.Reply,
 			Err:                pErr,
@@ -165,6 +167,9 @@ func (r *Replica) evalAndPropose(
 		proposal.finishApplication(ctx, pr)
 		return proposalCh, func() {}, "", nil, nil
 	}
+
+	// Make it a truly replicated proposal.
+	proposal.ec = makeEndCmds(r, g, *st)
 
 	log.VEventf(proposal.ctx, 2,
 		"proposing command to write %d new keys, %d new values, %d new intents, "+
