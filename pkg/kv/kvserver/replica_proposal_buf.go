@@ -548,7 +548,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			}
 
 			ents = ents[len(ents):]
-			firstProp, nextProp = i, i
+			firstProp, nextProp = i+1, i+1
 			admitHandles = admitHandles[len(admitHandles):]
 
 			confChangeCtx := kvserverpb.ConfChangeContext{
