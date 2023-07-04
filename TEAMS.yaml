@@ -98,4 +98,4 @@ cockroachdb/unowned:
   triage_column_id: 0 # TODO
 cockroachdb/migrations:
   label: T-migrations
-  triage_column_id: 19552034
+  triage_column_id: 18330909
