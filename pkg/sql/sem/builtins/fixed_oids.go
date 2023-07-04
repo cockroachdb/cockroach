@@ -2381,6 +2381,7 @@ var builtinOidsArray = []string{
 	2407: `crdb_internal.tenant_span() -> bytes[]`,
 	2411: `to_char(date: date, format: string) -> string`,
 	2412: `crdb_internal.fingerprint(span: bytes[], start_time: decimal, all_revisions: bool) -> int`,
+	2452: `crdb_internal.repaired_descriptor(descriptor: bytes, valid_descriptor_ids: int[], valid_job_ids: int[]) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
