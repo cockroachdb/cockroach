@@ -468,6 +468,7 @@ docker run --privileged -p 9090:9090 \
 	}
 
 	return c.Get(
+		ctx,
 		l,
 		promNode,
 		"/tmp/prometheus/prometheus-snapshot.tar.gz",

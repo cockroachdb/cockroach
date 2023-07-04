@@ -655,7 +655,8 @@ var runCmd = &cobra.Command{
 `,
 	Args: cobra.MinimumNArgs(1),
 	Run: wrap(func(_ *cobra.Command, args []string) error {
-		return roachprod.Run(context.Background(), config.Logger, args[0], extraSSHOptions, tag, secure, os.Stdout, os.Stderr, args[1:])
+		return roachprod.Run(context.Background(), config.Logger, args[0], extraSSHOptions, tag,
+			secure, os.Stdout, os.Stderr, args[1:], install.WithWaitOnFail())
 	}),
 }
 
@@ -802,7 +803,7 @@ multiple nodes the destination file name will be prefixed with the node number.
 		if len(args) == 3 {
 			dest = args[2]
 		}
-		return roachprod.Get(config.Logger, args[0], src, dest)
+		return roachprod.Get(context.Background(), config.Logger, args[0], src, dest)
 	}),
 }
 
@@ -858,7 +859,7 @@ Examples:
 		if cmd.CalledAs() == "pprof-heap" {
 			pprofOpts.Heap = true
 		}
-		return roachprod.Pprof(config.Logger, args[0], pprofOpts)
+		return roachprod.Pprof(context.Background(), config.Logger, args[0], pprofOpts)
 	}),
 }
 

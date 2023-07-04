@@ -183,7 +183,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	l.Printf("%s: starting nodes", c.Name)
 
 	// SSH retries are disabled by passing nil RunRetryOpts
-	if err := c.Parallel(l, "", len(nodes), parallelism, func(nodeIdx int) (*RunResultDetails, error) {
+	if err := c.Parallel(ctx, l, len(nodes), func(ctx context.Context, nodeIdx int) (*RunResultDetails, error) {
 		node := nodes[nodeIdx]
 		res := &RunResultDetails{Node: node}
 		// NB: if cockroach started successfully, we ignore the output as it is
@@ -228,7 +228,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			return res, errors.Wrap(err, "failed to set cluster settings")
 		}
 		return res, nil
-	}, DefaultSSHRetryOpts); err != nil {
+	}, WithConcurrency(parallelism)); err != nil {
 		return err
 	}
 
@@ -329,7 +329,7 @@ func (c *SyncedCluster) ExecSQL(
 	resultChan := make(chan result, len(c.Nodes))
 
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	if err := c.Parallel(l, display, len(c.Nodes), 0, func(nodeIdx int) (*RunResultDetails, error) {
+	if err := c.Parallel(ctx, l, len(c.Nodes), func(ctx context.Context, nodeIdx int) (*RunResultDetails, error) {
 		node := c.Nodes[nodeIdx]
 
 		var cmd string
@@ -348,11 +348,11 @@ func (c *SyncedCluster) ExecSQL(
 		res.CombinedOut = out
 
 		if res.Err != nil {
-			return res, errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
+			res.Err = errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
 		}
 		resultChan <- result{node: node, output: string(res.CombinedOut)}
 		return res, nil
-	}, DefaultSSHRetryOpts); err != nil {
+	}, WithDisplay(display), WithWaitOnFail()); err != nil {
 		return err
 	}
 
