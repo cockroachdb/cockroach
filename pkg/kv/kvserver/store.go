@@ -3364,15 +3364,15 @@ func (s *Store) HottestReplicasByTenant(tenantID roachpb.TenantID) []HotReplicaI
 func mapToHotReplicasInfo(repls []CandidateReplica) []HotReplicaInfo {
 	hotRepls := make([]HotReplicaInfo, len(repls))
 	for i := range repls {
-		loadStats := repls[i].Repl().LoadStats()
+		ri := repls[i].RangeUsageInfo()
 		hotRepls[i].Desc = repls[i].Desc()
-		hotRepls[i].QPS = loadStats.QueriesPerSecond
-		hotRepls[i].RequestsPerSecond = loadStats.RequestsPerSecond
-		hotRepls[i].WriteKeysPerSecond = loadStats.WriteKeysPerSecond
-		hotRepls[i].ReadKeysPerSecond = loadStats.ReadKeysPerSecond
-		hotRepls[i].WriteBytesPerSecond = loadStats.WriteBytesPerSecond
-		hotRepls[i].ReadBytesPerSecond = loadStats.ReadBytesPerSecond
-		hotRepls[i].CPUTimePerSecond = loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
+		hotRepls[i].QPS = ri.QueriesPerSecond
+		hotRepls[i].RequestsPerSecond = ri.RequestsPerSecond
+		hotRepls[i].WriteKeysPerSecond = ri.WritesPerSecond
+		hotRepls[i].ReadKeysPerSecond = ri.ReadsPerSecond
+		hotRepls[i].WriteBytesPerSecond = ri.WriteBytesPerSecond
+		hotRepls[i].ReadBytesPerSecond = ri.ReadBytesPerSecond
+		hotRepls[i].CPUTimePerSecond = ri.RaftCPUNanosPerSecond + ri.RequestCPUNanosPerSecond
 	}
 	return hotRepls
 }
