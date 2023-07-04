@@ -186,7 +186,7 @@ DROP TENANT "five-requiring-quotes"
 statement ok
 set default_transaction_read_only = on;
 
-statement error cannot execute DROP TENANT in a read-only transaction
+statement error cannot execute DROP VIRTUAL CLUSTER in a read-only transaction
 DROP TENANT three
 
 statement ok

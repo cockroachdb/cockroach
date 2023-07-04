@@ -1197,7 +1197,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 %type <tree.Statement> drop_func_stmt
-%type <tree.Statement> drop_tenant_stmt
+%type <tree.Statement> drop_virtual_cluster_stmt
 %type <bool>           opt_immediate
 
 %type <tree.Statement> analyze_stmt
@@ -5307,7 +5307,7 @@ drop_stmt:
 | drop_role_stmt                // EXTEND WITH HELP: DROP ROLE
 | drop_schedule_stmt            // EXTEND WITH HELP: DROP SCHEDULES
 | drop_external_connection_stmt // EXTEND WITH HELP: DROP EXTERNAL CONNECTION
-| drop_tenant_stmt              // EXTEND WITH HELP: DROP TENANT
+| drop_virtual_cluster_stmt     // EXTEND WITH HELP: DROP VIRTUAL CLUSTER
 | drop_unsupported   {}
 | DROP error                    // SHOW HELP: DROP
 
@@ -5454,27 +5454,29 @@ drop_type_stmt:
   }
 | DROP TYPE error // SHOW HELP: DROP TYPE
 
-// %Help: DROP TENANT - remove a tenant
+// %Help: DROP VIRTUAL CLUSTER - remove a virtual cluster
 // %Category: Experimental
-// %Text: DROP TENANT [IF EXISTS] <tenant_spec> [IMMEDIATE]
-drop_tenant_stmt:
-  DROP TENANT tenant_spec opt_immediate
+// %Text: DROP VIRTUAL CLUSTER [IF EXISTS] <tenant_spec> [IMMEDIATE]
+drop_virtual_cluster_stmt:
+  DROP virtual_cluster tenant_spec opt_immediate
   {
+   /* SKIP DOC */
    $$.val = &tree.DropTenant{
       TenantSpec: $3.tenantSpec(),
       IfExists: false,
       Immediate: $4.bool(),
     }
   }
-| DROP TENANT IF EXISTS tenant_spec opt_immediate
+| DROP virtual_cluster IF EXISTS tenant_spec opt_immediate
   {
+    /* SKIP DOC */
     $$.val = &tree.DropTenant{
       TenantSpec: $5.tenantSpec(),
       IfExists: true,
       Immediate: $6.bool(),
     }
   }
-| DROP TENANT error // SHOW HELP: DROP TENANT
+| DROP virtual_cluster error // SHOW HELP: DROP VIRTUAL CLUSTER
 
 opt_immediate:
   /* EMPTY */

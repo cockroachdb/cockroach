@@ -1084,7 +1084,7 @@ func (*DropTenant) StatementReturnType() StatementReturnType { return Ack }
 func (*DropTenant) StatementType() StatementType { return TypeDCL }
 
 // StatementTag implements the Statement interface.
-func (*DropTenant) StatementTag() string { return "DROP TENANT" }
+func (*DropTenant) StatementTag() string { return "DROP VIRTUAL CLUSTER" }
 
 // StatementReturnType implements the Statement interface.
 func (*Execute) StatementReturnType() StatementReturnType { return Unknown }
