@@ -208,7 +208,6 @@ type proposerRaft interface {
 	Step(raftpb.Message) error
 	Status() raft.Status
 	BasicStatus() raft.BasicStatus
-	ProposeConfChange(raftpb.ConfChangeI) error
 	Campaign() error
 }
 
