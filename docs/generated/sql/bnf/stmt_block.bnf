@@ -1166,6 +1166,7 @@ unreserved_keyword ::=
 	| 'INCLUDE'
 	| 'INCLUDING'
 	| 'INCLUDE_ALL_SECONDARY_TENANTS'
+	| 'INCLUDE_ALL_VIRTUAL_CLUSTERS'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
 	| 'INCREMENTAL_LOCATION'
@@ -2304,8 +2305,7 @@ backup_options ::=
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
-	| 'INCLUDE_ALL_SECONDARY_TENANTS'
-	| 'INCLUDE_ALL_SECONDARY_TENANTS' '=' a_expr
+	| include_all_clusters '=' a_expr
 
 c_expr ::=
 	d_expr
@@ -2664,8 +2664,8 @@ restore_options ::=
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
 	| 'NEW_DB_NAME' '=' string_or_placeholder
-	| 'INCLUDE_ALL_SECONDARY_TENANTS'
-	| 'INCLUDE_ALL_SECONDARY_TENANTS' '=' a_expr
+	| include_all_clusters
+	| include_all_clusters '=' a_expr
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'TENANT_NAME' '=' string_or_placeholder
 	| 'TENANT' '=' string_or_placeholder
@@ -2985,6 +2985,9 @@ role_option ::=
 	| 'NOVIEWCLUSTERSETTING'
 	| password_clause
 	| valid_until_clause
+
+include_all_clusters ::=
+	'INCLUDE_ALL_VIRTUAL_CLUSTERS'
 
 array_subscripts ::=
 	( array_subscript ) ( ( array_subscript ) )*
@@ -3674,6 +3677,7 @@ bare_label_keywords ::=
 	| 'IN'
 	| 'INCLUDE'
 	| 'INCLUDE_ALL_SECONDARY_TENANTS'
+	| 'INCLUDE_ALL_VIRTUAL_CLUSTERS'
 	| 'INCLUDING'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
