@@ -109,10 +109,11 @@ func TestStripDanglingBackReferences(t *testing.T) {
 				MutationJobs: []descpb.TableDescriptor_MutationJob{
 					{JobID: 1, MutationID: 1},
 					{JobID: 111222333444, MutationID: 1},
-					{JobID: 2, MutationID: 1},
+					{JobID: 2, MutationID: 2},
 				},
 				Mutations: []descpb.DescriptorMutation{
 					{MutationID: 1},
+					{MutationID: 2},
 				},
 				DropJobID: 1,
 				RowLevelTTL: &catpb.RowLevelTTL{
@@ -127,35 +128,11 @@ func TestStripDanglingBackReferences(t *testing.T) {
 				},
 				Mutations: []descpb.DescriptorMutation{
 					{MutationID: 1},
+					{MutationID: 2},
 				},
 			},
 			validDescIDs: catalog.MakeDescriptorIDSet(100, 101, 104, 105),
 			validJobIDs:  map[jobspb.JobID]struct{}{111222333444: {}},
-		},
-		{
-			name: "mutation IDs",
-			input: descpb.TableDescriptor{
-				Name: "foo",
-				ID:   104,
-				MutationJobs: []descpb.TableDescriptor_MutationJob{
-					{JobID: 555666777888, MutationID: 123}, {JobID: 111222333444, MutationID: 1},
-				},
-				Mutations: []descpb.DescriptorMutation{
-					{MutationID: 1},
-				},
-			},
-			expectedOutput: descpb.TableDescriptor{
-				Name: "foo",
-				ID:   104,
-				MutationJobs: []descpb.TableDescriptor_MutationJob{
-					{JobID: 111222333444, MutationID: 1},
-				},
-				Mutations: []descpb.DescriptorMutation{
-					{MutationID: 1},
-				},
-			},
-			validDescIDs: catalog.MakeDescriptorIDSet(104),
-			validJobIDs:  map[jobspb.JobID]struct{}{111222333444: {}, 555666777888: {}},
 		},
 	}
 
