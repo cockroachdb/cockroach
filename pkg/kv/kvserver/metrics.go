@@ -1229,6 +1229,29 @@ metric, which receives datapoints for each sub-batch processed in the process.`,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRaftReplicationLatency = metric.Metadata{
+		Name: "raft.replication.latency",
+		Help: `The duration elapsed between having evaluated a BatchRequest and it being
+reflected in the proposer's state machine (i.e. having applied fully).
+
+This encompasses time spent in the quota pool, in replication (including
+reproposals), and application, but notably *not* sequencing latency (i.e.
+contention and latch acquisition).
+
+No measurement is recorded for read-only commands as well as read-write commands
+which end up not writing (such as a DeleteRange on an empty span). Commands that
+result in 'above-replication' errors (i.e. txn retries, etc) are similarly
+excluded. Errors that arise while waiting for the in-flight replication result
+or result from application of the command are included.
+
+Note also that usually, clients are signalled at beginning of application, but
+the recorded measurement captures the entirety of log application.
+
+Commands that use async consensus will still cause a measurement that reflects
+the actual replication latency, despite returning early to the client.`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftSchedulerLatency = metric.Metadata{
 		Name: "raft.scheduler.latency",
 		Help: `Queueing durations for ranges waiting to be processed by the Raft scheduler.
@@ -2334,6 +2357,7 @@ type StoreMetrics struct {
 	RaftCommandCommitLatency   metric.IHistogram
 	RaftHandleReadyLatency     metric.IHistogram
 	RaftApplyCommittedLatency  metric.IHistogram
+	RaftReplicationLatency     metric.IHistogram
 	RaftSchedulerLatency       metric.IHistogram
 	RaftTimeoutCampaign        *metric.Counter
 	RaftStorageReadBytes       *metric.Counter
@@ -2996,6 +3020,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Metadata: metaRaftApplyCommittedLatency,
 			Duration: histogramWindow,
 			Buckets:  metric.IOLatencyBuckets,
+		}),
+		RaftReplicationLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePrometheus,
+			Metadata: metaRaftReplicationLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.NetworkLatencyBuckets,
 		}),
 		RaftSchedulerLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:     metric.HistogramModePreferHdrLatency,
