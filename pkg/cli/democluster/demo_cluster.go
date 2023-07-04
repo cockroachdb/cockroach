@@ -1928,8 +1928,8 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 		if !c.demoCtx.Multitenant || verbose {
 			// Connection parameters for the system tenant follow.
 			uiURL := s.Cfg.AdminURL()
-			if q := uiURL.Query(); c.demoCtx.Multitenant && !c.demoCtx.DisableServerController && !q.Has(server.TenantNameParamInQueryURL) {
-				q.Add(server.TenantNameParamInQueryURL, catconstants.SystemTenantName)
+			if q := uiURL.Query(); c.demoCtx.Multitenant && !c.demoCtx.DisableServerController && !q.Has(server.ClusterNameParamInQueryURL) {
+				q.Add(server.ClusterNameParamInQueryURL, catconstants.SystemTenantName)
 				uiURL.RawQuery = q.Encode()
 			}
 
@@ -2011,7 +2011,7 @@ func (c *transientCluster) addDemoLoginToURL(uiURL *url.URL, includeTenantName b
 	}
 
 	if !includeTenantName {
-		q.Del(server.TenantNameParamInQueryURL)
+		q.Del(server.ClusterNameParamInQueryURL)
 	}
 
 	uiURL.RawQuery = q.Encode()

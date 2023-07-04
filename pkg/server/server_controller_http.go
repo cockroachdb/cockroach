@@ -28,8 +28,9 @@ const (
 	// TenantSelectHeader is the HTTP header used to select a particular tenant.
 	TenantSelectHeader = `X-Cockroach-Tenant`
 
-	// TenantNameParamInQueryURL is the HTTP query URL parameter used to select a particular tenant.
-	TenantNameParamInQueryURL = "tenant_name"
+	// ClusterNameParamInQueryURL is the HTTP query URL parameter used
+	// to select a particular virtual cluster.
+	ClusterNameParamInQueryURL = "cluster"
 
 	// TenantSelectCookieName is the name of the HTTP cookie used to select a particular tenant,
 	// if the custom header is not specified.
@@ -109,7 +110,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 
 func getTenantNameFromHTTPRequest(st *cluster.Settings, r *http.Request) roachpb.TenantName {
 	// Highest priority is manual override on the URL query parameters.
-	if tenantName := r.URL.Query().Get(TenantNameParamInQueryURL); tenantName != "" {
+	if tenantName := r.URL.Query().Get(ClusterNameParamInQueryURL); tenantName != "" {
 		return roachpb.TenantName(tenantName)
 	}
 
