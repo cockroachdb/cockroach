@@ -184,7 +184,6 @@ type proposerRaft interface {
 	Step(raftpb.Message) error
 	Status() raft.Status
 	BasicStatus() raft.BasicStatus
-	ProposeConfChange(raftpb.ConfChangeI) error
 	Campaign() error
 }
 
@@ -511,9 +510,18 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				continue
 			}
 
-			if err := raftGroup.ProposeConfChange(
-				cc,
-			); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
+			typ, data, err := raftpb.MarshalConfChange(cc)
+			if err != nil {
+				firstErr = err
+				continue
+			}
+			msg := raftpb.Message{Type: raftpb.MsgProp, Entries: []raftpb.Entry{
+				{
+					Type: typ,
+					Data: data,
+				},
+			}}
+			if err := raftGroup.Step(msg); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).
 				// TODO(bdarnell): Handle ErrProposalDropped better.

@@ -120,11 +120,6 @@ func (t testProposerRaft) BasicStatus() raft.BasicStatus {
 	return t.status.BasicStatus
 }
 
-func (t testProposerRaft) ProposeConfChange(i raftpb.ConfChangeI) error {
-	// TODO(andrei, nvanbenschoten): Capture the message and test against it.
-	return nil
-}
-
 func (t *testProposerRaft) Campaign() error {
 	t.campaigned = true
 	return nil
