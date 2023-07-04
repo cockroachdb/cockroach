@@ -27,7 +27,7 @@ import (
 )
 
 // alterTenantSetClusterSettingNode represents an
-// ALTER TENANT ... SET CLUSTER SETTING statement.
+// ALTER VIRTUAL CLUSTER ... SET CLUSTER SETTING statement.
 type alterTenantSetClusterSettingNode struct {
 	name       string
 	tenantSpec tenantSpec
@@ -52,7 +52,7 @@ func (p *planner) AlterTenantSetClusterSetting(
 	// Error out if we're trying to call this from a non-system tenant.
 	if !p.execCfg.Codec.ForSystemTenant() {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"ALTER TENANT can only be called by system operators")
+			"ALTER VIRTUAL CLUSTER can only be called by system operators")
 	}
 
 	name := strings.ToLower(n.Name)
@@ -67,7 +67,7 @@ func (p *planner) AlterTenantSetClusterSetting(
 			"%s is a system-only setting and must be set in the admin tenant using SET CLUSTER SETTING", name)
 	}
 
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER TENANT SET CLUSTER SETTING "+name)
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER VIRTUAL CLUSTER SET CLUSTER SETTING "+name)
 	if err != nil {
 		return nil, err
 	}

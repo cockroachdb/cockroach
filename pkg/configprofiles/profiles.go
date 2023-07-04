@@ -102,11 +102,11 @@ var multitenantClusterInitTasks = []autoconfigpb.Task{
 		[]string{
 			// Create a main secondary tenant template.
 			"CREATE VIRTUAL CLUSTER template",
-			"ALTER TENANT template GRANT ALL CAPABILITIES",
+			"ALTER VIRTUAL CLUSTER template GRANT ALL CAPABILITIES",
 			// Enable admin scatter/split in tenant SQL.
 			// TODO(knz): Move this to in-tenant config task.
-			"ALTER TENANT template SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled = true",
-			"ALTER TENANT template SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled = true",
+			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled = true",
+			"ALTER VIRTUAL CLUSTER template SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled = true",
 		},
 	),
 	// Finally.
@@ -126,7 +126,7 @@ var multitenantClusterWithAppServiceInitTasks = append(
 			// Create the app tenant record.
 			"CREATE VIRTUAL CLUSTER application",
 			// Run the service for the application tenant.
-			"ALTER TENANT application START SERVICE SHARED",
+			"ALTER VIRTUAL CLUSTER application START SERVICE SHARED",
 		},
 	),
 	makeTask("activate application tenant",
