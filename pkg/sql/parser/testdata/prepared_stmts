@@ -191,20 +191,28 @@ PREPARE a (STRING) AS CANCEL SESSIONS IF EXISTS SELECT $1 -- literals removed
 PREPARE _ (STRING) AS CANCEL SESSIONS IF EXISTS SELECT $1 -- identifiers removed
 
 parse
-PREPARE a AS CREATE TENANT "some-string"
+PREPARE a AS CREATE VIRTUAL CLUSTER "some-string"
 ----
-PREPARE a AS CREATE TENANT "some-string"
-PREPARE a AS CREATE TENANT ("some-string") -- fully parenthesized
-PREPARE a AS CREATE TENANT "some-string" -- literals removed
-PREPARE _ AS CREATE TENANT _ -- identifiers removed
+PREPARE a AS CREATE VIRTUAL CLUSTER "some-string"
+PREPARE a AS CREATE VIRTUAL CLUSTER ("some-string") -- fully parenthesized
+PREPARE a AS CREATE VIRTUAL CLUSTER "some-string" -- literals removed
+PREPARE _ AS CREATE VIRTUAL CLUSTER _ -- identifiers removed
 
 parse
-PREPARE a (STRING) AS CREATE TENANT a
+PREPARE a AS CREATE TENANT "some-string"
 ----
-PREPARE a (STRING) AS CREATE TENANT a
-PREPARE a (STRING) AS CREATE TENANT (a) -- fully parenthesized
-PREPARE a (STRING) AS CREATE TENANT a -- literals removed
-PREPARE _ (STRING) AS CREATE TENANT _ -- identifiers removed
+PREPARE a AS CREATE VIRTUAL CLUSTER "some-string" -- normalized!
+PREPARE a AS CREATE VIRTUAL CLUSTER ("some-string") -- fully parenthesized
+PREPARE a AS CREATE VIRTUAL CLUSTER "some-string" -- literals removed
+PREPARE _ AS CREATE VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+PREPARE a (STRING) AS CREATE VIRTUAL CLUSTER a
+----
+PREPARE a (STRING) AS CREATE VIRTUAL CLUSTER a
+PREPARE a (STRING) AS CREATE VIRTUAL CLUSTER (a) -- fully parenthesized
+PREPARE a (STRING) AS CREATE VIRTUAL CLUSTER a -- literals removed
+PREPARE _ (STRING) AS CREATE VIRTUAL CLUSTER _ -- identifiers removed
 
 parse
 PREPARE a AS CANCEL JOBS SELECT 1
