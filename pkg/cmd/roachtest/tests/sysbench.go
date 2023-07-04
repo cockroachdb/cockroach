@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
@@ -121,13 +121,20 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		c.Run(ctx, loadNode, opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
-		err := c.RunE(ctx, loadNode, opts.cmd(true /* haproxy */)+" run")
+		cmd := opts.cmd(true /* haproxy */) + " run"
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), loadNode, cmd)
+
 		// Sysbench occasionally segfaults. When that happens, don't fail the
 		// test.
-		if err != nil && !strings.Contains(err.Error(), "Segmentation fault") {
+		if result.RemoteExitStatus == errors.SegmentationFaultExitCode {
+			t.L().Printf("sysbench segfaulted; passing test anyway")
+			return nil
+		}
+
+		if err != nil {
 			return err
 		}
-		t.L().Printf("sysbench segfaulted; passing test anyway")
+
 		return nil
 	})
 	m.Wait()
