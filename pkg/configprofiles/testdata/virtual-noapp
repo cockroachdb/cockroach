@@ -1,13 +1,8 @@
 profile
-multitenant+app+sharedservice+repl
+virtual+noapp
 ----
-canonical profile name: multitenant+app+sharedservice+repl
+canonical profile name: virtual+noapp
 server started
-
-connect-tenant
-application
-----
-ok
 
 system-sql
 SELECT variable, value FROM [SHOW ALL CLUSTER SETTINGS]
@@ -28,7 +23,7 @@ ORDER BY variable
 ----
 cross_cluster_replication.enabled false
 kv.rangefeed.enabled false
-server.controller.default_tenant application
+server.controller.default_tenant system
 server.secondary_tenants.redact_trace.enabled false
 spanconfig.storage_coalesce_adjacent.enabled false
 spanconfig.tenant_coalesce_adjacent.enabled false
@@ -47,8 +42,6 @@ ORDER BY tenant_id, name
 ----
 2 sql.scatter.allow_for_secondary_tenant.enabled true
 2 sql.split_at.allow_for_secondary_tenant.enabled true
-3 sql.scatter.allow_for_secondary_tenant.enabled true
-3 sql.split_at.allow_for_secondary_tenant.enabled true
 
 system-sql
 SHOW TENANTS WITH CAPABILITIES
@@ -73,13 +66,18 @@ SHOW TENANTS WITH CAPABILITIES
 2 template ready none can_view_tsdb_metrics true
 2 template ready none exempt_from_rate_limiting true
 2 template ready none span_config_bounds {}
-3 application ready shared can_admin_relocate_range true
-3 application ready shared can_admin_scatter true
-3 application ready shared can_admin_split true
-3 application ready shared can_admin_unsplit true
-3 application ready shared can_check_consistency true
-3 application ready shared can_use_nodelocal_storage true
-3 application ready shared can_view_node_info true
-3 application ready shared can_view_tsdb_metrics true
-3 application ready shared exempt_from_rate_limiting true
-3 application ready shared span_config_bounds {}
+
+system-sql
+CREATE TENANT application LIKE template
+----
+<no rows>
+
+system-sql
+ALTER TENANT application START SERVICE SHARED
+----
+<no rows>
+
+connect-tenant
+application
+----
+ok
