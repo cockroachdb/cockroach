@@ -479,16 +479,13 @@ SELECT
 		crdb_internal.json_to_pb(
 			'cockroach.sql.sqlbase.Descriptor',
 			json_set(
-				crdb_internal.pb_to_json(
-					'cockroach.sql.sqlbase.Descriptor',
-					descriptor,
-					false
+				json_set(
+					crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false),
+					ARRAY['table', 'mutationJobs'],
+					jsonb_build_array(jsonb_build_object('job_id', 123456, 'mutation_id', 1))
 				),
-				ARRAY['table', 'mutationJobs'],
-				jsonb_build_array(
-					jsonb_build_object('job_id', 123456)
-				),
-				true
+				ARRAY['table', 'mutations'],
+				jsonb_build_array(jsonb_build_object('mutation_id', 1))
 			)
 		),
 		true
@@ -518,7 +515,7 @@ UPDATE system.namespace SET id = %d WHERE id = %d;
 				tableTblID, tableFkTblID, tableFkTblID),
 		},
 		{fmt.Sprintf("%d", tableNoJobID), "defaultdb", "public", "nojob",
-			fmt.Sprintf(`relation "nojob" (%d): unknown mutation ID 0 associated with job ID 123456`, tableNoJobID),
+			fmt.Sprintf(`relation "nojob" (%d): mutation in state UNKNOWN, direction NONE, and no column/index descriptor`, tableNoJobID),
 		},
 		{fmt.Sprintf("%d", tableNoJobID), "defaultdb", "public", "nojob", `mutation job 123456: job not found`},
 		{fmt.Sprintf("%d", schemaID), fmt.Sprintf("[%d]", databaseID), "public", "",
