@@ -479,7 +479,7 @@ func (*AlterTenantCapability) StatementReturnType() StatementReturnType { return
 func (*AlterTenantCapability) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTenantCapability) StatementTag() string { return "ALTER TENANT CAPABILITY" }
+func (*AlterTenantCapability) StatementTag() string { return "ALTER VIRTUAL CLUSTER CAPABILITY" }
 
 // StatementReturnType implements the Statement interface.
 func (*AlterTenantSetClusterSetting) StatementReturnType() StatementReturnType { return Ack }
@@ -488,7 +488,9 @@ func (*AlterTenantSetClusterSetting) StatementReturnType() StatementReturnType {
 func (*AlterTenantSetClusterSetting) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTenantSetClusterSetting) StatementTag() string { return "ALTER TENANT SET CLUSTER SETTING" }
+func (*AlterTenantSetClusterSetting) StatementTag() string {
+	return "ALTER VIRTUAL CLUSTER SET CLUSTER SETTING"
+}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterTenantReplication) StatementReturnType() StatementReturnType { return Rows }
@@ -497,7 +499,7 @@ func (*AlterTenantReplication) StatementReturnType() StatementReturnType { retur
 func (*AlterTenantReplication) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTenantReplication) StatementTag() string { return "ALTER TENANT REPLICATION" }
+func (*AlterTenantReplication) StatementTag() string { return "ALTER VIRTUAL CLUSTER REPLICATION" }
 
 func (*AlterTenantReplication) cclOnlyStatement() {}
 
@@ -508,7 +510,7 @@ func (*AlterTenantRename) StatementReturnType() StatementReturnType { return Ack
 func (*AlterTenantRename) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTenantRename) StatementTag() string { return "ALTER TENANT RENAME" }
+func (*AlterTenantRename) StatementTag() string { return "ALTER VIRTUAL CLUSTER RENAME" }
 
 // StatementReturnType implements the Statement interface.
 func (*AlterTenantService) StatementReturnType() StatementReturnType { return Ack }
@@ -517,7 +519,7 @@ func (*AlterTenantService) StatementReturnType() StatementReturnType { return Ac
 func (*AlterTenantService) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterTenantService) StatementTag() string { return "ALTER TENANT SERVICE" }
+func (*AlterTenantService) StatementTag() string { return "ALTER VIRTUAL CLUSTER SERVICE" }
 
 // StatementReturnType implements the Statement interface.
 func (*AlterType) StatementReturnType() StatementReturnType { return DDL }

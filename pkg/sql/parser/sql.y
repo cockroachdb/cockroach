@@ -1065,22 +1065,22 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Statement> alter_table_locality_stmt
 %type <tree.Statement> alter_table_owner_stmt
 
-// ALTER TENANT
-%type <tree.Statement> alter_tenant_stmt
+// ALTER VIRTUAL CLUSTER
+%type <tree.Statement> alter_virtual_cluster_stmt
 
-// ALTER TENANT CAPABILITY
+// ALTER VIRTUAL CLUSTER CAPABILITY
 %type <tree.Statement> tenant_capability tenant_capability_list
 
-// ALTER TENANT CLUSTER SETTINGS
-%type <tree.Statement> alter_tenant_csetting_stmt
+// ALTER VIRTUAL CLUSTER SET CLUSTER SETTING
+%type <tree.Statement> alter_virtual_cluster_csetting_stmt
 
-// ALTER TENANT CAPABILITY
-%type <tree.Statement> alter_tenant_capability_stmt
+// ALTER VIRTUAL CLUSTER CAPABILITY
+%type <tree.Statement> alter_virtual_cluster_capability_stmt
 
-// Other ALTER TENANT statements.
-%type <tree.Statement> alter_tenant_replication_stmt
-%type <tree.Statement> alter_tenant_rename_stmt
-%type <tree.Statement> alter_tenant_service_stmt
+// Other ALTER VIRTUAL CLUSTER statements.
+%type <tree.Statement> alter_virtual_cluster_replication_stmt
+%type <tree.Statement> alter_virtual_cluster_rename_stmt
+%type <tree.Statement> alter_virtual_cluster_service_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -1777,7 +1777,7 @@ stmt_without_legacy_transaction:
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
-| alter_tenant_stmt   /* SKIP DOC */
+| alter_virtual_cluster_stmt   /* SKIP DOC */
 | alter_unsupported_stmt
 | ALTER error         // SHOW HELP: ALTER
 
@@ -6466,16 +6466,19 @@ set_csetting_stmt:
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
 
 
-// %Help: ALTER TENANT - alter tenant configuration
+// %Help: ALTER VIRTUAL CLUSTER - alter configuration of virtual clusters
 // %Category: Group
-// %Text: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING, ALTER TENANT CAPABILITY, ALTER TENANT RENAME, ALTER TENANT SERVICE
-alter_tenant_stmt:
-  alter_tenant_replication_stmt // EXTEND WITH HELP: ALTER TENANT REPLICATION
-| alter_tenant_csetting_stmt    // EXTEND WITH HELP: ALTER TENANT CLUSTER SETTING
-| alter_tenant_capability_stmt  // EXTEND WITH HELP: ALTER TENANT CAPABILITY
-| alter_tenant_rename_stmt      // EXTEND WITH HELP: ALTER TENANT RENAME
-| alter_tenant_service_stmt     // EXTEND WITH HELP: ALTER TENANT SERVICE
-| ALTER TENANT error            // SHOW HELP: ALTER TENANT
+// %Text:
+// ALTER VIRTUAL CLUSTER REPLICATION, ALTER VIRTUAL CLUSTER SETTING,
+// ALTER VIRTUAL CLUSTER CAPABILITY, ALTER VIRTUAL CLUSTER RENAME,
+// ALTER VIRTUAL CLUSTER SERVICE
+alter_virtual_cluster_stmt:
+  alter_virtual_cluster_replication_stmt // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER REPLICATION
+| alter_virtual_cluster_csetting_stmt    // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER SETTING
+| alter_virtual_cluster_capability_stmt  // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER CAPABILITY
+| alter_virtual_cluster_rename_stmt      // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER RENAME
+| alter_virtual_cluster_service_stmt     // EXTEND WITH HELP: ALTER VIRTUAL CLUSTER SERVICE
+| ALTER virtual_cluster error   // SHOW HELP: ALTER VIRTUAL CLUSTER
 
 tenant_spec:
   d_expr
@@ -6483,12 +6486,12 @@ tenant_spec:
 | '[' a_expr ']'
   { $$.val = &tree.TenantSpec{IsName: false, Expr: $2.expr()} }
 
-// %Help: ALTER TENANT RENAME - rename a tenant
+// %Help: ALTER VIRTUAL CLUSTER RENAME - rename a virtual cluster
 // %Category: Experimental
 // %Text:
-// ALTER TENANT <tenant_spec> RENAME TO <name>
-alter_tenant_rename_stmt:
-  ALTER TENANT tenant_spec RENAME TO d_expr
+// ALTER VIRTUAL CLUSTER <tenant_spec> RENAME TO <name>
+alter_virtual_cluster_rename_stmt:
+  ALTER virtual_cluster tenant_spec RENAME TO d_expr
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantRename{
@@ -6497,14 +6500,14 @@ alter_tenant_rename_stmt:
     }
   }
 
-// %Help: ALTER TENANT SERVICE - alter tenant service mode
+// %Help: ALTER VIRTUAL CLUSTER SERVICE - alter service mode of a virtual cluster
 // %Category: Experimental
 // %Text:
-// ALTER TENANT <tenant_spec> START SERVICE EXTERNAL
-// ALTER TENANT <tenant_spec> START SERVICE SHARED
-// ALTER TENANT <tenant_spec> STOP SERVICE
-alter_tenant_service_stmt:
-  ALTER TENANT tenant_spec START SERVICE EXTERNAL
+// ALTER VIRTUAL CLUSTER <tenant_spec> START SERVICE EXTERNAL
+// ALTER VIRTUAL CLUSTER <tenant_spec> START SERVICE SHARED
+// ALTER VIRTUAL CLUSTER <tenant_spec> STOP SERVICE
+alter_virtual_cluster_service_stmt:
+  ALTER virtual_cluster tenant_spec START SERVICE EXTERNAL
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantService{
@@ -6512,7 +6515,7 @@ alter_tenant_service_stmt:
       Command: tree.TenantStartServiceExternal,
     }
   }
-| ALTER TENANT tenant_spec START SERVICE SHARED
+| ALTER virtual_cluster tenant_spec START SERVICE SHARED
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantService{
@@ -6520,7 +6523,7 @@ alter_tenant_service_stmt:
       Command: tree.TenantStartServiceShared,
     }
   }
-| ALTER TENANT tenant_spec STOP SERVICE
+| ALTER virtual_cluster tenant_spec STOP SERVICE
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantService{
@@ -6528,20 +6531,20 @@ alter_tenant_service_stmt:
       Command: tree.TenantStopService,
     }
   }
-| ALTER TENANT tenant_spec START error // SHOW HELP: ALTER TENANT SERVICE
-| ALTER TENANT tenant_spec STOP error // SHOW HELP: ALTER TENANT SERVICE
+| ALTER virtual_cluster tenant_spec START error // SHOW HELP: ALTER VIRTUAL CLUSTER SERVICE
+| ALTER virtual_cluster tenant_spec STOP error // SHOW HELP: ALTER VIRTUAL CLUSTER SERVICE
 
 
-// %Help: ALTER TENANT REPLICATION - alter tenant replication stream
+// %Help: ALTER VIRTUAL CLUSTER REPLICATION - alter replication stream between virtual clusters
 // %Category: Experimental
 // %Text:
-// ALTER TENANT <tenant_spec> PAUSE REPLICATION
-// ALTER TENANT <tenant_spec> RESUME REPLICATION
-// ALTER TENANT <tenant_spec> COMPLETE REPLICATION TO LATEST
-// ALTER TENANT <tenant_spec> COMPLETE REPLICATION TO SYSTEM TIME 'time'
-// ALTER TENANT <tenant_spec> SET REPLICATION opt=value,...
-alter_tenant_replication_stmt:
-  ALTER TENANT tenant_spec PAUSE REPLICATION
+// ALTER VIRTUAL CLUSTER <tenant_spec> PAUSE REPLICATION
+// ALTER VIRTUAL CLUSTER <tenant_spec> RESUME REPLICATION
+// ALTER VIRTUAL CLUSTER <tenant_spec> COMPLETE REPLICATION TO LATEST
+// ALTER VIRTUAL CLUSTER <tenant_spec> COMPLETE REPLICATION TO SYSTEM TIME 'time'
+// ALTER VIRTUAL CLUSTER <tenant_spec> SET REPLICATION opt=value,...
+alter_virtual_cluster_replication_stmt:
+  ALTER virtual_cluster tenant_spec PAUSE REPLICATION
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
@@ -6549,7 +6552,7 @@ alter_tenant_replication_stmt:
       Command: tree.PauseJob,
     }
   }
-| ALTER TENANT tenant_spec RESUME REPLICATION
+| ALTER virtual_cluster tenant_spec RESUME REPLICATION
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
@@ -6557,7 +6560,7 @@ alter_tenant_replication_stmt:
       Command: tree.ResumeJob,
     }
   }
-| ALTER TENANT tenant_spec COMPLETE REPLICATION TO SYSTEM TIME a_expr
+| ALTER virtual_cluster tenant_spec COMPLETE REPLICATION TO SYSTEM TIME a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
@@ -6567,7 +6570,7 @@ alter_tenant_replication_stmt:
       },
     }
   }
-| ALTER TENANT tenant_spec COMPLETE REPLICATION TO LATEST
+| ALTER virtual_cluster tenant_spec COMPLETE REPLICATION TO LATEST
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
@@ -6577,7 +6580,7 @@ alter_tenant_replication_stmt:
       },
     }
   }
-| ALTER TENANT tenant_spec SET REPLICATION tenant_replication_options_list
+| ALTER virtual_cluster tenant_spec SET REPLICATION tenant_replication_options_list
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
@@ -6587,14 +6590,14 @@ alter_tenant_replication_stmt:
   }
 
 
-// %Help: ALTER TENANT CLUSTER SETTING - alter tenant cluster settings
+// %Help: ALTER VIRTUAL CLUSTER SETTING - alter cluster setting overrides for virtual clusters
 // %Category: Group
 // %Text:
-// ALTER TENANT { <tenant_spec> | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
-// ALTER TENANT { <tenant_spec> | ALL } RESET CLUSTER SETTING <var>
+// ALTER VIRTUAL CLUSTER { <tenant_spec> | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
+// ALTER VIRTUAL CLUSTER { <tenant_spec> | ALL } RESET CLUSTER SETTING <var>
 // %SeeAlso: SET CLUSTER SETTING
-alter_tenant_csetting_stmt:
-  ALTER TENANT tenant_spec set_or_reset_csetting_stmt
+alter_virtual_cluster_csetting_stmt:
+  ALTER virtual_cluster tenant_spec set_or_reset_csetting_stmt
   {
     /* SKIP DOC */
     csettingStmt := $4.stmt().(*tree.SetClusterSetting)
@@ -6612,7 +6615,17 @@ alter_tenant_csetting_stmt:
       TenantSpec: &tree.TenantSpec{All: true},
     }
   }
-| ALTER TENANT_ALL ALL error // SHOW HELP: ALTER TENANT CLUSTER SETTING
+| ALTER VIRTUAL CLUSTER_ALL ALL set_or_reset_csetting_stmt
+  {
+    /* SKIP DOC */
+    csettingStmt := $5.stmt().(*tree.SetClusterSetting)
+    $$.val = &tree.AlterTenantSetClusterSetting{
+      SetClusterSetting: *csettingStmt,
+      TenantSpec: &tree.TenantSpec{All: true},
+    }
+  }
+| ALTER VIRTUAL CLUSTER_ALL ALL error // SHOW HELP: ALTER VIRTUAL CLUSTER SETTING
+| ALTER TENANT_ALL ALL error // SHOW HELP: ALTER VIRTUAL CLUSTER SETTING
 
 set_or_reset_csetting_stmt:
   reset_csetting_stmt
@@ -6622,13 +6635,13 @@ to_or_eq:
   '='
 | TO
 
-// %Help: ALTER TENANT CAPABILITY - alter tenant capability
+// %Help: ALTER VIRTUAL CLUSTER CAPABILITY - alter system capability of virtual cluster
 // %Category: Group
 // %Text:
-// ALTER TENANT <tenant_id> GRANT CAPABILITY <var> { TO | = } <value>
-// ALTER TENANT <tenant_id> REVOKE CAPABILITY <var>
-alter_tenant_capability_stmt:
-  ALTER TENANT tenant_spec GRANT CAPABILITY tenant_capability_list
+// ALTER VIRTUAL CLUSTER <tenant_id> GRANT CAPABILITY <var> { TO | = } <value>
+// ALTER VIRTUAL CLUSTER <tenant_id> REVOKE CAPABILITY <var>
+alter_virtual_cluster_capability_stmt:
+  ALTER virtual_cluster tenant_spec GRANT CAPABILITY tenant_capability_list
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
@@ -6636,7 +6649,7 @@ alter_tenant_capability_stmt:
       Capabilities: $6.tenantCapabilities(),
     }
   }
-| ALTER TENANT tenant_spec GRANT ALL CAPABILITIES
+| ALTER virtual_cluster tenant_spec GRANT ALL CAPABILITIES
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
@@ -6644,7 +6657,7 @@ alter_tenant_capability_stmt:
       AllCapabilities: true,
     }
   }
-| ALTER TENANT tenant_spec REVOKE CAPABILITY tenant_capability_list
+| ALTER virtual_cluster tenant_spec REVOKE CAPABILITY tenant_capability_list
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
@@ -6653,7 +6666,7 @@ alter_tenant_capability_stmt:
       IsRevoke: true,
     }
   }
-| ALTER TENANT tenant_spec REVOKE ALL CAPABILITIES
+| ALTER virtual_cluster tenant_spec REVOKE ALL CAPABILITIES
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
@@ -6662,8 +6675,8 @@ alter_tenant_capability_stmt:
       IsRevoke: true,
     }
   }
-| ALTER TENANT tenant_spec GRANT error // SHOW HELP: ALTER TENANT CAPABILITY
-| ALTER TENANT tenant_spec REVOKE error // SHOW HELP: ALTER TENANT CAPABILITY
+| ALTER virtual_cluster tenant_spec GRANT error // SHOW HELP: ALTER VIRTUAL CLUSTER CAPABILITY
+| ALTER virtual_cluster tenant_spec REVOKE error // SHOW HELP: ALTER VIRTUAL CLUSTER CAPABILITY
 
 tenant_capability:
   var_name
