@@ -990,7 +990,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VERIFY_BACKUP_TABLE_DATA VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
 %token <str> VIEWCLUSTERMETADATA VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VOLATILE VOTERS
-%token <str> VIRTUAL_CLUSTER_NAME
+%token <str> VIRTUAL_CLUSTER_NAME VIRTUAL_CLUSTER
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -3762,7 +3762,7 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
   }
-| TENANT '=' string_or_placeholder
+| virtual_cluster_opt '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{ForceTenantID: $3.expr()}
   }
@@ -3778,6 +3778,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{UnsafeRestoreIncompatibleVersion: true}
   }
+
+virtual_cluster_opt:
+  TENANT  { /* SKIP DOC */ }
+| VIRTUAL_CLUSTER { }
 
 virtual_cluster_name:
   TENANT_NAME { /* SKIP DOC */ }
@@ -16694,6 +16698,7 @@ unreserved_keyword:
 | VIEWCLUSTERSETTING
 | VIEWDEBUG
 | VIRTUAL_CLUSTER_NAME
+| VIRTUAL_CLUSTER
 | VISIBLE
 | VOLATILE
 | VOTERS
@@ -17265,6 +17270,7 @@ bare_label_keywords:
 | VIEWDEBUG
 | VIRTUAL
 | VIRTUAL_CLUSTER_NAME
+| VIRTUAL_CLUSTER
 | VISIBLE
 | VOLATILE
 | VOTERS
