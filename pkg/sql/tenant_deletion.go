@@ -99,7 +99,7 @@ func dropTenantInternal(
 		if info.ServiceMode != mtinfopb.ServiceModeNone {
 			return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"cannot drop tenant %q (%d) in service mode %v", info.Name, tenID, info.ServiceMode),
-				"Use ALTER TENANT STOP SERVICE before DROP VIRTUAL CLUSTER.")
+				"Use ALTER VIRTUAL CLUSTER STOP SERVICE before DROP VIRTUAL CLUSTER.")
 		}
 	}
 

@@ -45,7 +45,7 @@ func (p *planner) alterTenantService(
 		return nil, errors.AssertionFailedf("unhandled case: %+v", n)
 	}
 
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER TENANT SERVICE")
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "ALTER VIRTUAL CLUSTER SERVICE")
 	if err != nil {
 		return nil, err
 	}

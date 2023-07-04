@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const alterTenantCapabilityOp = "ALTER TENANT CAPABILITY"
+const alterTenantCapabilityOp = "ALTER VIRTUAL CLUSTER CAPABILITY"
 
 type alterTenantCapabilityNode struct {
 	n          *tree.AlterTenantCapability
