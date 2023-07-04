@@ -244,7 +244,7 @@ func (r *Replica) updateTimestampCacheAndDropLatches(
 	pErr *kvpb.Error,
 	st kvserverpb.LeaseStatus,
 ) {
-	ec := makeEndCmds(r, g, st)
+	ec := makeUnreplicatedEndCmds(r, g, st)
 	ec.done(ctx, ba, br, pErr)
 }
 
