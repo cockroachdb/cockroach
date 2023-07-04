@@ -80,6 +80,13 @@ const (
 	// replicateQueueTimerDuration is the duration between replication of queued
 	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
+
+	// replicateQueueLeasePreferencePriority is the priority replicas are
+	// enqueued into the replicate queue with when violating lease preferences.
+	// This priority is lower than any voter up-replication, yet higher than
+	// removal, non-voter addition and rebalancing.
+	// See allocatorimpl.AllocatorAction.Priority.
+	replicateQueueLeasePreferencePriority = 1001
 )
 
 // MinLeaseTransferInterval controls how frequently leases can be transferred
