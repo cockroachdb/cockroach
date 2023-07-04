@@ -1069,7 +1069,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Statement> alter_virtual_cluster_stmt
 
 // ALTER VIRTUAL CLUSTER CAPABILITY
-%type <tree.Statement> tenant_capability tenant_capability_list
+%type <tree.Statement> virtual_cluster_capability virtual_cluster_capability_list
 
 // ALTER VIRTUAL CLUSTER SET CLUSTER SETTING
 %type <tree.Statement> alter_virtual_cluster_csetting_stmt
@@ -1174,7 +1174,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_func_stmt
 
-%type <*tree.LikeTenantSpec> opt_like_tenant
+%type <*tree.LikeTenantSpec> opt_like_virtual_cluster
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
@@ -1278,7 +1278,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Statement> show_syntax_stmt
 %type <tree.Statement> show_last_query_stats_stmt
 %type <tree.Statement> show_tables_stmt
-%type <tree.Statement> show_virtual_cluster_stmt opt_show_tenant_options show_tenant_options
+%type <tree.Statement> show_virtual_cluster_stmt opt_show_virtual_cluster_options show_virtual_cluster_options
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
 %type <tree.Statement> show_transactions_stmt
@@ -1320,7 +1320,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
-%type <*tree.TenantReplicationOptions> opt_with_tenant_replication_options tenant_replication_options tenant_replication_options_list
+%type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options show_backup_connection_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
@@ -4380,7 +4380,7 @@ create_stmt:
 // Replication option:
 //    FROM REPLICATION OF <virtual_cluster_spec> ON <location> [ WITH OPTIONS ... ]
 create_virtual_cluster_stmt:
-  CREATE virtual_cluster d_expr opt_like_tenant
+  CREATE virtual_cluster d_expr opt_like_virtual_cluster
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
@@ -4388,7 +4388,7 @@ create_virtual_cluster_stmt:
       Like: $4.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_tenant
+| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
@@ -4397,7 +4397,7 @@ create_virtual_cluster_stmt:
       Like: $7.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster d_expr opt_like_tenant FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
+| CREATE virtual_cluster d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
@@ -4408,7 +4408,7 @@ create_virtual_cluster_stmt:
       Like: $4.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_tenant FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
+| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
@@ -4426,10 +4426,10 @@ virtual_cluster:
   TENANT { /* SKIP DOC */ }
 | VIRTUAL CLUSTER
 
-// opt_like_tenant defines a LIKE clause for CREATE VIRTUAL CLUSTER.
+// opt_like_virtual_cluster defines a LIKE clause for CREATE VIRTUAL CLUSTER.
 // Eventually this can grow to support INCLUDING/EXCLUDING options
 // like in CREATE TABLE.
-opt_like_tenant:
+opt_like_virtual_cluster:
   /* EMPTY */
   {
      $$.val = &tree.LikeTenantSpec{}
@@ -4440,12 +4440,12 @@ opt_like_tenant:
   }
 
 // Optional tenant replication options.
-opt_with_tenant_replication_options:
-  WITH tenant_replication_options_list
+opt_with_replication_options:
+  WITH replication_options_list
   {
     $$.val = $2.tenantReplicationOptions()
   }
-| WITH OPTIONS '(' tenant_replication_options_list ')'
+| WITH OPTIONS '(' replication_options_list ')'
   {
     $$.val = $4.tenantReplicationOptions()
   }
@@ -4454,13 +4454,13 @@ opt_with_tenant_replication_options:
     $$.val = &tree.TenantReplicationOptions{}
   }
 
-tenant_replication_options_list:
+replication_options_list:
   // Require at least one option
-  tenant_replication_options
+  replication_options
   {
     $$.val = $1.tenantReplicationOptions()
   }
-| tenant_replication_options_list ',' tenant_replication_options
+| replication_options_list ',' replication_options
   {
     if err := $1.tenantReplicationOptions().CombineWith($3.tenantReplicationOptions()); err != nil {
       return setErr(sqllex, err)
@@ -4468,7 +4468,7 @@ tenant_replication_options_list:
   }
 
 // List of valid tenant replication options.
-tenant_replication_options:
+replication_options:
   RETENTION '=' d_expr
   {
     $$.val = &tree.TenantReplicationOptions{Retention: $3.expr()}
@@ -5845,7 +5845,7 @@ backup_kms:
 //     REPLICATION STATUS
 //     CAPABILITIES
 show_virtual_cluster_stmt:
-  SHOW virtual_cluster_spec_opt_all opt_show_tenant_options
+  SHOW virtual_cluster_spec_opt_all opt_show_virtual_cluster_options
   {
     /* SKIP DOC */
     $$.val = &tree.ShowTenant{
@@ -5884,29 +5884,39 @@ virtual_cluster_spec_opt_all:
     $$.val = $3.tenantSpec()
   }
 
-opt_show_tenant_options:
+opt_show_virtual_cluster_options:
   /* EMPTY */
-  { $$.val = tree.ShowTenantOptions{} }
-| WITH show_tenant_options
-  { $$.val = $2.showTenantOpts() }
+  {
+    /* SKIP DOC */
+    $$.val = tree.ShowTenantOptions{}
+  }
+| WITH show_virtual_cluster_options
+  {
+    /* SKIP DOC */
+    $$.val = $2.showTenantOpts()
+  }
 
-show_tenant_options:
+show_virtual_cluster_options:
   REPLICATION STATUS
   {
+    /* SKIP DOC */
     $$.val = tree.ShowTenantOptions{WithReplication: true}
   }
 | CAPABILITIES
   {
+    /* SKIP DOC */
     $$.val = tree.ShowTenantOptions{WithCapabilities: true}
   }
-| show_tenant_options ',' REPLICATION STATUS
+| show_virtual_cluster_options ',' REPLICATION STATUS
   {
+    /* SKIP DOC */
     o := $1.showTenantOpts()
     o.WithReplication = true
     $$.val = o
   }
-| show_tenant_options ',' CAPABILITIES
+| show_virtual_cluster_options ',' CAPABILITIES
   {
+    /* SKIP DOC */
     o := $1.showTenantOpts()
     o.WithCapabilities = true
     $$.val = o
@@ -6582,7 +6592,7 @@ alter_virtual_cluster_replication_stmt:
       },
     }
   }
-| ALTER virtual_cluster virtual_cluster_spec SET REPLICATION tenant_replication_options_list
+| ALTER virtual_cluster virtual_cluster_spec SET REPLICATION replication_options_list
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
@@ -6643,7 +6653,7 @@ to_or_eq:
 // ALTER VIRTUAL CLUSTER <tenant_id> GRANT CAPABILITY <var> { TO | = } <value>
 // ALTER VIRTUAL CLUSTER <tenant_id> REVOKE CAPABILITY <var>
 alter_virtual_cluster_capability_stmt:
-  ALTER virtual_cluster virtual_cluster_spec GRANT CAPABILITY tenant_capability_list
+  ALTER virtual_cluster virtual_cluster_spec GRANT CAPABILITY virtual_cluster_capability_list
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
@@ -6659,7 +6669,7 @@ alter_virtual_cluster_capability_stmt:
       AllCapabilities: true,
     }
   }
-| ALTER virtual_cluster virtual_cluster_spec REVOKE CAPABILITY tenant_capability_list
+| ALTER virtual_cluster virtual_cluster_spec REVOKE CAPABILITY virtual_cluster_capability_list
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantCapability{
@@ -6680,28 +6690,32 @@ alter_virtual_cluster_capability_stmt:
 | ALTER virtual_cluster virtual_cluster_spec GRANT error // SHOW HELP: ALTER VIRTUAL CLUSTER CAPABILITY
 | ALTER virtual_cluster virtual_cluster_spec REVOKE error // SHOW HELP: ALTER VIRTUAL CLUSTER CAPABILITY
 
-tenant_capability:
+virtual_cluster_capability:
   var_name
   {
-      $$.val = tree.TenantCapability{
-        Name: strings.Join($1.strs(), "."),
-      }
+    /* SKIP DOC */
+    $$.val = tree.TenantCapability{
+      Name: strings.Join($1.strs(), "."),
+    }
   }
 | var_name to_or_eq var_value
   {
+    /* SKIP DOC */
     $$.val = tree.TenantCapability{
       Name: strings.Join($1.strs(), "."),
       Value: $3.expr(),
     }
   }
 
-tenant_capability_list:
-  tenant_capability
+virtual_cluster_capability_list:
+  virtual_cluster_capability
   {
+    /* SKIP DOC */
     $$.val = []tree.TenantCapability{$1.tenantCapability()}
   }
-|  tenant_capability_list ',' tenant_capability
+| virtual_cluster_capability_list ',' virtual_cluster_capability
   {
+    /* SKIP DOC */
     $$.val = append($1.tenantCapabilities(), $3.tenantCapability())
   }
 
