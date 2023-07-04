@@ -32,7 +32,7 @@ func (p *planner) DropTenant(ctx context.Context, n *tree.DropTenant) (planNode,
 		return nil, err
 	}
 
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "DROP TENANT")
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "DROP VIRTUAL CLUSTER")
 	if err != nil {
 		return nil, err
 	}
