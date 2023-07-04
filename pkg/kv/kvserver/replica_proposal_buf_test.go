@@ -301,15 +301,11 @@ func (pc proposalCreator) newProposal(ba *kvpb.BatchRequest) *ProposalData {
 }
 
 func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
-	cmdLen := p.command.Size()
-	needed := raftlog.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, raftlog.RaftCommandPrefixLen, needed)
-	raftlog.EncodeRaftCommandPrefix(data, raftlog.EntryEncodingStandardWithoutAC, p.idKey)
-	data = data[:raftlog.RaftCommandPrefixLen+p.command.Size()]
-	if _, err := protoutil.MarshalTo(p.command, data[raftlog.RaftCommandPrefixLen:]); err != nil {
+	b, err := raftlog.EncodeCommand(context.Background(), p.command, p.idKey, nil /* raftAdmissionMeta */)
+	if err != nil {
 		panic(err)
 	}
-	return data
+	return b
 }
 
 // TestProposalBuffer tests the basic behavior of the Raft proposal buffer.
