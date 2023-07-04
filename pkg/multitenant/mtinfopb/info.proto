@@ -42,9 +42,9 @@ message ProtoInfo {
   // DeprecatedDataState is the state of the tenant's keyspace (DEPRECATED).
   optional DeprecatedDataState deprecated_data_state = 2 [(gogoproto.nullable) = false];
 
-  // DroppedName is the name the tenant had before DROP TENANT was
-  // run on the tenant. It should be empty for active or adding
-  // tenants.
+  // DroppedName is the name the tenant had before DROP VIRTUAL
+  // CLUSTER was run on the tenant. It should be empty for active or
+  // adding tenants.
   optional string dropped_name = 3 [
     (gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];

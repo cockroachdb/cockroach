@@ -235,7 +235,7 @@ func (node *DropExternalConnection) Format(ctx *FmtCtx) {
 	}
 }
 
-// DropTenant represents a DROP TENANT command.
+// DropTenant represents a DROP VIRTUAL CLUSTER command.
 type DropTenant struct {
 	TenantSpec *TenantSpec
 	IfExists   bool
@@ -246,7 +246,7 @@ var _ Statement = &DropTenant{}
 
 // Format implements the NodeFormatter interface.
 func (node *DropTenant) Format(ctx *FmtCtx) {
-	ctx.WriteString("DROP TENANT ")
+	ctx.WriteString("DROP VIRTUAL CLUSTER ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
