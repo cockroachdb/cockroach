@@ -2827,7 +2827,7 @@ func (a Allocator) PreferredLeaseholders(
 			if !ok {
 				continue
 			}
-			if constraint.ConjunctionsCheck(storeDesc, preference.Constraints) {
+			if constraint.CheckStoreConjunction(storeDesc, preference.Constraints) {
 				preferred = append(preferred, repl)
 			}
 		}
