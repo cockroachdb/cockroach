@@ -306,7 +306,7 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		maybeAddSep()
-		ctx.WriteString("include_all_secondary_tenants = ")
+		ctx.WriteString("include_all_virtual_clusters = ")
 		ctx.FormatNode(o.IncludeAllSecondaryTenants)
 	}
 }
@@ -356,7 +356,7 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		if other.IncludeAllSecondaryTenants != nil {
-			return errors.New("include_all_secondary_tenants specified multiple times")
+			return errors.New("include_all_virtual_clusters specified multiple times")
 		}
 	} else {
 		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
@@ -457,7 +457,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		maybeAddSep()
-		ctx.WriteString("include_all_secondary_tenants = ")
+		ctx.WriteString("include_all_virtual_clusters = ")
 		ctx.FormatNode(o.IncludeAllSecondaryTenants)
 	}
 
@@ -618,7 +618,7 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 
 	if o.IncludeAllSecondaryTenants != nil {
 		if other.IncludeAllSecondaryTenants != nil {
-			return errors.New("include_all_secondary_tenants specified multiple times")
+			return errors.New("include_all_virtual_clusters specified multiple times")
 		}
 	} else {
 		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
