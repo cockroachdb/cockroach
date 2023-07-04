@@ -486,10 +486,10 @@ DROP TENANT tmpl
 statement ok
 RESET CLUSTER SETTING sql.create_tenant.default_template
 
-subtest block_drop_tenant
+subtest block_drop_virtual_cluster
 
 statement ok
-SET disable_drop_tenant = 'true'
+SET disable_drop_virtual_cluster = 'true'
 
 statement ok
 CREATE TENANT nodelete
@@ -498,7 +498,7 @@ statement error rejected.*irreversible data loss
 DROP TENANT nodelete
 
 statement ok
-RESET disable_drop_tenant
+RESET disable_drop_virtual_cluster
 
 statement ok
 DROP TENANT nodelete
