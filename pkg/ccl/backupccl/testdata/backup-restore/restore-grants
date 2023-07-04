@@ -3,24 +3,9 @@
 # the restoring descriptors reference may not be the same users as they
 # referenced in the backed up cluster.
 
-# TODO(DisasterRecovery): this test currently hangs when run within a tenant
-# (see https://github.com/cockroachdb/cockroach/issues/90444), and should be refactored
-# to run smoothly in a tenant.
-
 # We allow implicit access to non-admin users so that we can test
 # with nodelocal.
-new-cluster name=s1 allow-implicit-access disable-tenant
-----
-
-# TODO(ssd): We reset the closed timestamp configurables to avoid schema
-# change transactions entering a retry loop with the lease acquisition
-# transactions. See https://github.com/cockroachdb/cockroach/issues/89900
-exec-sql
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '3s';
-----
-
-exec-sql
-SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval= '200ms';
+new-cluster name=s1 allow-implicit-access
 ----
 
 # First, let's create some users, a database, a couple of types, some tables,
