@@ -1007,6 +1007,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VERIFY_BACKUP_TABLE_DATA VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
 %token <str> VIEWCLUSTERMETADATA VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VISIBILITY VOLATILE VOTERS
+%token <str> VIRTUAL_CLUSTER_NAME
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -3797,7 +3798,7 @@ restore_options:
 	{
 		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
 	}
-| TENANT_NAME '=' string_or_placeholder
+| virtual_cluster_name '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
   }
@@ -3817,6 +3818,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{UnsafeRestoreIncompatibleVersion: true}
   }
+
+virtual_cluster_name:
+  TENANT_NAME { /* SKIP DOC */ }
+| VIRTUAL_CLUSTER_NAME { }
 
 import_format:
   name
@@ -16849,6 +16854,7 @@ unreserved_keyword:
 | VIEWCLUSTERMETADATA
 | VIEWCLUSTERSETTING
 | VIEWDEBUG
+| VIRTUAL_CLUSTER_NAME
 | VISIBLE
 | VISIBILITY
 | VOLATILE
@@ -17424,6 +17430,7 @@ bare_label_keywords:
 | VIEWCLUSTERSETTING
 | VIEWDEBUG
 | VIRTUAL
+| VIRTUAL_CLUSTER_NAME
 | VISIBLE
 | VISIBILITY
 | VOLATILE
