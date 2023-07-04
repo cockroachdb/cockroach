@@ -911,7 +911,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 
 %token <str> CACHE CALL CALLED CANCEL CANCELQUERY CAPABILITIES CAPABILITY CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CHECK_FILES CLOSE
-%token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
+%token <str> CLUSTER CLUSTERS COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONNECTION CONNECTIONS CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
 %token <str> CONVERSION CONVERT COPY COST COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
@@ -1033,9 +1033,9 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 // - ON_LA is needed for ON UPDATE and ON DELETE expressions for foreign key
 // references.
 // - TENANT_ALL is used to differentiate `ALTER TENANT <id>` from
-// `ALTER TENANT ALL`.
+// `ALTER TENANT ALL`. Ditto `CLUSTER_ALL` and `CLUSTER ALL`.
 %token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL
-%token USER_ALL ON_LA TENANT_ALL SET_TRACING
+%token USER_ALL ON_LA TENANT_ALL CLUSTER_ALL SET_TRACING
 
 %union {
   id    int32
@@ -1297,7 +1297,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Statement> show_syntax_stmt
 %type <tree.Statement> show_last_query_stats_stmt
 %type <tree.Statement> show_tables_stmt
-%type <tree.Statement> show_tenant_stmt opt_show_tenant_options show_tenant_options
+%type <tree.Statement> show_virtual_cluster_stmt opt_show_tenant_options show_tenant_options
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
 %type <tree.Statement> show_transactions_stmt
@@ -1492,7 +1492,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Exprs> execute_param_clause
 %type <types.IntervalTypeMetadata> opt_interval_qualifier interval_qualifier interval_second
 %type <tree.Expr> overlay_placing
-%type <*tree.TenantSpec> tenant_spec
+%type <*tree.TenantSpec> tenant_spec virtual_cluster_spec_opt_all
 
 %type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
 %type <bool> opt_index_access_method
@@ -5921,39 +5921,54 @@ backup_kms:
     }
 	}
 
-// %Help: SHOW TENANT - display tenant information
+// %Help: SHOW VIRTUAL CLUSTER - display metadata about virtual clusters
 // %Category: Experimental
 // %Text:
-// SHOW TENANT { <tenant_spec> | ALL } [ WITH <options> ]
-// SHOW TENANTS                        [ WITH <options> ]
+// SHOW VIRTUAL CLUSTER { <tenant_spec> | ALL } [ WITH <options> ]
+// SHOW VIRTUAL CLUSTERS                        [ WITH <options> ]
 //
 // Options:
 //     REPLICATION STATUS
 //     CAPABILITIES
-show_tenant_stmt:
-  SHOW TENANTS opt_show_tenant_options
+show_virtual_cluster_stmt:
+  SHOW virtual_cluster_spec_opt_all opt_show_tenant_options
   {
-   $$.val = &tree.ShowTenant{
-     TenantSpec: &tree.TenantSpec{All: true},
-     ShowTenantOptions: $3.showTenantOpts(),
-   }
+    /* SKIP DOC */
+    $$.val = &tree.ShowTenant{
+      TenantSpec: $2.tenantSpec(),
+      ShowTenantOptions: $3.showTenantOpts(),
+    }
   }
-| SHOW TENANT_ALL ALL opt_show_tenant_options
-  {
-   $$.val = &tree.ShowTenant{
-     TenantSpec: &tree.TenantSpec{All: true},
-     ShowTenantOptions: $4.showTenantOpts(),
-   }
-  }
-| SHOW TENANT tenant_spec opt_show_tenant_options
-  {
-   $$.val = &tree.ShowTenant{
-     TenantSpec: $3.tenantSpec(),
-     ShowTenantOptions: $4.showTenantOpts(),
+| SHOW virtual_cluster error // SHOW HELP: SHOW VIRTUAL CLUSTER
 
-   }
+virtual_cluster_spec_opt_all:
+  TENANT_ALL ALL
+  {
+    /* SKIP DOC */
+    $$.val = &tree.TenantSpec{All: true}
   }
-| SHOW TENANT error // SHOW HELP: SHOW TENANT
+| TENANTS
+  {
+    /* SKIP DOC */
+    $$.val = &tree.TenantSpec{All: true}
+  }
+| TENANT tenant_spec
+  {
+    /* SKIP DOC */
+    $$.val = $2.tenantSpec()
+  }
+| VIRTUAL CLUSTER_ALL ALL
+  {
+    $$.val = &tree.TenantSpec{All: true}
+  }
+| VIRTUAL CLUSTERS
+  {
+    $$.val = &tree.TenantSpec{All: true}
+  }
+| VIRTUAL CLUSTER tenant_spec
+  {
+    $$.val = $3.tenantSpec()
+  }
 
 opt_show_tenant_options:
   /* EMPTY */
@@ -7083,7 +7098,7 @@ show_stmt:
 | show_stats_stmt            // EXTEND WITH HELP: SHOW STATISTICS
 | show_syntax_stmt           // EXTEND WITH HELP: SHOW SYNTAX
 | show_tables_stmt           // EXTEND WITH HELP: SHOW TABLES
-| show_tenant_stmt           // EXTEND WITH HELP: SHOW TENANT
+| show_virtual_cluster_stmt  // EXTEND WITH HELP: SHOW VIRTUAL CLUSTER
 | show_trace_stmt            // EXTEND WITH HELP: SHOW TRACE
 | show_transaction_stmt      // EXTEND WITH HELP: SHOW TRANSACTION
 | show_transactions_stmt     // EXTEND WITH HELP: SHOW TRANSACTIONS
@@ -16460,6 +16475,7 @@ unreserved_keyword:
 | CHECK_FILES
 | CLOSE
 | CLUSTER
+| CLUSTERS
 | COLUMNS
 | COMMENT
 | COMMENTS
@@ -16939,6 +16955,7 @@ bare_label_keywords:
 | CHECK_FILES
 | CLOSE
 | CLUSTER
+| CLUSTERS
 | COALESCE
 | COLLATION
 | COLUMN
