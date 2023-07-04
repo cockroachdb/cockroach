@@ -229,7 +229,6 @@ FILES = [
     "show_indexes_stmt",
     "show_jobs",
     "show_keys",
-    "show_local_or_tenant_csettings_stmt",
     "show_locality",
     "show_locality_stmt",
     "show_partitions_stmt",

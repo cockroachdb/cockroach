@@ -241,7 +241,6 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:show_indexes_stmt.bnf",
     "//docs/generated/sql/bnf:show_jobs.bnf",
     "//docs/generated/sql/bnf:show_keys.bnf",
-    "//docs/generated/sql/bnf:show_local_or_tenant_csettings_stmt.bnf",
     "//docs/generated/sql/bnf:show_locality.bnf",
     "//docs/generated/sql/bnf:show_locality_stmt.bnf",
     "//docs/generated/sql/bnf:show_partitions_stmt.bnf",
