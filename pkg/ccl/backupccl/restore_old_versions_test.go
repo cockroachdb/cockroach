@@ -471,7 +471,7 @@ func fullClusterRestoreWithTenants(exportDir string) func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, fmt.Sprintf("SELECT count(*) FROM [SHOW BACKUP LATEST IN '%s'] WHERE object_type = 'TENANT'", localFoo), [][]string{
 			{"2"},
 		})
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION, include_all_secondary_tenants", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION, include_all_virtual_clusters", localFoo))
 		sqlDB.CheckQueryResults(t, "SHOW TENANTS", [][]string{
 			{"1", "system", "ready", "shared"},
 			{"5", "tenant-5", "ready", "none"},
