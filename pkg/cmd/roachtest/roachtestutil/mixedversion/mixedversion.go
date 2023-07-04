@@ -407,15 +407,15 @@ func (t *Test) Workload(
 // test plan will be generated (and logged), and the test will be
 // carried out.
 func (t *Test) Run() {
-	plan, err := t.plan()
+	plans, err := t.plan()
 	if err != nil {
-		t.rt.Fatal(fmt.Errorf("error creating test plan: %w", err))
+		t.rt.Fatal(fmt.Errorf("error creating test plans: %w", err))
 	}
-
-	t.logger.Printf(plan.PrettyPrint())
-
-	if err := t.run(plan); err != nil {
-		t.rt.Fatal(err)
+	for _, plan := range plans {
+		t.logger.Printf(plan.PrettyPrint())
+		if err := t.run(plan); err != nil {
+			t.rt.Fatal(err)
+		}
 	}
 }
 
@@ -425,24 +425,24 @@ func (t *Test) run(plan *TestPlan) error {
 	).run()
 }
 
-func (t *Test) plan() (*TestPlan, error) {
+func (t *Test) plan() ([]*TestPlan, error) {
+	var plans []*TestPlan
 	previousReleases, err := version.UpdatePaths(t.buildVersion())
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO: change testPlanner to work with multiple versions or loop over "from" versions and return multiple plans.
-	// This iteration should be a noop. And the mapping is ugly now, because it points to keys in the other file, not actual from versions.
-	planner := testPlanner{
-		initialVersion: previousReleases[0],
-		rt:             t.rt,
-		crdbNodes:      t.crdbNodes,
-		hooks:          t.hooks,
-		prng:           t.prng,
-		bgChans:        t.bgChans,
+	for _, rel := range previousReleases {
+		planner := testPlanner{
+			initialVersion: rel,
+			rt:             t.rt,
+			crdbNodes:      t.crdbNodes,
+			hooks:          t.hooks,
+			prng:           t.prng,
+			bgChans:        t.bgChans,
+		}
+		plans = append(plans, planner.Plan())
 	}
-
-	return planner.Plan(), nil
+	return plans, nil
 }
 
 func (t *Test) buildVersion() version.Version {

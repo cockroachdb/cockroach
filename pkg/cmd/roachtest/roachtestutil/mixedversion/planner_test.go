@@ -78,14 +78,15 @@ func TestTestPlanner(t *testing.T) {
 	csvServer := roachtestutil.NewCommand("./cockroach workload csv-server").Flag("port", 9999)
 	mvt.BackgroundCommand("csv server", nodes, csvServer)
 
-	plan, err := mvt.plan()
+	plans, err := mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 12)
+	for _, plan := range plans {
+		require.Len(t, plan.steps, 12)
 
-	// Assert on the pretty-printed version of the test plan as that
-	// asserts the ordering of the steps we want to take, and as a bonus
-	// tests the printing function itself.
-	expectedPrettyPlan := fmt.Sprintf(`
+		// Assert on the pretty-printed version of the test plan as that
+		// asserts the ordering of the steps we want to take, and as a bonus
+		// tests the printing function itself.
+		expectedPrettyPlan := fmt.Sprintf(`
 mixed-version test plan for upgrading from %[1]s to <current>:
 ├── starting cluster from fixtures for version "%[1]s" (1)
 ├── upload current binary to all cockroach nodes (:1-4) (2)
@@ -125,10 +126,11 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 │   └── run "mixed-version 2", after 0s delay (29)
 └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (30)
 `, previousVersion,
-	)
+		)
 
-	expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
-	require.Equal(t, expectedPrettyPlan, plan.PrettyPrint())
+		expectedPrettyPlan = expectedPrettyPlan[1:] // remove leading newline
+		require.Equal(t, expectedPrettyPlan, plan.PrettyPrint())
+	}
 
 	// Assert that startup hooks are scheduled to run before any
 	// upgrades, i.e., after cluster is initialized (step 1), and after
@@ -136,9 +138,11 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 	mvt = newTest(t)
 	mvt.OnStartup("startup 1", dummyHook)
 	mvt.OnStartup("startup 2", dummyHook)
-	plan, err = mvt.plan()
+	plans, err = mvt.plan()
 	require.NoError(t, err)
-	requireConcurrentHooks(t, plan.steps[4], "startup 1", "startup 2")
+	for _, plan := range plans {
+		requireConcurrentHooks(t, plan.steps[4], "startup 1", "startup 2")
+	}
 
 	// Assert that AfterUpgradeFinalized hooks are scheduled to run in
 	// the last step of the test.
@@ -146,30 +150,36 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 	mvt.AfterUpgradeFinalized("finalizer 1", dummyHook)
 	mvt.AfterUpgradeFinalized("finalizer 2", dummyHook)
 	mvt.AfterUpgradeFinalized("finalizer 3", dummyHook)
-	plan, err = mvt.plan()
+	plans, err = mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 10)
-	requireConcurrentHooks(t, plan.steps[9], "finalizer 1", "finalizer 2", "finalizer 3")
+	for _, plan := range plans {
+		require.Len(t, plan.steps, 10)
+		requireConcurrentHooks(t, plan.steps[9], "finalizer 1", "finalizer 2", "finalizer 3")
+	}
 }
 
 // TestDeterministicTestPlan tests that generating a test plan with
 // the same seed multiple times yields the same plan every time.
 func TestDeterministicTestPlan(t *testing.T) {
-	makePlan := func() *TestPlan {
+	makePlans := func() []*TestPlan {
 		mvt := newTest(t)
 		mvt.InMixedVersion("mixed-version 1", dummyHook)
 		mvt.InMixedVersion("mixed-version 2", dummyHook)
 
-		plan, err := mvt.plan()
+		plans, err := mvt.plan()
 		require.NoError(t, err)
-		return plan
+		return plans
 	}
 
-	expectedPlan := makePlan()
 	const numRuns = 50
 	for j := 0; j < numRuns; j++ {
-		require.Equal(t, expectedPlan.PrettyPrint(), makePlan().PrettyPrint(), "j = %d", j)
+		expectedPlans1 := makePlans()
+		expectedPlans2 := makePlans()
+		for i := range expectedPlans1 {
+			require.Equal(t, expectedPlans1[i].PrettyPrint(), expectedPlans2[i].PrettyPrint(), "j = %d", j)
+		}
 	}
+
 }
 
 var unused float64
@@ -211,28 +221,31 @@ func TestDeterministicHookSeeds(t *testing.T) {
 			emptyHelper = &Helper{}
 		)
 
-		plan, err := mvt.plan()
+		plans, err := mvt.plan()
 		require.NoError(t, err)
 
-		// We can hardcode these paths since we are using a fixed seed in
-		// these tests.
-		firstRun := plan.steps[4].(sequentialRunStep).steps[2].(runHookStep)
-		require.Equal(t, "do something", firstRun.hook.name)
-		require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+		for _, plan := range plans {
 
-		secondRun := plan.steps[5].(sequentialRunStep).steps[3].(runHookStep)
-		require.Equal(t, "do something", secondRun.hook.name)
-		require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+			// We can hardcode these paths since we are using a fixed seed in
+			// these tests.
+			firstRun := plan.steps[4].(sequentialRunStep).steps[2].(runHookStep)
+			require.Equal(t, "do something", firstRun.hook.name)
+			require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		thirdRun := plan.steps[6].(sequentialRunStep).steps[1].(runHookStep)
-		require.Equal(t, "do something", thirdRun.hook.name)
-		require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+			secondRun := plan.steps[5].(sequentialRunStep).steps[3].(runHookStep)
+			require.Equal(t, "do something", secondRun.hook.name)
+			require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		fourthRun := plan.steps[8].(runHookStep)
-		require.Equal(t, "do something", fourthRun.hook.name)
-		require.NoError(t, fourthRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+			thirdRun := plan.steps[6].(sequentialRunStep).steps[1].(runHookStep)
+			require.Equal(t, "do something", thirdRun.hook.name)
+			require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
 
-		require.Len(t, generatedData, 4)
+			fourthRun := plan.steps[8].(runHookStep)
+			require.Equal(t, "do something", fourthRun.hook.name)
+			require.NoError(t, fourthRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+
+			require.Len(t, generatedData, 4)
+		}
 		return generatedData
 	}
 
