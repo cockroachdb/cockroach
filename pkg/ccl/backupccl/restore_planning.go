@@ -79,7 +79,7 @@ const (
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
 	restoreOptDebugPauseOn              = "debug_pause_on"
 	restoreOptAsTenant                  = "virtual_cluster_name"
-	restoreOptForceTenantID             = "tenant"
+	restoreOptForceTenantID             = "virtual_cluster"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
