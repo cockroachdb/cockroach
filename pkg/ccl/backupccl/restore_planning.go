@@ -78,7 +78,7 @@ const (
 	restoreOptSkipMissingViews          = "skip_missing_views"
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
 	restoreOptDebugPauseOn              = "debug_pause_on"
-	restoreOptAsTenant                  = "tenant_name"
+	restoreOptAsTenant                  = "virtual_cluster_name"
 	restoreOptForceTenantID             = "tenant"
 
 	// The temporary database system tables will be restored into for full
