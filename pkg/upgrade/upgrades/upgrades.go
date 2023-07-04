@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
-	"github.com/cockroachdb/errors"
 )
 
 // SettingsDefaultOverrides documents the effect of several migrations that add
@@ -117,6 +116,7 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		waitForAllSchemaChanges,
 	),
+	firstUpgradeTowardsV23_1,
 	upgrade.NewTenantUpgrade("add columns to system.tenants and populate a system tenant entry",
 		toCV(clusterversion.V23_1TenantNamesStateAndServiceMode),
 		upgrade.NoPrecondition,
@@ -318,11 +318,28 @@ var upgrades = []upgradebase.Upgrade{
 	),
 }
 
+var (
+	firstUpgradeTowardsV23_1 = upgrade.NewTenantUpgrade(
+		"prepare upgrade to v23.1 release",
+		toCV(clusterversion.V23_1Start),
+		FirstUpgradeFromReleasePrecondition,
+		NoTenantUpgradeFunc,
+	)
+
+	// This slice must contain all upgrades bound to V??_?Start cluster
+	// version keys. In this release branch, this means V23_1Start.
+	//
+	// These should have FirstUpgradeFromReleasePrecondition as a
+	// precondition and NoTenantUpgradeFunc as the upgrade function itself,
+	// due to this functionality having been added in the 23.2 release cycle
+	// and backported into this release branch.
+	firstUpgradesAfterPreExistingReleases = []upgradebase.Upgrade{
+		firstUpgradeTowardsV23_1,
+	}
+)
+
 func init() {
 	for _, m := range upgrades {
-		if _, exists := registry[m.Version()]; exists {
-			panic(errors.AssertionFailedf("duplicate upgrade registration for %v", m.Version()))
-		}
 		registry[m.Version()] = m
 	}
 }
