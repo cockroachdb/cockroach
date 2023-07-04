@@ -117,17 +117,17 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
 regex matches error
 
 exec-sql expect-error-regex=(invalid tenant name)
-RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'invalid_name';
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'invalid_name';
 ----
 regex matches error
 
 exec-sql expect-error-regex=(tenant with name "tenant-6" already exists)
-RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'tenant-6';
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'tenant-6';
 ----
 regex matches error
 
 exec-sql
-RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'newname';
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'newname';
 ----
 
 query-sql
@@ -152,7 +152,7 @@ BACKUP TENANT 2 INTO 'nodelocal://1/tenant2'
 ----
 
 exec-sql
-RESTORE TENANT 2 FROM LATEST IN 'nodelocal://1/tenant2' WITH tenant_name = 'another-name';
+RESTORE TENANT 2 FROM LATEST IN 'nodelocal://1/tenant2' WITH virtual_cluster_name = 'another-name';
 ----
 
 query-sql
