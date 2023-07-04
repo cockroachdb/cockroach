@@ -5019,7 +5019,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Body:       `SELECT crdb_internal.destroy_tenant($1, false)`,
-			Info:       "DO NOT USE -- USE 'DROP TENANT' INSTEAD.",
+			Info:       "DO NOT USE -- USE 'DROP VIRTUAL CLUSTER' INSTEAD.",
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
@@ -5044,7 +5044,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 				}
 				return args[0], nil
 			},
-			Info:       "DO NOT USE -- USE 'DROP TENANT IMMEDIATE' INSTEAD.",
+			Info:       "DO NOT USE -- USE 'DROP VIRTUAL CLUSTER IMMEDIATE' INSTEAD.",
 			Volatility: volatility.Volatile,
 		},
 	),
