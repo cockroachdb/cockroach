@@ -2010,7 +2010,7 @@ func allocateConstraintsCheck(
 	}
 
 	for i, constraints := range analyzed.Constraints {
-		if constraintsOK := constraint.ConjunctionsCheck(
+		if constraintsOK := constraint.CheckStoreConjunction(
 			store, constraints.Constraints,
 		); constraintsOK {
 			valid = true
@@ -2050,9 +2050,7 @@ func replaceConstraintsCheck(
 	for i, constraints := range analyzed.Constraints {
 		matchingStores := analyzed.SatisfiedBy[i]
 		satisfiedByExistingStore := containsStore(matchingStores, existingStore.StoreID)
-		satisfiedByCandidateStore := constraint.ConjunctionsCheck(
-			store, constraints.Constraints,
-		)
+		satisfiedByCandidateStore := constraint.CheckStoreConjunction(store, constraints.Constraints)
 		if satisfiedByCandidateStore {
 			valid = true
 		}
@@ -2147,7 +2145,7 @@ func rebalanceFromConstraintsCheck(
 	// satisfied by existing replicas or that is only fully satisfied because of
 	// fromStoreID, then it's necessary.
 	for i, constraints := range analyzed.Constraints {
-		if constraintsOK := constraint.ConjunctionsCheck(
+		if constraintsOK := constraint.CheckStoreConjunction(
 			store, constraints.Constraints,
 		); constraintsOK {
 			valid = true
