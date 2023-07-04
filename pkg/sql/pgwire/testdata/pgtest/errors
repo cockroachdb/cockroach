@@ -50,7 +50,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"23503","ConstraintName":"fk_p_ref_parent"}
+{"Type":"ErrorResponse","Code":"23503","ConstraintName":"fk_p_ref_parent","Detail":"Key (p)=(1) is not present in table \"parent\"."}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -82,5 +82,20 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"23503","ConstraintName":"foo bar"}
+{"Type":"ErrorResponse","Code":"23503","ConstraintName":"foo bar","Detail":"Key (p)=(1) is not present in table \"parent\"."}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s0", "Query": "select $1,$2,$3", "ParameterOIDs":[1043, 1043, 1043]}
+Bind {"DestinationPortal": "p0", "PreparedStatement": "s0", "ParameterFormatCodes": [0], "ResultFormatCodes": [0,1,2,3,4,5], "Parameters": [{"text":"whitebear"}, {"text":"blackbear"}, {"text":"brownbear"}]}
+Execute {"Portal": "p0"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement name \"s0\"\n--\nportal name \"p0\"\n--\nstatement summary \"SELECT $1, $1, $1\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}

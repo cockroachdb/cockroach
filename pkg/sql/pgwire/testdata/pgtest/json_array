@@ -248,7 +248,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement summary \"SELECT $1::JSONB[]\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -315,7 +315,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement summary \"SELECT $1::JSONB[]\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -370,7 +370,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement summary \"SELECT $1::JSONB[]\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -437,7 +437,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement summary \"SELECT $1::JSONB[]\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send

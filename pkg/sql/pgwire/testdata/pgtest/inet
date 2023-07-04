@@ -10,7 +10,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement summary \"SELECT $1::INET\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # IPv4family
@@ -23,7 +23,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ErrorResponse","Code":"22P03","Detail":"statement summary \"SELECT $1::INET\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # IPv6family
@@ -36,7 +36,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ErrorResponse","Code":"22P03","Detail":"statement summary \"SELECT $1::INET\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Unknown family
@@ -49,5 +49,5 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ErrorResponse","Code":"22P03","Detail":"statement summary \"SELECT $1::INET\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}

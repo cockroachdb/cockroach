@@ -24,7 +24,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement name \"s0\"\n--\nportal name \"p0\"\n--\nstatement summary \"SELECT $1\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -70,7 +70,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement name \"s2\"\n--\nportal name \"p2\"\n--\nstatement summary \"SELECT $1, $1::INT8\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 
@@ -88,5 +88,5 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement name \"s\"\n--\nportal name \"p\"\n--\nstatement summary \"SELECT _\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}

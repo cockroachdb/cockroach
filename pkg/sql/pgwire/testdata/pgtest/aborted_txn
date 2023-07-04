@@ -102,7 +102,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"25P02"}
+{"Type":"ErrorResponse","Code":"25P02","Detail":"statement name \"s1\"\n--\nstatement summary \"SELECT * FROM drop_cols\""}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 # Rollback the transaction, and make sure prepared statement works.
@@ -300,7 +300,7 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"BindComplete"}
-{"Type":"ErrorResponse","Code":"23505","ConstraintName":"t103936_j_key"}
+{"Type":"ErrorResponse","Code":"23505","ConstraintName":"t103936_j_key","Detail":"Key (j)=(2) already exists."}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 # Get back to a good state.

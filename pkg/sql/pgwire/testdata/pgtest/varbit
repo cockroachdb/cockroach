@@ -10,7 +10,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement summary \"SELECT $1::VARBIT\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # bitlen = 0x52 = 82 (4 bytes), with 17 0-bytes following.
@@ -23,5 +23,5 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ErrorResponse","Code":"22P03","Detail":"statement summary \"SELECT $1::VARBIT\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
