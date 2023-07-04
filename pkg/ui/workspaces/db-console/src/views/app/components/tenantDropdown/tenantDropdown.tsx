@@ -27,7 +27,7 @@ const TenantDropdown = () => {
   const createDropdownItems = () => {
     return (
       tenants?.map(tenantID => {
-        return { name: "Tenant: " + tenantID, value: tenantID };
+        return { name: "Virtual cluster: " + tenantID, value: tenantID };
       }) || []
     );
   };
@@ -49,7 +49,9 @@ const TenantDropdown = () => {
         items={createDropdownItems()}
         onChange={(tenantID: string) => onTenantChange(tenantID)}
       >
-        <div className="tenant-selected">{"Tenant: " + currentTenant}</div>
+        <div className="virtual-cluster-selected">
+          {"Virtual cluster: " + currentTenant}
+        </div>
       </Dropdown>
     </ErrorBoundary>
   );
