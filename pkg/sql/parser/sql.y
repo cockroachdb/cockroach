@@ -1169,7 +1169,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Statement> create_schema_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
-%type <tree.Statement> create_tenant_stmt
+%type <tree.Statement> create_virtual_cluster_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_func_stmt
@@ -4367,18 +4367,18 @@ create_stmt:
 | create_changefeed_stmt // EXTEND WITH HELP: CREATE CHANGEFEED
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
-| create_tenant_stmt     // EXTEND WITH HELP: CREATE TENANT
+| create_virtual_cluster_stmt     // EXTEND WITH HELP: CREATE VIRTUAL CLUSTER
 | create_schedule_stmt   // help texts in sub-rule
 | create_unsupported     {}
 | CREATE error           // SHOW HELP: CREATE
 
-// %Help: CREATE TENANT - create new tenant
+// %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
 // %Text:
-// CREATE TENANT [ IF NOT EXISTS ] name [ LIKE <tenant_spec> ]
-// CREATE TENANT [ IF NOT EXISTS ] name [ LIKE <tenant_spec> ] FROM REPLICATION OF <tenant_spec> ON <location> [ WITH OPTIONS ... ]
-create_tenant_stmt:
-  CREATE TENANT d_expr opt_like_tenant
+// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ LIKE <tenant_spec> ]
+// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ LIKE <tenant_spec> ] FROM REPLICATION OF <tenant_spec> ON <location> [ WITH OPTIONS ... ]
+create_virtual_cluster_stmt:
+  CREATE virtual_cluster d_expr opt_like_tenant
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
@@ -4386,7 +4386,7 @@ create_tenant_stmt:
       Like: $4.likeTenantSpec(),
     }
   }
-| CREATE TENANT IF NOT EXISTS d_expr opt_like_tenant
+| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_tenant
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
@@ -4395,7 +4395,7 @@ create_tenant_stmt:
       Like: $7.likeTenantSpec(),
     }
   }
-| CREATE TENANT d_expr opt_like_tenant FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
+| CREATE virtual_cluster d_expr opt_like_tenant FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
@@ -4406,7 +4406,7 @@ create_tenant_stmt:
       Like: $4.likeTenantSpec(),
     }
   }
-| CREATE TENANT IF NOT EXISTS d_expr opt_like_tenant FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
+| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_tenant FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
@@ -4418,9 +4418,13 @@ create_tenant_stmt:
       Like: $7.likeTenantSpec(),
     }
   }
-| CREATE TENANT error // SHOW HELP: CREATE TENANT
+| CREATE virtual_cluster error // SHOW HELP: CREATE VIRTUAL CLUSTER
 
-// opt_like_tenant defines a LIKE clause for CREATE TENANT.
+virtual_cluster:
+  TENANT { /* SKIP DOC */ }
+| VIRTUAL CLUSTER
+
+// opt_like_tenant defines a LIKE clause for CREATE VIRTUAL CLUSTER.
 // Eventually this can grow to support INCLUDING/EXCLUDING options
 // like in CREATE TABLE.
 opt_like_tenant:

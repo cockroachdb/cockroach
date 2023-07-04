@@ -133,7 +133,7 @@ CREATE TENANT IF NOT EXISTS three
 statement ok
 set default_transaction_read_only = on;
 
-statement error cannot execute CREATE TENANT in a read-only transaction
+statement error cannot execute CREATE VIRTUAL CLUSTER in a read-only transaction
 CREATE TENANT four;
 
 statement ok

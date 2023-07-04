@@ -842,7 +842,7 @@ func (*CreateTenant) StatementReturnType() StatementReturnType { return Ack }
 func (*CreateTenant) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CreateTenant) StatementTag() string { return "CREATE TENANT" }
+func (*CreateTenant) StatementTag() string { return "CREATE VIRTUAL CLUSTER" }
 
 // StatementReturnType implements the Statement interface.
 func (*CreateTenantFromReplication) StatementReturnType() StatementReturnType { return Rows }
@@ -851,7 +851,9 @@ func (*CreateTenantFromReplication) StatementReturnType() StatementReturnType { 
 func (*CreateTenantFromReplication) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CreateTenantFromReplication) StatementTag() string { return "CREATE TENANT FROM REPLICATION" }
+func (*CreateTenantFromReplication) StatementTag() string {
+	return "CREATE VIRTUAL CLUSTER FROM REPLICATION"
+}
 
 func (*CreateTenantFromReplication) cclOnlyStatement() {}
 
