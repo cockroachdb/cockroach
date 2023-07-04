@@ -10,7 +10,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement summary \"SELECT $1::JSONB\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # JSONB version 2 followed by two double quotes (ASCII 0x22). This is a
@@ -25,7 +25,7 @@ until mapError=(XX000, 08P01)
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ErrorResponse","Code":"08P01","Detail":"statement summary \"SELECT $1::JSONB\""}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # Test binary output encoding for JSONB.

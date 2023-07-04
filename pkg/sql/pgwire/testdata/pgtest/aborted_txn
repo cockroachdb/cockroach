@@ -102,7 +102,7 @@ until
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"ErrorResponse","Code":"25P02"}
+{"Type":"ErrorResponse","Code":"25P02","Detail":"statement name \"s1\"\n--\nstatement summary \"SELECT * FROM drop_cols\""}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 # Rollback the transaction, and make sure prepared statement works.
