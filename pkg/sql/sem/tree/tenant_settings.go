@@ -10,7 +10,7 @@
 
 package tree
 
-// AlterTenantSetClusterSetting represents an ALTER TENANT
+// AlterTenantSetClusterSetting represents an ALTER VIRTUAL CLUSTER
 // SET CLUSTER SETTING statement.
 type AlterTenantSetClusterSetting struct {
 	SetClusterSetting
@@ -19,7 +19,7 @@ type AlterTenantSetClusterSetting struct {
 
 // Format implements the NodeFormatter interface.
 func (n *AlterTenantSetClusterSetting) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER TENANT ")
+	ctx.WriteString("ALTER VIRTUAL CLUSTER ")
 	ctx.FormatNode(n.TenantSpec)
 	ctx.WriteByte(' ')
 	ctx.FormatNode(&n.SetClusterSetting)
