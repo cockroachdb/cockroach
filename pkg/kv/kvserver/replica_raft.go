@@ -170,7 +170,7 @@ func (r *Replica) evalAndPropose(
 
 	// Make it a truly replicated proposal. We measure the replication latency
 	// from this point on.
-	proposal.ec = makeReplicatedEndCmds(r, g, *st)
+	proposal.ec = makeReplicatedEndCmds(r, g, *st, timeutil.Now())
 
 	log.VEventf(proposal.ctx, 2,
 		"proposing command to write %d new keys, %d new values, %d new intents, "+
