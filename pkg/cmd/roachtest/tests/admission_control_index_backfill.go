@@ -169,15 +169,6 @@ func registerIndexBackfill(r registry.Registry) {
 					db := c.Conn(ctx, t.L(), 1)
 					defer db.Close()
 
-					// Crank up AddSST concurrency to increase the likelihood
-					// of getting into IO overload regime due to follower
-					// activity.
-					if _, err := db.ExecContext(ctx,
-						"SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 3",
-					); err != nil {
-						t.Fatal(err)
-					}
-
 					// Defeat https://github.com/cockroachdb/cockroach/issues/98311.
 					if _, err := db.ExecContext(ctx,
 						"SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false;",
