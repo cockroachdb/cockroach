@@ -15,7 +15,7 @@ restore_options ::=
 	| 'INCLUDE_ALL_VIRTUAL_CLUSTERS' '=' a_expr
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'VIRTUAL_CLUSTER_NAME' '=' string_or_placeholder
-	| 'TENANT' '=' string_or_placeholder
+	| 'VIRTUAL_CLUSTER' '=' string_or_placeholder
 	| 'SCHEMA_ONLY'
 	| 'VERIFY_BACKUP_TABLE_DATA'
 	| 'UNSAFE_RESTORE_INCOMPATIBLE_VERSION'

@@ -475,7 +475,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 
 	if o.ForceTenantID != nil {
 		maybeAddSep()
-		ctx.WriteString("tenant = ")
+		ctx.WriteString("virtual_cluster = ")
 		ctx.FormatNode(o.ForceTenantID)
 	}
 
@@ -598,7 +598,7 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 	if o.ForceTenantID == nil {
 		o.ForceTenantID = other.ForceTenantID
 	} else if other.ForceTenantID != nil {
-		return errors.New("tenant option specified multiple times")
+		return errors.New("virtual_cluster option specified multiple times")
 	}
 
 	if o.SchemaOnly {
