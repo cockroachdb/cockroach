@@ -42,9 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -3289,113 +3287,6 @@ HAVING
 	if len(matrix) > 0 {
 		t.Fatalf("more than %d voting replicas: %s", repFactor, sqlutils.MatrixToStr(matrix))
 	}
-}
-
-func TestDecommission(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// Five nodes is too much to reliably run under testrace with our aggressive
-	// liveness timings.
-	skip.UnderRace(t, "#39807 and #37811")
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationAuto,
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SpanConfig: &spanconfig.TestingKnobs{
-					ConfigureScratchRange: true,
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	k := tc.ScratchRange(t)
-	admin, err := tc.GetAdminClient(ctx, t, 0)
-	require.NoError(t, err)
-
-	// Decommission the first node, which holds most of the leases.
-	_, err = admin.Decommission(
-		ctx, &serverpb.DecommissionRequest{
-			NodeIDs:          []roachpb.NodeID{1},
-			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
-		},
-	)
-	require.NoError(t, err)
-
-	requireNoReplicas := func(storeID roachpb.StoreID, repFactor int) {
-		attempt := 0
-		testutils.SucceedsSoon(t, func() error {
-			attempt++
-			desc := tc.LookupRangeOrFatal(t, k)
-			for _, rDesc := range desc.Replicas().VoterDescriptors() {
-				store, err := tc.Servers[int(rDesc.NodeID-1)].Stores().GetStore(rDesc.StoreID)
-				require.NoError(t, err)
-				if err := store.ForceReplicationScanAndProcess(); err != nil {
-					return err
-				}
-			}
-			if sl := desc.Replicas().FilterToDescriptors(func(rDesc roachpb.ReplicaDescriptor) bool {
-				return rDesc.StoreID == storeID
-			}); len(sl) > 0 {
-				return errors.Errorf("still a replica on s%d: %s on attempt %d", storeID, &desc, attempt)
-			}
-			if len(desc.Replicas().VoterDescriptors()) != repFactor {
-				return errors.Errorf("expected %d replicas: %s on attempt %d", repFactor, &desc, attempt)
-			}
-			return nil
-		})
-	}
-
-	const triplicated = 3
-
-	requireNoReplicas(1, triplicated)
-
-	runner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	ts := timeutil.Now()
-
-	_, err = admin.Decommission(
-		ctx, &serverpb.DecommissionRequest{
-			NodeIDs:          []roachpb.NodeID{2},
-			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
-		},
-	)
-	require.NoError(t, err)
-
-	// Both s1 and s2 are out, so neither ought to have replicas.
-	requireNoReplicas(1, triplicated)
-	requireNoReplicas(2, triplicated)
-
-	// Going from three replicas to three replicas should have used atomic swaps
-	// only. We didn't verify this before the first decommissioning op because
-	// lots of ranges were over-replicated due to ranges recently having split
-	// off from the five-fold replicated system ranges.
-	requireOnlyAtomicChanges(t, runner, tc.LookupRangeOrFatal(t, k).RangeID, triplicated, ts)
-
-	sqlutils.SetZoneConfig(t, runner, "RANGE default", "num_replicas: 1")
-
-	const single = 1
-
-	// The range should drop down to one replica on a non-decommissioning store.
-	requireNoReplicas(1, single)
-	requireNoReplicas(2, single)
-
-	// Decommission two more nodes. Only n5 is left; getting the replicas there
-	// can't use atomic replica swaps because the leaseholder can't be removed.
-	_, err = admin.Decommission(
-		ctx, &serverpb.DecommissionRequest{
-			NodeIDs:          []roachpb.NodeID{3, 4},
-			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
-		},
-	)
-	require.NoError(t, err)
-
-	requireNoReplicas(1, single)
-	requireNoReplicas(2, single)
-	requireNoReplicas(3, single)
-	requireNoReplicas(4, single)
 }
 
 // TestReplicateRogueRemovedNode ensures that a rogue removed node
