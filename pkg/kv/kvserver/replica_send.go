@@ -14,6 +14,7 @@ import (
 	"context"
 	"reflect"
 	"runtime/pprof"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1259,19 +1261,22 @@ func (r *Replica) collectSpans(
 // either after a write request has achieved consensus and been applied to Raft
 // or after a read-only request has finished evaluation.
 type endCmds struct {
-	repl *Replica
-	g    *concurrency.Guard
-	st   kvserverpb.LeaseStatus // empty for follower reads
+	repl             *Replica
+	g                *concurrency.Guard
+	st               kvserverpb.LeaseStatus // empty for follower reads
+	replicatingSince time.Time
 }
 
 func makeUnreplicatedEndCmds(
 	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus,
 ) endCmds {
-	return makeReplicatedEndCmds(repl, g, st)
+	return makeReplicatedEndCmds(repl, g, st, time.Time{})
 }
 
-func makeReplicatedEndCmds(repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus) endCmds {
-	return endCmds{repl: repl, g: g, st: st}
+func makeReplicatedEndCmds(
+	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus, replicatingSince time.Time,
+) endCmds {
+	return endCmds{repl: repl, g: g, st: st, replicatingSince: replicatingSince}
 }
 
 func makeEmptyEndCmds() endCmds {
@@ -1318,9 +1323,18 @@ func (ec *endCmds) done(
 		ec.repl.updateTimestampCache(ctx, &ec.st, ba, br, pErr)
 	}
 
-	// Release the latches acquired by the request and exit lock wait-queues.
-	// Must be done AFTER the timestamp cache is updated. ec.g is only set when
-	// the Raft proposal has assumed responsibility for the request.
+	if ts := ec.replicatingSince; !ts.IsZero() {
+		ec.repl.store.metrics.RaftReplicationLatency.RecordValue(timeutil.Since(ts).Nanoseconds())
+	}
+
+	// Release the latches acquired by the request and exit lock wait-queues. Must
+	// be done AFTER the timestamp cache is updated. ec.g is set both for reads
+	// and for writes. For writes, it is set only when the Raft proposal has
+	// assumed responsibility for the request.
+	//
+	// TODO(replication): at the time of writing, there is no code path in which
+	// this method is called and the Guard is not set. Consider removing this
+	// check and upgrading the previous observation to an invariant.
 	if ec.g != nil {
 		ec.repl.concMgr.FinishReq(ec.g)
 	}
