@@ -1,3 +1,0 @@
-show_local_or_tenant_csettings_stmt ::=
-	show_csettings_stmt
-	| show_csettings_stmt 'FOR' 'TENANT' tenant_spec

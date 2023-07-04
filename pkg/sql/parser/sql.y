@@ -1270,7 +1270,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.ShowCreateFormatOption> opt_show_create_format_options
 %type <tree.Statement> show_create_schedules_stmt
 %type <tree.Statement> show_create_external_connections_stmt
-%type <tree.Statement> show_csettings_stmt show_local_or_tenant_csettings_stmt
+%type <tree.Statement> show_csettings_stmt show_local_or_virtual_cluster_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_default_privileges_stmt
 %type <tree.Statement> show_enums_stmt
@@ -7071,7 +7071,7 @@ show_stmt:
 | show_create_stmt           // EXTEND WITH HELP: SHOW CREATE
 | show_create_schedules_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULES
 | show_create_external_connections_stmt // EXTEND WITH HELP: SHOW CREATE EXTERNAL CONNECTIONS
-| show_local_or_tenant_csettings_stmt // EXTEND WITH HELP: SHOW CLUSTER SETTING
+| show_local_or_virtual_cluster_csettings_stmt // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt        // EXTEND WITH HELP: SHOW DATABASES
 | show_enums_stmt            // EXTEND WITH HELP: SHOW ENUMS
 | show_types_stmt            // EXTEND WITH HELP: SHOW TYPES
@@ -7659,8 +7659,8 @@ show_backup_connection_options:
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg
 // %Text:
-// SHOW CLUSTER SETTING <var> [ FOR TENANT <tenant_spec> ]
-// SHOW [ PUBLIC | ALL ] CLUSTER SETTINGS [ FOR TENANT <tenant_spec> ]
+// SHOW CLUSTER SETTING <var> [ FOR VIRTUAL CLUSTER <tenant_spec> ]
+// SHOW [ PUBLIC | ALL ] CLUSTER SETTINGS [ FOR VIRTUAL CLUSTER <tenant_spec> ]
 // %SeeAlso: WEBDOCS/cluster-settings.html
 show_csettings_stmt:
   SHOW CLUSTER SETTING var_name
@@ -7687,11 +7687,15 @@ show_csettings_stmt:
   }
 | SHOW PUBLIC CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 
-show_local_or_tenant_csettings_stmt:
+show_local_or_virtual_cluster_csettings_stmt:
   show_csettings_stmt
-  { $$.val = $1.stmt() }
-| show_csettings_stmt FOR TENANT tenant_spec
   {
+    /* SKIP DOC */
+    $$.val = $1.stmt()
+  }
+| show_csettings_stmt FOR virtual_cluster tenant_spec
+  {
+    /* SKIP DOC */
     switch t := $1.stmt().(type) {
     case *tree.ShowClusterSetting:
        $$.val = &tree.ShowTenantClusterSetting{
@@ -7705,7 +7709,7 @@ show_local_or_tenant_csettings_stmt:
        }
     }
   }
-| show_csettings_stmt FOR TENANT error // SHOW HELP: SHOW CLUSTER SETTING
+| show_csettings_stmt FOR virtual_cluster error // SHOW HELP: SHOW CLUSTER SETTING
 
 // %Help: SHOW COLUMNS - list columns in relation
 // %Category: DDL

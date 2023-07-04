@@ -228,7 +228,6 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:show_indexes.html",
     "//docs/generated/sql/bnf:show_jobs.html",
     "//docs/generated/sql/bnf:show_keys.html",
-    "//docs/generated/sql/bnf:show_local_or_tenant_csettings.html",
     "//docs/generated/sql/bnf:show_locality.html",
     "//docs/generated/sql/bnf:show_partitions.html",
     "//docs/generated/sql/bnf:show_range_for_row.html",
