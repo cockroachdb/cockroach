@@ -116,6 +116,13 @@ type jsonVM struct {
 			NatIP string
 		}
 	}
+	Scheduling struct {
+		AutomaticRestart          bool
+		Preemptible               bool
+		OnHostMaintenance         string
+		InstanceTerminationAction string
+		ProvisioningModel         string
+	}
 	MachineType string
 	SelfLink    string
 	Zone        string
@@ -163,6 +170,10 @@ func (jsonVM *jsonVM) toVM(
 			vpc = lastComponent(jsonVM.NetworkInterfaces[0].Network)
 		}
 	}
+	if jsonVM.Scheduling.OnHostMaintenance == "" {
+		// N.B. 'onHostMaintenance' is always non-empty, hence its absense implies a parsing error
+		vmErrors = append(vmErrors, vm.ErrBadScheduling)
+	}
 
 	machineType := lastComponent(jsonVM.MachineType)
 	zone := lastComponent(jsonVM.Zone)
@@ -205,6 +216,7 @@ func (jsonVM *jsonVM) toVM(
 		Errors:                 vmErrors,
 		DNS:                    fmt.Sprintf("%s.%s.%s", jsonVM.Name, zone, project),
 		Lifetime:               lifetime,
+		Preemptible:            jsonVM.Scheduling.Preemptible,
 		Labels:                 jsonVM.Labels,
 		PrivateIP:              privateIP,
 		Provider:               ProviderName,
@@ -241,6 +253,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		TerminateOnMigration: false,
 		useSharedUser:        true,
 		preemptible:          false,
+		useSpot:              false,
 	}
 }
 
@@ -271,6 +284,8 @@ type ProviderOpts struct {
 	useSharedUser bool
 	// use preemptible instances
 	preemptible bool
+	// use spot instances (i.e., latest version of preemptibles which can run > 24 hours)
+	useSpot bool
 }
 
 // Provider is the GCE implementation of the vm.Provider interface.
@@ -614,7 +629,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
 			strings.Join(defaultZones, ",")))
-	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false, "use preemptible GCE instances")
+	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
+		"use preemptible GCE instances (lifetime cannot exceed 24h)")
+	flags.BoolVar(&o.useSpot, ProviderName+"-use-spot", false,
+		"use spot GCE instances (like preemptible but lifetime can exceed 24h)")
 	flags.BoolVar(&o.TerminateOnMigration, ProviderName+"-terminateOnMigration", false,
 		"use 'TERMINATE' maintenance policy (for GCE live migrations)")
 }
@@ -761,6 +779,8 @@ func (p *Provider) Create(
 		// Preemptible instances require the following arguments set explicitly
 		args = append(args, "--maintenance-policy", "TERMINATE")
 		args = append(args, "--no-restart-on-failure")
+	} else if providerOpts.useSpot {
+		args = append(args, "--provisioning-model", "SPOT")
 	} else {
 		if providerOpts.TerminateOnMigration {
 			args = append(args, "--maintenance-policy", "TERMINATE")
