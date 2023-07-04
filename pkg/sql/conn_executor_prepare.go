@@ -344,14 +344,28 @@ func (ex *connExecutor) populatePrepared(
 func (ex *connExecutor) execBind(
 	ctx context.Context, bindCmd BindStmt,
 ) (fsm.Event, fsm.EventPayload) {
-	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
+	retErr1 := func(err error) (fsm.Event, fsm.EventPayload) {
+		if bindCmd.PreparedStatementName != "" {
+			err = errors.Wrapf(err, "bind prepared statement %q failed", bindCmd.PreparedStatementName)
+		}
+		if bindCmd.PortalName != "" {
+			err = errors.Wrapf(err, "bind portal %q failed", bindCmd.PortalName)
+		}
 		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
 	}
 
 	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
 	if !ok {
-		return retErr(newPreparedStmtDNEError(ex.sessionData(), bindCmd.PreparedStatementName))
+		return retErr1(newPreparedStmtDNEError(ex.sessionData(), bindCmd.PreparedStatementName))
 	}
+
+	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
+		if ps.StatementSummary != "" {
+			err = errors.Wrapf(err, "bind statement (%q) failed", ps.StatementSummary)
+		}
+		return retErr1(err)
+	}
+
 	ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(bindCmd.PreparedStatementName)
 
 	// We need to make sure type resolution happens within a transaction.
@@ -437,7 +451,7 @@ func (ex *connExecutor) execBind(
 		if len(bindCmd.Args) != int(numQArgs) {
 			return retErr(
 				pgwirebase.NewProtocolViolationErrorf(
-					"bind message supplies %d parameters, but prepared statement \"%s\" requires %d", len(bindCmd.Args), bindCmd.PreparedStatementName, numQArgs))
+					"bind message supplies %d parameters, but requires %d", len(bindCmd.Args), numQArgs))
 		}
 
 		resolve := func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -498,8 +512,8 @@ func (ex *connExecutor) execBind(
 	numCols := len(ps.Columns)
 	if (len(bindCmd.OutFormats) > 1) && (len(bindCmd.OutFormats) != numCols) {
 		return retErr(pgwirebase.NewProtocolViolationErrorf(
-			"expected 1 or %d for number of format codes, got %d",
-			numCols, len(bindCmd.OutFormats)))
+			"expected 1 or %d for number of format codes, got %d (formats: %v) (AST: %T)",
+			numCols, len(bindCmd.OutFormats), bindCmd.OutFormats, ps.AST))
 	}
 
 	columnFormatCodes := bindCmd.OutFormats

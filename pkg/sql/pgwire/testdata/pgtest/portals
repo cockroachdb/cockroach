@@ -1363,7 +1363,7 @@ ErrorResponse
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
-{"Type":"ErrorResponse","Code":"42P03","Message":"portal \"sqlcursor\" already exists as cursor"}
+{"Type":"ErrorResponse","Code":"42P03","Message":"bind portal \"sqlcursor\" failed: bind prepared statement \"blah\" failed: bind statement (\"SELECT _\") failed: portal \"sqlcursor\" already exists as cursor"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send
