@@ -68,7 +68,7 @@ func AnalyzeConstraints(
 			// is a much more stable failure state than frantically moving everything
 			// off such a node.
 			store, ok := storeResolver.GetStoreDescriptor(repl.StoreID)
-			if !ok || ConjunctionsCheck(store, subConstraints.Constraints) {
+			if !ok || CheckStoreConjunction(store, subConstraints.Constraints) {
 				result.SatisfiedBy[i] = append(result.SatisfiedBy[i], store.StoreID)
 				result.Satisfies[store.StoreID] = append(result.Satisfies[store.StoreID], i)
 			}
@@ -80,18 +80,31 @@ func AnalyzeConstraints(
 	return result
 }
 
-// ConjunctionsCheck checks a store against a single set of constraints (out of
-// the possibly numerous sets that apply to a range), returning true iff the
-// store matches the constraints. The constraints are AND'ed together; a store
-// matches the conjunction if it matches all of them.
-func ConjunctionsCheck(store roachpb.StoreDescriptor, constraints []roachpb.Constraint) bool {
+// CheckConjunction checks the given attributes and locality tags against all
+// the given constraints. Every constraint must be satisfied by any
+// attribute/tier, i.e. they are ANDed together.
+func CheckConjunction(
+	storeAttrs, nodeAttrs roachpb.Attributes,
+	nodeLocality roachpb.Locality,
+	constraints []roachpb.Constraint,
+) bool {
 	for _, constraint := range constraints {
-		// StoreMatchesConstraint returns whether a store matches the given constraint.
-		hasConstraint := roachpb.StoreMatchesConstraint(store, constraint)
-		if (constraint.Type == roachpb.Constraint_REQUIRED && !hasConstraint) ||
-			(constraint.Type == roachpb.Constraint_PROHIBITED && hasConstraint) {
+		matchesConstraint := roachpb.MatchesConstraint(storeAttrs, nodeAttrs, nodeLocality, constraint)
+		if (constraint.Type == roachpb.Constraint_REQUIRED && !matchesConstraint) ||
+			(constraint.Type == roachpb.Constraint_PROHIBITED && matchesConstraint) {
 			return false
 		}
 	}
 	return true
+}
+
+// CheckStoreConjunction checks a store against a single set of constraints (out of
+// the possibly numerous sets that apply to a range), returning true iff the
+// store matches the constraints. The constraints are AND'ed together; a store
+// matches the conjunction if it matches all of them.
+func CheckStoreConjunction(
+	storeDesc roachpb.StoreDescriptor, constraints []roachpb.Constraint,
+) bool {
+	return CheckConjunction(
+		storeDesc.Attrs, storeDesc.Node.Attrs, storeDesc.Node.Locality, constraints)
 }
