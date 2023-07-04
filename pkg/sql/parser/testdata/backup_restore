@@ -392,12 +392,20 @@ BACKUP TABLE foo TO '_' WITH detached = FALSE -- literals removed
 BACKUP TABLE _ TO 'bar' WITH detached = FALSE -- identifiers removed
 
 parse
+BACKUP VIRTUAL CLUSTER 36 TO 'bar'
+----
+BACKUP VIRTUAL CLUSTER 36 TO 'bar'
+BACKUP VIRTUAL CLUSTER 36 TO ('bar') -- fully parenthesized
+BACKUP VIRTUAL CLUSTER _ TO '_' -- literals removed
+BACKUP VIRTUAL CLUSTER 36 TO 'bar' -- identifiers removed
+
+parse
 BACKUP TENANT 36 TO 'bar'
 ----
-BACKUP TENANT 36 TO 'bar'
-BACKUP TENANT 36 TO ('bar') -- fully parenthesized
-BACKUP TENANT _ TO '_' -- literals removed
-BACKUP TENANT 36 TO 'bar' -- identifiers removed
+BACKUP VIRTUAL CLUSTER 36 TO 'bar' -- normalized!
+BACKUP VIRTUAL CLUSTER 36 TO ('bar') -- fully parenthesized
+BACKUP VIRTUAL CLUSTER _ TO '_' -- literals removed
+BACKUP VIRTUAL CLUSTER 36 TO 'bar' -- identifiers removed
 
 parse
 RESTORE TABLE foo FROM 'bar'
@@ -746,42 +754,42 @@ RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'b
 parse
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
 ----
-RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
-RESTORE TENANT 36 FROM (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
-RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
 
 parse
 RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5'
 ----
-RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5'
-RESTORE TENANT 36 FROM (($1), ($2)) WITH virtual_cluster_name = ('tenant-5') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $1) WITH virtual_cluster_name = '_' -- literals removed
-RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- identifiers removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH virtual_cluster_name = ('tenant-5') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH virtual_cluster_name = '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- identifiers removed
 
 parse
 RESTORE TENANT 36 FROM ($1, $2) WITH tenant_name = 'tenant-5'
 ----
-RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- normalized!
-RESTORE TENANT 36 FROM (($1), ($2)) WITH virtual_cluster_name = ('tenant-5') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $1) WITH virtual_cluster_name = '_' -- literals removed
-RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- identifiers removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH virtual_cluster_name = ('tenant-5') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH virtual_cluster_name = '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- identifiers removed
 
 parse
 RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster = '5'
 ----
-RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster = '5'
-RESTORE TENANT 36 FROM (($1), ($2)) WITH virtual_cluster = ('5') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $1) WITH virtual_cluster = '_' -- literals removed
-RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster = '5' -- identifiers removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster = '5' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH virtual_cluster = ('5') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH virtual_cluster = '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster = '5' -- identifiers removed
 
 parse
 RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'
 ----
-RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster = '5' -- normalized!
-RESTORE TENANT 36 FROM (($1), ($2)) WITH virtual_cluster = ('5') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $1) WITH virtual_cluster = '_' -- literals removed
-RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster = '5' -- identifiers removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster = '5' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH virtual_cluster = ('5') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH virtual_cluster = '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster = '5' -- identifiers removed
 
 parse
 BACKUP TABLE foo TO 'bar' WITH revision_history, detached

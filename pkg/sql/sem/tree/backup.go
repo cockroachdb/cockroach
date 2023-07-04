@@ -677,7 +677,7 @@ func (tl *BackupTargetList) Format(ctx *FmtCtx) {
 		ctx.WriteString("SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)
 	} else if tl.TenantID.Specified {
-		ctx.WriteString("TENANT ")
+		ctx.WriteString("VIRTUAL CLUSTER ")
 		ctx.FormatNode(&tl.TenantID)
 	} else {
 		if tl.Tables.SequenceOnly {
