@@ -160,7 +160,7 @@ func (pt *partitioningTest) parse() error {
 	}
 
 	replPK := func(s string) string {
-		return strings.ReplaceAll(s, "@primary", fmt.Sprintf("@%s_pkey", pt.parsed.tableDesc.Name))
+		return strings.ReplaceAll(s, "@primary", fmt.Sprintf("@%s", pt.parsed.tableDesc.PrimaryIndex.Name))
 	}
 	pt.parsed.generatedSpans = make([]string, len(pt.generatedSpans))
 	for i, gs := range pt.generatedSpans {
@@ -194,7 +194,7 @@ func (pt *partitioningTest) parse() error {
 			indexName = subzoneParts[0]
 		case 2:
 			if subzoneParts[0] == "" {
-				indexName = fmt.Sprintf("@%s", pt.parsed.tableDesc.Name+"_pkey")
+				indexName = fmt.Sprintf("@%s", pt.parsed.tableDesc.PrimaryIndex.Name)
 			} else {
 				indexName = subzoneParts[0]
 			}
@@ -276,21 +276,21 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		},
 
 		{
-			name:           `all indexes`,
+			name:           `all_indexes`,
 			schema:         `CREATE TABLE %s (a INT PRIMARY KEY, b INT, c INT, INDEX idx1 (b), INDEX idx2 (c))`,
 			configs:        []string{`@primary`, `@idx1:+n2`, `@idx2:+n3`},
 			generatedSpans: []string{`@primary /1-/2`, `@idx1 /2-/3`, `@idx2 /3-/4`},
 			scans:          map[string]string{`b = 1`: `n2`, `c = 1`: `n3`},
 		},
 		{
-			name:           `all indexes - shuffled`,
+			name:           `all_indexes_shuffled`,
 			schema:         `CREATE TABLE %s (a INT PRIMARY KEY, b INT, c INT, INDEX idx1 (b), INDEX idx2 (c))`,
 			configs:        []string{`@idx2:+n2`, `@primary`, `@idx1:+n3`},
 			generatedSpans: []string{`@primary /1-/2`, `@idx1 /2-/3`, `@idx2 /3-/4`},
 			scans:          map[string]string{`b = 1`: `n3`, `c = 1`: `n2`},
 		},
 		{
-			name:           `some indexes`,
+			name:           `some_indexes`,
 			schema:         `CREATE TABLE %s (a INT PRIMARY KEY, b INT, c INT, INDEX idx1 (b), INDEX idx2 (c))`,
 			configs:        []string{`@primary`, `@idx2:+n2`},
 			generatedSpans: []string{`@primary /1-/2`, `@idx2 /3-/4`},
@@ -298,7 +298,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		},
 
 		{
-			name: `single col list partitioning`,
+			name: `single_col_list_partitioning`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY LIST (a) (
 				PARTITION p3 VALUES IN (3),
 				PARTITION p4 VALUES IN (4)
@@ -315,7 +315,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		{
 			// Intentionally a little different than `single col list
 			// partitioning` for the repartitioning tests.
-			name: `single col list partitioning - DEFAULT`,
+			name: `single_col_list_partitioning_DEFAULT`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY LIST (a) (
 				PARTITION p4 VALUES IN (4),
 				PARTITION p5 VALUES IN (5),
@@ -331,7 +331,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			scans: map[string]string{`a < 4`: `n1`, `a = 4`: `n2`, `a = 5`: `n3`, `a > 5`: `n1`},
 		},
 		{
-			name: `multi col list partitioning`,
+			name: `multi_col_list_partitioning`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
 				PARTITION p34 VALUES IN ((3, 4)),
 				PARTITION p56 VALUES IN ((5, 6)),
@@ -358,7 +358,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		{
 			// Intentionally a little different than `multi col list
 			// partitioning` for the repartitioning tests.
-			name: `multi col list partitioning - DEFAULT`,
+			name: `multi_col_list_partitioning_DEFAULT`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
 				PARTITION p34 VALUES IN ((3, 4)),
 				PARTITION p57 VALUES IN ((5, 7)),
@@ -388,7 +388,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
-			name: `multi col list partitioning - DEFAULT DEFAULT`,
+			name: `multi_col_list_partitioning_DEFAULT_DEFAULT`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
 				PARTITION p34 VALUES IN ((3, 4)),
 				PARTITION p57 VALUES IN ((5, 7)),
@@ -419,9 +419,9 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
-			// Similar to `multi col list partitioning - DEFAULT DEFAULT` but
+			// Similar to `multi_col_list_partitioning_DEFAULT DEFAULT` but
 			// via subpartitioning instead of multi col.
-			name: `multi col list partitioning - DEFAULT DEFAULT subpartitioned`,
+			name: `multi_col_list_partitioning_DEFAULT_DEFAULT_subpartitioned`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
 				PARTITION p3 VALUES IN (3) PARTITION BY LIST (b) (
 					PARTITION p34 VALUES IN (4)
@@ -457,7 +457,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		},
 
 		{
-			name: `single col range partitioning`,
+			name: `single_col_range_partitioning`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
 				PARTITION p3 VALUES FROM (MINVALUE) TO (3),
 				PARTITION p4 VALUES FROM (3) TO (4)
@@ -476,7 +476,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		},
 		{
 			// If this test seems confusing, see the note on the multi-col equivalent.
-			name: `single col range partitioning - descending`,
+			name: `single_col_range_partitioning_descending`,
 			schema: `CREATE TABLE %s (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
 				PARTITION p4 VALUES FROM (MINVALUE) TO (4),
 				PARTITION p3 VALUES FROM (4) TO (3),
@@ -495,7 +495,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
-			name: `sparse single col range partitioning`,
+			name: `sparse_single_col_range_partitioning`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
 				PARTITION p1 VALUES FROM (1) TO (2),
 				PARTITION p3 VALUES FROM (3) TO (4)
@@ -519,7 +519,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		{
 			// Intentionally a little different than `single col range
 			// partitioning` for the repartitioning tests.
-			name: `single col range partitioning - MAXVALUE`,
+			name: `single_col_range_partitioning_MAXVALUE`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
 				PARTITION p4 VALUES FROM (MINVALUE) TO (4),
 				PARTITION p5 VALUES FROM (4) TO (5),
@@ -538,7 +538,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
-			name: `multi col range partitioning`,
+			name: `multi_col_range_partitioning`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
 				PARTITION p34 VALUES FROM (MINVALUE, MINVALUE) TO (3, 4),
 				PARTITION p56 VALUES FROM (3, 4) TO (5, 6),
@@ -577,7 +577,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			//
 			// Better to let the meaning of MINVALUE/MAXVALUE be consistent
 			// everywhere, and document the gotcha thoroughly.
-			name: `multi col range partitioning - descending`,
+			name: `multi_col_range_partitioning_descending`,
 			schema: `CREATE TABLE %s (a INT, b INT, c INT, PRIMARY KEY (a, b DESC, c)) PARTITION BY RANGE (a, b, c) (
 				PARTITION p6xx VALUES FROM (MINVALUE, MINVALUE, MINVALUE) TO (6, MAXVALUE, MAXVALUE),
 				PARTITION p75n VALUES FROM (7, MINVALUE, MINVALUE) TO (7, 5, MINVALUE),
@@ -596,7 +596,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
-			name: `sparse multi col range partitioning`,
+			name: `sparse_multi_col_range_partitioning`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
 				PARTITION p34  VALUES FROM (1, 2) TO (3, 4),
 				PARTITION p78 VALUES FROM (5, 6) TO (7, 8)
@@ -620,7 +620,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		{
 			// Intentionally a little different than `multi col range
 			// partitioning` for the repartitioning tests.
-			name: `multi col range partitioning - MAXVALUE`,
+			name: `multi_col_range_partitioning_MAXVALUE`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
 				PARTITION p3n VALUES FROM (MINVALUE, MINVALUE) TO (3, MINVALUE),
 				PARTITION p3x VALUES FROM (3, MINVALUE) TO (3, MAXVALUE),
@@ -644,7 +644,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
-			name: `multi col range partitioning - MAXVALUE MAXVALUE`,
+			name: `multi_col_range_partitioning_MAXVALUE_MAXVALUE`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
 				PARTITION p34 VALUES FROM (MINVALUE, MINVALUE) TO (3, 4),
 				PARTITION p3x VALUES FROM (3, 4) TO (3, MAXVALUE),
@@ -670,7 +670,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		},
 
 		{
-			name: `list-list partitioning`,
+			name: `list-list_partitioning`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
 				PARTITION p3 VALUES IN (3) PARTITION BY LIST (b) (
 					PARTITION p34 VALUES IN (4)
@@ -706,7 +706,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
-			name: `list-range partitioning`,
+			name: `list-range_partitioning`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
 				PARTITION p3 VALUES IN (3) PARTITION BY RANGE (b) (
 					PARTITION p34 VALUES FROM (MINVALUE) TO (4)
@@ -739,7 +739,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		},
 
 		{
-			name: `inheritance - index`,
+			name: `inheritance_index`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY LIST (a) (
 				PARTITION pd VALUES IN (DEFAULT)
 			)`,
@@ -747,7 +747,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			generatedSpans: []string{`@primary /1-/2`},
 		},
 		{
-			name: `inheritance - single col default`,
+			name: `inheritance_single_col_default`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY LIST (a) (
 				PARTITION p3 VALUES IN (3),
 				PARTITION pd VALUES IN (DEFAULT)
@@ -756,7 +756,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			generatedSpans: []string{`.pd /1-/2`},
 		},
 		{
-			name: `inheritance - multi col default`,
+			name: `inheritance_multi_col_default`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
 				PARTITION p34 VALUES IN ((3, 4)),
 				PARTITION p3d VALUES IN ((3, DEFAULT)),
@@ -773,7 +773,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
-			name: `inheritance - subpartitioning`,
+			name: `inheritance_subpartitioning`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
 				PARTITION p3 VALUES IN (3) PARTITION BY LIST (b) (
 					PARTITION p34 VALUES IN (4),
@@ -801,11 +801,11 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		},
 
 		{
-			name:   `secondary index - unpartitioned`,
+			name:   `secondary_index_unpartitioned`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`,
 		},
 		{
-			name: `secondary index - list partitioning`,
+			name: `secondary_index_list_partitioning`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY, b INT, INDEX b_idx (b) PARTITION BY LIST (b) (
 				PARTITION p3 VALUES IN (3),
 				PARTITION p4 VALUES IN (4)
@@ -822,7 +822,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		{
 			// Intentionally a little different than `single col list
 			// partitioning` for the repartitioning tests.
-			name: `secondary index - list partitioning - DEFAULT`,
+			name: `secondary_index_list_partitioning_DEFAULT`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY, b INT, INDEX b_idx (b) PARTITION BY LIST (b) (
 				PARTITION p4 VALUES IN (4),
 				PARTITION p5 VALUES IN (5),
@@ -838,7 +838,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			scans: map[string]string{`b < 4`: `n1`, `b = 4`: `n2`, `b = 5`: `n3`, `b > 5`: `n1`},
 		},
 		{
-			name: `secondary index - NULL`,
+			name: `secondary_index_NULL`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY, b INT, INDEX b_idx (b) PARTITION BY LIST (b) (
 				PARTITION pl1 VALUES IN (NULL, 1),
 				PARTITION p3  VALUES IN (3)
@@ -933,146 +933,123 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 func allRepartitioningTests(partitioningTests []partitioningTest) ([]repartitioningTest, error) {
 	tests := []repartitioningTest{
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `unpartitioned`},
-			new:   partitioningTest{name: `unpartitioned`},
+			old: partitioningTest{name: `unpartitioned`},
+			new: partitioningTest{name: `unpartitioned`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `unpartitioned`},
-			new:   partitioningTest{name: `single col list partitioning`},
+			old: partitioningTest{name: `unpartitioned`},
+			new: partitioningTest{name: `single_col_list_partitioning`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `unpartitioned`},
-			new:   partitioningTest{name: `single col list partitioning - DEFAULT`},
+			old: partitioningTest{name: `unpartitioned`},
+			new: partitioningTest{name: `single_col_list_partitioning_DEFAULT`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `unpartitioned`},
-			new:   partitioningTest{name: `single col range partitioning`},
+			old: partitioningTest{name: `unpartitioned`},
+			new: partitioningTest{name: `single_col_range_partitioning`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `unpartitioned`},
-			new:   partitioningTest{name: `single col range partitioning - MAXVALUE`},
+			old: partitioningTest{name: `unpartitioned`},
+			new: partitioningTest{name: `single_col_range_partitioning_MAXVALUE`},
 		},
 
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col list partitioning`},
-			new:   partitioningTest{name: `single col list partitioning - DEFAULT`},
+			old: partitioningTest{name: `single_col_list_partitioning`},
+			new: partitioningTest{name: `single_col_list_partitioning_DEFAULT`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col list partitioning - DEFAULT`},
-			new:   partitioningTest{name: `single col list partitioning`},
+			old: partitioningTest{name: `single_col_list_partitioning_DEFAULT`},
+			new: partitioningTest{name: `single_col_list_partitioning`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `multi col list partitioning`},
-			new:   partitioningTest{name: `multi col list partitioning - DEFAULT`},
+			old: partitioningTest{name: `multi_col_list_partitioning`},
+			new: partitioningTest{name: `multi_col_list_partitioning_DEFAULT`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `multi col list partitioning - DEFAULT`},
-			new:   partitioningTest{name: `multi col list partitioning`},
+			old: partitioningTest{name: `multi_col_list_partitioning_DEFAULT`},
+			new: partitioningTest{name: `multi_col_list_partitioning`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `multi col list partitioning - DEFAULT`},
-			new:   partitioningTest{name: `multi col list partitioning - DEFAULT DEFAULT`},
+			old: partitioningTest{name: `multi_col_list_partitioning_DEFAULT`},
+			new: partitioningTest{name: `multi_col_list_partitioning_DEFAULT_DEFAULT`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `multi col list partitioning - DEFAULT DEFAULT`},
-			new:   partitioningTest{name: `multi col list partitioning - DEFAULT`},
+			old: partitioningTest{name: `multi_col_list_partitioning_DEFAULT_DEFAULT`},
+			new: partitioningTest{name: `multi_col_list_partitioning_DEFAULT`},
 		},
 
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col range partitioning`},
-			new:   partitioningTest{name: `single col range partitioning - MAXVALUE`},
+			old: partitioningTest{name: `single_col_range_partitioning`},
+			new: partitioningTest{name: `single_col_range_partitioning_MAXVALUE`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col range partitioning - MAXVALUE`},
-			new:   partitioningTest{name: `single col range partitioning`},
+			old: partitioningTest{name: `single_col_range_partitioning_MAXVALUE`},
+			new: partitioningTest{name: `single_col_range_partitioning`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `multi col range partitioning`},
-			new:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
+			old: partitioningTest{name: `multi_col_range_partitioning`},
+			new: partitioningTest{name: `multi_col_range_partitioning_MAXVALUE`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
-			new:   partitioningTest{name: `multi col range partitioning`},
+			old: partitioningTest{name: `multi_col_range_partitioning_MAXVALUE`},
+			new: partitioningTest{name: `multi_col_range_partitioning`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
-			new:   partitioningTest{name: `multi col range partitioning - MAXVALUE MAXVALUE`},
+			old: partitioningTest{name: `multi_col_range_partitioning_MAXVALUE`},
+			new: partitioningTest{name: `multi_col_range_partitioning_MAXVALUE_MAXVALUE`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `multi col range partitioning - MAXVALUE MAXVALUE`},
-			new:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
+			old: partitioningTest{name: `multi_col_range_partitioning_MAXVALUE_MAXVALUE`},
+			new: partitioningTest{name: `multi_col_range_partitioning_MAXVALUE`},
 		},
 
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col list partitioning`},
-			new:   partitioningTest{name: `single col range partitioning`},
+			old: partitioningTest{name: `single_col_list_partitioning`},
+			new: partitioningTest{name: `single_col_range_partitioning`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col range partitioning`},
-			new:   partitioningTest{name: `single col list partitioning`},
+			old: partitioningTest{name: `single_col_range_partitioning`},
+			new: partitioningTest{name: `single_col_list_partitioning`},
 		},
 
 		// TODO(dan): One repartitioning is fully implemented, these tests also
 		// need to pass with no ccl code.
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col list partitioning`},
-			new:   partitioningTest{name: `unpartitioned`},
+			old: partitioningTest{name: `single_col_list_partitioning`},
+			new: partitioningTest{name: `unpartitioned`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col list partitioning - DEFAULT`},
-			new:   partitioningTest{name: `unpartitioned`},
+			old: partitioningTest{name: `single_col_list_partitioning_DEFAULT`},
+			new: partitioningTest{name: `unpartitioned`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col range partitioning`},
-			new:   partitioningTest{name: `unpartitioned`},
+			old: partitioningTest{name: `single_col_range_partitioning`},
+			new: partitioningTest{name: `unpartitioned`},
 		},
 		{
-			index: `primary`,
-			old:   partitioningTest{name: `single col range partitioning - MAXVALUE`},
-			new:   partitioningTest{name: `unpartitioned`},
+			old: partitioningTest{name: `single_col_range_partitioning_MAXVALUE`},
+			new: partitioningTest{name: `unpartitioned`},
 		},
 
 		{
 			index: `b_idx`,
-			old:   partitioningTest{name: `secondary index - unpartitioned`},
-			new:   partitioningTest{name: `secondary index - list partitioning`},
+			old:   partitioningTest{name: `secondary_index_unpartitioned`},
+			new:   partitioningTest{name: `secondary_index_list_partitioning`},
 		},
 		{
 			index: `b_idx`,
-			old:   partitioningTest{name: `secondary index - list partitioning`},
-			new:   partitioningTest{name: `secondary index - unpartitioned`},
+			old:   partitioningTest{name: `secondary_index_list_partitioning`},
+			new:   partitioningTest{name: `secondary_index_unpartitioned`},
 		},
 		{
 			index: `b_idx`,
-			old:   partitioningTest{name: `secondary index - list partitioning`},
-			new:   partitioningTest{name: `secondary index - list partitioning - DEFAULT`},
+			old:   partitioningTest{name: `secondary_index_list_partitioning`},
+			new:   partitioningTest{name: `secondary_index_list_partitioning_DEFAULT`},
 		},
 		{
 			index: `b_idx`,
-			old:   partitioningTest{name: `secondary index - list partitioning - DEFAULT`},
-			new:   partitioningTest{name: `secondary index - list partitioning`},
+			old:   partitioningTest{name: `secondary_index_list_partitioning_DEFAULT`},
+			new:   partitioningTest{name: `secondary_index_list_partitioning`},
 		},
 	}
 
@@ -1168,6 +1145,7 @@ func setupPartitioningTestCluster(
 
 	tsArgs := func(attr string) base.TestServerArgs {
 		return base.TestServerArgs{
+			DefaultTestTenant: base.TestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable LBS because when the scan is happening at the rate it's happening
@@ -1185,21 +1163,22 @@ func setupPartitioningTestCluster(
 			UseDatabase: "data",
 		}
 	}
-	tcArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
-		0: tsArgs("n1"),
-		1: tsArgs("n2"),
-		2: tsArgs("n3"),
-	}}
+	tcArgs := base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: tsArgs("n1"),
+			1: tsArgs("n2"),
+			2: tsArgs("n3"),
+		},
+	}
 	tc := testcluster.StartTestCluster(t, 3, tcArgs)
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, `CREATE DATABASE data`)
 
 	// Disabling store throttling vastly speeds up rebalancing.
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.declined_reservation_timeout = '0s'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.failed_reservation_timeout = '0s'`)
 
-	return tc.Conns[0], sqlDB, func() {
+	return tc.ServerConn(0), sqlDB, func() {
 		tc.Stopper().Stop(context.Background())
 	}
 }
@@ -1243,12 +1222,11 @@ func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Skipping as part of test-infra-team flaky test cleanup.
-	skip.WithIssue(t, 49112)
-
 	// This test configures many sub-tests and is too slow to run under nightly
-	// race stress.
+	// race stress. We're also skipping it under nightly stress for good measure
+	// as this test is pretty resource-heavy.
 	skip.UnderStressRace(t)
+	skip.UnderStress(t)
 
 	rng, _ := randutil.NewTestRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
@@ -1259,6 +1237,9 @@ func TestRepartitioning(t *testing.T) {
 	ctx := context.Background()
 	db, sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
 	defer cleanup()
+
+	// Be extra lenient with timeouts in this test as they shuffle replicas around.
+	const lenientSucceedsSoonDuration = 3 * testutils.DefaultSucceedsSoonDuration
 
 	for _, test := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
@@ -1272,7 +1253,7 @@ func TestRepartitioning(t *testing.T) {
 				sqlDB.Exec(t, test.old.parsed.createStmt)
 				sqlDB.Exec(t, test.old.parsed.zoneConfigStmts)
 
-				testutils.SucceedsSoon(t, test.old.verifyScansFn(ctx, t, db))
+				require.NoError(t, testutils.SucceedsWithinError(test.old.verifyScansFn(ctx, t, db), lenientSucceedsSoonDuration))
 			}
 
 			{
@@ -1281,9 +1262,15 @@ func TestRepartitioning(t *testing.T) {
 				}
 				sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", test.old.parsed.tableName, test.new.parsed.tableName))
 
-				testIndex, err := catalog.MustFindIndexByName(test.new.parsed.tableDesc, test.index)
-				if err != nil {
-					t.Fatalf("%+v", err)
+				var testIndex catalog.Index
+				if test.index == "" {
+					testIndex = test.new.parsed.tableDesc.GetPrimaryIndex()
+				} else {
+					var err error
+					testIndex, err = catalog.MustFindIndexByName(test.new.parsed.tableDesc, test.index)
+					if err != nil {
+						t.Fatalf("%+v", err)
+					}
 				}
 
 				var repartition bytes.Buffer
@@ -1328,7 +1315,7 @@ func TestRepartitioning(t *testing.T) {
 				// sitting around (e.g., when a repartitioning preserves a partition but
 				// does not apply a new zone config). This is fine.
 				sqlDB.Exec(t, test.new.parsed.zoneConfigStmts)
-				testutils.SucceedsSoon(t, test.new.verifyScansFn(ctx, t, db))
+				require.NoError(t, testutils.SucceedsWithinError(test.new.verifyScansFn(ctx, t, db), lenientSucceedsSoonDuration))
 			}
 		})
 	}
