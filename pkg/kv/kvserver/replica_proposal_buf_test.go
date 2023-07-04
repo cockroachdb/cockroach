@@ -911,11 +911,7 @@ func TestProposalBufferLinesUpEntriesAndProposals(t *testing.T) {
 		require.NoError(t, b.Insert(ctx, pd, tok.Move(ctx)))
 	}
 	require.NoError(t, b.flushLocked(ctx))
-	// The ConfChange doesn't go through proposeBatch, so we only see the
-	// six puts.
-	//
-	// TODO(tbg): fix that. We should handle everything the same.
-	require.Equal(t, len(pds)-1, matchingDroppedProposalsSeen)
+	require.Equal(t, len(pds), matchingDroppedProposalsSeen)
 }
 
 // TestProposalBufferRejectStaleChangeReplicasConfChange is a regression test
