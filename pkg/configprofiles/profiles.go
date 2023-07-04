@@ -92,8 +92,8 @@ var virtClusterInitTasks = []autoconfigpb.Task{
 			// to range coalescing have not been solved yet).
 			"SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = false",
 			"SET CLUSTER SETTING spanconfig.tenant_coalesce_adjacent.enabled = false",
-			// Make the operator double-check tenant deletions.
-			"SET CLUSTER SETTING sql.drop_tenant.enabled = false",
+			// Make the operator double-check virtual cluster deletions.
+			"SET CLUSTER SETTING sql.drop_virtual_cluster.enabled = false",
 		},
 		nil, /* txnSQL */
 	),
