@@ -9684,7 +9684,7 @@ func TestProtectRestoreTargets(t *testing.T) {
 		},
 		{
 			name:        "tenantid",
-			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, tenant = '20', virtual_cluster_name = 'othername'`,
+			restoreStmt: `RESTORE TENANT 10 FROM LATEST IN $1 WITH detached, virtual_cluster = '20', virtual_cluster_name = 'othername'`,
 		},
 		{
 			name:        "database",
