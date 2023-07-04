@@ -42,9 +42,7 @@ message SpanStats {
   // key sorts after the range start, and whose end key sorts before the
   // range end, will have a range_count value of 1.
   int32 range_count = 2;
-
-  // The explicit jsontag prevents 'omitempty` from being added by default.
-  uint64 approximate_disk_bytes = 3 [(gogoproto.jsontag) = "approximate_disk_bytes"];
+  uint64 approximate_disk_bytes = 3;
 }
 
 message SpanStatsResponse {

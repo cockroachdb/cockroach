@@ -2384,7 +2384,6 @@ var builtinOidsArray = []string{
 	2411: `to_char(date: date, format: string) -> string`,
 	2412: `crdb_internal.unsafe_lock_replica(range_id: int, lock: bool) -> bool`,
 	2413: `crdb_internal.fingerprint(span: bytes[], start_time: decimal, all_revisions: bool) -> int`,
-	2414: `crdb_internal.tenant_span_stats(spans: tuple[]) -> tuple{bytes AS start_key, bytes AS end_key, jsonb AS stats}`,
 	2415: `pg_lsnrecv(input: anyelement) -> pg_lsn`,
 	2416: `pg_lsnout(pg_lsn: pg_lsn) -> bytes`,
 	2417: `pg_lsnin(input: anyelement) -> pg_lsn`,
