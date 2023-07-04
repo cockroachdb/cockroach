@@ -1540,25 +1540,42 @@ func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
 	return hasExpirationLease == r.shouldUseExpirationLeaseRLocked()
 }
 
-// LeaseViolatesPreferences checks if current replica owns the lease and if it
-// violates the lease preferences defined in the span config. If there is an
-// error or no preferences defined then it will return false and consider that
-// to be in-conformance.
+// LeaseViolatesPreferences checks if this replica owns the lease and if it
+// violates the lease preferences defined in the span config. If no preferences
+// are defined then it will return false and consider it to be in conformance.
 func (r *Replica) LeaseViolatesPreferences(ctx context.Context) bool {
-	storeDesc, err := r.store.Descriptor(ctx, true /* useCached */)
-	if err != nil {
-		log.Infof(ctx, "Unable to load the descriptor %v: cannot check if lease violates preference", err)
+	storeID := r.store.StoreID()
+	storeAttrs := r.store.Attrs()
+	nodeAttrs := r.store.nodeDesc.Attrs
+	nodeLocality := r.store.nodeDesc.Locality
+	now := r.Clock().NowAsClockTimestamp()
+	r.mu.RLock()
+	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
+	preferences := r.mu.conf.LeasePreferences
+	r.mu.RUnlock()
+	return leaseViolatesPreferences(
+		leaseStatus, storeID, storeAttrs, nodeAttrs, nodeLocality, preferences)
+}
+
+// leaseViolatesPreferences returns true if the given lease is valid, owned by
+// the given store, and does not satisfy the lease preferences.
+func leaseViolatesPreferences(
+	leaseStatus kvserverpb.LeaseStatus,
+	storeID roachpb.StoreID,
+	storeAttrs, nodeAttrs roachpb.Attributes,
+	nodeLocality roachpb.Locality,
+	preferences []roachpb.LeasePreference,
+) bool {
+	if !leaseStatus.IsValid() || !leaseStatus.Lease.OwnedBy(storeID) {
 		return false
 	}
-	conf := r.SpanConfig()
-	if len(conf.LeasePreferences) == 0 {
+	if len(preferences) == 0 {
 		return false
 	}
-	for _, preference := range conf.LeasePreferences {
-		if constraint.CheckStoreConjunction(*storeDesc, preference.Constraints) {
+	for _, preference := range preferences {
+		if constraint.CheckConjunction(storeAttrs, nodeAttrs, nodeLocality, preference.Constraints) {
 			return false
 		}
 	}
-	// We have at lease one preference set up, but we don't satisfy any.
 	return true
 }

@@ -80,6 +80,8 @@ const (
 	// replicateQueueTimerDuration is the duration between replication of queued
 	// replicas.
 	replicateQueueTimerDuration = 0 // zero duration to process replication greedily
+
+	replicateQueuePriorityHigh = 1000 // see AllocatorAction.Priority
 )
 
 // MinLeaseTransferInterval controls how frequently leases can be transferred
