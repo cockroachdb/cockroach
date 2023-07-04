@@ -164,6 +164,7 @@ var retiredSettings = map[string]struct{}{
 	// renamed.
 	"spanconfig.host_coalesce_adjacent.enabled":            {},
 	"sql.defaults.experimental_stream_replication.enabled": {},
+	"sql.drop_tenant.enabled":                              {},
 
 	// removed as of 23.2.
 	"sql.log.unstructured_entries.enabled":                     {},

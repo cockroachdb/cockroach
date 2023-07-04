@@ -32,9 +32,9 @@ import (
 func (p *planner) DropTenantByID(
 	ctx context.Context, tenID uint64, synchronousImmediateDrop, ignoreServiceMode bool,
 ) error {
-	if p.SessionData().DisableDropTenant || p.SessionData().SafeUpdates {
+	if p.SessionData().DisableDropVirtualCluster || p.SessionData().SafeUpdates {
 		err := errors.Newf("DROP VIRTUAL CLUSTER causes irreversible data loss")
-		err = errors.WithMessage(err, "rejected (via sql_safe_updates or disable_drop_tenant)")
+		err = errors.WithMessage(err, "rejected (via sql_safe_updates or disable_drop_virtual_cluster)")
 		err = pgerror.WithCandidateCode(err, pgcode.Warning)
 		return err
 	}
