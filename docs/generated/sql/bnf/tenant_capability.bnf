@@ -1,3 +1,0 @@
-tenant_capability ::=
-	var_name
-	| var_name to_or_eq var_value
