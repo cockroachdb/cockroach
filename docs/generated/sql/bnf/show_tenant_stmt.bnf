@@ -1,4 +1,0 @@
-show_tenant_stmt ::=
-	'SHOW' 'TENANTS' opt_show_tenant_options
-	| 'SHOW' 'TENANT_ALL' 'ALL' opt_show_tenant_options
-	| 'SHOW' 'TENANT' tenant_spec opt_show_tenant_options

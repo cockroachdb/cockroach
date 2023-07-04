@@ -1901,7 +1901,7 @@ func (*ShowTenant) StatementReturnType() StatementReturnType { return Rows }
 func (*ShowTenant) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowTenant) StatementTag() string { return "SHOW TENANT" }
+func (*ShowTenant) StatementTag() string { return "SHOW VIRTUAL CLUSTER" }
 
 // StatementReturnType implements the Statement interface.
 func (*ShowFunctions) StatementReturnType() StatementReturnType { return Rows }

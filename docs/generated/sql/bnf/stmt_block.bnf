@@ -294,7 +294,6 @@ show_stmt ::=
 	| show_sessions_stmt
 	| show_stats_stmt
 	| show_tables_stmt
-	| show_tenant_stmt
 	| show_trace_stmt
 	| show_transactions_stmt
 	| show_transfer_stmt
@@ -923,11 +922,6 @@ show_tables_stmt ::=
 	| 'SHOW' 'TABLES' 'FROM' name with_comment
 	| 'SHOW' 'TABLES' with_comment
 
-show_tenant_stmt ::=
-	'SHOW' 'TENANTS' opt_show_tenant_options
-	| 'SHOW' 'TENANT_ALL' 'ALL' opt_show_tenant_options
-	| 'SHOW' 'TENANT' tenant_spec opt_show_tenant_options
-
 show_trace_stmt ::=
 	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'
 	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' 'SESSION'
@@ -1046,6 +1040,7 @@ unreserved_keyword ::=
 	| 'CHECK_FILES'
 	| 'CLOSE'
 	| 'CLUSTER'
+	| 'CLUSTERS'
 	| 'COLUMNS'
 	| 'COMMENT'
 	| 'COMMENTS'
@@ -1976,9 +1971,6 @@ statements_or_queries ::=
 opt_show_ranges_options ::=
 	'WITH' show_ranges_options
 
-opt_show_tenant_options ::=
-	'WITH' show_tenant_options
-
 opt_compact ::=
 	'COMPACT'
 	| 
@@ -2718,9 +2710,6 @@ targets_roles ::=
 
 show_ranges_options ::=
 	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' ) )*
-
-show_tenant_options ::=
-	( 'REPLICATION' 'STATUS' | 'CAPABILITIES' ) ( ( ',' 'REPLICATION' 'STATUS' | ',' 'CAPABILITIES' ) )*
 
 partition ::=
 	'PARTITION' partition_name
@@ -3526,6 +3515,7 @@ bare_label_keywords ::=
 	| 'CHECK_FILES'
 	| 'CLOSE'
 	| 'CLUSTER'
+	| 'CLUSTERS'
 	| 'COALESCE'
 	| 'COLLATION'
 	| 'COLUMN'

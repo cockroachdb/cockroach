@@ -64,7 +64,7 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 		return nil, err
 	}
 
-	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "SHOW TENANT")
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "SHOW VIRTUAL CLUSTER")
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +223,7 @@ func (n *showTenantNode) Values() tree.Datums {
 	}
 
 	if n.withReplication {
-		// This is a 'SHOW TENANT name WITH REPLICATION STATUS' command.
+		// This is a 'SHOW VIRTUAL CLUSTER name WITH REPLICATION STATUS' command.
 		sourceTenantName := tree.DNull
 		sourceClusterUri := tree.DNull
 		replicationJobId := tree.DNull
