@@ -426,13 +426,15 @@ func (t *Test) run(plan *TestPlan) error {
 }
 
 func (t *Test) plan() (*TestPlan, error) {
-	previousRelease, err := version.PredecessorVersion(t.buildVersion())
+	previousReleases, err := version.UpdatePaths(t.buildVersion())
 	if err != nil {
 		return nil, err
 	}
 
+	// TODO: change testPlanner to work with multiple versions or loop over "from" versions and return multiple plans.
+	// This iteration should be a noop. And the mapping is ugly now, because it points to keys in the other file, not actual from versions.
 	planner := testPlanner{
-		initialVersion: previousRelease,
+		initialVersion: previousReleases[0],
 		rt:             t.rt,
 		crdbNodes:      t.crdbNodes,
 		hooks:          t.hooks,

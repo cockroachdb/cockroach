@@ -6,7 +6,10 @@ go_library(
         "predecessor_version.go",
         "version.go",
     ],
-    embedsrcs = ["predecessor_version.json"],
+    embedsrcs = [
+        "predecessor_version.json",
+        "update_paths.json",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/version",
     visibility = ["//visibility:public"],
     deps = ["@com_github_cockroachdb_errors//:errors"],

@@ -30,13 +30,26 @@ import (
 //go:embed predecessor_version.json
 var verMapJSON []byte
 
+//go:embed update_paths.json
+var updatePathsJSON []byte
+
 type versionMap map[string]string
+type updatePaths map[string][]string
 
 func unmarshalVersionMap() (versionMap, error) {
 	var res versionMap
 	err := json.Unmarshal(verMapJSON, &res)
 	if err != nil {
 		return versionMap{}, err
+	}
+	return res, nil
+}
+
+func unmarshalUpdatePaths() (updatePaths, error) {
+	var res updatePaths
+	err := json.Unmarshal(updatePathsJSON, &res)
+	if err != nil {
+		return updatePaths{}, err
 	}
 	return res, nil
 }
@@ -87,4 +100,31 @@ func PredecessorVersion(buildVersion Version) (string, error) {
 	}
 
 	return history[0], nil
+}
+
+// UpdatePaths for a given version returns a slice of versions that the given version can be upgraded from.
+func UpdatePaths(buildVersion Version) ([]string, error) {
+	var res []string
+	if buildVersion == (Version{}) {
+		return nil, errors.Errorf("buildVersion not set")
+	}
+	versionMajorMinor := fmt.Sprintf("%d.%d", buildVersion.Major(), buildVersion.Minor())
+	verMap, err := unmarshalVersionMap()
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot load version map")
+	}
+	updatePaths, err := unmarshalUpdatePaths()
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot load update paths")
+	}
+	if _, ok := updatePaths[versionMajorMinor]; !ok {
+		return nil, errors.Errorf("cannot find update paths for %s", versionMajorMinor)
+	}
+	for _, from := range updatePaths[versionMajorMinor] {
+		if _, ok := verMap[from]; !ok {
+			return nil, errors.Errorf("cannot find update version for %s", from)
+		}
+		res = append(res, verMap[from])
+	}
+	return res, nil
 }
