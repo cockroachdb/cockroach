@@ -8,7 +8,7 @@ CREATE TENANT "grant-revoke-error-tenant";
 statement error pgcode 42601 unknown capability: "not_a_capability"
 ALTER TENANT "grant-revoke-error-tenant" GRANT CAPABILITY not_a_capability=true
 
-statement error pgcode 42804 argument of ALTER TENANT CAPABILITY can_admin_split must be type bool, not type int
+statement error pgcode 42804 argument of ALTER VIRTUAL CLUSTER CAPABILITY can_admin_split must be type bool, not type int
 ALTER TENANT "grant-revoke-error-tenant" GRANT CAPABILITY can_admin_split=1
 
 statement error pgcode 22023 parameter "can_admin_split" requires a Boolean value
@@ -307,7 +307,7 @@ span_config_bounds         {}
 statement error pgcode 22023 invalid span_config_bounds value
 ALTER TENANT scb GRANT CAPABILITY span_config_bounds = x'01ab';
 
-statement error pgcode 42804 argument of ALTER TENANT CAPABILITY span_config_bounds must be type bytes, not type bool
+statement error pgcode 42804 argument of ALTER VIRTUAL CLUSTER CAPABILITY span_config_bounds must be type bytes, not type bool
 ALTER TENANT scb GRANT CAPABILITY span_config_bounds = false;
 
 statement error pgcode 42601 value required for capability: span_config_bounds

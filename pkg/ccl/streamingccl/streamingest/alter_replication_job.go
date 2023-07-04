@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const alterReplicationJobOp = "ALTER TENANT REPLICATION"
+const alterReplicationJobOp = "ALTER VIRTUAL CLUSTER REPLICATION"
 
 var alterReplicationCutoverHeader = colinfo.ResultColumns{
 	{Name: "cutover_time", Typ: types.Decimal},
@@ -155,7 +155,7 @@ func alterReplicationJobHook(
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		if err := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
-			"ALTER TENANT REPLICATION",
+			alterReplicationJobOp,
 		); err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func alterReplicationJobHook(
 			return err
 		}
 
-		tenInfo, err := p.LookupTenantInfo(ctx, alterTenantStmt.TenantSpec, "ALTER TENANT REPLICATION")
+		tenInfo, err := p.LookupTenantInfo(ctx, alterTenantStmt.TenantSpec, alterReplicationJobOp)
 		if err != nil {
 			return err
 		}
@@ -193,11 +193,11 @@ func alterReplicationJobHook(
 				}
 			case tree.PauseJob:
 				if err := jobRegistry.PauseRequested(ctx, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID,
-					"ALTER TENANT PAUSE REPLICATION"); err != nil {
+					"ALTER VIRTUAL CLUSTER PAUSE REPLICATION"); err != nil {
 					return err
 				}
 			default:
-				return errors.New("unsupported job command in ALTER TENANT REPLICATION")
+				return errors.New("unsupported job command in ALTER VIRTUAL CLUSTER REPLICATION")
 			}
 		}
 		return nil
@@ -209,7 +209,7 @@ func alterReplicationJobHook(
 }
 
 // alterTenantJobCutover returns the cutover timestamp that was used to initiate
-// the cutover process - if the command is 'ALTER TENANT .. COMPLETE REPLICATION
+// the cutover process - if the command is 'ALTER VIRTUAL CLUSTER .. COMPLETE REPLICATION
 // TO LATEST' then the frontier high water timestamp is used.
 func alterTenantJobCutover(
 	ctx context.Context,
@@ -221,7 +221,7 @@ func alterTenantJobCutover(
 	cutoverTime hlc.Timestamp,
 ) (hlc.Timestamp, error) {
 	if alterTenantStmt == nil || alterTenantStmt.Cutover == nil {
-		return hlc.Timestamp{}, errors.AssertionFailedf("unexpected nil ALTER TENANT cutover expression")
+		return hlc.Timestamp{}, errors.AssertionFailedf("unexpected nil ALTER VIRTUAL CLUSTER cutover expression")
 	}
 
 	tenantName := tenInfo.Name
