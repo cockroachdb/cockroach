@@ -252,7 +252,7 @@ var defaultTenantConfigTemplate = func() *settings.StringSetting {
 	s := settings.RegisterStringSetting(
 		settings.SystemOnly,
 		"sql.create_tenant.default_template",
-		"tenant to use as configuration template when LIKE is not specified in CREATE TENANT",
+		"tenant to use as configuration template when LIKE is not specified in CREATE VIRTUAL CLUSTER",
 		// We use the empty string so that no template is used by default
 		// (i.e. empty proto, no setting overrides).
 		"",
