@@ -1,0 +1,11 @@
+backup_options ::=
+	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
+	| 'REVISION_HISTORY'
+	| 'REVISION_HISTORY' '=' a_expr
+	| 'DETACHED'
+	| 'DETACHED' '=' 'TRUE'
+	| 'DETACHED' '=' 'FALSE'
+	| 'KMS' '=' string_or_placeholder_opt_list
+	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
+	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
+	| 'INCLUDE_ALL_VIRTUAL_CLUSTERS' '=' a_expr
