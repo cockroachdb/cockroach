@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 func registerClearRange(r registry.Registry) {
@@ -110,14 +109,6 @@ func runClearRange(
 	// the  cluster still works.
 	t.Status(`restoring tiny table`)
 	defer t.WorkerStatus()
-
-	if t.BuildVersion().AtLeast(version.MustParse("v19.2.0")) {
-		conn := c.Conn(ctx, t.L(), 1)
-		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 8`); err != nil {
-			t.Fatal(err)
-		}
-		conn.Close()
-	}
 
 	// Use a 120s connect timeout to work around the fact that the server will
 	// declare itself ready before it's actually 100% ready. See:

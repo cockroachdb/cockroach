@@ -90,12 +90,6 @@ func runImportCancellation(
 	if _, err := conn.Exec(stmt); err != nil {
 		t.Fatal(err)
 	}
-	// Increase AddSSTable concurrency to speed up the imports. Otherwise the
-	// lineitem (the largest tpch table) IMPORT will extend the test duration
-	// significantly.
-	if _, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 10`); err != nil {
-		t.Fatal(err)
-	}
 
 	seed := int64(1666467482296309000)
 	rng := randutil.NewTestRandWithSeed(seed)

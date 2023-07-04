@@ -109,7 +109,7 @@ type tpceOptions struct {
 	customers int // --customers
 	nodes     int // use to determine where the workload is run from, how data is partitioned, and workload concurrency
 	cpus      int // used to determine workload concurrency
-	ssds      int // used during cluster init and permitted AddSST concurrency
+	ssds      int // used during cluster init
 
 	// Promethues specific flags.
 	//
@@ -162,11 +162,6 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 	{
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
-		if _, err := db.ExecContext(
-			ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,
-		); err != nil {
-			t.Fatal(err)
-		}
 		if _, err := db.ExecContext(
 			ctx, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
 		); err != nil {

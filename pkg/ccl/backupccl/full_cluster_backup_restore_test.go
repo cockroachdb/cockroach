@@ -158,7 +158,6 @@ CREATE TABLE data2.foo (a int);
 	// This job will eventually fail since it will run from a new cluster.
 	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://1/throwawayjob'`)
 	// Populate system.settings.
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5`)
 	sqlDB.Exec(t, `INSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`, "some_key", "some_val")
 	// Populate system.comments.
 	sqlDB.Exec(t, `COMMENT ON TABLE data.bank IS 'table comment string'`)
