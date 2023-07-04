@@ -118,4 +118,9 @@ const (
 	// StrippedDanglingBackReferences indicates that at least one dangling
 	// back-reference was removed from the descriptor.
 	StrippedDanglingBackReferences
+
+	// StrippedDanglingSelfBackReferences indicates that at least one dangling
+	// back-reference to something within the descriptor itself was removed
+	// from the descriptor.
+	StrippedDanglingSelfBackReferences
 )

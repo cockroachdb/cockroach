@@ -856,6 +856,36 @@ func TestDefaultExprNil(t *testing.T) {
 	})
 }
 
+// TestStrippedDanglingSelfBackReferences checks the proper behavior of the
+// catalog.StrippedDanglingSelfBackReferences post-deserialization change.
+func TestStrippedDanglingSelfBackReferences(t *testing.T) {
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create a table.
+	tdb.Exec(t, `CREATE DATABASE t`)
+	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY)`)
+
+	// Get the descriptor for the table.
+	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tbl")
+
+	// Inject some nonsense into the mutation_jobs slice.
+	mut := NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
+	mut.MutationJobs = append(mut.MutationJobs, descpb.TableDescriptor_MutationJob{
+		MutationID: 12345,
+		JobID:      6789,
+	})
+
+	// Check that it's properly removed.
+	b := NewBuilder(mut.TableDesc())
+	require.NoError(t, b.RunPostDeserializationChanges())
+	desc := b.BuildExistingMutableTable()
+	require.Empty(t, desc.MutationJobs)
+	require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingSelfBackReferences))
+}
+
 // TestRemoveDefaultExprFromComputedColumn tests that default expressions are
 // correctly removed from descriptors of computed columns as part of the
 // RunPostDeserializationChanges suite.
