@@ -552,7 +552,7 @@ export class StatementsPage extends React.Component<
 
     // Creates a list of all possible columns,
     // hiding nodeRegions if is not multi-region and
-    // hiding columns that won't be displayed for tenants.
+    // hiding columns that won't be displayed for virtual clusters.
     const columns = makeStatementsColumns(
       statements,
       filters.app?.split(","),
