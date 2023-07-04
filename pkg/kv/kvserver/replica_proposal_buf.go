@@ -174,6 +174,11 @@ type proposer interface {
 		lease *roachpb.Lease,
 		reason raftutil.ReplicaNeedsSnapshotStatus,
 	)
+	// rejectProposalWithErrLocked rejects the proposal with the given error. This
+	// should only be used if none of the other `rejectProposalX` methods apply.
+	rejectProposalWithErrLocked(
+		ctx context.Context, prop *ProposalData, pErr *kvpb.Error,
+	)
 
 	// leaseDebugRLocked returns info on the current lease.
 	leaseDebugRLocked() string
@@ -528,6 +533,28 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				// TODO(bdarnell): Handle ErrProposalDropped better.
 				// https://github.com/cockroachdb/cockroach/issues/21849
 				firstErr = err
+				continue
+			}
+			if msg.Entries[0].Type == raftpb.EntryNormal {
+				// If we are trying to commit a ChangeReplicas but the lease has since
+				// changed, it's possible that the new leaseholder has already committed
+				// additional replication changes that our RawNode has applied. In that
+				// case, its config may be incompatible with what our stale
+				// ChangeReplicas wants to do, and raft will "reject" it by proposing an
+				// empty entry instead. We don't need this protection since it is
+				// conferred by our below-raft checks (plus, on the leaseholder, latches
+				// that linearize application of replication changes). In fact, it's
+				// detrimental, because an empty entry doesn't map back to our inflight
+				// proposal, and so in effect the stale ChangeReplicas will never "show
+				// up" as replicated, essentially leaking a proposal and the associated
+				// latches. We could disable the raft check, but there currently isn't
+				// an option for that. Instead, we detect when RawNode has replaced our
+				// entry with a "normal" entry and terminate the proposal here (note
+				// that it is currently not in the proposals map).
+				b.p.rejectProposalWithErrLocked(ctx, p, kvpb.NewErrorf(`config change rejected by raft; please retry`))
+				// At the time of writing, this is superfluous, but if any code gets
+				// added at the end of the loop likely it shouldn't affect this
+				// proposal since we're skipping it.
 				continue
 			}
 		} else {
