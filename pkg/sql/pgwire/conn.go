@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/pgreplparser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/pgrepltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -39,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -362,6 +365,34 @@ func (c *conn) handleSimpleQuery(
 	}
 
 	startParse := timeutil.Now()
+	if c.sessionArgs.ReplicationMode != sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED &&
+		pgreplparser.IsReplicationProtocolCommand(query) {
+		stmt, err := pgreplparser.Parse(query)
+		if err != nil {
+			log.SqlExec.Infof(ctx, "could not parse simple query in replication protocol: %s", query)
+			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+		}
+		switch stmt.AST.(type) {
+		case *pgrepltree.IdentifySystem:
+		default:
+			log.SqlExec.Infof(ctx, "unhandled replication protocol query: %s", query)
+			return c.stmtBuf.Push(ctx, sql.SendError{
+				Err: unimplemented.NewWithIssueDetail(0, fmt.Sprintf("%T", stmt.AST), "replication protocol command not implemented"),
+			})
+		}
+		endParse := timeutil.Now()
+		return c.stmtBuf.Push(
+			ctx,
+			sql.ExecStmt{
+				Statement:                            stmt,
+				TimeReceived:                         timeReceived,
+				ParseStart:                           startParse,
+				ParseEnd:                             endParse,
+				LastInBatch:                          true,
+				LastInBatchBeforeShowCommitTimestamp: false,
+			},
+		)
+	}
 	stmts, err := c.parser.ParseWithInt(query, unqualifiedIntSize)
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse simple query: %s", query)
