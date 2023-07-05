@@ -392,8 +392,8 @@ runner itself.
 		cmd.Flags().StringToStringVar(
 			&versionsBinaryOverride, "versions-binary-override", nil,
 			"List of <version>=<path to cockroach binary>. If a certain version <ver> "+
-				"is present in the list,"+"the respective binary will be used when a "+
-				"multi-version test asks for the respective binary, instead of "+
+				"is present in the list, the respective binary will be used when a "+
+				"mixed-version test asks for the respective binary, instead of "+
 				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
 	}
 
