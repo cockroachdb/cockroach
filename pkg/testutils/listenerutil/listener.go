@@ -64,15 +64,6 @@ func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) net.Listener {
 	return l
 }
 
-// ReopenOrFail will allow accepting more connections on existing shared
-// listener if it was previously closed. If it was not closed, nothing happens.
-// If listener wasn't created previously, test failure is raised.
-func (r *ListenerRegistry) ReopenOrFail(t *testing.T, idx int) {
-	l, ok := r.listeners[idx]
-	require.Truef(t, ok, "socket for id %d is not open", idx)
-	l.resume()
-}
-
 // Close closes and deletes all previously created shared listeners.
 func (r *ListenerRegistry) Close() {
 	for k, v := range r.listeners {
@@ -129,6 +120,15 @@ func (l *ReusableListener) pauseC() <-chan interface{} {
 	l.pauseMu.RLock()
 	defer l.pauseMu.RUnlock()
 	return l.pauseMu.pauseC
+}
+
+// ReopenOrFail will allow accepting more connections on existing shared
+// listener if it was previously closed. If it was not closed, nothing happens.
+// If listener wasn't created previously, test failure is raised.
+func (r *ListenerRegistry) ReopenOrFail(t *testing.T, idx int) {
+	l, ok := r.listeners[idx]
+	require.Truef(t, ok, "socket for id %d is not open", idx)
+	l.resume()
 }
 
 func (l *ReusableListener) resume() {
