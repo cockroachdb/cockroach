@@ -53,6 +53,7 @@ func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) *ReusableListener {
 	nl, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err, "failed to create network listener")
 	l := &ReusableListener{
+		reg:     r,
 		id:      idx,
 		wrapped: nl,
 		acceptC: make(chan acceptResult),
@@ -83,7 +84,8 @@ type acceptResult struct {
 // the same address without worrying about losing a race with another process'
 // port acquisition.
 type ReusableListener struct {
-	id      int
+	reg     *ListenerRegistry
+	id      int // idx into reg.listeners
 	wrapped net.Listener
 	acceptC chan acceptResult
 	pauseMu struct {
