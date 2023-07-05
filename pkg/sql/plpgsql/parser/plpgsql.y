@@ -130,12 +130,24 @@ func (u *plpgsqlSymUnion) plpgsqlExpr() plpgsqltree.PLpgSQLExpr {
     return u.val.(plpgsqltree.PLpgSQLExpr)
 }
 
+func (u *plpgsqlSymUnion) plpgsqlExprs() []plpgsqltree.PLpgSQLExpr {
+    return u.val.([]plpgsqltree.PLpgSQLExpr)
+}
+
 func (u *plpgsqlSymUnion) plpgsqlDecl() *plpgsqltree.PLpgSQLDecl {
     return u.val.(*plpgsqltree.PLpgSQLDecl)
 }
 
 func (u *plpgsqlSymUnion) plpgsqlDecls() []plpgsqltree.PLpgSQLDecl {
     return u.val.([]plpgsqltree.PLpgSQLDecl)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlOptionExpr() *plpgsqltree.PLpgSQLStmtRaiseOption {
+    return u.val.(*plpgsqltree.PLpgSQLStmtRaiseOption)
+}
+
+func (u *plpgsqlSymUnion) plpgsqlOptionExprs() []plpgsqltree.PLpgSQLStmtRaiseOption {
+    return u.val.([]plpgsqltree.PLpgSQLStmtRaiseOption)
 }
 
 %}
@@ -300,7 +312,8 @@ func (u *plpgsqlSymUnion) plpgsqlDecls() []plpgsqltree.PLpgSQLDecl {
 %type <*tree.NumVal>	foreach_slice
 %type <plpgsqltree.PLpgSQLStatement>	for_control
 
-%type <str>		any_identifier opt_block_label opt_loop_label opt_label query_options
+%type <str> any_identifier opt_block_label opt_loop_label opt_label query_options
+%type <str> error_level option_type
 
 %type <[]plpgsqltree.PLpgSQLStatement> proc_sect
 %type <[]*plpgsqltree.PLpgSQLStmtIfElseIfArm> stmt_elsifs
@@ -329,6 +342,11 @@ func (u *plpgsqlSymUnion) plpgsqlDecls() []plpgsqltree.PLpgSQLDecl {
 %type <plpgsqltree.PLpgSQLStmtGetDiagItemList>	getdiag_list // TODO don't know what this is
 %type <*plpgsqltree.PLpgSQLStmtGetDiagItem> getdiag_list_item // TODO don't know what this is
 %type <int32> getdiag_item
+
+%type <*plpgsqltree.PLpgSQLStmtRaiseOption> option_expr
+%type <[]plpgsqltree.PLpgSQLStmtRaiseOption> option_exprs optional_option_exprs
+%type <plpgsqltree.PLpgSQLExpr> format_expr
+%type <[]plpgsqltree.PLpgSQLExpr> optional_format_exprs format_exprs
 
 %type <uint32>	opt_scrollable
 
@@ -628,7 +646,9 @@ proc_stmt:pl_block ';'
     $$.val = $1.plpgsqlStatement()
   }
 | stmt_raise
-  { }
+  {
+    $$.val = $1.plpgsqlStatement()
+  }
 | stmt_assert
   {
     $$.val = $1.plpgsqlStatement()
@@ -1018,58 +1038,143 @@ return_variable: expr_until_semi
   }
 ;
 
-stmt_raise: RAISE error_level ';'
+stmt_raise:
+  RAISE ';'
   {
+    return unimplemented(plpgsqllex, "empty RAISE statement")
+  }
+| RAISE error_level SCONST optional_format_exprs optional_option_exprs ';'
+  {
+    $$.val = &plpgsqltree.PLpgSQLStmtRaise{
+      LogLevel: $2,
+      Message: $3,
+      Params: $4.plpgsqlExprs(),
+      Options: $5.plpgsqlOptionExprs(),
+    }
+  }
+| RAISE error_level IDENT optional_option_exprs ';'
+  {
+    $$.val = &plpgsqltree.PLpgSQLStmtRaise{
+      LogLevel: $2,
+      Code: $3,
+      Options: $4.plpgsqlOptionExprs(),
+    }
+  }
+| RAISE error_level SQLSTATE SCONST optional_option_exprs ';'
+  {
+    $$.val = &plpgsqltree.PLpgSQLStmtRaise{
+      LogLevel: $2,
+      Code: $4,
+      Options: $5.plpgsqlOptionExprs(),
+    }
+  }
+| RAISE error_level option_exprs ';'
+  {
+    $$.val = &plpgsqltree.PLpgSQLStmtRaise{
+      LogLevel: $2,
+      Options: $3.plpgsqlOptionExprs(),
+    }
   }
 ;
 
 error_level:
+  DEBUG
+| LOG
+| INFO
+| NOTICE
+| WARNING
+| EXCEPTION
+| /* EMPTY */
   {
-    return unimplemented(plpgsqllex, "raise")
-  }
-| EXCEPTION raise_cond option_expr
-  {
-    return unimplemented(plpgsqllex, "raise exception")
-  }
-| DEBUG raise_cond option_expr
-  {
-    return unimplemented(plpgsqllex, "raise debug")
-  }
-| LOG raise_cond option_expr
-  {
-    return unimplemented(plpgsqllex, "raise log")
-  }
-| INFO raise_cond option_expr
-  {
-    return unimplemented(plpgsqllex, "raise info")
-  }
-| WARNING raise_cond option_expr
-  {
-    return unimplemented(plpgsqllex, "raise warning")
+    $$ = ""
   }
 ;
 
-raise_cond:
-  {}
-| SCONST
-  {}
-| SQLSTATE
-  {}
-| IDENT
-  {}
+optional_option_exprs:
+  /* EMPTY */
+  {
+    $$.val = []plpgsqltree.PLpgSQLStmtRaiseOption{}
+  }
+| option_exprs
+  {
+    $$.val = $1.plpgsqlOptionExprs()
+  }
 ;
 
+option_exprs:
+  option_exprs ',' option_expr
+  {
+    option := $3.plpgsqlOptionExpr()
+    $$.val = append($1.plpgsqlOptionExprs(), *option)
+  }
+| option_expr
+  {
+    option := $1.plpgsqlOptionExpr()
+    $$.val = []plpgsqltree.PLpgSQLStmtRaiseOption{*option}
+  }
+;
 
 option_expr:
-  {}
-| USING MESSAGE assign_operator expr_until_semi
-  {}
-| USING DETAIL assign_operator expr_until_semi
-  {}
-| USING HINT assign_operator expr_until_semi
-  {}
-| USING ERRCODE assign_operator expr_until_semi
-  {}
+  USING option_type assign_operator
+  {
+    // Read until reaching one of the tokens that can follow a raise option.
+    sqlStr, _ := plpgsqllex.(*lexer).ReadSqlConstruct(',', ';')
+    optionExpr, err := plpgsqllex.(*lexer).ParseExpr(sqlStr)
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$.val = &plpgsqltree.PLpgSQLStmtRaiseOption{
+      OptType: $2,
+      Expr: optionExpr,
+    }
+  }
+;
+
+option_type:
+  MESSAGE
+| DETAIL
+| HINT
+| ERRCODE
+| COLUMN
+| CONSTRAINT
+| DATATYPE
+| TABLE
+| SCHEMA
+;
+
+optional_format_exprs:
+  format_exprs
+  {
+    $$.val = $1.plpgsqlExprs()
+  }
+ | /* EMPTY */
+  {
+    $$.val = []plpgsqltree.PLpgSQLExpr{}
+  }
+;
+
+format_exprs:
+  format_expr
+  {
+    $$.val = []plpgsqltree.PLpgSQLExpr{$1.plpgsqlExpr()}
+  }
+| format_exprs format_expr
+  {
+    $$.val = append($1.plpgsqlExprs(), $2.plpgsqlExpr())
+  }
+;
+
+format_expr: ','
+  {
+    // Read until reaching a token that can follow a raise format parameter.
+    sqlStr, _ := plpgsqllex.(*lexer).ReadSqlConstruct(',', ';', USING)
+    param, err := plpgsqllex.(*lexer).ParseExpr(sqlStr)
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$.val = param
+  }
+;
 
 stmt_assert: ASSERT assert_cond ';'
   {
@@ -1084,6 +1189,7 @@ assert_cond:
       plpgsqllex.(*lexer).ReadSqlExpressionStr(';')
     }
   }
+;
 
 loop_body: proc_sect END LOOP
   {
