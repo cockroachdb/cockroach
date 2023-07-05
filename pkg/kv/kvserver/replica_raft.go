@@ -2607,7 +2607,10 @@ func handleTruncatedStateBelowRaftPreApply(
 		// avoid allocating when constructing Raft log keys (16 bytes).
 		prefix := prefixBuf.RaftLogPrefix()
 		for idx := currentTruncatedState.Index + 1; idx <= suggestedTruncatedState.Index; idx++ {
-			if err := readWriter.ClearUnversioned(keys.RaftLogKeyFromPrefix(prefix, idx)); err != nil {
+			if err := readWriter.ClearUnversioned(
+				keys.RaftLogKeyFromPrefix(prefix, idx),
+				storage.ClearOptions{},
+			); err != nil {
 				return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
 					suggestedTruncatedState, idx)
 			}

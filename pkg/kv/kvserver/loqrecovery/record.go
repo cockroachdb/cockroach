@@ -107,7 +107,7 @@ func RegisterOfflineRecoveryEvents(
 			continue
 		}
 		if removeEvent {
-			if err := readWriter.ClearUnversioned(iter.UnsafeKey().Key); err != nil {
+			if err := readWriter.ClearUnversioned(iter.UnsafeKey().Key, storage.ClearOptions{}); err != nil {
 				processingErrors = errors.CombineErrors(processingErrors, errors.Wrapf(
 					err, "failed to delete replica recovery record at key %s", iter.UnsafeKey()))
 				continue
