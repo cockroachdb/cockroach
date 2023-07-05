@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"net/url"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -23,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -263,4 +266,41 @@ func TestMakeAzureStorageURLFromEnvironment(t *testing.T) {
 			require.Equal(t, tt.expected, sut.(*azureStorage).container.URL())
 		})
 	}
+}
+
+func TestAzureStorageFileImplicitAuth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cfg, err := getAzureConfig()
+	if err != nil {
+		skip.IgnoreLint(t, "Test not configured for Azure")
+		return
+	}
+	testSettings := cluster.MakeTestingClusterSettings()
+
+	cleanup := envutil.TestSetEnv(t, "AZURE_CLIENT_ID", "")
+	defer cleanup()
+
+	cloudtestutils.CheckNoPermission(t, cfg.filePathImplicitAuth("backup-test"), username.RootUserName(),
+		nil /*db*/, testSettings)
+
+	tmpDir, cleanup2 := testutils.TempDir(t)
+	defer cleanup2()
+
+	credFile := path.Join(tmpDir, "credentials.json")
+	require.NoError(t, writeAzureCredentialsFile(credFile, cfg.tenantID, cfg.clientID, cfg.clientSecret))
+
+	cleanup3 := envutil.TestSetEnv(t, "COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE", credFile)
+	defer cleanup3()
+
+	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth("backup-test"),
+		false, username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
+	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth("listing-test"),
+		username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
 }
