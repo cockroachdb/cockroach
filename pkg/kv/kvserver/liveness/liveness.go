@@ -376,7 +376,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaHeartbeatLatency,
 			Duration: opts.HistogramWindowInterval,
-			Buckets:  metric.NetworkLatencyBuckets,
+			Buckets:  metric.IOLatencyBuckets,
 		}),
 	}
 	nl.cache = newCache(opts.Gossip, opts.Clock, nl.cacheUpdated)
