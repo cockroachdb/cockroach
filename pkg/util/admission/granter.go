@@ -362,16 +362,19 @@ func (cg *kvStoreTokenChildGranter) storeWriteDone(
 	cg.parent.coord.mu.Lock()
 	defer cg.parent.coord.mu.Unlock()
 	// NB: the token/metric adjustments we want to make here are the same as we
-	// want to make through the storeReplicatedWorkAdmittedLocked, so we (ab)use it.
+	// want to make through the storeReplicatedWorkAdmittedLocked, so we (ab)use
+	// it. The one difference is that post token adjustments, if we observe the
+	// granter was previously exhausted but is no longer so, we're allowed to
+	// admit other waiting requests.
 	return cg.parent.storeReplicatedWorkAdmittedLocked(
-		cg.workClass, originalTokens, storeReplicatedWorkAdmittedInfo(doneInfo))
+		cg.workClass, originalTokens, storeReplicatedWorkAdmittedInfo(doneInfo), true /* canGrantAnother */)
 }
 
 // storeReplicatedWorkAdmitted implements granterWithStoreReplicatedWorkAdmitted.
 func (cg *kvStoreTokenChildGranter) storeReplicatedWorkAdmittedLocked(
 	originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo,
 ) (additionalTokens int64) {
-	return cg.parent.storeReplicatedWorkAdmittedLocked(cg.workClass, originalTokens, admittedInfo)
+	return cg.parent.storeReplicatedWorkAdmittedLocked(cg.workClass, originalTokens, admittedInfo, false /* canGrantAnother */)
 }
 
 func (sg *kvStoreTokenGranter) tryGet(workClass admissionpb.WorkClass, count int64) bool {
@@ -557,7 +560,10 @@ func (sg *kvStoreTokenGranter) setLinearModels(
 }
 
 func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
-	wc admissionpb.WorkClass, originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo,
+	wc admissionpb.WorkClass,
+	originalTokens int64,
+	admittedInfo storeReplicatedWorkAdmittedInfo,
+	canGrantAnother bool,
 ) (additionalTokens int64) {
 	// Reminder: coord.mu protects the state in the kvStoreTokenGranter.
 	exhaustedFunc := func() bool {
@@ -576,9 +582,9 @@ func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
 		sg.coordMu.elasticDiskBWTokensAvailable -= additionalDiskBWTokensNeeded
 	}
 	sg.coordMu.diskBWTokensUsed[wc] += additionalDiskBWTokensNeeded
-	if additionalL0TokensNeeded < 0 || additionalDiskBWTokensNeeded < 0 {
+	if canGrantAnother && (additionalL0TokensNeeded < 0 || additionalDiskBWTokensNeeded < 0) {
 		isExhausted := exhaustedFunc()
-		if wasExhausted && !isExhausted {
+		if (wasExhausted && !isExhausted) || sg.coord.knobs.AlwaysTryGrantWhenAdmitted {
 			sg.coord.tryGrantLocked()
 		}
 	}

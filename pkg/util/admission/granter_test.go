@@ -143,6 +143,7 @@ func TestGranterBasic(t *testing.T) {
 				kvIOTotalTokensTaken:            metrics.KVIOTotalTokensTaken,
 				workQueueMetrics:                workQueueMetrics,
 				disableTickerForTesting:         true,
+				knobs:                           &TestingKnobs{},
 			}
 			var metricsProvider testMetricsProvider
 			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
