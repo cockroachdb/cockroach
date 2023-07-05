@@ -412,6 +412,7 @@ func (n noopBackfiller) BackfillIndexes(
 	ctx context.Context,
 	progress scexec.BackfillProgress,
 	writer scexec.BackfillerProgressWriter,
+	job *jobs.Job,
 	descriptor catalog.TableDescriptor,
 ) error {
 	return nil

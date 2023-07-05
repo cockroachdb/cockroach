@@ -173,6 +173,7 @@ type Backfiller interface {
 		context.Context,
 		BackfillProgress,
 		BackfillerProgressWriter,
+		*jobs.Job,
 		catalog.TableDescriptor,
 	) error
 }

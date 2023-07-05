@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // IndexBackfillPlanner holds dependencies for an index backfiller
@@ -72,8 +74,22 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	ctx context.Context,
 	progress scexec.BackfillProgress,
 	tracker scexec.BackfillerProgressWriter,
+	job *jobs.Job,
 	descriptor catalog.TableDescriptor,
-) error {
+) (err error) {
+	// Potentially install a protected timestamp before the GC interval is hit,
+	// which can help avoid transaction retry errors, with shorter GC intervals.
+	protectedTimestampCleaner := ib.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx,
+		job,
+		descriptor,
+		progress.MinimumWriteTimestamp)
+	defer func() {
+		cleanupError := protectedTimestampCleaner(ctx)
+		if cleanupError != nil {
+			err = errors.CombineErrors(cleanupError, err)
+		}
+	}()
+
 	var completed = struct {
 		syncutil.Mutex
 		g roachpb.SpanGroup

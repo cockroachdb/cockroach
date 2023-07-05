@@ -13,6 +13,7 @@ package sctestdeps
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -85,6 +86,7 @@ func (s *testBackfiller) BackfillIndexes(
 	_ context.Context,
 	progress scexec.BackfillProgress,
 	_ scexec.BackfillerProgressWriter,
+	_ *jobs.Job,
 	tbl catalog.TableDescriptor,
 ) error {
 	s.s.LogSideEffectf(
