@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher/systemconfigwatchertest"
@@ -169,7 +171,7 @@ func TestTenantHTTP(t *testing.T) {
 		httpClient, err := tenant.GetUnauthenticatedHTTPClient()
 		require.NoError(t, err)
 		defer httpClient.CloseIdleConnections()
-		resp, err := httpClient.Get(tenant.AdminURL() + "/_status/vars")
+		resp, err := httpClient.Get(tenant.AdminURL().WithPath("/_status/vars").String())
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
@@ -180,7 +182,11 @@ func TestTenantHTTP(t *testing.T) {
 		httpClient, err := tenant.GetAdminHTTPClient()
 		require.NoError(t, err)
 		defer httpClient.CloseIdleConnections()
-		resp, err := httpClient.Get(tenant.AdminURL() + "/debug/pprof/goroutine?debug=2")
+		u := tenant.AdminURL().WithPath("/debug/pprof/goroutine")
+		q := u.Query()
+		q.Set("debug", "2")
+		u.RawQuery = q.Encode()
+		resp, err := httpClient.Get(u.String())
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
@@ -188,6 +194,137 @@ func TestTenantHTTP(t *testing.T) {
 		require.Contains(t, string(body), "goroutine")
 	})
 
+}
+
+// TestTenantProcessDebugging verifies that in-process SQL tenant servers gate
+// process debugging behind capabilities.
+func TestTenantProcessDebugging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantDisabled,
+	}})
+	defer tc.Stopper().Stop(ctx)
+	db := tc.ServerConn(0)
+	defer db.Close()
+
+	s := tc.Server(0)
+
+	tenant, _, err := s.StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantID:   serverutils.TestTenantID(),
+			TenantName: "processdebug",
+		})
+	require.NoError(t, err)
+	defer tenant.Stopper().Stop(ctx)
+
+	t.Run("system tenant pprof", func(t *testing.T) {
+		httpClient, err := s.GetAdminHTTPClient()
+		require.NoError(t, err)
+		defer httpClient.CloseIdleConnections()
+
+		url := s.AdminURL().URL
+		url.Path = url.Path + "/debug/pprof/goroutine"
+		q := url.Query()
+		q.Add("debug", "2")
+		url.RawQuery = q.Encode()
+
+		resp, err := httpClient.Get(url.String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Contains(t, string(body), "goroutine")
+	})
+
+	t.Run("pprof", func(t *testing.T) {
+		httpClient, err := tenant.GetAdminHTTPClient()
+		require.NoError(t, err)
+		defer httpClient.CloseIdleConnections()
+
+		url := tenant.AdminURL().URL
+		url.Path = url.Path + "/debug/pprof/"
+		q := url.Query()
+		q.Add("debug", "2")
+		url.RawQuery = q.Encode()
+
+		resp, err := httpClient.Get(url.String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusForbidden, resp.StatusCode)
+		require.Contains(t, string(body), "tenant does not have capability to debug the running process")
+
+		_, err = db.Exec(`ALTER TENANT processdebug GRANT CAPABILITY can_debug_process=true`)
+		require.NoError(t, err)
+
+		tc.WaitForTenantCapabilities(t, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanDebugProcess: "true",
+		})
+
+		resp, err = httpClient.Get(url.String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err = io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Contains(t, string(body), "goroutine")
+
+		_, err = db.Exec(`ALTER TENANT processdebug REVOKE CAPABILITY can_debug_process`)
+		require.NoError(t, err)
+
+		tc.WaitForTenantCapabilities(t, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanDebugProcess: "false",
+		})
+	})
+
+	t.Run("vmodule", func(t *testing.T) {
+		httpClient, err := tenant.GetAdminHTTPClient()
+		require.NoError(t, err)
+		defer httpClient.CloseIdleConnections()
+
+		url := tenant.AdminURL().URL
+		url.Path = url.Path + "/debug/vmodule"
+		q := url.Query()
+		q.Add("duration", "-1s")
+		q.Add("vmodule", "exec_log=3")
+		url.RawQuery = q.Encode()
+
+		resp, err := httpClient.Get(url.String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusForbidden, resp.StatusCode)
+		require.Contains(t, string(body), "tenant does not have capability to debug the running process")
+
+		_, err = db.Exec(`ALTER TENANT processdebug GRANT CAPABILITY can_debug_process=true`)
+		require.NoError(t, err)
+
+		tc.WaitForTenantCapabilities(t, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanDebugProcess: "true",
+		})
+
+		resp, err = httpClient.Get(url.String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err = io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Contains(t, string(body), "previous vmodule configuration: \nnew vmodule configuration: exec_log=3\n")
+
+		_, err = db.Exec(`ALTER TENANT processdebug REVOKE CAPABILITY can_debug_process`)
+		require.NoError(t, err)
+
+		tc.WaitForTenantCapabilities(t, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanDebugProcess: "false",
+		})
+	})
 }
 
 func TestNonExistentTenant(t *testing.T) {

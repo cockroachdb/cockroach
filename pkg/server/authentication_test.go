@@ -520,7 +520,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 		}
 		var resp serverpb.UserLoginResponse
 		return httputil.PostJSONWithRequest(
-			httpClient, ts.AdminURL()+loginPath, &req, &resp,
+			httpClient, ts.AdminURL().WithPath(loginPath).String(), &req, &resp,
 		)
 	}
 
@@ -591,7 +591,7 @@ func TestLogoutClearsCookies(t *testing.T) {
 	require.NoError(t, err)
 
 	// Log out.
-	resp, err := authHTTPClient.Get(ts.AdminURL() + logoutPath)
+	resp, err := authHTTPClient.Get(ts.AdminURL().WithPath(logoutPath).String())
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -621,7 +621,7 @@ func TestLogout(t *testing.T) {
 
 	// Log out.
 	var resp serverpb.UserLogoutResponse
-	if err := httputil.GetJSON(authHTTPClient, ts.AdminURL()+logoutPath, &resp); err != nil {
+	if err := httputil.GetJSON(authHTTPClient, ts.AdminURL().WithPath(logoutPath).String(), &resp); err != nil {
 		t.Fatal("logout request failed:", err)
 	}
 
@@ -637,7 +637,7 @@ func TestLogout(t *testing.T) {
 		t.Fatal("expected revoked at to not be empty; was empty")
 	}
 
-	databasesURL := ts.AdminURL() + "/_admin/v1/databases"
+	databasesURL := ts.AdminURL().WithPath("/_admin/v1/databases").String()
 
 	// Verify that we're unauthorized after logout.
 	response, err := authHTTPClient.Get(databasesURL)
@@ -651,10 +651,6 @@ func TestLogout(t *testing.T) {
 	}
 
 	// Try to use the revoked cookie; verify that it doesn't work.
-	parsedURL, err := url.Parse(s.AdminURL())
-	if err != nil {
-		t.Fatal(err)
-	}
 	encodedCookie, err := EncodeSessionCookie(cookie, false /* forHTTPSOnly */)
 	if err != nil {
 		t.Fatal(err)
@@ -669,7 +665,7 @@ func TestLogout(t *testing.T) {
 		t.Fatal(err)
 	}
 	invalidAuthClient.Jar = jar
-	invalidAuthClient.Jar.SetCookies(parsedURL, []*http.Cookie{encodedCookie})
+	invalidAuthClient.Jar.SetCookies(s.AdminURL().URL, []*http.Cookie{encodedCookie})
 
 	invalidAuthResp, err := invalidAuthClient.Get(databasesURL)
 	if err != nil {
@@ -708,7 +704,7 @@ func TestAuthenticationMux(t *testing.T) {
 	runRequest := func(
 		client http.Client, method string, path string, body []byte, cookieHeader string, expected int,
 	) error {
-		req, err := http.NewRequest(method, tsrv.AdminURL()+path, bytes.NewBuffer(body))
+		req, err := http.NewRequest(method, tsrv.AdminURL().WithPath(path).String(), bytes.NewBuffer(body))
 		if cookieHeader != "" {
 			// The client still attaches its own cookies to this one.
 			req.Header.Set("cookie", cookieHeader)
