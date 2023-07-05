@@ -486,6 +486,7 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 105956)
 
 	skip.UnderRace(t, "takes too long with multiple nodes")
 
