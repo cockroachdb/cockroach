@@ -67,7 +67,9 @@ upsert descriptor #106
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      id: 106
+  +      name: crdb_internal_region
      enumMembers:
      - logicalRepresentation: us-east1
   ...
@@ -129,7 +131,9 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      id: 106
+  -      name: crdb_internal_region
      enumMembers:
      - logicalRepresentation: us-east1
   ...

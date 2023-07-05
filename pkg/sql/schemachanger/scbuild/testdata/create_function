@@ -37,13 +37,3 @@ $$;
   {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[FunctionBody:{DescID: 110}, PUBLIC], ABSENT]
   {body: "SELECT a FROM t;\nSELECT b FROM t@t_idx_b;\nSELECT c FROM t@t_idx_c;\nSELECT a FROM v;\nSELECT nextval(105:::REGCLASS);", functionId: 110, lang: {lang: SQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [108, 109], usesViews: [{columnIds: [1], viewId: 107}]}
-- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
-  {indexId: 2, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 3}, PUBLIC], PUBLIC]
-  {indexId: 3, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
-- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 105}

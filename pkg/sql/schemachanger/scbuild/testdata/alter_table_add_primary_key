@@ -26,6 +26,8 @@ ALTER TABLE defaultdb.bar ADD PRIMARY KEY (i)
   {indexId: 1, name: bar_pkey, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
 - [[PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 105, temporaryIndexId: 3}
 - [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
@@ -58,5 +60,3 @@ ALTER TABLE defaultdb.bar ADD PRIMARY KEY (i)
   {columnId: 1, indexId: 5, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 5, tableId: 105}
-- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 105}

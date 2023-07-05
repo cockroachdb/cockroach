@@ -175,7 +175,21 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      columns:
+  +        "1": a
+  +        "2": b
+  +        "3": c
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +        "2": t_idx_b
+  +        "3": t_idx_c
+  +      name: t
      dependedOnBy:
      - columnIds:
        - 1
@@ -209,7 +223,9 @@ upsert descriptor #105
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      id: 105
+  +      name: sq1
      formatVersion: 3
      id: 105
   ...
@@ -229,7 +245,13 @@ upsert descriptor #106
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      columns:
+  +        "1": a
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      id: 106
+  +      name: v
      dependsOn:
      - 104
   ...
@@ -245,7 +267,9 @@ upsert descriptor #107
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      id: 107
+  +      name: notmyworkday
      enumMembers:
      - logicalRepresentation: Monday
   ...
@@ -263,7 +287,9 @@ upsert descriptor #108
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      id: 108
+  +      name: _notmyworkday
      id: 108
      kind: ALIAS
   ...
@@ -318,7 +344,21 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      columns:
+  -        "1": a
+  -        "2": b
+  -        "3": c
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -        "2": t_idx_b
+  -        "3": t_idx_c
+  -      name: t
      dependedOnBy:
      - columnIds:
   ...
@@ -334,7 +374,9 @@ upsert descriptor #105
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      id: 105
+  -      name: sq1
      formatVersion: 3
      id: 105
   ...
@@ -350,7 +392,13 @@ upsert descriptor #106
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      columns:
+  -        "1": a
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      id: 106
+  -      name: v
      dependsOn:
      - 104
   ...
@@ -366,7 +414,9 @@ upsert descriptor #107
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      id: 107
+  -      name: notmyworkday
      enumMembers:
      - logicalRepresentation: Monday
   ...
@@ -382,7 +432,9 @@ upsert descriptor #108
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      id: 108
+  -      name: _notmyworkday
      id: 108
      kind: ALIAS
   ...

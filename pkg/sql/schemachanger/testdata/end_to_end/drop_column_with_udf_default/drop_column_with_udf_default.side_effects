@@ -143,7 +143,9 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      id: 104
+  +      name: f
   +    revertible: true
      dependedOnBy:
      - columnIds:
@@ -422,8 +424,8 @@ begin transaction #10
 ## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
 upsert descriptor #104
   ...
-       jobId: "1"
-       nameMapping: {}
+         id: 104
+         name: f
   -    revertible: true
      dependedOnBy:
      - columnIds:
@@ -567,7 +569,9 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      id: 104
+  -      name: f
   -  dependedOnBy:
   -  - columnIds:
   -    - 2
