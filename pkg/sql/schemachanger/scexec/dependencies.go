@@ -170,6 +170,7 @@ type Backfiller interface {
 		context.Context,
 		BackfillProgress,
 		BackfillerProgressWriter,
+		*jobs.Job,
 		catalog.TableDescriptor,
 	) error
 }
@@ -181,12 +182,7 @@ type Merger interface {
 
 	// MergeIndexes will merge the specified indexes in the table, from each
 	// temporary index into each adding index.
-	MergeIndexes(
-		context.Context,
-		MergeProgress,
-		BackfillerProgressWriter,
-		catalog.TableDescriptor,
-	) error
+	MergeIndexes(context.Context, *jobs.Job, MergeProgress, BackfillerProgressWriter, catalog.TableDescriptor) error
 }
 
 // Validator provides interfaces that allow indexes and check constraints to be validated.
