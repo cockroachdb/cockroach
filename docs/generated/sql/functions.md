@@ -3354,6 +3354,8 @@ table. Returns an error if validation fails.</p>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
 <tr><td><a name="crdb_internal.force_delete_table_data"></a><code>crdb_internal.force_delete_table_data(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function can be used to clear the data belonging to a table, when the table cannot be dropped.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.repair_catalog_corruption"></a><code>crdb_internal.repair_catalog_corruption(descriptor_id: <a href="int.html">int</a>, corruption: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>repair_catalog_corruption(descriptor_id,corruption) attempts to repair corrupt records in system tables associated with that descriptor id</p>
 </span></td><td>Volatile</td></tr></tbody>
 </table>
 

@@ -216,6 +216,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalKVFlowHandlesID:                    crdbInternalKVFlowHandles,
 		catconstants.CrdbInternalKVFlowControllerID:                 crdbInternalKVFlowController,
 		catconstants.CrdbInternalKVFlowTokenDeductions:              crdbInternalKVFlowTokenDeductions,
+		catconstants.CrdbInternalRepairableCatalogCorruptionsViewID: crdbInternalRepairableCatalogCorruptions,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -5807,6 +5808,10 @@ CREATE TABLE crdb_internal.invalid_objects (
 					if dbContext != nil && d.GetParentID() != dbContext.GetID() {
 						return nil
 					}
+				case catalog.FunctionDescriptor:
+					if dbContext != nil && d.GetParentID() != dbContext.GetID() {
+						return nil
+					}
 				default:
 					return nil
 				}
@@ -6160,6 +6165,84 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		}
 		return nil
 	},
+}
+
+// crdbInternalRepairableCatalogCorruptions lists all corruptions in the
+// catalog which can be automatically repaired. By type:
+//   - 'descriptor' corruptions denote corruptions in the system.descriptor
+//     table which can be repaired by applying
+//     crdb_internal.unsafe_upsert_descriptor to the output of
+//     crdb_internal.repaired_descriptor,
+//   - 'namespace' corruptions denote corruptions in the system.namespace
+//     table which can be repaired by removing the corresponding record with
+//     crdb_internal.unsafe_delete_namespace_entry.
+var crdbInternalRepairableCatalogCorruptions = virtualSchemaView{
+	comment: "known corruptions in the catalog which can be repaired using builtin functions like " +
+		"crdb_internal.repaired_descriptor",
+	resultColumns: colinfo.ResultColumns{
+		{Name: "parent_id", Typ: types.Int},
+		{Name: "parent_schema_id", Typ: types.Int},
+		{Name: "name", Typ: types.String},
+		{Name: "id", Typ: types.Int},
+		{Name: "corruption", Typ: types.String},
+	},
+	schema: `
+CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
+	parent_id,
+	parent_schema_id,
+	name,
+	id,
+	corruption
+) AS
+	WITH
+		data
+			AS (
+				SELECT
+					ns."parentID" AS parent_id,
+					ns."parentSchemaID" AS parent_schema_id,
+					ns.name,
+					COALESCE(ns.id, d.id) AS id,
+					d.descriptor,
+					crdb_internal.descriptor_with_post_deserialization_changes(d.descriptor)
+						AS updated_descriptor,
+					crdb_internal.repaired_descriptor(
+						d.descriptor,
+						(SELECT array_agg(id) AS desc_id_array FROM system.descriptor),
+						(
+							SELECT
+								array_agg(id) AS job_id_array
+							FROM
+								system.jobs
+							WHERE
+								status NOT IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+						)
+					)
+						AS repaired_descriptor
+				FROM
+					system.namespace AS ns FULL JOIN system.descriptor AS d ON ns.id = d.id
+			),
+		diag
+			AS (
+				SELECT
+					*,
+					CASE
+					WHEN descriptor IS NULL AND id != 29 THEN 'namespace'
+					WHEN updated_descriptor != repaired_descriptor THEN 'descriptor'
+					ELSE NULL
+					END
+						AS corruption
+				FROM
+					data
+			)
+	SELECT
+		parent_id, parent_schema_id, name, id, corruption
+	FROM
+		diag
+	WHERE
+		corruption IS NOT NULL
+	ORDER BY
+		parent_id, parent_schema_id, name, id
+`,
 }
 
 var crdbInternalDefaultPrivilegesTable = virtualSchemaTable{
@@ -8011,7 +8094,7 @@ func getContentionEventInfo(
 	if err != nil {
 		schName = "[dropped schema]"
 	}
-	if dbDesc != nil {
+	if schemaDesc != nil {
 		schName = schemaDesc.GetName()
 	}
 
