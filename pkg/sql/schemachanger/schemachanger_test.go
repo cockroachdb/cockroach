@@ -31,19 +31,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
 	"github.com/lib/pq"
@@ -51,6 +55,127 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
+
+// TestConcurrentDeclarativeSchemaChanges tests that concurrent declarative
+// schema changes operating on the same descriptors are performed serially.
+func TestConcurrentDeclarativeSchemaChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var maxValue = 4000
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows.
+		maxValue = 200
+	}
+
+	// Protects backfillNotification.
+	var mu syncutil.Mutex
+	var backfillNotification, continueNotification chan struct{}
+	// We have to have initBackfillNotification return the new
+	// channel rather than having later users read the original
+	// backfillNotification to make the race detector happy.
+	initBackfillNotification := func() (chan struct{}, chan struct{}) {
+		mu.Lock()
+		defer mu.Unlock()
+		backfillNotification = make(chan struct{})
+		continueNotification = make(chan struct{})
+		return backfillNotification, continueNotification
+	}
+	notifyBackfill := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if backfillNotification != nil {
+			close(backfillNotification)
+			backfillNotification = nil
+		}
+		if continueNotification != nil {
+			<-continueNotification
+			close(continueNotification)
+			continueNotification = nil
+		}
+	}
+	var addColumnBlockedCounter atomic.Uint32
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+			AfterWaitingForConcurrentSchemaChanges: func(stmts []string, wasBlocked bool) {
+				for _, stmt := range stmts {
+					if wasBlocked && strings.Contains(stmt, "ADD COLUMN") {
+						addColumnBlockedCounter.Add(1)
+						return
+					}
+				}
+			},
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(_ roachpb.Span) error {
+				notifyBackfill()
+				return nil
+			},
+		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		// Prevent the GC job from running so we ensure that all the keys
+		// which were written remain.
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(jobID jobspb.JobID) error {
+			<-ctx.Done()
+			return ctx.Err()
+		}},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	defer cancel()
+
+	if _, err := sqlDB.Exec(`CREATE DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`CREATE TABLE t.test (k INT NOT NULL, v INT)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	backfillNotif, continueNotif := initBackfillNotification()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`CREATE INDEX i1 ON t.test (v)`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	// Wait until the create index schema change job has started
+	// before kicking off the add column
+	<-backfillNotif
+	require.Zero(t, addColumnBlockedCounter.Load())
+	wg.Add(1)
+	go func() {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN w INT NOT NULL DEFAULT 42`); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	// Unblock the create index job.
+	continueNotif <- struct{}{}
+	wg.Wait()
+
+	// The ADD COLUMN schema change must have been blocked.
+	require.NotZero(t, addColumnBlockedCounter.Load())
+
+	// There should be 3 k/v pairs per row:
+	// * the original primary index keyed on rowid,
+	// * the secondary index on v with rowid as key suffix,
+	// * the new primary index, still keyed on rowid, but with w stored.
+	testutils.SucceedsSoon(t, func() error {
+		return sqltestutils.CheckTableKeyCount(ctx, kvDB, 3, maxValue)
+	})
+}
 
 func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()

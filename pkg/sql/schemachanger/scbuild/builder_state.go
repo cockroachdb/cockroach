@@ -84,6 +84,20 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		// Ignore no-op changes.
 		return
 	}
+
+	// Check that the descriptors relevant to this element are not undergoing any
+	// concurrent schema changes.
+	screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
+		b.ensureDescriptor(id)
+		if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(c.desc))
+		}
+	})
+	// Re-assign dst because the above function may have mutated the builder
+	// state. Specifically, the output slice, to which dst points to, might
+	// have grown and might have been reallocated.
+	dst = b.getExistingElementState(e)
+
 	// Henceforth all possibilities lead to the target and metadata being
 	// overwritten. See below for explanations as to why this is legal.
 	oldTarget, oldStatementID := dst.target, dst.metadata.StatementID

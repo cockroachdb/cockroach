@@ -66,58 +66,6 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   └── • SameStagePrecedence dependency from DROPPED EnumType:{DescID: 106}
 │       │   │         rule: "descriptor drop right before removing dependent with attr ref"
 │       │   │
-│       │   ├── • Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104}
-│       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • Owner:{DescID: 105}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: admin}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: public}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: root}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • Schema:{DescID: 105}
-│       │   │   │ PUBLIC → DROPPED
-│       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 106, ReferencedDescID: 105}
-│       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 107, ReferencedDescID: 105}
-│       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
-│       │   │   │
-│       │   │   └── • Precedence dependency from ABSENT SchemaChild:{DescID: 108, ReferencedDescID: 105}
-│       │   │         rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
-│       │   │
-│       │   ├── • SchemaParent:{DescID: 105, ReferencedDescID: 104}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
-│       │   │
 │       │   ├── • Namespace:{DescID: 106, Name: crdb_internal_region, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
@@ -176,6 +124,58 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED EnumType:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
+│       │   │
+│       │   ├── • Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104}
+│       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • Owner:{DescID: 105}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 105, Name: admin}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 105, Name: public}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 105, Name: root}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • Schema:{DescID: 105}
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 106, ReferencedDescID: 105}
+│       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 107, ReferencedDescID: 105}
+│       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
+│       │   │   │
+│       │   │   └── • Precedence dependency from ABSENT SchemaChild:{DescID: 108, ReferencedDescID: 105}
+│       │   │         rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
+│       │   │
+│       │   ├── • SchemaParent:{DescID: 105, ReferencedDescID: 104}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 105}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
@@ -504,14 +504,6 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           │     Name: crdb_internal_index_1_name_placeholder
 │           │     TableID: 108
 │           │
-│           ├── • MarkDescriptorAsDropped
-│           │     DescriptorID: 105
-│           │
-│           ├── • RemoveSchemaParent
-│           │     Parent:
-│           │       ParentDatabaseID: 104
-│           │       SchemaID: 105
-│           │
 │           ├── • NotImplementedForPublicObjects
 │           │     DescID: 106
 │           │     ElementType: scpb.Owner
@@ -527,6 +519,14 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           ├── • RemoveUserPrivileges
 │           │     DescriptorID: 106
 │           │     User: root
+│           │
+│           ├── • MarkDescriptorAsDropped
+│           │     DescriptorID: 105
+│           │
+│           ├── • RemoveSchemaParent
+│           │     Parent:
+│           │       ParentDatabaseID: 104
+│           │       SchemaID: 105
 │           │
 │           ├── • NotImplementedForPublicObjects
 │           │     DescID: 107
@@ -577,6 +577,13 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           ├── • DrainDescriptorName
 │           │     Namespace:
 │           │       DatabaseID: 104
+│           │       DescriptorID: 106
+│           │       Name: crdb_internal_region
+│           │       SchemaID: 105
+│           │
+│           ├── • DrainDescriptorName
+│           │     Namespace:
+│           │       DatabaseID: 104
 │           │       DescriptorID: 105
 │           │       Name: public
 │           │
@@ -595,13 +602,6 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           ├── • RemoveUserPrivileges
 │           │     DescriptorID: 105
 │           │     User: root
-│           │
-│           ├── • DrainDescriptorName
-│           │     Namespace:
-│           │       DatabaseID: 104
-│           │       DescriptorID: 106
-│           │       Name: crdb_internal_region
-│           │       SchemaID: 105
 │           │
 │           ├── • DrainDescriptorName
 │           │     Namespace:
@@ -697,27 +697,6 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │   │   │   ├── • DatabaseRegionConfig:{DescID: 104, ReferencedDescID: 106}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
-│   │   │   ├── • Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • Owner:{DescID: 105}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • UserPrivileges:{DescID: 105, Name: admin}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • UserPrivileges:{DescID: 105, Name: public}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • UserPrivileges:{DescID: 105, Name: root}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
-│   │   │   ├── • Schema:{DescID: 105}
-│   │   │   │     DROPPED → PUBLIC
-│   │   │   │
-│   │   │   ├── • SchemaParent:{DescID: 105, ReferencedDescID: 104}
-│   │   │   │     ABSENT → PUBLIC
-│   │   │   │
 │   │   │   ├── • Namespace:{DescID: 106, Name: crdb_internal_region, ReferencedDescID: 104}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
@@ -746,6 +725,27 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
 │   │   │   ├── • SchemaChild:{DescID: 106, ReferencedDescID: 105}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • Owner:{DescID: 105}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • UserPrivileges:{DescID: 105, Name: admin}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • UserPrivileges:{DescID: 105, Name: public}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • UserPrivileges:{DescID: 105, Name: root}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • Schema:{DescID: 105}
+│   │   │   │     DROPPED → PUBLIC
+│   │   │   │
+│   │   │   ├── • SchemaParent:{DescID: 105, ReferencedDescID: 104}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
 │   │   │   ├── • Namespace:{DescID: 107, Name: _crdb_internal_region, ReferencedDescID: 104}
@@ -892,58 +892,6 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   └── • SameStagePrecedence dependency from DROPPED EnumType:{DescID: 106}
 │       │   │         rule: "descriptor drop right before removing dependent with attr ref"
 │       │   │
-│       │   ├── • Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104}
-│       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • Owner:{DescID: 105}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: admin}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: public}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • UserPrivileges:{DescID: 105, Name: root}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │
-│       │   ├── • Schema:{DescID: 105}
-│       │   │   │ PUBLIC → DROPPED
-│       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 106, ReferencedDescID: 105}
-│       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
-│       │   │   │
-│       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 107, ReferencedDescID: 105}
-│       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
-│       │   │   │
-│       │   │   └── • Precedence dependency from ABSENT SchemaChild:{DescID: 108, ReferencedDescID: 105}
-│       │   │         rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
-│       │   │
-│       │   ├── • SchemaParent:{DescID: 105, ReferencedDescID: 104}
-│       │   │   │ PUBLIC → ABSENT
-│       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 105}
-│       │   │         rule: "descriptor dropped before dependent element removal"
-│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
-│       │   │
 │       │   ├── • Namespace:{DescID: 106, Name: crdb_internal_region, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
@@ -1002,6 +950,58 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from DROPPED EnumType:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
+│       │   │
+│       │   ├── • Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from DROPPED Database:{DescID: 104}
+│       │   │   │     rule: "descriptor drop right before removing dependent with attr ref"
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • Owner:{DescID: 105}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 105, Name: admin}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 105, Name: public}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 105, Name: root}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 105}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • Schema:{DescID: 105}
+│       │   │   │ PUBLIC → DROPPED
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 106, ReferencedDescID: 105}
+│       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT SchemaChild:{DescID: 107, ReferencedDescID: 105}
+│       │   │   │     rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
+│       │   │   │
+│       │   │   └── • Precedence dependency from ABSENT SchemaChild:{DescID: 108, ReferencedDescID: 105}
+│       │   │         rule: "back-reference in parent descriptor is removed before parent descriptor is dropped"
+│       │   │
+│       │   ├── • SchemaParent:{DescID: 105, ReferencedDescID: 104}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 105}
 │       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
@@ -1330,14 +1330,6 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           │     Name: crdb_internal_index_1_name_placeholder
 │           │     TableID: 108
 │           │
-│           ├── • MarkDescriptorAsDropped
-│           │     DescriptorID: 105
-│           │
-│           ├── • RemoveSchemaParent
-│           │     Parent:
-│           │       ParentDatabaseID: 104
-│           │       SchemaID: 105
-│           │
 │           ├── • NotImplementedForPublicObjects
 │           │     DescID: 106
 │           │     ElementType: scpb.Owner
@@ -1353,6 +1345,14 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           ├── • RemoveUserPrivileges
 │           │     DescriptorID: 106
 │           │     User: root
+│           │
+│           ├── • MarkDescriptorAsDropped
+│           │     DescriptorID: 105
+│           │
+│           ├── • RemoveSchemaParent
+│           │     Parent:
+│           │       ParentDatabaseID: 104
+│           │       SchemaID: 105
 │           │
 │           ├── • NotImplementedForPublicObjects
 │           │     DescID: 107
@@ -1406,6 +1406,13 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           ├── • DrainDescriptorName
 │           │     Namespace:
 │           │       DatabaseID: 104
+│           │       DescriptorID: 106
+│           │       Name: crdb_internal_region
+│           │       SchemaID: 105
+│           │
+│           ├── • DrainDescriptorName
+│           │     Namespace:
+│           │       DatabaseID: 104
 │           │       DescriptorID: 105
 │           │       Name: public
 │           │
@@ -1424,13 +1431,6 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           ├── • RemoveUserPrivileges
 │           │     DescriptorID: 105
 │           │     User: root
-│           │
-│           ├── • DrainDescriptorName
-│           │     Namespace:
-│           │       DatabaseID: 104
-│           │       DescriptorID: 106
-│           │       Name: crdb_internal_region
-│           │       SchemaID: 105
 │           │
 │           ├── • DrainDescriptorName
 │           │     Namespace:
@@ -1572,30 +1572,6 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   │   └── • SameStagePrecedence dependency from ABSENT Database:{DescID: 104}
         │   │         rule: "descriptor removed right before garbage collection"
         │   │
-        │   ├── • Schema:{DescID: 105}
-        │   │   │ DROPPED → ABSENT
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
-        │   │   │     rule: "non-data dependents removed before descriptor"
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 105}
-        │   │   │     rule: "non-data dependents removed before descriptor"
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: admin}
-        │   │   │     rule: "non-data dependents removed before descriptor"
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: public}
-        │   │   │     rule: "non-data dependents removed before descriptor"
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: root}
-        │   │   │     rule: "non-data dependents removed before descriptor"
-        │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DROPPED Schema:{DescID: 105}
-        │   │   │     rule: "descriptor dropped in transaction before removal"
-        │   │   │
-        │   │   └── • Precedence dependency from ABSENT SchemaParent:{DescID: 105, ReferencedDescID: 104}
-        │   │         rule: "non-data dependents removed before descriptor"
-        │   │
         │   ├── • EnumType:{DescID: 106}
         │   │   │ DROPPED → ABSENT
         │   │   │
@@ -1627,6 +1603,30 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   │   │     rule: "non-data dependents removed before descriptor"
         │   │   │
         │   │   └── • Precedence dependency from ABSENT SchemaChild:{DescID: 106, ReferencedDescID: 105}
+        │   │         rule: "non-data dependents removed before descriptor"
+        │   │
+        │   ├── • Schema:{DescID: 105}
+        │   │   │ DROPPED → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT Owner:{DescID: 105}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: admin}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: public}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT UserPrivileges:{DescID: 105, Name: root}
+        │   │   │     rule: "non-data dependents removed before descriptor"
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DROPPED Schema:{DescID: 105}
+        │   │   │     rule: "descriptor dropped in transaction before removal"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT SchemaParent:{DescID: 105, ReferencedDescID: 104}
         │   │         rule: "non-data dependents removed before descriptor"
         │   │
         │   ├── • AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
@@ -1745,10 +1745,10 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
             │       Statement: DROP DATABASE multi_region_test_db CASCADE
             │
             ├── • DeleteDescriptor
-            │     DescriptorID: 105
+            │     DescriptorID: 106
             │
             ├── • DeleteDescriptor
-            │     DescriptorID: 106
+            │     DescriptorID: 105
             │
             ├── • DeleteDescriptor
             │     DescriptorID: 107
