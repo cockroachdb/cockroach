@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
@@ -84,15 +83,6 @@ func Build(
 		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.target, e.element, &e.metadata))
 		current = append(current, e.current)
 	}
-	// Ensure that no concurrent schema change are on going on any targets.
-	descSet := screl.AllTargetDescIDs(ts)
-	descSet.ForEach(func(id descpb.ID) {
-		bs.ensureDescriptor(id)
-		desc := bs.descCache[id].desc
-		if desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(desc))
-		}
-	})
 	return scpb.CurrentState{TargetState: ts, Current: current}, nil
 }
 
@@ -101,15 +91,6 @@ func Build(
 func CheckIfSupported(statement tree.Statement) bool {
 	return scbuildstmt.CheckIfStmtIsSupported(statement, sessiondatapb.UseNewSchemaChangerOn)
 }
-
-// Export dependency interfaces.
-// These are defined in the scbuildstmts package instead of scbuild to avoid
-// circular import dependencies.
-type (
-	// FeatureChecker contains operations for checking if a schema change
-	// feature is allowed by the database administrator.
-	FeatureChecker = scbuildstmt.SchemaFeatureChecker
-)
 
 type elementState struct {
 	element  scpb.Element

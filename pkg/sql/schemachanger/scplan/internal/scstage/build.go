@@ -46,7 +46,7 @@ func BuildStages(
 		targetState:                init.TargetState,
 		startingStatuses:           init.Current,
 		startingPhase:              phase,
-		descIDs:                    screl.AllTargetDescIDs(init.TargetState),
+		descIDs:                    screl.AllTargetStateDescIDs(init.TargetState),
 		enforcePlannerSanityChecks: enforcePlannerSanityChecks,
 	}
 	// Try building stages while ignoring revertibility constraints.

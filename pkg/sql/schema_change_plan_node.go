@@ -122,16 +122,11 @@ func (p *planner) waitForDescriptorSchemaChanges(
 
 	// Wait for the descriptor to no longer be claimed by a schema change.
 	start := timeutil.Now()
-	logEvery := log.Every(30 * time.Second)
+	logEvery := log.Every(10 * time.Second)
+	var wasBlocked bool
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		now := p.ExecCfg().Clock.Now()
-		if logEvery.ShouldLog() {
-			log.Infof(ctx,
-				"schema change waiting for concurrent schema changes on descriptor %d,"+
-					" waited %v so far", descID, timeutil.Since(start),
-			)
-		}
-		blocked := false
+		var isBlocked bool
 		if err := p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
@@ -146,15 +141,29 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			if err != nil {
 				return err
 			}
-			blocked = desc.HasConcurrentSchemaChanges()
+			isBlocked = desc.HasConcurrentSchemaChanges()
 			return nil
 		}); err != nil {
 			return err
 		}
-		if !blocked {
+		if isBlocked {
+			wasBlocked = true
+		} else {
 			break
 		}
+		if logEvery.ShouldLog() {
+			log.Infof(ctx,
+				"schema change waiting for concurrent schema changes on descriptor %d,"+
+					" waited %v so far", descID, timeutil.Since(start),
+			)
+		}
 	}
+
+	if knobs := p.ExecCfg().DeclarativeSchemaChangerTestingKnobs; knobs != nil &&
+		knobs.AfterWaitingForConcurrentSchemaChanges != nil {
+		knobs.AfterWaitingForConcurrentSchemaChanges(scs.stmts, wasBlocked)
+	}
+
 	log.Infof(
 		ctx,
 		"done waiting for concurrent schema changes on descriptor %d after %v",
