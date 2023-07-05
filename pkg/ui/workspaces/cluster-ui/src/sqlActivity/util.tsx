@@ -19,6 +19,7 @@ import { createSelector } from "@reduxjs/toolkit";
 import { SqlStatsResponse } from "src/api/statementsApi";
 import { Filters, getTimeValueInSeconds } from "src/queryFilter";
 import { AggregateStatistics } from "src/statementsTable";
+import { StatementDiagnosticsResponse } from "../api";
 
 // filterBySearchQuery returns true if a search query matches the statement.
 export function filterBySearchQuery(
@@ -132,6 +133,7 @@ export function filteredStatementsData(
 // server response to AggregatedStatistics[]
 export const convertRawStmtsToAggregateStatistics = (
   stmts: CollectedStatementStatistics[],
+  statementDiagnostics: StatementDiagnosticsResponse,
 ): AggregateStatistics[] => {
   if (!stmts?.length) return [];
 
@@ -151,14 +153,17 @@ export const convertRawStmtsToAggregateStatistics = (
       database: stmt.database,
       applicationName: stmt.app,
       stats: stmt.stats,
+      diagnosticsReports: (statementDiagnostics || [])
+        .filter(d => d.statement_fingerprint === stmt.statement)
     };
   });
 };
 
 // We separate the memoized version for testing.
 export const convertRawStmtsToAggregateStatisticsMemoized = createSelector(
-  (stmts: CollectedStatementStatistics[]) => stmts,
-  (stmts): AggregateStatistics[] => convertRawStmtsToAggregateStatistics(stmts),
+  (stmts: CollectedStatementStatistics[], statementDiagnostics: StatementDiagnosticsResponse) => ([stmts, statementDiagnostics]),
+  ([stmts, statementDiagnostics]: [CollectedStatementStatistics[], StatementDiagnosticsResponse]): AggregateStatistics[] =>
+    convertRawStmtsToAggregateStatistics(stmts, statementDiagnostics),
 );
 
 // getAppsFromStmtsResponse returns the array of all unique apps within the data.
