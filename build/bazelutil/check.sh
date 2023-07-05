@@ -52,10 +52,6 @@ pkg/util/log/sinks.go://go:generate mockgen -package=log -destination=mocks_gene
 pkg/util/timeutil/zoneinfo.go://go:generate go run gen/main.go
 "
 
-EXISTING_BROKEN_TESTS_IN_BAZEL="
-pkg/cmd/prereqs/BUILD.bazel
-"
-
 EXISTING_CRDB_TEST_BUILD_CONSTRAINTS="
 pkg/util/buildutil/crdb_test_off.go://go:build !crdb_test || crdb_test_off
 pkg/util/buildutil/crdb_test_on.go://go:build crdb_test && !crdb_test_off
@@ -93,16 +89,6 @@ $GIT_GREP '//go:generate' 'pkg/**/*.go' | grep -v stringer | grep -v 'add-leakte
     echo 'present in the Bazel build as well, then add the line to the'
     echo 'EXISTING_GO_GENERATE_COMMENTS in build/bazelutil/check.sh.'
     echo 'Also see https://cockroachlabs.atlassian.net/wiki/spaces/CRDB/pages/1380090083/How+to+ensure+your+code+builds+with+Bazel'
-    exit 1
-done
-
-$GIT_GREP 'broken_in_bazel' pkg | grep BUILD.bazel: | grep -v pkg/BUILD.bazel | grep -v pkg/cli/BUILD.bazel | grep -v generate-bazel-extra | cut -d: -f1 | while read LINE; do
-    if [[ "$EXISTING_BROKEN_TESTS_IN_BAZEL" == *"$LINE"* ]]; then
-	# Grandfathered.
-	continue
-    fi
-    echo "A new broken test in Bazel was added in $LINE"
-    echo 'Ensure the test runs with Bazel, then remove the broken_in_bazel tag.'
     exit 1
 done
 

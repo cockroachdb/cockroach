@@ -196,8 +196,8 @@ GO_TARGETS = [`)
 	fmt.Fprintln(w, `]
 
 # These suites run only the tests with the appropriate "size" (excepting those
-# tagged "broken_in_bazel", "flaky", or "integration") [1]. Note that tests have
-# a default timeout depending on the size [2].
+# tagged "flaky" or "integration") [1]. Note that tests have a default timeout
+# depending on the size [2].
 
 # [1] https://docs.bazel.build/versions/master/be/general.html#test_suite
 # [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests`)
@@ -206,7 +206,6 @@ GO_TARGETS = [`)
 test_suite(
     name = "all_tests",
     tags = [
-        "-broken_in_bazel",
         "-integration",
     ],
     tests = ALL_TESTS,
@@ -216,7 +215,6 @@ test_suite(
 test_suite(
     name = "ccl_tests",
     tags = [
-        "-broken_in_bazel",
         "-integration",
         "ccl_test",
     ],
@@ -228,7 +226,6 @@ test_suite(
 test_suite(
     name = "%[1]s_non_ccl_tests",
     tags = [
-        "-broken_in_bazel",
         "-ccl_test",
         "-flaky",
         "-integration",
