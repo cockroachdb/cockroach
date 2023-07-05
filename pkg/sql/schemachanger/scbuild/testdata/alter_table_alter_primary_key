@@ -22,6 +22,8 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {comment: pkey is a constraint, constraintId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 4, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 5}
 - [[IndexName:{DescID: 104, Name: pkey, IndexID: 4}, PUBLIC], ABSENT]
@@ -62,8 +64,6 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 2, indexId: 3, kind: KEY_SUFFIX, tableId: 104}
 - [[IndexName:{DescID: 104, Name: foo_i_key, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: foo_i_key, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
 
 build
 ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
@@ -88,6 +88,8 @@ ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
   {indexId: 1, name: bar_pkey, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
 - [[PrimaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 105, temporaryIndexId: 3}
 - [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 2}, TRANSIENT_ABSENT], ABSENT]
@@ -120,5 +122,3 @@ ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
   {columnId: 1, indexId: 5, tableId: 105}
 - [[IndexData:{DescID: 105, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 5, tableId: 105}
-- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 105}

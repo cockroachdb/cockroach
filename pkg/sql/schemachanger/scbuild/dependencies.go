@@ -247,3 +247,12 @@ type ReferenceProvider interface {
 type ReferenceProviderFactory interface {
 	NewReferenceProvider(ctx context.Context, stmt tree.Statement) (ReferenceProvider, error)
 }
+
+// Export dependency interfaces.
+// These are defined in the scbuildstmts package instead of scbuild to avoid
+// circular import dependencies.
+type (
+	// FeatureChecker contains operations for checking if a schema change
+	// feature is allowed by the database administrator.
+	FeatureChecker = scbuildstmt.SchemaFeatureChecker
+)

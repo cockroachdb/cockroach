@@ -275,7 +275,7 @@ func logSchemaChangeEvents(
 	var ids catalog.DescriptorIDSet
 	for _, t := range state.TargetState.Targets {
 		if t.Metadata.SourceElementID > 1 ||
-			!t.TargetIsLinkedToSchemaChange() { // Ignore empty metadata
+			!t.IsLinkedToSchemaChange() { // Ignore empty metadata
 			// Ignore targets which are the product of CASCADEs.
 			continue
 		}

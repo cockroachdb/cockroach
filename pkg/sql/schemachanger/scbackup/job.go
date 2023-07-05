@@ -78,7 +78,7 @@ func CreateDeclarativeSchemaChangeJobs(
 		// parent database but was excluded from the BACKUP (bc it's in DROP state),
 		// and the parent database will have a non-nil but empty declarative schema
 		// changer state, which we can safely clear out.
-		descsToSchemaChange := screl.AllTargetDescIDs(currentState.TargetState)
+		descsToSchemaChange := screl.AllTargetStateDescIDs(currentState.TargetState)
 		for _, desc := range descs {
 			if len(desc.GetDeclarativeSchemaChangerState().Targets) == 0 &&
 				!descsToSchemaChange.Contains(desc.GetID()) {
@@ -92,7 +92,7 @@ func CreateDeclarativeSchemaChangeJobs(
 			currentState.Statements,
 			!currentState.Revertible, /* isNonCancelable */
 			currentState.Authorization,
-			screl.AllTargetDescIDs(currentState.TargetState),
+			screl.AllTargetStateDescIDs(currentState.TargetState),
 			runningStatus,
 		))
 	}
