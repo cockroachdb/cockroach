@@ -740,11 +740,27 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
+
+	// Can't remove Replica with DestroyData false because this requires the destroyStatus
+	// to already have been set by the caller (but we didn't).
+	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+		DestroyData: false,
+	}), `replica not marked as destroyed`)
+
+	// Remove the Replica twice, as this should be idempotent.
+	// NB: we rely on this idempotency today (as @tbg found out when he accidentally
+	// removed it).
+	for i := 0; i < 2; i++ {
+		require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}), "%d", i)
 	}
+
+	// However, if we have DestroyData=false, caller is expected to be the unique first "destroyer"
+	// of the Replica.
+	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+		DestroyData: false,
+	}), `does not exist`)
 
 	// Verify that removal of a replica marks it as destroyed so that future raft
 	// commands on the Replica will silently be dropped.
