@@ -68,7 +68,7 @@ func (ts *httpTestServer) AdminURL() *serverutils.TestURL {
 	u := ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL()
 	if ts.t.tenantName != "" {
 		q := u.Query()
-		q.Add(TenantNameParamInQueryURL, string(ts.t.tenantName))
+		q.Add(ClusterNameParamInQueryURL, string(ts.t.tenantName))
 		u.RawQuery = q.Encode()
 	}
 	return &serverutils.TestURL{URL: u}

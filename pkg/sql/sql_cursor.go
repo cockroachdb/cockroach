@@ -301,6 +301,32 @@ type sqlCursors interface {
 	list() map[tree.Name]*sqlCursor
 }
 
+// emptySqlCursors is the default impl used by the planner when the
+// connExecutor is not available.
+type emptySqlCursors struct{}
+
+var _ sqlCursors = emptySqlCursors{}
+
+func (e emptySqlCursors) closeAll(bool) error {
+	return errors.AssertionFailedf("closeAll not supported in emptySqlCursors")
+}
+
+func (e emptySqlCursors) closeCursor(tree.Name) error {
+	return errors.AssertionFailedf("closeCursor not supported in emptySqlCursors")
+}
+
+func (e emptySqlCursors) getCursor(tree.Name) *sqlCursor {
+	return nil
+}
+
+func (e emptySqlCursors) addCursor(tree.Name, *sqlCursor) error {
+	return errors.AssertionFailedf("addCursor not supported in emptySqlCursors")
+}
+
+func (e emptySqlCursors) list() map[tree.Name]*sqlCursor {
+	return nil
+}
+
 // cursorMap is a sqlCursors that's backed by an actual map.
 type cursorMap struct {
 	cursors map[tree.Name]*sqlCursor
