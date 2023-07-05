@@ -148,17 +148,17 @@ func (sr *SQLRunner) ExecRowsAffected(
 func (sr *SQLRunner) ExpectErr(t Fataler, errRE string, query string, args ...interface{}) {
 	helperOrNoop(t)()
 	_, err := sr.DB.ExecContext(context.Background(), query, args...)
-	sr.expectErr(t, err, errRE)
+	sr.expectErr(t, query, err, errRE)
 }
 
-func (sr *SQLRunner) expectErr(t Fataler, err error, errRE string) {
+func (sr *SQLRunner) expectErr(t Fataler, query string, err error, errRE string) {
 	helperOrNoop(t)()
 	if !testutils.IsError(err, errRE) {
 		s := "nil"
 		if err != nil {
 			s = pgerror.FullError(err)
 		}
-		t.Fatalf("expected error '%s', got: %s", errRE, s)
+		t.Fatalf("expected query '%s' error '%s', got: %s", query, errRE, s)
 	}
 }
 
@@ -170,7 +170,7 @@ func (sr *SQLRunner) ExpectErrWithHint(
 	helperOrNoop(t)()
 	_, err := sr.DB.ExecContext(context.Background(), query, args...)
 
-	sr.expectErr(t, err, errRE)
+	sr.expectErr(t, query, err, errRE)
 
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 		matched, merr := regexp.MatchString(hintRE, pqErr.Hint)

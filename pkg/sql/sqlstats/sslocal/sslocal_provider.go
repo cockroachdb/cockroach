@@ -130,7 +130,7 @@ func (s *SQLStats) GetLastReset() time.Time {
 
 // IterateStatementStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateStatementStats(
-	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
+	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
 ) error {
 	iter := s.StmtStatsIterator(options)
 
@@ -145,13 +145,13 @@ func (s *SQLStats) IterateStatementStats(
 
 // StmtStatsIterator returns an instance of sslocal.StmtStatsIterator for
 // the current SQLStats.
-func (s *SQLStats) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtStatsIterator {
+func (s *SQLStats) StmtStatsIterator(options sqlstats.IteratorOptions) StmtStatsIterator {
 	return NewStmtStatsIterator(s, options)
 }
 
 // IterateTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateTransactionStats(
-	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
+	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) error {
 	iter := s.TxnStatsIterator(options)
 
@@ -167,14 +167,14 @@ func (s *SQLStats) IterateTransactionStats(
 
 // TxnStatsIterator returns an instance of sslocal.TxnStatsIterator for
 // the current SQLStats.
-func (s *SQLStats) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
+func (s *SQLStats) TxnStatsIterator(options sqlstats.IteratorOptions) TxnStatsIterator {
 	return NewTxnStatsIterator(s, options)
 }
 
 // IterateAggregatedTransactionStats implements sqlstats.Provider interface.
 func (s *SQLStats) IterateAggregatedTransactionStats(
 	ctx context.Context,
-	options *sqlstats.IteratorOptions,
+	options sqlstats.IteratorOptions,
 	visitor sqlstats.AggregatedTransactionVisitor,
 ) error {
 	appNames := s.getAppNames(options.SortedAppNames)

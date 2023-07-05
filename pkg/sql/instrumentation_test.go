@@ -60,7 +60,7 @@ func TestSampledStatsCollection(t *testing.T) {
 				GetLocalMemProvider().
 				IterateStatementStats(
 					ctx,
-					&sqlstats.IteratorOptions{},
+					sqlstats.IteratorOptions{},
 					func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 						if statistics.Key.Query == key.Query &&
 							statistics.Key.ImplicitTxn == key.ImplicitTxn &&
@@ -89,7 +89,7 @@ func TestSampledStatsCollection(t *testing.T) {
 			GetLocalMemProvider().
 			IterateTransactionStats(
 				ctx,
-				&sqlstats.IteratorOptions{},
+				sqlstats.IteratorOptions{},
 				func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
 					if statistics.TransactionFingerprintID == key {
 						stats = statistics

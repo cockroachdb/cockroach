@@ -145,7 +145,7 @@ FROM
 func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {
 	// s.doFlush directly logs errors if they are encountered. Therefore,
 	// no error is returned here.
-	_ = s.SQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
+	_ = s.SQLStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			s.doFlush(ctx, func() error {
 				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
@@ -160,7 +160,7 @@ func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs tim
 }
 
 func (s *PersistedSQLStats) flushTxnStats(ctx context.Context, aggregatedTs time.Time) {
-	_ = s.SQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{},
+	_ = s.SQLStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
 			s.doFlush(ctx, func() error {
 				return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)

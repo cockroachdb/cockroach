@@ -167,7 +167,7 @@ func New(
 // IterateAggregatedTransactionStats implements sqlstats.ApplicationStats
 // interface.
 func (s *Container) IterateAggregatedTransactionStats(
-	_ context.Context, _ *sqlstats.IteratorOptions, visitor sqlstats.AggregatedTransactionVisitor,
+	_ context.Context, _ sqlstats.IteratorOptions, visitor sqlstats.AggregatedTransactionVisitor,
 ) error {
 	txnStat := func() appstatspb.TxnStats {
 		s.txnCounts.mu.Lock()
@@ -184,18 +184,18 @@ func (s *Container) IterateAggregatedTransactionStats(
 }
 
 // StmtStatsIterator returns an instance of StmtStatsIterator.
-func (s *Container) StmtStatsIterator(options *sqlstats.IteratorOptions) *StmtStatsIterator {
+func (s *Container) StmtStatsIterator(options sqlstats.IteratorOptions) StmtStatsIterator {
 	return NewStmtStatsIterator(s, options)
 }
 
 // TxnStatsIterator returns an instance of TxnStatsIterator.
-func (s *Container) TxnStatsIterator(options *sqlstats.IteratorOptions) *TxnStatsIterator {
+func (s *Container) TxnStatsIterator(options sqlstats.IteratorOptions) TxnStatsIterator {
 	return NewTxnStatsIterator(s, options)
 }
 
 // IterateStatementStats implements sqlstats.Provider interface.
 func (s *Container) IterateStatementStats(
-	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
+	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.StatementVisitor,
 ) error {
 	iter := s.StmtStatsIterator(options)
 
@@ -210,7 +210,7 @@ func (s *Container) IterateStatementStats(
 
 // IterateTransactionStats implements sqlstats.Provider interface.
 func (s *Container) IterateTransactionStats(
-	ctx context.Context, options *sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
+	ctx context.Context, options sqlstats.IteratorOptions, visitor sqlstats.TransactionVisitor,
 ) error {
 	iter := s.TxnStatsIterator(options)
 
@@ -686,7 +686,7 @@ func (s *Container) MergeApplicationStatementStats(
 ) (discardedStats uint64) {
 	if err := other.IterateStatementStats(
 		ctx,
-		&sqlstats.IteratorOptions{},
+		sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			if transformer != nil {
 				transformer(statistics)
@@ -737,7 +737,7 @@ func (s *Container) MergeApplicationTransactionStats(
 ) (discardedStats uint64) {
 	if err := other.IterateTransactionStats(
 		ctx,
-		&sqlstats.IteratorOptions{},
+		sqlstats.IteratorOptions{},
 		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
 			txnStats, _, throttled :=
 				s.getStatsForTxnWithKey(

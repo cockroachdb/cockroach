@@ -25,18 +25,18 @@ import (
 // and aggregation_interval fields on the returning
 // appstatspb.CollectedStatementStatistics.
 type memStmtStatsIterator struct {
-	*sslocal.StmtStatsIterator
+	sslocal.StmtStatsIterator
 	aggregatedTs time.Time
 	aggInterval  time.Duration
 }
 
 func newMemStmtStatsIterator(
 	stats *sslocal.SQLStats,
-	options *sqlstats.IteratorOptions,
+	options sqlstats.IteratorOptions,
 	aggregatedTS time.Time,
 	aggInterval time.Duration,
-) *memStmtStatsIterator {
-	return &memStmtStatsIterator{
+) memStmtStatsIterator {
+	return memStmtStatsIterator{
 		StmtStatsIterator: stats.StmtStatsIterator(options),
 		aggregatedTs:      aggregatedTS,
 		aggInterval:       aggInterval,
@@ -59,18 +59,18 @@ func (m *memStmtStatsIterator) Cur() *appstatspb.CollectedStatementStatistics {
 // aggregatoin_interval fields fields on the returning
 // appstatspb.CollectedTransactionStatistics.
 type memTxnStatsIterator struct {
-	*sslocal.TxnStatsIterator
+	sslocal.TxnStatsIterator
 	aggregatedTs time.Time
 	aggInterval  time.Duration
 }
 
 func newMemTxnStatsIterator(
 	stats *sslocal.SQLStats,
-	options *sqlstats.IteratorOptions,
+	options sqlstats.IteratorOptions,
 	aggregatedTS time.Time,
 	aggInterval time.Duration,
-) *memTxnStatsIterator {
-	return &memTxnStatsIterator{
+) memTxnStatsIterator {
+	return memTxnStatsIterator{
 		TxnStatsIterator: stats.TxnStatsIterator(options),
 		aggregatedTs:     aggregatedTS,
 		aggInterval:      aggInterval,

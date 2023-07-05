@@ -10,6 +10,8 @@
 
 package tree
 
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+
 // TableName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement, etc.
 //
@@ -46,8 +48,13 @@ func (t *TableName) objectName() {}
 // schema and catalog names. Suitable for logging, etc.
 func (t *TableName) FQString() string {
 	ctx := NewFmtCtx(FmtSimple)
-	ctx.FormatNode(&t.CatalogName)
-	ctx.WriteByte('.')
+	schemaName := t.SchemaName.String()
+	// The pg_catalog and pg_extension schemas cannot be referenced from inside
+	// an anonymous ("") database. This makes their FQ string always relative.
+	if schemaName != catconstants.PgCatalogName && schemaName != catconstants.PgExtensionSchemaName {
+		ctx.FormatNode(&t.CatalogName)
+		ctx.WriteByte('.')
+	}
 	ctx.FormatNode(&t.SchemaName)
 	ctx.WriteByte('.')
 	ctx.FormatNode(&t.ObjectName)
