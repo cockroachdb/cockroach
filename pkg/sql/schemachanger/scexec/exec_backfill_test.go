@@ -160,7 +160,7 @@ func TestExecBackfiller(t *testing.T) {
 				FlushCheckpoint(gomock.Any()).
 				After(setProgress)
 			backfillCall := bf.EXPECT().
-				BackfillIndexes(gomock.Any(), scanned, bt, desc).
+				BackfillIndexes(gomock.Any(), scanned, bt, deps.TransactionalJobRegistry().CurrentJob(), desc).
 				After(flushAfterScan)
 			bt.EXPECT().
 				FlushCheckpoint(gomock.Any()).
@@ -245,10 +245,10 @@ func TestExecBackfiller(t *testing.T) {
 					FlushCheckpoint(gomock.Any()).
 					After(setProgress)
 				backfillBarCall := bf.EXPECT().
-					BackfillIndexes(gomock.Any(), scannedBar, bt, bar).
+					BackfillIndexes(gomock.Any(), scannedBar, bt, deps.TransactionalJobRegistry().CurrentJob(), bar).
 					After(flushAfterScan)
 				backfillFooCall := bf.EXPECT().
-					BackfillIndexes(gomock.Any(), progressFoo, bt, foo).
+					BackfillIndexes(gomock.Any(), progressFoo, bt, deps.TransactionalJobRegistry().CurrentJob(), foo).
 					After(flushAfterScan)
 				bt.EXPECT().
 					FlushCheckpoint(gomock.Any()).
@@ -306,7 +306,7 @@ func TestExecBackfiller(t *testing.T) {
 				GetMergeProgress(gomock.Any(), merge).
 				Return(progress, nil)
 			mergeCall := m.EXPECT().
-				MergeIndexes(gomock.Any(), progress, bt, desc).
+				MergeIndexes(gomock.Any(), deps.CurrentJob(), progress, bt, desc).
 				After(getProgress)
 			bt.EXPECT().
 				FlushCheckpoint(gomock.Any()).
