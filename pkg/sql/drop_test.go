@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -269,17 +268,21 @@ CREATE DATABASE t;
 func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 85876)
-
-	defer gcjob.SetSmallMaxGCIntervalForTest()()
-
 	params, _ := tests.CreateTestServerParams()
+	// Speed up mvcc queue scan.
+	params.ScanMaxIdleTime = time.Millisecond
+
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
 
-	sqltestutils.SetShortRangeFeedIntervals(t, sqlDB)
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
+	require.NoError(t, err)
+
+	// Refresh protected timestamp cache immediately to make MVCC GC queue to
+	// process GC immediately.
+	_, err = sqlDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
+	require.NoError(t, err)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -323,20 +326,14 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatal(err)
 	}
 
-	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
-	tests.CheckKeyCount(t, kvDB, table2Span, 6)
+	tests.CheckKeyCountIncludingTombstoned(t, s, tableSpan, 6)
+	tests.CheckKeyCountIncludingTombstoned(t, s, table2Span, 6)
 
-	// TODO (lucy): Maybe this test API should use an offset starting
-	// from the most recent job instead.
-	const migrationJobOffset = 0
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, migrationJobOffset,
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0,
 		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Username:    username.RootUserName(),
 			Description: "DROP DATABASE t CASCADE",
-			DescriptorIDs: descpb.IDs{
-				tbDesc.GetID(), tb2Desc.GetID(), dbDesc.GetID(), dbDesc.GetSchemaID(catconstants.PublicSchemaName),
-			},
 		}); err != nil {
 		t.Fatal(err)
 	}
@@ -351,13 +348,12 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		if err := descExists(sqlDB, false, tbDesc.GetID()); err != nil {
 			return err
 		}
-
 		return zoneExists(sqlDB, nil, tbDesc.GetID())
 	})
 
 	// Table 1 data is deleted.
-	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
-	tests.CheckKeyCount(t, kvDB, table2Span, 6)
+	tests.CheckKeyCountIncludingTombstoned(t, s, tableSpan, 0)
+	tests.CheckKeyCountIncludingTombstoned(t, s, table2Span, 6)
 
 	def := zonepb.DefaultZoneConfig()
 	if err := zoneExists(sqlDB, &def, dbDesc.GetID()); err != nil {
@@ -390,7 +386,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	})
 
 	// Table 2 data is deleted.
-	tests.CheckKeyCount(t, kvDB, table2Span, 0)
+	tests.CheckKeyCountIncludingTombstoned(t, s, table2Span, 0)
 
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
