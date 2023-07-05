@@ -244,8 +244,8 @@ func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 	} else {
 		// If there are system KVs to emit, prioritize those.
 		if len(r.systemKVs) > 0 {
-			systemKV := r.systemKVs[0]
-			systemKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			systemKV := r.systemKVs
+			//			systemKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			event = streamingccl.MakeKVEvent(systemKV)
 			r.systemKVs = r.systemKVs[1:]
 			return event
@@ -260,8 +260,8 @@ func (r *randomEventGenerator) generateNewEvent() streamingccl.Event {
 				keyVals = append(keyVals, makeRandomKey(r.rng, r.config, r.tableDesc))
 			}
 			event = streamingccl.MakeSSTableEvent(r.sstMaker(keyVals))
-		} else {
-			event = streamingccl.MakeKVEvent(makeRandomKey(r.rng, r.config, r.tableDesc))
+			//} else {
+			//			event = streamingccl.MakeKVEvent(makeRandomKey(r.rng, r.config, r.tableDesc))
 		}
 		r.numEventsSinceLastResolved++
 	}
@@ -625,17 +625,17 @@ func duplicateEvent(event streamingccl.Event) streamingccl.Event {
 		copy(resolvedSpans, event.GetResolvedSpans())
 		dup = streamingccl.MakeCheckpointEvent(resolvedSpans)
 	case streamingccl.KVEvent:
-		eventKV := event.GetKV()
-		rawBytes := make([]byte, len(eventKV.Value.RawBytes))
-		copy(rawBytes, eventKV.Value.RawBytes)
-		keyVal := roachpb.KeyValue{
-			Key: event.GetKV().Key.Clone(),
-			Value: roachpb.Value{
-				RawBytes:  rawBytes,
-				Timestamp: eventKV.Value.Timestamp,
-			},
-		}
-		dup = streamingccl.MakeKVEvent(keyVal)
+		//eventKV := event.GetKV()
+		//rawBytes := make([]byte, len(eventKV.Value.RawBytes))
+		//copy(rawBytes, eventKV.Value.RawBytes)
+		//keyVal := roachpb.KeyValue{
+		//	Key: event.GetKV().Key.Clone(),
+		//	Value: roachpb.Value{
+		//		RawBytes:  rawBytes,
+		//		Timestamp: eventKV.Value.Timestamp,
+		//	},
+		//}
+		//dup = streamingccl.MakeKVEvent(keyVal)
 	case streamingccl.SSTableEvent:
 		sst := event.GetSSTable()
 		dataCopy := make([]byte, len(sst.Data))

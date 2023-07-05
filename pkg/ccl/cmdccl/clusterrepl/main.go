@@ -246,8 +246,10 @@ func subscriptionConsumer(
 				}
 				switch event.Type() {
 				case streamingccl.KVEvent:
-					kv := event.GetKV()
-					sz = kv.Size()
+					kvs := event.GetKV()
+					for _, kv := range kvs {
+						sz += kv.Size()
+					}
 				case streamingccl.SSTableEvent:
 					ssTab := event.GetSSTable()
 					sz = ssTab.Size()

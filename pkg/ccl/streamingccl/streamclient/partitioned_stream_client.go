@@ -288,8 +288,8 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 			event = streamingccl.MakeSSTableEvent(streamEvent.Batch.Ssts[0])
 			streamEvent.Batch.Ssts = streamEvent.Batch.Ssts[1:]
 		} else if len(streamEvent.Batch.KeyValues) > 0 {
-			event = streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues[0])
-			streamEvent.Batch.KeyValues = streamEvent.Batch.KeyValues[1:]
+			event = streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues)
+			streamEvent.Batch.KeyValues = streamEvent.Batch.KeyValues[:0]
 		} else if len(streamEvent.Batch.DelRanges) > 0 {
 			event = streamingccl.MakeDeleteRangeEvent(streamEvent.Batch.DelRanges[0])
 			streamEvent.Batch.DelRanges = streamEvent.Batch.DelRanges[1:]

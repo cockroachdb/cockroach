@@ -647,10 +647,10 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 	sv := &sip.FlowCtx.Cfg.Settings.SV
 
-	if event.Type() == streamingccl.KVEvent {
-		sip.metrics.AdmitLatency.RecordValue(
-			timeutil.Since(event.GetKV().Value.Timestamp.GoTime()).Nanoseconds())
-	}
+	//if event.Type() == streamingccl.KVEvent {
+	//	sip.metrics.AdmitLatency.RecordValue(
+	//		timeutil.Since(event.GetKV().Value.Timestamp.GoTime()).Nanoseconds())
+	//}
 
 	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.RunAfterReceivingEvent != nil {
@@ -662,8 +662,13 @@ func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
 
 	switch event.Type() {
 	case streamingccl.KVEvent:
-		if err := sip.bufferKV(event.GetKV()); err != nil {
-			return err
+		kvs := event.GetKV()
+		for _, kv := range kvs {
+			s := int64(kv.Value.Size() + len(kv.Key))
+			sip.metrics.IngestedLogicalBytes.Inc(s)
+			if err := sip.bufferKV(&kv); err != nil {
+				return err
+			}
 		}
 	case streamingccl.SSTableEvent:
 		if err := sip.bufferSST(event.GetSSTable()); err != nil {
@@ -1141,7 +1146,9 @@ func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.Res
 	}
 
 	preFlushTime := timeutil.Now()
+	log.Infof(ctx, "C2C_TEST: flushing")
 	if len(b.buffer.curKVBatch) > 0 {
+		log.Infof(ctx, "C2C_TEST: flushing: batch")
 		if err := sip.batcher.Flush(ctx); err != nil {
 			return nil, errors.Wrap(err, "flushing sst batcher")
 		}
@@ -1149,11 +1156,14 @@ func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.Res
 
 	// Now process the range KVs.
 	if len(b.buffer.curRangeKVBatch) > 0 {
+		log.Infof(ctx, "C2C_TEST: flushing: range")
 		if err := sip.rangeBatcher.flush(ctx, b.buffer.curRangeKVBatch); err != nil {
 			log.Warningf(ctx, "flush error: %v", err)
 			return nil, errors.Wrap(err, "flushing range key sst")
 		}
 	}
+	log.Infof(ctx, "C2C_TEST: flushed: %v >> %v",
+		timeutil.Since(preFlushTime).Nanoseconds(), timeutil.Since(preFlushTime).Seconds())
 
 	// Update the flush metrics.
 	sip.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())

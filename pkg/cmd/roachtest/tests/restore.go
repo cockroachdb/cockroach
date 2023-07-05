@@ -277,6 +277,15 @@ func registerRestore(r registry.Registry) {
 			// Note that the default specs in makeHardwareSpecs() spin up restore tests in aws,
 			// by default.
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
+			backup: makeRestoringBackupSpecs(backupSpecs{
+				workload: tpceRestore{customers: 5000},
+				cloud:    spec.GCE}),
+			timeout: 1 * time.Hour,
+		},
+		{
+			// Note that the default specs in makeHardwareSpecs() spin up restore tests in aws,
+			// by default.
+			hardware: makeHardwareSpecs(hardwareSpecs{}),
 			backup:   makeRestoringBackupSpecs(backupSpecs{cloud: spec.GCE}),
 			timeout:  1 * time.Hour,
 		},
@@ -379,8 +388,10 @@ func registerRestore(r registry.Registry) {
 			// A teeny weeny 15GB restore that could be used to bisect scale agnostic perf regressions.
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
 			backup: makeRestoringBackupSpecs(
-				backupSpecs{workload: tpceRestore{customers: 1000},
-					version: "v22.2.1"}),
+				backupSpecs{
+					workload: tpceRestore{customers: 1000},
+					version:  "v22.2.1",
+					cloud:    spec.GCE}),
 			timeout:     3 * time.Hour,
 			fingerprint: 8445446819555404274,
 		},
