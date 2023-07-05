@@ -391,13 +391,11 @@ TestXXA - 1.00s
 func TestListFailuresFromTestXML(t *testing.T) {
 	testCases := []struct {
 		fileName  string
-		expPkg    string
 		expIssues []issue
 		formatter formatter
 	}{
 		{
-			fileName: "basic.xml",
-			expPkg:   "github.com/cockroachdb/cockroach/pkg/util/json",
+			fileName: "failed-build-output.txt",
 			expIssues: []issue{{
 				testName: "TestJSONErrors",
 				title:    "util/json: TestJSONErrors failed",
@@ -428,9 +426,6 @@ func TestListFailuresFromTestXML(t *testing.T) {
 				if curIssue >= len(c.expIssues) {
 					t.Errorf("unexpected issue filed. title: %s", f.title)
 				}
-				if exp := c.expPkg; exp != f.packageName {
-					t.Errorf("expected package %s, but got %s", exp, f.packageName)
-				}
 				if exp := c.expIssues[curIssue].testName; exp != f.testName {
 					t.Errorf("expected test name %s, but got %s", exp, f.testName)
 				}
@@ -446,6 +441,58 @@ func TestListFailuresFromTestXML(t *testing.T) {
 			if err := listFailuresFromTestXML(context.Background(), file, f); err != nil {
 				t.Fatal(err)
 			}
+			if curIssue != len(c.expIssues) {
+				t.Fatalf("expected %d issues, got: %d", len(c.expIssues), curIssue)
+			}
+		})
+	}
+}
+
+func TestPostGeneralFailure(t *testing.T) {
+	testCases := []struct {
+		fileName  string
+		expIssues []issue
+		formatter formatter
+	}{
+		{
+			fileName: "failed-build-output.txt",
+			expIssues: []issue{{
+				title:       "unexpected build failure",
+				mention:     []string{"@cockroachdb/unowned"},
+				extraLabels: []string{"T-testeng"},
+			}},
+			formatter: defaultFormatter,
+		},
+	}
+
+	for _, c := range testCases {
+		t.Run(c.fileName, func(t *testing.T) {
+			b, err := os.ReadFile(datapathutils.TestDataPath(t, c.fileName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			curIssue := 0
+			for _, issue := range c.expIssues {
+				issue.message = string(b)
+			}
+
+			f := func(ctx context.Context, f failure) error {
+				if t.Failed() {
+					return nil
+				}
+				if curIssue >= len(c.expIssues) {
+					t.Errorf("unexpected issue filed. title: %s", f.title)
+				}
+				if exp := c.expIssues[curIssue].title; exp != f.title {
+					t.Errorf("expected title %s, but got %s", exp, f.title)
+				}
+				if exp := c.expIssues[curIssue].message; !strings.Contains(f.testMessage, exp) {
+					t.Errorf("expected message containing %s, but got:\n%s", exp, f.testMessage)
+				}
+				curIssue++
+				return nil
+			}
+			postGeneralFailureImpl(string(b), f)
 			if curIssue != len(c.expIssues) {
 				t.Fatalf("expected %d issues, got: %d", len(c.expIssues), curIssue)
 			}
