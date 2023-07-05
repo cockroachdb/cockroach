@@ -25,7 +25,7 @@ do
         # Run affected tests.
         for test in $tests
         do
-            if [[ ! -z $(bazel query "attr(tags, \"broken_in_bazel\", $test)") ]] || [[ ! -z $(bazel query "attr(tags, \"integration\", $test)") ]]
+            if [[ ! -z $(bazel query "attr(tags, \"integration\", $test)") ]]
             then
                 echo "Skipping test $test"
                 continue
