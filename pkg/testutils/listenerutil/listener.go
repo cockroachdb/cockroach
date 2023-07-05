@@ -65,6 +65,15 @@ func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) *ReusableListener {
 	return l
 }
 
+func (r *ListenerRegistry) MustGet(t require.TestingT, idx int) *ReusableListener {
+	if l, ok := r.listeners[idx]; ok {
+		return l
+	}
+	t.Errorf("listener %d not found", idx)
+	t.FailNow()
+	return nil // not reached
+}
+
 // Close closes and deletes all previously created shared listeners.
 func (r *ListenerRegistry) Close() {
 	for k, v := range r.listeners {
