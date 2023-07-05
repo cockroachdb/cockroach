@@ -12,10 +12,6 @@ package plpgsqltree
 
 import "github.com/cockroachdb/errors"
 
-// PLpgSQLRaiseOptionType represents the severity of the error in
-// a raise statement.
-type PLpgSQLRaiseOptionType int
-
 // PLpgSQLGetDiagKind represents the type of error diagnostic
 // item in stmt_getdiag.
 type PLpgSQLGetDiagKind int
