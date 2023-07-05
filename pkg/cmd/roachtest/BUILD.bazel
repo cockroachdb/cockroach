@@ -37,6 +37,7 @@ go_library(
         "//pkg/util/allstacks",
         "//pkg/util/ctxgroup",
         "//pkg/util/httputil",
+        "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
