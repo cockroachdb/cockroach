@@ -36,6 +36,7 @@ func ReplicationChangesForRebalance(
 	addTarget, removeTarget roachpb.ReplicationTarget,
 	rebalanceTargetType allocatorimpl.TargetReplicaType,
 ) (chgs []kvpb.ReplicationChange, performingSwap bool, err error) {
+	rdesc, found := desc.GetReplicaDescriptor(addTarget.StoreID)
 	if rebalanceTargetType == allocatorimpl.VoterTarget && numExistingVoters == 1 {
 		// If there's only one replica, the removal target is the
 		// leaseholder and this is unsupported and will fail. However,
@@ -58,14 +59,29 @@ func ReplicationChangesForRebalance(
 		// when we know it's necessary, picking the smaller of two evils.
 		//
 		// See https://github.com/cockroachdb/cockroach/issues/40333.
-		chgs = []kvpb.ReplicationChange{
-			{ChangeType: roachpb.ADD_VOTER, Target: addTarget},
-		}
 		log.KvDistribution.Infof(ctx, "can't swap replica due to lease; falling back to add")
+
+		// Even when there is only 1 existing voter, there may be other replica
+		// types in the range. Check if the add target already has a replica, if so
+		// it must be a non-voter or the rebalance is invalid.
+		if found && rdesc.Type == roachpb.NON_VOTER {
+			// The receiving store already has a non-voting replica. Instead of just
+			// adding a voter to the receiving store, we *must* promote the non-voting
+			// replica to a voter.
+			chgs = kvpb.ReplicationChangesForPromotion(addTarget)
+		} else if !found {
+			chgs = []kvpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_VOTER, Target: addTarget},
+			}
+		} else {
+			return nil, false, errors.AssertionFailedf(
+				"invalid rebalancing decision: trying to"+
+					" move voter to a store that already has a replica %s for the range", rdesc,
+			)
+		}
 		return chgs, false, err
 	}
 
-	rdesc, found := desc.GetReplicaDescriptor(addTarget.StoreID)
 	switch rebalanceTargetType {
 	case allocatorimpl.VoterTarget:
 		// Check if the target being added already has a non-voting replica.
