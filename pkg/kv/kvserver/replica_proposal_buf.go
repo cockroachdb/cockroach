@@ -595,6 +595,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			if !shouldAdmit {
 				admitHandles = append(admitHandles, admitEntHandle{})
 			} else {
+				if p.createdAtTicks != p.proposedAtTicks {
+					log.Fatalf(ctx, "created != proposed, but !reproposal: %+v", p)
+				}
 				admitHandles = append(admitHandles, admitEntHandle{
 					handle: p.raftAdmissionMeta,
 					pCtx:   p.ctx,
