@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/google/btree"
 )
@@ -291,6 +292,7 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 		return nil, false
 	}
 
+	sp, st := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClock(&s.clock, 0))
 	node := s.nodes[nodeID]
 	s.storeSeqGen++
 	storeID := s.storeSeqGen
@@ -298,7 +300,8 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 		storeID:   storeID,
 		nodeID:    nodeID,
 		desc:      roachpb.StoreDescriptor{StoreID: roachpb.StoreID(storeID), Node: node.Descriptor()},
-		storepool: NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClock(&s.clock, 0)),
+		storepool: sp,
+		settings:  st,
 		replicas:  make(map[RangeID]ReplicaID),
 	}
 
@@ -704,6 +707,7 @@ func (s *state) NodeCountFn() storepool.NodeCountFunc {
 // populates the storepool with the current state.
 func (s *state) MakeAllocator(storeID StoreID) allocatorimpl.Allocator {
 	return allocatorimpl.MakeAllocator(
+		s.stores[storeID].settings,
 		s.stores[storeID].storepool,
 		func(addr string) (time.Duration, bool) { return 0, true },
 		nil,
@@ -776,6 +780,7 @@ type store struct {
 	desc    roachpb.StoreDescriptor
 
 	storepool *storepool.StorePool
+	settings  *cluster.Settings
 	replicas  map[RangeID]ReplicaID
 }
 
