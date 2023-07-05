@@ -174,7 +174,8 @@ type ExternalStorageContext struct {
 // overridden by callers of an ExternalStorageFactory via a passed
 // ExternalStorageOption.
 type ExternalStorageOptions struct {
-	ioAccountingInterceptor ReadWriterInterceptor
+	ioAccountingInterceptor  ReadWriterInterceptor
+	AzureStorageTestingKnobs base.ModuleTestingKnobs
 }
 
 // ExternalStorageConstructor is a function registered to create instances
