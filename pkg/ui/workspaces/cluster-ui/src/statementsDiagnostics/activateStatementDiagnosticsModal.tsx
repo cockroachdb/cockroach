@@ -150,7 +150,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
                     At a sampled rate of:
                   </div>
                   <div className={cx("diagnostic__trace-container")}>
-                    <Select
+                    <Select<number>
                       disabled={!conditional}
                       defaultValue={0.01}
                       onChange={setTraceSampleRate}
