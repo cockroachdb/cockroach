@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -75,6 +76,15 @@ func New() *Catalog {
 			dataSources: make(map[string]dataSource),
 		},
 	}
+}
+
+func (tc *Catalog) LookupDatabaseName(
+	_ context.Context, _ cat.Flags, name string,
+) (tree.Name, error) {
+	if name != testDB {
+		return "", sqlerrors.NewUndefinedDatabaseError(name)
+	}
+	return tree.Name(name), nil
 }
 
 // ResolveSchema is part of the cat.Catalog interface.

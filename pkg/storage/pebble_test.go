@@ -801,7 +801,7 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 	require.NoError(t, eng.Flush())
 
 	// Clear a@5 and [c-d)@7 in a separate SST.
-	require.NoError(t, eng.ClearMVCC(pointKey("a", 5)))
+	require.NoError(t, eng.ClearMVCC(pointKey("a", 5), ClearOptions{}))
 	require.NoError(t, eng.ClearMVCCRangeKey(rangeKey("c", "d", 7)))
 	require.NoError(t, eng.Flush())
 

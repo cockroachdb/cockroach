@@ -550,7 +550,7 @@ func writeRandomData(
 		if interleave {
 			require.NoError(t, batch.PutUnversioned(kv.key.Key, kv.val))
 			if !kv.liveIntent {
-				require.NoError(t, batch.ClearUnversioned(kv.key.Key))
+				require.NoError(t, batch.ClearUnversioned(kv.key.Key, ClearOptions{}))
 			}
 		} else {
 			eKey, _ := kv.key.ToEngineKey(nil)
