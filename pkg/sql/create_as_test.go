@@ -35,9 +35,6 @@ func TestCreateAsVTable(t *testing.T) {
 	// The map should be empty if all vtables are supported.
 	brokenTables := map[string]struct{}{
 		// TODO(sql-foundations): Fix nil pointer dereference.
-		//  See https://github.com/cockroachdb/cockroach/issues/106166.
-		`pg_catalog.pg_prepared_statements`: {},
-		// TODO(sql-foundations): Fix nil pointer dereference.
 		//  See https://github.com/cockroachdb/cockroach/issues/106167.
 		`pg_catalog.pg_cursors`: {},
 		// TODO(sql-foundations): Fix nil pointer dereference.
