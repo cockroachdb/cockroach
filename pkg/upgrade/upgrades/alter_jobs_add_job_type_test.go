@@ -94,6 +94,14 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Set a small batch size so the migration uses more than one batch for testing.
+	// Reset it after the test completes.
+	prev := upgrades.JobsBackfillBatchSize_22_2_20
+	upgrades.JobsBackfillBatchSize_22_2_20 = 2
+	defer func() {
+		upgrades.JobsBackfillBatchSize_22_2_20 = prev
+	}()
+
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
@@ -173,7 +181,7 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	row := sqlDB.QueryRow("SELECT count(*) FROM system.jobs WHERE job_type IS NOT NULL")
 	err := row.Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, count, 0)
+	assert.Equal(t, 0, count)
 
 	upgrades.ValidateSchemaExists(
 		ctx,
@@ -200,7 +208,7 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	row = sqlDB.QueryRow("SELECT count(*) FROM system.jobs WHERE job_type IS NULL")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, count, 0)
+	assert.Equal(t, 0, count)
 
 	var typStr string
 	rows, err := sqlDB.Query("SELECT distinct(job_type) FROM system.jobs")
