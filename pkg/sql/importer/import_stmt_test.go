@@ -3950,6 +3950,7 @@ func TestImportIntoCSV(t *testing.T) {
 }
 
 func benchUserUpload(b *testing.B, uploadBaseURI string) {
+	defer log.Scope(b).Close(b)
 	const (
 		nodes = 3
 	)
@@ -4115,6 +4116,7 @@ var _ importRowProducer = &csvBenchmarkStream{}
 // BenchmarkConvertRecord-16    	  500000	      2376 ns/op	  50.49 MB/s	    3606 B/op	     101 allocs/op
 // BenchmarkConvertRecord-16    	  500000	      2390 ns/op	  50.20 MB/s	    3606 B/op	     101 allocs/op
 func BenchmarkCSVConvertRecord(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	tpchLineItemDataRows := [][]string{
@@ -5065,6 +5067,7 @@ INSERT INTO users (a, b) VALUES (1, 2), (3, 4);
 // BenchmarkDelimitedConvertRecord-16    	  500000	      3004 ns/op	  39.94 MB/s
 // BenchmarkDelimitedConvertRecord-16    	  500000	      2966 ns/op	  40.45 MB/s
 func BenchmarkDelimitedConvertRecord(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
@@ -5167,6 +5170,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 // BenchmarkPgCopyConvertRecord-16    	  339940	      3610 ns/op	  33.24 MB/s
 // BenchmarkPgCopyConvertRecord-16    	  307701	      3833 ns/op	  31.30 MB/s
 func BenchmarkPgCopyConvertRecord(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
