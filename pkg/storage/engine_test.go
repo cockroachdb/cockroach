@@ -1238,6 +1238,7 @@ func TestEngineFS(t *testing.T) {
 		"8c: f.close",
 		"8d: f = open /bar",
 		"8e: f.read 3 == ghe",
+		"8f: f.close",
 		"9a: create-dir /dir1",
 		"9b: create /dir1/bar",
 		"9c: list-dir /dir1 == bar",
