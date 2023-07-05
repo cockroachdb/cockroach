@@ -630,7 +630,7 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	for _, id := range planDetails.UpdatedNodes {
 		tc.StopServer(int(id.NodeID - 1))
-		lReg.ReopenOrFail(t, int(id.NodeID-1))
+		require.NoError(t, lReg.MustGet(t, int(id.NodeID-1)).Reopen())
 		require.NoError(t, tc.RestartServer(int(id.NodeID-1)), "failed to restart node")
 	}
 
@@ -682,7 +682,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 	tc.StopServer(1)
 	require.NoError(t, pss[1].SavePlan(plan), "failed to inject plan into storage")
-	lReg.ReopenOrFail(t, 1)
+	require.NoError(t, lReg.MustGet(t, 1).Reopen())
 	require.NoError(t, tc.RestartServer(1), "failed to restart server")
 
 	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})

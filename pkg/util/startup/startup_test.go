@@ -278,7 +278,7 @@ func runCircuitBreakerTestForKey(
 
 	// Restart node and check that it succeeds in reestablishing range quorum
 	// necessary for startup actions.
-	lReg.ReopenOrFail(t, 5)
+	require.NoError(t, lReg.MustGet(t, 5).Reopen())
 	err = tc.RestartServer(5)
 	require.NoError(t, err, "restarting server with range(s) %s tripping circuit breaker", rangesList)
 
