@@ -45,7 +45,7 @@ func NewListenerRegistry() ListenerRegistry {
 
 // GetOrFail returns an existing reusable socket listener or creates a new one
 // on a random local port.
-func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) net.Listener {
+func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) *ReusableListener {
 	t.Helper()
 	if l, ok := r.listeners[idx]; ok {
 		return l
