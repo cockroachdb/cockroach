@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/privilege",  # keep
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/tree",  # keep
+        "//pkg/util/debugutil",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
