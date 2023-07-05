@@ -208,6 +208,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	skip.UnderShort(t, "test takes minutes")
 	skip.UnderRace(t, "takes >5mn under race")
+	skip.UnderStress(t, "takes >3mn under stress")
 
 	ctx := context.Background()
 
