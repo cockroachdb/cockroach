@@ -31,20 +31,6 @@ import (
 func TestCreateAsVTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// These are the vtables that need to be fixed.
-	// The map should be empty if all vtables are supported.
-	brokenTables := map[string]struct{}{
-		// TODO(sql-foundations): Fix nil pointer dereference.
-		//  See https://github.com/cockroachdb/cockroach/issues/106166.
-		`pg_catalog.pg_prepared_statements`: {},
-		// TODO(sql-foundations): Fix nil pointer dereference.
-		//  See https://github.com/cockroachdb/cockroach/issues/106167.
-		`pg_catalog.pg_cursors`: {},
-		// TODO(sql-foundations): Fix nil pointer dereference.
-		//  See https://github.com/cockroachdb/cockroach/issues/106168.
-		`"".crdb_internal.create_statements`: {},
-	}
-
 	ctx := context.Background()
 	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
@@ -88,10 +74,6 @@ func TestCreateAsVTable(t *testing.T) {
 			}
 
 			fqName := name.FQString()
-			if _, ok := brokenTables[fqName]; ok {
-				continue
-			}
-
 			// Filter by trace_id to prevent error when selecting from
 			// crdb_internal.cluster_inflight_traces:
 			// "pq: a trace_id value needs to be specified".
