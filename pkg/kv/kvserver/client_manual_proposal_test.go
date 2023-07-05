@@ -235,7 +235,7 @@ LIMIT
 					Mode:     metric.HistogramModePrometheus,
 					Metadata: fakeMeta,
 					Duration: time.Millisecond,
-					Buckets:  metric.NetworkLatencyBuckets,
+					Buckets:  metric.IOLatencyBuckets,
 				}),
 			},
 		}
