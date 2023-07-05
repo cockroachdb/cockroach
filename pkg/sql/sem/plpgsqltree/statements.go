@@ -12,6 +12,7 @@ package plpgsqltree
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -603,7 +604,8 @@ func (s *PLpgSQLStmtReturnQuery) WalkStmt(visitor PLpgSQLStmtVisitor) {
 // stmt_raise
 type PLpgSQLStmtRaise struct {
 	PLpgSQLStatementImpl
-	LogLevel int
+	LogLevel string
+	Code     string
 	CodeName string
 	Message  string
 	Params   []PLpgSQLExpr
@@ -611,14 +613,43 @@ type PLpgSQLStmtRaise struct {
 }
 
 func (s *PLpgSQLStmtRaise) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("RAISE")
+	if s.LogLevel != "" {
+		ctx.WriteString(" ")
+		ctx.WriteString(s.LogLevel)
+	}
+	if s.Code != "" {
+		ctx.WriteString(fmt.Sprintf(" SQLSTATE '%s'", s.Code))
+	}
+	if s.CodeName != "" {
+		ctx.WriteString(fmt.Sprintf(" %s", s.CodeName))
+	}
+	if s.Message != "" {
+		ctx.WriteString(fmt.Sprintf(" '%s'", s.Message))
+		for i := range s.Params {
+			ctx.WriteString(", ")
+			s.Params[i].Format(ctx)
+		}
+	}
+	for i := range s.Options {
+		if i == 0 {
+			ctx.WriteString("\nUSING ")
+		} else {
+			ctx.WriteString(",\n")
+		}
+		s.Options[i].Format(ctx)
+	}
+	ctx.WriteString(";\n")
 }
 
 type PLpgSQLStmtRaiseOption struct {
-	OptType PLpgSQLRaiseOptionType
+	OptType string
 	Expr    PLpgSQLExpr
 }
 
 func (s *PLpgSQLStmtRaiseOption) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString(fmt.Sprintf("%s = ", strings.ToUpper(s.OptType)))
+	s.Expr.Format(ctx)
 }
 
 func (s *PLpgSQLStmtRaise) PlpgSQLStatementTag() string {
