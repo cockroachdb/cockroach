@@ -398,6 +398,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onChangeLimit: noop,
   onChangeReqSort: noop,
   onApplySearchCriteria: noop,
+  statementDiagnostics: [],
 };
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {

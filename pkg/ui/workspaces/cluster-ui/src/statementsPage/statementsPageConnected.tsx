@@ -100,6 +100,7 @@ export const ConnectedStatementsPage = withRouter(
         stmtsTotalRuntimeSecs:
           state.adminUI?.statements?.data?.stmts_total_runtime_secs ?? 0,
         statementsResponse: state.adminUI.statements,
+        statementDiagnostics: state.adminUI.statementDiagnostics?.data,
       },
       activePageProps: mapStateToActiveStatementsPageProps(state),
     }),
