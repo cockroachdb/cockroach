@@ -9,6 +9,7 @@ go_library(
         "graphite_exporter.go",
         "hdrhistogram.go",
         "histogram_buckets.go",
+        "log_metrics.go",
         "metric.go",
         "prometheus_exporter.go",
         "prometheus_rule_exporter.go",

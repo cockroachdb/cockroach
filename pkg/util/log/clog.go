@@ -109,6 +109,23 @@ type loggingT struct {
 
 	allSinkInfos sinkInfoRegistry
 	allLoggers   loggerRegistry
+	metrics      LogMetrics
+}
+
+// LogMetricsRegistry returns the metrics registry used by
+// the logging package. An interface is returned to avoid a
+// circular dependency with the metrics package, but its type
+// should always be of *metric.Registry, for clients to make
+// type assertions against on their end.
+//
+// NB: Depending on the stage of server/logging initialization,
+// the returned value may be nil. Clients should handle
+// accordingly.
+func LogMetricsRegistry() interface{} {
+	if logging.metrics == nil {
+		return nil
+	}
+	return logging.metrics.Registry()
 }
 
 func init() {
