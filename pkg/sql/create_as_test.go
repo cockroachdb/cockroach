@@ -33,11 +33,7 @@ func TestCreateAsVTable(t *testing.T) {
 
 	// These are the vtables that need to be fixed.
 	// The map should be empty if all vtables are supported.
-	brokenTables := map[string]struct{}{
-		// TODO(sql-foundations): Fix nil pointer dereference.
-		//  See https://github.com/cockroachdb/cockroach/issues/106168.
-		`"".crdb_internal.create_statements`: {},
-	}
+	brokenTables := map[string]struct{}{}
 
 	ctx := context.Background()
 	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
