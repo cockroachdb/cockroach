@@ -2,8 +2,7 @@ exec
 dev ui watch
 ----
 bazel info workspace --color=no
-yarn --cwd crdb-checkout/pkg/ui/workspaces/db-console install
-yarn --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui install
+pnpm --dir crdb-checkout/pkg/ui install
 bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
@@ -13,15 +12,14 @@ cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.d.ts crdb-checkout/pkg/ui/
 cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 3000
+pnpm --dir crdb-checkout/pkg/ui/workspaces/cluster-ui run build:watch
+pnpm --dir crdb-checkout/pkg/ui/workspaces/db-console exec webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 3000
 
 exec
 dev ui watch --oss
 ----
 bazel info workspace --color=no
-yarn --cwd crdb-checkout/pkg/ui/workspaces/db-console install
-yarn --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui install
+pnpm --dir crdb-checkout/pkg/ui install
 bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
@@ -29,15 +27,14 @@ cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.js crdb-checkout/pkg/ui/wo
 cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.d.ts crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.d.ts
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=oss --env.target=http://localhost:8080 --port 3000
+pnpm --dir crdb-checkout/pkg/ui/workspaces/cluster-ui run build:watch
+pnpm --dir crdb-checkout/pkg/ui/workspaces/db-console exec webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=oss --env.target=http://localhost:8080 --port 3000
 
 exec
 dev ui watch --secure
 ----
 bazel info workspace --color=no
-yarn --cwd crdb-checkout/pkg/ui/workspaces/db-console install
-yarn --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui install
+pnpm --dir crdb-checkout/pkg/ui install
 bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
@@ -47,15 +44,14 @@ cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.d.ts crdb-checkout/pkg/ui/
 cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 3000 --https
+pnpm --dir crdb-checkout/pkg/ui/workspaces/cluster-ui run build:watch
+pnpm --dir crdb-checkout/pkg/ui/workspaces/db-console exec webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 3000 --https
 
 exec
 dev ui watch --db http://example.crdb.io:4848
 ----
 bazel info workspace --color=no
-yarn --cwd crdb-checkout/pkg/ui/workspaces/db-console install
-yarn --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui install
+pnpm --dir crdb-checkout/pkg/ui install
 bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
@@ -65,15 +61,14 @@ cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.d.ts crdb-checkout/pkg/ui/
 cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://example.crdb.io:4848 --port 3000
+pnpm --dir crdb-checkout/pkg/ui/workspaces/cluster-ui run build:watch
+pnpm --dir crdb-checkout/pkg/ui/workspaces/db-console exec webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://example.crdb.io:4848 --port 3000
 
 exec
 dev ui watch --port 12345
 ----
 bazel info workspace --color=no
-yarn --cwd crdb-checkout/pkg/ui/workspaces/db-console install
-yarn --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui install
+pnpm --dir crdb-checkout/pkg/ui install
 bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
@@ -83,17 +78,19 @@ cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.d.ts crdb-checkout/pkg/ui/
 cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts crdb-checkout/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 12345
+pnpm --dir crdb-checkout/pkg/ui/workspaces/cluster-ui run build:watch
+pnpm --dir crdb-checkout/pkg/ui/workspaces/db-console exec webpack-dev-server --config webpack.config.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 12345
 
 exec
 dev ui lint
 ----
+bazel test //pkg/cmd/mirror/npm:list_unmirrored_dependencies --test_output errors
 bazel test //pkg/ui:lint --test_output errors
 
 exec
 dev ui lint --verbose
 ----
+bazel test //pkg/cmd/mirror/npm:list_unmirrored_dependencies --test_output all
 bazel test //pkg/ui:lint --test_output all
 
 exec
@@ -119,8 +116,8 @@ cp sandbox/pkg/ui/workspaces/db-console/ccl/src/js/protos.d.ts crdb-checkout/pkg
 rm -rf crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 cp -r sandbox/pkg/ui/workspaces/cluster-ui/dist crdb-checkout/pkg/ui/workspaces/cluster-ui/dist
 bazel info workspace --color=no
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui jest --watch
+pnpm --dir crdb-checkout/pkg/ui/workspaces/db-console exec jest --watch -w4
+pnpm --dir crdb-checkout/pkg/ui/workspaces/cluster-ui exec jest --watch
 
 exec
 dev ui clean
@@ -156,33 +153,32 @@ dev ui e2e
 ----
 bazel info workspace --color=no
 bazel info workspace --color=no
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests install
+pnpm --dir crdb-checkout/pkg/ui/workspaces/e2e-tests install
 bazel build //pkg/cmd/cockroach:cockroach
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cypress install
-crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:run
+pnpm --dir crdb-checkout/pkg/ui/workspaces/e2e-tests exec cypress install
+crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh pnpm --dir crdb-checkout/pkg/ui/workspaces/e2e-tests cy:run
 
 exec
 dev ui e2e ./foo/bar
 ----
 bazel info workspace --color=no
 bazel info workspace --color=no
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests install
+pnpm --dir crdb-checkout/pkg/ui/workspaces/e2e-tests install
 bazel build //pkg/cmd/cockroach:cockroach
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cypress install
-crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:run ./foo/bar
+pnpm --dir crdb-checkout/pkg/ui/workspaces/e2e-tests exec cypress install
+crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh pnpm --dir crdb-checkout/pkg/ui/workspaces/e2e-tests cy:run ./foo/bar
 
 exec
 dev ui e2e --headed
 ----
 bazel info workspace --color=no
 bazel info workspace --color=no
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests install
+pnpm --dir crdb-checkout/pkg/ui/workspaces/e2e-tests install
 bazel build //pkg/cmd/cockroach:cockroach
-yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cypress install
-crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/e2e-tests cy:debug
+pnpm --dir crdb-checkout/pkg/ui/workspaces/e2e-tests exec cypress install
+crdb-checkout/pkg/ui/workspaces/e2e-tests/build/start-crdb-then.sh pnpm --dir crdb-checkout/pkg/ui/workspaces/e2e-tests cy:debug
 
 exec
 dev ui mirror-deps
 ----
 bazel run //pkg/cmd/mirror/npm:mirror_npm_dependencies
-bazel run //pkg/cmd/mirror/npm:update_yarn_lock

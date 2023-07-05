@@ -1,0 +1,7 @@
+packages:
+  - "./workspaces/eslint-plugin-crdb"
+  - "./workspaces/db-console/src/js/"
+  - "./workspaces/db-console/ccl/src/js/"
+  - "./workspaces/cluster-ui"
+  - "./workspaces/db-console"
+  - "./workspaces/e2e-tests"
