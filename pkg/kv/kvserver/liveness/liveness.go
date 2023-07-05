@@ -331,7 +331,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 			Mode:     metric.HistogramModePreferHdrLatency,
 			Metadata: metaHeartbeatLatency,
 			Duration: opts.HistogramWindowInterval,
-			Buckets:  metric.NetworkLatencyBuckets,
+			Buckets:  metric.IOLatencyBuckets,
 		}),
 	}
 	nl.mu.nodes = make(map[roachpb.NodeID]Record)

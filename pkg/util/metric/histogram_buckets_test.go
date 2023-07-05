@@ -52,11 +52,6 @@ func TestHistogramBuckets(t *testing.T) {
 		verifyAndPrint(t, exp, IOLatencyBuckets, LATENCY)
 	})
 
-	t.Run("NetworkLatencyBuckets", func(t *testing.T) {
-		exp := prometheus.ExponentialBucketsRange(500e3, 1e9, 60)
-		verifyAndPrint(t, exp, NetworkLatencyBuckets, LATENCY)
-	})
-
 	t.Run("BatchProcessLatencyBuckets", func(t *testing.T) {
 		exp := prometheus.ExponentialBucketsRange(500e6, 300e9, 60)
 		verifyAndPrint(t, exp, BatchProcessLatencyBuckets, LATENCY)
