@@ -133,13 +133,16 @@ func (l *ReusableListener) pauseC() <-chan interface{} {
 	return l.pauseMu.pauseC
 }
 
-// ReopenOrFail will allow accepting more connections on existing shared
-// listener if it was previously closed. If it was not closed, nothing happens.
-// If listener wasn't created previously, test failure is raised.
-func (r *ListenerRegistry) ReopenOrFail(t *testing.T, idx int) {
-	l, ok := r.listeners[idx]
-	require.Truef(t, ok, "socket for id %d is not open", idx)
+// Reopen will allow accepting more connections on existing shared listener if
+// it was previously closed. If it was not closed, nothing happens. If listener
+// wasn't created previously, an error is returned.
+func (r *ReusableListener) Reopen() error {
+	l, ok := r.reg.listeners[r.id]
+	if !ok {
+		return errors.Errorf("socket for id %d is not open", r.id)
+	}
 	l.resume()
+	return nil
 }
 
 func (l *ReusableListener) resume() {
