@@ -15,6 +15,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -628,6 +630,23 @@ The last argument is a JSONB object containing the following optional fields:
 			spanStatsGeneratorType,
 			makeSpanStatsGenerator,
 			"Returns SpanStats for the provided spans.",
+			volatility.Stable,
+		),
+	),
+	"crdb_internal.sstable_metrics": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "node_id", Typ: types.Int},
+				{Name: "store_id", Typ: types.Int},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			tableMetricsGeneratorType,
+			makeTableMetricsGenerator,
+			"Returns statistics for the sstables containing keys in the range start_key and end_key for the provided node id.",
 			volatility.Stable,
 		),
 	),
@@ -3103,6 +3122,98 @@ func (tssi *tableSpanStatsIterator) Close(_ context.Context) {}
 // ResolvedType implements the tree.ValueGenerator interface.
 func (tssi *tableSpanStatsIterator) ResolvedType() *types.T {
 	return tableSpanStatsGeneratorType
+}
+
+var tableMetricsGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Json},
+	[]string{"node_id,", "store_id", "level", "file_num", "metrics"},
+)
+
+// tableMetricsIterator implements tree.ValueGenerator; it returns a set of
+// SSTable metrics (one per row).
+type tableMetricsIterator struct {
+	metrics []enginepb.SSTableMetricsInfo
+	evalCtx *eval.Context
+
+	iterIdx int
+	nodeID  int32
+	storeID int32
+	start   []byte
+	end     []byte
+}
+
+var _ eval.ValueGenerator = (*tableMetricsIterator)(nil)
+
+func newTableMetricsIterator(
+	evalCtx *eval.Context, nodeID, storeID int32, start, end []byte,
+) *tableMetricsIterator {
+	return &tableMetricsIterator{evalCtx: evalCtx, nodeID: nodeID, storeID: storeID, start: start, end: end}
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) Start(ctx context.Context, _ *kv.Txn) error {
+	var err error
+	tmi.metrics, err = tmi.evalCtx.GetTableMetrics(ctx, tmi.nodeID, tmi.storeID, tmi.start, tmi.end)
+	if err != nil {
+		err = errors.Wrapf(err, "getting table metrics for node %d store %d", tmi.nodeID, tmi.storeID)
+	}
+
+	sort.SliceStable(tmi.metrics, func(i, j int) bool {
+		a, b := tmi.metrics[i], tmi.metrics[j]
+		return a.Level < b.Level || (a.Level == b.Level && a.TableID < b.TableID)
+	})
+
+	return err
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) Next(_ context.Context) (bool, error) {
+	tmi.iterIdx++
+	return tmi.iterIdx <= len(tmi.metrics), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) Values() (tree.Datums, error) {
+	metricsInfo := tmi.metrics[tmi.iterIdx-1]
+
+	metricsJson, err := tree.ParseDJSON(string(metricsInfo.TableInfoJSON))
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.Datums{
+		tree.NewDInt(tree.DInt(tmi.nodeID)),
+		tree.NewDInt(tree.DInt(tmi.storeID)),
+		tree.NewDInt(tree.DInt(metricsInfo.Level)),
+		tree.NewDInt(tree.DInt(metricsInfo.TableID)),
+		metricsJson,
+	}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) Close(_ context.Context) {}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (tmi *tableMetricsIterator) ResolvedType() *types.T {
+	return tableMetricsGeneratorType
+}
+
+func makeTableMetricsGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, errInsufficientPriv
+	}
+	nodeID := int32(tree.MustBeDInt(args[0]))
+	storeID := int32(tree.MustBeDInt(args[1]))
+	start := []byte(tree.MustBeDBytes(args[2]))
+	end := []byte(tree.MustBeDBytes(args[3]))
+
+	return newTableMetricsIterator(evalCtx, nodeID, storeID, start, end), nil
 }
 
 var tableSpanStatsGeneratorType = types.MakeLabeledTuple(
