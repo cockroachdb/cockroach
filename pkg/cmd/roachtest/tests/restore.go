@@ -829,7 +829,7 @@ func (rd *restoreDriver) getAOST(ctx context.Context) {
 }
 
 func (rd *restoreDriver) restoreCmd(target, opts string) string {
-	return fmt.Sprintf(`./cockroach sql --insecure -e "RESTORE %s FROM %s IN %s AS OF SYSTEM TIME '%s' %s"`,
+	return fmt.Sprintf(`RESTORE %s FROM %s IN %s AS OF SYSTEM TIME '%s' %s`,
 		target, rd.sp.backup.fullBackupDir, rd.sp.backup.backupCollection(), rd.aost, opts)
 }
 
@@ -838,19 +838,24 @@ func (rd *restoreDriver) restoreCmd(target, opts string) string {
 // - "DATABASE tpce" will execute a database restore on the tpce cluster.
 // - "" will execute a cluster restore.
 func (rd *restoreDriver) run(ctx context.Context, target string) error {
-	return rd.c.RunE(ctx, rd.c.Node(1), rd.restoreCmd(target, ""))
+	conn, err := rd.c.ConnE(ctx, rd.t.L(), 1)
+	if err != nil {
+		return errors.Wrapf(err, "failed to connect to node 1; running restore")
+	}
+	_, err = conn.ExecContext(ctx, rd.restoreCmd(target, ""))
+	return err
 }
 
 func (rd *restoreDriver) runDetached(
 	ctx context.Context, target string, node int,
 ) (jobspb.JobID, error) {
-	if err := rd.c.RunE(ctx, rd.c.Node(node), rd.restoreCmd(target, "WITH DETACHED")); err != nil {
-		return 0, err
-	}
-
 	db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(node)[0])
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to connect to node %d; running restore detached", node)
+	}
+	if _, err = db.ExecContext(ctx, rd.restoreCmd(target,
+		"WITH DETACHED")); err != nil {
+		return 0, err
 	}
 	var jobID jobspb.JobID
 	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); err != nil {
