@@ -237,7 +237,7 @@ Use --bench to list benchmarks instead of tests.
 
 Each test has a set of tags. The tags are used to skip tests which don't match
 the tag filter. The tag filter is specified by specifying a pattern with the
-"tag:" prefix. 
+"tag:" prefix.
 
 If multiple "tag:" patterns are specified, the test must match at
 least one of them.
@@ -404,8 +404,8 @@ runner itself.
 		cmd.Flags().StringToStringVar(
 			&versionsBinaryOverride, "versions-binary-override", nil,
 			"List of <version>=<path to cockroach binary>. If a certain version <ver> "+
-				"is present in the list,"+"the respective binary will be used when a "+
-				"multi-version test asks for the respective binary, instead of "+
+				"is present in the list, the respective binary will be used when a "+
+				"mixed-version test asks for the respective binary, instead of "+
 				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
 	}
 
