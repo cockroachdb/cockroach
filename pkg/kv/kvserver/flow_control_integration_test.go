@@ -2203,6 +2203,117 @@ ORDER BY name ASC;
 `)
 }
 
+// TestFlowControlGranterAdmitOneByOne is a reproduction for #105185. Internal
+// admission code that relied on admitting at most one waiting request was in
+// fact admitting more than one, and doing so recursively with call stacks as
+// deep as the admit chain. This triggered panics (and is also just undesirable,
+// design-wise). This test intentionally queues a 1000+ small requests, to that
+// end.
+func TestFlowControlGranterAdmitOneByOne(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const numNodes = 3
+	var disableWorkQueueGranting atomic.Bool
+	disableWorkQueueGranting.Store(true)
+
+	st := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
+						UseOnlyForScratchRanges: true,
+						MaintainStreamsForBehindFollowers: func() bool {
+							// TODO(irfansharif): This test is flakey without
+							// this change -- we disconnect one stream or
+							// another because raft says we're no longer
+							// actively replicating through it. Why? Something
+							// to do with the many proposals we're issuing?
+							return true
+						},
+						OverrideTokenDeduction: func() kvflowcontrol.Tokens {
+							// This test asserts on the exact values of tracked
+							// tokens. In non-test code, the tokens deducted are
+							// a few bytes off (give or take) from the size of
+							// the proposals. We don't care about such
+							// differences.
+							return kvflowcontrol.Tokens(1 << 10 /* 1KiB */)
+						},
+					},
+				},
+				AdmissionControl: &admission.TestingKnobs{
+					DisableWorkQueueFastPath: true,
+					DisableWorkQueueGranting: func() bool {
+						return disableWorkQueueGranting.Load()
+					},
+					AlwaysTryGrantWhenAdmitted: true,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	k := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+
+	n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	h := newFlowControlTestHelper(t, tc)
+	h.init()
+	defer h.close("granter_admit_one_by_one")
+
+	desc, err := tc.LookupRange(k)
+	require.NoError(t, err)
+	h.waitForConnectedStreams(ctx, desc.RangeID, 3)
+
+	h.comment(`-- (Issuing regular 1024*1KiB, 3x replicated writes that are not admitted.)`)
+	h.log("sending put requests")
+	for i := 0; i < 1024; i++ {
+		h.put(ctx, k, 1<<10 /* 1KiB */, admissionpb.NormalPri)
+	}
+	h.log("sent put requests")
+
+	h.comment(`
+-- Flow token metrics from n1 after issuing 1024KiB, i.e. 1MiB 3x replicated writes
+-- that are yet to get admitted. We see 3*1MiB=3MiB deductions of
+-- {regular,elastic} tokens with no corresponding returns.
+`)
+	h.query(n1, `
+  SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+`)
+
+	h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
+	h.query(n1, `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles
+`, "range_id", "store_id", "total_tracked_tokens")
+
+	h.comment(`-- (Allow below-raft admission to proceed.)`)
+	disableWorkQueueGranting.Store(false)
+	h.waitForAllTokensReturned(ctx, 3) // wait for admission
+
+	h.comment(`
+-- Flow token metrics from n1 after work gets admitted. We see 3MiB returns of
+-- {regular,elastic} tokens, and the available capacities going back to what
+-- they were. In #105185, by now we would've observed panics.
+`)
+	h.query(n1, `
+  SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvadmission%tokens%'
+ORDER BY name ASC;
+`)
+}
+
 type flowControlTestHelper struct {
 	t   *testing.T
 	tc  *testcluster.TestCluster

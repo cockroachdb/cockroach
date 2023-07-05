@@ -299,11 +299,21 @@ type granterWithStoreReplicatedWorkAdmitted interface {
 	// inform granters of when the write was actually done, post-admission. At
 	// admit-time we did not have sizing info for these writes, so by
 	// intercepting these writes at admit time we're able to make any
-	// outstanding token adjustments in the granter.
+	// outstanding token adjustments in the granter. When adjusting tokens, if
+	// we observe the granter was previously exhausted but is now no longer so,
+	// this interface is allowed to admit other waiting requests.
 	storeWriteDone(originalTokens int64, doneInfo StoreWorkDoneInfo) (additionalTokens int64)
 	// storeReplicatedWorkAdmittedLocked is used by below-raft admission control
 	// to inform granters of work being admitted in order for them to make any
-	// outstanding token adjustments. It's invoked with the coord.mu held.
+	// outstanding token adjustments. Unlike storeWriteDone, the token
+	// adjustments don't result in further admission. It's invoked with the
+	// coord.mu held.
+	//
+	// TODO(irfansharif): It's only when storeReplicatedWorkAdmittedLocked is
+	// invoked by the granter (which relies on admitting a single queued
+	// request) that we want to avoid further grants -- our callstack could be
+	// as large the number of waiting requests. But this interface is also
+	// invoked by the WorkQueue fast path, where it's ok to have further grants
 	storeReplicatedWorkAdmittedLocked(originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo) (additionalTokens int64)
 }
 
