@@ -78,6 +78,7 @@ import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
   SqlStatsResponse,
+  StatementDiagnosticsResponse,
 } from "../api";
 import {
   filteredStatementsData,
@@ -150,6 +151,7 @@ export interface StatementsPageStateProps {
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
   stmtsTotalRuntimeSecs: number;
+  statementDiagnostics: StatementDiagnosticsResponse | null;
 }
 
 export interface StatementsPageState {
@@ -713,6 +715,7 @@ export class StatementsPage extends React.Component<
 
     const statements = convertRawStmtsToAggregateStatisticsMemoized(
       this.props.statementsResponse?.data?.statements,
+      this.props.statementDiagnostics,
     );
 
     const longLoadingMessage = (

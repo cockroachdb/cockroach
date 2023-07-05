@@ -25,7 +25,7 @@ describe("filteredStatementsData", () => {
     searchString: string | null,
     expectedStmtIDs: number[],
   ) {
-    const statements = convertRawStmtsToAggregateStatistics(stmtsRaw);
+    const statements = convertRawStmtsToAggregateStatistics(stmtsRaw, []);
 
     const filteredStmts = filteredStatementsData(
       filters,
