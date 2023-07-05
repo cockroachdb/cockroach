@@ -16,7 +16,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 	"testing"
 	"time"
 
@@ -167,7 +166,6 @@ func TestServerControllerHTTP(t *testing.T) {
 
 	// Retrieve a privileged HTTP client. NB: this also populates
 	// system.web_sessions.
-	aurl := s.AdminURL()
 	client, err := s.GetAdminHTTPClient()
 	require.NoError(t, err)
 
@@ -252,8 +250,10 @@ VALUES($1, $2, $3, $4, $5, (SELECT user_id FROM system.users WHERE username = $3
 		return &ls, err
 	}
 
+	var aurl *serverutils.TestURL
 	newreq := func() *http.Request {
-		req, err := http.NewRequest("GET", aurl+"/_status/sessions", nil)
+		aurl = s.AdminURL()
+		req, err := http.NewRequest("GET", aurl.WithPath("/_status/sessions").String(), nil)
 		require.NoError(t, err)
 		return req
 	}
@@ -289,9 +289,7 @@ VALUES($1, $2, $3, $4, $5, (SELECT user_id FROM system.users WHERE username = $3
 		HttpOnly: true,
 		Secure:   true,
 	}
-	purl, err := url.Parse(aurl)
-	require.NoError(t, err)
-	client.Jar.SetCookies(purl, []*http.Cookie{c})
+	client.Jar.SetCookies(aurl.URL, []*http.Cookie{c})
 
 	req = newreq()
 	body, err = get(req)
@@ -303,7 +301,7 @@ VALUES($1, $2, $3, $4, $5, (SELECT user_id FROM system.users WHERE username = $3
 	t.Logf("retrieving session list from test tenant via cookie")
 
 	c.Value = "hello"
-	client.Jar.SetCookies(purl, []*http.Cookie{c})
+	client.Jar.SetCookies(aurl.URL, []*http.Cookie{c})
 	req = newreq()
 	body, err = get(req)
 	require.NoError(t, err)
@@ -351,7 +349,7 @@ func TestServerControllerDefaultHTTPTenant(t *testing.T) {
 	client, err := s.GetUnauthenticatedHTTPClient()
 	require.NoError(t, err)
 
-	resp, err := client.Post(s.AdminURL()+"/login",
+	resp, err := client.Post(s.AdminURL().WithPath("/login").String(),
 		"application/json",
 		bytes.NewBuffer([]byte("{\"username\":\"foo\",\"password\":\"cockroach\"})")),
 	)
@@ -392,7 +390,7 @@ func TestServerControllerBadHTTPCookies(t *testing.T) {
 		Secure:   true,
 	}
 
-	req, err := http.NewRequest("GET", s.AdminURL()+"/", nil)
+	req, err := http.NewRequest("GET", s.AdminURL().WithPath("/").String(), nil)
 	require.NoError(t, err)
 	req.AddCookie(c)
 	resp, err := client.Do(req)
@@ -400,7 +398,7 @@ func TestServerControllerBadHTTPCookies(t *testing.T) {
 	defer resp.Body.Close()
 	require.Equal(t, 200, resp.StatusCode)
 
-	req, err = http.NewRequest("GET", s.AdminURL()+"/bundle.js", nil)
+	req, err = http.NewRequest("GET", s.AdminURL().WithPath("/bundle.js").String(), nil)
 	require.NoError(t, err)
 	req.AddCookie(c)
 	resp, err = client.Do(req)
@@ -569,7 +567,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	client, err := s.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
 	require.NoError(t, err)
 
-	resp, err := client.Post(s.AdminURL()+"/logout", "", nil)
+	resp, err := client.Post(s.AdminURL().WithPath("/logout").String(), "", nil)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -590,7 +588,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	clientMT, err := s2.GetAuthenticatedHTTPClient(false, serverutils.MultiTenantSession)
 	require.NoError(t, err)
 
-	respMT, err := clientMT.Get(s.AdminURL() + "/logout")
+	respMT, err := clientMT.Get(s.AdminURL().WithPath("/logout").String())
 	require.NoError(t, err)
 	defer respMT.Body.Close()
 
@@ -605,11 +603,9 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	require.ElementsMatch(t, []string{"", ""}, cookieValues)
 
 	// Now using manual clients to simulate states that might be invalid
-	url, err := url.Parse(s2.AdminURL())
-	require.NoError(t, err)
 	cookieJar, err := cookiejar.New(nil)
 	require.NoError(t, err)
-	cookieJar.SetCookies(url, []*http.Cookie{
+	cookieJar.SetCookies(s2.AdminURL().URL, []*http.Cookie{
 		{
 			Name:  "multitenant-session",
 			Value: "abc-123",
@@ -617,7 +613,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	})
 	clientMT.Jar = cookieJar
 
-	respBadCookie, err := clientMT.Get(s.AdminURL() + "/logout")
+	respBadCookie, err := clientMT.Get(s.AdminURL().WithPath("/logout").String())
 	require.NoError(t, err)
 	defer respBadCookie.Body.Close()
 

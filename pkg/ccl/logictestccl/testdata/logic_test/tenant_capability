@@ -36,6 +36,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -61,6 +62,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -79,6 +81,7 @@ can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -104,6 +107,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -129,6 +133,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -154,6 +159,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         true
 can_view_tsdb_metrics      false
@@ -172,6 +178,7 @@ can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -190,6 +197,7 @@ can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -208,6 +216,7 @@ can_admin_scatter          true
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -227,6 +236,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          true
 can_check_consistency      true
+can_debug_process          true
 can_use_nodelocal_storage  true
 can_view_node_info         true
 can_view_tsdb_metrics      true
@@ -268,6 +278,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -297,6 +308,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -331,6 +343,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -349,6 +362,7 @@ can_admin_scatter          false
 can_admin_split            false
 can_admin_unsplit          false
 can_check_consistency      false
+can_debug_process          false
 can_use_nodelocal_storage  false
 can_view_node_info         false
 can_view_tsdb_metrics      false
@@ -367,6 +381,7 @@ can_admin_scatter          true
 can_admin_split            true
 can_admin_unsplit          true
 can_check_consistency      true
+can_debug_process          true
 can_use_nodelocal_storage  true
 can_view_node_info         true
 can_view_tsdb_metrics      true

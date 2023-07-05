@@ -411,6 +411,11 @@ func newTenantServer(
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	sAdmin.sqlServer = sqlServer
 
+	var processCapAuthz tenantcapabilities.Authorizer = &tenantcapabilitiesauthorizer.AllowEverythingAuthorizer{}
+	if lsi := sqlCfg.LocalKVServerInfo; lsi != nil {
+		processCapAuthz = lsi.SameProcessCapabilityAuthorizer
+	}
+
 	// Create the debug API server.
 	debugServer := debug.NewServer(
 		baseCfg.AmbientCtx,
@@ -418,6 +423,8 @@ func newTenantServer(
 		sqlServer.pgServer.HBADebugFn(),
 		sqlServer.execCfg.SQLStatusServer,
 		nil, /* serverTickleFn */
+		sqlCfg.TenantID,
+		processCapAuthz,
 	)
 
 	return &SQLServerWrapper{

@@ -36,7 +36,7 @@ func TestHotRangesV2(t *testing.T) {
 	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"ranges/hot/", nil)
+	req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiV2Path+"ranges/hot/").String(), nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestNodeRangesV2(t *testing.T) {
 	client, err := ts.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts.AdminURL()+apiV2Path+"nodes/local/ranges/", nil)
+	req, err := http.NewRequest("GET", ts.AdminURL().WithPath(apiV2Path+"nodes/local/ranges/").String(), nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -141,7 +141,7 @@ func TestNodesV2(t *testing.T) {
 	client, err := ts1.GetAdminHTTPClient()
 	require.NoError(t, err)
 
-	req, err := http.NewRequest("GET", ts1.AdminURL()+apiV2Path+"nodes/", nil)
+	req, err := http.NewRequest("GET", ts1.AdminURL().WithPath(apiV2Path+"nodes/").String(), nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)

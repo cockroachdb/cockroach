@@ -1899,26 +1899,21 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 			}
 
 			rpcAddr := c.tenantServers[i].RPCAddr()
-			tenantUiURLstr := c.tenantServers[i].AdminURL()
-			tenantUiURL, err := url.Parse(tenantUiURLstr)
+			tenantUiURL := c.tenantServers[i].AdminURL()
+			tenantSqlURL, err := c.getNetworkURLForServer(context.Background(), i,
+				false /* includeAppName */, forSecondaryTenant)
 			if err != nil {
 				fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL for tenant server"))
 			} else {
-				tenantSqlURL, err := c.getNetworkURLForServer(context.Background(), i,
-					false /* includeAppName */, forSecondaryTenant)
-				if err != nil {
-					fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL for tenant server"))
-				} else {
-					// Only include a separate HTTP URL if there's no server
-					// controller.
-					includeHTTP := !c.demoCtx.Multitenant || c.demoCtx.DisableServerController
+				// Only include a separate HTTP URL if there's no server
+				// controller.
+				includeHTTP := !c.demoCtx.Multitenant || c.demoCtx.DisableServerController
 
-					socketDetails, err := c.sockForServer(i, forSecondaryTenant)
-					if err != nil {
-						fmt.Fprintln(ew, errors.Wrap(err, "retrieving socket URL for tenant server"))
-					}
-					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, socketDetails, rpcAddr, verbose, includeHTTP)
+				socketDetails, err := c.sockForServer(i, forSecondaryTenant)
+				if err != nil {
+					fmt.Fprintln(ew, errors.Wrap(err, "retrieving socket URL for tenant server"))
 				}
+				c.printURLs(w, ew, tenantSqlURL, tenantUiURL.URL, socketDetails, rpcAddr, verbose, includeHTTP)
 			}
 			fmt.Fprintln(w)
 			if verbose {

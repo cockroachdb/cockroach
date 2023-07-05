@@ -193,7 +193,7 @@ func TestHealthTelemetry(t *testing.T) {
 	if err := serverutils.GetJSONProto(s, "/health", &details); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := getText(s, s.AdminURL()+statusPrefix+"vars"); err != nil {
+	if _, err := getText(s, s.AdminURL().WithPath(statusPrefix+"vars").String()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -999,7 +999,7 @@ func TestMetricsEndpoint(t *testing.T) {
 	s := startServer(t)
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := getText(s, s.AdminURL()+statusPrefix+"metrics/"+s.Gossip().NodeID.String()); err != nil {
+	if _, err := getText(s, s.AdminURL().WithPath(statusPrefix+"metrics/"+s.Gossip().NodeID.String()).String()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1358,12 +1358,12 @@ func TestStatusVars(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	if body, err := getText(s, s.AdminURL()+statusPrefix+"vars"); err != nil {
+	if body, err := getText(s, s.AdminURL().WithPath(statusPrefix+"vars").String()); err != nil {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
 		t.Errorf("expected sql_bytesout, got: %s", body)
 	}
-	if body, err := getText(s, s.AdminURL()+statusPrefix+"load"); err != nil {
+	if body, err := getText(s, s.AdminURL().WithPath(statusPrefix+"load").String()); err != nil {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sys_cpu_user_ns gauge\nsys_cpu_user_ns")) {
 		t.Errorf("expected sys_cpu_user_ns, got: %s", body)
@@ -1387,7 +1387,7 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	body, err := getText(s, s.AdminURL()+statusPrefix+"vars")
+	body, err := getText(s, s.AdminURL().WithPath(statusPrefix+"vars").String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1429,7 +1429,7 @@ func TestSpanStatsResponse(t *testing.T) {
 		Spans:  []roachpb.Span{span},
 	}
 
-	url := ts.AdminURL() + statusPrefix + "span"
+	url := ts.AdminURL().WithPath(statusPrefix + "span").String()
 	if err := httputil.PostJSON(httpClient, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}

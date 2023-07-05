@@ -84,6 +84,11 @@ const (
 	// span configs.
 	TenantSpanConfigBounds // span_config_bounds
 
+	// CanDebugProcess describes the ability of a tenant to set vmodule on the
+	// process and run pprof profiles and tools. This can reveal information
+	// across tenant boundaries.
+	CanDebugProcess // can_debug_process
+
 	MaxCapabilityID ID = iota - 1
 )
 
@@ -114,6 +119,7 @@ var capabilities = [MaxCapabilityID + 1]Capability{
 	CanViewTSDBMetrics:     boolCapability(CanViewTSDBMetrics),
 	ExemptFromRateLimiting: boolCapability(ExemptFromRateLimiting),
 	TenantSpanConfigBounds: spanConfigBoundsCapability(TenantSpanConfigBounds),
+	CanDebugProcess:        boolCapability(CanDebugProcess),
 }
 
 // EnableAll enables maximum access to services.

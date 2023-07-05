@@ -16,6 +16,7 @@ package serverutils
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -37,6 +38,32 @@ const (
 	SingleTenantSession
 	MultiTenantSession
 )
+
+type TestURL struct {
+	*url.URL
+}
+
+func NewTestURL(path string) TestURL {
+	u, err := url.Parse(path)
+	if err != nil {
+		panic(err)
+	}
+	return TestURL{u}
+}
+
+// WithPath is a helper that allows the user of the `TestURL` to easily
+// append paths to use for testing. Please be aware that your path will
+// automatically be escaped for you, but if it includes any invalid hex
+// escapes (eg: `%s`) it will fail silently and you'll get back a blank
+// URL.
+func (t *TestURL) WithPath(path string) *TestURL {
+	newPath, err := url.JoinPath(t.Path, path)
+	if err != nil {
+		panic(err)
+	}
+	t.Path = newPath
+	return t
+}
 
 // TestTenantInterface defines SQL-only tenant functionality that tests need; it
 // is implemented by server.Test{Tenant,Server}. Tests written against this
@@ -147,7 +174,7 @@ type TestTenantInterface interface {
 	AmbientCtx() log.AmbientContext
 
 	// AdminURL returns the URL for the admin UI.
-	AdminURL() string
+	AdminURL() *TestURL
 	// GetUnauthenticatedHTTPClient returns an http client configured with the client TLS
 	// config required by the TestServer's configuration.
 	// Discourages implementer from using unauthenticated http connections
