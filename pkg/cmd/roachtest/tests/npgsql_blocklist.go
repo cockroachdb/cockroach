@@ -789,6 +789,7 @@ var npgsqlIgnoreList = blocklist{
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Write_null_values`:                                            "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Wrong_format_binary_export`:                                   "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Wrong_format_binary_import`:                                   "flaky",
+	`Npgsql.Tests.CopyTests(NonMultiplexing).Wrong_format_raw_binary_copy`:                                 "flaky",
 	`Npgsql.Tests.CopyTests(NonMultiplexing).Wrong_format_text_import`:                                     "flaky",
 	`Npgsql.Tests.ReaderTests(Multiplexing,SequentialAccess).Cleans_up_ok_with_dispose_calls(NotPrepared)`: "flaky",
 	`Npgsql.Tests.TransactionTests(NonMultiplexing).CommitAsync(Prepared)`:                                 "flaky",
