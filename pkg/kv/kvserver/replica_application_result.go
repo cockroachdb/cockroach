@@ -348,10 +348,6 @@ func (r *Replica) tryReproposeWithNewLeaseIndexV2(
 		}
 	}()
 
-	r.mu.RLock()
-	ticks := r.mu.ticks
-	r.mu.RUnlock()
-
 	// TODO(tbg): work on the lifecycle of ProposalData. This struct (and the
 	// surrounding replicatedCmd) are populated in an overly ad-hoc manner.
 	// TODO(tbg): the fields are spelled out here to make explicit what is being copied
@@ -368,7 +364,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndexV2(
 		sp:              origP.sp, // NB: special handling below
 		idKey:           raftlog.MakeCmdIDKey(),
 		proposedAtTicks: 0, // set in registerProposalLocked
-		createdAtTicks:  ticks,
+		createdAtTicks:  0, // set in registerProposalLocked
 		command:         &newCommand,
 		quotaAlloc:      newQuotaAlloc,
 		ec:              newEC,
