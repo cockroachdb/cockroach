@@ -165,9 +165,6 @@ PREPARE insert_f4 AS INSERT INTO assn_cast(f4) VALUES ($1)
 statement ok
 EXECUTE insert_f4(18754999.99)
 
-# TODO(mgartner): Values are not correctly truncated when cast to FLOAT4, either
-# in an assignment or explicit context. The columns should have a value of
-# 1.8755e+07. See #73743.
 query F rowsort
 SELECT f4 FROM assn_cast WHERE f4 IS NOT NULL
 ----

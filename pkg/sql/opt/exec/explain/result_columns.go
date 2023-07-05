@@ -150,7 +150,10 @@ func getResultColumns(
 
 	case deleteOp:
 		a := args.(*deleteArgs)
-		return tableColumns(a.Table, a.ReturnCols), nil
+		return appendColumns(
+			tableColumns(a.Table, a.ReturnCols),
+			a.Passthrough...,
+		), nil
 
 	case opaqueOp:
 		if args.(*opaqueArgs).Metadata != nil {
