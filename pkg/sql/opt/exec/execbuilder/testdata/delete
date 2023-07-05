@@ -337,3 +337,47 @@ vectorized: true
               estimated row count: 990 (missing stats)
               table: xyz@xyz_y_idx
               spans: /1-/1000 /2001-/3000
+
+# Testcase for issue 105803.
+
+statement ok
+CREATE TABLE b (b INT PRIMARY KEY)
+
+query T
+EXPLAIN (TYPES) DELETE FROM a USING b WHERE b > 1 RETURNING a, b, NULL
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a int, b int, "?column?" unknown)
+│ render ?column?: (NULL)[unknown]
+│ render a: (a)[int]
+│ render b: (b)[int]
+│
+└── • delete
+    │ columns: (a int, b int)
+    │ estimated row count: 1,000 (missing stats)
+    │ from: a
+    │ auto commit
+    │
+    └── • distinct
+        │ columns: (a int, b int)
+        │ estimated row count: 1,000 (missing stats)
+        │ distinct on: a
+        │
+        └── • cross join (inner)
+            │ columns: (a int, b int)
+            │ estimated row count: 333,333 (missing stats)
+            │
+            ├── • scan
+            │     columns: (a int)
+            │     estimated row count: 1,000 (missing stats)
+            │     table: a@a_pkey
+            │     spans: FULL SCAN
+            │
+            └── • scan
+                  columns: (b int)
+                  estimated row count: 333 (missing stats)
+                  table: b@b_pkey
+                  spans: /2-
