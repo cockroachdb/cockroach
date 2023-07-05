@@ -248,6 +248,12 @@ npm_import(
     package = "pnpm",
     url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
     version = "8.5.1",
+    # Declare an @pnpm//:pnpm rule that can be called externally.
+    # Copied from https://github.com/aspect-build/rules_js/blob/14724d9b27b2c45f088aa003c091cbe628108170/npm/private/pnpm_repository.bzl#L27-L30
+    extra_build_content = "\n".join([
+        """load("@aspect_rules_js//js:defs.bzl", "js_binary")""",
+        """js_binary(name = "pnpm", entry_point = "package/dist/pnpm.cjs", visibility = ["//visibility:public"])""",
+    ]),
 )
 
 load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
@@ -257,80 +263,26 @@ rules_js_dependencies()
 load("@aspect_rules_js//npm:repositories.bzl", "npm_translate_lock")
 
 npm_translate_lock(
-    name = "npm_mirror_npm",
-    data = ["//pkg/cmd/mirror/npm:package.json"],
-    npmrc = "//pkg/ui:.npmrc.pnpm",
-    pnpm_lock = "//pkg/cmd/mirror/npm:pnpm-lock.yaml",
-    update_pnpm_lock = True,
+    name = "npm",
+    data = [
+        "//pkg/ui:pnpm-workspace.yaml",
+        "//pkg/ui:package.json",
+        "//pkg/ui/patches:topojson@3.0.2.patch",
+        "//pkg/ui/workspaces/db-console/src/js:package.json",
+        "//pkg/ui/workspaces/db-console:package.json",
+        "//pkg/ui/workspaces/cluster-ui:package.json",
+        "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
+        "//pkg/ui/workspaces/e2e-tests:package.json",
+    ],
+    patch_args = {
+        "*": ["-p1"]
+    },
+    npmrc = "//pkg/ui:.npmrc.bazel",
+    pnpm_lock = "//pkg/ui:pnpm-lock.yaml",
     verify_node_modules_ignored = "//:.bazelignore",
-    yarn_lock = "//pkg/cmd/mirror/npm:yarn.lock",
 )
-load("@npm_mirror_npm//:repositories.bzl", npm_mirror_npm_repositories = "npm_repositories")
-npm_mirror_npm_repositories()
-
-npm_translate_lock(
-    name = "npm_e2e_tests",
-    data = ["//pkg/ui/workspaces/e2e-tests:package.json"],
-    no_optional = True,
-    npmrc = "//pkg/ui:.npmrc.pnpm",
-    pnpm_lock = "//pkg/ui/workspaces/e2e-tests:pnpm-lock.yaml",
-    update_pnpm_lock = True,
-    verify_node_modules_ignored = "//:.bazelignore",
-    yarn_lock = "//pkg/ui/workspaces/e2e-tests:yarn.lock",
-)
-load("@npm_e2e_tests//:repositories.bzl", npm_e2e_tests_repositories = "npm_repositories")
-npm_e2e_tests_repositories()
-
-npm_translate_lock(
-    name = "npm_protos",
-    data = ["//pkg/ui/workspaces/db-console/src/js:package.json"],
-    no_optional = True,
-    npmrc = "//pkg/ui:.npmrc.pnpm",
-    pnpm_lock = "//pkg/ui/workspaces/db-console/src/js:pnpm-lock.yaml",
-    update_pnpm_lock = True,
-    verify_node_modules_ignored = "//:.bazelignore",
-    yarn_lock = "//pkg/ui/workspaces/db-console/src/js:yarn.lock",
-)
-load("@npm_protos//:repositories.bzl", npm_protos_repositories = "npm_repositories")
-npm_protos_repositories()
-
-npm_translate_lock(
-    name = "npm_db_console",
-    data = ["//pkg/ui/workspaces/db-console:package.json"],
-    npmrc = "//pkg/ui:.npmrc.pnpm",
-    pnpm_lock = "//pkg/ui/workspaces/db-console:pnpm-lock.yaml",
-    update_pnpm_lock = True,
-    verify_node_modules_ignored = "//:.bazelignore",
-    yarn_lock = "//pkg/ui/workspaces/db-console:yarn.lock",
-)
-load("@npm_db_console//:repositories.bzl", npm_db_console_repositories = "npm_repositories")
-npm_db_console_repositories()
-
-npm_translate_lock(
-    name = "npm_cluster_ui",
-    data = ["//pkg/ui/workspaces/cluster-ui:package.json"],
-    no_optional = True,
-    npmrc = "//pkg/ui:.npmrc.pnpm",
-    pnpm_lock = "//pkg/ui/workspaces/cluster-ui:pnpm-lock.yaml",
-    update_pnpm_lock = True,
-    verify_node_modules_ignored = "//:.bazelignore",
-    yarn_lock = "//pkg/ui/workspaces/cluster-ui:yarn.lock",
-)
-load("@npm_cluster_ui//:repositories.bzl", npm_cluster_ui_repositories = "npm_repositories")
-npm_cluster_ui_repositories()
-
-npm_translate_lock(
-    name = "npm_eslint_plugin_crdb",
-    data = ["//pkg/ui/workspaces/eslint-plugin-crdb:package.json"],
-    no_optional = True,
-    npmrc = "//pkg/ui:.npmrc.pnpm",
-    pnpm_lock = "//pkg/ui/workspaces/eslint-plugin-crdb:pnpm-lock.yaml",
-    update_pnpm_lock = True,
-    verify_node_modules_ignored = "//:.bazelignore",
-    yarn_lock = "//pkg/ui/workspaces/eslint-plugin-crdb:yarn.lock",
-)
-load("@npm_eslint_plugin_crdb//:repositories.bzl", npm_eslint_plugin_crdb_repositories = "npm_repositories")
-npm_eslint_plugin_crdb_repositories()
+load("@npm//:repositories.bzl", npm_repositories = "npm_repositories")
+npm_repositories()
 
 
 #################################

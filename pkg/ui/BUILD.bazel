@@ -1,7 +1,14 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@npm//:defs.bzl", "npm_link_all_packages")
 
-exports_files([".npmrc.pnpm"])
+npm_link_all_packages(name = "node_modules")
+
+exports_files([
+    ".npmrc.bazel",
+    "package.json",
+    "pnpm-lock.yaml",
+])
 
 go_library(
     name = "ui",
@@ -19,9 +26,16 @@ go_library(
 )
 
 test_suite(
+    name = "test",
+    tests = [
+        "//pkg/ui/workspaces/cluster-ui:jest",
+        "//pkg/ui/workspaces/db-console:jest",
+    ],
+)
+
+test_suite(
     name = "lint",
     tests = [
-        "//pkg/cmd/mirror/npm:are_lockfiles_updated",
         "//pkg/ui/workspaces/cluster-ui:lint",
         "//pkg/ui/workspaces/db-console:lint",
         "//pkg/ui/workspaces/e2e-tests:lint",

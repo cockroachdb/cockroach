@@ -1,0 +1,18 @@
+diff --git a/package.json b/package.json
+index 9a14a58b474382cdb3f6837171b3d67d3c4d2c6e..f2308a5c88db7451b38533b623116a70b6b2e164 100644
+--- a/package.json
++++ b/package.json
+@@ -21,13 +21,6 @@
+     "type": "git",
+     "url": "https://github.com/topojson/topojson.git"
+   },
+-  "bin": {
+-    "geo2topo": "node_modules/topojson-server/bin/geo2topo",
+-    "toposimplify": "node_modules/topojson-simplify/bin/toposimplify",
+-    "topo2geo": "node_modules/topojson-client/bin/topo2geo",
+-    "topomerge": "node_modules/topojson-client/bin/topomerge",
+-    "topoquantize": "node_modules/topojson-client/bin/topoquantize"
+-  },
+   "scripts": {
+     "pretest": "rm -rf dist && mkdir dist && node rollup.node",
+     "test": "tape 'test/**/*-test.js'",

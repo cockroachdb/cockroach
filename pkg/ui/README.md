@@ -19,21 +19,22 @@ Immdiately upon cloning this repo, your editor may report errors from
 [eslint](https://eslint.org/) claiming that `@cockroachlabs/eslint-plugin-crdb`
 failed to load. Solve this issue by running the linter once to build the
 CRDB-specific plugin, which lives in this repo:
+
 ```shell
-$ make ui-lint
+$ ./dev gen js
 ```
 
 or by building the plugin manually:
 ```shell
-$ pushd pkg/ui/workspaces/eslint-plugin-crdb; yarn && yarn build; popd
+$ pushd pkg/ui/workspaces/eslint-plugin-crdb; pnpm install && pnpm build; popd
 ```
 
 Behind the scenes, our UI is compiled using a collection of tools that depends on
 [Node.js](https://nodejs.org/) and are managed with
-[Yarn](https://yarnpkg.com), a package manager that offers more deterministic
-package installation than NPM. LTS versions of NodeJS and Yarn v1.x.x are known
-to work. [Chrome](https://www.google.com/chrome/), Google's internet browser.
-Unit tests are run using Chrome's "Headless" mode.
+[pnpm](https://pnpm.io), a package manager that offers more deterministic
+package installation than NPM. LTS versions of NodeJS (16.x) and pnpm (8.6.x)
+are known to work. [Chrome](https://www.google.com/chrome/), Google's internet
+browser. Unit tests are run using Chrome's "Headless" mode.
 
 ## Developing
 
@@ -77,11 +78,6 @@ package](https://github.com/cockroachdb/cockroach/blob/master/pkg/ui/workspaces/
 which describes a dev workflow that fits well with this package.
 
 ### Clearing the local cache
-If the vendor directory becomes corrupted, clear it by running in the root Cockroach directory:
-```shell
-$ git submodule update --init --recursive
-```
-
 If the UI cache becomes corrupted, clear it with:
 ```shell
 $ ./dev ui clean --all
@@ -124,80 +120,66 @@ leading cause of spurious CI failures in the first half of 2018. We used yarn's
 functionality through December 2022 (and for the initial 22.2 release), but
 Bazel support for that feature was poor to non-existent and the workflow
 involved was complicated. Worse, upgrades to Bazel and the deprecation of
-rules_nodejs (in favor of rules_js) meant a yarn- vendor submodule prevented
+rules_nodejs (in favor of rules_js) meant a yarn-vendor submodule prevented
 necessary maintenance.
 
 As-of January 2023, NPM dependencies are mirrored to a world-readable Google
 Cloud Storage bucket maintained by Cockroach Labs, similar to the Go
 dependencies (see [build/README.md](../../build/README.md#dependencies)). This
-allows for nearly standard yarn package management workflows, with only two
-caveats:
+allows for nearly standard pnpm package management workflows, with only one
+caveat:
 
-1. Due to rules_nodejs's lack of support for yarn workspaces in Bazel builds,
-   each tree under pkg/ui/workspaces/ has its own package.json, its own
-   yarn.lock, and its own node_modules/ directory. There is no hoisting of
-   shared dependencies into pkg/ui/node_modules, so **dependencies are managed
-   independently in each sub-project.**
-2. The public registries can be used for initial installation, but have to
-   be rewritten before a PR can merge. The linter will help with this, no
-   need to worry.
+1. When running `pnpm install`, dependencies are installed from the public
+   registry. Bazel builds install dependencies from the Cockroach Labs mirror.
+   Any net-new dependencies must be uploaded to Google Cloud Storage before a
+   Bazel build will succeed. See below for details.
 
 ### Adding, Removing, or Updating a dependency
-Since there's no shared dependency hoisting and dependencies are managed
-independently for each tree under pkg/ui/workspaces (see above), adding,
-removing, and updating dependencies must happen from the root of the sub-
-project, not the general pkg/ui/ root.
-
-Besides that wrinkle, the standard workflows apply:
+Besides the above wrinkle w.r.t. CLI flags, the standard workflows apply:
 
 ```sh
 # Add left-pad
-yarn add left-pad
+pnpm add left-pad
 
 # Or upgrade to a specific version
-yarn add left-pad@1.3.0
+pnpm add left-pad@1.3.0
 # or
-yarn upgrade left-pad
+pnpm update left-pad
 
 # Then remove it (it's deprecated, after all)
-yarn remove left-pad
+pnpm remove left-pad
 ```
 
 These respectively add, upgrade, or remove dependencies using the default
-registry for yarn (registry.yarnpkg.com). Before merging, new dependencies must
-be mirrored to GCS and lockfiles must be rewritten.
-
-Note that `yarn install` will by default never update a `yarn.lock` file,
-thanks to a line in `./yarnrc` that makes `--pure-lockfile` the default. To
-force-rewrite a lockfile with `yarn install`, use `yarn install --no-default-
-rc`.
+registry for pnpm (registry.npmjs.org). Before merging, new dependencies must
+be mirrored to GCS so that a Bazel build can succeed.
 
 As always, be sure to commit modifications resulting from dependency changes,
-like updates to `package.json` and `yarn.lock`.
+like updates to `package.json` and `pnpm-lock.yaml`.
 
-### Mirroring and Rewriting yarn.lock
+### Mirroring Dependencies
 To upload new dependencies to Google Cloud Storage, you'll need to be a
 Cockroach Labs employee signed into the `gcloud` CLI. Simply run
 `./dev ui mirror-deps` from the root of `cockroach.git`, and any new
-dependencies will be uploaded and all yarn.lock files rewritten:
+dependencies will be uploaded:
 
 ```sh
-# Upload new dependencies to GCS and rewrite yarn.lock files
+# Upload new dependencies to GCS
 ./dev ui mirror-deps
 ```
 
-### Testing if yarn.lock Updates are Needed
-The default UI lint suite includes testing for required yarn.lock updates:
+### Testing if Dependencies Need to be Mirrored
+The default UI lint suite includes testing for unmirrored dependencies:
 
 ```sh
 ./dev ui lint
 ```
 
-To run _only_ the yarn.lock tests, use `bazel` directly:
+To run _only_ the dependency-mirroring tests, use `bazel` directly:
 
 ```sh
-bazel test //pkg/cmd/mirror/npm:are_lockfiles_updated
+bazel test //pkg/cmd/mirror/npm:list_unmirrored_dependencies
 ```
 
-Either way, a failed test will produce a diff between the expected yarn.lock
-and the actual yarn.lock, with a reminder to run `./dev ui lint`.
+Either way, a failed test will produce a list of unmirrored dependencies, with a
+reminder to run `./dev ui mirror-deps`.

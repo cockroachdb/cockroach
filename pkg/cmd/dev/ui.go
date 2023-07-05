@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -49,6 +48,8 @@ func makeUICmd(d *dev) *cobra.Command {
 
 // UIDirectories contains the absolute path to the root of each UI sub-project.
 type UIDirectories struct {
+	// root is the absolute path to ./pkg/ui.
+	root string
 	// clusterUI is the absolute path to ./pkg/ui/workspaces/cluster-ui.
 	clusterUI string
 	// dbConsole is the absolute path to ./pkg/ui/workspaces/db-console.
@@ -67,10 +68,11 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 	}
 
 	return &UIDirectories{
-		clusterUI:    path.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
-		dbConsole:    path.Join(workspace, "./pkg/ui/workspaces/db-console"),
-		e2eTests:     path.Join(workspace, "./pkg/ui/workspaces/e2e-tests"),
-		eslintPlugin: path.Join(workspace, "./pkg/ui/workspaces/eslint-plugin-crdb"),
+		root:         filepath.Join(workspace, "./pkg/ui"),
+		clusterUI:    filepath.Join(workspace, "./pkg/ui/workspaces/cluster-ui"),
+		dbConsole:    filepath.Join(workspace, "./pkg/ui/workspaces/db-console"),
+		e2eTests:     filepath.Join(workspace, "./pkg/ui/workspaces/e2e-tests"),
+		eslintPlugin: filepath.Join(workspace, "./pkg/ui/workspaces/eslint-plugin-crdb"),
 	}, nil
 }
 
@@ -114,17 +116,15 @@ Replaces 'make ui-watch'.`,
 			}
 
 			// Ensure node dependencies are up-to-date.
-			for _, dir := range []string{dirs.dbConsole, dirs.clusterUI} {
-				err = d.exec.CommandContextInheritingStdStreams(
-					ctx,
-					"yarn",
-					"--cwd",
-					dir,
-					"install",
-				)
-				if err != nil {
-					log.Fatalf("failed to fetch node dependencies in dir %s: %v", dir, err)
-				}
+			err = d.exec.CommandContextInheritingStdStreams(
+				ctx,
+				"pnpm",
+				"--dir",
+				dirs.root,
+				"install",
+			)
+			if err != nil {
+				log.Fatalf("failed to fetch node dependencies: %v", err)
 			}
 
 			// Build prerequisites for db-console
@@ -170,9 +170,9 @@ Replaces 'make ui-watch'.`,
 			// Start the cluster-ui watch task
 			nbExec := d.exec.AsNonBlocking()
 			argv := []string{
-				"--silent", "--cwd", dirs.clusterUI, "build:watch",
+				"--dir", dirs.clusterUI, "run", "build:watch",
 			}
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", argv...)
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", argv...)
 			if err != nil {
 				log.Fatalf("Unable to watch cluster-ui for changes: %v", err)
 				return err
@@ -186,9 +186,9 @@ Replaces 'make ui-watch'.`,
 			}
 
 			args = []string{
-				"--silent",
-				"--cwd",
+				"--dir",
 				dirs.dbConsole,
+				"exec",
 				"webpack-dev-server",
 				"--config", "webpack.config.js",
 				"--mode", "development",
@@ -204,7 +204,7 @@ Replaces 'make ui-watch'.`,
 			}
 
 			// Start the db-console web server + watcher
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", args...)
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", args...)
 			if err != nil {
 				log.Fatalf("Unable to serve db-console: %v", err)
 				return err
@@ -312,13 +312,13 @@ func makeUIStorybookCmd(d *dev) *cobra.Command {
 			nbExec := d.exec.AsNonBlocking()
 
 			args = []string{
-				"--silent",
-				"--cwd", cwd,
+				"--dir", cwd,
+				"exec",
 				"start-storybook",
 				"-p", port,
 			}
 
-			err = nbExec.CommandContextInheritingStdStreams(ctx, "yarn", args...)
+			err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", args...)
 			if err != nil {
 				log.Fatalf("Unable to run Storybook for %s : %v", project, err)
 				return err
@@ -358,27 +358,31 @@ Replaces 'make ui-lint'.`,
 				return err
 			}
 
-			args := []string{
-				"test",
-				"//pkg/ui:lint",
-			}
-			args = append(args,
-				d.getTestOutputArgs(
-					false, /* stream */
-					isVerbose,
-					false, /* showLogs */
-					false, /* streamOutput */
-				)...,
+			bazelTestArgs := d.getTestOutputArgs(
+				false, /* stream */
+				isVerbose,
+				false, /* showLogs */
+				false, /* streamOutput */
 			)
 
-			logCommand("bazel", args...)
-			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+			// Check for unmirrored dependencies before running the lint target, since that lint
+			// target requires all dependencies to be mirrored. The presence of any unmirrored
+			// dependencies during //pkg/ui:lint results in cryptic errors that don't help users.
+			targets := []string{"//pkg/cmd/mirror/npm:list_unmirrored_dependencies", "//pkg/ui:lint"}
+			for _, target := range targets {
+				args := append(
+					[]string{"test", target},
+					bazelTestArgs...,
+				)
 
-			if err != nil {
-				log.Fatalf("failed to lint UI projects: %v", err)
-				return err
+				logCommand("bazel", args...)
+				err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+
+				if err != nil {
+					log.Fatalf("failed to lint UI projects: %v", err)
+					return err
+				}
 			}
-
 			return nil
 		},
 	}
@@ -573,28 +577,31 @@ Replaces 'make ui-test' and 'make ui-test-watch'.`,
 				nbExec := d.exec.AsNonBlocking()
 
 				argv := []string{
-					"--silent",
-					"--cwd",
+					"--dir",
 					dirs.dbConsole,
+					"exec",
+					"jest",
+					"--watch",
+					"-w4",
 				}
 				env := append(os.Environ(), "BAZEL_TARGET=fake")
-				logCommand("yarn", args...)
-				err = nbExec.CommandContextWithEnv(ctx, env, "yarn", argv...)
+				logCommand("pnpm", args...)
+				err = nbExec.CommandContextWithEnv(ctx, env, "pnpm", argv...)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to start db-console tests in watch mode: %+v", err)
 				}
 
 				argv = []string{
-					"--silent",
-					"--cwd",
+					"--dir",
 					dirs.clusterUI,
+					"exec",
 					"jest",
 					"--watch",
 				}
-				logCommand("yarn", args...)
+				logCommand("pnpm", args...)
 				env = append(os.Environ(), "BAZEL_TARGET=fake", "CI=1")
-				err = nbExec.CommandContextWithEnv(ctx, env, "yarn", argv...)
+				err = nbExec.CommandContextWithEnv(ctx, env, "pnpm", argv...)
 				if err != nil {
 					// nolint:errwrap
 					return fmt.Errorf("unable to start cluster-ui tests in watch mode: %+v", err)
@@ -655,9 +662,9 @@ launching test in a real browser. Extra flags are passed directly to the
 			ctx := cmd.Context()
 
 			isHeaded := mustGetFlagBool(cmd, headedFlag)
-			var yarnTarget string = "cy:run"
+			var pnpmTarget string = "cy:run"
 			if isHeaded {
-				yarnTarget = "cy:debug"
+				pnpmTarget = "cy:debug"
 			}
 
 			uiDirs, err := getUIDirs(d)
@@ -671,9 +678,9 @@ launching test in a real browser. Extra flags are passed directly to the
 			}
 
 			// Ensure e2e-tests dependencies are installed
-			installArgv := []string{"--silent", "--cwd", uiDirs.e2eTests, "install"}
-			logCommand("yarn", installArgv...)
-			err = d.exec.CommandContextInheritingStdStreams(ctx, "yarn", installArgv...)
+			installArgv := []string{"--dir", uiDirs.e2eTests, "install"}
+			logCommand("pnpm", installArgv...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "pnpm", installArgv...)
 			if err != nil {
 				return fmt.Errorf("unable to install NPM dependencies: %w", err)
 			}
@@ -690,24 +697,24 @@ launching test in a real browser. Extra flags are passed directly to the
 			}
 
 			// Ensure the native Cypress binary is installed.
-			cyInstallArgv := []string{"--silent", "--cwd", uiDirs.e2eTests, "cypress", "install"}
-			logCommand("yarn", cyInstallArgv...)
-			err = d.exec.CommandContextInheritingStdStreams(ctx, "yarn", cyInstallArgv...)
+			cyInstallArgv := []string{"--dir", uiDirs.e2eTests, "exec", "cypress", "install"}
+			logCommand("pnpm", cyInstallArgv...)
+			err = d.exec.CommandContextInheritingStdStreams(ctx, "pnpm", cyInstallArgv...)
 			if err != nil {
 				return fmt.Errorf("unable to install Cypress native package: %w", err)
 			}
 
 			// Run Cypress tests, passing any extra args through to 'cypress'
-			startCrdbThenSh := path.Join(uiDirs.e2eTests, "build/start-crdb-then.sh")
+			startCrdbThenSh := filepath.Join(uiDirs.e2eTests, "build/start-crdb-then.sh")
 			runCypressArgv := []string{
-				"yarn", "--silent", "--cwd", uiDirs.e2eTests, yarnTarget,
+				"pnpm", "--dir", uiDirs.e2eTests, pnpmTarget,
 			}
 			runCypressArgv = append(runCypressArgv, cmd.Flags().Args()...)
 
 			logCommand(startCrdbThenSh, runCypressArgv...)
 			env := append(
 				os.Environ(),
-				fmt.Sprintf("COCKROACH=%s", path.Join(workspace, "cockroach")),
+				fmt.Sprintf("COCKROACH=%s", filepath.Join(workspace, "cockroach")),
 			)
 			err = d.exec.CommandContextWithEnv(ctx, env, startCrdbThenSh, runCypressArgv...)
 			if err != nil {
@@ -728,9 +735,7 @@ func makeMirrorDepsCmd(d *dev) *cobra.Command {
 		Short: "mirrors NPM dependencies to Google Cloud Storage",
 		Long: strings.TrimSpace(`
 Downloads NPM dependencies from public registries, uploads them to a Google
-Cloud Storage bucket managed by Cockroach Labs, and rewrites yarn.lock files
-so that future 'yarn install' invocations download from that bucket instead
-of the default registries.`),
+Cloud Storage bucket managed by Cockroach Labs.`),
 		RunE: func(cmd *cobra.Command, commandLine []string) error {
 			ctx := cmd.Context()
 
@@ -738,12 +743,6 @@ of the default registries.`),
 			logCommand("bazel", mirrorArgv...)
 			if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", mirrorArgv...); err != nil {
 				return fmt.Errorf("unable to mirror dependencies to GCS: %w", err)
-			}
-
-			updateArgv := []string{"run", "//pkg/cmd/mirror/npm:update_yarn_lock"}
-			logCommand("bazel", updateArgv...)
-			if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", updateArgv...); err != nil {
-				return fmt.Errorf("unable to update yarn.lock files: %w", err)
 			}
 
 			return nil

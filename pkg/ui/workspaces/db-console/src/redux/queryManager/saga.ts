@@ -178,7 +178,9 @@ export function* queryManagerSaga() {
     const state = queryManagerState.getQueryState(qmAction.query);
     if (!taskIsRunning(state.sagaTask)) {
       state.channel = channel<QueryManagementAction>();
-      state.sagaTask = yield fork(managedQuerySaga, state);
+      state.sagaTask = (yield fork(managedQuerySaga, state)) as ReturnType<
+        typeof managedQuerySaga
+      >;
     }
     yield put(state.channel, qmAction);
   }

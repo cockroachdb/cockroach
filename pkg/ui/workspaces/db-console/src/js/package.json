@@ -9,8 +9,10 @@
     "protos.d.ts",
     "protos.js"
   ],
+  "peerDependencies": {
+    "protobufjs": "6.x"
+  },
   "devDependencies": {
-    "protobufjs": "6.8.6",
     "chalk": "^1.1.3",
     "escodegen": "^1.8.1",
     "espree": "^3.1.3",
@@ -18,7 +20,7 @@
     "glob": "^7.1.1",
     "jsdoc": "^3.4.2",
     "minimist": "^1.2.0",
-    "semver": "^5.3.0",
+    "semver": "^5.5.0",
     "tmp": "0.0.33",
     "uglify-js": "^2.8.15"
   }

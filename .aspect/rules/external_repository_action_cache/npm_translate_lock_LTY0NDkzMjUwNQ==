@@ -1,6 +1,0 @@
-# Input hashes for repository rule npm_translate_lock(name = "npm_db_console", pnpm_lock = "//pkg/ui/workspaces/db-console:pnpm-lock.yaml").
-# This file should be checked into version control along with the pnpm-lock.yaml file.
-pkg/ui/.npmrc.pnpm=1714720514
-pkg/ui/workspaces/db-console/pnpm-lock.yaml=307741782
-pkg/ui/workspaces/db-console/yarn.lock=1296929611
-pkg/ui/workspaces/db-console/package.json=-1415963323
