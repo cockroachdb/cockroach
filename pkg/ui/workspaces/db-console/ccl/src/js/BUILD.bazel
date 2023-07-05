@@ -1,6 +1,9 @@
 load("@aspect_rules_js//js:defs.bzl", "js_library")
 load("@aspect_rules_js//npm:defs.bzl", "npm_package")
 load("@//pkg/ui/workspaces/db-console/src/js:defs.bzl", "protobufjs_library")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+npm_link_all_packages(name = "node_modules")
 
 protobufjs_library(
     name = "crdb-protobuf-client-ccl__proto",

@@ -1,6 +1,0 @@
-# Input hashes for repository rule npm_translate_lock(name = "npm_cluster_ui", pnpm_lock = "//pkg/ui/workspaces/cluster-ui:pnpm-lock.yaml").
-# This file should be checked into version control along with the pnpm-lock.yaml file.
-pkg/ui/.npmrc.pnpm=1714720514
-pkg/ui/workspaces/cluster-ui/pnpm-lock.yaml=-216806008
-pkg/ui/workspaces/cluster-ui/yarn.lock=1601010899
-pkg/ui/workspaces/cluster-ui/package.json=-1596820040

@@ -2,29 +2,8 @@
 # it is extended to consume multiple protobuf_library targets instead of single instance as in original example
 
 load("@aspect_rules_js//js:defs.bzl", "js_library")
-load("@npm_protos//pkg/ui/workspaces/db-console/src/js:protobufjs/package_json.bzl", "bin")
+load("@npm//pkg/ui/workspaces/db-console/src/js:protobufjs/package_json.bzl", "bin")
 load("@rules_proto//proto:defs.bzl", "ProtoInfo")
-
-# protobuf.js relies on these packages, but does not list them as dependencies
-# in its package.json.
-# Instead they are listed under "cliDependencies"
-# (see https://unpkg.com/protobufjs@6.10.2/package.json)
-# When run, the CLI attempts to run `npm install` at runtime to get them.
-# This fails under Bazel as it tries to access the npm cache outside of the sandbox.
-# Per Bazel semantics, all dependencies should be pre-declared.
-# Note, you'll also need to install all of these in your package.json!
-_PROTOBUFJS_CLI_DEPS = ["//pkg/ui/workspaces/db-console/src/js:node_modules/%s" % s for s in [
-    "chalk",
-    "escodegen",
-    "espree",
-    "estraverse",
-    "glob",
-    "jsdoc",
-    "minimist",
-    "semver",
-    "tmp",
-    "uglify-js",
-]]
 
 def _proto_sources_impl(ctx):
     return DefaultInfo(files = depset(
@@ -66,7 +45,7 @@ def protobufjs_library(name, out_name, protos, **kwargs):
     # Transform .proto files to a single _pb.js file named after the macro
     bin.pbjs(
         name = js_target,
-        srcs = [proto_target] + _PROTOBUFJS_CLI_DEPS,
+        srcs = [proto_target, ":node_modules"],
         chdir = "../../../",
         copy_srcs_to_bin = False,
         # Arguments documented at
@@ -89,7 +68,7 @@ def protobufjs_library(name, out_name, protos, **kwargs):
     # Transform the _pb.js file to a .d.ts file with TypeScript types
     bin.pbts(
         name = ts_target,
-        srcs = [js_target] + _PROTOBUFJS_CLI_DEPS,
+        srcs = [js_target, ":node_modules"],
         chdir = "../../../",
         copy_srcs_to_bin = False,
         # Arguments documented at

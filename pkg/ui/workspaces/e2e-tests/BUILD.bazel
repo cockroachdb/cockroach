@@ -1,12 +1,5 @@
-load("@npm_e2e_tests//:defs.bzl", "npm_link_all_packages")
-load("@npm_e2e_tests//pkg/ui/workspaces/e2e-tests:eslint/package_json.bzl", eslint_bin = "bin")
-
-exports_files(
-    [
-        "yarn.lock",
-    ],
-    visibility = ["//visibility:public"],
-)
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//pkg/ui/workspaces/e2e-tests:eslint/package_json.bzl", eslint_bin = "bin")
 
 npm_link_all_packages(name = "node_modules")
 
@@ -25,5 +18,10 @@ eslint_bin.eslint_test(
         "cypress.config.ts",
         ":node_modules",
         "//pkg/ui/workspaces/eslint-plugin-crdb",
-    ] + glob(["cypress/**"]),
+    ] + glob(
+        include = [
+            "cypress/e2e/**",
+            "cypress/support/**",
+        ],
+    ),
 )
