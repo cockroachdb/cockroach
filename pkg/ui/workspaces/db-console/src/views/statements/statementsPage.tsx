@@ -209,6 +209,11 @@ type DispatchProps = {
 const selectStatements =
   createSelectorForCachedDataField<api.SqlStatsResponse>("statements");
 
+const selectStatementDiagnostics =
+  createSelectorForCachedDataField<api.StatementDiagnosticsResponse>(
+    "statementDiagnosticsReports",
+  );
+
 export default withRouter(
   connect<
     StateProps,
@@ -233,6 +238,7 @@ export default withRouter(
         stmtsTotalRuntimeSecs:
           state.cachedData?.statements?.data?.stmts_total_runtime_secs ?? 0,
         statementsResponse: selectStatements(state),
+        statementDiagnostics: selectStatementDiagnostics(state)?.data,
       },
       activePageProps: mapStateToActiveStatementViewProps(state),
     }),
