@@ -3,4 +3,4 @@
 pkg/ui/.npmrc.pnpm=1714720514
 pkg/ui/workspaces/cluster-ui/pnpm-lock.yaml=-216806008
 pkg/ui/workspaces/cluster-ui/yarn.lock=1601010899
-pkg/ui/workspaces/cluster-ui/package.json=1004843776
+pkg/ui/workspaces/cluster-ui/package.json=1264672671
