@@ -89,6 +89,12 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		return
 	}
 
+	// Check that the element's parent descriptor is not undergoing a concurrent
+	// schema change.
+	if d := b.descCache[screl.GetDescID(e)].desc; d != nil && d.HasConcurrentSchemaChanges() {
+		panic(scerrors.ConcurrentSchemaChangeError(d))
+	}
+
 	// We were about to overwrite an element's target and metadata. Assert one
 	// disallowed case: reviving a "ghost" element, that is, add an element that
 	// was previously added and then dropped. This assertion is artificial per se

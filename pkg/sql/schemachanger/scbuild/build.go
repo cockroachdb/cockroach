@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
@@ -160,9 +159,6 @@ func Build(
 			current = append(current, ex.e.current)
 		}
 	}
-	// Ensure none of the involving descriptors have an ongoing schema change,
-	// unless it's newly created.
-	ensureNoConcurrentSchemaChange(&ts, bs)
 
 	// Write to event log and return.
 	logEvents(b, ts, withLogEvent)
@@ -172,18 +168,6 @@ func Build(
 		Initial:     initial,
 		Current:     current,
 	}, nil
-}
-
-// ensureNoConcurrentSchemaChange panics if any involving descriptor has an
-// ongoing schema changer, unless the descriptor is being added.
-func ensureNoConcurrentSchemaChange(ts *scpb.TargetState, bs *builderState) {
-	screl.AllTargetDescIDs(*ts).ForEach(func(id descpb.ID) {
-		bs.ensureDescriptor(id)
-		cached := bs.descCache[id]
-		if !cached.isBeingCreated() && cached.desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(cached.desc))
-		}
-	})
 }
 
 // makeBoundAccount is the same as `monitor.MakeBountAccount`
@@ -286,10 +270,6 @@ type cachedDesc struct {
 	// This map ends up being very important to make sure that Ensure does
 	// not become O(N) where N is the number of elements in the descriptor.
 	elementIndexMap map[string]int
-}
-
-func (c *cachedDesc) isBeingCreated() bool {
-	return c.desc == nil
 }
 
 // newBuilderState constructs a builderState.
