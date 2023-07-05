@@ -5460,16 +5460,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_knz_go_libedit",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/knz/go-libedit",
-        sha256 = "de5a038a75f45e5c4d19321d39b85b7007b73eb77f9ec3fcca16798236fb081f",
-        strip_prefix = "github.com/knz/go-libedit@v1.10.2-0.20230621133438-5f2b2e7387c5",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/go-libedit/com_github_knz_go_libedit-v1.10.2-0.20230621133438-5f2b2e7387c5.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_knz_lipgloss_convert",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/lipgloss-convert",

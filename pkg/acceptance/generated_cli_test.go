@@ -291,13 +291,6 @@ func TestDockerCLI_test_multiline_statements(t *testing.T) {
 	runTestDockerCLI(t, "test_multiline_statements", "../cli/interactive_tests/test_multiline_statements.tcl")
 }
 
-func TestDockerCLI_test_multiline_statements_libedit(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
-
-	runTestDockerCLI(t, "test_multiline_statements_libedit", "../cli/interactive_tests/test_multiline_statements_libedit.tcl")
-}
-
 func TestDockerCLI_test_multiple_nodes(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
