@@ -2424,6 +2424,7 @@ var builtinOidsArray = []string{
 	2451: `st_asmvtgeom(geometry: geometry, bbox: box2d) -> geometry`,
 	2452: `crdb_internal.repaired_descriptor(descriptor: bytes, valid_descriptor_ids: int[], valid_job_ids: int[]) -> bytes`,
 	2453: `crdb_internal.reset_activity_tables() -> bool`,
+	2454: `crdb_internal.sstable_metrics(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> tuple{int AS node_id,, int AS store_id, int AS level, int AS file_num, jsonb AS metrics}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
