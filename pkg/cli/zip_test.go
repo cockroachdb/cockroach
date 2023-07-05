@@ -85,6 +85,7 @@ table_name NOT IN (
 	'kv_catalog_descriptor',
 	'kv_catalog_namespace',
 	'kv_catalog_zones',
+	'kv_repairable_catalog_corruptions',
 	'kv_dropped_relations',
 	'kv_inherited_role_members',
 	'kv_flow_control_handles',

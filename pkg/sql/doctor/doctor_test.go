@@ -496,6 +496,7 @@ func TestExamineDescriptors(t *testing.T) {
 					desc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
 					tbl, _, _, _, _ := descpb.GetDescriptors(desc)
 					tbl.MutationJobs = []descpb.TableDescriptor_MutationJob{{MutationID: 1, JobID: 123}}
+					tbl.Mutations = []descpb.DescriptorMutation{{MutationID: 1}}
 					return desc
 				}())},
 				{
@@ -517,7 +518,7 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID  52, ParentSchemaID 29: relation "t" (51): unknown mutation ID 1 associated with job ID 123
+  ParentID  52, ParentSchemaID 29: relation "t" (51): mutation in state UNKNOWN, direction NONE, and no column/index descriptor
   ParentID  52, ParentSchemaID 29: relation "t" (51): mutation job 123 has terminal status (canceled)
 `,
 		},
