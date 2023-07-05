@@ -816,10 +816,25 @@ func (*ioLoadListener) adjustTokensInner(
 	var smoothedCompactionByteTokens float64
 
 	score, _ := ioThreshold.Score()
-	// Multiplying score by 2 for ease of calculation. We're under medium load
-	// if score is in [1, 2) rather than [0.5, 1).
+	// Multiplying score by 2 for ease of calculation.
 	score *= 2
-	if score < 1 {
+	// We define four levels of load:
+	// Let C be smoothedIntL0CompactedBytes.
+	//
+	// Underload: Score is less than 0.5, which means sublevels is less than 5.
+	// In this case, we don't limit compaction tokens. Flush tokens will likely
+	// become the limit.
+	//
+	// Low load: Score is >= 0.5 and score is less than 1. In this case, we limit
+	// compaction tokens, and interpolate between C tokens when score is 1, and
+	// 2C tokens when score is 0.5.
+	//
+	// Medium load: Score is >= 1 and < 2. We limit compaction tokens, and limit
+	// them between C and C/2 tokens when score is 1 and 2 respectively.
+	//
+	// Overload: Score is >= 2. We limit compaction tokens, and limit tokens to
+	// at most C/2 tokens.
+	if score < 0.5 {
 		// Underload. Maintain a smoothedCompactionByteTokens based on what was
 		// removed, so that when we go over the threshold we have some history.
 		// This is also useful when we temporarily dip below the threshold --
@@ -840,8 +855,12 @@ func (*ioLoadListener) adjustTokensInner(
 			// totalNumByteTokens tracks our goal for admission. Scale down
 			// since we want to get under the thresholds over time.
 			fTotalNumByteTokens = float64(smoothedIntL0CompactedBytes / 2.0)
+		} else if score >= 0.5 && score < 1 {
+			// Low load. Score in [0.5, 1). Score should be smoothedIntL0CompactedBytes at 1,
+			// and 2 * smoothedIntL0CompactedBytes at 0.5.
+			fTotalNumByteTokens = -score*(2*float64(smoothedIntL0CompactedBytes)) + 3*float64(smoothedIntL0CompactedBytes)
 		} else {
-			// Medium load. score in [1, 2). We use linear interpolation from
+			// Medium load. Score in [1, 2). We use linear interpolation from
 			// medium load to overload, to slowly give out fewer tokens as we
 			// move towards overload.
 			halfSmoothedBytes := float64(smoothedIntL0CompactedBytes / 2.0)
