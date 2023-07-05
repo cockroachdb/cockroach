@@ -134,7 +134,7 @@ func (s *StatsCollector) ShouldSample(
 
 // UpgradeImplicitTxn implements sqlstats.StatsCollector interface.
 func (s *StatsCollector) UpgradeImplicitTxn(ctx context.Context) error {
-	err := s.ApplicationStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
+	err := s.ApplicationStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
 		func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			statistics.Key.ImplicitTxn = false
 			return nil
