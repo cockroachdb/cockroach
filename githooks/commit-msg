@@ -146,6 +146,7 @@ else
                     "enterprise change") ;;
                     "backward-incompatible change") ;;
                     "performance improvement") ;;
+                    "cluster virtualization" | "virtualization" | "multi-tenancy") ;;
                     "bug fix") ;;
                     "security update") ;;
                     operational*)
