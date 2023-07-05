@@ -126,6 +126,27 @@ type preparedStatementsAccessor interface {
 	DeleteAll(ctx context.Context)
 }
 
+// emptyPreparedStatements is the default impl used by the planner when the
+// connExecutor is not available.
+type emptyPreparedStatements struct{}
+
+var _ preparedStatementsAccessor = emptyPreparedStatements{}
+
+func (e emptyPreparedStatements) List() map[string]*PreparedStatement {
+	return nil
+}
+
+func (e emptyPreparedStatements) Get(string, bool) (*PreparedStatement, bool) {
+	return nil, false
+}
+
+func (e emptyPreparedStatements) Delete(context.Context, string) bool {
+	return false
+}
+
+func (e emptyPreparedStatements) DeleteAll(context.Context) {
+}
+
 // PortalPausablity mark if the portal is pausable and the reason. This is
 // needed to give the correct error for usage of multiple active portals.
 type PortalPausablity int64

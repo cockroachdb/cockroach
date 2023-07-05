@@ -457,6 +457,7 @@ func newInternalPlanner(
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
+	p.preparedStatements = emptyPreparedStatements{}
 	p.createdSequences = emptyCreatedSequences{}
 
 	p.schemaResolver.descCollection = p.Descriptors()
