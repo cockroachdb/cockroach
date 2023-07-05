@@ -334,7 +334,7 @@ export default class KeyVisualizer extends React.PureComponent<
 
   handleCanvasScroll = (e: any) => {
     if (!this.zoomHandlerThrottled) {
-      this.zoomHandlerThrottled = throttle(e => {
+      this.zoomHandlerThrottled = throttle((e: any) => {
         // normalize value and negate so that "scrolling up" zooms in
         const deltaY = -e.deltaY / 100;
 

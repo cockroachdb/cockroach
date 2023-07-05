@@ -267,7 +267,7 @@ $(info GOPATH set to $(GOPATH))
 # overwriting any user-installed binaries of the same name in the default GOBIN.
 GO_INSTALL := GOBIN='$(abspath bin)' GOFLAGS= $(GO) install
 
-# Prefer tools we've installed with go install and Yarn to those elsewhere on
+# Prefer tools we've installed with go install and pnpm to those elsewhere on
 # the PATH.
 export PATH := $(abspath bin):$(PATH)
 
@@ -354,18 +354,18 @@ endif
 
 ESLINT_PLUGIN_CRDB := pkg/ui/workspaces/eslint-plugin-crdb/dist/index.js
 .SECONDARY: $(ESLINT_PLUGIN_CRDB)
-$(ESLINT_PLUGIN_CRDB): $(shell find pkg/ui/workspaces/eslint-plugin-crdb/src -type f | grep -v '\.spec') pkg/ui/yarn.installed
-	$(NODE_RUN) -C pkg/ui/workspaces/eslint-plugin-crdb yarn build
+$(ESLINT_PLUGIN_CRDB): $(shell find pkg/ui/workspaces/eslint-plugin-crdb/src -type f | grep -v '\.spec') pkg/ui/js-deps.installed
+	$(NODE_RUN) -C pkg/ui/workspaces/eslint-plugin-crdb pnpm build
 
 CLUSTER_UI_JS := pkg/ui/cluster-ui/dist/main.js
 
 .SECONDARY: $(CLUSTER_UI_JS)
-$(CLUSTER_UI_JS): $(shell find pkg/ui/workspaces/cluster-ui/src -type f | sed 's/ /\\ /g') pkg/ui/yarn.installed pkg/ui/workspaces/db-console/src/js/protos.d.ts | bin/.submodules-initialized
-	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn build
+$(CLUSTER_UI_JS): $(shell find pkg/ui/workspaces/cluster-ui/src -type f | sed 's/ /\\ /g') pkg/ui/js-deps.installed pkg/ui/workspaces/db-console/src/js/protos.d.ts | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui pnpm build
 
-.SECONDARY: pkg/ui/yarn.installed
-pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock
-	$(NODE_RUN) -C pkg/ui yarn install --pure-lockfile
+.SECONDARY: pkg/ui/js-deps.installed
+pkg/ui/js-deps.installed: pkg/ui/package.json pkg/ui/pnpm-lock.yaml
+	$(NODE_RUN) -C pkg/ui pnpm install --frozen-lockfile
 	touch $@
 
 vendor/modules.txt: go.mod go.sum | fake-protobufs
@@ -1317,13 +1317,13 @@ bin/.gw_protobuf_sources: $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOG
 # typescript definitions for the proto files afterwards.
 
 .SECONDARY: $(UI_JS_CCL)
-$(UI_JS_CCL): $(GW_PROTOS) $(GO_PROTOS) $(JS_PROTOS_CCL) pkg/ui/yarn.installed | bin/.submodules-initialized
+$(UI_JS_CCL): $(GW_PROTOS) $(GO_PROTOS) $(JS_PROTOS_CCL) pkg/ui/js-deps.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(PROMETHEUS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS) $(JS_PROTOS_CCL)) >> $@
 
 .SECONDARY: $(UI_JS_OSS)
-$(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.installed | bin/.submodules-initialized
+$(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/js-deps.installed | bin/.submodules-initialized
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path pkg --path ./vendor/github.com --path $(GOGO_PROTOBUF_PATH) --path $(ERRORS_PATH) --path $(COREOS_PATH) --path $(PROMETHEUS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(filter %.proto,$(GW_PROTOS)) >> $@
@@ -1331,8 +1331,8 @@ $(UI_JS_OSS): $(GW_PROTOS) $(GO_PROTOS) pkg/ui/yarn.installed | bin/.submodules-
 # End of PBJS-generated files.
 
 .SECONDARY: $(UI_TS_CCL) $(UI_TS_OSS)
-$(UI_TS_CCL): $(UI_JS_CCL) pkg/ui/yarn.installed
-$(UI_TS_OSS): $(UI_JS_OSS) pkg/ui/yarn.installed
+$(UI_TS_CCL): $(UI_JS_CCL) pkg/ui/js-deps.installed
+$(UI_TS_OSS): $(UI_JS_OSS) pkg/ui/js-deps.installed
 $(UI_TS_CCL) $(UI_TS_OSS):
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
@@ -1351,28 +1351,28 @@ ui-fonts:
 	pkg/ui/workspaces/db-console/scripts/font-gen
 
 .PHONY: ui-topo
-ui-topo: pkg/ui/yarn.installed
+ui-topo: pkg/ui/js-deps.installed
 	pkg/ui/workspaces/db-console/scripts/topo.js
 
 .PHONY: ui-lint
-ui-lint: pkg/ui/yarn.installed $(ESLINT_PLUGIN_CRDB) $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
+ui-lint: pkg/ui/js-deps.installed $(ESLINT_PLUGIN_CRDB) $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(STYLINT) -c .stylintrc styl
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(TSC)
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console yarn lint
-	@if $(NODE_RUN) -C pkg/ui/workspaces/db-console yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
-	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn --cwd pkg/ui/workspaces/cluster-ui lint
+	$(NODE_RUN) -C pkg/ui/workspaces/db-console pnpm lint
+	@if $(NODE_RUN) -C pkg/ui/workspaces/db-console pnpm list --parseable | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
+	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui pnpm lint
 
 .PHONY: ui-test
 ui-test: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
 	$(info $(yellow)[WARNING]: Use `dev ui test` instead.$(term-reset))
-	$(NODE_RUN) -C pkg/ui/workspaces/db-console yarn test
-	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn ci
+	$(NODE_RUN) -C pkg/ui/workspaces/db-console pnpm test
+	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui pnpm ci
 
 .PHONY: ui-test-watch
 ui-test-watch: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
 	$(info $(yellow)[WARNING]: Use `dev ui test --watch` instead.$(term-reset))
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(KARMA) start --no-single-run --auto-watch & \
-	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn test
+	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui pnpm test
 
 .PHONY: ui-test-debug
 ui-test-debug: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) $(CLUSTER_UI_JS)
@@ -1394,15 +1394,15 @@ ui-watch-secure: export TARGET ?= https://localhost:8080/
 .PHONY: ui-watch
 ui-watch: export TARGET ?= http://localhost:8080
 ui-watch ui-watch-secure: PORT := 3000
-ui-watch ui-watch-secure: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) pkg/ui/yarn.installed
+ui-watch ui-watch-secure: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) pkg/ui/js-deps.installed
   # TODO (koorosh): running two webpack dev servers doesn't provide best performance and polling changes.
   # it has to be considered to use something like `parallel-webpack` lib.
   #
   # `node-run.sh` wrapper is removed because this command is supposed to be run in dev environment (not in docker of CI)
-  # so it is safe to run yarn commands directly to preserve formatting and colors for outputs
+  # so it is safe to run pnpm commands directly to preserve formatting and colors for outputs
 	$(info $(yellow)[WARNING] Use `dev ui watch [--secure]` instead$(term-reset))
-	yarn --cwd pkg/ui/workspaces/cluster-ui build:watch & \
-	yarn --cwd pkg/ui/workspaces/db-console webpack-dev-server --config webpack.config.js --env.dist=ccl --env.WEBPACK_SERVE --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
+	pnpm --dir pkg/ui/workspaces/cluster-ui build:watch & \
+	pnpm --dir pkg/ui/workspaces/db-console exec webpack-dev-server --config webpack.config.js --env.dist=ccl --env.WEBPACK_SERVE --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
@@ -1418,7 +1418,7 @@ ui-maintainer-clean: ui-clean
 	$(info $(yellow)[WARNING] Use `dev ui clean --all` instead.$(term-reset))
 	rm -rf pkg/ui/node_modules \
 		pkg/ui/workspaces/db-console/node_modules \
-		pkg/ui/yarn.installed \
+		pkg/ui/js-deps.installed \
 		pkg/ui/workspaces/cluster-ui/node_modules \
 		pkg/ui/workspaces/db-console/src/js/node_modules \
 		pkg/ui/workspaces/e2e-tests/node_modules \
