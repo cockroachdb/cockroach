@@ -109,6 +109,19 @@ type loggingT struct {
 
 	allSinkInfos sinkInfoRegistry
 	allLoggers   loggerRegistry
+	metrics      LogMetrics
+}
+
+// SetLogMetrics injects an initialized implementation of
+// the LogMetrics interface into the logging package. The
+// implementation must be injected to avoid a dependency
+// cycle.
+//
+// Should be called within the init() function of the
+// implementing package to avoid the possibility of a nil
+// LogMetrics during server startups.
+func SetLogMetrics(m LogMetrics) {
+	logging.metrics = m
 }
 
 func init() {
