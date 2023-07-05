@@ -38,6 +38,10 @@ type TestingKnobs struct {
 	// DisableWorkQueueGranting disables the work queue from granting admission
 	// to waiting work.
 	DisableWorkQueueGranting func() bool
+
+	// AlwaysTryGrantWhenAdmitted causes the granter to unconditionally try
+	// admitting another request when admitting one.
+	AlwaysTryGrantWhenAdmitted bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
