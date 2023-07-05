@@ -1267,12 +1267,18 @@ type endCmds struct {
 	replicatingSince time.Time
 }
 
+// makeUnreplicatedEndCmds sets up an endCmds to track an unreplicated,
+// that is, read-only, command.
 func makeUnreplicatedEndCmds(
 	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus,
 ) endCmds {
 	return makeReplicatedEndCmds(repl, g, st, time.Time{})
 }
 
+// makeReplicatedEndCmds initializes an endCmds representing a command that
+// needs to undergo replication. This is not used for read-only commands
+// (including read-write commands that end up not queueing any mutations to the
+// state machine).
 func makeReplicatedEndCmds(
 	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus, replicatingSince time.Time,
 ) endCmds {
