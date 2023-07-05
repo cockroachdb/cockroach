@@ -145,7 +145,7 @@ type admitEntHandle struct {
 type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
-	onErrProposalDropped([]raftpb.Entry, raft.StateType)
+	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raft.StateType)
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -548,7 +548,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			}
 
 			ents = ents[len(ents):]
-			firstProp, nextProp = i, i
+			firstProp, nextProp = i+1, i+1
 			admitHandles = admitHandles[len(admitHandles):]
 
 			confChangeCtx := kvserverpb.ConfChangeContext{
@@ -572,13 +572,17 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				firstErr = err
 				continue
 			}
-			msg := raftpb.Message{Type: raftpb.MsgProp, Entries: []raftpb.Entry{
-				{
-					Type: typ,
-					Data: data,
-				},
-			}}
-			if err := raftGroup.Step(msg); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
+			sl := []raftpb.Entry{{Type: typ, Data: data}}
+			// Send config change in a single-element batch. We go through
+			// proposeBatch since there's observability in there.
+			//
+			// TODO(replication): we can construct a proper admitEntHandle here by
+			// pulling the initialization code from the "regular" branch to the top so
+			// that it can be shared. For now, this is fine since conf changes are
+			// internal commands anyway and unlikely to be sent at significant volume.
+			if err := proposeBatch(
+				ctx, b.p, raftGroup, sl, []admitEntHandle{{}}, []*ProposalData{p},
+			); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).
 				// TODO(bdarnell): Handle ErrProposalDropped better.
@@ -586,7 +590,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				firstErr = err
 				continue
 			}
-			if msg.Entries[0].Type == raftpb.EntryNormal {
+			if sl[0].Type == raftpb.EntryNormal {
 				// If we are trying to commit a ChangeReplicas but the lease has since
 				// changed, it's possible that the new leaseholder has already committed
 				// additional replication changes that our RawNode has applied. In that
@@ -1041,7 +1045,7 @@ func proposeBatch(
 				log.Event(p.ctx, "entry dropped")
 			}
 		}
-		p.onErrProposalDropped(ents, raftGroup.BasicStatus().RaftState)
+		p.onErrProposalDropped(ents, props, raftGroup.BasicStatus().RaftState)
 		return nil //nolint:returnerrcheck
 	}
 	if err == nil {
@@ -1347,7 +1351,9 @@ func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error
 	})
 }
 
-func (rp *replicaProposer) onErrProposalDropped(ents []raftpb.Entry, stateType raft.StateType) {
+func (rp *replicaProposer) onErrProposalDropped(
+	ents []raftpb.Entry, _ []*ProposalData, stateType raft.StateType,
+) {
 	n := int64(len(ents))
 	rp.store.metrics.RaftProposalsDropped.Inc(n)
 	if stateType == raft.StateLeader {
