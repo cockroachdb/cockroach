@@ -85,6 +85,7 @@ module.exports = (env, argv) => {
     },
 
     mode: argv.mode || "production",
+    devtool: "source-map",
 
     resolve: {
       // Add resolvable extensions.

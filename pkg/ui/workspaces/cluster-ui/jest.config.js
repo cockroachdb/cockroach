@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 const path = require("path");
+const _ = require("identity-obj-proxy");
 const isBazel = !!process.env.BAZEL_TARGET;
 
 const bazelOnlySettings = {

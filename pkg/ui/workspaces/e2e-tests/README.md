@@ -6,17 +6,17 @@ provided by [Cypress Testing
 Library](https://testing-library.com/docs/cypress-testing-library/intro).
 
 ## Running Tests Locally
-### Via `yarn`
+### Via `pnpm`
 If you've already built a `cockroach` binary and installed the dependencies in
-this directory with `yarn`, these tests can be run with `yarn` directly:
+this directory with `pnpm`, these tests can be run with `pnpm` directly:
 
 ```sh
-yarn test # run all tests
-yarn test ./path/to/some/file.cy.ts # run only a single test file
+pnpm test # run all tests
+pnpm test ./path/to/some/file.cy.ts # run only a single test file
 ```
 
 For "headed" test development, in which the Cypress UI and a browser are
-visible, run `yarn test:debug` and choose a test file in the Cypress UI.
+visible, run `pnpm test:debug` and choose a test file in the Cypress UI.
 
 ### Via `dev`
 The standard `dev` CLI used for other CockroachDB tasks can be used to run all
