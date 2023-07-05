@@ -21,7 +21,7 @@ EXAMPLES:
     $0 'curl http://localhost:8080'
         Load index.html once the database has started.
 
-    $0 'yarn cy:run'
+    $0 'pnpm run cy:run'
         Run Cypress tests once the database has started.
 EOF
 }

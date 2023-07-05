@@ -3,17 +3,10 @@ load("@aspect_rules_js//js:defs.bzl", "js_library")
 load("@aspect_rules_js//npm:defs.bzl", "npm_package")
 load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
-load("@npm_cluster_ui//:defs.bzl", "npm_link_all_packages")
-load("@npm_cluster_ui//pkg/ui/workspaces/cluster-ui:eslint/package_json.bzl", eslint_bin = "bin")
-load("@npm_cluster_ui//pkg/ui/workspaces/cluster-ui:typescript/package_json.bzl", typescript_bin = "bin")
-load("@npm_cluster_ui//pkg/ui/workspaces/cluster-ui:webpack-cli/package_json.bzl", webpack_bin = "bin")
-
-exports_files(
-    [
-        "yarn.lock",
-    ],
-    visibility = ["//visibility:public"],
-)
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//pkg/ui/workspaces/cluster-ui:eslint/package_json.bzl", eslint_bin = "bin")
+load("@npm//pkg/ui/workspaces/cluster-ui:typescript/package_json.bzl", typescript_bin = "bin")
+load("@npm//pkg/ui/workspaces/cluster-ui:webpack-cli/package_json.bzl", webpack_bin = "bin")
 
 npm_link_all_packages(name = "node_modules")
 
@@ -35,6 +28,7 @@ ts_project(
     root_dir = "src",
     supports_workers = False,
     tsconfig = "tsconfig.json",
+    validate = False,
     deps = [":node_modules"],
 )
 
