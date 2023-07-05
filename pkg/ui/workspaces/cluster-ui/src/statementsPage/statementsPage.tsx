@@ -10,7 +10,7 @@
 
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
-import { flatMap, merge } from "lodash";
+import { flatMap, merge, groupBy } from "lodash";
 import classNames from "classnames/bind";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Delayed } from "src/delayed";
@@ -78,6 +78,7 @@ import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
   SqlStatsResponse,
+  StatementDiagnosticsResponse,
 } from "../api";
 import {
   filteredStatementsData,
@@ -150,6 +151,7 @@ export interface StatementsPageStateProps {
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
   stmtsTotalRuntimeSecs: number;
+  statementDiagnostics: StatementDiagnosticsResponse | null;
 }
 
 export interface StatementsPageState {
@@ -709,10 +711,21 @@ export class StatementsPage extends React.Component<
       refreshStatementDiagnosticsRequests,
       onActivateStatementDiagnostics,
       onDiagnosticsModalOpen,
+      statementDiagnostics,
     } = this.props;
+
+    const diagnosticsByStatement = groupBy(
+      statementDiagnostics,
+      sd => sd.statement_fingerprint,
+    );
 
     const statements = convertRawStmtsToAggregateStatisticsMemoized(
       this.props.statementsResponse?.data?.statements,
+    ).map(
+      (s): AggregateStatistics => ({
+        ...s,
+        diagnosticsReports: diagnosticsByStatement[s.label] || [],
+      }),
     );
 
     const longLoadingMessage = (
