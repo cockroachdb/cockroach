@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,10 +61,14 @@ func TestFuture(t *testing.T) {
 	}()
 
 	mustBeReady := func(ch chan struct{}) error {
+		soon := 5 * time.Second
+		if util.RaceEnabled {
+			soon *= 5
+		}
 		select {
 		case <-ch:
 			return nil
-		default:
+		case <-time.After(soon):
 			return errors.New("channel not ready")
 		}
 	}

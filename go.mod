@@ -167,7 +167,6 @@ require (
 	github.com/klauspost/compress v1.15.15
 	github.com/klauspost/pgzip v1.2.5
 	github.com/knz/bubbline v0.0.0-20230422210153-e176cdfe1c43
-	github.com/knz/go-libedit v1.10.2-0.20230621133438-5f2b2e7387c5
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.3.1
 	github.com/kr/text v0.2.0
