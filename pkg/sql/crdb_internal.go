@@ -8011,7 +8011,7 @@ func getContentionEventInfo(
 	if err != nil {
 		schName = "[dropped schema]"
 	}
-	if dbDesc != nil {
+	if schemaDesc != nil {
 		schName = schemaDesc.GetName()
 	}
 
