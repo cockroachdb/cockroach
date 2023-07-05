@@ -3417,7 +3417,7 @@ top-k
       │    ├── columns: c:1(char) d:2(char)
       │    ├── computed column expressions
       │    │    └── d:2
-      │    │         └── const: ‹×› [type=string]
+      │    │         └── const: ‹×› [type=char]
       │    ├── stats: [rows=1000]
       │    ├── cost: 1129.02
       │    ├── fd: ()-->(2)
@@ -3793,7 +3793,7 @@ project
       │    │    ├── columns: c:1(char)
       │    │    ├── computed column expressions
       │    │    │    └── d:2
-      │    │    │         └── const: ‹×› [type=string]
+      │    │    │         └── const: ‹×› [type=char]
       │    │    ├── stats: [rows=1000]
       │    │    ├── cost: 1108.82
       │    │    ├── distribution: test

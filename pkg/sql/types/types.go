@@ -2155,7 +2155,7 @@ func (t *InternalType) Identical(other *InternalType) bool {
 		return false
 	}
 	if t.Locale != nil && other.Locale != nil {
-		if *t.Locale != *other.Locale {
+		if !lex.LocaleNamesAreEqual(*t.Locale, *other.Locale) {
 			return false
 		}
 	} else if t.Locale != nil {
