@@ -10,7 +10,10 @@
 
 package scpb
 
-import "github.com/cockroachdb/errors"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
+	"github.com/cockroachdb/errors"
+)
 
 // ElementCollection represents an ordered set of
 // (current status, target status, element) tuples,
@@ -18,6 +21,15 @@ import "github.com/cockroachdb/errors"
 type ElementCollection[E Element] struct {
 	g       ElementCollectionGetter
 	indexes []int
+
+	// debugInfo is only populated when using a debugger.
+	debugInfo []debugInfo
+}
+
+type debugInfo struct {
+	element Element
+	target  TargetStatus
+	status  Status
 }
 
 // ElementCollectionGetter abstracts the actual mechanism for obtaining
@@ -38,10 +50,26 @@ func NewElementCollection(g ElementCollectionGetter, indexes []int) *ElementColl
 	if g == nil || len(indexes) == 0 {
 		return nil
 	}
-	return &ElementCollection[Element]{
+	ret := &ElementCollection[Element]{
 		g:       g,
 		indexes: indexes,
 	}
+	return ret.decorate()
+}
+
+func (c *ElementCollection[E]) decorate() *ElementCollection[E] {
+	if c != nil && debugutil.IsLaunchedByDebugger() {
+		c.debugInfo = make([]debugInfo, len(c.indexes))
+		for i, idx := range c.indexes {
+			s, t, e := c.g.Get(idx)
+			c.debugInfo[i] = debugInfo{
+				element: e,
+				target:  t,
+				status:  s,
+			}
+		}
+	}
+	return c
 }
 
 // ElementCollection is an ElementCollectionGetter.
@@ -98,7 +126,7 @@ func (c *ElementCollection[E]) genericFilter(
 	if c == nil || len(c.indexes) == 0 {
 		return nil
 	}
-	ret := ElementCollection[E]{
+	ret := &ElementCollection[E]{
 		g:       c.g,
 		indexes: make([]int, 0, len(c.indexes)),
 	}
@@ -110,7 +138,7 @@ func (c *ElementCollection[E]) genericFilter(
 	if len(ret.indexes) == 0 {
 		return nil
 	}
-	return &ret
+	return ret.decorate()
 }
 
 // ForEach iterates through the collection and applies fn
