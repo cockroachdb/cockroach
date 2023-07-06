@@ -1164,3 +1164,84 @@ func (o *Optimizer) FormatExpr(e opt.Expr, flags memo.ExprFmtFlags, redactableVa
 func (o *Optimizer) CustomFuncs() *CustomFuncs {
 	return &o.explorer.funcs
 }
+
+// getCRBDRegionColSetFromInput examines the input relation to a lookup join. If
+// the column set equivalent to the crdb_region column of a Scan or
+// locality-optimized Scan in the first input to a chain of lookup joins, and
+// Distribution of the operation can be determined, they are returned.
+// Otherwise, an empty ColSet and an empty Distribution are returned.
+func (o *Optimizer) getCRBDRegionColSetFromInput(
+	join *memo.LookupJoinExpr, required *physical.Required,
+) (crdbRegionColSet opt.ColSet, inputDistribution physical.Distribution) {
+	var needRemap bool
+	var setOpCols opt.ColSet
+	if o == nil || o.coster == nil {
+		return crdbRegionColSet, physical.Distribution{}
+	}
+	if bestCostInputRel, ok := o.coster.MaybeGetBestCostRelation(join.Input, required); ok {
+		maybeScan := bestCostInputRel
+		var projectExpr *memo.ProjectExpr
+		if projectExpr, ok = maybeScan.(*memo.ProjectExpr); ok {
+			maybeScan, ok = o.coster.MaybeGetBestCostRelation(projectExpr.Input, required)
+			if !ok {
+				return crdbRegionColSet, physical.Distribution{}
+			}
+		}
+		if selectExpr, ok := maybeScan.(*memo.SelectExpr); ok {
+			maybeScan, ok = o.coster.MaybeGetBestCostRelation(selectExpr.Input, required)
+			if !ok {
+				return crdbRegionColSet, physical.Distribution{}
+			}
+		}
+		if indexJoinExpr, ok := maybeScan.(*memo.IndexJoinExpr); ok {
+			maybeScan, ok = o.coster.MaybeGetBestCostRelation(indexJoinExpr.Input, required)
+			if !ok {
+				return crdbRegionColSet, physical.Distribution{}
+			}
+		}
+		if lookupJoinExpr, ok := maybeScan.(*memo.LookupJoinExpr); ok {
+			crdbRegionColSet, inputDistribution = o.getCRBDRegionColSetFromInput(lookupJoinExpr, required)
+			crdbRegionColSet, inputDistribution =
+				distribution.BuildLookupJoinLookupTableDistribution(
+					o.ctx, o.evalCtx, lookupJoinExpr, crdbRegionColSet, inputDistribution)
+			return crdbRegionColSet, inputDistribution
+		}
+		if localityOptimizedScan, ok := maybeScan.(*memo.LocalityOptimizedSearchExpr); ok {
+			maybeScan = localityOptimizedScan.Local
+			needRemap = true
+			setOpCols = localityOptimizedScan.Relational().OutputCols
+		}
+		scanExpr, ok := maybeScan.(*memo.ScanExpr)
+		if !ok {
+			return crdbRegionColSet, physical.Distribution{}
+		}
+		tab := maybeScan.Memo().Metadata().Table(scanExpr.Table)
+		if !tab.IsRegionalByRow() {
+			return crdbRegionColSet, physical.Distribution{}
+		}
+		inputDistribution =
+			distribution.BuildProvided(o.ctx, o.evalCtx, scanExpr, &required.Distribution)
+		index := tab.Index(scanExpr.Index)
+		crdbRegionColID := scanExpr.Table.IndexColumnID(index, 0)
+		if needRemap {
+			scanCols := scanExpr.Relational().OutputCols
+			if scanCols.Len() == setOpCols.Len() {
+				destCol, _ := setOpCols.Next(0)
+				for srcCol, ok := scanCols.Next(0); ok; srcCol, ok = scanCols.Next(srcCol + 1) {
+					if srcCol == crdbRegionColID {
+						crdbRegionColID = destCol
+						break
+					}
+					destCol, _ = setOpCols.Next(destCol + 1)
+				}
+			}
+		}
+		if projectExpr != nil {
+			if !projectExpr.Passthrough.Contains(crdbRegionColID) {
+				return crdbRegionColSet, physical.Distribution{}
+			}
+		}
+		crdbRegionColSet.Add(crdbRegionColID)
+	}
+	return crdbRegionColSet, inputDistribution
+}
