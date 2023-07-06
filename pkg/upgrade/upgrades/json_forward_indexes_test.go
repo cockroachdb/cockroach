@@ -132,6 +132,14 @@ func TestJSONForwardingIndexes(t *testing.T) {
 	)`)
 	require.Error(t, err)
 
+	// Creating a table with an inverted index with a JSON column should result in an error.
+	_, err = db.Exec(`CREATE TABLE test.tbl_json_secondary_unique(
+    s GEOGRAPHY,
+    j JSONB,
+    INVERTED INDEX tbl_json_secondary_uidx (j, s)
+)`)
+	require.Error(t, err)
+
 	// Setting a cluster version that supports forward indexes on JSON
 	// columns and expecting success when creating forward indexes.
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
@@ -157,5 +165,14 @@ func TestJSONForwardingIndexes(t *testing.T) {
 	_, err = db.Exec(`CREATE TABLE test.tbl_json_primary (
 	   key JSONB PRIMARY KEY
 	)`)
+	require.NoError(t, err)
+
+	// Creating a table with an inverted index with a JSON column should not result
+	// in an error once inverted indexes are supported.
+	_, err = db.Exec(`CREATE TABLE test.tbl_json_secondary_unique(
+    s GEOGRAPHY,
+    j JSONB,
+    INVERTED INDEX tbl_json_secondary_uidx (j, s)
+)`)
 	require.NoError(t, err)
 }
