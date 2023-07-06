@@ -559,6 +559,7 @@ func BenchmarkBinaryJSONImport(b *testing.B) {
 }
 
 func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData string) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	_, _, db := serverutils.StartServer(b, base.TestServerArgs{})
