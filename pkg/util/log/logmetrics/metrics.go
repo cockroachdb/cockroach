@@ -26,6 +26,15 @@ var (
 	}
 )
 
+// InitLogMetrics nitializes & injects a LogMetricsRegistry into the logging
+// package. This ensures that the LogMetrics implementation within the
+// log package is always defined. This should only be called once from
+// a single init function. We don't do it in this package's own init() func
+// because it's largely unused.
+func InitLogMetrics() {
+	log.SetLogMetrics(NewLogMetricsRegistry())
+}
+
 // logMetricsStruct is a struct used to contain all metrics
 // tracked by the LogMetricsRegistry. This container is necessary
 // to register all the metrics with the Registry internal to the

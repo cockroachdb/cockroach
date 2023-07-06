@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
@@ -146,6 +147,15 @@ type MetricsRecorder struct {
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
 	// therefore give it its own mutex to avoid blocking other methods.
 	writeSummaryMu syncutil.Mutex
+}
+
+func init() {
+	// The logmetrics package is not imported by much, meaning
+	// that its own init function is not a reliable place to initialize
+	// log metrics. Being that the recorder is the primary user of
+	// its registry, we initialize it here to ensure it's not nil
+	// when initializing the recorder.
+	logmetrics.InitLogMetrics()
 }
 
 // NewMetricsRecorder initializes a new MetricsRecorder object that uses the
