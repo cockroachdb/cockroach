@@ -96,6 +96,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:create_index.html",
     "//docs/generated/sql/bnf:create_index_with_storage_param.html",
     "//docs/generated/sql/bnf:create_inverted_index.html",
+    "//docs/generated/sql/bnf:create_proc.html",
     "//docs/generated/sql/bnf:create_role.html",
     "//docs/generated/sql/bnf:create_schedule.html",
     "//docs/generated/sql/bnf:create_schedule_for_backup.html",
