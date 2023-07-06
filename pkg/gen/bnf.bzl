@@ -95,6 +95,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:create_index_stmt.bnf",
     "//docs/generated/sql/bnf:create_index_with_storage_param.bnf",
     "//docs/generated/sql/bnf:create_inverted_index_stmt.bnf",
+    "//docs/generated/sql/bnf:create_proc_stmt.bnf",
     "//docs/generated/sql/bnf:create_role_stmt.bnf",
     "//docs/generated/sql/bnf:create_schedule_for_backup_stmt.bnf",
     "//docs/generated/sql/bnf:create_schedule_for_changefeed_stmt.bnf",

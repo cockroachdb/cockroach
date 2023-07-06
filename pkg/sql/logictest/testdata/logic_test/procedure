@@ -1,0 +1,7 @@
+statement error pgcode 0A000 procedures not supported
+CREATE PROCEDURE p() LANGUAGE SQL AS $$
+  SELECT nextval('s');
+$$
+
+statement error pgcode 0A000 unimplemented: this syntax\nHINT.*\n.*17511
+CALL err()
