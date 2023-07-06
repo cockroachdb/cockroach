@@ -11,30 +11,24 @@ package partitionccl
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/partitionccl/partitionccltestcases"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -285,86 +279,19 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 	}
 }
 
-func TestGenerateSubzoneSpans(t *testing.T) {
+func TestGenerateSubzoneSpansRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	rng, _ := randutil.NewTestRand()
 
-	partitioningTests := allPartitioningTests(rng)
-	for _, test := range partitioningTests {
-		if test.generatedSpans == nil {
-			// The randomized partition tests don't have generatedSpans, and
-			// wouldn't be very interesting to test.
+	rng, _ := randutil.NewTestRand()
+	specs := partitionccltestcases.RandomizedPartitioningTestSpecs(rng)
+
+	for _, spec := range specs {
+		if !spec.HasGeneratedSpans() {
 			continue
 		}
-		t.Run(test.name, func(t *testing.T) {
-			if err := test.parse(); err != nil {
-				t.Fatalf("%+v", err)
-			}
-			clusterID := uuid.MakeV4()
-			hasNewSubzones := false
-			spans, err := sql.GenerateSubzoneSpans(
-				cluster.NoSettings, clusterID, keys.SystemSQLCodec, test.parsed.tableDesc, test.parsed.subzones, hasNewSubzones)
-			if err != nil {
-				t.Fatalf("generating subzone spans: %+v", err)
-			}
-
-			var actual []string
-			for _, span := range spans {
-				subzone := test.parsed.subzones[span.SubzoneIndex]
-				idx, err := catalog.MustFindIndexByID(test.parsed.tableDesc, descpb.IndexID(subzone.IndexID))
-				if err != nil {
-					t.Fatalf("could not find index with ID %d: %+v", subzone.IndexID, err)
-				}
-
-				directions := []encoding.Direction{encoding.Ascending /* index ID */}
-				for i := 0; i < idx.NumKeyColumns(); i++ {
-					cd := idx.GetKeyColumnDirection(i)
-					ed, err := catalogkeys.IndexColumnEncodingDirection(cd)
-					if err != nil {
-						t.Fatal(err)
-					}
-					directions = append(directions, ed)
-				}
-
-				var subzoneShort string
-				if len(subzone.PartitionName) > 0 {
-					subzoneShort = "." + subzone.PartitionName
-				} else {
-					subzoneShort = "@" + idx.GetName()
-				}
-
-				// Verify that we're always doing the space savings when we can.
-				var buf redact.StringBuilder
-				var buf2 redact.StringBuilder
-				if span.Key.PrefixEnd().Equal(span.EndKey) {
-					encoding.PrettyPrintValue(&buf, directions, span.Key, "/")
-					encoding.PrettyPrintValue(&buf2, directions, span.EndKey, "/")
-					t.Errorf("endKey should be omitted when equal to key.PrefixEnd [%s, %s)",
-						buf.String(),
-						buf2.String())
-				}
-				if len(span.EndKey) == 0 {
-					span.EndKey = span.Key.PrefixEnd()
-				}
-
-				// TODO(dan): Check that spans are sorted.
-				encoding.PrettyPrintValue(&buf, directions, span.Key, "/")
-				encoding.PrettyPrintValue(&buf2, directions, span.EndKey, "/")
-
-				actual = append(actual, fmt.Sprintf("%s %s-%s", subzoneShort,
-					buf.String(),
-					buf2.String()))
-			}
-
-			if len(actual) != len(test.parsed.generatedSpans) {
-				t.Fatalf("got \n    %v\n expected \n    %v", actual, test.generatedSpans)
-			}
-			for i := range actual {
-				if expected := strings.TrimSpace(test.parsed.generatedSpans[i]); actual[i] != expected {
-					t.Errorf("%d: got [%s] expected [%s]", i, actual[i], expected)
-				}
-			}
+		t.Run(spec.Name, func(t *testing.T) {
+			RunGenerateSubzoneSpansTestCase(t, spec)
 		})
 	}
 }

@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "partitionccl",
@@ -28,9 +28,34 @@ go_library(
     ],
 )
 
+go_binary(
+    name = "test-generator",
+    srcs = ["partition_test_generator.go"],
+    gotags = ["generator"],
+    deps = [
+        "//pkg/ccl/partitionccl/partitionccltestcases",
+        "//pkg/cli/exit",
+    ],
+)
+
+genrule(
+    name = "gen-partition-tests",
+    outs = ["partition_generated_test.go"],
+    cmd = """
+        $(location :test-generator) --out $(location partition_generated_test.go)
+       """,
+    exec_tools = [
+        ":test-generator",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
 go_test(
     name = "partitionccl_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "alter_primary_key_test.go",
         "drop_test.go",
@@ -38,13 +63,15 @@ go_test(
         "partition_test.go",
         "scrub_test.go",
         "zone_test.go",
+        ":gen-partition-tests",  # keep
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=895s"],
     embed = [":partitionccl"],
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/ccl/partitionccl/partitionccltestcases",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/testutilsccl",
         "//pkg/ccl/utilccl",
@@ -70,13 +97,11 @@ go_test(
         "//pkg/sql/importer",
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
-        "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/scrub",
         "//pkg/sql/scrub/scrubtestutils",
         "//pkg/sql/sem/tree",
         "//pkg/sql/tests",
-        "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
