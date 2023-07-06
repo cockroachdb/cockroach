@@ -119,6 +119,45 @@ type preparedStatementsAccessor interface {
 	DeleteAll(ctx context.Context)
 }
 
+// emptyPreparedStatements is the default impl used by the planner when the
+// connExecutor is not available.
+type emptyPreparedStatements struct{}
+
+var _ preparedStatementsAccessor = emptyPreparedStatements{}
+
+func (e emptyPreparedStatements) List() map[string]*PreparedStatement {
+	return nil
+}
+
+func (e emptyPreparedStatements) Get(string, bool) (*PreparedStatement, bool) {
+	return nil, false
+}
+
+func (e emptyPreparedStatements) Delete(context.Context, string) bool {
+	return false
+}
+
+func (e emptyPreparedStatements) DeleteAll(context.Context) {
+}
+
+// PortalPausablity mark if the portal is pausable and the reason. This is
+// needed to give the correct error for usage of multiple active portals.
+type PortalPausablity int64
+
+const (
+	// PortalPausabilityDisabled is the default status of a portal when
+	// the session variable multiple_active_portals_enabled is false.
+	PortalPausabilityDisabled PortalPausablity = iota
+	// PausablePortal is set when the session variable multiple_active_portals_enabled
+	// is set to true and the underlying statement is a read-only SELECT query
+	// with no sub-queries or post-queries.
+	PausablePortal
+	// NotPausablePortalForUnsupportedStmt is used when the cluster setting
+	// the session variable multiple_active_portals_enabled is set to true, while
+	// we don't support underlying statement.
+	NotPausablePortalForUnsupportedStmt
+)
+
 // PreparedPortal is a PreparedStatement that has been bound with query
 // arguments.
 type PreparedPortal struct {
