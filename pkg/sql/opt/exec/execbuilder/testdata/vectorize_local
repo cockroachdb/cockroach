@@ -46,6 +46,9 @@ rows decoded from KV: 2,001 (16 KiB, 4,002 KVs, 2,001 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • scan
   nodes: <hidden>
@@ -75,6 +78,9 @@ rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • lookup join (streamer)
 │ nodes: <hidden>
@@ -156,6 +162,9 @@ rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • merge join
 │ nodes: <hidden>
