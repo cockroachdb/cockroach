@@ -1890,7 +1890,7 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
 // are done in the local region.
 func (c *CustomFuncs) LookupsAreLocal(lookupJoinExpr *memo.LookupJoinExpr) bool {
 	var inputDistribution physical.Distribution
-	provided := distribution.BuildLookupJoinLookupTableDistribution(c.e.ctx, c.e.f.EvalContext(), lookupJoinExpr, 0, inputDistribution)
+	_, provided := distribution.BuildLookupJoinLookupTableDistribution(c.e.ctx, c.e.f.EvalContext(), lookupJoinExpr, 0, inputDistribution)
 	if provided.Any() || len(provided.Regions) != 1 {
 		return false
 	}
