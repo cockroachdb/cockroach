@@ -627,7 +627,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	if !isPausablePortal() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 		ctx, needFinish = ih.Setup(
 			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-			stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
+			stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.state.priority,
+			ex.extraTxnState.shouldCollectTxnExecutionStats,
 		)
 	} else {
 		ctx = portal.pauseInfo.execStmtInOpenState.ihWrapper.ctx
@@ -2924,7 +2925,11 @@ func (ex *connExecutor) recordTransactionFinish(
 		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
 		Priority:                ex.state.priority,
-		SessionData:             ex.sessionData(),
+		// add isolation level?
+		// add qos?
+		// add asoftime?
+		// add readonly?
+		SessionData: ex.sessionData(),
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
