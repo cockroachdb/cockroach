@@ -15,14 +15,19 @@ func _() {
 	_ = x[ColumnConversionGeneral-3]
 }
 
-const _ColumnConversionKind_name = "DangerousImpossibleTrivialValidateGeneral"
-
-var _ColumnConversionKind_index = [...]uint8{0, 9, 19, 26, 34, 41}
-
 func (i ColumnConversionKind) String() string {
-	i -= -1
-	if i < 0 || i >= ColumnConversionKind(len(_ColumnConversionKind_index)-1) {
-		return "ColumnConversionKind(" + strconv.FormatInt(int64(i+-1), 10) + ")"
+	switch i {
+	case ColumnConversionDangerous:
+		return "Dangerous"
+	case ColumnConversionImpossible:
+		return "Impossible"
+	case ColumnConversionTrivial:
+		return "Trivial"
+	case ColumnConversionValidate:
+		return "Validate"
+	case ColumnConversionGeneral:
+		return "General"
+	default:
+		return "ColumnConversionKind(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _ColumnConversionKind_name[_ColumnConversionKind_index[i]:_ColumnConversionKind_index[i+1]]
 }

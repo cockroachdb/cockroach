@@ -21,7 +21,6 @@ go_library(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigbounds",
-        "//pkg/util/stringerutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
@@ -31,7 +30,11 @@ go_library(
 stringer(
     name = "id-stringer",
     src = "capabilities.go",
-    additional_args = ["--linecomment"],
+    additional_args = [
+        "--linecomment",
+        "--stringtovaluemapname=stringToCapabilityIDMap",
+        "--enumvaluesslicename=IDs",
+    ],
     typ = "ID",
 )
 

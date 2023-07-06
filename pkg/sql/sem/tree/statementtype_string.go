@@ -14,13 +14,17 @@ func _() {
 	_ = x[TypeTCL-3]
 }
 
-const _StatementType_name = "TypeDDLTypeDMLTypeDCLTypeTCL"
-
-var _StatementType_index = [...]uint8{0, 7, 14, 21, 28}
-
 func (i StatementType) String() string {
-	if i < 0 || i >= StatementType(len(_StatementType_index)-1) {
+	switch i {
+	case TypeDDL:
+		return "TypeDDL"
+	case TypeDML:
+		return "TypeDML"
+	case TypeDCL:
+		return "TypeDCL"
+	case TypeTCL:
+		return "TypeTCL"
+	default:
 		return "StatementType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _StatementType_name[_StatementType_index[i]:_StatementType_index[i+1]]
 }

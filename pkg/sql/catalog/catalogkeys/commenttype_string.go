@@ -15,15 +15,26 @@ func _() {
 	_ = x[SchemaCommentType-4]
 	_ = x[ConstraintCommentType-5]
 	_ = x[FunctionCommentType-6]
+	_ = x[MaxCommentTypeValue-6]
 }
 
-const _CommentType_name = "DatabaseCommentTypeTableCommentTypeColumnCommentTypeIndexCommentTypeSchemaCommentTypeConstraintCommentTypeFunctionCommentType"
-
-var _CommentType_index = [...]uint8{0, 19, 35, 52, 68, 85, 106, 125}
-
 func (i CommentType) String() string {
-	if i < 0 || i >= CommentType(len(_CommentType_index)-1) {
+	switch i {
+	case DatabaseCommentType:
+		return "DatabaseCommentType"
+	case TableCommentType:
+		return "TableCommentType"
+	case ColumnCommentType:
+		return "ColumnCommentType"
+	case IndexCommentType:
+		return "IndexCommentType"
+	case SchemaCommentType:
+		return "SchemaCommentType"
+	case ConstraintCommentType:
+		return "ConstraintCommentType"
+	case FunctionCommentType:
+		return "FunctionCommentType"
+	default:
 		return "CommentType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _CommentType_name[_CommentType_index[i]:_CommentType_index[i+1]]
 }

@@ -46,13 +46,81 @@ func _() {
 	_ = x[validate-35]
 }
 
-const _opType_name = "addColumnaddConstraintaddForeignKeyConstraintaddRegionaddUniqueConstraintalterTableLocalitycreateIndexcreateSequencecreateTablecreateTableAscreateViewcreateEnumcreateSchemadropColumndropColumnDefaultdropColumnNotNulldropColumnStoreddropConstraintdropIndexdropSequencedropTabledropViewdropSchemaprimaryRegionrenameColumnrenameIndexrenameSequencerenameTablerenameViewsetColumnDefaultsetColumnNotNullsetColumnTypesurviveinsertRowselectStmtvalidate"
-
-var _opType_index = [...]uint16{0, 9, 22, 45, 54, 73, 91, 102, 116, 127, 140, 150, 160, 172, 182, 199, 216, 232, 246, 255, 267, 276, 284, 294, 307, 319, 330, 344, 355, 365, 381, 397, 410, 417, 426, 436, 444}
-
 func (i opType) String() string {
-	if i < 0 || i >= opType(len(_opType_index)-1) {
+	switch i {
+	case addColumn:
+		return "addColumn"
+	case addConstraint:
+		return "addConstraint"
+	case addForeignKeyConstraint:
+		return "addForeignKeyConstraint"
+	case addRegion:
+		return "addRegion"
+	case addUniqueConstraint:
+		return "addUniqueConstraint"
+	case alterTableLocality:
+		return "alterTableLocality"
+	case createIndex:
+		return "createIndex"
+	case createSequence:
+		return "createSequence"
+	case createTable:
+		return "createTable"
+	case createTableAs:
+		return "createTableAs"
+	case createView:
+		return "createView"
+	case createEnum:
+		return "createEnum"
+	case createSchema:
+		return "createSchema"
+	case dropColumn:
+		return "dropColumn"
+	case dropColumnDefault:
+		return "dropColumnDefault"
+	case dropColumnNotNull:
+		return "dropColumnNotNull"
+	case dropColumnStored:
+		return "dropColumnStored"
+	case dropConstraint:
+		return "dropConstraint"
+	case dropIndex:
+		return "dropIndex"
+	case dropSequence:
+		return "dropSequence"
+	case dropTable:
+		return "dropTable"
+	case dropView:
+		return "dropView"
+	case dropSchema:
+		return "dropSchema"
+	case primaryRegion:
+		return "primaryRegion"
+	case renameColumn:
+		return "renameColumn"
+	case renameIndex:
+		return "renameIndex"
+	case renameSequence:
+		return "renameSequence"
+	case renameTable:
+		return "renameTable"
+	case renameView:
+		return "renameView"
+	case setColumnDefault:
+		return "setColumnDefault"
+	case setColumnNotNull:
+		return "setColumnNotNull"
+	case setColumnType:
+		return "setColumnType"
+	case survive:
+		return "survive"
+	case insertRow:
+		return "insertRow"
+	case selectStmt:
+		return "selectStmt"
+	case validate:
+		return "validate"
+	default:
 		return "opType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _opType_name[_opType_index[i]:_opType_index[i+1]]
 }

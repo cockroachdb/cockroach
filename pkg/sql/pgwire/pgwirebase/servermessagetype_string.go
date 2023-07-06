@@ -30,56 +30,48 @@ func _() {
 	_ = x[ServerMsgRowDescription-84]
 }
 
-const (
-	_ServerMessageType_name_0 = "ServerMsgParseCompleteServerMsgBindCompleteServerMsgCloseComplete"
-	_ServerMessageType_name_1 = "ServerMsgCommandCompleteServerMsgDataRowServerMsgErrorResponse"
-	_ServerMessageType_name_2 = "ServerMsgCopyInResponseServerMsgCopyOutResponseServerMsgEmptyQuery"
-	_ServerMessageType_name_3 = "ServerMsgBackendKeyData"
-	_ServerMessageType_name_4 = "ServerMsgNoticeResponse"
-	_ServerMessageType_name_5 = "ServerMsgAuthServerMsgParameterStatusServerMsgRowDescription"
-	_ServerMessageType_name_6 = "ServerMsgReady"
-	_ServerMessageType_name_7 = "ServerMsgCopyDoneCommandServerMsgCopyDataCommand"
-	_ServerMessageType_name_8 = "ServerMsgNoData"
-	_ServerMessageType_name_9 = "ServerMsgPortalSuspendedServerMsgParameterDescription"
-)
-
-var (
-	_ServerMessageType_index_0 = [...]uint8{0, 22, 43, 65}
-	_ServerMessageType_index_1 = [...]uint8{0, 24, 40, 62}
-	_ServerMessageType_index_2 = [...]uint8{0, 23, 47, 66}
-	_ServerMessageType_index_5 = [...]uint8{0, 13, 37, 60}
-	_ServerMessageType_index_7 = [...]uint8{0, 24, 48}
-	_ServerMessageType_index_9 = [...]uint8{0, 24, 53}
-)
-
 func (i ServerMessageType) String() string {
-	switch {
-	case 49 <= i && i <= 51:
-		i -= 49
-		return _ServerMessageType_name_0[_ServerMessageType_index_0[i]:_ServerMessageType_index_0[i+1]]
-	case 67 <= i && i <= 69:
-		i -= 67
-		return _ServerMessageType_name_1[_ServerMessageType_index_1[i]:_ServerMessageType_index_1[i+1]]
-	case 71 <= i && i <= 73:
-		i -= 71
-		return _ServerMessageType_name_2[_ServerMessageType_index_2[i]:_ServerMessageType_index_2[i+1]]
-	case i == 75:
-		return _ServerMessageType_name_3
-	case i == 78:
-		return _ServerMessageType_name_4
-	case 82 <= i && i <= 84:
-		i -= 82
-		return _ServerMessageType_name_5[_ServerMessageType_index_5[i]:_ServerMessageType_index_5[i+1]]
-	case i == 90:
-		return _ServerMessageType_name_6
-	case 99 <= i && i <= 100:
-		i -= 99
-		return _ServerMessageType_name_7[_ServerMessageType_index_7[i]:_ServerMessageType_index_7[i+1]]
-	case i == 110:
-		return _ServerMessageType_name_8
-	case 115 <= i && i <= 116:
-		i -= 115
-		return _ServerMessageType_name_9[_ServerMessageType_index_9[i]:_ServerMessageType_index_9[i+1]]
+	switch i {
+	case ServerMsgAuth:
+		return "ServerMsgAuth"
+	case ServerMsgBackendKeyData:
+		return "ServerMsgBackendKeyData"
+	case ServerMsgBindComplete:
+		return "ServerMsgBindComplete"
+	case ServerMsgCommandComplete:
+		return "ServerMsgCommandComplete"
+	case ServerMsgCloseComplete:
+		return "ServerMsgCloseComplete"
+	case ServerMsgCopyInResponse:
+		return "ServerMsgCopyInResponse"
+	case ServerMsgCopyOutResponse:
+		return "ServerMsgCopyOutResponse"
+	case ServerMsgCopyDataCommand:
+		return "ServerMsgCopyDataCommand"
+	case ServerMsgCopyDoneCommand:
+		return "ServerMsgCopyDoneCommand"
+	case ServerMsgDataRow:
+		return "ServerMsgDataRow"
+	case ServerMsgEmptyQuery:
+		return "ServerMsgEmptyQuery"
+	case ServerMsgErrorResponse:
+		return "ServerMsgErrorResponse"
+	case ServerMsgNoticeResponse:
+		return "ServerMsgNoticeResponse"
+	case ServerMsgNoData:
+		return "ServerMsgNoData"
+	case ServerMsgParameterDescription:
+		return "ServerMsgParameterDescription"
+	case ServerMsgParameterStatus:
+		return "ServerMsgParameterStatus"
+	case ServerMsgParseComplete:
+		return "ServerMsgParseComplete"
+	case ServerMsgPortalSuspended:
+		return "ServerMsgPortalSuspended"
+	case ServerMsgReady:
+		return "ServerMsgReady"
+	case ServerMsgRowDescription:
+		return "ServerMsgRowDescription"
 	default:
 		return "ServerMessageType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

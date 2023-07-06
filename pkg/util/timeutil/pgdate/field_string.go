@@ -20,15 +20,37 @@ func _() {
 	_ = x[fieldTZHour-9]
 	_ = x[fieldTZMinute-10]
 	_ = x[fieldTZSecond-11]
+	_ = x[fieldMinimum-0]
+	_ = x[fieldMaximum-11]
 }
 
-const _field_name = "fieldYearfieldMonthfieldDayfieldErafieldHourfieldMinutefieldSecondfieldNanosfieldMeridianfieldTZHourfieldTZMinutefieldTZSecond"
-
-var _field_index = [...]uint8{0, 9, 19, 27, 35, 44, 55, 66, 76, 89, 100, 113, 126}
-
 func (i field) String() string {
-	if i >= field(len(_field_index)-1) {
+	switch i {
+	case fieldYear:
+		return "fieldYear"
+	case fieldMonth:
+		return "fieldMonth"
+	case fieldDay:
+		return "fieldDay"
+	case fieldEra:
+		return "fieldEra"
+	case fieldHour:
+		return "fieldHour"
+	case fieldMinute:
+		return "fieldMinute"
+	case fieldSecond:
+		return "fieldSecond"
+	case fieldNanos:
+		return "fieldNanos"
+	case fieldMeridian:
+		return "fieldMeridian"
+	case fieldTZHour:
+		return "fieldTZHour"
+	case fieldTZMinute:
+		return "fieldTZMinute"
+	case fieldTZSecond:
+		return "fieldTZSecond"
+	default:
 		return "field(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _field_name[_field_index[i]:_field_index[i+1]]
 }

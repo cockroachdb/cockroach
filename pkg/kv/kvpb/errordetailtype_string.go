@@ -45,42 +45,78 @@ func _() {
 	_ = x[InternalErrType-25]
 }
 
-const (
-	_ErrorDetailType_name_0 = "NotLeaseHolderErrTypeRangeNotFoundErrTypeRangeKeyMismatchErrTypeReadWithinUncertaintyIntervalErrTypeTransactionAbortedErrTypeTransactionPushErrTypeTransactionRetryErrTypeTransactionStatusErrTypeWriteIntentErrTypeWriteTooOldErrTypeOpRequiresTxnErrTypeConditionFailedErrTypeLeaseRejectedErrTypeNodeUnavailableErrType"
-	_ErrorDetailType_name_1 = "RaftGroupDeletedErrTypeReplicaCorruptionErrTypeReplicaTooOldErrType"
-	_ErrorDetailType_name_2 = "CommunicationErrType"
-	_ErrorDetailType_name_3 = "InternalErrTypeAmbiguousResultErrTypeStoreNotFoundErrTypeTransactionRetryWithProtoRefreshErrType"
-	_ErrorDetailType_name_4 = "IntegerOverflowErrTypeUnsupportedRequestErrType"
-	_ErrorDetailType_name_5 = "BatchTimestampBeforeGCErrTypeTxnAlreadyEncounteredErrTypeIntentMissingErrTypeMergeInProgressErrTypeRangeFeedRetryErrTypeIndeterminateCommitErrTypeInvalidLeaseErrTypeOptimisticEvalConflictsErrTypeMinTimestampBoundUnsatisfiableErrTypeRefreshFailedErrTypeMVCCHistoryMutationErrType"
-)
-
-var (
-	_ErrorDetailType_index_0 = [...]uint16{0, 21, 41, 64, 100, 125, 147, 170, 194, 212, 230, 250, 272, 292, 314}
-	_ErrorDetailType_index_1 = [...]uint8{0, 23, 47, 67}
-	_ErrorDetailType_index_3 = [...]uint8{0, 15, 37, 57, 96}
-	_ErrorDetailType_index_4 = [...]uint8{0, 22, 47}
-	_ErrorDetailType_index_5 = [...]uint16{0, 29, 57, 77, 99, 120, 146, 165, 195, 232, 252, 278}
-)
-
 func (i ErrorDetailType) String() string {
-	switch {
-	case 1 <= i && i <= 14:
-		i -= 1
-		return _ErrorDetailType_name_0[_ErrorDetailType_index_0[i]:_ErrorDetailType_index_0[i+1]]
-	case 16 <= i && i <= 18:
-		i -= 16
-		return _ErrorDetailType_name_1[_ErrorDetailType_index_1[i]:_ErrorDetailType_index_1[i+1]]
-	case i == 22:
-		return _ErrorDetailType_name_2
-	case 25 <= i && i <= 28:
-		i -= 25
-		return _ErrorDetailType_name_3[_ErrorDetailType_index_3[i]:_ErrorDetailType_index_3[i+1]]
-	case 31 <= i && i <= 32:
-		i -= 31
-		return _ErrorDetailType_name_4[_ErrorDetailType_index_4[i]:_ErrorDetailType_index_4[i+1]]
-	case 34 <= i && i <= 44:
-		i -= 34
-		return _ErrorDetailType_name_5[_ErrorDetailType_index_5[i]:_ErrorDetailType_index_5[i+1]]
+	switch i {
+	case NotLeaseHolderErrType:
+		return "NotLeaseHolderErrType"
+	case RangeNotFoundErrType:
+		return "RangeNotFoundErrType"
+	case RangeKeyMismatchErrType:
+		return "RangeKeyMismatchErrType"
+	case ReadWithinUncertaintyIntervalErrType:
+		return "ReadWithinUncertaintyIntervalErrType"
+	case TransactionAbortedErrType:
+		return "TransactionAbortedErrType"
+	case TransactionPushErrType:
+		return "TransactionPushErrType"
+	case TransactionRetryErrType:
+		return "TransactionRetryErrType"
+	case TransactionStatusErrType:
+		return "TransactionStatusErrType"
+	case WriteIntentErrType:
+		return "WriteIntentErrType"
+	case WriteTooOldErrType:
+		return "WriteTooOldErrType"
+	case OpRequiresTxnErrType:
+		return "OpRequiresTxnErrType"
+	case ConditionFailedErrType:
+		return "ConditionFailedErrType"
+	case LeaseRejectedErrType:
+		return "LeaseRejectedErrType"
+	case NodeUnavailableErrType:
+		return "NodeUnavailableErrType"
+	case RaftGroupDeletedErrType:
+		return "RaftGroupDeletedErrType"
+	case ReplicaCorruptionErrType:
+		return "ReplicaCorruptionErrType"
+	case ReplicaTooOldErrType:
+		return "ReplicaTooOldErrType"
+	case AmbiguousResultErrType:
+		return "AmbiguousResultErrType"
+	case StoreNotFoundErrType:
+		return "StoreNotFoundErrType"
+	case TransactionRetryWithProtoRefreshErrType:
+		return "TransactionRetryWithProtoRefreshErrType"
+	case IntegerOverflowErrType:
+		return "IntegerOverflowErrType"
+	case UnsupportedRequestErrType:
+		return "UnsupportedRequestErrType"
+	case BatchTimestampBeforeGCErrType:
+		return "BatchTimestampBeforeGCErrType"
+	case TxnAlreadyEncounteredErrType:
+		return "TxnAlreadyEncounteredErrType"
+	case IntentMissingErrType:
+		return "IntentMissingErrType"
+	case MergeInProgressErrType:
+		return "MergeInProgressErrType"
+	case RangeFeedRetryErrType:
+		return "RangeFeedRetryErrType"
+	case IndeterminateCommitErrType:
+		return "IndeterminateCommitErrType"
+	case InvalidLeaseErrType:
+		return "InvalidLeaseErrType"
+	case OptimisticEvalConflictsErrType:
+		return "OptimisticEvalConflictsErrType"
+	case MinTimestampBoundUnsatisfiableErrType:
+		return "MinTimestampBoundUnsatisfiableErrType"
+	case RefreshFailedErrType:
+		return "RefreshFailedErrType"
+	case MVCCHistoryMutationErrType:
+		return "MVCCHistoryMutationErrType"
+	case CommunicationErrType:
+		return "CommunicationErrType"
+	case InternalErrType:
+		return "InternalErrType"
 	default:
 		return "ErrorDetailType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

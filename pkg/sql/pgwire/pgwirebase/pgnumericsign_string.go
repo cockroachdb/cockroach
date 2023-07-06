@@ -12,17 +12,12 @@ func _() {
 	_ = x[PGNumericNeg-16384]
 }
 
-const (
-	_PGNumericSign_name_0 = "PGNumericPos"
-	_PGNumericSign_name_1 = "PGNumericNeg"
-)
-
 func (i PGNumericSign) String() string {
-	switch {
-	case i == 0:
-		return _PGNumericSign_name_0
-	case i == 16384:
-		return _PGNumericSign_name_1
+	switch i {
+	case PGNumericPos:
+		return "PGNumericPos"
+	case PGNumericNeg:
+		return "PGNumericNeg"
 	default:
 		return "PGNumericSign(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
