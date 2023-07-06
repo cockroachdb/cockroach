@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -58,7 +57,6 @@ import (
 // TODO(pbardea): Add more testing around the timer calculations.
 func TestSchemaChangeGCJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 60664, "flaky test")
 
 	type DropItem int
 	const (
@@ -78,6 +76,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 		for _, ttlTime := range []TTLTime{PAST, SOON, FUTURE} {
 			blockGC := make(chan struct{}, 1)
 			params := base.TestServerArgs{}
+			params.ScanMaxIdleTime = time.Millisecond
 			params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 			params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 				RunBeforePerformGC: func(_ jobspb.JobID) error {
@@ -90,6 +89,11 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(db)
 
+			sqlDB.Exec(t, `SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
+			// Refresh protected timestamp cache immediately to make MVCC GC queue to
+			// process GC immediately.
+			sqlDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
+
 			jobRegistry := s.JobRegistry().(*jobs.Registry)
 
 			sqlDB.Exec(t, "CREATE DATABASE my_db")
@@ -100,9 +104,10 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				sqlDB.Exec(t, "ALTER TABLE my_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 				sqlDB.Exec(t, "ALTER TABLE my_other_table CONFIGURE ZONE USING gc.ttlseconds = 1")
 			}
-			myDBID := descpb.ID(bootstrap.TestingUserDescID(2))
-			myTableID := descpb.ID(bootstrap.TestingUserDescID(3))
-			myOtherTableID := descpb.ID(bootstrap.TestingUserDescID(4))
+
+			myDBID := descpb.ID(bootstrap.TestingUserDescID(4))
+			myTableID := descpb.ID(bootstrap.TestingUserDescID(6))
+			myOtherTableID := descpb.ID(bootstrap.TestingUserDescID(7))
 
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
@@ -141,7 +146,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					ParentID: myTableID,
 				}
 				myTableDesc.SetPublicNonPrimaryIndexes([]descpb.IndexDescriptor{})
-				expectedRunningStatus = "performing garbage collection on index 2"
+				expectedRunningStatus = "deleting data"
 			case TABLE:
 				details = jobspb.SchemaChangeGCDetails{
 					Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -153,7 +158,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				}
 				myTableDesc.State = descpb.DescriptorState_DROP
 				myTableDesc.DropTime = dropTime
-				expectedRunningStatus = fmt.Sprintf("performing garbage collection on table %d", myTableID)
+				expectedRunningStatus = "deleting data"
 			case DATABASE:
 				details = jobspb.SchemaChangeGCDetails{
 					Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
@@ -172,7 +177,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				myTableDesc.DropTime = dropTime
 				myOtherTableDesc.State = descpb.DescriptorState_DROP
 				myOtherTableDesc.DropTime = dropTime
-				expectedRunningStatus = fmt.Sprintf("performing garbage collection on tables %d, %d", myTableID, myOtherTableID)
+				expectedRunningStatus = "deleting data"
 			}
 
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -238,24 +243,21 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				myImm, err := col.ByID(txn.KV()).Get().Table(ctx, myTableID)
 				if err != nil {
+					if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
+						// We dropped the table, so expect it to not be found.
+						require.EqualError(t, err, fmt.Sprintf(`relation "[%d]" does not exist`, myTableID))
+						return nil
+					}
 					return err
-				}
-				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
-					// We dropped the table, so expect it to not be found.
-					require.EqualError(t, err, "descriptor not found")
-					return nil
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
 				myOtherImm, err := col.ByID(txn.KV()).Get().Table(ctx, myOtherTableID)
 				if err != nil {
-					return err
-				}
-				if ttlTime != FUTURE && dropItem == DATABASE {
-					// We dropped the entire database, so expect none of the tables to be found.
-					require.EqualError(t, err, "descriptor not found")
-					return nil
-				}
-				if err != nil {
+					if ttlTime != FUTURE && dropItem == DATABASE {
+						// We dropped the entire database, so expect none of the tables to be found.
+						require.EqualError(t, err, fmt.Sprintf(`relation "[%d]" does not exist`, myOtherTableID))
+						return nil
+					}
 					return err
 				}
 				myOtherTableDesc = tabledesc.NewBuilder(myOtherImm.TableDesc()).BuildExistingMutableTable()
