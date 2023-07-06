@@ -32,19 +32,6 @@ add synthetic descriptor #104:
          id: 106
   +  state: DROP
      version: "1"
-add synthetic descriptor #106:
-   schema:
-     id: 106
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: public
-     parentId: 104
-  ...
-         withGrantOption: 2
-       version: 2
-  +  state: DROP
-     version: "1"
 add synthetic descriptor #105:
   ...
      id: 105
@@ -59,6 +46,19 @@ add synthetic descriptor #105:
        zoneConfigExtensions: {}
   +  state: DROP
      version: "2"
+add synthetic descriptor #106:
+   schema:
+     id: 106
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: public
+     parentId: 104
+  ...
+         withGrantOption: 2
+       version: 2
+  +  state: DROP
+     version: "1"
 add synthetic descriptor #107:
   ...
      id: 107

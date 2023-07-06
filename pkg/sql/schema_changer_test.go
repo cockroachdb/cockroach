@@ -2617,45 +2617,6 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Run("create-index-before", func(t *testing.T) {
-		skip.WithIssue(t, 45510, "unskip when finished")
-		if _, err := sqlDB.Exec(`CREATE TABLE t.test (k INT NOT NULL, v INT)`); err != nil {
-			t.Fatal(err)
-		}
-		if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
-			t.Fatal(err)
-		}
-
-		backfillNotif, _ := initBackfillNotification()
-		var wg sync.WaitGroup
-		wg.Add(1)
-		// Create an index on the table that will need to get rewritten.
-		go func() {
-			if _, err := sqlDB.Exec(`CREATE INDEX i ON t.test (v)`); err != nil {
-				t.Error(err)
-			}
-			wg.Done()
-		}()
-
-		// Wait until the create index mutation has progressed before starting the alter primary key.
-		<-backfillNotif
-
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (k)`); err != nil {
-			t.Fatal(err)
-		}
-
-		wg.Wait()
-
-		// There should be 4 k/v pairs per row:
-		// * the original rowid index.
-		// * the old index on v.
-		// * the new primary key on k.
-		// * the new index for v with k as the unique column.
-		testutils.SucceedsSoon(t, func() error {
-			return sqltestutils.CheckTableKeyCount(ctx, kvDB, 4, maxValue)
-		})
-	})
-
 	// Repeat the prior process but with a primary key change before.
 	t.Run("pk-change-before", func(t *testing.T) {
 		var wg sync.WaitGroup

@@ -41,29 +41,34 @@ func GetIndexID(e scpb.Element) (catid.IndexID, bool) {
 	return v.(catid.IndexID), true
 }
 
-// AllTargetDescIDs returns all the descriptor IDs referenced in the
-// target state's elements. This is a superset of the IDs of the descriptors
-// affected by the schema change.
-func AllTargetDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
+// AllTargetStateDescIDs applies AllTargetDescIDs to the whole target state.
+func AllTargetStateDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
 	for i := range s.Targets {
-		e := s.Targets[i].Element()
-		// Handle special cases to tighten this superset a bit.
-		switch te := e.(type) {
-		case *scpb.Namespace:
-			// Ignore the parent database and schema in the namespace element:
-			// - the parent schema of an object has no back-references to it,
-			// - the parent database has back-references to a schema, but these
-			//   will be captured by the scpb.SchemaParent target.
-			ids.Add(te.DescriptorID)
-		case *scpb.ObjectParent:
-			// Ignore the parent schema, it won't have back-references.
-			ids.Add(te.ObjectID)
-		default:
-			_ = WalkDescIDs(e, func(id *catid.DescID) error {
-				ids.Add(*id)
-				return nil
-			})
-		}
+		AllTargetDescIDs(s.Targets[i].Element()).ForEach(ids.Add)
+	}
+	return ids
+}
+
+// AllTargetDescIDs returns all the descriptor IDs referenced in the element.
+// This is a superset of the IDs of the descriptors actually affected by the
+// schema change.
+func AllTargetDescIDs(e scpb.Element) (ids catalog.DescriptorIDSet) {
+	// Handle special cases to tighten this superset a bit.
+	switch te := e.(type) {
+	case *scpb.Namespace:
+		// Ignore the parent database and schema in the namespace element:
+		// - the parent schema of an object has no back-references to it,
+		// - the parent database has back-references to a schema, but these
+		//   will be captured by the scpb.SchemaParent target.
+		ids.Add(te.DescriptorID)
+	case *scpb.ObjectParent:
+		// Ignore the parent schema, it won't have back-references.
+		ids.Add(te.ObjectID)
+	default:
+		_ = WalkDescIDs(e, func(id *catid.DescID) error {
+			ids.Add(*id)
+			return nil
+		})
 	}
 	return ids
 }

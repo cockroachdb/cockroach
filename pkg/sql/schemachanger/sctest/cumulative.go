@@ -386,7 +386,7 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			}, func(db *gosql.DB) {
 				tdb := sqlutils.MakeSQLRunner(db)
 				var ok bool
-				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetDescIDs(pl.TargetState))
+				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetStateDescIDs(pl.TargetState))
 				if ok {
 					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 				}

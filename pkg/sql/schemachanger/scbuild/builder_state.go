@@ -71,6 +71,19 @@ func (b *builderState) Ensure(
 			panic(errors.AssertionFailedf("element key %v does not match element: %s",
 				key, screl.ElementString(es.element)))
 		}
+		// Check that the descriptors relevant to this element are not undergoing
+		// any concurrent schema changes.
+		screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
+			b.ensureDescriptor(id)
+			if rc := b.descCache[id]; rc != nil && rc.desc != nil && rc.desc.HasConcurrentSchemaChanges() {
+				panic(scerrors.ConcurrentSchemaChangeError(rc.desc))
+			}
+		})
+		// Re-assign es because the above function may have mutated the builder
+		// state. Specifically, the output slice, to which es points to, might
+		// have grown and might have been reallocated.
+		es = &b.output[i]
+
 		if current != scpb.Status_UNKNOWN {
 			es.current = current
 		}
