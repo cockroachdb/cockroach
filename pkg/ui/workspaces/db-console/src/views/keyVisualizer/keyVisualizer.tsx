@@ -23,6 +23,7 @@ import {
   SampleBucket,
 } from "src/views/keyVisualizer/interfaces";
 import { throttle } from "lodash";
+import { getRequestsAsNumber } from ".";
 
 function drawBucket(
   pixels: Uint8ClampedArray,
@@ -296,7 +297,7 @@ export default class KeyVisualizer extends React.PureComponent<
 
           // compute color
           const color = [
-            Math.log(Math.max(bucket.requests.toInt(), 1)) /
+            Math.log(Math.max(getRequestsAsNumber(bucket.requests), 1)) /
               Math.log(this.props.hottestBucket),
             0,
             0,
@@ -400,7 +401,7 @@ export default class KeyVisualizer extends React.PureComponent<
                   y: y,
                   startKey: this.props.keys[bucket.startKeyHex],
                   endKey: this.props.keys[bucket.endKeyHex],
-                  requests: bucket.requests.toNumber(),
+                  requests: getRequestsAsNumber(bucket.requests),
                   epochTime: sample.timestamp.seconds.toNumber(),
                 },
               });
