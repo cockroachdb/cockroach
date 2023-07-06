@@ -392,12 +392,20 @@ BACKUP TABLE foo TO '_' WITH detached = FALSE -- literals removed
 BACKUP TABLE _ TO 'bar' WITH detached = FALSE -- identifiers removed
 
 parse
+BACKUP VIRTUAL CLUSTER 36 TO 'bar'
+----
+BACKUP VIRTUAL CLUSTER 36 TO 'bar'
+BACKUP VIRTUAL CLUSTER 36 TO ('bar') -- fully parenthesized
+BACKUP VIRTUAL CLUSTER _ TO '_' -- literals removed
+BACKUP VIRTUAL CLUSTER 36 TO 'bar' -- identifiers removed
+
+parse
 BACKUP TENANT 36 TO 'bar'
 ----
-BACKUP TENANT 36 TO 'bar'
-BACKUP TENANT 36 TO ('bar') -- fully parenthesized
-BACKUP TENANT _ TO '_' -- literals removed
-BACKUP TENANT 36 TO 'bar' -- identifiers removed
+BACKUP VIRTUAL CLUSTER 36 TO 'bar' -- normalized!
+BACKUP VIRTUAL CLUSTER 36 TO ('bar') -- fully parenthesized
+BACKUP VIRTUAL CLUSTER _ TO '_' -- literals removed
+BACKUP VIRTUAL CLUSTER 36 TO 'bar' -- identifiers removed
 
 parse
 RESTORE TABLE foo FROM 'bar'
@@ -746,26 +754,42 @@ RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'b
 parse
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
 ----
-RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
-RESTORE TENANT 36 FROM (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
-RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
+
+parse
+RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5'
+----
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH virtual_cluster_name = ('tenant-5') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH virtual_cluster_name = '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- identifiers removed
 
 parse
 RESTORE TENANT 36 FROM ($1, $2) WITH tenant_name = 'tenant-5'
 ----
-RESTORE TENANT 36 FROM ($1, $2) WITH tenant_name = 'tenant-5'
-RESTORE TENANT 36 FROM (($1), ($2)) WITH tenant_name = ('tenant-5') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $1) WITH tenant_name = '_' -- literals removed
-RESTORE TENANT 36 FROM ($1, $2) WITH tenant_name = 'tenant-5' -- identifiers removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH virtual_cluster_name = ('tenant-5') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH virtual_cluster_name = '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster_name = 'tenant-5' -- identifiers removed
+
+parse
+RESTORE TENANT 36 FROM ($1, $2) WITH virtual_cluster = '5'
+----
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster = '5' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH virtual_cluster = ('5') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH virtual_cluster = '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster = '5' -- identifiers removed
 
 parse
 RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'
 ----
-RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'
-RESTORE TENANT 36 FROM (($1), ($2)) WITH tenant = ('5') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $1) WITH tenant = '_' -- literals removed
-RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5' -- identifiers removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster = '5' -- normalized!
+RESTORE VIRTUAL CLUSTER 36 FROM (($1), ($2)) WITH virtual_cluster = ('5') -- fully parenthesized
+RESTORE VIRTUAL CLUSTER _ FROM ($1, $1) WITH virtual_cluster = '_' -- literals removed
+RESTORE VIRTUAL CLUSTER 36 FROM ($1, $2) WITH virtual_cluster = '5' -- identifiers removed
 
 parse
 BACKUP TABLE foo TO 'bar' WITH revision_history, detached
@@ -792,36 +816,68 @@ RESTORE TABLE foo FROM '_' WITH skip_missing_foreign_keys, skip_missing_sequence
 RESTORE TABLE _ FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached -- identifiers removed
 
 parse
+BACKUP INTO 'bar' WITH include_all_virtual_clusters = $1, detached
+----
+BACKUP INTO 'bar' WITH detached, include_all_virtual_clusters = $1 -- normalized!
+BACKUP INTO ('bar') WITH detached, include_all_virtual_clusters = ($1) -- fully parenthesized
+BACKUP INTO '_' WITH detached, include_all_virtual_clusters = $1 -- literals removed
+BACKUP INTO 'bar' WITH detached, include_all_virtual_clusters = $1 -- identifiers removed
+
+parse
 BACKUP INTO 'bar' WITH include_all_secondary_tenants = $1, detached
 ----
-BACKUP INTO 'bar' WITH detached, include_all_secondary_tenants = $1 -- normalized!
-BACKUP INTO ('bar') WITH detached, include_all_secondary_tenants = ($1) -- fully parenthesized
-BACKUP INTO '_' WITH detached, include_all_secondary_tenants = $1 -- literals removed
-BACKUP INTO 'bar' WITH detached, include_all_secondary_tenants = $1 -- identifiers removed
+BACKUP INTO 'bar' WITH detached, include_all_virtual_clusters = $1 -- normalized!
+BACKUP INTO ('bar') WITH detached, include_all_virtual_clusters = ($1) -- fully parenthesized
+BACKUP INTO '_' WITH detached, include_all_virtual_clusters = $1 -- literals removed
+BACKUP INTO 'bar' WITH detached, include_all_virtual_clusters = $1 -- identifiers removed
+
+parse
+BACKUP INTO 'bar' WITH include_all_virtual_clusters, detached
+----
+BACKUP INTO 'bar' WITH detached, include_all_virtual_clusters = true -- normalized!
+BACKUP INTO ('bar') WITH detached, include_all_virtual_clusters = (true) -- fully parenthesized
+BACKUP INTO '_' WITH detached, include_all_virtual_clusters = _ -- literals removed
+BACKUP INTO 'bar' WITH detached, include_all_virtual_clusters = true -- identifiers removed
 
 parse
 BACKUP INTO 'bar' WITH include_all_secondary_tenants, detached
 ----
-BACKUP INTO 'bar' WITH detached, include_all_secondary_tenants = true -- normalized!
-BACKUP INTO ('bar') WITH detached, include_all_secondary_tenants = (true) -- fully parenthesized
-BACKUP INTO '_' WITH detached, include_all_secondary_tenants = _ -- literals removed
-BACKUP INTO 'bar' WITH detached, include_all_secondary_tenants = true -- identifiers removed
+BACKUP INTO 'bar' WITH detached, include_all_virtual_clusters = true -- normalized!
+BACKUP INTO ('bar') WITH detached, include_all_virtual_clusters = (true) -- fully parenthesized
+BACKUP INTO '_' WITH detached, include_all_virtual_clusters = _ -- literals removed
+BACKUP INTO 'bar' WITH detached, include_all_virtual_clusters = true -- identifiers removed
+
+parse
+RESTORE FROM LATEST IN 'bar' WITH include_all_virtual_clusters = $1, detached
+----
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = $1 -- normalized!
+RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_virtual_clusters = ($1) -- fully parenthesized
+RESTORE FROM '_' IN '_' WITH detached, include_all_virtual_clusters = $1 -- literals removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = $1 -- identifiers removed
 
 parse
 RESTORE FROM LATEST IN 'bar' WITH include_all_secondary_tenants = $1, detached
 ----
-RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_secondary_tenants = $1 -- normalized!
-RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_secondary_tenants = ($1) -- fully parenthesized
-RESTORE FROM '_' IN '_' WITH detached, include_all_secondary_tenants = $1 -- literals removed
-RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_secondary_tenants = $1 -- identifiers removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = $1 -- normalized!
+RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_virtual_clusters = ($1) -- fully parenthesized
+RESTORE FROM '_' IN '_' WITH detached, include_all_virtual_clusters = $1 -- literals removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = $1 -- identifiers removed
+
+parse
+RESTORE FROM LATEST IN 'bar' WITH include_all_virtual_clusters, detached
+----
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = true -- normalized!
+RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_virtual_clusters = (true) -- fully parenthesized
+RESTORE FROM '_' IN '_' WITH detached, include_all_virtual_clusters = _ -- literals removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = true -- identifiers removed
 
 parse
 RESTORE FROM LATEST IN 'bar' WITH include_all_secondary_tenants, detached
 ----
-RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_secondary_tenants = true -- normalized!
-RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_secondary_tenants = (true) -- fully parenthesized
-RESTORE FROM '_' IN '_' WITH detached, include_all_secondary_tenants = _ -- literals removed
-RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_secondary_tenants = true -- identifiers removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = true -- normalized!
+RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_virtual_clusters = (true) -- fully parenthesized
+RESTORE FROM '_' IN '_' WITH detached, include_all_virtual_clusters = _ -- literals removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_virtual_clusters = true -- identifiers removed
 
 parse
 RESTORE FROM LATEST IN 'bar' WITH unsafe_restore_incompatible_version, detached
@@ -873,12 +929,12 @@ BACKUP foo TO 'bar' WITH detached=true, revision_history, detached=true
                                                                    ^
 
 error
-BACKUP TO 'bar' WITH include_all_secondary_tenants=false, include_all_secondary_tenants
+BACKUP TO 'bar' WITH include_all_virtual_clusters=false, include_all_secondary_tenants
 ----
-at or near "EOF": syntax error: include_all_secondary_tenants specified multiple times
+at or near "EOF": syntax error: include_all_virtual_clusters specified multiple times
 DETAIL: source SQL:
-BACKUP TO 'bar' WITH include_all_secondary_tenants=false, include_all_secondary_tenants
-                                                                                       ^
+BACKUP TO 'bar' WITH include_all_virtual_clusters=false, include_all_secondary_tenants
+                                                                                      ^
 
 error
 BACKUP foo TO 'bar' WITH detached=$1, revision_history
@@ -931,12 +987,12 @@ RESTORE foo FROM 'bar' WITH skip_missing_udfs, skip_missing_views, skip_missing_
                                                                    ^
 
 error
-RESTORE FROM 'bar' WITH include_all_secondary_tenants=false, include_all_secondary_tenants
+RESTORE FROM 'bar' WITH include_all_virtual_clusters=false, include_all_secondary_tenants
 ----
-at or near "EOF": syntax error: include_all_secondary_tenants specified multiple times
+at or near "EOF": syntax error: include_all_virtual_clusters specified multiple times
 DETAIL: source SQL:
-RESTORE FROM 'bar' WITH include_all_secondary_tenants=false, include_all_secondary_tenants
-                                                                                          ^
+RESTORE FROM 'bar' WITH include_all_virtual_clusters=false, include_all_secondary_tenants
+                                                                                         ^
 
 error
 RESTORE FROM 'bar' WITH unsafe_restore_incompatible_version, unsafe_restore_incompatible_version
