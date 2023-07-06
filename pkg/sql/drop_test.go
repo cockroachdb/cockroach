@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
@@ -796,15 +795,19 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 85876)
 	ctx := context.Background()
 
-	defer gcjob.SetSmallMaxGCIntervalForTest()()
-
 	params, _ := tests.CreateTestServerParams()
+	params.ScanMaxIdleTime = time.Millisecond
 	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
+
+	// Refresh protected timestamp cache immediately to make MVCC GC queue to
+	// process GC immediately.
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
@@ -822,7 +825,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	}
 
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
-	tests.CheckKeyCount(t, kvDB, tableSpan, numRows)
+	tests.CheckKeyCountIncludingTombstoned(t, s, tableSpan, numRows)
 
 	sqlDB.Exec(t, `DROP TABLE test.t`)
 
@@ -857,7 +860,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return descExists(sqlDBRaw, false, tableDesc.ID)
 	})
-	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
+	tests.CheckKeyCountIncludingTombstoned(t, s, tableSpan, 0)
 }
 
 func TestDropTableInTxn(t *testing.T) {
@@ -1218,7 +1221,6 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 // entire database.
 func TestDropDatabaseWithForeignKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 85876)
 	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1226,7 +1228,15 @@ func TestDropDatabaseWithForeignKeys(t *testing.T) {
 
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
-	_, err := sqlDB.Exec(`
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
+	require.NoError(t, err)
+
+	// Refresh protected timestamp cache immediately to make MVCC GC queue to
+	// process GC immediately.
+	_, err = sqlDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.parent(k INT PRIMARY KEY);
 CREATE TABLE t.child(k INT PRIMARY KEY REFERENCES t.parent);
@@ -1259,8 +1269,8 @@ ORDER BY
 	)
 
 	// Check that the data was cleaned up.
-	tests.CheckKeyCount(t, kvDB, parentDesc.TableSpan(keys.SystemSQLCodec), 0)
-	tests.CheckKeyCount(t, kvDB, childDesc.TableSpan(keys.SystemSQLCodec), 0)
+	tests.CheckKeyCountIncludingTombstoned(t, s, parentDesc.TableSpan(keys.SystemSQLCodec), 0)
+	tests.CheckKeyCountIncludingTombstoned(t, s, childDesc.TableSpan(keys.SystemSQLCodec), 0)
 }
 
 // Test that non-physical table deletions like DROP VIEW are immediate instead
