@@ -893,10 +893,14 @@ func (c *CustomFuncs) RemapProjectionCols(
 		return replacement
 	}
 
+	// Use the projection outer columns to filter out columns that are synthesized
+	// within the projections themselves (e.g. in a subquery).
+	outerCols := c.ProjectionOuterCols(projections)
+
 	// Replace any references to the "from" columns in the projections.
 	var replace ReplaceFunc
 	replace = func(e opt.Expr) opt.Expr {
-		if v, ok := e.(*memo.VariableExpr); ok && !to.Contains(v.Col) {
+		if v, ok := e.(*memo.VariableExpr); ok && !to.Contains(v.Col) && outerCols.Contains(v.Col) {
 			// This variable needs to be remapped.
 			return c.f.ConstructVariable(getReplacement(v.Col))
 		}
