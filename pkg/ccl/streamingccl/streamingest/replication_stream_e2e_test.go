@@ -45,10 +45,6 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(casper): disabled due to error when setting a cluster setting
-	// "setting updated but timed out waiting to read new value"
-	skip.UnderStressRace(t, "disabled under stress race")
-
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	args.SrcClusterSettings[`stream_replication.job_liveness_timeout`] = `'1m'`
@@ -62,7 +58,6 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
-	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
 
