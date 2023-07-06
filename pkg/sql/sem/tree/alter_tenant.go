@@ -21,6 +21,7 @@ type AlterTenantReplication struct {
 	TenantSpec *TenantSpec
 	Command    JobCommand
 	Cutover    *ReplicationCutoverTime
+	NoWait     bool
 	Options    TenantReplicationOptions
 }
 
@@ -39,6 +40,10 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 			ctx.WriteString("SYSTEM TIME ")
 			ctx.FormatNode(n.Cutover.Timestamp)
 		}
+		if n.NoWait {
+			ctx.WriteString(" WITH NOWAIT")
+		}
+
 	} else if !n.Options.IsDefault() {
 		ctx.WriteString("SET REPLICATION ")
 		ctx.FormatNode(&n.Options)
