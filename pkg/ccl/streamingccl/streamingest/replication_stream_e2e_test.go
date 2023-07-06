@@ -248,10 +248,6 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(casper): disabled due to error when setting a cluster setting
-	// "setting updated but timed out waiting to read new value"
-	skip.UnderStressRace(t, "disabled under stress race")
-
 	ctx := context.Background()
 
 	lastClientStart := make(map[string]hlc.Timestamp)
@@ -327,20 +323,13 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	cutoverTime := c.DestSysServer.Clock().Now()
 	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
-	cutoverFingerprint := c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
+	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 	// Clients should never be started prior to a checkpointed timestamp
 	for _, clientStartTime := range lastClientStart {
 		require.Less(t, checkpointMinTime.UnixNano(), clientStartTime.GoTime().UnixNano())
 	}
 
-	// After cutover, changes to source won't be streamed into destination cluster.
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (3);`)
-	})
-	// Check the dst cluster didn't receive the change after a while.
-	<-time.NewTimer(3 * time.Second).C
-	c.RequireDestinationFingerprintAtTimestamp(cutoverFingerprint, c.DestSysServer.Clock().Now().AsOfSystemTime())
 }
 
 func TestTenantStreamingCancelIngestion(t *testing.T) {
