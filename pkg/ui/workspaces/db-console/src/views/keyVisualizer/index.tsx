@@ -33,11 +33,19 @@ import { RouteComponentProps } from "react-router-dom";
 const EnabledSetting = "keyvisualizer.enabled";
 const IntervalSetting = "keyvisualizer.sample_interval";
 
+export function getRequestsAsNumber(requests: number | Long | null): number {
+  if (typeof requests == "number") {
+    return requests;
+  }
+
+  return requests?.toInt() || 0;
+}
+
 function hottestBucket(samples: KeyVisSamplesResponse["samples"]) {
   let highest = 0;
   for (const sample of samples) {
     for (const stat of sample.buckets) {
-      const numRequests = stat.requests?.toInt() || 0;
+      const numRequests = this.getRequestsAsNumber(stat.requests);
       if (numRequests > highest) {
         highest = numRequests;
       }
