@@ -744,8 +744,8 @@ var errTransactionInProgress = errors.New("there is already a transaction in pro
 const sqlTxnName string = "sql txn"
 const metricsSampleInterval = 10 * time.Second
 
-// enableDropTenant (or rather, its inverted boolean value) defines
-// the default value for the session var "disable_drop_tenant".
+// enableDropVirtualCluster (or rather, its inverted boolean value) defines
+// the default value for the session var "disable_drop_virtual_cluster".
 //
 // Note:
 //   - We use a cluster setting here instead of a default role option
@@ -756,10 +756,10 @@ const metricsSampleInterval = 10 * time.Second
 //   - The session var is named "disable_" because we want the Go
 //     default value (false) to mean that tenant deletion is enabled.
 //     This is needed for backward-compatibility with Cockroach Cloud.
-var enableDropTenant = settings.RegisterBoolSetting(
+var enableDropVirtualCluster = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"sql.drop_tenant.enabled",
-	"default value (inverted) for the disable_drop_tenant session setting",
+	"sql.drop_virtual_cluster.enabled",
+	"default value (inverted) for the disable_virtual_cluster session setting",
 	true,
 )
 
@@ -3226,8 +3226,8 @@ func (m *sessionDataMutator) SetSafeUpdates(val bool) {
 	m.data.SafeUpdates = val
 }
 
-func (m *sessionDataMutator) SetDisableDropTenant(val bool) {
-	m.data.DisableDropTenant = val
+func (m *sessionDataMutator) SetDisableDropVirtualCluster(val bool) {
+	m.data.DisableDropVirtualCluster = val
 }
 
 func (m *sessionDataMutator) SetCheckFunctionBodies(val bool) {
