@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -83,8 +86,12 @@ type instrumentationHelper struct {
 
 	// Query fingerprint (anonymized statement).
 	fingerprint string
+
+	// Transaction information.
 	implicitTxn bool
-	codec       keys.SQLCodec
+	txnPriority roachpb.UserPriority
+
+	codec keys.SQLCodec
 
 	// -- The following fields are initialized by Setup() --
 
@@ -254,10 +261,12 @@ func (ih *instrumentationHelper) Setup(
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	fingerprint string,
 	implicitTxn bool,
+	txnPriority roachpb.UserPriority,
 	collectTxnExecStats bool,
 ) (newCtx context.Context, needFinish bool) {
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
+	ih.txnPriority = txnPriority
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
@@ -589,6 +598,14 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 			ob.AddRUEstimate(queryStats.RUEstimate)
 		}
 	}
+
+	qos := sessiondatapb.Normal
+	iso := isolation.Serializable
+	if ih.evalCtx != nil {
+		qos = ih.evalCtx.QualityOfService()
+		iso = ih.evalCtx.TxnIsoLevel
+	}
+	ob.AddTxnInfo(iso, ih.txnPriority, qos)
 
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		ob.AddTopLevelField("error emitting plan", fmt.Sprint(err))
