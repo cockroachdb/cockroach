@@ -1032,13 +1032,14 @@ func (c *coster) computeIndexJoinCost(
 	)
 }
 
-// getCRBDRegionColFromInput examines the input to a lookup join. If it is a
-// Scan or LocalityOptimizedSearch from a REGIONAL BY ROW table, the column id
-// of the crdb_region column and Distribution of the operation are returned.
-// Otherwise, 0 and an empty Distribution are returned.
-func (c *coster) getCRBDRegionColFromInput(
+// getCRBDRegionColSetFromInput examines the input relation to a lookup join. If
+// the column set equivalent to the crdb_region column of a Scan or
+// locality-optimized Scan in the first input to a chain of lookup joins, and
+// Distribution of the operation can be determined, they are returned.
+// Otherwise, an empty ColSet and an empty Distribution are returned.
+func (c *coster) getCRBDRegionColSetFromInput(
 	join *memo.LookupJoinExpr, required *physical.Required,
-) (crdbRegionColID opt.ColumnID, inputDistribution physical.Distribution) {
+) (crdbRegionColSet opt.ColSet, inputDistribution physical.Distribution) {
 	var needRemap bool
 	var setOpCols opt.ColSet
 	if bestCostInputRel, ok := c.MaybeGetBestCostRelation(join.Input, required); ok {
@@ -1047,27 +1048,27 @@ func (c *coster) getCRBDRegionColFromInput(
 		if projectExpr, ok = maybeScan.(*memo.ProjectExpr); ok {
 			maybeScan, ok = c.MaybeGetBestCostRelation(projectExpr.Input, required)
 			if !ok {
-				return 0, physical.Distribution{}
+				return crdbRegionColSet, physical.Distribution{}
 			}
 		}
 		if selectExpr, ok := maybeScan.(*memo.SelectExpr); ok {
 			maybeScan, ok = c.MaybeGetBestCostRelation(selectExpr.Input, required)
 			if !ok {
-				return 0, physical.Distribution{}
+				return crdbRegionColSet, physical.Distribution{}
 			}
 		}
 		if indexJoinExpr, ok := maybeScan.(*memo.IndexJoinExpr); ok {
 			maybeScan, ok = c.MaybeGetBestCostRelation(indexJoinExpr.Input, required)
 			if !ok {
-				return 0, physical.Distribution{}
+				return crdbRegionColSet, physical.Distribution{}
 			}
 		}
 		if lookupJoinExpr, ok := maybeScan.(*memo.LookupJoinExpr); ok {
-			crdbRegionColID, inputDistribution = c.getCRBDRegionColFromInput(lookupJoinExpr, required)
-			inputDistribution, crdbRegionColID =
+			crdbRegionColSet, inputDistribution = c.getCRBDRegionColSetFromInput(lookupJoinExpr, required)
+			inputDistribution, crdbRegionColSet =
 				distribution.BuildLookupJoinLookupTableDistribution(
-					c.ctx, c.evalCtx, lookupJoinExpr, crdbRegionColID, inputDistribution)
-			return crdbRegionColID, inputDistribution
+					c.ctx, c.evalCtx, lookupJoinExpr, crdbRegionColSet, inputDistribution)
+			return crdbRegionColSet, inputDistribution
 		}
 		if localityOptimizedScan, ok := maybeScan.(*memo.LocalityOptimizedSearchExpr); ok {
 			maybeScan = localityOptimizedScan.Local
@@ -1076,16 +1077,16 @@ func (c *coster) getCRBDRegionColFromInput(
 		}
 		scanExpr, ok := maybeScan.(*memo.ScanExpr)
 		if !ok {
-			return 0, physical.Distribution{}
+			return crdbRegionColSet, physical.Distribution{}
 		}
 		tab := maybeScan.Memo().Metadata().Table(scanExpr.Table)
 		if !tab.IsRegionalByRow() {
-			return 0, physical.Distribution{}
+			return crdbRegionColSet, physical.Distribution{}
 		}
 		inputDistribution =
 			distribution.BuildProvided(c.ctx, c.evalCtx, scanExpr, &required.Distribution)
 		index := tab.Index(scanExpr.Index)
-		crdbRegionColID = scanExpr.Table.IndexColumnID(index, 0)
+		crdbRegionColID := scanExpr.Table.IndexColumnID(index, 0)
 		if needRemap {
 			scanCols := scanExpr.Relational().OutputCols
 			if scanCols.Len() == setOpCols.Len() {
@@ -1101,11 +1102,12 @@ func (c *coster) getCRBDRegionColFromInput(
 		}
 		if projectExpr != nil {
 			if !projectExpr.Passthrough.Contains(crdbRegionColID) {
-				return 0, physical.Distribution{}
+				return crdbRegionColSet, physical.Distribution{}
 			}
 		}
+		crdbRegionColSet.Add(crdbRegionColID)
 	}
-	return crdbRegionColID, inputDistribution
+	return crdbRegionColSet, inputDistribution
 }
 
 func (c *coster) computeLookupJoinCost(
@@ -1125,7 +1127,7 @@ func (c *coster) computeLookupJoinCost(
 		join.Flags,
 		join.LocalityOptimized,
 	)
-	crdbRegionColID, inputDistribution := c.getCRBDRegionColFromInput(join, required)
+	crdbRegionColID, inputDistribution := c.getCRBDRegionColSetFromInput(join, required)
 	provided, _ := distribution.BuildLookupJoinLookupTableDistribution(
 		c.ctx, c.evalCtx, join, crdbRegionColID, inputDistribution)
 	extraCost := c.distributionCost(provided)
