@@ -34,7 +34,7 @@ func TestTenantZip(t *testing.T) {
 		addTenantArgs func(params TestCLIParams) TestCLIParams
 	}{
 		{
-			testName: "testzip tenant separate process",
+			testName: "testzip external process virtualization",
 			addTenantArgs: func(params TestCLIParams) TestCLIParams {
 				tenantDir, tenantDirCleanupFn := testutils.TempDir(t)
 				defer tenantDirCleanupFn()
@@ -47,7 +47,7 @@ func TestTenantZip(t *testing.T) {
 			},
 		},
 		{
-			testName: "testzip shared process tenant",
+			testName: "testzip shared process virtualization",
 			addTenantArgs: func(params TestCLIParams) TestCLIParams {
 				params.SharedProcessTenantArgs = &base.TestSharedProcessTenantArgs{
 					TenantName: "test-tenant",

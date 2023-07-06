@@ -160,7 +160,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	var tenants []*serverpb.Tenant
 	if err := func() error {
-		s := zr.start("discovering tenants on cluster")
+		s := zr.start("discovering virtual clusters")
 		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 		if err != nil {
 			return s.fail(err)
@@ -168,7 +168,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		defer finish()
 
 		var resp *serverpb.ListTenantsResponse
-		if err := timeutil.RunWithTimeout(context.Background(), "list tenants", timeout, func(ctx context.Context) error {
+		if err := timeutil.RunWithTimeout(context.Background(), "list virtual clusters", timeout, func(ctx context.Context) error {
 			resp, err = serverpb.NewAdminClient(conn).ListTenants(ctx, &serverpb.ListTenantsRequest{})
 			return err
 		}); err != nil {
@@ -267,7 +267,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			// Only add tenant prefix for non system tenants.
 			var prefix string
 			if tenant.TenantId.ToUint64() != roachpb.SystemTenantID.ToUint64() {
-				prefix = fmt.Sprintf("/tenants/%s", tenant.TenantName)
+				prefix = fmt.Sprintf("/virtual/%s", tenant.TenantName)
 			}
 
 			zc := debugZipContext{
