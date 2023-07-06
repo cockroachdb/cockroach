@@ -1059,6 +1059,13 @@ func (c *coster) getCRBDRegionColFromInput(
 				return 0, physical.Distribution{}
 			}
 		}
+		if lookupJoinExpr, ok := maybeScan.(*memo.LookupJoinExpr); ok {
+			crdbRegionColID, inputDistribution = c.getCRBDRegionColFromInput(lookupJoinExpr, required)
+			crdbRegionColID, inputDistribution =
+				distribution.BuildLookupJoinLookupTableDistribution(
+					c.ctx, c.evalCtx, lookupJoinExpr, crdbRegionColID, inputDistribution)
+			return crdbRegionColID, inputDistribution
+		}
 		if localityOptimizedScan, ok := maybeScan.(*memo.LocalityOptimizedSearchExpr); ok {
 			maybeScan = localityOptimizedScan.Local
 			needRemap = true
@@ -1116,7 +1123,8 @@ func (c *coster) computeLookupJoinCost(
 		join.LocalityOptimized,
 	)
 	crdbRegionColID, inputDistribution := c.getCRBDRegionColFromInput(join, required)
-	provided := distribution.BuildLookupJoinLookupTableDistribution(c.ctx, c.evalCtx, join, crdbRegionColID, inputDistribution)
+	_, provided := distribution.BuildLookupJoinLookupTableDistribution(
+		c.ctx, c.evalCtx, join, crdbRegionColID, inputDistribution)
 	extraCost := c.distributionCost(provided)
 	cost += extraCost
 	return cost

@@ -3445,3 +3445,90 @@ distribute
       │    └── filters
       │         └── t1.b = regional_by_row_table_virt_partial.pk
       └── 1
+
+statement ok
+CREATE TABLE abc (
+  id UUID PRIMARY KEY,
+  id1 UUID NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  id2 UUID NULL,
+  INDEX (id1 ASC, id2 ASC)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE xyz (
+  id UUID PRIMARY KEY,
+  str STRING NOT NULL,
+  abc_id UUID NOT NULL,
+  id2 UUID NULL,
+  FOREIGN KEY (abc_id) REFERENCES abc(id) ON DELETE CASCADE,
+  INDEX (abc_id ASC, id2 ASC),
+  INDEX (id2 ASC, str ASC, abc_id ASC)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "avg_size": 3000,
+    "columns": ["id"],
+    "distinct_count": 100,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]';
+
+statement ok
+ALTER TABLE xyz INJECT STATISTICS '[
+  {
+    "avg_size": 3000,
+    "columns": ["id"],
+    "distinct_count": 100,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]';
+
+# Regression test for #105942
+# The following should produce 2 lookup joins with a local distribution.
+query T retry
+EXPLAIN SELECT
+  xyz.str,
+  abc.id,
+  abc.id1,
+  abc.id2,
+  abc.created_at,
+  abc.updated_at
+FROM
+  abc JOIN xyz ON
+    xyz.abc_id = abc.id
+    AND xyz.id2 = abc.id2
+    AND xyz.crdb_region = abc.crdb_region
+WHERE
+  abc.id1 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'
+  AND abc.id2 = '68088706-02c6-47d1-b993-a421cd761f2b'
+  AND abc.crdb_region = 'ap-southeast-2'
+  AND xyz.crdb_region = 'ap-southeast-2';
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ estimated row count: 1
+│ table: abc@abc_pkey
+│ equality: (crdb_region, id) = (crdb_region,id)
+│ equality cols are key
+│
+└── • lookup join
+    │ estimated row count: 0
+    │ table: abc@abc_id1_id2_idx
+    │ equality: (crdb_region, lookup_join_const_col_@2, id2, abc_id) = (crdb_region,id1,id2,id)
+    │ equality cols are key
+    │ pred: (id2 = '68088706-02c6-47d1-b993-a421cd761f2b') AND (crdb_region = 'ap-southeast-2')
+    │
+    └── • render
+        │
+        └── • scan
+              estimated row count: 4 (3.7% of the table; stats collected <hidden> ago)
+              table: xyz@xyz_id2_str_abc_id_idx
+              spans: [/'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b' - /'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b']
