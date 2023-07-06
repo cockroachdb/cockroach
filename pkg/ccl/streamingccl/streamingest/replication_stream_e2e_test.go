@@ -152,10 +152,6 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(casper): disabled due to error when setting a cluster setting
-	// "setting updated but timed out waiting to read new value"
-	skip.UnderStressRace(t, "disabled under stress race")
-
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
