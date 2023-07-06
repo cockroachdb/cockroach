@@ -657,38 +657,38 @@ t6_expr_idx1       false      i        1         0          false       false
 mv1                false      m        2         0          false       true
 mv1_pkey           false      i        1         0          false       false
 
-query TBBBITT colnames,rowsort
-SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
+query TBBBITTT colnames,rowsort
+SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relreplident
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-relname            relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions
-t1                 false        false           false           0             NULL    NULL
-t1_pkey            false        false           false           0             NULL    NULL
-t1_a_key           false        false           false           0             NULL    NULL
-index_key          false        false           false           0             NULL    NULL
-t1_m_seq           false        false           false           0             NULL    NULL
-t1_n_seq           false        false           false           0             NULL    NULL
-t2                 false        false           false           0             NULL    NULL
-t2_pkey            false        false           false           0             NULL    NULL
-t2_t1_id_idx       false        false           false           0             NULL    NULL
-t3                 false        false           false           0             NULL    NULL
-t3_pkey            false        false           false           0             NULL    NULL
-t3_a_b_idx         false        false           false           0             NULL    NULL
-v1                 false        false           false           0             NULL    NULL
-t4                 false        false           false           0             NULL    NULL
-t4_pkey            false        false           false           0             NULL    NULL
-t5                 false        false           false           0             NULL    NULL
-t5_pkey            false        false           false           0             NULL    NULL
-t6                 false        false           false           0             NULL    NULL
-t6_pkey            false        false           false           0             NULL    NULL
-t6_expr_idx        false        false           false           0             NULL    NULL
-t6_expr_expr1_idx  false        false           false           0             NULL    NULL
-t6_expr_key        false        false           false           0             NULL    NULL
-t6_expr_idx1       false        false           false           0             NULL    NULL
-mv1                false        false           false           0             NULL    NULL
-mv1_pkey           false        false           false           0             NULL    NULL
+relname            relhasrules  relhastriggers  relhassubclass  relfrozenxid  relacl  reloptions  relreplident
+t1                 false        false           false           0             NULL    NULL        d
+t1_pkey            false        false           false           0             NULL    NULL        n
+t1_a_key           false        false           false           0             NULL    NULL        n
+index_key          false        false           false           0             NULL    NULL        n
+t1_m_seq           false        false           false           0             NULL    NULL        n
+t1_n_seq           false        false           false           0             NULL    NULL        n
+t2                 false        false           false           0             NULL    NULL        d
+t2_pkey            false        false           false           0             NULL    NULL        n
+t2_t1_id_idx       false        false           false           0             NULL    NULL        n
+t3                 false        false           false           0             NULL    NULL        d
+t3_pkey            false        false           false           0             NULL    NULL        n
+t3_a_b_idx         false        false           false           0             NULL    NULL        n
+v1                 false        false           false           0             NULL    NULL        n
+t4                 false        false           false           0             NULL    NULL        d
+t4_pkey            false        false           false           0             NULL    NULL        n
+t5                 false        false           false           0             NULL    NULL        d
+t5_pkey            false        false           false           0             NULL    NULL        n
+t6                 false        false           false           0             NULL    NULL        d
+t6_pkey            false        false           false           0             NULL    NULL        n
+t6_expr_idx        false        false           false           0             NULL    NULL        n
+t6_expr_expr1_idx  false        false           false           0             NULL    NULL        n
+t6_expr_key        false        false           false           0             NULL    NULL        n
+t6_expr_idx1       false        false           false           0             NULL    NULL        n
+mv1                false        false           false           0             NULL    NULL        d
+mv1_pkey           false        false           false           0             NULL    NULL        n
 
 ## pg_catalog.pg_attribute
 
@@ -924,20 +924,20 @@ CREATE MATERIALIZED VIEW mv_test AS SELECT 1
 statement ok
 CREATE SEQUENCE seq_test
 
-query TT
-SELECT relname, relkind
+query TTT
+SELECT relname, relkind, relreplident
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY relname
 ----
-mv_test         m
-mv_test_pkey    i
-seq_test        S
-tbl_test        r
-tbl_test_pkey   i
-tbl_test_v_idx  i
-view_test       v
+mv_test         m  d
+mv_test_pkey    i  n
+seq_test        S  n
+tbl_test        r  d
+tbl_test_pkey   i  n
+tbl_test_v_idx  i  n
+view_test       v  n
 
 statement ok
 DROP DATABASE relkinds

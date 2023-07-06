@@ -664,15 +664,19 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
+		replIdent := "d" // default;
 		if table.IsView() {
 			relKind = relKindView
 			if table.MaterializedView() {
 				relKind = relKindMaterializedView
+			} else {
+				replIdent = "n"
 			}
 			relAm = oidZero
 		} else if table.IsSequence() {
 			relKind = relKindSequence
 			relAm = oidZero
+			replIdent = "n"
 		}
 		relPersistence := relPersistencePermanent
 		if table.IsTemporary() {
@@ -724,13 +728,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DNull,      // relacl
 			relOptions,      // reloptions
 			// These columns were automatically created by pg_catalog_test's missing column generator.
-			tree.DNull, // relforcerowsecurity
-			tree.DNull, // relispartition
-			tree.DNull, // relispopulated
-			tree.DNull, // relreplident
-			tree.DNull, // relrewrite
-			tree.DNull, // relrowsecurity
-			tree.DNull, // relpartbound
+			tree.DNull,                 // relforcerowsecurity
+			tree.DNull,                 // relispartition
+			tree.DNull,                 // relispopulated
+			tree.NewDString(replIdent), // relreplident
+			tree.DNull,                 // relrewrite
+			tree.DNull,                 // relrowsecurity
+			tree.DNull,                 // relpartbound
 			// These columns were automatically created by pg_catalog_test's missing column generator.
 			tree.DNull, // relminmxid
 		); err != nil {
@@ -784,13 +788,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				tree.DNull,      // relacl
 				tree.DNull,      // reloptions
 				// These columns were automatically created by pg_catalog_test's missing column generator.
-				tree.DNull, // relforcerowsecurity
-				tree.DNull, // relispartition
-				tree.DNull, // relispopulated
-				tree.DNull, // relreplident
-				tree.DNull, // relrewrite
-				tree.DNull, // relrowsecurity
-				tree.DNull, // relpartbound
+				tree.DNull,           // relforcerowsecurity
+				tree.DNull,           // relispartition
+				tree.DNull,           // relispopulated
+				tree.NewDString("n"), // relreplident
+				tree.DNull,           // relrewrite
+				tree.DNull,           // relrowsecurity
+				tree.DNull,           // relpartbound
 				// These columns were automatically created by pg_catalog_test's missing column generator.
 				tree.DNull, // relminmxid
 			)
