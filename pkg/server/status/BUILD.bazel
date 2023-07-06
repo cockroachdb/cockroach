@@ -65,6 +65,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
+        "//pkg/util/log/logmetrics",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "//pkg/util/system",
