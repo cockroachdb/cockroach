@@ -21,6 +21,7 @@ go_test(
     deps = [
         ":future",
         "//pkg/testutils",
+        "//pkg/util",
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",
