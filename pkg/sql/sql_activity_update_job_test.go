@@ -62,13 +62,13 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 		"FROM system.public.transaction_activity")
 	err := row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, 0, count, "transaction_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "system.transaction_activity: expect:0, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM system.public.statement_activity")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, 0, count, "statement_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "system.statement_activity: expect:0, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM system.public.jobs WHERE job_type = 'AUTO UPDATE SQL ACTIVITY' and id = 103 ")
@@ -80,13 +80,13 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 		"FROM system.public.transaction_statistics")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, 0, count, "transaction_statistics: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "system.transaction_statistics: expect:0, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM system.public.statement_statistics")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, 0, count, "statement_statistics: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "system.statement_statistics: expect:0, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() FROM crdb_internal.transaction_activity")
 	err = row.Scan(&count)
@@ -112,13 +112,13 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 		"FROM system.public.transaction_activity")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, 0, count, "transaction_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "system.transaction_activity: expect:0, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM system.public.statement_activity")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, 0, count, "statement_activity: expect:0, actual:%d", count)
+	require.Equal(t, 0, count, "system.statement_activity: expect:0, actual:%d", count)
 
 	appName := "TestSqlActivityUpdateJob"
 	_, err = db.ExecContext(ctx, "SET SESSION application_name=$1", appName)
@@ -174,25 +174,25 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 		"FROM system.public.transaction_activity WHERE app_name = $1", appName)
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, count, 1, "transaction_activity after transfer: expect:1, actual:%d", count)
+	require.Equal(t, count, 1, "system.transaction_activity after transfer: expect:1, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM system.public.statement_activity WHERE app_name = $1", appName)
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, count, 1, "statement_activity after transfer: expect:1, actual:%d", count)
+	require.Equal(t, count, 1, "system.statement_activity after transfer: expect:1, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM crdb_internal.transaction_activity WHERE app_name = $1", appName)
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, count, 1, "transaction_activity after transfer: expect:1, actual:%d", count)
+	require.Equal(t, count, 1, "crdb_internal.transaction_activity after transfer: expect:1, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM crdb_internal.statement_activity WHERE app_name = $1", appName)
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Equal(t, count, 1, "statement_activity after transfer: expect:1, actual:%d", count)
+	require.Equal(t, count, 1, "crdb_internal.statement_activity after transfer: expect:1, actual:%d", count)
 
 	// Reset the stats and verify it's empty
 	_, err = db.ExecContext(ctx, "SELECT crdb_internal.reset_sql_stats()")
@@ -202,25 +202,25 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 		"FROM system.public.transaction_activity")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Zero(t, count, "transaction_activity after transfer: expect:0, actual:%d", count)
+	require.Zero(t, count, "system.transaction_activity after transfer: expect:0, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM system.public.statement_activity")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Zero(t, count, "statement_activity after transfer: expect:0, actual:%d", count)
+	require.Zero(t, count, "system.statement_activity after transfer: expect:0, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM crdb_internal.transaction_activity")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Zero(t, count, "transaction_activity after transfer: expect:0, actual:%d", count)
+	require.Zero(t, count, "crdb_internal.transaction_activity after transfer: expect:0, actual:%d", count)
 
 	row = db.QueryRowContext(ctx, "SELECT count_rows() "+
 		"FROM crdb_internal.statement_activity")
 	err = row.Scan(&count)
 	require.NoError(t, err)
-	require.Zero(t, count, "statement_activity after transfer: expect:0, actual:%d", count)
+	require.Zero(t, count, "crdb_internal.statement_activity after transfer: expect:0, actual:%d", count)
 }
 
 // TestSqlActivityUpdateJob verifies that the
