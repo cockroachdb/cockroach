@@ -404,6 +404,11 @@ func (s *ColIndexJoin) GetCumulativeContentionTime() time.Duration {
 	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
 }
 
+// UsedStreamer is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) UsedStreamer() bool {
+	return s.usesStreamer
+}
+
 // inputBatchSizeLimit is a batch size limit for the number of input rows that
 // will be used to form lookup spans for each scan. This is used as a proxy for
 // result batch size in order to prevent OOMs, because index joins do not limit

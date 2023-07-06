@@ -93,7 +93,7 @@ regions: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
     │
-    ├── • index join
+    ├── • index join (streamer)
     │   │ nodes: <hidden>
     │   │ regions: <hidden>
     │   │ actual row count: 1
@@ -120,7 +120,7 @@ regions: <hidden>
     │         table: a@a_y_idx
     │         spans: [/1 - /1]
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
@@ -172,7 +172,7 @@ regions: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
     │
-    ├── • index join
+    ├── • index join (streamer)
     │   │ nodes: <hidden>
     │   │ regions: <hidden>
     │   │ actual row count: 1
@@ -197,7 +197,7 @@ regions: <hidden>
     │         table: a@a_y_idx
     │         spans: [/1 - /1]
     │
-    └── • index join
+    └── • index join (streamer)
         │ nodes: <hidden>
         │ regions: <hidden>
         │ actual row count: 0
@@ -319,7 +319,7 @@ regions: <hidden>
 • limit
 │ count: 1
 │
-└── • lookup join
+└── • lookup join (streamer)
     │ nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 1
@@ -409,7 +409,7 @@ regions: <hidden>
 • limit
 │ count: 2
 │
-└── • lookup join
+└── • lookup join (streamer)
     │ nodes: <hidden>
     │ regions: <hidden>
     │ actual row count: 2
