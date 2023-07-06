@@ -261,7 +261,7 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 			// Only add tenant prefix for non system tenants.
 			var prefix string
 			if tenant.TenantId.ToUint64() != roachpb.SystemTenantID.ToUint64() {
-				prefix = fmt.Sprintf("/tenants/%s", tenant.TenantName)
+				prefix = fmt.Sprintf("/cluster/%s", tenant.TenantName)
 			}
 
 			zc := debugZipContext{
