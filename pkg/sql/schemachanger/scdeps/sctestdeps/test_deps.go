@@ -566,12 +566,12 @@ func (s *TestState) getQualifiedObjectNameByID(id descpb.ID) (*tree.TableName, e
 
 func (s *TestState) GetQualifiedFunctionNameByID(
 	ctx context.Context, id int64,
-) (*tree.FunctionName, error) {
+) (*tree.RoutineName, error) {
 	prefix, obj, err := s.getQualifiedNameComponentsByID(descpb.ID(id))
 	if err != nil {
 		return nil, err
 	}
-	fn := tree.MakeQualifiedFunctionName(string(prefix.CatalogName), string(prefix.SchemaName), string(obj))
+	fn := tree.MakeQualifiedRoutineName(string(prefix.CatalogName), string(prefix.SchemaName), string(obj))
 	return &fn, nil
 }
 
@@ -1259,13 +1259,13 @@ func (s *TestState) ResolveFunction(
 // ResolveFunctionByOID implements the scbuild.CatalogReader interface.
 func (s *TestState) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.FunctionName, *tree.Overload, error) {
+) (*tree.RoutineName, *tree.Overload, error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
 		qol, ok := tree.OidToQualifiedBuiltinOverload[oid]
 		if !ok {
 			return nil, nil, errors.Newf("function %d not found", oid)
 		}
-		name := tree.MakeQualifiedFunctionName(s.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
+		name := tree.MakeQualifiedRoutineName(s.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
 		return &name, qol.Overload, nil
 	}
 
@@ -1290,7 +1290,7 @@ func (s *TestState) ResolveFunctionByOID(
 	if err != nil {
 		return nil, nil, err
 	}
-	name := tree.MakeQualifiedFunctionName(dbDesc.GetName(), scDesc.GetName(), fnDesc.GetName())
+	name := tree.MakeQualifiedRoutineName(dbDesc.GetName(), scDesc.GetName(), fnDesc.GetName())
 	return &name, ol, nil
 }
 

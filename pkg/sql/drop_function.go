@@ -246,7 +246,7 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 	if err := p.writeDropFuncSchemaChange(ctx, fnMutable); err != nil {
 		return err
 	}
-	fnName := tree.MakeQualifiedFunctionName(p.CurrentDatabase(), scDesc.GetName(), fnMutable.GetName())
+	fnName := tree.MakeQualifiedRoutineName(p.CurrentDatabase(), scDesc.GetName(), fnMutable.GetName())
 	event := eventpb.DropFunction{FunctionName: fnName.FQString()}
 	return p.logEvent(ctx, fnMutable.GetID(), &event)
 }

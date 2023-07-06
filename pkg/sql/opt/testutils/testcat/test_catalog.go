@@ -499,7 +499,7 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		tc.CreateType(stmt)
 		return "", nil
 
-	case *tree.CreateFunction:
+	case *tree.CreateRoutine:
 		tc.CreateFunction(stmt)
 		return "", nil
 

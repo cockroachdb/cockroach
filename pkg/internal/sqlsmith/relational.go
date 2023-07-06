@@ -882,9 +882,9 @@ func makeCreateFunc(s *Smither) (tree.Statement, bool) {
 	return s.makeCreateFunc()
 }
 
-func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
+func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 	fname := s.name("func")
-	name := tree.MakeFunctionNameFromPrefix(tree.ObjectNamePrefix{}, fname)
+	name := tree.MakeRoutineNameFromPrefix(tree.ObjectNamePrefix{}, fname)
 	// Return a record 50% of the time, which means the UDF can return any number
 	// or type in its final SQL statement. Otherwise, pick a random type from
 	// this smither's available types.
@@ -901,7 +901,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	if s.d6() < 3 {
 		setof = true
 	}
-	rtype := tree.FuncReturnType{
+	rtype := tree.RoutineReturnType{
 		Type:  rtyp,
 		IsSet: setof,
 	}
@@ -913,7 +913,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	// TODO(100405): Add support for non-default param classes. Currently, only IN
 	// parameters are supported.
 	// TODO(100962): Set a param default value sometimes.
-	params := make(tree.FuncParams, paramCnt)
+	params := make(tree.RoutineParams, paramCnt)
 	paramTypes := make(tree.ParamTypes, paramCnt)
 	refs := make(colRefs, paramCnt)
 	for i := 0; i < paramCnt; i++ {
@@ -923,7 +923,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 			ptyp = s.randType()
 		}
 		pname := fmt.Sprintf("p%d", i)
-		params[i] = tree.FuncParam{
+		params[i] = tree.RoutineParam{
 			Name: tree.Name(pname),
 			Type: ptyp,
 		}
@@ -940,65 +940,65 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	}
 
 	// There are up to 5 function options that may be applied to UDFs.
-	var opts tree.FunctionOptions
-	opts = make(tree.FunctionOptions, 0, 5)
+	var opts tree.RoutineOptions
+	opts = make(tree.RoutineOptions, 0, 5)
 
-	// FunctionNullInputBehavior
-	// 50%: Do not specify behavior (default is FunctionCalledOnNullInput).
-	// ~17%: FunctionCalledOnNullInput
-	// ~17%: FunctionReturnsNullOnNullInput
-	// ~17%: FunctionStrict
+	// RoutineNullInputBehavior
+	// 50%: Do not specify behavior (default is RoutineCalledOnNullInput).
+	// ~17%: RoutineCalledOnNullInput
+	// ~17%: RoutineReturnsNullOnNullInput
+	// ~17%: RoutineStrict
 	switch s.d6() {
 	case 1:
-		opts = append(opts, tree.FunctionCalledOnNullInput)
+		opts = append(opts, tree.RoutineCalledOnNullInput)
 	case 2:
-		opts = append(opts, tree.FunctionReturnsNullOnNullInput)
+		opts = append(opts, tree.RoutineReturnsNullOnNullInput)
 	case 3:
-		opts = append(opts, tree.FunctionStrict)
+		opts = append(opts, tree.RoutineStrict)
 	}
 
-	// FunctionVolatility
+	// RoutineVolatility
 	// 50%: Do not specify behavior (default is volatile).
-	// ~17%: FunctionVolatile
-	// ~17%: FunctionImmutable
-	// ~17%: FunctionStable
-	funcVol := tree.FunctionVolatile
+	// ~17%: RoutineVolatile
+	// ~17%: RoutineImmutable
+	// ~17%: RoutineStable
+	funcVol := tree.RoutineVolatile
 	vol := volatility.Volatile
 	switch s.d6() {
 	case 1:
-		funcVol = tree.FunctionImmutable
+		funcVol = tree.RoutineImmutable
 		vol = volatility.Immutable
 	case 2:
-		funcVol = tree.FunctionStable
+		funcVol = tree.RoutineStable
 		vol = volatility.Stable
 	}
-	if funcVol != tree.FunctionVolatile || s.coin() {
+	if funcVol != tree.RoutineVolatile || s.coin() {
 		opts = append(opts, funcVol)
 	}
 
-	// FunctionLeakproof
+	// RoutineLeakproof
 	// Leakproof can only be used with immutable volatility. If the function is
 	// immutable, also specify leakproof 50% of the time. Otherwise, specify
 	// not leakproof 50% of the time (default is not leakproof).
 	leakproof := false
-	if funcVol == tree.FunctionImmutable {
+	if funcVol == tree.RoutineImmutable {
 		leakproof = s.coin()
 	}
 	if leakproof || s.coin() {
 		if leakproof {
 			vol = volatility.Leakproof
 		}
-		opts = append(opts, tree.FunctionLeakproof(leakproof))
+		opts = append(opts, tree.RoutineLeakproof(leakproof))
 	}
 
-	// FunctionLanguage
+	// RoutineLanguage
 	// Currently only SQL is supported.
-	opts = append(opts, tree.FunctionLangSQL)
+	opts = append(opts, tree.RoutineLangSQL)
 
-	// FunctionBodyStr
+	// RoutineBodyStr
 	// Generate SQL statements for the function body. More than one may be
 	// generated, but only the result of the final statement will matter for
-	// the function return type. Use the FunctionBodyStr option so the statements
+	// the function return type. Use the RoutineBodyStr option so the statements
 	// are formatted correctly.
 	stmtCnt := s.rnd.Intn(11)
 	stmts := make([]string, 0, stmtCnt)
@@ -1014,14 +1014,14 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 	}()
 	s.disableWith = true
 	s.disableUDFs = true
-	s.disableMutations = (funcVol != tree.FunctionVolatile) || s.disableMutations
+	s.disableMutations = (funcVol != tree.RoutineVolatile) || s.disableMutations
 	for i := 0; i < stmtCnt; i++ {
 		var stmt tree.Statement
 		if i == stmtCnt-1 {
 			// The return type of the last statement should match the function return
 			// type.
 			// If mutations are enabled, also use anything from mutatingTableExprs -- needs returning
-			if s.disableMutations || funcVol != tree.FunctionVolatile || s.coin() {
+			if s.disableMutations || funcVol != tree.RoutineVolatile || s.coin() {
 				if stmt, _, ok = s.makeSelect([]*types.T{rtyp}, refs); !ok {
 					return nil, false
 				}
@@ -1052,7 +1052,7 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 				}
 			}
 		} else {
-			if s.disableMutations || funcVol != tree.FunctionVolatile || s.coin() {
+			if s.disableMutations || funcVol != tree.RoutineVolatile || s.coin() {
 				if stmt, _, ok = s.makeSelect(nil /* desiredTypes */, refs); !ok {
 					continue
 				}
@@ -1073,11 +1073,11 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateFunction, ok bool) {
 		stmts = append(stmts, tree.AsStringWithFlags(stmt, tree.FmtParsable))
 	}
 	if len(stmts) > 0 {
-		opts = append(opts, tree.FunctionBodyStr(strings.Join(stmts, ";\n")))
+		opts = append(opts, tree.RoutineBodyStr(strings.Join(stmts, ";\n")))
 	}
 
-	stmt := &tree.CreateFunction{
-		FuncName:   name,
+	stmt := &tree.CreateRoutine{
+		Name:       name,
 		ReturnType: rtype,
 		Params:     params,
 		Options:    opts,

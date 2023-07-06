@@ -510,9 +510,9 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "alter_func_stmt",
-		inline:  []string{"alter_func_options_stmt", "alter_func_rename_stmt", "alter_func_owner_stmt", "alter_func_set_schema_stmt", "alter_func_dep_extension_stmt", "alter_func_opt_list", "common_func_opt_item", "opt_restrict", "opt_no"},
+		inline:  []string{"alter_func_options_stmt", "alter_func_rename_stmt", "alter_func_owner_stmt", "alter_func_set_schema_stmt", "alter_func_dep_extension_stmt", "alter_func_opt_list", "common_routine_opt_item", "opt_restrict", "opt_no"},
 		replace: map[string]string{"'RENAME' 'TO' name": "'RENAME' 'TO' function_new_name"},
-		unlink:  []string{"alter_func_options_stmt", "alter_func_rename_stmt", "alter_func_owner_stmt", "alter_func_set_schema_stmt", "alter_func_dep_extension_stmt", "alter_func_opt_list", "common_func_opt_item", "opt_restrict", "opt_no", "function_new_name"},
+		unlink:  []string{"alter_func_options_stmt", "alter_func_rename_stmt", "alter_func_owner_stmt", "alter_func_set_schema_stmt", "alter_func_dep_extension_stmt", "alter_func_opt_list", "common_routine_opt_item", "opt_restrict", "opt_no", "function_new_name"},
 		nosplit: true,
 	},
 	{
@@ -812,8 +812,8 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_func_stmt",
-		inline: []string{"opt_or_replace", "opt_func_param_with_default_list", "opt_return_set", "opt_create_func_opt_list", "create_func_opt_list", "common_func_opt_item", "create_func_opt_item", "routine_return_stmt", "func_param_with_default_list", "func_param_with_default", "func_as", "opt_link_sym"},
-		unlink: []string{"opt_or_replace", "opt_func_param_with_default_list", "opt_return_set", "opt_create_func_opt_list", "create_func_opt_list", "create_func_opt_item", "common_func_opt_item", "routine_return_stmt", "non_reserved_word_or_sconst", "func_param_with_default_list", "func_param_with_default", "a_expr", "func_as"},
+		inline: []string{"opt_or_replace", "opt_routine_param_with_default_list", "opt_return_set", "opt_create_routine_opt_list", "create_routine_opt_list", "common_routine_opt_item", "create_routine_opt_item", "routine_return_stmt", "routine_param_with_default_list", "routine_param_with_default", "routine_as", "opt_link_sym"},
+		unlink: []string{"opt_or_replace", "opt_routine_param_with_default_list", "opt_return_set", "opt_create_routine_opt_list", "create_routine_opt_list", "create_routine_opt_item", "common_routine_opt_item", "routine_return_stmt", "non_reserved_word_or_sconst", "routine_param_with_default_list", "routine_param_with_default", "a_expr", "routine_as"},
 		replace: map[string]string{
 			"func_as":                     "'SCONST'",
 			"non_reserved_word_or_sconst": "'SQL'",
