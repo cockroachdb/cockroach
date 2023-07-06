@@ -13,6 +13,9 @@ distribution: local
 vectorized: false
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
+isolation level: serializable
+priority: normal
+quality of service: regular
 
 • scan
   columns: (oid int)
@@ -45,6 +48,9 @@ distribution: local
 vectorized: false
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
+isolation level: serializable
+priority: normal
+quality of service: regular
 
 • scan
   columns: (cid int, date date, value decimal)
@@ -77,6 +83,9 @@ distribution: local
 vectorized: false
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
+isolation level: serializable
+priority: normal
+quality of service: regular
 
 • project
 │ columns: (cid int, sum decimal)
@@ -156,6 +165,9 @@ distribution: local
 vectorized: false
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
+isolation level: serializable
+priority: normal
+quality of service: regular
 
 • scan
   columns: (value decimal)
@@ -188,6 +200,9 @@ distribution: local
 vectorized: false
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
+isolation level: serializable
+priority: normal
+quality of service: regular
 
 • project
 │ columns: (cid int, date date, value decimal)
@@ -277,6 +292,9 @@ distribution: local
 vectorized: false
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
+isolation level: serializable
+priority: normal
+quality of service: regular
 
 • root
 │ columns: (movie_id int, title string, name string)

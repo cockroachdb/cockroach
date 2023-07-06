@@ -119,6 +119,9 @@ rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • scan
   nodes: <hidden>
@@ -145,6 +148,9 @@ vectorized: <hidden>
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
 ·
 • scan
   nodes: <hidden>
