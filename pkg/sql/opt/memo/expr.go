@@ -706,6 +706,12 @@ type UDFDefinition struct {
 	// applies to direct as well as indirect recursive calls (mutual recursion).
 	IsRecursive bool
 
+	// Params is the list of columns representing parameters of the function. The
+	// i-th column in the list corresponds to the i-th parameter of the function.
+	// During execution of the UDF, these columns are replaced with the arguments
+	// of the function invocation.
+	Params opt.ColList
+
 	// Body contains a relational expression for each statement in the function
 	// body. It is unset during construction of a recursive UDF.
 	Body []RelExpr
@@ -714,12 +720,6 @@ type UDFDefinition struct {
 	// should be optimized if it is rebuilt. Each props corresponds to the RelExpr
 	// at the same position in Body.
 	BodyProps []*physical.Required
-
-	// Params is the list of columns representing parameters of the function. The
-	// i-th column in the list corresponds to the i-th parameter of the function.
-	// During execution of the UDF, these columns are replaced with the arguments
-	// of the function invocation.
-	Params opt.ColList
 }
 
 // WindowFrame denotes the definition of a window frame for an individual

@@ -1,4 +1,8 @@
 exec-ddl
+CREATE TABLE xy (x INT, y INT);
+----
+
+exec-ddl
 CREATE OR REPLACE FUNCTION f(a INT, b INT) RETURNS INT AS $$
   BEGIN
     RETURN a;
@@ -1537,4 +1541,1541 @@ project
                      │                                                                                                                                      │    ├── variable: a:38
                      │                                                                                                                                      │    └── variable: b:39
                      │                                                                                                                                      └── recursive-call
+                     └── const: 1
+
+# TODO(drewk): consider adding a norm rules to fold nested UDFs.
+# Testing RAISE statements.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE DEBUG 'foo';
+    RAISE LOG 'foo';
+    RAISE INFO 'foo';
+    RAISE NOTICE 'foo';
+    RAISE WARNING 'foo';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:12
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:12]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":11
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":11
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":11]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'DEBUG1'
+                     │                   │              ├── const: 'foo'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: '00000'
+                     │                   └── project
+                     │                        ├── columns: "_stmt_raise_3":10
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: _stmt_raise_3 [as="_stmt_raise_3":10]
+                     │                                  └── body
+                     │                                       ├── project
+                     │                                       │    ├── columns: stmt_raise_4:2
+                     │                                       │    ├── values
+                     │                                       │    │    └── tuple
+                     │                                       │    └── projections
+                     │                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_4:2]
+                     │                                       │              ├── const: 'LOG'
+                     │                                       │              ├── const: 'foo'
+                     │                                       │              ├── const: ''
+                     │                                       │              ├── const: ''
+                     │                                       │              └── const: '00000'
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_raise_5":9
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_raise_5 [as="_stmt_raise_5":9]
+                     │                                                      └── body
+                     │                                                           ├── project
+                     │                                                           │    ├── columns: stmt_raise_6:3
+                     │                                                           │    ├── values
+                     │                                                           │    │    └── tuple
+                     │                                                           │    └── projections
+                     │                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_6:3]
+                     │                                                           │              ├── const: 'INFO'
+                     │                                                           │              ├── const: 'foo'
+                     │                                                           │              ├── const: ''
+                     │                                                           │              ├── const: ''
+                     │                                                           │              └── const: '00000'
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_raise_7":8
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_raise_7 [as="_stmt_raise_7":8]
+                     │                                                                          └── body
+                     │                                                                               ├── project
+                     │                                                                               │    ├── columns: stmt_raise_8:4
+                     │                                                                               │    ├── values
+                     │                                                                               │    │    └── tuple
+                     │                                                                               │    └── projections
+                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:4]
+                     │                                                                               │              ├── const: 'NOTICE'
+                     │                                                                               │              ├── const: 'foo'
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              └── const: '00000'
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: "_stmt_raise_9":7
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple
+                     │                                                                                    └── projections
+                     │                                                                                         └── udf: _stmt_raise_9 [as="_stmt_raise_9":7]
+                     │                                                                                              └── body
+                     │                                                                                                   ├── project
+                     │                                                                                                   │    ├── columns: stmt_raise_10:5
+                     │                                                                                                   │    ├── values
+                     │                                                                                                   │    │    └── tuple
+                     │                                                                                                   │    └── projections
+                     │                                                                                                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_10:5]
+                     │                                                                                                   │              ├── const: 'WARNING'
+                     │                                                                                                   │              ├── const: 'foo'
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              └── const: '00000'
+                     │                                                                                                   └── project
+                     │                                                                                                        ├── columns: stmt_return_11:6!null
+                     │                                                                                                        ├── values
+                     │                                                                                                        │    └── tuple
+                     │                                                                                                        └── projections
+                     │                                                                                                             └── const: 0 [as=stmt_return_11:6]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE '%', 1;
+    RAISE NOTICE 'foo: %, %, %', 1, 2, 3;
+    RAISE NOTICE '%%';
+    RAISE NOTICE '%%%', 1;
+    RAISE NOTICE '%%%foo%% bar%%%% %% %%%% ba%z%', 1, 2, 3;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:12
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:12]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":11
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":11
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":11]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'NOTICE'
+                     │                   │              ├── concat
+                     │                   │              │    ├── concat
+                     │                   │              │    │    ├── const: ''
+                     │                   │              │    │    └── const: 1
+                     │                   │              │    └── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: '00000'
+                     │                   └── project
+                     │                        ├── columns: "_stmt_raise_3":10
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: _stmt_raise_3 [as="_stmt_raise_3":10]
+                     │                                  └── body
+                     │                                       ├── project
+                     │                                       │    ├── columns: stmt_raise_4:2
+                     │                                       │    ├── values
+                     │                                       │    │    └── tuple
+                     │                                       │    └── projections
+                     │                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_4:2]
+                     │                                       │              ├── const: 'NOTICE'
+                     │                                       │              ├── concat
+                     │                                       │              │    ├── concat
+                     │                                       │              │    │    ├── concat
+                     │                                       │              │    │    │    ├── concat
+                     │                                       │              │    │    │    │    ├── concat
+                     │                                       │              │    │    │    │    │    ├── concat
+                     │                                       │              │    │    │    │    │    │    ├── const: 'foo: '
+                     │                                       │              │    │    │    │    │    │    └── const: 1
+                     │                                       │              │    │    │    │    │    └── const: ', '
+                     │                                       │              │    │    │    │    └── const: 2
+                     │                                       │              │    │    │    └── const: ', '
+                     │                                       │              │    │    └── const: 3
+                     │                                       │              │    └── const: ''
+                     │                                       │              ├── const: ''
+                     │                                       │              ├── const: ''
+                     │                                       │              └── const: '00000'
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_raise_5":9
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_raise_5 [as="_stmt_raise_5":9]
+                     │                                                      └── body
+                     │                                                           ├── project
+                     │                                                           │    ├── columns: stmt_raise_6:3
+                     │                                                           │    ├── values
+                     │                                                           │    │    └── tuple
+                     │                                                           │    └── projections
+                     │                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_6:3]
+                     │                                                           │              ├── const: 'NOTICE'
+                     │                                                           │              ├── concat
+                     │                                                           │              │    ├── concat
+                     │                                                           │              │    │    ├── const: ''
+                     │                                                           │              │    │    └── const: '%'
+                     │                                                           │              │    └── const: ''
+                     │                                                           │              ├── const: ''
+                     │                                                           │              ├── const: ''
+                     │                                                           │              └── const: '00000'
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_raise_7":8
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_raise_7 [as="_stmt_raise_7":8]
+                     │                                                                          └── body
+                     │                                                                               ├── project
+                     │                                                                               │    ├── columns: stmt_raise_8:4
+                     │                                                                               │    ├── values
+                     │                                                                               │    │    └── tuple
+                     │                                                                               │    └── projections
+                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:4]
+                     │                                                                               │              ├── const: 'NOTICE'
+                     │                                                                               │              ├── concat
+                     │                                                                               │              │    ├── concat
+                     │                                                                               │              │    │    ├── concat
+                     │                                                                               │              │    │    │    ├── concat
+                     │                                                                               │              │    │    │    │    ├── const: ''
+                     │                                                                               │              │    │    │    │    └── const: '%'
+                     │                                                                               │              │    │    │    └── const: ''
+                     │                                                                               │              │    │    └── const: 1
+                     │                                                                               │              │    └── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              └── const: '00000'
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: "_stmt_raise_9":7
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple
+                     │                                                                                    └── projections
+                     │                                                                                         └── udf: _stmt_raise_9 [as="_stmt_raise_9":7]
+                     │                                                                                              └── body
+                     │                                                                                                   ├── project
+                     │                                                                                                   │    ├── columns: stmt_raise_10:5
+                     │                                                                                                   │    ├── values
+                     │                                                                                                   │    │    └── tuple
+                     │                                                                                                   │    └── projections
+                     │                                                                                                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_10:5]
+                     │                                                                                                   │              ├── const: 'NOTICE'
+                     │                                                                                                   │              ├── concat
+                     │                                                                                                   │              │    ├── concat
+                     │                                                                                                   │              │    │    ├── concat
+                     │                                                                                                   │              │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    ├── concat
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    ├── const: ''
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: '%'
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: ''
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: 1
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: 'foo'
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: '%'
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: ' bar'
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: '%'
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    │    └── const: ''
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    │    └── const: '%'
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    │    └── const: ' '
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    │    └── const: '%'
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    │    └── const: ' '
+                     │                                                                                                   │              │    │    │    │    │    │    │    │    └── const: '%'
+                     │                                                                                                   │              │    │    │    │    │    │    │    └── const: ''
+                     │                                                                                                   │              │    │    │    │    │    │    └── const: '%'
+                     │                                                                                                   │              │    │    │    │    │    └── const: ' ba'
+                     │                                                                                                   │              │    │    │    │    └── const: 2
+                     │                                                                                                   │              │    │    │    └── const: 'z'
+                     │                                                                                                   │              │    │    └── const: 3
+                     │                                                                                                   │              │    └── const: ''
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              └── const: '00000'
+                     │                                                                                                   └── project
+                     │                                                                                                        ├── columns: stmt_return_11:6!null
+                     │                                                                                                        ├── values
+                     │                                                                                                        │    └── tuple
+                     │                                                                                                        └── projections
+                     │                                                                                                             └── const: 0 [as=stmt_return_11:6]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE division_by_zero;
+    RAISE NOTICE null_value_not_allowed;
+    RAISE NOTICE reading_sql_data_not_permitted;
+    RAISE NOTICE SQLSTATE '22012';
+    RAISE NOTICE SQLSTATE '22004';
+    RAISE NOTICE SQLSTATE '39004';
+    RAISE NOTICE SQLSTATE '2F004';
+    RAISE NOTICE SQLSTATE '38004';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:18
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:18]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":17
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":17
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":17]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'NOTICE'
+                     │                   │              ├── const: 'division_by_zero'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: 'division_by_zero'
+                     │                   └── project
+                     │                        ├── columns: "_stmt_raise_3":16
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: _stmt_raise_3 [as="_stmt_raise_3":16]
+                     │                                  └── body
+                     │                                       ├── project
+                     │                                       │    ├── columns: stmt_raise_4:2
+                     │                                       │    ├── values
+                     │                                       │    │    └── tuple
+                     │                                       │    └── projections
+                     │                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_4:2]
+                     │                                       │              ├── const: 'NOTICE'
+                     │                                       │              ├── const: 'null_value_not_allowed'
+                     │                                       │              ├── const: ''
+                     │                                       │              ├── const: ''
+                     │                                       │              └── const: 'null_value_not_allowed'
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_raise_5":15
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_raise_5 [as="_stmt_raise_5":15]
+                     │                                                      └── body
+                     │                                                           ├── project
+                     │                                                           │    ├── columns: stmt_raise_6:3
+                     │                                                           │    ├── values
+                     │                                                           │    │    └── tuple
+                     │                                                           │    └── projections
+                     │                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_6:3]
+                     │                                                           │              ├── const: 'NOTICE'
+                     │                                                           │              ├── const: 'reading_sql_data_not_permitted'
+                     │                                                           │              ├── const: ''
+                     │                                                           │              ├── const: ''
+                     │                                                           │              └── const: 'reading_sql_data_not_permitted'
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_raise_7":14
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_raise_7 [as="_stmt_raise_7":14]
+                     │                                                                          └── body
+                     │                                                                               ├── project
+                     │                                                                               │    ├── columns: stmt_raise_8:4
+                     │                                                                               │    ├── values
+                     │                                                                               │    │    └── tuple
+                     │                                                                               │    └── projections
+                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:4]
+                     │                                                                               │              ├── const: 'NOTICE'
+                     │                                                                               │              ├── const: '22012'
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              └── const: '22012'
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: "_stmt_raise_9":13
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple
+                     │                                                                                    └── projections
+                     │                                                                                         └── udf: _stmt_raise_9 [as="_stmt_raise_9":13]
+                     │                                                                                              └── body
+                     │                                                                                                   ├── project
+                     │                                                                                                   │    ├── columns: stmt_raise_10:5
+                     │                                                                                                   │    ├── values
+                     │                                                                                                   │    │    └── tuple
+                     │                                                                                                   │    └── projections
+                     │                                                                                                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_10:5]
+                     │                                                                                                   │              ├── const: 'NOTICE'
+                     │                                                                                                   │              ├── const: '22004'
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              └── const: '22004'
+                     │                                                                                                   └── project
+                     │                                                                                                        ├── columns: "_stmt_raise_11":12
+                     │                                                                                                        ├── values
+                     │                                                                                                        │    └── tuple
+                     │                                                                                                        └── projections
+                     │                                                                                                             └── udf: _stmt_raise_11 [as="_stmt_raise_11":12]
+                     │                                                                                                                  └── body
+                     │                                                                                                                       ├── project
+                     │                                                                                                                       │    ├── columns: stmt_raise_12:6
+                     │                                                                                                                       │    ├── values
+                     │                                                                                                                       │    │    └── tuple
+                     │                                                                                                                       │    └── projections
+                     │                                                                                                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_12:6]
+                     │                                                                                                                       │              ├── const: 'NOTICE'
+                     │                                                                                                                       │              ├── const: '39004'
+                     │                                                                                                                       │              ├── const: ''
+                     │                                                                                                                       │              ├── const: ''
+                     │                                                                                                                       │              └── const: '39004'
+                     │                                                                                                                       └── project
+                     │                                                                                                                            ├── columns: "_stmt_raise_13":11
+                     │                                                                                                                            ├── values
+                     │                                                                                                                            │    └── tuple
+                     │                                                                                                                            └── projections
+                     │                                                                                                                                 └── udf: _stmt_raise_13 [as="_stmt_raise_13":11]
+                     │                                                                                                                                      └── body
+                     │                                                                                                                                           ├── project
+                     │                                                                                                                                           │    ├── columns: stmt_raise_14:7
+                     │                                                                                                                                           │    ├── values
+                     │                                                                                                                                           │    │    └── tuple
+                     │                                                                                                                                           │    └── projections
+                     │                                                                                                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_14:7]
+                     │                                                                                                                                           │              ├── const: 'NOTICE'
+                     │                                                                                                                                           │              ├── const: '2F004'
+                     │                                                                                                                                           │              ├── const: ''
+                     │                                                                                                                                           │              ├── const: ''
+                     │                                                                                                                                           │              └── const: '2F004'
+                     │                                                                                                                                           └── project
+                     │                                                                                                                                                ├── columns: "_stmt_raise_15":10
+                     │                                                                                                                                                ├── values
+                     │                                                                                                                                                │    └── tuple
+                     │                                                                                                                                                └── projections
+                     │                                                                                                                                                     └── udf: _stmt_raise_15 [as="_stmt_raise_15":10]
+                     │                                                                                                                                                          └── body
+                     │                                                                                                                                                               ├── project
+                     │                                                                                                                                                               │    ├── columns: stmt_raise_16:8
+                     │                                                                                                                                                               │    ├── values
+                     │                                                                                                                                                               │    │    └── tuple
+                     │                                                                                                                                                               │    └── projections
+                     │                                                                                                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_16:8]
+                     │                                                                                                                                                               │              ├── const: 'NOTICE'
+                     │                                                                                                                                                               │              ├── const: '38004'
+                     │                                                                                                                                                               │              ├── const: ''
+                     │                                                                                                                                                               │              ├── const: ''
+                     │                                                                                                                                                               │              └── const: '38004'
+                     │                                                                                                                                                               └── project
+                     │                                                                                                                                                                    ├── columns: stmt_return_17:9!null
+                     │                                                                                                                                                                    ├── values
+                     │                                                                                                                                                                    │    └── tuple
+                     │                                                                                                                                                                    └── projections
+                     │                                                                                                                                                                         └── const: 0 [as=stmt_return_17:9]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE NOTICE USING MESSAGE = 'foo';
+    RAISE NOTICE USING MESSAGE = format('%s %s!','Hello','World');
+    RAISE NOTICE USING MESSAGE = 'foo', DETAIL = 'bar', HINT = 'baz';
+    RAISE NOTICE 'foo' USING ERRCODE = 'division_by_zero';
+    RAISE NOTICE 'foo' USING ERRCODE = '22012';
+    -- If no message is specified, the error code is used.
+    RAISE NOTICE USING ERRCODE = 'division_by_zero';
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:14
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:14]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":13
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":13
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":13]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'NOTICE'
+                     │                   │              ├── const: 'foo'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: '00000'
+                     │                   └── project
+                     │                        ├── columns: "_stmt_raise_3":12
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: _stmt_raise_3 [as="_stmt_raise_3":12]
+                     │                                  └── body
+                     │                                       ├── project
+                     │                                       │    ├── columns: stmt_raise_4:2
+                     │                                       │    ├── values
+                     │                                       │    │    └── tuple
+                     │                                       │    └── projections
+                     │                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_4:2]
+                     │                                       │              ├── const: 'NOTICE'
+                     │                                       │              ├── function: format
+                     │                                       │              │    ├── const: '%s %s!'
+                     │                                       │              │    ├── const: 'Hello'
+                     │                                       │              │    └── const: 'World'
+                     │                                       │              ├── const: ''
+                     │                                       │              ├── const: ''
+                     │                                       │              └── const: '00000'
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_raise_5":11
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_raise_5 [as="_stmt_raise_5":11]
+                     │                                                      └── body
+                     │                                                           ├── project
+                     │                                                           │    ├── columns: stmt_raise_6:3
+                     │                                                           │    ├── values
+                     │                                                           │    │    └── tuple
+                     │                                                           │    └── projections
+                     │                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_6:3]
+                     │                                                           │              ├── const: 'NOTICE'
+                     │                                                           │              ├── const: 'foo'
+                     │                                                           │              ├── const: 'bar'
+                     │                                                           │              ├── const: 'baz'
+                     │                                                           │              └── const: '00000'
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_raise_7":10
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_raise_7 [as="_stmt_raise_7":10]
+                     │                                                                          └── body
+                     │                                                                               ├── project
+                     │                                                                               │    ├── columns: stmt_raise_8:4
+                     │                                                                               │    ├── values
+                     │                                                                               │    │    └── tuple
+                     │                                                                               │    └── projections
+                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:4]
+                     │                                                                               │              ├── const: 'NOTICE'
+                     │                                                                               │              ├── const: 'foo'
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              └── const: 'division_by_zero'
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: "_stmt_raise_9":9
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple
+                     │                                                                                    └── projections
+                     │                                                                                         └── udf: _stmt_raise_9 [as="_stmt_raise_9":9]
+                     │                                                                                              └── body
+                     │                                                                                                   ├── project
+                     │                                                                                                   │    ├── columns: stmt_raise_10:5
+                     │                                                                                                   │    ├── values
+                     │                                                                                                   │    │    └── tuple
+                     │                                                                                                   │    └── projections
+                     │                                                                                                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_10:5]
+                     │                                                                                                   │              ├── const: 'NOTICE'
+                     │                                                                                                   │              ├── const: 'foo'
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              ├── const: ''
+                     │                                                                                                   │              └── const: '22012'
+                     │                                                                                                   └── project
+                     │                                                                                                        ├── columns: "_stmt_raise_11":8
+                     │                                                                                                        ├── values
+                     │                                                                                                        │    └── tuple
+                     │                                                                                                        └── projections
+                     │                                                                                                             └── udf: _stmt_raise_11 [as="_stmt_raise_11":8]
+                     │                                                                                                                  └── body
+                     │                                                                                                                       ├── project
+                     │                                                                                                                       │    ├── columns: stmt_raise_12:6
+                     │                                                                                                                       │    ├── values
+                     │                                                                                                                       │    │    └── tuple
+                     │                                                                                                                       │    └── projections
+                     │                                                                                                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_12:6]
+                     │                                                                                                                       │              ├── const: 'NOTICE'
+                     │                                                                                                                       │              ├── const: 'division_by_zero'
+                     │                                                                                                                       │              ├── const: ''
+                     │                                                                                                                       │              ├── const: ''
+                     │                                                                                                                       │              └── const: 'division_by_zero'
+                     │                                                                                                                       └── project
+                     │                                                                                                                            ├── columns: stmt_return_13:7!null
+                     │                                                                                                                            ├── values
+                     │                                                                                                                            │    └── tuple
+                     │                                                                                                                            └── projections
+                     │                                                                                                                                 └── const: 0 [as=stmt_return_13:7]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    RAISE NOTICE '1: i = %', i;
+    i := 100;
+    RAISE NOTICE '2: i = %', i;
+    i := (SELECT count(*) FROM xy);
+    RAISE NOTICE '3: i = %', i;
+    RAISE NOTICE 'max_x: %', (SELECT max(x) FROM xy);
+    return i;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:29
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:29]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":28
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":28
+                     │    ├── project
+                     │    │    ├── columns: i:1!null
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── const: 0 [as=i:1]
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":28]
+                     │              ├── args
+                     │              │    └── variable: i:1
+                     │              ├── params: i:2
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:3
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:3]
+                     │                   │              ├── const: 'NOTICE'
+                     │                   │              ├── concat
+                     │                   │              │    ├── concat
+                     │                   │              │    │    ├── const: '1: i = '
+                     │                   │              │    │    └── variable: i:2
+                     │                   │              │    └── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: '00000'
+                     │                   └── project
+                     │                        ├── columns: "_stmt_raise_3":27
+                     │                        ├── project
+                     │                        │    ├── columns: i:4!null
+                     │                        │    ├── values
+                     │                        │    │    └── tuple
+                     │                        │    └── projections
+                     │                        │         └── const: 100 [as=i:4]
+                     │                        └── projections
+                     │                             └── udf: _stmt_raise_3 [as="_stmt_raise_3":27]
+                     │                                  ├── args
+                     │                                  │    └── variable: i:4
+                     │                                  ├── params: i:5
+                     │                                  └── body
+                     │                                       ├── project
+                     │                                       │    ├── columns: stmt_raise_4:6
+                     │                                       │    ├── values
+                     │                                       │    │    └── tuple
+                     │                                       │    └── projections
+                     │                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_4:6]
+                     │                                       │              ├── const: 'NOTICE'
+                     │                                       │              ├── concat
+                     │                                       │              │    ├── concat
+                     │                                       │              │    │    ├── const: '2: i = '
+                     │                                       │              │    │    └── variable: i:5
+                     │                                       │              │    └── const: ''
+                     │                                       │              ├── const: ''
+                     │                                       │              ├── const: ''
+                     │                                       │              └── const: '00000'
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_raise_5":26
+                     │                                            ├── project
+                     │                                            │    ├── columns: i:13
+                     │                                            │    ├── values
+                     │                                            │    │    └── tuple
+                     │                                            │    └── projections
+                     │                                            │         └── subquery [as=i:13]
+                     │                                            │              └── max1-row
+                     │                                            │                   ├── columns: count_rows:12!null
+                     │                                            │                   └── scalar-group-by
+                     │                                            │                        ├── columns: count_rows:12!null
+                     │                                            │                        ├── project
+                     │                                            │                        │    └── scan xy
+                     │                                            │                        │         └── columns: x:7 y:8 rowid:9!null crdb_internal_mvcc_timestamp:10 tableoid:11
+                     │                                            │                        └── aggregations
+                     │                                            │                             └── count-rows [as=count_rows:12]
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_raise_5 [as="_stmt_raise_5":26]
+                     │                                                      ├── args
+                     │                                                      │    └── variable: i:13
+                     │                                                      ├── params: i:14
+                     │                                                      └── body
+                     │                                                           ├── project
+                     │                                                           │    ├── columns: stmt_raise_6:15
+                     │                                                           │    ├── values
+                     │                                                           │    │    └── tuple
+                     │                                                           │    └── projections
+                     │                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_6:15]
+                     │                                                           │              ├── const: 'NOTICE'
+                     │                                                           │              ├── concat
+                     │                                                           │              │    ├── concat
+                     │                                                           │              │    │    ├── const: '3: i = '
+                     │                                                           │              │    │    └── variable: i:14
+                     │                                                           │              │    └── const: ''
+                     │                                                           │              ├── const: ''
+                     │                                                           │              ├── const: ''
+                     │                                                           │              └── const: '00000'
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_raise_7":25
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_raise_7 [as="_stmt_raise_7":25]
+                     │                                                                          ├── args
+                     │                                                                          │    └── variable: i:14
+                     │                                                                          ├── params: i:16
+                     │                                                                          └── body
+                     │                                                                               ├── project
+                     │                                                                               │    ├── columns: stmt_raise_8:23
+                     │                                                                               │    ├── values
+                     │                                                                               │    │    └── tuple
+                     │                                                                               │    └── projections
+                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:23]
+                     │                                                                               │              ├── const: 'NOTICE'
+                     │                                                                               │              ├── concat
+                     │                                                                               │              │    ├── concat
+                     │                                                                               │              │    │    ├── const: 'max_x: '
+                     │                                                                               │              │    │    └── subquery
+                     │                                                                               │              │    │         └── max1-row
+                     │                                                                               │              │    │              ├── columns: max:22
+                     │                                                                               │              │    │              └── scalar-group-by
+                     │                                                                               │              │    │                   ├── columns: max:22
+                     │                                                                               │              │    │                   ├── project
+                     │                                                                               │              │    │                   │    ├── columns: x:17
+                     │                                                                               │              │    │                   │    └── scan xy
+                     │                                                                               │              │    │                   │         └── columns: x:17 y:18 rowid:19!null crdb_internal_mvcc_timestamp:20 tableoid:21
+                     │                                                                               │              │    │                   └── aggregations
+                     │                                                                               │              │    │                        └── max [as=max:22]
+                     │                                                                               │              │    │                             └── variable: x:17
+                     │                                                                               │              │    └── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              └── const: '00000'
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: stmt_return_9:24
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple
+                     │                                                                                    └── projections
+                     │                                                                                         └── variable: i:16 [as=stmt_return_9:24]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    LOOP
+      IF i >= 5 THEN EXIT; END IF;
+      RAISE NOTICE 'i = %', i;
+      i := i + 1;
+    END LOOP;
+    RAISE NOTICE 'finished with i = %', i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:18
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:18]
+           └── body
+                └── limit
+                     ├── columns: stmt_loop_5:17
+                     ├── project
+                     │    ├── columns: stmt_loop_5:17
+                     │    ├── project
+                     │    │    ├── columns: i:1!null
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── const: 0 [as=i:1]
+                     │    └── projections
+                     │         └── udf: stmt_loop_5 [as=stmt_loop_5:17]
+                     │              ├── args
+                     │              │    └── variable: i:1
+                     │              ├── params: i:7
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: stmt_if_9:16
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── case [as=stmt_if_9:16]
+                     │                                  ├── true
+                     │                                  ├── when
+                     │                                  │    ├── ge
+                     │                                  │    │    ├── variable: i:7
+                     │                                  │    │    └── const: 5
+                     │                                  │    └── subquery
+                     │                                  │         └── project
+                     │                                  │              ├── columns: loop_exit_1:14
+                     │                                  │              ├── values
+                     │                                  │              │    └── tuple
+                     │                                  │              └── projections
+                     │                                  │                   └── udf: loop_exit_1 [as=loop_exit_1:14]
+                     │                                  │                        ├── args
+                     │                                  │                        │    └── variable: i:7
+                     │                                  │                        ├── params: i:2
+                     │                                  │                        └── body
+                     │                                  │                             └── project
+                     │                                  │                                  ├── columns: "_stmt_raise_2":6
+                     │                                  │                                  ├── values
+                     │                                  │                                  │    └── tuple
+                     │                                  │                                  └── projections
+                     │                                  │                                       └── udf: _stmt_raise_2 [as="_stmt_raise_2":6]
+                     │                                  │                                            ├── args
+                     │                                  │                                            │    └── variable: i:2
+                     │                                  │                                            ├── params: i:3
+                     │                                  │                                            └── body
+                     │                                  │                                                 ├── project
+                     │                                  │                                                 │    ├── columns: stmt_raise_3:4
+                     │                                  │                                                 │    ├── values
+                     │                                  │                                                 │    │    └── tuple
+                     │                                  │                                                 │    └── projections
+                     │                                  │                                                 │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_3:4]
+                     │                                  │                                                 │              ├── const: 'NOTICE'
+                     │                                  │                                                 │              ├── concat
+                     │                                  │                                                 │              │    ├── concat
+                     │                                  │                                                 │              │    │    ├── const: 'finished with i = '
+                     │                                  │                                                 │              │    │    └── variable: i:3
+                     │                                  │                                                 │              │    └── const: ''
+                     │                                  │                                                 │              ├── const: ''
+                     │                                  │                                                 │              ├── const: ''
+                     │                                  │                                                 │              └── const: '00000'
+                     │                                  │                                                 └── project
+                     │                                  │                                                      ├── columns: stmt_return_4:5!null
+                     │                                  │                                                      ├── values
+                     │                                  │                                                      │    └── tuple
+                     │                                  │                                                      └── projections
+                     │                                  │                                                           └── const: 0 [as=stmt_return_4:5]
+                     │                                  └── subquery
+                     │                                       └── project
+                     │                                            ├── columns: stmt_if_6:15
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: stmt_if_6 [as=stmt_if_6:15]
+                     │                                                      ├── args
+                     │                                                      │    └── variable: i:7
+                     │                                                      ├── params: i:8
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_raise_7":13
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_raise_7 [as="_stmt_raise_7":13]
+                     │                                                                          ├── args
+                     │                                                                          │    └── variable: i:8
+                     │                                                                          ├── params: i:9
+                     │                                                                          └── body
+                     │                                                                               ├── project
+                     │                                                                               │    ├── columns: stmt_raise_8:10
+                     │                                                                               │    ├── values
+                     │                                                                               │    │    └── tuple
+                     │                                                                               │    └── projections
+                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_8:10]
+                     │                                                                               │              ├── const: 'NOTICE'
+                     │                                                                               │              ├── concat
+                     │                                                                               │              │    ├── concat
+                     │                                                                               │              │    │    ├── const: 'i = '
+                     │                                                                               │              │    │    └── variable: i:9
+                     │                                                                               │              │    └── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              └── const: '00000'
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: stmt_loop_5:12
+                     │                                                                                    ├── project
+                     │                                                                                    │    ├── columns: i:11
+                     │                                                                                    │    ├── values
+                     │                                                                                    │    │    └── tuple
+                     │                                                                                    │    └── projections
+                     │                                                                                    │         └── plus [as=i:11]
+                     │                                                                                    │              ├── variable: i:9
+                     │                                                                                    │              └── const: 1
+                     │                                                                                    └── projections
+                     │                                                                                         └── udf: stmt_loop_5 [as=stmt_loop_5:12]
+                     │                                                                                              ├── args
+                     │                                                                                              │    └── variable: i:11
+                     │                                                                                              └── recursive-call
+                     └── const: 1
+
+# Testing RAISE statement with EXCEPTION log level.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION 'foo';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:4]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":3
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":3
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":3]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'ERROR'
+                     │                   │              ├── const: 'foo'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: 'P0001'
+                     │                   └── project
+                     │                        ├── columns: stmt_return_3:2!null
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── const: 0 [as=stmt_return_3:2]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION division_by_zero;
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:4]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":3
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":3
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":3]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'ERROR'
+                     │                   │              ├── const: 'division_by_zero'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: 'division_by_zero'
+                     │                   └── project
+                     │                        ├── columns: stmt_return_3:2!null
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── const: 0 [as=stmt_return_3:2]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION SQLSTATE '22012';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:4]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":3
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":3
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":3]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'ERROR'
+                     │                   │              ├── const: '22012'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: '22012'
+                     │                   └── project
+                     │                        ├── columns: stmt_return_3:2!null
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── const: 0 [as=stmt_return_3:2]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    LOOP
+      IF i >= 5 THEN EXIT; END IF;
+      IF i = 3 THEN
+        RAISE EXCEPTION 'i = %', i;
+      END IF;
+      RAISE NOTICE 'i = %', i;
+      i := i + 1;
+    END LOOP;
+    RAISE NOTICE 'finished with i = %', i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:25
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:25]
+           └── body
+                └── limit
+                     ├── columns: stmt_loop_5:24
+                     ├── project
+                     │    ├── columns: stmt_loop_5:24
+                     │    ├── project
+                     │    │    ├── columns: i:1!null
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── const: 0 [as=i:1]
+                     │    └── projections
+                     │         └── udf: stmt_loop_5 [as=stmt_loop_5:24]
+                     │              ├── args
+                     │              │    └── variable: i:1
+                     │              ├── params: i:7
+                     │              └── body
+                     │                   └── project
+                     │                        ├── columns: stmt_if_13:23
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── case [as=stmt_if_13:23]
+                     │                                  ├── true
+                     │                                  ├── when
+                     │                                  │    ├── ge
+                     │                                  │    │    ├── variable: i:7
+                     │                                  │    │    └── const: 5
+                     │                                  │    └── subquery
+                     │                                  │         └── project
+                     │                                  │              ├── columns: loop_exit_1:21
+                     │                                  │              ├── values
+                     │                                  │              │    └── tuple
+                     │                                  │              └── projections
+                     │                                  │                   └── udf: loop_exit_1 [as=loop_exit_1:21]
+                     │                                  │                        ├── args
+                     │                                  │                        │    └── variable: i:7
+                     │                                  │                        ├── params: i:2
+                     │                                  │                        └── body
+                     │                                  │                             └── project
+                     │                                  │                                  ├── columns: "_stmt_raise_2":6
+                     │                                  │                                  ├── values
+                     │                                  │                                  │    └── tuple
+                     │                                  │                                  └── projections
+                     │                                  │                                       └── udf: _stmt_raise_2 [as="_stmt_raise_2":6]
+                     │                                  │                                            ├── args
+                     │                                  │                                            │    └── variable: i:2
+                     │                                  │                                            ├── params: i:3
+                     │                                  │                                            └── body
+                     │                                  │                                                 ├── project
+                     │                                  │                                                 │    ├── columns: stmt_raise_3:4
+                     │                                  │                                                 │    ├── values
+                     │                                  │                                                 │    │    └── tuple
+                     │                                  │                                                 │    └── projections
+                     │                                  │                                                 │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_3:4]
+                     │                                  │                                                 │              ├── const: 'NOTICE'
+                     │                                  │                                                 │              ├── concat
+                     │                                  │                                                 │              │    ├── concat
+                     │                                  │                                                 │              │    │    ├── const: 'finished with i = '
+                     │                                  │                                                 │              │    │    └── variable: i:3
+                     │                                  │                                                 │              │    └── const: ''
+                     │                                  │                                                 │              ├── const: ''
+                     │                                  │                                                 │              ├── const: ''
+                     │                                  │                                                 │              └── const: '00000'
+                     │                                  │                                                 └── project
+                     │                                  │                                                      ├── columns: stmt_return_4:5!null
+                     │                                  │                                                      ├── values
+                     │                                  │                                                      │    └── tuple
+                     │                                  │                                                      └── projections
+                     │                                  │                                                           └── const: 0 [as=stmt_return_4:5]
+                     │                                  └── subquery
+                     │                                       └── project
+                     │                                            ├── columns: stmt_if_6:22
+                     │                                            ├── values
+                     │                                            │    └── tuple
+                     │                                            └── projections
+                     │                                                 └── udf: stmt_if_6 [as=stmt_if_6:22]
+                     │                                                      ├── args
+                     │                                                      │    └── variable: i:7
+                     │                                                      ├── params: i:8
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: stmt_if_12:20
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── case [as=stmt_if_12:20]
+                     │                                                                          ├── true
+                     │                                                                          ├── when
+                     │                                                                          │    ├── eq
+                     │                                                                          │    │    ├── variable: i:8
+                     │                                                                          │    │    └── const: 3
+                     │                                                                          │    └── subquery
+                     │                                                                          │         └── project
+                     │                                                                          │              ├── columns: "_stmt_raise_10":18
+                     │                                                                          │              ├── values
+                     │                                                                          │              │    └── tuple
+                     │                                                                          │              └── projections
+                     │                                                                          │                   └── udf: _stmt_raise_10 [as="_stmt_raise_10":18]
+                     │                                                                          │                        ├── args
+                     │                                                                          │                        │    └── variable: i:8
+                     │                                                                          │                        ├── params: i:15
+                     │                                                                          │                        └── body
+                     │                                                                          │                             ├── project
+                     │                                                                          │                             │    ├── columns: stmt_raise_11:16
+                     │                                                                          │                             │    ├── values
+                     │                                                                          │                             │    │    └── tuple
+                     │                                                                          │                             │    └── projections
+                     │                                                                          │                             │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_11:16]
+                     │                                                                          │                             │              ├── const: 'ERROR'
+                     │                                                                          │                             │              ├── concat
+                     │                                                                          │                             │              │    ├── concat
+                     │                                                                          │                             │              │    │    ├── const: 'i = '
+                     │                                                                          │                             │              │    │    └── variable: i:15
+                     │                                                                          │                             │              │    └── const: ''
+                     │                                                                          │                             │              ├── const: ''
+                     │                                                                          │                             │              ├── const: ''
+                     │                                                                          │                             │              └── const: 'P0001'
+                     │                                                                          │                             └── project
+                     │                                                                          │                                  ├── columns: stmt_if_7:17
+                     │                                                                          │                                  ├── values
+                     │                                                                          │                                  │    └── tuple
+                     │                                                                          │                                  └── projections
+                     │                                                                          │                                       └── udf: stmt_if_7 [as=stmt_if_7:17]
+                     │                                                                          │                                            ├── args
+                     │                                                                          │                                            │    └── variable: i:15
+                     │                                                                          │                                            ├── params: i:9
+                     │                                                                          │                                            └── body
+                     │                                                                          │                                                 └── project
+                     │                                                                          │                                                      ├── columns: "_stmt_raise_8":14
+                     │                                                                          │                                                      ├── values
+                     │                                                                          │                                                      │    └── tuple
+                     │                                                                          │                                                      └── projections
+                     │                                                                          │                                                           └── udf: _stmt_raise_8 [as="_stmt_raise_8":14]
+                     │                                                                          │                                                                ├── args
+                     │                                                                          │                                                                │    └── variable: i:9
+                     │                                                                          │                                                                ├── params: i:10
+                     │                                                                          │                                                                └── body
+                     │                                                                          │                                                                     ├── project
+                     │                                                                          │                                                                     │    ├── columns: stmt_raise_9:11
+                     │                                                                          │                                                                     │    ├── values
+                     │                                                                          │                                                                     │    │    └── tuple
+                     │                                                                          │                                                                     │    └── projections
+                     │                                                                          │                                                                     │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_9:11]
+                     │                                                                          │                                                                     │              ├── const: 'NOTICE'
+                     │                                                                          │                                                                     │              ├── concat
+                     │                                                                          │                                                                     │              │    ├── concat
+                     │                                                                          │                                                                     │              │    │    ├── const: 'i = '
+                     │                                                                          │                                                                     │              │    │    └── variable: i:10
+                     │                                                                          │                                                                     │              │    └── const: ''
+                     │                                                                          │                                                                     │              ├── const: ''
+                     │                                                                          │                                                                     │              ├── const: ''
+                     │                                                                          │                                                                     │              └── const: '00000'
+                     │                                                                          │                                                                     └── project
+                     │                                                                          │                                                                          ├── columns: stmt_loop_5:13
+                     │                                                                          │                                                                          ├── project
+                     │                                                                          │                                                                          │    ├── columns: i:12
+                     │                                                                          │                                                                          │    ├── values
+                     │                                                                          │                                                                          │    │    └── tuple
+                     │                                                                          │                                                                          │    └── projections
+                     │                                                                          │                                                                          │         └── plus [as=i:12]
+                     │                                                                          │                                                                          │              ├── variable: i:10
+                     │                                                                          │                                                                          │              └── const: 1
+                     │                                                                          │                                                                          └── projections
+                     │                                                                          │                                                                               └── udf: stmt_loop_5 [as=stmt_loop_5:13]
+                     │                                                                          │                                                                                    ├── args
+                     │                                                                          │                                                                                    │    └── variable: i:12
+                     │                                                                          │                                                                                    └── recursive-call
+                     │                                                                          └── subquery
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: stmt_if_7:19
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple
+                     │                                                                                    └── projections
+                     │                                                                                         └── udf: stmt_if_7 [as=stmt_if_7:19]
+                     │                                                                                              ├── args
+                     │                                                                                              │    └── variable: i:8
+                     │                                                                                              ├── params: i:9
+                     │                                                                                              └── body
+                     │                                                                                                   └── project
+                     │                                                                                                        ├── columns: "_stmt_raise_8":14
+                     │                                                                                                        ├── values
+                     │                                                                                                        │    └── tuple
+                     │                                                                                                        └── projections
+                     │                                                                                                             └── udf: _stmt_raise_8 [as="_stmt_raise_8":14]
+                     │                                                                                                                  ├── args
+                     │                                                                                                                  │    └── variable: i:9
+                     │                                                                                                                  ├── params: i:10
+                     │                                                                                                                  └── body
+                     │                                                                                                                       ├── project
+                     │                                                                                                                       │    ├── columns: stmt_raise_9:11
+                     │                                                                                                                       │    ├── values
+                     │                                                                                                                       │    │    └── tuple
+                     │                                                                                                                       │    └── projections
+                     │                                                                                                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_9:11]
+                     │                                                                                                                       │              ├── const: 'NOTICE'
+                     │                                                                                                                       │              ├── concat
+                     │                                                                                                                       │              │    ├── concat
+                     │                                                                                                                       │              │    │    ├── const: 'i = '
+                     │                                                                                                                       │              │    │    └── variable: i:10
+                     │                                                                                                                       │              │    └── const: ''
+                     │                                                                                                                       │              ├── const: ''
+                     │                                                                                                                       │              ├── const: ''
+                     │                                                                                                                       │              └── const: '00000'
+                     │                                                                                                                       └── project
+                     │                                                                                                                            ├── columns: stmt_loop_5:13
+                     │                                                                                                                            ├── project
+                     │                                                                                                                            │    ├── columns: i:12
+                     │                                                                                                                            │    ├── values
+                     │                                                                                                                            │    │    └── tuple
+                     │                                                                                                                            │    └── projections
+                     │                                                                                                                            │         └── plus [as=i:12]
+                     │                                                                                                                            │              ├── variable: i:10
+                     │                                                                                                                            │              └── const: 1
+                     │                                                                                                                            └── projections
+                     │                                                                                                                                 └── udf: stmt_loop_5 [as=stmt_loop_5:13]
+                     │                                                                                                                                      ├── args
+                     │                                                                                                                                      │    └── variable: i:12
+                     │                                                                                                                                      └── recursive-call
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING ERRCODE = 'division_by_zero';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:4]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":3
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":3
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":3]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'ERROR'
+                     │                   │              ├── const: 'division_by_zero'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: 'division_by_zero'
+                     │                   └── project
+                     │                        ├── columns: stmt_return_3:2!null
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── const: 0 [as=stmt_return_3:2]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING ERRCODE = '22012';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:4]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":3
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":3
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":3]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'ERROR'
+                     │                   │              ├── const: '22012'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: '22012'
+                     │                   └── project
+                     │                        ├── columns: stmt_return_3:2!null
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── const: 0 [as=stmt_return_3:2]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE EXCEPTION USING DETAIL = 'use default errcode for the code and message';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:4]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":3
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":3
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":3]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'ERROR'
+                     │                   │              ├── const: 'P0001'
+                     │                   │              ├── const: 'use default errcode for the code and message'
+                     │                   │              ├── const: ''
+                     │                   │              └── const: 'P0001'
+                     │                   └── project
+                     │                        ├── columns: stmt_return_3:2!null
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── const: 0 [as=stmt_return_3:2]
+                     └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    RAISE 'foo';
+    return 0;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f();
+----
+project
+ ├── columns: f:4
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f [as=f:4]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":3
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":3
+                     │    ├── values
+                     │    │    └── tuple
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":3]
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:1
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1]
+                     │                   │              ├── const: 'ERROR'
+                     │                   │              ├── const: 'foo'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: 'P0001'
+                     │                   └── project
+                     │                        ├── columns: stmt_return_3:2!null
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── const: 0 [as=stmt_return_3:2]
                      └── const: 1
