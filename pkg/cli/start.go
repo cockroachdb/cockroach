@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -398,6 +399,8 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	const serverType redact.SafeString = "node"
 
+	logMetrics := metric.NewLogMetricsRegistry()
+
 	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
 		// Beware of not writing simply 'return server.NewServer()'. This is
 		// because it would cause the serverStartupInterface reference to
@@ -411,7 +414,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 		return s, nil
 	}
 
-	return runStartInternal(cmd, serverType, serverCfg.InitNode, newServerFn, startSingleNode)
+	return runStartInternal(cmd, serverType, serverCfg.InitNode, newServerFn, startSingleNode, logMetrics)
 }
 
 // runStartInternal contains the code common to start a regular server
@@ -422,6 +425,7 @@ func runStartInternal(
 	initConfigFn func(context.Context) error,
 	newServerFn newServerFn,
 	startSingleNode bool,
+	logMetrics log.LogMetrics,
 ) error {
 	tBegin := timeutil.Now()
 
@@ -508,7 +512,7 @@ func runStartInternal(
 	// additional server configuration tweaks for the startup process
 	// must be necessarily non-logging-related, as logging parameters
 	// cannot be picked up beyond this point.
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, true /* isServerCmd */)
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, true /* isServerCmd */, logMetrics)
 	if err != nil {
 		return err
 	}
@@ -1384,9 +1388,9 @@ disk space exhaustion may result in node loss.`, ballastPathsStr)
 // "start" and "start-sql" commands which is why this work occurs here and not
 // in an OnInitialize function.
 func setupAndInitializeLoggingAndProfiling(
-	ctx context.Context, cmd *cobra.Command, isServerCmd bool,
+	ctx context.Context, cmd *cobra.Command, isServerCmd bool, metrics log.LogMetrics,
 ) (stopper *stop.Stopper, err error) {
-	if err := setupLogging(ctx, cmd, isServerCmd, true /* applyConfig */); err != nil {
+	if err := setupLogging(ctx, cmd, isServerCmd, true /* applyConfig */, metrics); err != nil {
 		return nil, err
 	}
 

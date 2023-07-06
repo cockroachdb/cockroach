@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
@@ -77,6 +78,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 			ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
 		)
 	}
+	logMetrics := metric.NewLogMetricsRegistry()
 
 	newServerFn := func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
 		// Beware of not writing simply 'return server.NewServer()'. This is
@@ -97,5 +99,5 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return s, nil
 	}
 
-	return runStartInternal(cmd, serverType, initConfig, newServerFn, false /* startSingleNode */)
+	return runStartInternal(cmd, serverType, initConfig, newServerFn, false /* startSingleNode */, logMetrics)
 }

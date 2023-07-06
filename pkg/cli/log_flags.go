@@ -39,7 +39,9 @@ import (
 //
 // The command then further distinguishes between server (e.g. start)
 // and non-server commands (e.g. 'node ls').
-func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyConfig bool) error {
+func setupLogging(
+	ctx context.Context, cmd *cobra.Command, isServerCmd, applyConfig bool, metrics log.LogMetrics,
+) error {
 	// Compatibility check for command-line usage.
 	if cliCtx.logOverrides.anySet() &&
 		cliCtx.logConfigInput.isSet {
@@ -187,7 +189,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	}
 
 	// Configuration ready and directories exist; apply it.
-	logShutdownFn, err := log.ApplyConfig(h.Config)
+	logShutdownFn, err := log.ApplyConfig(h.Config, metrics)
 	if err != nil {
 		return err
 	}

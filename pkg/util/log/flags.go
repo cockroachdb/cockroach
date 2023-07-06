@@ -66,7 +66,7 @@ func init() {
 	// using TestLogScope.
 	cfg := getTestConfig(nil /* output to files disabled */, true /* mostly inline */)
 
-	if _, err := ApplyConfig(cfg); err != nil {
+	if _, err := ApplyConfig(cfg, nil); err != nil {
 		panic(err)
 	}
 
@@ -90,11 +90,16 @@ func IsActive() (active bool, firstUse string) {
 // ApplyConfig applies the given configuration.
 //
 // The returned logShutdownFn can be used to gracefully shut down logging facilities.
-func ApplyConfig(config logconfig.Config) (logShutdownFn func(), err error) {
+func ApplyConfig(config logconfig.Config, metrics LogMetrics) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
 		panic(errors.Newf("logging already active; first use:\n%s", firstUse))
 	}
+
+	if logging.metrics != nil {
+		panic("tried to assign LogMetrics after it was already assigned")
+	}
+	logging.metrics = metrics
 
 	// Our own cancellable context to stop the secondary loggers below.
 	//

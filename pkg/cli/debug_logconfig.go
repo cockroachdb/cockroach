@@ -30,7 +30,7 @@ var debugLogChanSel logconfig.ChannelList
 
 func runDebugCheckLogConfig(cmd *cobra.Command, args []string) error {
 	if err := setupLogging(context.Background(), cmd,
-		true /* isServerCmd */, false /* applyconfig */); err != nil {
+		true /* isServerCmd */, false /* applyconfig */, nil /* metrics */); err != nil {
 		return err
 	}
 	if cliCtx.ambiguousLogDir {

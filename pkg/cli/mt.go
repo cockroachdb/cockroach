@@ -65,7 +65,7 @@ func ClearStoresAndSetupLoggingForMTCommands(
 	serverCfg.ClusterName = ""
 	serverCfg.Stores.Specs = nil
 
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */, nil)
 	if err != nil {
 		return nil, err
 	}

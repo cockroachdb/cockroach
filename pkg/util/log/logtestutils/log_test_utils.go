@@ -38,7 +38,7 @@ func InstallLogFileSink(sc *log.TestLogScope, t *testing.T, channel logpb.Channe
 	if err := cfg.Validate(&dir); err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := log.ApplyConfig(cfg)
+	cleanup, err := log.ApplyConfig(cfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
