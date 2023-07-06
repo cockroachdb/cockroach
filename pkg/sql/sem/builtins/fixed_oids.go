@@ -2383,6 +2383,7 @@ var builtinOidsArray = []string{
 	2412: `crdb_internal.fingerprint(span: bytes[], start_time: decimal, all_revisions: bool) -> int`,
 	2452: `crdb_internal.repaired_descriptor(descriptor: bytes, valid_descriptor_ids: int[], valid_job_ids: int[]) -> bytes`,
 	2453: `crdb_internal.reset_activity_tables() -> bool`,
+	2455: `crdb_internal.repair_catalog_corruption(descriptor_id: int, corruption: string) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
