@@ -286,13 +286,10 @@ func (s *TestState) MayResolveSchema(
 	return db, sc
 }
 
-func (s *TestState) MustResolvePrefix(
+func (s *TestState) MayResolvePrefix(
 	ctx context.Context, name tree.ObjectNamePrefix,
 ) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
 	db, sc := s.mayResolvePrefix(name)
-	if sc == nil {
-		panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
-	}
 	return db.(catalog.DatabaseDescriptor), sc.(catalog.SchemaDescriptor)
 }
 

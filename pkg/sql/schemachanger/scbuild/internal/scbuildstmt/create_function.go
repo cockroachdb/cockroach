@@ -30,7 +30,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	}
 	b.IncrementSchemaChangeCreateCounter("function")
 
-	dbElts, scElts := b.ResolvePrefix(n.FuncName.ObjectNamePrefix, privilege.CREATE)
+	dbElts, scElts := b.ResolveTargetObject(n.FuncName.ToUnresolvedObjectName(), privilege.CREATE)
 	_, _, sc := scpb.FindSchema(scElts)
 	_, _, db := scpb.FindDatabase(dbElts)
 	_, _, scName := scpb.FindNamespace(scElts)

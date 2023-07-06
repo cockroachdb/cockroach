@@ -129,10 +129,10 @@ type CatalogReader interface {
 	// If withOffline is set, we include offline schema descs into our search.
 	MayResolveSchema(ctx context.Context, name tree.ObjectNamePrefix, withOffline bool) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
 
-	// MustResolvePrefix looks up a database and schema given the prefix at best
+	// MayResolvePrefix looks up a database and schema given the prefix at best
 	// effort, meaning the prefix may not have explicit catalog and schema name.
 	// It fails if the db or schema represented by the prefix does not exist.
-	MustResolvePrefix(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
+	MayResolvePrefix(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
 
 	// MayResolveTable looks up a table by name.
 	MayResolveTable(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor)
