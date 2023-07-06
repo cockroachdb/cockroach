@@ -61,13 +61,14 @@ func CreateDeclarativeSchemaChangeJobs(
 		if err != nil {
 			return err
 		}
+
 		const runningStatus = "restored from backup"
 		records = append(records, scexec.MakeDeclarativeSchemaChangeJobRecord(
 			newID,
 			currentState.Statements,
 			!currentState.Revertible, // NonCancelable
 			currentState.Authorization,
-			screl.AllTargetDescIDs(currentState.TargetState),
+			screl.AllTargetStateDescIDs(currentState.TargetState),
 			runningStatus,
 		))
 	}

@@ -64,7 +64,7 @@ func BuildStages(
 			return m
 		}(),
 		startingPhase:    phase,
-		descIDs:          screl.AllTargetDescIDs(init.TargetState),
+		descIDs:          screl.AllTargetStateDescIDs(init.TargetState),
 		withSanityChecks: withSanityChecks,
 	}
 	// Build stages for all remaining phases.
