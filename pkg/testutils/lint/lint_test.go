@@ -477,7 +477,11 @@ func TestLint(t *testing.T) {
 			re       string
 			excludes []string
 		}{
-			{re: `\bos\.(Getenv|LookupEnv)\("COCKROACH`},
+			{re: `\bos\.(Getenv|LookupEnv)\("COCKROACH`,
+				excludes: []string{
+					":!cmd/bazci/githubpost",
+				},
+			},
 			{
 				re: `\bos\.(Getenv|LookupEnv)\(`,
 				excludes: []string{
