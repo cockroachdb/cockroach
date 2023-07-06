@@ -100,19 +100,6 @@ if [ $# -gt 0 ] ; then
   shift 1
 fi
 
-# Sanity-check used GCE project. You still need to set non default for GCE even if running on AWS.
-if [ -z "${local}" ] && [ "${GCE_PROJECT-cockroach-ephemeral}" == "cockroach-ephemeral" ]; then
-  cat <<EOF
-Please do not use roachstress on the cockroach-ephemeral project.
-This may compete over quota with scheduled roachtest builds.
-Use the andrei-jepsen project instead or reach out to dev-inf.
-
-The project can be specified via the environment:
-  export GCE_PROJECT=XXX
-EOF
-  exit 2
-fi
-
 # Define the artifacts base dir, within which both the built binaries and the
 # artifacts will be stored.
 sha=$(git rev-parse --short HEAD)
