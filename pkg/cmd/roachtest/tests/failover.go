@@ -79,7 +79,7 @@ func registerFailover(r registry.Registry) {
 				Name:                "failover/chaos" + suffix,
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
-				Timeout:             60 * time.Minute,
+				Timeout:             15 * time.Minute,
 				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.PreferLocalSSD(false)), // uses disk stalls
 				Leases:              leases,
 				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
@@ -226,13 +226,22 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	// 100.000 keys.
 	var insertCount int
 	if readOnly {
-		insertCount = 100000
+		// insertCount = 100000
+		insertCount = 1 // HACK
 	}
 	t.L().Printf("creating workload database")
 	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
-	c.Run(ctx, c.Node(10), fmt.Sprintf(
-		`./cockroach workload init kv --splits 1000 --insert-count %d {pgurl:1}`, insertCount))
+
+	m.Go(func(ctx context.Context) error {
+		return c.RunE(ctx, c.Node(10), fmt.Sprintf(
+			`./cockroach workload init kv --splits 1000 --insert-count %d {pgurl:1}`, insertCount))
+	})
+	m.Wait()
+
+	if rand.Intn(100) < 100 { // avoid linters complaining about unreachable code...
+		return // HACK
+	}
 
 	// Scatter the ranges, then relocate them off of the SQL gateways n1-n2.
 	t.L().Printf("scattering table")

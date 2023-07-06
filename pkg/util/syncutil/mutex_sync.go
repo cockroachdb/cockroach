@@ -13,7 +13,14 @@
 
 package syncutil
 
-import "sync"
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+)
 
 // DeadlockEnabled is true if the deadlock detector is enabled.
 const DeadlockEnabled = false
@@ -37,6 +44,45 @@ func (m *Mutex) AssertHeld() {
 // An RWMutex is a reader/writer mutual exclusion lock.
 type RWMutex struct {
 	sync.RWMutex
+	pcs      []uintptr
+	watching *time.Timer // from mtime.AfterFunc
+}
+
+func fatalWithStack(pcs []uintptr) {
+	var buf strings.Builder
+	fs := runtime.CallersFrames(pcs)
+	for {
+		frame, more := fs.Next()
+		if !more {
+			break
+		}
+		_, err := fmt.Fprintf(&buf, "%s:%d %s\n", frame.File, frame.Line, frame.Function)
+		if err != nil {
+			_, _ = fmt.Fprintf(&buf, "error: %v\n", err)
+		}
+		if !more {
+			break
+		}
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "stuck mutex, acquired at:\n%s", &buf)
+	os.Exit(17)
+}
+
+func (rw *RWMutex) Lock() {
+	rw.RWMutex.Lock()
+	if len(rw.pcs) == 0 {
+		rw.pcs = make([]uintptr, 8)
+	}
+	rw.pcs = rw.pcs[:runtime.Callers(2, rw.pcs[:cap(rw.pcs)])]
+	rw.watching = time.AfterFunc(25*time.Second, func() {
+		fatalWithStack(rw.pcs) // data race but we have bigger problems!
+	})
+}
+
+func (rw *RWMutex) Unlock() {
+	rw.watching.Stop()
+	rw.watching = nil
+	rw.RWMutex.Unlock()
 }
 
 // AssertHeld may panic if the mutex is not locked for writing (but it is not

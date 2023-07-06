@@ -24,6 +24,7 @@ go_test(
         "int_map_bench_test.go",
         "int_map_reference_test.go",
         "int_map_test.go",
+        "mutex_stuck_test.go",
         "mutex_sync_race_test.go",  # keep
     ],
     args = ["-test.timeout=55s"],
