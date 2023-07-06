@@ -197,10 +197,6 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(casper): disabled due to error when setting a cluster setting
-	// "setting updated but timed out waiting to read new value"
-	skip.UnderStressRace(t, "disabled under stress race")
-
 	ctx := context.Background()
 	ingestErrCh := make(chan error, 1)
 	ingestionStarts := 0
@@ -220,12 +216,13 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	// Make ingestion error out only once.
+	// Make ingestion error out only once to ensure the job conducts one retryable
+	// error. It's fine to close the channel before the receiver gets the error,
+	// as the channel is buffered.
 	ingestErrCh <- errors.Newf("ingestion error from test")
 	close(ingestErrCh)
 
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	// Ingestion is retried once after having an ingestion error.
