@@ -5,6 +5,10 @@ CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
 build
 CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
 ----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   {indexId: 2, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
@@ -27,15 +31,15 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
   {columnId: 3, indexId: 3, kind: STORED, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
 
 build
 CREATE INVERTED INDEX CONCURRENTLY id2
 	ON defaultdb.t1 (id, name gin_trgm_ops)
 ----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   {indexId: 2, isConcurrently: true, isInverted: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
@@ -54,10 +58,6 @@ CREATE INVERTED INDEX CONCURRENTLY id2
   {columnId: 2, indexId: 3, invertedKind: 1, ordinalInKind: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
 
 build skip=sql_dependencies
 CREATE INDEX id3
@@ -65,6 +65,10 @@ CREATE INDEX id3
 	STORING (money)
 	PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   {indexId: 2, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexPartitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
@@ -91,15 +95,15 @@ CREATE INDEX id3
   {columnId: 3, indexId: 3, kind: STORED, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}
 
 build
 CREATE INDEX id4
 	ON defaultdb.t1 (id, name) USING HASH STORING (money) WITH (bucket_count=8)
 ----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 4}, PUBLIC], ABSENT]
   {columnId: 4, isHidden: true, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: crdb_internal_id_name_shard_8, ColumnID: 4}, PUBLIC], ABSENT]
@@ -138,7 +142,3 @@ CREATE INDEX id4
   {columnId: 3, indexId: 3, kind: STORED, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 3, tableId: 104}
-- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
-  {indexId: 1, tableId: 104}
-- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
-  {databaseId: 100, tableId: 104}

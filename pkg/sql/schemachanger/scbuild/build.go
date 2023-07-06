@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
@@ -59,15 +58,18 @@ func Build(
 		redact.Safe(n.StatementTag()),
 	).HandlePanicAndLogError(ctx, &err)
 
-	// localMemAcc is opened to track memory allocation for local objects
-	// and should be cleared before this function returns.
-	localMemAcc := makeBoundAccount(memAcc.Monitor())
+	// localMemAcc tracks memory allocations for local objects.
+	var localMemAcc *mon.BoundAccount
 	defer func() {
 		localMemAcc.Clear(ctx)
 	}()
-
+	if monitor := memAcc.Monitor(); monitor != nil {
+		acc := monitor.MakeBoundAccount()
+		localMemAcc = &acc
+	}
 	bs := newBuilderState(ctx, dependencies, incumbent, localMemAcc)
 	els := newEventLogState(dependencies, incumbent, n)
+
 	// TODO(fqazi): The optimizer can end up already modifying the statement above
 	// to fully resolve names. We need to take this into account for CTAS/CREATE
 	// VIEW statements.
@@ -84,116 +86,92 @@ func Build(
 		SchemaFeatureChecker: dependencies.FeatureChecker(),
 	}
 	scbuildstmt.Process(b, an.GetStatement())
-	an.ValidateAnnotations()
-	currentStatementID := uint32(len(els.statements) - 1)
-	els.statements[currentStatementID].RedactedStatement = string(
-		dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 
-	// estimatedTargetStateSize is an estimated memory usage of the to-be-return scpb.TargetState.
-	estimatedTargetStateSize := int(unsafe.Sizeof(scpb.Target{})+2*unsafe.Sizeof(scpb.Status(0))) * len(bs.output)
-	if err := memAcc.Grow(ctx, int64(estimatedTargetStateSize)); err != nil {
-		return scpb.CurrentState{}, err
+	// Generate redacted statement.
+	{
+		an.ValidateAnnotations()
+		currentStatementID := uint32(len(els.statements) - 1)
+		els.statements[currentStatementID].RedactedStatement = string(
+			dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 	}
-	ts := scpb.TargetState{
-		Targets:       make([]scpb.Target, 0, len(bs.output)),
-		Statements:    els.statements,
-		Authorization: els.authorization,
-		NameMappings:  makeNameMappings(bs.output),
-	}
-	initial := make([]scpb.Status, 0, len(bs.output))
-	current := make([]scpb.Status, 0, len(bs.output))
-	version := dependencies.ClusterSettings().Version.ActiveVersion(ctx)
-	withLogEvent := make([]scpb.Target, 0, len(bs.output))
-	var extraTargets []struct {
-		e elementState
-		t scpb.Target
-	}
-	for _, e := range bs.output {
-		if !e.metadata.TargetIsLinkedToSchemaChange() && !shouldElementBeRetainedWithoutMetadata(e.element, e.current) {
-			// Exclude targets which weren't explicitly set.
-			// Explicitly-set targets have non-zero values in the target metadata.
-			// Exceptions are TableData/IndexData elements which allow our planning
-			// execution to skip certain transitions and fences like the two version
-			// invariant. We will only keep these for descriptors going through
-			// a transition.
-			continue
-		}
-		if !version.IsActive(screl.MinElementVersion(e.element)) {
-			// Exclude targets which are not yet usable in the currently active
-			// cluster version.
-			continue
-		}
-		maxVersion := screl.MaxElementVersion(e.element)
-		if maxVersion != nil && version.IsActive(*maxVersion) {
-			// Exclude the target which are no longer allowed at the active
-			// max version.
-			continue
-		}
 
-		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
-		if t.TargetIsLinkedToSchemaChange() {
-			ts.Targets = append(ts.Targets, t)
-			initial = append(initial, e.initial)
-			current = append(current, e.current)
-			if e.withLogEvent {
-				withLogEvent = append(withLogEvent, t)
-			}
-		} else if b.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_2) {
-			extraTargets = append(extraTargets, struct {
-				e elementState
-				t scpb.Target
-			}{e: e, t: t})
-		}
+	// Generate returned state.
+	ret, loggedTargets := makeState(dependencies.ClusterSettings().Version.ActiveVersion(ctx), bs)
+	ret.Statements = els.statements
+	ret.Authorization = els.authorization
 
+	// Update memory accounting.
+	if err := memAcc.Grow(ctx, ret.ByteSize()); err != nil {
+		panic(err)
 	}
-	seenDescriptors := screl.AllTargetDescIDs(ts)
-	// We are going to retain certain elements for metadata purposes, like
-	// TableData/IndexData elements, which will allow the declarative schema
-	// changer to know if a given table is empty. Once these elements exist
-	// the two-version invariant is applied when making mutations to elements.
-	// Only emit data elements for descriptors if they are references with
-	// some transition.
-	for _, ex := range extraTargets {
-		if seenDescriptors.Contains(screl.GetDescID(ex.t.Element())) {
-			ts.Targets = append(ts.Targets, ex.t)
-			initial = append(initial, ex.e.initial)
-			current = append(current, ex.e.current)
-		}
-	}
-	// Ensure none of the involving descriptors have an ongoing schema change,
-	// unless it's newly created.
-	ensureNoConcurrentSchemaChange(&ts, bs)
 
 	// Write to event log and return.
-	logEvents(b, ts, withLogEvent)
-
-	return scpb.CurrentState{
-		TargetState: ts,
-		Initial:     initial,
-		Current:     current,
-	}, nil
+	logEvents(b, ret.TargetState, loggedTargets)
+	return ret, nil
 }
 
-// ensureNoConcurrentSchemaChange panics if any involving descriptor has an
-// ongoing schema changer, unless the descriptor is being added.
-func ensureNoConcurrentSchemaChange(ts *scpb.TargetState, bs *builderState) {
-	screl.AllTargetDescIDs(*ts).ForEach(func(id descpb.ID) {
-		bs.ensureDescriptor(id)
-		cached := bs.descCache[id]
-		if !cached.isBeingCreated() && cached.desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(cached.desc))
-		}
-	})
-}
-
-// makeBoundAccount is the same as `monitor.MakeBountAccount`
-// except that it returns a pointer.
-func makeBoundAccount(monitor *mon.BytesMonitor) (ret *mon.BoundAccount) {
-	if monitor != nil {
-		memAcc := monitor.MakeBoundAccount()
-		ret = &memAcc
+// makeState populates the declarative schema changer state returned by Build
+// with the targets and the statuses present in the builderState.
+func makeState(
+	version clusterversion.ClusterVersion, bs *builderState,
+) (s scpb.CurrentState, loggedTargets []scpb.Target) {
+	s = scpb.CurrentState{
+		TargetState: scpb.TargetState{
+			Targets:      make([]scpb.Target, 0, len(bs.output)),
+			NameMappings: makeNameMappings(bs.output),
+		},
+		Initial: make([]scpb.Status, 0, len(bs.output)),
+		Current: make([]scpb.Status, 0, len(bs.output)),
 	}
-	return ret
+	loggedTargets = make([]scpb.Target, 0, len(bs.output))
+	isElementAllowedInVersion := func(e scpb.Element) bool {
+		if !version.IsActive(screl.MinElementVersion(e)) {
+			// Exclude targets which are not yet usable in the currently active
+			// cluster version.
+			return false
+		}
+		if maxVersion, exists := screl.MaxElementVersion(e); exists && version.IsActive(maxVersion) {
+			// Exclude the target which are no longer allowed at the active
+			// max version.
+			return false
+		}
+		return true
+	}
+	// Collect the set of IDs of descriptors involved in the schema change.
+	// This is used to add targets which aren't explicitly set but which are
+	// necessary for execution plan correctness, typically in order to skip
+	// certain transitions and fences like the two version invariant.
+	// This only applies for cluster at or beyond version 23.2.
+	var descriptorIDsInSchemaChange catalog.DescriptorIDSet
+	if version.IsActive(clusterversion.V23_2) {
+		for _, e := range bs.output {
+			if isElementAllowedInVersion(e.element) && e.metadata.IsLinkedToSchemaChange() {
+				descriptorIDsInSchemaChange.Add(screl.GetDescID(e.element))
+			}
+		}
+	}
+	for _, e := range bs.output {
+		if !isElementAllowedInVersion(e.element) {
+			continue
+		}
+		if !e.metadata.IsLinkedToSchemaChange() {
+			// Exclude targets which weren't explicitly set, minus exceptions.
+			if !descriptorIDsInSchemaChange.Contains(screl.GetDescID(e.element)) {
+				continue
+			}
+			if !shouldElementBeRetainedWithoutMetadata(e.element, e.current) {
+				continue
+			}
+		}
+		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
+		s.Targets = append(s.Targets, t)
+		s.Initial = append(s.Initial, e.initial)
+		s.Current = append(s.Current, e.current)
+		if e.withLogEvent {
+			loggedTargets = append(loggedTargets, t)
+		}
+	}
+	return s, loggedTargets
 }
 
 // IsFullySupportedWithFalsePositive returns if a statement is fully supported
@@ -204,15 +182,6 @@ func IsFullySupportedWithFalsePositive(
 ) bool {
 	return scbuildstmt.IsFullySupportedWithFalsePositive(statement, version, sessiondatapb.UseNewSchemaChangerOn)
 }
-
-// Export dependency interfaces.
-// These are defined in the scbuildstmts package instead of scbuild to avoid
-// circular import dependencies.
-type (
-	// FeatureChecker contains operations for checking if a schema change
-	// feature is allowed by the database administrator.
-	FeatureChecker = scbuildstmt.SchemaFeatureChecker
-)
 
 type elementState struct {
 	// element is the element which identifies this structure.
@@ -286,10 +255,6 @@ type cachedDesc struct {
 	// This map ends up being very important to make sure that Ensure does
 	// not become O(N) where N is the number of elements in the descriptor.
 	elementIndexMap map[string]int
-}
-
-func (c *cachedDesc) isBeingCreated() bool {
-	return c.desc == nil
 }
 
 // newBuilderState constructs a builderState.

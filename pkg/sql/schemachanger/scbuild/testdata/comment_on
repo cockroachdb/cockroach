@@ -63,14 +63,14 @@ COMMENT ON SCHEMA test_schema IS NULL;
 build
 COMMENT ON TABLE customer IS 'customer is god';
 ----
-- [[TableComment:{DescID: 104, Comment: customer is god}, PUBLIC], ABSENT]
-  {comment: customer is god, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[TableComment:{DescID: 104, Comment: customer is god}, PUBLIC], ABSENT]
+  {comment: customer is god, tableId: 104}
 
 setup
 COMMENT ON TABLE customer IS 'customer real comment';
@@ -79,14 +79,14 @@ COMMENT ON TABLE customer IS 'customer real comment';
 build
 COMMENT ON TABLE customer IS 'customer gets better';
 ----
-- [[TableComment:{DescID: 104, Comment: customer gets better}, PUBLIC], ABSENT]
-  {comment: customer gets better, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[TableComment:{DescID: 104, Comment: customer gets better}, PUBLIC], ABSENT]
+  {comment: customer gets better, tableId: 104}
 
 build
 COMMENT ON TABLE customer IS NULL;
@@ -103,14 +103,14 @@ COMMENT ON TABLE customer IS NULL;
 build
 COMMENT ON COLUMN customer.name IS 'some comment for name';
 ----
-- [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: some comment for name}, PUBLIC], ABSENT]
-  {columnId: 2, comment: some comment for name, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: some comment for name}, PUBLIC], ABSENT]
+  {columnId: 2, comment: some comment for name, tableId: 104}
 
 setup
 COMMENT ON COLUMN customer.name IS 'real comment for name';
@@ -119,14 +119,14 @@ COMMENT ON COLUMN customer.name IS 'real comment for name';
 build
 COMMENT ON COLUMN customer.name IS 'some better comment for name';
 ----
-- [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: some better comment for name}, PUBLIC], ABSENT]
-  {columnId: 2, comment: some better comment for name, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: some better comment for name}, PUBLIC], ABSENT]
+  {columnId: 2, comment: some better comment for name, tableId: 104}
 
 build
 COMMENT ON COLUMN customer.name IS NULL;
@@ -143,38 +143,38 @@ COMMENT ON COLUMN customer.name IS NULL;
 build
 COMMENT ON INDEX customer@idx_customer_name IS 'comment on name index';
 ----
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: comment on name index}, PUBLIC], ABSENT]
-  {comment: comment on name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 2, Comment: comment on name index}, PUBLIC], ABSENT]
+  {comment: comment on name index, indexId: 2, tableId: 104}
 
 build
 COMMENT ON INDEX public.idx_customer_name IS 'comment on name index';
 ----
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: comment on name index}, PUBLIC], ABSENT]
-  {comment: comment on name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 2, Comment: comment on name index}, PUBLIC], ABSENT]
+  {comment: comment on name index, indexId: 2, tableId: 104}
 
 build
 COMMENT ON INDEX defaultdb.idx_customer_name IS 'comment on name index';
 ----
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: comment on name index}, PUBLIC], ABSENT]
-  {comment: comment on name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 2, Comment: comment on name index}, PUBLIC], ABSENT]
+  {comment: comment on name index, indexId: 2, tableId: 104}
 
 setup
 COMMENT ON INDEX customer@idx_customer_name IS 'real comment on name index';
@@ -183,22 +183,22 @@ COMMENT ON INDEX customer@idx_customer_name IS 'real comment on name index';
 build
 COMMENT ON INDEX customer@idx_customer_name IS 'better comment for name index';
 ----
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: better comment for name index}, PUBLIC], ABSENT]
-  {comment: better comment for name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 2, Comment: better comment for name index}, PUBLIC], ABSENT]
+  {comment: better comment for name index, indexId: 2, tableId: 104}
 
 build
 COMMENT ON INDEX customer@idx_customer_name IS NULL;
 ----
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: real comment on name index}, ABSENT], PUBLIC]
-  {comment: real comment on name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 2, Comment: real comment on name index}, ABSENT], PUBLIC]
+  {comment: real comment on name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
@@ -207,22 +207,22 @@ COMMENT ON INDEX customer@idx_customer_name IS NULL;
 build
 COMMENT ON INDEX customer@idx_customer_name IS 'better comment for name index'
 ----
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: better comment for name index}, PUBLIC], ABSENT]
-  {comment: better comment for name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 2, Comment: better comment for name index}, PUBLIC], ABSENT]
+  {comment: better comment for name index, indexId: 2, tableId: 104}
 
 build
 COMMENT ON INDEX customer@idx_customer_name IS NULL;
 ----
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: real comment on name index}, ABSENT], PUBLIC]
-  {comment: real comment on name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
+- [[IndexComment:{DescID: 104, IndexID: 2, Comment: real comment on name index}, ABSENT], PUBLIC]
+  {comment: real comment on name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
@@ -231,14 +231,14 @@ COMMENT ON INDEX customer@idx_customer_name IS NULL;
 build
 COMMENT ON CONSTRAINT customer_age_gt_21 ON customer IS 'better be old enough'
 ----
-- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: better be old enough}, PUBLIC], ABSENT]
-  {comment: better be old enough, constraintId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: better be old enough}, PUBLIC], ABSENT]
+  {comment: better be old enough, constraintId: 2, tableId: 104}
 
 setup
 COMMENT ON CONSTRAINT customer_age_gt_21 ON customer IS 'real constraint comment'
@@ -247,23 +247,23 @@ COMMENT ON CONSTRAINT customer_age_gt_21 ON customer IS 'real constraint comment
 build
 COMMENT ON CONSTRAINT customer_age_gt_21 ON customer IS 'better be old enough'
 ----
-- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: better be old enough}, PUBLIC], ABSENT]
-  {comment: better be old enough, constraintId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: better be old enough}, PUBLIC], ABSENT]
+  {comment: better be old enough, constraintId: 2, tableId: 104}
 
 build
 COMMENT ON CONSTRAINT customer_age_gt_21 ON customer IS NULL
 ----
-- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: real constraint comment}, ABSENT], PUBLIC]
-  {comment: real constraint comment, constraintId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
+- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: real constraint comment}, ABSENT], PUBLIC]
+  {comment: real constraint comment, constraintId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}

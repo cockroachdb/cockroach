@@ -17,7 +17,7 @@ add_node
 ----
 
 # Assert that the replica counts balance within 5% of each other among stores.
-assertion type=balance stat=replicas ticks=6 threshold=1.05
+assertion type=balance stat=replicas ticks=6 upper_bound=1.05
 ----
 
 # Update the replication factor for the keyspace to be 3, instead of the

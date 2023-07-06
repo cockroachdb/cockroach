@@ -89,6 +89,19 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 		return
 	}
 
+	// Check that the descriptors relevant to this element are not undergoing any
+	// concurrent schema changes.
+	screl.AllTargetDescIDs(e).ForEach(func(id descpb.ID) {
+		b.ensureDescriptor(id)
+		if c := b.descCache[id]; c != nil && c.desc != nil && c.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(c.desc))
+		}
+	})
+	// Re-assign dst because the above function may have mutated the builder
+	// state. Specifically, the output slice, to which dst points to, might
+	// have grown and might have been reallocated.
+	dst = b.getExistingElementState(e)
+
 	// We were about to overwrite an element's target and metadata. Assert one
 	// disallowed case: reviving a "ghost" element, that is, add an element that
 	// was previously added and then dropped. This assertion is artificial per se
@@ -102,7 +115,7 @@ func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scp
 	if dst.current == scpb.Status_ABSENT &&
 		dst.target == scpb.ToAbsent &&
 		(target == scpb.ToPublic || target == scpb.Transient) &&
-		dst.metadata.TargetIsLinkedToSchemaChange() {
+		dst.metadata.IsLinkedToSchemaChange() {
 		panic(scerrors.NotImplementedErrorf(nil, "attempt to revive a ghost element:"+
 			" [elem=%v],[current=ABSENT],[target=ToAbsent],[newTarget=%v]", dst.element.String(), target.Status()))
 	}

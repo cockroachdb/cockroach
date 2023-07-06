@@ -96,7 +96,7 @@ func (s *CurrentState) Rollback() {
 		t := &s.Targets[i]
 		// If the metadata is not populated this element
 		// only usd for tracking.
-		if !t.TargetIsLinkedToSchemaChange() {
+		if !t.IsLinkedToSchemaChange() {
 			continue
 		}
 		switch t.TargetStatus {
@@ -146,13 +146,13 @@ func (e *ElementProto) Element() Element {
 	return e.GetElementOneOf().(ElementGetter).Element()
 }
 
-// TargetIsLinkedToSchemaChange return if a Target is linked to a schema change.
-func (t *Target) TargetIsLinkedToSchemaChange() bool {
-	return t.Metadata.TargetIsLinkedToSchemaChange()
+// IsLinkedToSchemaChange return if a Target is linked to a schema change.
+func (t *Target) IsLinkedToSchemaChange() bool {
+	return t.Metadata.IsLinkedToSchemaChange()
 }
 
-// TargetIsLinkedToSchemaChange return if a TargetMetadata is linked to a schema change.
-func (t *TargetMetadata) TargetIsLinkedToSchemaChange() bool {
+// IsLinkedToSchemaChange return if a TargetMetadata is linked to a schema change.
+func (t *TargetMetadata) IsLinkedToSchemaChange() bool {
 	return t.Size() > 0
 }
 
