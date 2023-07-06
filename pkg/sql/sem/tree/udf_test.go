@@ -25,55 +25,55 @@ func TestConflictingFunctionOptions(t *testing.T) {
 
 	testCases := []struct {
 		testName    string
-		options     tree.FunctionOptions
+		options     tree.RoutineOptions
 		expectedErr string
 	}{
 		{
 			testName: "no conflict",
-			options: tree.FunctionOptions{
-				tree.FunctionVolatile, tree.FunctionLeakproof(true), tree.FunctionCalledOnNullInput, tree.FunctionLangSQL, tree.FunctionBodyStr("hi"),
+			options: tree.RoutineOptions{
+				tree.RoutineVolatile, tree.RoutineLeakproof(true), tree.RoutineCalledOnNullInput, tree.RoutineLangSQL, tree.RoutineBodyStr("hi"),
 			},
 			expectedErr: "",
 		},
 		{
 			testName: "volatility conflict",
-			options: tree.FunctionOptions{
-				tree.FunctionVolatile, tree.FunctionStable,
+			options: tree.RoutineOptions{
+				tree.RoutineVolatile, tree.RoutineStable,
 			},
 			expectedErr: "STABLE: conflicting or redundant options",
 		},
 		{
 			testName: "null input behavior conflict 1",
-			options: tree.FunctionOptions{
-				tree.FunctionCalledOnNullInput, tree.FunctionReturnsNullOnNullInput,
+			options: tree.RoutineOptions{
+				tree.RoutineCalledOnNullInput, tree.RoutineReturnsNullOnNullInput,
 			},
 			expectedErr: "RETURNS NULL ON NULL INPUT: conflicting or redundant options",
 		},
 		{
 			testName: "null input behavior conflict 2",
-			options: tree.FunctionOptions{
-				tree.FunctionCalledOnNullInput, tree.FunctionStrict,
+			options: tree.RoutineOptions{
+				tree.RoutineCalledOnNullInput, tree.RoutineStrict,
 			},
 			expectedErr: "STRICT: conflicting or redundant options",
 		},
 		{
 			testName: "leakproof conflict",
-			options: tree.FunctionOptions{
-				tree.FunctionLeakproof(true), tree.FunctionLeakproof(false),
+			options: tree.RoutineOptions{
+				tree.RoutineLeakproof(true), tree.RoutineLeakproof(false),
 			},
 			expectedErr: "NOT LEAKPROOF: conflicting or redundant options",
 		},
 		{
 			testName: "language conflict",
-			options: tree.FunctionOptions{
-				tree.FunctionLangSQL, tree.FunctionLangSQL,
+			options: tree.RoutineOptions{
+				tree.RoutineLangSQL, tree.RoutineLangSQL,
 			},
 			expectedErr: "LANGUAGE SQL: conflicting or redundant options",
 		},
 		{
 			testName: "function body conflict",
-			options: tree.FunctionOptions{
-				tree.FunctionBodyStr("queries"), tree.FunctionBodyStr("others"),
+			options: tree.RoutineOptions{
+				tree.RoutineBodyStr("queries"), tree.RoutineBodyStr("others"),
 			},
 			expectedErr: "AS $$others$$: conflicting or redundant options",
 		},
@@ -81,7 +81,7 @@ func TestConflictingFunctionOptions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
-			err := tree.ValidateFuncOptions(tc.options)
+			err := tree.ValidateRoutineOptions(tc.options)
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
 				return

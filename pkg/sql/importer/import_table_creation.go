@@ -419,7 +419,7 @@ func (r fkResolver) GetQualifiedTableNameByID(
 // GetQualifiedFunctionNameByID implements the resolver.SchemaResolver interface.
 func (r fkResolver) GetQualifiedFunctionNameByID(
 	ctx context.Context, id int64,
-) (*tree.FunctionName, error) {
+) (*tree.RoutineName, error) {
 	return nil, errSchemaResolver
 }
 
@@ -433,6 +433,6 @@ func (r fkResolver) ResolveFunction(
 // ResolveFunctionByOID implements the resolver.SchemaResolver interface.
 func (r fkResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.FunctionName, *tree.Overload, error) {
+) (*tree.RoutineName, *tree.Overload, error) {
 	return nil, nil, errSchemaResolver
 }

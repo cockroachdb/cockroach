@@ -1876,7 +1876,7 @@ func (ef *execFactory) ConstructCreateView(
 
 // ConstructCreateFunction is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateFunction(
-	schema cat.Schema, cf *tree.CreateFunction, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
+	schema cat.Schema, cf *tree.CreateRoutine, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(

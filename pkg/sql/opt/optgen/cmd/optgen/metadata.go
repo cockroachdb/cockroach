@@ -220,7 +220,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Statement":            {fullName: "tree.Statement", isInterface: true},
 		"Subquery":             {fullName: "tree.Subquery", isPointer: true, usePointerIntern: true},
 		"CreateTable":          {fullName: "tree.CreateTable", isPointer: true, usePointerIntern: true},
-		"CreateFunction":       {fullName: "tree.CreateFunction", isPointer: true, usePointerIntern: true},
+		"CreateRoutine":        {fullName: "tree.CreateRoutine", isPointer: true, usePointerIntern: true},
 		"CreateStats":          {fullName: "tree.CreateStats", isPointer: true, usePointerIntern: true},
 		"TableName":            {fullName: "tree.TableName", isPointer: true, usePointerIntern: true},
 		"Constraint":           {fullName: "constraint.Constraint", isPointer: true, usePointerIntern: true},

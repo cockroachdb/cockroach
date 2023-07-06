@@ -74,7 +74,7 @@ define CreateFunctionPrivate {
     Schema SchemaID
 
     # Syntax is the CREATE FUNCTION AST node.
-    Syntax CreateFunction
+    Syntax CreateRoutine
 
     # Deps contains the data source dependencies of the view.
     Deps SchemaDeps

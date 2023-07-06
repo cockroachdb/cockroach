@@ -266,7 +266,7 @@ func (d *buildDeps) ResolveFunction(
 // ResolveFunctionByOID implements the scbuild.CatalogReader interface.
 func (d *buildDeps) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.FunctionName, *tree.Overload, error) {
+) (*tree.RoutineName, *tree.Overload, error) {
 	return d.schemaResolver.ResolveFunctionByOID(ctx, oid)
 }
 
@@ -280,7 +280,7 @@ func (d *buildDeps) GetQualifiedTableNameByID(
 // GetQualifiedTableNameByID implements the scbuild.CatalogReader interface.
 func (d *buildDeps) GetQualifiedFunctionNameByID(
 	ctx context.Context, id int64,
-) (*tree.FunctionName, error) {
+) (*tree.RoutineName, error) {
 	return d.schemaResolver.GetQualifiedFunctionNameByID(ctx, id)
 }
 

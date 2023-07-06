@@ -319,7 +319,7 @@ func makePGGetViewDef(paramTypes tree.ParamTypes) tree.Overload {
 		WHERE c.oid=$1`,
 		Info:       "Returns the CREATE statement for an existing view.",
 		Volatility: volatility.Stable,
-		Language:   tree.FunctionLangSQL,
+		Language:   tree.RoutineLangSQL,
 	}
 }
 
@@ -331,7 +331,7 @@ func makePGGetConstraintDef(paramTypes tree.ParamTypes) tree.Overload {
 		Body:       `SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1 LIMIT 1`,
 		Info:       notUsableInfo,
 		Volatility: volatility.Stable,
-		Language:   tree.FunctionLangSQL,
+		Language:   tree.RoutineLangSQL,
 	}
 }
 
@@ -708,7 +708,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				"For builtin functions, returns the name of the function.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -722,7 +722,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				"in the form it would need to appear in within CREATE FUNCTION.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -743,7 +743,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info:              "Returns the types of the result of the specified function.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -761,7 +761,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				"in the form it would need to appear in within ALTER FUNCTION, for instance.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -776,7 +776,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info:              "Gets the CREATE INDEX command for index",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}, {Name: "column_no", Typ: types.Int}, {Name: "pretty_bool", Typ: types.Bool}},
@@ -798,7 +798,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					WHERE i.indexrelid = $1`,
 			Info:       "Gets the CREATE INDEX command for index, or definition of just one index column when given a non-zero column number",
 			Volatility: volatility.Stable,
-			Language:   tree.FunctionLangSQL,
+			Language:   tree.RoutineLangSQL,
 		},
 	),
 
@@ -955,7 +955,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info:              notUsableInfo,
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -977,7 +977,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Info:              notUsableInfo,
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -1053,7 +1053,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				"(obj_description cannot be used for table columns, since columns do not have OIDs of their own.)",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -1071,7 +1071,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				"therefore, the wrong comment might be returned.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},
@@ -1091,7 +1091,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				"For example, obj_description(123456, 'pg_class') would retrieve the comment for the table with OID 123456.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -1113,7 +1113,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				"This is just like obj_description except that it is used for retrieving comments on shared objects (e.g. databases). ",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -1212,7 +1212,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			CalledOnNullInput: true,
 			Info:              "Returns whether the function with the given OID belongs to one of the schemas on the search path.",
 			Volatility:        volatility.Stable,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 	// pg_table_is_visible returns true if the input oid corresponds to a table
@@ -1230,7 +1230,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			CalledOnNullInput: true,
 			Info:              "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
 			Volatility:        volatility.Stable,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -1252,7 +1252,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			CalledOnNullInput: true,
 			Info:              "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
 			Volatility:        volatility.Stable,
-			Language:          tree.FunctionLangSQL,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -2050,7 +2050,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			       WHERE (ss.a).x = $2`,
 			Info:       notUsableInfo,
 			Volatility: volatility.Stable,
-			Language:   tree.FunctionLangSQL,
+			Language:   tree.RoutineLangSQL,
 		},
 	),
 

@@ -477,7 +477,7 @@ func (b *Builder) resolveSchemaForCreateTable(name *tree.TableName) (cat.Schema,
 // resolveSchemaForCreateFunction is the same as resolveSchemaForCreate but
 // specific for functions.
 func (b *Builder) resolveSchemaForCreateFunction(
-	name *tree.FunctionName,
+	name *tree.RoutineName,
 ) (cat.Schema, cat.SchemaName) {
 	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name)
 }
