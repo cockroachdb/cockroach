@@ -832,20 +832,20 @@ func (u *sqlSymUnion) cursorStmt() tree.CursorStmt {
 func (u *sqlSymUnion) asTenantClause() tree.TenantID {
     return u.val.(tree.TenantID)
 }
-func (u *sqlSymUnion) functionOptions() tree.FunctionOptions {
-    return u.val.(tree.FunctionOptions)
+func (u *sqlSymUnion) routineOptions() tree.RoutineOptions {
+    return u.val.(tree.RoutineOptions)
 }
-func (u *sqlSymUnion) functionOption() tree.FunctionOption {
-    return u.val.(tree.FunctionOption)
+func (u *sqlSymUnion) functionOption() tree.RoutineOption {
+    return u.val.(tree.RoutineOption)
 }
-func (u *sqlSymUnion) functionParams() tree.FuncParams {
-    return u.val.(tree.FuncParams)
+func (u *sqlSymUnion) routineParams() tree.RoutineParams {
+    return u.val.(tree.RoutineParams)
 }
-func (u *sqlSymUnion) functionParam() tree.FuncParam {
-    return u.val.(tree.FuncParam)
+func (u *sqlSymUnion) routineParam() tree.RoutineParam {
+    return u.val.(tree.RoutineParam)
 }
-func (u *sqlSymUnion) functionParamClass() tree.FuncParamClass {
-    return u.val.(tree.FuncParamClass)
+func (u *sqlSymUnion) routineParamClass() tree.RoutineParamClass {
+    return u.val.(tree.RoutineParamClass)
 }
 func (u *sqlSymUnion) stmts() tree.Statements {
     return u.val.(tree.Statements)
@@ -1665,14 +1665,14 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 
 // User defined function relevant components.
 %type <bool> opt_or_replace opt_return_table opt_return_set opt_no
-%type <str> param_name func_as
-%type <tree.FuncParams> opt_func_param_with_default_list func_param_with_default_list func_params func_params_list
-%type <tree.FuncParam> func_param_with_default func_param
-%type <tree.ResolvableTypeReference> func_return_type func_param_type
-%type <tree.FunctionOptions> opt_create_func_opt_list create_func_opt_list alter_func_opt_list
-%type <tree.FunctionOption> create_func_opt_item common_func_opt_item
-%type <tree.FuncParamClass> func_param_class
-%type <*tree.UnresolvedObjectName> func_create_name
+%type <str> param_name routine_as
+%type <tree.RoutineParams> opt_routine_param_with_default_list routine_param_with_default_list func_params func_params_list
+%type <tree.RoutineParam> routine_param_with_default routine_param
+%type <tree.ResolvableTypeReference> routine_return_type routine_param_type
+%type <tree.RoutineOptions> opt_create_routine_opt_list create_routine_opt_list alter_func_opt_list
+%type <tree.RoutineOption> create_routine_opt_item common_routine_opt_item
+%type <tree.RoutineParamClass> routine_param_class
+%type <*tree.UnresolvedObjectName> routine_create_name
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
@@ -4566,21 +4566,21 @@ create_extension_stmt:
 //  } ...
 // %SeeAlso: WEBDOCS/create-function.html
 create_func_stmt:
-  CREATE opt_or_replace FUNCTION func_create_name '(' opt_func_param_with_default_list ')'
-  RETURNS opt_return_table opt_return_set func_return_type
-  opt_create_func_opt_list opt_routine_body
+  CREATE opt_or_replace FUNCTION routine_create_name '(' opt_routine_param_with_default_list ')'
+  RETURNS opt_return_table opt_return_set routine_return_type
+  opt_create_routine_opt_list opt_routine_body
   {
     name := $4.unresolvedObjectName().ToFunctionName()
-    $$.val = &tree.CreateFunction{
+    $$.val = &tree.CreateRoutine{
       IsProcedure: false,
       Replace: $2.bool(),
-      FuncName: name,
-      Params: $6.functionParams(),
-      ReturnType: tree.FuncReturnType{
+      Name: name,
+      Params: $6.routineParams(),
+      ReturnType: tree.RoutineReturnType{
         Type: $11.typeReference(),
         IsSet: $10.bool(),
       },
-      Options: $12.functionOptions(),
+      Options: $12.routineOptions(),
       RoutineBody: $13.routineBody(),
     }
   }
@@ -4596,16 +4596,16 @@ create_func_stmt:
 //  } ...
 // %SeeAlso: WEBDOCS/create-procedure.html
 create_proc_stmt:
-  CREATE opt_or_replace PROCEDURE func_create_name '(' opt_func_param_with_default_list ')'
-  opt_create_func_opt_list opt_routine_body
+  CREATE opt_or_replace PROCEDURE routine_create_name '(' opt_routine_param_with_default_list ')'
+  opt_create_routine_opt_list opt_routine_body
   {
     name := $4.unresolvedObjectName().ToFunctionName()
-    $$.val = &tree.CreateFunction{
+    $$.val = &tree.CreateRoutine{
       IsProcedure: true,
       Replace: $2.bool(),
-      FuncName: name,
-      Params: $6.functionParams(),
-      Options: $8.functionOptions(),
+      Name: name,
+      Params: $6.routineParams(),
+      Options: $8.routineOptions(),
       RoutineBody: $9.routineBody(),
     }
   }
@@ -4623,107 +4623,107 @@ opt_return_set:
   SETOF { $$.val = true}
 | /* EMPTY */ { $$.val = false }
 
-func_create_name:
+routine_create_name:
   db_object_name
 
-opt_func_param_with_default_list:
-  func_param_with_default_list { $$.val = $1.functionParams() }
-| /* Empty */ { $$.val = tree.FuncParams{} }
+opt_routine_param_with_default_list:
+  routine_param_with_default_list { $$.val = $1.routineParams() }
+| /* Empty */ { $$.val = tree.RoutineParams{} }
 
-func_param_with_default_list:
-  func_param_with_default { $$.val = tree.FuncParams{$1.functionParam()} }
-| func_param_with_default_list ',' func_param_with_default
+routine_param_with_default_list:
+  routine_param_with_default { $$.val = tree.RoutineParams{$1.routineParam()} }
+| routine_param_with_default_list ',' routine_param_with_default
   {
-    $$.val = append($1.functionParams(), $3.functionParam())
+    $$.val = append($1.routineParams(), $3.routineParam())
   }
 
-func_param_with_default:
-  func_param
-| func_param DEFAULT a_expr
+routine_param_with_default:
+  routine_param
+| routine_param DEFAULT a_expr
   {
-    arg := $1.functionParam()
+    arg := $1.routineParam()
     arg.DefaultVal = $3.expr()
     $$.val = arg
   }
-| func_param '=' a_expr
+| routine_param '=' a_expr
   {
-    arg := $1.functionParam()
+    arg := $1.routineParam()
     arg.DefaultVal = $3.expr()
     $$.val = arg
   }
 
-func_param:
-  func_param_class param_name func_param_type
+routine_param:
+  routine_param_class param_name routine_param_type
   {
-    $$.val = tree.FuncParam{
+    $$.val = tree.RoutineParam{
       Name: tree.Name($2),
       Type: $3.typeReference(),
-      Class: $1.functionParamClass(),
+      Class: $1.routineParamClass(),
     }
   }
-| param_name func_param_class func_param_type
+| param_name routine_param_class routine_param_type
   {
-    $$.val = tree.FuncParam{
+    $$.val = tree.RoutineParam{
       Name: tree.Name($1),
       Type: $3.typeReference(),
-      Class: $2.functionParamClass(),
+      Class: $2.routineParamClass(),
     }
   }
-| param_name func_param_type
+| param_name routine_param_type
   {
-    $$.val = tree.FuncParam{
+    $$.val = tree.RoutineParam{
       Name: tree.Name($1),
       Type: $2.typeReference(),
-      Class: tree.FunctionParamIn,
+      Class: tree.RoutineParamIn,
     }
   }
-| func_param_class func_param_type
+| routine_param_class routine_param_type
   {
-    $$.val = tree.FuncParam{
+    $$.val = tree.RoutineParam{
       Type: $2.typeReference(),
-      Class: $1.functionParamClass(),
+      Class: $1.routineParamClass(),
     }
   }
-| func_param_type
+| routine_param_type
   {
-    $$.val = tree.FuncParam{
+    $$.val = tree.RoutineParam{
       Type: $1.typeReference(),
-      Class: tree.FunctionParamIn,
+      Class: tree.RoutineParamIn,
     }
   }
 
-func_param_class:
-  IN { $$.val = tree.FunctionParamIn }
+routine_param_class:
+  IN { $$.val = tree.RoutineParamIn }
 | OUT { return unimplementedWithIssueDetail(sqllex, 100405, "create function with 'OUT' argument class") }
 | INOUT { return unimplementedWithIssueDetail(sqllex, 100405, "create function with 'INOUT' argument class") }
 | IN OUT { return unimplementedWithIssueDetail(sqllex, 100405, "create function with 'IN OUT' argument class") }
 | VARIADIC { return unimplementedWithIssueDetail(sqllex, 88947, "variadic user-defined functions") }
 
-func_param_type:
+routine_param_type:
   typename
 
-func_return_type:
-  func_param_type
+routine_return_type:
+  routine_param_type
 
-opt_create_func_opt_list:
-  create_func_opt_list { $$.val = $1.functionOptions() }
-| /* EMPTY */ { $$.val = tree.FunctionOptions{} }
+opt_create_routine_opt_list:
+  create_routine_opt_list { $$.val = $1.routineOptions() }
+| /* EMPTY */ { $$.val = tree.RoutineOptions{} }
 
-create_func_opt_list:
-  create_func_opt_item { $$.val = tree.FunctionOptions{$1.functionOption()} }
-| create_func_opt_list create_func_opt_item
+create_routine_opt_list:
+  create_routine_opt_item { $$.val = tree.RoutineOptions{$1.functionOption()} }
+| create_routine_opt_list create_routine_opt_item
   {
-    $$.val = append($1.functionOptions(), $2.functionOption())
+    $$.val = append($1.routineOptions(), $2.functionOption())
   }
 
-create_func_opt_item:
-  AS func_as opt_link_sym
+create_routine_opt_item:
+  AS routine_as opt_link_sym
   {
-    $$.val = tree.FunctionBodyStr($2)
+    $$.val = tree.RoutineBodyStr($2)
   }
 | LANGUAGE non_reserved_word_or_sconst
   {
-    lang, err := tree.AsFunctionLanguage($2)
+    lang, err := tree.AsRoutineLanguage($2)
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -4731,35 +4731,35 @@ create_func_opt_item:
   }
 | TRANSFORM { return unimplemented(sqllex, "create transform function") }
 | WINDOW { return unimplemented(sqllex, "create window function") }
-| common_func_opt_item
+| common_routine_opt_item
   {
     $$.val = $1.functionOption()
   }
 
-common_func_opt_item:
+common_routine_opt_item:
   CALLED ON NULL INPUT
   {
-    $$.val = tree.FunctionCalledOnNullInput
+    $$.val = tree.RoutineCalledOnNullInput
   }
 | RETURNS NULL ON NULL INPUT
   {
-    $$.val = tree.FunctionReturnsNullOnNullInput
+    $$.val = tree.RoutineReturnsNullOnNullInput
   }
 | STRICT
   {
-    $$.val = tree.FunctionStrict
+    $$.val = tree.RoutineStrict
   }
 | IMMUTABLE
   {
-    $$.val = tree.FunctionImmutable
+    $$.val = tree.RoutineImmutable
   }
 | STABLE
   {
-    $$.val = tree.FunctionStable
+    $$.val = tree.RoutineStable
   }
 | VOLATILE
   {
-    $$.val = tree.FunctionVolatile
+    $$.val = tree.RoutineVolatile
   }
 | EXTERNAL SECURITY DEFINER
   {
@@ -4779,32 +4779,32 @@ common_func_opt_item:
   }
 | LEAKPROOF
   {
-    $$.val = tree.FunctionLeakproof(true)
+    $$.val = tree.RoutineLeakproof(true)
   }
 | NOT LEAKPROOF
   {
-    $$.val = tree.FunctionLeakproof(false)
+    $$.val = tree.RoutineLeakproof(false)
   }
 | COST numeric_only
   {
-    return unimplemented(sqllex, "create function...cost")
+    return unimplemented(sqllex, "create function/procedure ... cost")
   }
 | ROWS numeric_only
   {
-    return unimplemented(sqllex, "create function...rows")
+    return unimplemented(sqllex, "create function/procedure ... rows")
   }
 | SUPPORT name
   {
-    return unimplemented(sqllex, "create function...support")
+    return unimplemented(sqllex, "create function/procedure ... support")
   }
 
 // In theory we should parse the a whole set/reset statement here. But it's fine
 // to just return fast on SET/RESET keyword for now since it's not supported
 // yet.
-| SET { return unimplemented(sqllex, "create function...set") }
-| PARALLEL { return unimplemented(sqllex, "create function...parallel") }
+| SET { return unimplemented(sqllex, "create function/procedure ... set") }
+| PARALLEL { return unimplemented(sqllex, "create function/procedure ... parallel") }
 
-func_as:
+routine_as:
   SCONST
 
 routine_return_stmt:
@@ -4894,7 +4894,7 @@ function_with_paramtypes:
   {
     $$.val = tree.FuncObj{
       FuncName: $1.unresolvedObjectName().ToFunctionName(),
-      Params: $2.functionParams(),
+      Params: $2.routineParams(),
     }
   }
   | db_object_name
@@ -4907,21 +4907,21 @@ function_with_paramtypes:
 func_params:
   '(' func_params_list ')'
   {
-    $$.val = $2.functionParams()
+    $$.val = $2.routineParams()
   }
   | '(' ')'
   {
-    $$.val = tree.FuncParams{}
+    $$.val = tree.RoutineParams{}
   }
 
 func_params_list:
-  func_param
+  routine_param
   {
-    $$.val = tree.FuncParams{$1.functionParam()}
+    $$.val = tree.RoutineParams{$1.routineParam()}
   }
-  | func_params_list ',' func_param
+  | func_params_list ',' routine_param
   {
-    $$.val = append($1.functionParams(), $3.functionParam())
+    $$.val = append($1.routineParams(), $3.routineParam())
   }
 
 alter_func_options_stmt:
@@ -4929,18 +4929,18 @@ alter_func_options_stmt:
   {
     $$.val = &tree.AlterFunctionOptions{
       Function: $3.functionObj(),
-      Options: $4.functionOptions(),
+      Options: $4.routineOptions(),
     }
   }
 
 alter_func_opt_list:
-  common_func_opt_item
+  common_routine_opt_item
   {
-    $$.val = tree.FunctionOptions{$1.functionOption()}
+    $$.val = tree.RoutineOptions{$1.functionOption()}
   }
-| alter_func_opt_list common_func_opt_item
+| alter_func_opt_list common_routine_opt_item
   {
-    $$.val = append($1.functionOptions(), $2.functionOption())
+    $$.val = append($1.routineOptions(), $2.functionOption())
   }
 
 opt_restrict:

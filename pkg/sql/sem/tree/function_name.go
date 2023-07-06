@@ -57,7 +57,7 @@ type FunctionReferenceResolver interface {
 	// there is no function with the same oid.
 	ResolveFunctionByOID(
 		ctx context.Context, oid oid.Oid,
-	) (*FunctionName, *Overload, error)
+	) (*RoutineName, *Overload, error)
 }
 
 // ResolvableFunctionReference implements the editable reference call of a

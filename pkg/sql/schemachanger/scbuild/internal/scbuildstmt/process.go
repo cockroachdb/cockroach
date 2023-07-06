@@ -61,7 +61,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true, checks: isV222Active},
 	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, on: true, checks: isV231Active},
-	reflect.TypeOf((*tree.CreateFunction)(nil)):      {fn: CreateFunction, on: true, checks: isV231Active},
+	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {fn: CreateFunction, on: true, checks: isV231Active},
 	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, on: true, checks: isV232Active},
 	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, on: true, checks: isV232Active},
 }

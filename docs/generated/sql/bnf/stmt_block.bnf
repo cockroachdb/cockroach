@@ -577,6 +577,7 @@ create_ddl_stmt ::=
 	| create_view_stmt
 	| create_sequence_stmt
 	| create_func_stmt
+	| create_proc_stmt
 
 create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
@@ -1743,7 +1744,10 @@ create_sequence_stmt ::=
 	| 'CREATE' opt_temp 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
 
 create_func_stmt ::=
-	'CREATE' opt_or_replace 'FUNCTION' func_create_name '(' opt_func_param_with_default_list ')' 'RETURNS' opt_return_set func_return_type opt_create_func_opt_list opt_routine_body
+	'CREATE' opt_or_replace 'FUNCTION' routine_create_name '(' opt_routine_param_with_default_list ')' 'RETURNS' opt_return_set routine_return_type opt_create_routine_opt_list opt_routine_body
+
+create_proc_stmt ::=
+	'CREATE' opt_or_replace 'PROCEDURE' routine_create_name '(' opt_routine_param_with_default_list ')' opt_create_routine_opt_list opt_routine_body
 
 statistics_name ::=
 	name
@@ -2483,22 +2487,22 @@ opt_or_replace ::=
 	'OR' 'REPLACE'
 	| 
 
-func_create_name ::=
+routine_create_name ::=
 	db_object_name
 
-opt_func_param_with_default_list ::=
-	func_param_with_default_list
+opt_routine_param_with_default_list ::=
+	routine_param_with_default_list
 	| 
 
 opt_return_set ::=
 	'SETOF'
 	| 
 
-func_return_type ::=
-	func_param_type
+routine_return_type ::=
+	routine_param_type
 
-opt_create_func_opt_list ::=
-	create_func_opt_list
+opt_create_routine_opt_list ::=
+	create_routine_opt_list
 	| 
 
 opt_routine_body ::=
@@ -2907,7 +2911,7 @@ alter_backup_cmd ::=
 	'ADD' backup_kms
 
 alter_func_opt_list ::=
-	( common_func_opt_item ) ( ( common_func_opt_item ) )*
+	( common_routine_opt_item ) ( ( common_routine_opt_item ) )*
 
 opt_restrict ::=
 	'RESTRICT'
@@ -3091,14 +3095,14 @@ enum_val_list ::=
 composite_type_list ::=
 	( name simple_typename ) ( ( ',' name simple_typename ) )*
 
-func_param_with_default_list ::=
-	( func_param_with_default ) ( ( ',' func_param_with_default ) )*
+routine_param_with_default_list ::=
+	( routine_param_with_default ) ( ( ',' routine_param_with_default ) )*
 
-func_param_type ::=
+routine_param_type ::=
 	typename
 
-create_func_opt_list ::=
-	( create_func_opt_item ) ( ( create_func_opt_item ) )*
+create_routine_opt_list ::=
+	( create_routine_opt_item ) ( ( create_routine_opt_item ) )*
 
 routine_return_stmt ::=
 	'RETURN' a_expr
@@ -3266,7 +3270,7 @@ type_func_name_no_crdb_extra_keyword ::=
 	| 'SIMILAR'
 
 func_params_list ::=
-	( func_param ) ( ( ',' func_param ) )*
+	( routine_param ) ( ( ',' routine_param ) )*
 
 general_type_name ::=
 	type_function_name_no_crdb_extra
@@ -3352,7 +3356,7 @@ sequence_option_elem ::=
 backup_kms ::=
 	'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
 
-common_func_opt_item ::=
+common_routine_opt_item ::=
 	'CALLED' 'ON' 'NULL' 'INPUT'
 	| 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT'
 	| 'STRICT'
@@ -3451,15 +3455,15 @@ family_def ::=
 create_as_constraint_def ::=
 	create_as_constraint_elem
 
-func_param_with_default ::=
-	func_param
-	| func_param 'DEFAULT' a_expr
-	| func_param '=' a_expr
+routine_param_with_default ::=
+	routine_param
+	| routine_param 'DEFAULT' a_expr
+	| routine_param '=' a_expr
 
-create_func_opt_item ::=
-	'AS' func_as opt_link_sym
+create_routine_opt_item ::=
+	'AS' routine_as opt_link_sym
 	| 'LANGUAGE' non_reserved_word_or_sconst
-	| common_func_opt_item
+	| common_routine_opt_item
 
 routine_body_stmt ::=
 	stmt_without_legacy_transaction
@@ -4114,12 +4118,12 @@ opt_nowait_or_skip ::=
 wildcard_pattern ::=
 	name '.' '*'
 
-func_param ::=
-	func_param_class param_name func_param_type
-	| param_name func_param_class func_param_type
-	| param_name func_param_type
-	| func_param_class func_param_type
-	| func_param_type
+routine_param ::=
+	routine_param_class param_name routine_param_type
+	| param_name routine_param_class routine_param_type
+	| param_name routine_param_type
+	| routine_param_class routine_param_type
+	| routine_param_type
 
 type_function_name_no_crdb_extra ::=
 	'identifier'
@@ -4341,7 +4345,7 @@ opt_family_name ::=
 create_as_constraint_elem ::=
 	'PRIMARY' 'KEY' '(' create_as_params ')' opt_with_storage_parameter_list
 
-func_as ::=
+routine_as ::=
 	'SCONST'
 
 opt_link_sym ::=
@@ -4367,7 +4371,7 @@ group_by_item ::=
 window_definition ::=
 	window_name 'AS' window_specification
 
-func_param_class ::=
+routine_param_class ::=
 	'IN'
 
 param_name ::=

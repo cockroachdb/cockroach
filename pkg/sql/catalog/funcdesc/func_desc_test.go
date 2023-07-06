@@ -673,7 +673,7 @@ func TestToOverload(t *testing.T) {
 				Volatility: volatility.Leakproof,
 				Body:       "ANY QUERIES",
 				IsUDF:      true,
-				Language:   tree.FunctionLangSQL,
+				Language:   tree.RoutineLangSQL,
 			},
 		},
 		{
@@ -698,7 +698,7 @@ func TestToOverload(t *testing.T) {
 				Volatility: volatility.Leakproof,
 				Body:       "ANY QUERIES",
 				IsUDF:      true,
-				Language:   tree.FunctionLangSQL,
+				Language:   tree.RoutineLangSQL,
 			},
 		},
 		{
@@ -724,7 +724,7 @@ func TestToOverload(t *testing.T) {
 				Volatility: volatility.Stable,
 				Body:       "ANY QUERIES",
 				IsUDF:      true,
-				Language:   tree.FunctionLangSQL,
+				Language:   tree.RoutineLangSQL,
 			},
 		},
 		{
@@ -751,7 +751,7 @@ func TestToOverload(t *testing.T) {
 				Body:              "ANY QUERIES",
 				IsUDF:             true,
 				CalledOnNullInput: true,
-				Language:          tree.FunctionLangSQL,
+				Language:          tree.RoutineLangSQL,
 			},
 		},
 		{
@@ -776,7 +776,7 @@ func TestToOverload(t *testing.T) {
 				Volatility: volatility.Leakproof,
 				Body:       "ANY QUERIES",
 				IsUDF:      true,
-				Language:   tree.FunctionLangSQL,
+				Language:   tree.RoutineLangSQL,
 			},
 			err: "function 1 is leakproof but not immutable",
 		},

@@ -226,7 +226,7 @@ type Overload struct {
 	Version uint64
 	// Language is the function language that was used to define the UDF.
 	// This is currently either SQL or PL/pgSQL.
-	Language FunctionLanguage
+	Language RoutineLanguage
 }
 
 // params implements the overloadImpl interface.
