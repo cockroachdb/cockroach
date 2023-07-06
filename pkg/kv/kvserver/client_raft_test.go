@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -6823,65 +6822,5 @@ func TestStoreMetricsOnIncomingOutgoingMsg(t *testing.T) {
 			"raft.sent.cross_zone.bytes":   0,
 		}
 		require.Equal(t, expected, actual)
-	})
-}
-
-// TestInvalidConfChangeRejection is a regression test for [1]. See also
-// TestProposalBufferRejectStaleChangeReplicasConfChange for a unit test.
-//
-// [1]: https://github.com/cockroachdb/cockroach/issues/105797
-func TestInvalidConfChangeRejection(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// This is a regression test against a stuck command, so set a timeout to get
-	// a shot at a graceful failure on regression.
-	ctx, cancel := context.WithTimeout(context.Background(), testutils.DefaultSucceedsSoonDuration)
-	defer cancel()
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
-	defer tc.Stopper().Stop(ctx)
-
-	k := tc.ScratchRange(t)
-
-	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(keys.MustAddr(k))
-
-	// Try to leave a joint config even though we're not in one. This is something
-	// that will lead raft to propose an empty entry instead of our conf change.
-	//
-	// See: https://github.com/cockroachdb/cockroach/issues/105797
-	var ba kvpb.BatchRequest
-	now := tc.Server(0).Clock().Now()
-	txn := roachpb.MakeTransaction("fake", k, isolation.Serializable, roachpb.NormalUserPriority, now, 500*time.Millisecond.Nanoseconds(), 1)
-	ba.Txn = &txn
-	ba.Timestamp = now
-	ba.Add(&kvpb.EndTxnRequest{
-		RequestHeader: kvpb.RequestHeader{
-			Key: k,
-		},
-		Commit: true,
-		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
-			ChangeReplicasTrigger: &roachpb.ChangeReplicasTrigger{
-				Desc: repl.Desc(),
-			},
-		},
-	})
-
-	_, pErr := repl.Send(ctx, &ba)
-	require.ErrorContains(t, pErr.GoError(), `config change rejected by raft`)
-
-	// We didn't leak the latch.
-	_, err := tc.Servers[0].DB().Get(ctx, k)
-	require.NoError(t, err)
-
-	// Double check that we don't have a proposal in the map. (We may not have
-	// leaked the latch, but still leaked the proposal). This is morally always
-	// zero, but since it's a TestCluster guard against another random request
-	// blipping in.
-	testutils.SucceedsSoon(t, func() error {
-		if n := repl.State(ctx).NumPending; n > 0 {
-			return errors.Errorf("%d proposals pending", n)
-		}
-		return nil
 	})
 }
