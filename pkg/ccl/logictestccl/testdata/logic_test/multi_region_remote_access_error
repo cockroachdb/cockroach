@@ -639,7 +639,7 @@ locality-optimized-search
 # Locality optimized search with lookup join will be supported in phase 2 or 3
 # when we can dynamically determine if the lookup will access a remote region.
 retry
-statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try adding a filter on o\.crdb_region and/or on key column \(o\.cust_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
   (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
 
