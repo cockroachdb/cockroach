@@ -1388,6 +1388,13 @@ func TestLogic_privileges_table(
 	runLogicTest(t, "privileges_table")
 }
 
+func TestLogic_procedure(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure")
+}
+
 func TestLogic_propagate_input_ordering(
 	t *testing.T,
 ) {

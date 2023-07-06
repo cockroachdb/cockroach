@@ -105,17 +105,23 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 	if node.Replace {
 		ctx.WriteString("OR REPLACE ")
 	}
-	ctx.WriteString("FUNCTION ")
+	if node.IsProcedure {
+		ctx.WriteString("PROCEDURE ")
+	} else {
+		ctx.WriteString("FUNCTION ")
+	}
 	ctx.FormatNode(&node.FuncName)
 	ctx.WriteString("(")
 	ctx.FormatNode(node.Params)
 	ctx.WriteString(")\n\t")
-	ctx.WriteString("RETURNS ")
-	if node.ReturnType.IsSet {
-		ctx.WriteString("SETOF ")
+	if !node.IsProcedure {
+		ctx.WriteString("RETURNS ")
+		if node.ReturnType.IsSet {
+			ctx.WriteString("SETOF ")
+		}
+		ctx.FormatTypeReference(node.ReturnType.Type)
+		ctx.WriteString("\n\t")
 	}
-	ctx.FormatTypeReference(node.ReturnType.Type)
-	ctx.WriteString("\n\t")
 	var funcBody FunctionBodyStr
 	for _, option := range node.Options {
 		switch t := option.(type) {

@@ -1192,6 +1192,7 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_func_stmt
+%type <tree.Statement> create_proc_stmt
 
 %type <*tree.LikeTenantSpec> opt_like_virtual_cluster
 
@@ -4582,6 +4583,31 @@ create_func_stmt:
   }
 | CREATE opt_or_replace FUNCTION error // SHOW HELP: CREATE FUNCTION
 
+// %Help: CREATE PROCEDURE - define a new procedure
+// %Category: DDL
+// %Text:
+// CREATE [ OR REPLACE ] PROCEDURE
+//    name ( [ [ argmode ] [ argname ] argtype [, ...] ] )
+//  { LANGUAGE lang_name
+//    | AS 'definition'
+//  } ...
+// %SeeAlso: WEBDOCS/create-procedure.html
+create_proc_stmt:
+  CREATE opt_or_replace PROCEDURE func_create_name '(' opt_func_param_with_default_list ')'
+  opt_create_func_opt_list opt_routine_body
+  {
+    name := $4.unresolvedObjectName().ToFunctionName()
+    $$.val = &tree.CreateFunction{
+      IsProcedure: true,
+      Replace: $2.bool(),
+      FuncName: name,
+      Params: $6.functionParams(),
+      Options: $8.functionOptions(),
+      RoutineBody: $9.routineBody(),
+    }
+  }
+| CREATE opt_or_replace PROCEDURE error // SHOW HELP: CREATE PROCEDURE
+
 opt_or_replace:
   OR REPLACE { $$.val = true }
 | /* EMPTY */ { $$.val = false }
@@ -4976,7 +5002,6 @@ create_unsupported:
 | CREATE FOREIGN DATA error { return unimplemented(sqllex, "create fdw") }
 | CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
 | CREATE OPERATOR error { return unimplementedWithIssue(sqllex, 65017) }
-| CREATE opt_or_replace PROCEDURE error { return unimplementedWithIssueDetail(sqllex, 17511, "create procedure") }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
 | CREATE SERVER error { return unimplemented(sqllex, "create server") }
@@ -5025,6 +5050,7 @@ create_ddl_stmt:
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
 | create_func_stmt     // EXTEND WITH HELP: CREATE FUNCTION
+| create_proc_stmt     // EXTEND WITH HELP: CREATE PROCEDURE
 
 // %Help: CREATE STATISTICS - create a new table statistic
 // %Category: Misc
