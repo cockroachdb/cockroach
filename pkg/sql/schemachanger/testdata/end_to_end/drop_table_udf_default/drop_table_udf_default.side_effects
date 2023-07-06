@@ -66,7 +66,9 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
-  +    nameMapping: {}
+  +    nameMapping:
+  +      id: 104
+  +      name: f
      functionBody: SELECT 1;
      id: 104
   ...
@@ -121,7 +123,9 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
-  -    nameMapping: {}
+  -    nameMapping:
+  -      id: 104
+  -      name: f
      functionBody: SELECT 1;
      id: 104
   ...

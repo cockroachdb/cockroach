@@ -24,6 +24,59 @@ import (
 	"github.com/montanaflynn/stats"
 )
 
+type thresholdType int
+
+const (
+	exactBound thresholdType = iota
+	upperBound
+	lowerBound
+)
+
+// String returns the string representation of thresholdType.
+func (tht thresholdType) String() string {
+	switch tht {
+	case exactBound:
+		return "="
+	case upperBound:
+		return "<"
+	case lowerBound:
+		return ">"
+	default:
+		panic("unknown threshold type")
+	}
+}
+
+// threshold is created by parsing CmdArgs array and is used for assertion to
+// validate user-defined threshold constraints.
+type threshold struct {
+	// value indicates the predefined threshold value specified by arguments.
+	value float64
+	// thresholdType indicates the predefined threshold bound type specified by
+	// arguments.
+	thresholdType thresholdType
+}
+
+// String returns the string representation of threshold.
+func (th threshold) String() string {
+	return fmt.Sprintf("(%v%.2f)", th.thresholdType, th.value)
+}
+
+// isViolated returns true if the threshold constraint is violated and false
+// otherwise. Note that if the provided actual value is NaN, the function
+// returns false.
+func (th threshold) isViolated(actual float64) bool {
+	switch th.thresholdType {
+	case upperBound:
+		return actual > th.value
+	case lowerBound:
+		return actual < th.value
+	case exactBound:
+		return actual != th.value
+	default:
+		panic("unknown threshold type")
+	}
+}
+
 // SimulationAssertion provides methods to assert on properties of a cluster
 // simulation over time.
 type SimulationAssertion interface {
@@ -36,21 +89,23 @@ type SimulationAssertion interface {
 }
 
 // steadyStateAssertion implements the SimulationAssertion interface. The
-// steadyStateAssertion declares an assertion where the given stat for each
-// store must be no greater than threshold % of the mean over the assertion
-// ticks. This assertion is useful for when a cluster should stop activity and
-// converge after a period of initial activity. A natural example is asserting
-// that rebalancing activity reaches a steady state, so there is not thrashing.
+// steadyStateAssertion declares an assertion. A common use case is to specify
+// an upper_bound for the type=steady threshold. With this configuration, the
+// given stat for each store must be no greater than threshold % of the mean
+// over the assertion ticks. This assertion is useful for when a cluster should
+// stop activity and converge after a period of initial activity. A natural
+// example is asserting that rebalancing activity reaches a steady state, so
+// there is not thrashing.
 type steadyStateAssertion struct {
 	ticks     int
 	stat      string
-	threshold float64
+	threshold threshold
 }
 
 // Assert looks at a simulation run history and returns true if the declared
-// stat's minimum/mean and maximum/mean over the assertion duration are not
-// greater than the declared threshold. If over the threshold, holds is
-// returned as false and the reason given.
+// stat's minimum/mean and maximum/mean meets the threshold constraint at each
+// assertion tick. If violated, holds is returned as false along with the
+// reason.
 func (sa steadyStateAssertion) Assert(
 	ctx context.Context, h asim.History,
 ) (holds bool, reason string) {
@@ -80,7 +135,7 @@ func (sa steadyStateAssertion) Assert(
 		maxMean := math.Abs(max/mean - 1)
 		minMean := math.Abs(min/mean - 1)
 
-		if maxMean > sa.threshold || minMean > sa.threshold {
+		if sa.threshold.isViolated(maxMean) || sa.threshold.isViolated(minMean) {
 			if holds {
 				fmt.Fprintf(&buf, "  %s\n", sa)
 				holds = false
@@ -95,16 +150,17 @@ func (sa steadyStateAssertion) Assert(
 
 // String returns the string representation of the assertion.
 func (sa steadyStateAssertion) String() string {
-	return fmt.Sprintf("steady state stat=%s threshold=%.2f ticks=%d",
+	return fmt.Sprintf("steady state stat=%s threshold=%v ticks=%d",
 		sa.stat, sa.threshold, sa.ticks)
 }
 
 // balanceAssertion implements the SimulationAssertion interface. The
-// balanceAssertion declares an assertion where the max/mean of a given stat
-// across all all stores for each tick must be no greater than the threshold
-// given, for all assertion ticks. This assertion is useful when a stat is
-// being controlled, such as QPS and a correct rebalancing algorithm should
-// balance the stat.
+// balanceAssertion declares an assertion. A common use case is to specify an
+// upper_bound for the type=balance threshold. With this configuration, the
+// given stat across all stores must be no greater than the threshold for all
+// assertion ticks. This assertion is useful when a stat is being controlled,
+// such as QPS and a correct rebalancing algorithm should balance the stat.
+//
 // TODO(kvoli): Rationalize this assertion for multi-locality clusters with
 // zone configurations. This balance assertion uses the mean and maximum across
 // all stores in the cluster. In multi-locality clusters, it is possible for
@@ -130,13 +186,13 @@ func (sa steadyStateAssertion) String() string {
 type balanceAssertion struct {
 	ticks     int
 	stat      string
-	threshold float64
+	threshold threshold
 }
 
 // Assert looks at a simulation run history and returns true if the declared
-// stat's maximum/mean (over all stores) in the cluster is not greater than the
-// threshold at each tick. If this holds for all assertion ticks, holds is
-// true, otherwise false and the reason given.
+// stat's maximum/mean (over all stores) in the cluster meets the threshold
+// constraint at each assertion tick. If violated, holds is returned as false
+// along with the reason.
 func (ba balanceAssertion) Assert(ctx context.Context, h asim.History) (holds bool, reason string) {
 	m := h.Recorded
 	ticks := len(m)
@@ -164,9 +220,9 @@ func (ba balanceAssertion) Assert(ctx context.Context, h asim.History) (holds bo
 		maxMeanRatio := max / mean
 
 		log.VInfof(ctx, 2,
-			"Balance assertion: stat=%s, max/mean=%.2f, threshold=%.2f raw=%v",
+			"Balance assertion: stat=%s, max/mean=%.2f, threshold=%+v raw=%v",
 			ba.stat, maxMeanRatio, ba.threshold, tickStats)
-		if maxMeanRatio > ba.threshold {
+		if ba.threshold.isViolated(maxMeanRatio) {
 			if holds {
 				fmt.Fprintf(&buf, "  %s\n", ba)
 				holds = false
@@ -180,15 +236,19 @@ func (ba balanceAssertion) Assert(ctx context.Context, h asim.History) (holds bo
 // String returns the string representation of the assertion.
 func (ba balanceAssertion) String() string {
 	return fmt.Sprintf(
-		"balance stat=%s threshold=%.2f ticks=%d",
+		"balance stat=%s threshold=%v ticks=%d",
 		ba.stat, ba.threshold, ba.ticks)
 }
 
+// storeStatAssertion implements the SimulationAssertion interface. The
+// storeStatAssertion declares an assertion. A common use case is to specify an
+// exact_bound for the type=stat threshold. With this configuration, the given
+// stat for each store in stores must be == threshold over the assertion ticks.
 type storeStatAssertion struct {
-	ticks         int
-	stat          string
-	stores        []int
-	acceptedValue float64
+	ticks     int
+	stat      string
+	stores    []int
+	threshold threshold
 }
 
 // Assert looks at a simulation run history and returns true if the
@@ -217,7 +277,7 @@ func (sa storeStatAssertion) Assert(
 	for _, store := range sa.stores {
 		trimmedStoreStats := statTs[store-1][ticks-sa.ticks-1:]
 		for _, stat := range trimmedStoreStats {
-			if stat != sa.acceptedValue {
+			if sa.threshold.isViolated(stat) {
 				if holds {
 					holds = false
 					fmt.Fprintf(&buf, "  %s\n", sa)
@@ -233,8 +293,8 @@ func (sa storeStatAssertion) Assert(
 
 // String returns the string representation of the assertion.
 func (sa storeStatAssertion) String() string {
-	return fmt.Sprintf("stat=%s value=%.2f ticks=%d",
-		sa.stat, sa.acceptedValue, sa.ticks)
+	return fmt.Sprintf("stat=%s value=%v ticks=%d",
+		sa.stat, sa.threshold, sa.ticks)
 }
 
 type conformanceAssertion struct {

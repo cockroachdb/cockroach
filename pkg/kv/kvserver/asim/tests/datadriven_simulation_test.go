@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -91,34 +90,36 @@ import (
 //     voting replicas and 2 non-voting replicas, with a constraint that all
 //     replicas are in the region US_East.
 //
-//   - "assertion" type=<string> [stat=<string>] [ticks=<int>] [threshold=<float>]
-//     [store=<int>] [(under|over|unavailable|violating)=<int>]
-//     Add an assertion to the list of assertions that run against each
-//     sample on subsequent calls to eval. When every assertion holds during eval,
-//     OK is printed, otherwise the reason the assertion(s) failed is printed.
-//     There are two types of assertions available, type=balance and type=steady.
-//     Both assertions only look at the last 'ticks' duration of the simulation
-//     run.
+//   - "assertion" type=<string> [stat=<string>] [ticks=<int>]
+//     [(exact_bound|upper_bound|lower_bound)=<float>] [store=<int>]
+//     [(under|over|unavailable|violating)=<int>]
+//     Add an assertion to the list of assertions that run against each sample
+//     on subsequent calls to eval. When every assertion holds during eval, OK
+//     is printed, otherwise the reason the assertion(s) failed is printed.
+//     type=balance,steady,stat assertions look at the last 'ticks' duration of
+//     the simulation run. type=conformance assertions look at the end of the
+//     evaluation.
 //
 //     For type=balance assertions, the max stat (e.g. stat=qps) value of each
 //     store is taken and divided by the mean store stat value. If the max/mean
-//     exceeds the threshold provided (e.g. threshold=1.15) during any of the
-//     last ticks (e.g. ticks=5), then the assertion fails. This assertion
-//     applies over all stores, at each tick, for the last 'ticks' duration.
+//     violates the threshold constraint provided (e.g. upper_bound=1.15) during
+//     any of the last ticks (e.g. ticks=5), then the assertion fails. This
+//     assertion applies over all stores, at each tick, for the last 'ticks'
+//     duration.
 //
 //     For type=steady assertions, if the max or min stat (e.g. stat=replicas)
-//     value over the last ticks (e.g. ticks=6) duration is greater than
-//     threshold (e.g. threshold=0.05) % of the mean, the assertion fails. This
-//     assertion applies per-store, over 'ticks' duration.
+//     value over the last ticks (e.g. ticks=6) duration violates the threshold
+//     constraint provided (e.g. upper_bound=0.05) % of the mean, the assertion
+//     fails. This assertion applies per-store, over 'ticks' duration.
 //
-//     For type=stat assertions, if the stat (e.g. stat=replicas) value of the
-//     last ticks (e.g. ticks=5) duration is not exactly equal to threshold, the
-//     assertion fails. This applies for specified stores which must be provided
-//     with stores=(storeID,...).
+//     For type=stat assertions, if the stat (e.g. stat=replicas) value over the
+//     last ticks (e.g. ticks=5) duration violates the threshold constraint
+//     provided (e.g. exact=0), the assertion fails. This applies for specified
+//     stores which must be provided with stores=(storeID,...).
 //
 //     For type=conformance assertions, you may assert on the number of
-//     replicas that you expect to be underreplicated (under),
-//     overreplicated(over), unavailable(unavailable) and violating
+//     replicas that you expect to be under-replicated (under),
+//     over-replicated(over), unavailable(unavailable) and violating
 //     constraints(violating) at the end of the evaluation.
 //
 //   - "setting" [rebalance_mode=<int>] [rebalance_interval=<duration>]
@@ -419,40 +420,35 @@ func TestDataDriven(t *testing.T) {
 				var stat string
 				var typ string
 				var ticks int
-				var threshold float64
-
 				scanArg(t, d, "type", &typ)
 
 				switch typ {
 				case "balance":
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
-					scanArg(t, d, "threshold", &threshold)
 					assertions = append(assertions, balanceAssertion{
 						ticks:     ticks,
 						stat:      stat,
-						threshold: threshold,
+						threshold: scanThreshold(t, d),
 					})
 				case "steady":
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
-					scanArg(t, d, "threshold", &threshold)
 					assertions = append(assertions, steadyStateAssertion{
 						ticks:     ticks,
 						stat:      stat,
-						threshold: threshold,
+						threshold: scanThreshold(t, d),
 					})
 				case "stat":
 					var stores []int
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
-					scanArg(t, d, "threshold", &threshold)
 					scanArg(t, d, "stores", &stores)
 					assertions = append(assertions, storeStatAssertion{
-						ticks:         ticks,
-						stat:          stat,
-						acceptedValue: threshold,
-						stores:        stores,
+						ticks:     ticks,
+						stat:      stat,
+						threshold: scanThreshold(t, d),
+						stores:    stores,
 					})
 				case "conformance":
 					var under, over, unavailable, violating int
@@ -510,36 +506,4 @@ func TestDataDriven(t *testing.T) {
 			}
 		})
 	})
-}
-
-// TODO(kvoli): Upstream the scan implementations for the float64 and
-// time.Duration types to the datadriven testing repository.
-func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
-	var tmp string
-	var err error
-	switch dest := dest.(type) {
-	case *time.Duration:
-		d.ScanArgs(t, key, &tmp)
-		*dest, err = time.ParseDuration(tmp)
-		require.NoError(t, err)
-	case *float64:
-		d.ScanArgs(t, key, &tmp)
-		*dest, err = strconv.ParseFloat(tmp, 64)
-		require.NoError(t, err)
-	case *[]int, *string, *int, *int64, *uint64, *bool:
-		d.ScanArgs(t, key, dest)
-	default:
-		require.Fail(t, "unsupported type %T", dest)
-	}
-}
-
-// scanIfExists looks up the first arg in CmdArgs array that matches the
-// provided firstKey. If found, it scans the value into dest and returns true;
-// Otherwise, it does nothing and returns false.
-func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interface{}) bool {
-	if d.HasArg(key) {
-		scanArg(t, d, key, dest)
-		return true
-	}
-	return false
 }
