@@ -28,6 +28,18 @@ var (
 	}
 )
 
+// Inject our singleton LogMetricsRegistry into the logging
+// package. This ensures that the LogMetrics implementation within the
+// log package is always defined. This should only be called once from
+// a single init function.
+//
+// Since the primary user of the eventual metric.Registry's that come
+// from LogMetricsRegistry is the MetricsRecorder, we trigger this
+// init function via an import in pkg/util/log/logmetrics/metrics.go.
+func init() {
+	log.SetLogMetrics(logMetricsReg)
+}
+
 // logMetricsStruct is a struct used to contain all metrics
 // tracked by the LogMetricsRegistry. This container is necessary
 // to register all the metrics with the Registry internal to the
