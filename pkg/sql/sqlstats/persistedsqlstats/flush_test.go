@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"math"
 	"net/url"
 	"testing"
@@ -524,7 +525,110 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 	// 5. Assert that neither table has grown in length.
 	require.Equal(t, stmtStatsCountFlush3, stmtStatsCountFlush2)
 	require.Equal(t, txnStatsCountFlush3, txnStatsCountFlush2)
+}
 
+func TestSQLStatsPlanSampling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stubTime := &stubTime{}
+	setTime := func(inputTime string) {
+		parsedTime, err := time.Parse(time.RFC3339, inputTime)
+		require.NoError(t, err)
+		stubTime.setTime(parsedTime)
+	}
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLStatsKnobs.(*sqlstats.TestingKnobs).StubTimeNow = stubTime.Now
+
+	ctx := context.Background()
+	s, conn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	sqlRun := sqlutils.MakeSQLRunner(conn)
+
+	dbName := "defaultdb"
+
+	appName := fmt.Sprintf("TestSQLStatsPlanSampling_%s", uuid.FastMakeV4().String())
+	sqlRun.Exec(t, "SET application_name = $1", appName)
+
+	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	appStats := sqlStats.GetApplicationStats(appName, false)
+
+	sqlRun.Exec(t, `SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = true;`)
+	sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0;`)
+
+	validateSample := func(fingerprint string, implicitTxn bool, expectedPreviouslySampledState bool, expectedSavePlanForStatsState bool) {
+
+		previouslySampled, savePlanForStats := appStats.ShouldSample(
+			fingerprint,
+			implicitTxn,
+			dbName,
+		)
+
+		errMessage := fmt.Sprintf("validate: %s, implicit: %t expected sample before: %t, actual sample before: %t, exptected save plan: %t actual save plan: %t\n",
+			fingerprint, implicitTxn, expectedPreviouslySampledState, previouslySampled, expectedSavePlanForStatsState, savePlanForStats)
+		require.Equal(t, expectedSavePlanForStatsState, savePlanForStats, errMessage)
+		require.Equal(t, expectedPreviouslySampledState, previouslySampled, errMessage)
+	}
+
+	setTime("2021-09-20T15:00:00Z")
+
+	// Logical plan should be sampled here, since we have not collected logical plan
+	// at all.
+	validateSample("SELECT _", true, false, true)
+
+	// Execute the query to trigger a collection of logical plan.
+	// (db_name=defaultdb implicitTxn=true fingerprint=SELECT _)
+	_, err := conn.ExecContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+
+	// Ensure that if a query is to be subsequently executed, it will not cause
+	// logical plan sampling.
+	validateSample("SELECT _", true, true, false)
+
+	// However, if we are to execute the same statement but under explicit
+	// transaction, the plan will still need to be sampled.
+	validateSample("SELECT _", false, false, true)
+
+	// Execute the statement under explicit transaction.
+	// (db_name=defaultdb implicitTxn=false fingerprint=SELECT _)
+	tx, err := conn.BeginTx(ctx, &gosql.TxOptions{})
+	require.NoError(t, err)
+	_, err = tx.ExecContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+
+	// Ensure that the subsequent execution of the query will not cause logical plan
+	// collection.
+	validateSample("SELECT _", false, true, false)
+
+	// Set the time to the future and ensure we will resample the logical plan.
+	setTime("2021-09-20T15:05:01Z")
+
+	// If tracing is not enabled the statement will not be sampled. To update the
+	// save plan for stats last sampled time the statement must have tracing enabled.
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;")
+	require.NoError(t, err)
+
+	validateSample("SELECT _", true, true, true)
+
+	// implicit txn
+	_, err = conn.ExecContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+	validateSample("SELECT _", true, true, false)
+
+	// explicit txn
+	validateSample("SELECT _", false, true, true)
+
+	tx, err = conn.BeginTx(ctx, &gosql.TxOptions{})
+	require.NoError(t, err)
+	_, err = tx.ExecContext(ctx, "SELECT 1")
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+
+	// Ensure that the subsequent execution of the query will not cause logical plan
+	// collection.
+	validateSample("SELECT _", false, true, false)
 }
 
 type stubTime struct {
