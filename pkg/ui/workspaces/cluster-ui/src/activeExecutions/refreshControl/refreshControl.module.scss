@@ -1,0 +1,49 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@import "src/core/index.module";
+
+.refresh-timestamp {
+  vertical-align: middle;
+}
+
+.refresh-icon {
+  margin-left: 12px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.refresh-text {
+  color: $colors--primary-blue-3;
+  vertical-align: middle;
+  margin-right: 12px;
+}
+
+.ant-switch-checked {
+  background-color: $colors--primary-blue-3;
+}
+
+.refresh-button {
+  align-items: center;
+}
+
+.refresh-divider {
+  border-left: 1px solid $colors--neutral-4;
+  padding-left: 12px;
+  height: $line-height--large;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.auto-refresh-label {
+  padding-right: 8px;
+  vertical-align: middle;
+}
