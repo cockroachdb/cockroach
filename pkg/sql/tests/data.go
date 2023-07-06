@@ -37,12 +37,33 @@ func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 // those whose tombstones are marked but not GC'ed yet) in the provided span
 // matches the expected number.
 func CheckKeyCountIncludingTombstoned(
-	t *testing.T, s serverutils.TestServerInterface, tableSpan roachpb.Span, expectedNum int,
+	t *testing.T, s serverutils.TestServerInterface, span roachpb.Span, expectedNum int,
 ) {
+	t.Helper()
+	if err := CheckKeyCountIncludingTombstonedE(t, s, span, expectedNum); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// CheckKeyCountE returns an error if the the number of keys in the
+// provided span does not match numKeys.
+func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) error {
+	t.Helper()
+	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
+		return err
+	} else if l := numKeys; len(kvs) != l {
+		return errors.Newf("expected %d key value pairs, but got %d", l, len(kvs))
+	}
+	return nil
+}
+
+func CheckKeyCountIncludingTombstonedE(
+	t *testing.T, s serverutils.TestServerInterface, tableSpan roachpb.Span, expectedNum int,
+) error {
 	// Check key count including tombstoned ones.
 	engines := s.Engines()
 	if len(engines) != 1 {
-		t.Fatalf("expecting 1 engine from the test server, but found %d", len(engines))
+		return errors.Errorf("expecting 1 engine from the test server, but found %d", len(engines))
 	}
 
 	keyCount := 0
@@ -57,7 +78,7 @@ func CheckKeyCountIncludingTombstoned(
 	for it.SeekGE(storage.MVCCKey{Key: tableSpan.Key}); ; it.NextKey() {
 		ok, err := it.Valid()
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
 		if !ok {
 			break
@@ -66,18 +87,7 @@ func CheckKeyCountIncludingTombstoned(
 	}
 	it.Close()
 	if keyCount != expectedNum {
-		t.Fatalf("expecting %d keys, but found %d", expectedNum, keyCount)
-	}
-}
-
-// CheckKeyCountE returns an error if the the number of keys in the
-// provided span does not match numKeys.
-func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) error {
-	t.Helper()
-	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
-		return err
-	} else if l := numKeys; len(kvs) != l {
-		return errors.Newf("expected %d key value pairs, but got %d", l, len(kvs))
+		return errors.Errorf("expecting %d keys, but found %d", expectedNum, keyCount)
 	}
 	return nil
 }
