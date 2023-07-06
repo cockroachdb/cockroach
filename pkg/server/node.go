@@ -1225,8 +1225,11 @@ func (n *Node) batchInternal(
 	// the request was doing at the time it noticed the cancellation.
 	if pErr != nil && ctx.Err() != nil {
 		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
-			log.Infof(ctx, "batch request %s failed with error: %s\ntrace:\n%s", args.String(),
-				pErr.GoError().Error(), sp.GetConfiguredRecording().String())
+			recording := sp.GetConfiguredRecording()
+			if recording.Len() != 0 {
+				log.Infof(ctx, "batch request %s failed with error: %v\ntrace:\n%s", args.String(),
+					pErr.GoError(), recording)
+			}
 		}
 	}
 
