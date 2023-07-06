@@ -11140,10 +11140,10 @@ def go_deps():
         name = "org_golang_x_mod",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/mod",
-        sha256 = "4ae8176799d8cda819e70731ba6855735003e7e4930436e34584c75c96c496e0",
-        strip_prefix = "golang.org/x/mod@v0.8.0",
+        sha256 = "ad0b72a29c07f57d92612fdbc2da6891b3988dd98b31d2fdcbe8ddb9c8cc2d52",
+        strip_prefix = "golang.org/x/mod@v0.9.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/mod/org_golang_x_mod-v0.8.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/mod/org_golang_x_mod-v0.9.0.zip",
         ],
     )
     go_repository(
@@ -11234,10 +11234,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:org_golang_x_tools.patch",
         ],
-        sha256 = "9a29c8904c2acd4b65825e916cbdaf417086f35bb68c54af9a6283a0e1341e85",
-        strip_prefix = "golang.org/x/tools@v0.6.0",
+        sha256 = "e43c6cc63a85dc30cd1794846ae96a44e81e458e88e436474c3bbbdbef80941a",
+        strip_prefix = "golang.org/x/tools@v0.7.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/tools/org_golang_x_tools-v0.6.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/tools/org_golang_x_tools-v0.7.0.zip",
         ],
     )
     go_repository(
