@@ -22,7 +22,7 @@ type ObjectName interface {
 
 var _ ObjectName = &TableName{}
 var _ ObjectName = &TypeName{}
-var _ ObjectName = &FunctionName{}
+var _ ObjectName = &RoutineName{}
 
 // objName is the internal type for a qualified object.
 type objName struct {
@@ -241,8 +241,8 @@ func (u *UnresolvedObjectName) ToTableName() TableName {
 }
 
 // ToFunctionName converts the unresolved name to a function name.
-func (u *UnresolvedObjectName) ToFunctionName() FunctionName {
-	return FunctionName{u.toObjName()}
+func (u *UnresolvedObjectName) ToFunctionName() RoutineName {
+	return RoutineName{u.toObjName()}
 }
 
 // ToUnresolvedName converts the unresolved object name to the more general

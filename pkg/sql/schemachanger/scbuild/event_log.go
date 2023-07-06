@@ -148,7 +148,7 @@ func functionName(b buildCtx, e scpb.Element) string {
 		}
 	})
 	if fnNameElem == nil {
-		panic(errors.AssertionFailedf("cannot find FunctionName element for function with ID %v", descID))
+		panic(errors.AssertionFailedf("cannot find RoutineName element for function with ID %v", descID))
 	}
 	// Retrieve parent schema and database name.
 	var schemaID catid.DescID
@@ -161,7 +161,7 @@ func functionName(b buildCtx, e scpb.Element) string {
 	})
 	schemaNamespaceElem := namespace(b, schemaID)
 	databaseNamespaceElem := namespace(b, schemaNamespaceElem.DatabaseID)
-	fnName := tree.MakeQualifiedFunctionName(databaseNamespaceElem.Name, schemaNamespaceElem.Name, fnNameElem.Name)
+	fnName := tree.MakeQualifiedRoutineName(databaseNamespaceElem.Name, schemaNamespaceElem.Name, fnNameElem.Name)
 	return fnName.FQString()
 }
 

@@ -1092,8 +1092,8 @@ func getSchemaNameFromSchemaDescriptor(
 
 func getFunctionNameFromFunctionDescriptor(
 	l simpleSchemaResolver, fn catalog.FunctionDescriptor,
-) (tree.FunctionName, error) {
-	var fnName tree.FunctionName
+) (tree.RoutineName, error) {
+	var fnName tree.RoutineName
 	db, err := l.getDatabaseByID(fn.GetParentID())
 	if err != nil {
 		return fnName, err
@@ -1109,7 +1109,7 @@ func getFunctionNameFromFunctionDescriptor(
 		}
 		scName = sc.GetName()
 	}
-	return tree.MakeQualifiedFunctionName(db.GetName(), scName, fn.GetName()), nil
+	return tree.MakeQualifiedRoutineName(db.GetName(), scName, fn.GetName()), nil
 }
 
 // ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.

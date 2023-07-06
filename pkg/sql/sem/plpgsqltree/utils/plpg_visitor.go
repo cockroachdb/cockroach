@@ -99,12 +99,12 @@ func CountPLpgSQLStmt(sql string) (PLpgSQLStmtCounter, error) {
 
 // ParseAndCollectTelemetryForPLpgSQLFunc takes a plpgsql function and parses and collects
 // telemetry on the parsable statements.
-func ParseAndCollectTelemetryForPLpgSQLFunc(stmt *tree.CreateFunction) error {
+func ParseAndCollectTelemetryForPLpgSQLFunc(stmt *tree.CreateRoutine) error {
 	// Assert that the function language is PLPGSQL.
 	var funcBodyStr string
 	for _, option := range stmt.Options {
 		switch opt := option.(type) {
-		case tree.FunctionBodyStr:
+		case tree.RoutineBodyStr:
 			funcBodyStr = string(opt)
 		}
 	}

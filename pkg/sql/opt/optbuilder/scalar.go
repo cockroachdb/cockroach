@@ -722,7 +722,7 @@ func (b *Builder) buildUDF(
 	var body []memo.RelExpr
 	var bodyProps []*physical.Required
 	switch o.Language {
-	case tree.FunctionLangSQL:
+	case tree.RoutineLangSQL:
 		// Parse the function body.
 		stmts, err := parser.Parse(o.Body)
 		if err != nil {
@@ -744,7 +744,7 @@ func (b *Builder) buildUDF(
 			body[i] = expr
 			bodyProps[i] = physProps
 		}
-	case tree.FunctionLangPLpgSQL:
+	case tree.RoutineLangPLpgSQL:
 		// Parse the function body.
 		stmt, err := plpgsql.Parse(o.Body)
 		if err != nil {

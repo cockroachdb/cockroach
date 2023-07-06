@@ -455,7 +455,7 @@ func (ep *DummyEvalPlanner) ResolveFunction(
 // ResolveFunctionByOID implements FunctionReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.FunctionName, *tree.Overload, error) {
+) (*tree.RoutineName, *tree.Overload, error) {
 	return nil, nil, errors.AssertionFailedf("ResolveFunctionByOID unimplemented")
 }
 

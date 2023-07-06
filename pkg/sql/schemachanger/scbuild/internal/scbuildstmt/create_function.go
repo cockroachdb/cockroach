@@ -24,26 +24,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
-func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
+func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	if n.Replace {
 		panic(scerrors.NotImplementedError(n))
 	}
 	b.IncrementSchemaChangeCreateCounter("function")
 
-	dbElts, scElts := b.ResolveTargetObject(n.FuncName.ToUnresolvedObjectName(), privilege.CREATE)
+	dbElts, scElts := b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
 	_, _, sc := scpb.FindSchema(scElts)
 	_, _, db := scpb.FindDatabase(dbElts)
 	_, _, scName := scpb.FindNamespace(scElts)
 	_, _, dbname := scpb.FindNamespace(dbElts)
 
-	n.FuncName.SchemaName = tree.Name(scName.Name)
-	n.FuncName.CatalogName = tree.Name(dbname.Name)
+	n.Name.SchemaName = tree.Name(scName.Name)
+	n.Name.CatalogName = tree.Name(dbname.Name)
 
 	validateParameters(n)
 
 	existingFn := b.ResolveUDF(
 		&tree.FuncObj{
-			FuncName: n.FuncName,
+			FuncName: n.Name,
 			Params:   n.Params,
 		},
 		ResolveParams{
@@ -55,7 +55,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 		panic(pgerror.Newf(
 			pgcode.DuplicateFunction,
 			"function %q already exists with same argument types",
-			n.FuncName.Object(),
+			n.Name.Object(),
 		))
 	}
 
@@ -91,7 +91,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	})
 	b.Add(&scpb.FunctionName{
 		FunctionID: fnID,
-		Name:       n.FuncName.Object(),
+		Name:       n.Name.Object(),
 	})
 
 	validateFunctionLeakProof(n.Options, funcinfo.MakeDefaultVolatilityProperties())
@@ -99,7 +99,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	var fnBodyStr string
 	for _, option := range n.Options {
 		switch t := option.(type) {
-		case tree.FunctionVolatility:
+		case tree.RoutineVolatility:
 			v, err := funcinfo.VolatilityToProto(t)
 			if err != nil {
 				panic(err)
@@ -108,12 +108,12 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 				FunctionID: fnID,
 				Volatility: catpb.FunctionVolatility{Volatility: v},
 			})
-		case tree.FunctionLeakproof:
+		case tree.RoutineLeakproof:
 			b.Add(&scpb.FunctionLeakProof{
 				FunctionID: fnID,
 				LeakProof:  bool(t),
 			})
-		case tree.FunctionNullInputBehavior:
+		case tree.RoutineNullInputBehavior:
 			v, err := funcinfo.NullInputBehaviorToProto(t)
 			if err != nil {
 				panic(err)
@@ -122,13 +122,13 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 				FunctionID:        fnID,
 				NullInputBehavior: catpb.FunctionNullInputBehavior{NullInputBehavior: v},
 			})
-		case tree.FunctionLanguage:
+		case tree.RoutineLanguage:
 			v, err := funcinfo.FunctionLangToProto(t)
 			if err != nil {
 				panic(err)
 			}
 			lang = v
-		case tree.FunctionBodyStr:
+		case tree.RoutineBodyStr:
 			fnBodyStr = string(t)
 		}
 	}
@@ -150,7 +150,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateFunction) {
 	b.LogEventForExistingTarget(&fn)
 }
 
-func validateParameters(n *tree.CreateFunction) {
+func validateParameters(n *tree.CreateRoutine) {
 	seen := make(map[tree.Name]struct{})
 	for _, param := range n.Params {
 		if param.Name != "" {
@@ -186,7 +186,7 @@ func validateFunctionRelationReferences(
 	}
 }
 
-func validateFunctionLeakProof(options tree.FunctionOptions, vp funcinfo.VolatilityProperties) {
+func validateFunctionLeakProof(options tree.RoutineOptions, vp funcinfo.VolatilityProperties) {
 	if err := vp.Apply(options); err != nil {
 		panic(err)
 	}

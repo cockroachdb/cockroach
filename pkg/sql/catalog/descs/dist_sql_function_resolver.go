@@ -65,7 +65,7 @@ func (d *DistSQLFunctionResolver) ResolveFunction(
 // separate package so that it can be reused here.
 func (d *DistSQLFunctionResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (*tree.FunctionName, *tree.Overload, error) {
+) (*tree.RoutineName, *tree.Overload, error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
 		return nil, nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not found", oid)
 	}
@@ -86,6 +86,6 @@ func (d *DistSQLFunctionResolver) ResolveFunctionByOID(
 	if err != nil {
 		return nil, nil, err
 	}
-	fnName := tree.MakeQualifiedFunctionName(db.GetName(), sc.GetName(), funcDesc.GetName())
+	fnName := tree.MakeQualifiedRoutineName(db.GetName(), sc.GetName(), funcDesc.GetName())
 	return &fnName, ret, nil
 }

@@ -972,7 +972,7 @@ type FunctionDescriptor interface {
 
 	// ToCreateExpr converts a function descriptor back to a CREATE FUNCTION
 	// statement. This is mainly used for formatting, e.g. SHOW CREATE FUNCTION.
-	ToCreateExpr() (*tree.CreateFunction, error)
+	ToCreateExpr() (*tree.CreateRoutine, error)
 }
 
 // FilterDroppedDescriptor returns an error if the descriptor state is DROP.
