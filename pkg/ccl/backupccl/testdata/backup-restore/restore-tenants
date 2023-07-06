@@ -38,16 +38,16 @@ BACKUP INTO 'nodelocal://1/cluster_without_tenants'
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://1/cluster_with_tenants' WITH include_all_secondary_tenants
+BACKUP INTO 'nodelocal://1/cluster_with_tenants' WITH include_all_virtual_clusters
 ----
 
-exec-sql expect-error-regex=(the include_all_secondary_tenants option is only supported for full cluster backups)
-BACKUP TABLE tab1 INTO 'nodelocal://1/table_backup' WITH include_all_secondary_tenants
+exec-sql expect-error-regex=(the include_all_virtual_clusters option is only supported for full cluster backups)
+BACKUP TABLE tab1 INTO 'nodelocal://1/table_backup' WITH include_all_virtual_clusters
 ----
 regex matches error
 
-exec-sql expect-error-regex=(the include_all_secondary_tenants option is only supported for full cluster backups)
-BACKUP DATABASE db1 INTO 'nodelocal://1/database_backup' WITH include_all_secondary_tenants
+exec-sql expect-error-regex=(the include_all_virtual_clusters option is only supported for full cluster backups)
+BACKUP DATABASE db1 INTO 'nodelocal://1/database_backup' WITH include_all_virtual_clusters
 ----
 regex matches error
 
@@ -72,7 +72,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow'
 ----
 
 restore expect-pausepoint tag=a
-RESTORE FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_secondary_tenants
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_virtual_clusters
 ----
 job paused at pausepoint
 
@@ -117,17 +117,17 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
 regex matches error
 
 exec-sql expect-error-regex=(invalid tenant name)
-RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'invalid_name';
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'invalid_name';
 ----
 regex matches error
 
 exec-sql expect-error-regex=(tenant with name "tenant-6" already exists)
-RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'tenant-6';
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'tenant-6';
 ----
 regex matches error
 
 exec-sql
-RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'newname';
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_name = 'newname';
 ----
 
 query-sql
@@ -152,7 +152,7 @@ BACKUP TENANT 2 INTO 'nodelocal://1/tenant2'
 ----
 
 exec-sql
-RESTORE TENANT 2 FROM LATEST IN 'nodelocal://1/tenant2' WITH tenant_name = 'another-name';
+RESTORE TENANT 2 FROM LATEST IN 'nodelocal://1/tenant2' WITH virtual_cluster_name = 'another-name';
 ----
 
 query-sql
@@ -163,13 +163,13 @@ SELECT id,name,service_mode FROM system.tenants WHERE name = 'another-name';
 new-cluster name=s3 share-io-dir=s1 disable-tenant
 ----
 
-exec-sql expect-error-regex=(the include_all_secondary_tenants option is only supported for full cluster restores)
-RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_secondary_tenants
+exec-sql expect-error-regex=(the include_all_virtual_clusters option is only supported for full cluster restores)
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_virtual_clusters
 ----
 regex matches error
 
-exec-sql expect-error-regex=(the include_all_secondary_tenants option is only supported for full cluster restores)
-RESTORE TABLE tab1 FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_secondary_tenants
+exec-sql expect-error-regex=(the include_all_virtual_clusters option is only supported for full cluster restores)
+RESTORE TABLE tab1 FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_virtual_clusters
 ----
 regex matches error
 

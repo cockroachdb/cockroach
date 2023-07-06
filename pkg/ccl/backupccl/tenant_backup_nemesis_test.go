@@ -102,7 +102,7 @@ func TestTenantBackupWithCanceledImport(t *testing.T) {
 	tenant10DB.Exec(t, "SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT')")
 
 	hostSQLDB.Exec(t, "BACKUP TENANT 10 INTO LATEST IN 'nodelocal://1/tenant-backup'")
-	hostSQLDB.Exec(t, "RESTORE TENANT 10 FROM LATEST IN 'nodelocal://1/tenant-backup' WITH tenant_name = 'tenant-11'")
+	hostSQLDB.Exec(t, "RESTORE TENANT 10 FROM LATEST IN 'nodelocal://1/tenant-backup' WITH virtual_cluster_name = 'tenant-11'")
 
 	tenant11, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{
 		TenantName:          "tenant-11",
@@ -245,7 +245,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	})
 
 	require.NoError(t, g.Wait())
-	restoreQuery := fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' AS OF SYSTEM TIME %s WITH tenant_name = 'tenant-11'", backupLoc, aost)
+	restoreQuery := fmt.Sprintf("RESTORE TENANT 10 FROM LATEST IN '%s' AS OF SYSTEM TIME %s WITH virtual_cluster_name = 'tenant-11'", backupLoc, aost)
 	t.Logf("backup-nemesis: restoring tenant 10 into 11: %s", restoreQuery)
 	hostSQLDB.Exec(t, restoreQuery)
 

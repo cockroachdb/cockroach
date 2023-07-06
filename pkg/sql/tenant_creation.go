@@ -67,7 +67,7 @@ func (p *planner) CreateTenant(
 		// Tenant creation via this interface (which includes
 		// crdb_internal.create_tenant) should be prevented from gobbling
 		// up the entire tenant ID space by asking for too large values.
-		// Otherwise, CREATE TENANT will not be possible any more.
+		// Otherwise, CREATE VIRTUAL CLUSTER will not be possible any more.
 		return tid, pgerror.Newf(pgcode.ProgramLimitExceeded, "tenant ID %d out of range", *ctcfg.ID)
 	}
 

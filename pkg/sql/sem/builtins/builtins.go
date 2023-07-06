@@ -4952,7 +4952,7 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Volatile,
 			Language:   tree.FunctionLangSQL,
 		},
-		// This overload is deprecated. Use CREATE TENANT instead.
+		// This overload is deprecated. Use CREATE VIRTUAL CLUSTER instead.
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "name", Typ: types.String},
@@ -4960,7 +4960,7 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Int),
 			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1))`,
 			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
-DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
+DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Volatility: volatility.Volatile,
 			Language:   tree.FunctionLangSQL,
 		},
@@ -4996,7 +4996,7 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Body:       `SELECT crdb_internal.destroy_tenant($1, false)`,
-			Info:       "DO NOT USE -- USE 'DROP TENANT' INSTEAD.",
+			Info:       "DO NOT USE -- USE 'DROP VIRTUAL CLUSTER' INSTEAD.",
 			Volatility: volatility.Volatile,
 			Language:   tree.FunctionLangSQL,
 		},
@@ -5022,7 +5022,7 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 				}
 				return args[0], nil
 			},
-			Info:       "DO NOT USE -- USE 'DROP TENANT IMMEDIATE' INSTEAD.",
+			Info:       "DO NOT USE -- USE 'DROP VIRTUAL CLUSTER IMMEDIATE' INSTEAD.",
 			Volatility: volatility.Volatile,
 		},
 	),

@@ -1638,6 +1638,14 @@ var specs = []stmtSpec{
 		name:   "opt_frame_clause",
 		inline: []string{"frame_extent"},
 	},
+	{
+		name:   "backup_options",
+		inline: []string{"include_all_clusters"},
+	},
+	{
+		name:   "restore_options",
+		inline: []string{"include_all_clusters", "virtual_cluster_name", "virtual_cluster_opt"},
+	},
 }
 
 // getAllStmtSpecs returns a slice of stmtSpecs for all sql.y statements that
