@@ -151,20 +151,19 @@ func GetDEnumAsStringFromConstantExpr(expr opt.Expr) (enumAsString string, ok bo
 
 // BuildLookupJoinLookupTableDistribution builds the Distribution that results
 // from performing lookups of a LookupJoin, if that distribution can be
-// statically determined. If crdbRegionColID is non-zero, it is the column ID
-// of the input REGIONAL BY ROW table holding the crdb_region column, and
-// inputDistribution is the distribution of the operation on that table
-// (Scan or LocalityOptimizedSearch).
-// The distribution of the lookup join is returned, plus the first lookup index
-// column, as matched in the lookup with crdbRegionColID (if it can be
-// determined, otherwise zero).
+// statically determined. If crdbRegionColSet is not empty, it is the set of
+// columns of the input regions equivalent to the crdb_region column, and
+// inputDistribution is the distribution of that relation. The distribution of
+// the lookup join is returned, plus crdbRegionColSet including the first lookup
+// index column, as matched in the lookup with crdbRegionColID (if it can be
+// determined, otherwise an empty ColSet).
 func BuildLookupJoinLookupTableDistribution(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	lookupJoin *memo.LookupJoinExpr,
-	crdbRegionColID opt.ColumnID,
+	crdbRegionColSet opt.ColSet,
 	inputDistribution physical.Distribution,
-) (firstLookupIndexCol opt.ColumnID, provided physical.Distribution) {
+) (firstLookupIndexColSet opt.ColSet, provided physical.Distribution) {
 	lookupTableMeta := lookupJoin.Memo().Metadata().TableMeta(lookupJoin.Table)
 	lookupTable := lookupTableMeta.Table
 
@@ -175,13 +174,13 @@ func BuildLookupJoinLookupTableDistribution(
 
 	if lookupJoin.LocalityOptimized || lookupJoin.ChildOfLocalityOptimizedSearch {
 		provided.FromLocality(evalCtx.Locality)
-		return 0 /* firstLookupIndexCol */, provided
+		return firstLookupIndexColSet, provided
 	} else if lookupTable.IsGlobalTable() {
 		provided.FromLocality(evalCtx.Locality)
-		return 0 /* firstLookupIndexCol */, provided
+		return firstLookupIndexColSet, provided
 	} else if homeRegion, ok := lookupTable.HomeRegion(); ok {
 		provided.Regions = []string{homeRegion}
-		return 0 /* firstLookupIndexCol */, provided
+		return firstLookupIndexColSet, provided
 	} else if lookupTable.IsRegionalByRow() {
 		if len(lookupJoin.KeyCols) > 0 {
 			inputExpr := lookupJoin.Input
@@ -190,23 +189,29 @@ func BuildLookupJoinLookupTableDistribution(
 				if filterExpr, ok := invertedJoinExpr.GetConstExprFromFilter(firstKeyColID); ok {
 					if homeRegion, ok = GetDEnumAsStringFromConstantExpr(filterExpr); ok {
 						provided.Regions = []string{homeRegion}
-						return colIDOfFirstLookupIndexColumn, provided
+						firstLookupIndexColSet.UnionWith(crdbRegionColSet)
+						firstLookupIndexColSet.Add(colIDOfFirstLookupIndexColumn)
+						return firstLookupIndexColSet, provided
 					}
 				}
 			} else if projectExpr, ok := inputExpr.(*memo.ProjectExpr); ok {
 				regionName := projectExpr.GetProjectedEnumConstant(firstKeyColID)
 				if regionName != "" {
 					provided.Regions = []string{regionName}
-					return colIDOfFirstLookupIndexColumn, provided
+					firstLookupIndexColSet.UnionWith(crdbRegionColSet)
+					firstLookupIndexColSet.Add(colIDOfFirstLookupIndexColumn)
+					return firstLookupIndexColSet, provided
 				}
 			}
-			if crdbRegionColID == firstKeyColID {
+			if crdbRegionColSet.Contains(firstKeyColID) {
 				provided.FromIndexScan(ctx, evalCtx, lookupTableMeta, lookupJoin.Index, nil)
 				if !inputDistribution.Any() &&
 					(provided.Any() || len(provided.Regions) > len(inputDistribution.Regions)) {
-					return colIDOfFirstLookupIndexColumn, inputDistribution
+					firstLookupIndexColSet.UnionWith(crdbRegionColSet)
+					firstLookupIndexColSet.Add(colIDOfFirstLookupIndexColumn)
+					return firstLookupIndexColSet, inputDistribution
 				}
-				return 0 /* firstLookupIndexCol */, provided
+				return firstLookupIndexColSet, provided
 			}
 		} else if len(lookupJoin.LookupJoinPrivate.LookupExpr) > 0 {
 			if filterIdx, ok := lookupJoin.GetConstPrefixFilter(lookupJoin.Memo().Metadata()); ok {
@@ -214,22 +219,26 @@ func BuildLookupJoinLookupTableDistribution(
 				if firstIndexColEqExpr.Op() == opt.EqOp {
 					if regionName, ok := GetDEnumAsStringFromConstantExpr(firstIndexColEqExpr.Child(1)); ok {
 						provided.Regions = []string{regionName}
-						return colIDOfFirstLookupIndexColumn, provided
+						firstLookupIndexColSet.UnionWith(crdbRegionColSet)
+						firstLookupIndexColSet.Add(colIDOfFirstLookupIndexColumn)
+						return firstLookupIndexColSet, provided
 					}
 				}
-			} else if lookupJoin.ColIsEquivalentWithLookupIndexPrefix(lookupJoin.Memo().Metadata(), crdbRegionColID) {
+			} else if lookupJoin.LookupIndexPrefixIsEquatedWithColInColSet(lookupJoin.Memo().Metadata(), crdbRegionColSet) {
 				// We have a `crdb_region = crdb_region` term in `LookupJoinPrivate.LookupExpr`.
 				provided.FromIndexScan(ctx, evalCtx, lookupTableMeta, lookupJoin.Index, nil)
 				if !inputDistribution.Any() &&
 					(provided.Any() || len(provided.Regions) > len(inputDistribution.Regions)) {
-					return colIDOfFirstLookupIndexColumn, inputDistribution
+					firstLookupIndexColSet.UnionWith(crdbRegionColSet)
+					firstLookupIndexColSet.Add(colIDOfFirstLookupIndexColumn)
+					return firstLookupIndexColSet, inputDistribution
 				}
-				return 0 /* firstLookupIndexCol */, provided
+				return firstLookupIndexColSet, provided
 			}
 		}
 	}
 	provided.FromIndexScan(ctx, evalCtx, lookupTableMeta, lookupJoin.Index, nil)
-	return 0 /* firstLookupIndexCol */, provided
+	return firstLookupIndexColSet, provided
 }
 
 // BuildInvertedJoinLookupTableDistribution builds the Distribution that results
