@@ -2393,3 +2393,13 @@ statement error pgcode 42809 \"test.public.multiple_seq_test_tbl\" is not a sequ
 SELECT pg_sequence_last_value('multiple_seq_test_tbl'::regclass)
 
 subtest end
+
+# For #106302 we had cases where internal errors could be returned in the prefix
+# did not resolve properly
+subtest create_prefix
+
+statement error pgcode 3F000 cannot create \"timestamptz.primary.is\" because the target database or schema does not exist
+CREATE SEQUENCE TIMESTAMPTZ . PRIMARY . IS;
+
+statement error pgcode 3F000 cannot create \"timestamptz.is\" because the target database or schema does not exist
+CREATE SEQUENCE TIMESTAMPTZ . IS;
