@@ -347,25 +347,26 @@ func (s *Server) Decommission(
 		nodeIDs = orderedNodeIDs
 	}
 
-	var event logpb.EventPayload
-	var nodeDetails *eventpb.CommonNodeDecommissionDetails
-	if targetStatus.Decommissioning() {
-		ev := &eventpb.NodeDecommissioning{}
-		nodeDetails = &ev.CommonNodeDecommissionDetails
-		event = ev
-	} else if targetStatus.Decommissioned() {
-		ev := &eventpb.NodeDecommissioned{}
-		nodeDetails = &ev.CommonNodeDecommissionDetails
-		event = ev
-	} else if targetStatus.Active() {
-		ev := &eventpb.NodeRecommissioned{}
-		nodeDetails = &ev.CommonNodeDecommissionDetails
-		event = ev
-	} else {
-		panic("unexpected target membership status")
+	newEvent := func() (event logpb.EventPayload, nodeDetails *eventpb.CommonNodeDecommissionDetails) {
+		if targetStatus.Decommissioning() {
+			ev := &eventpb.NodeDecommissioning{}
+			nodeDetails = &ev.CommonNodeDecommissionDetails
+			event = ev
+		} else if targetStatus.Decommissioned() {
+			ev := &eventpb.NodeDecommissioned{}
+			nodeDetails = &ev.CommonNodeDecommissionDetails
+			event = ev
+		} else if targetStatus.Active() {
+			ev := &eventpb.NodeRecommissioned{}
+			nodeDetails = &ev.CommonNodeDecommissionDetails
+			event = ev
+		} else {
+			panic(errors.AssertionFailedf("unexpected target membership status: %v", targetStatus))
+		}
+		event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+		nodeDetails.RequestingNodeID = int32(s.NodeID())
+		return event, nodeDetails
 	}
-	event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
-	nodeDetails.RequestingNodeID = int32(s.NodeID())
 
 	for _, nodeID := range nodeIDs {
 		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
@@ -377,6 +378,7 @@ func (s *Server) Decommission(
 			return grpcstatus.Errorf(codes.Internal, err.Error())
 		}
 		if statusChanged {
+			event, nodeDetails := newEvent()
 			nodeDetails.TargetNodeID = int32(nodeID)
 			// Ensure an entry is produced in the external log in all cases.
 			log.StructuredEvent(ctx, event)

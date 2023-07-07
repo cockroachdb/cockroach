@@ -481,6 +481,9 @@ const (
 // of the provided transaction, using the provided internal executor.
 //
 // This converts to a call to insertEventRecords() with just 1 entry.
+//
+// Note: it is not safe to pass the same entry references to multiple
+// subsequent calls (it causes a race condition).
 func InsertEventRecords(
 	ctx context.Context, execCfg *ExecutorConfig, dst LogEventDestination, info ...logpb.EventPayload,
 ) {
@@ -516,6 +519,9 @@ func InsertEventRecords(
 //   - if there's at txn, after the txn commit time (i.e. we don't log
 //     if the txn ends up aborting), using a txn commit trigger.
 //   - otherwise (no txn), immediately.
+//
+// Note: it is not safe to pass the same entry references to multiple
+// subsequent calls (it causes a race condition).
 func insertEventRecords(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
