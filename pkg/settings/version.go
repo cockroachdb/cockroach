@@ -103,8 +103,12 @@ func (v *VersionSetting) SettingsListDefault() string {
 // Typ is part of the Setting interface.
 func (*VersionSetting) Typ() string {
 	// This is named "m" (instead of "v") for backwards compatibility reasons.
-	return "m"
+	return VersionSettingValueType
 }
+
+// VersionSettingValueType is the value type string (m originally for
+// "migration") used in the system.settings table.
+const VersionSettingValueType = "m"
 
 // String is part of the Setting interface.
 func (v *VersionSetting) String(sv *Values) string {

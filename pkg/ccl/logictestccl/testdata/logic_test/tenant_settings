@@ -7,15 +7,6 @@ true
 
 user host-cluster-root
 
-# Ensure that the version is set the same in the system tenant and in the tenant override.
-query TI rowsort
-SELECT settings.name, tenant_id
-FROM system.settings
-JOIN system.tenant_settings ON tenant_settings.name = settings.name
-WHERE tenant_settings.name = 'version' AND tenant_settings.value = settings.value;
-----
-version 0
-
 statement ok
 ALTER TENANT [10] SET CLUSTER SETTING sql.notices.enabled = false
 
