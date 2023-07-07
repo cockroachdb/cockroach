@@ -45,8 +45,9 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// This test becomes flaky when the machine/cluster is under significant
-	// background load, so it should only be run manually.
-	skip.IgnoreLint(t, "intended to be manually run as a sanity test")
+	// background load, so we disable running it under stress and/or race.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 
@@ -182,7 +183,12 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	// Check the estimated RU aggregate for all the queries against the actual
 	// measured RU consumption for the tenant.
 	tenantMeasuredRUs = getTenantRUs() - tenantStartRUs
-	const deltaFraction = 0.25
+	// Usually, the difference is within 0.25 delta, but in rare cases it can be
+	// outside of that delta (when ran on the gceworker, it was outside the 0.5
+	// delta within 6 minutes of stressing), so we allow for generous 0.75
+	// delta. This still provides a good enough sanity check for the RU
+	// estimation.
+	const deltaFraction = 0.75
 	allowedDelta := tenantMeasuredRUs * deltaFraction
 	require.InDeltaf(t, tenantMeasuredRUs, tenantEstimatedRUs, allowedDelta,
 		"estimated RUs (%d) were not within %f RUs of the expected value (%f)",
