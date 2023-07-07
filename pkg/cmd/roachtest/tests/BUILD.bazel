@@ -46,6 +46,7 @@ go_library(
         "decommission.go",
         "decommission_self.go",
         "decommissionbench.go",
+        "disagg-rebalance.go",
         "disk_full.go",
         "disk_stall.go",
         "django.go",
