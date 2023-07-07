@@ -1070,13 +1070,39 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
-	if createdBy := b.job.Payload().CreationClusterID; !jobExec.ExtendedEvalContext().ClusterID.Equal(createdBy) {
-		return errors.Newf("this changefeed was orignally created by cluster %s; it must be recreated on this cluster if this cluster is now expected to emit to the same destination", createdBy)
+	if err := b.ensureClusterIDMatches(ctx, jobExec.ExtendedEvalContext().ClusterID); err != nil {
+		return err
 	}
 
 	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, execCfg)
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
+	}
+	return nil
+}
+
+// ensureClusterIDMatches verifies that this job record matches
+// the cluster ID of this cluster.
+// This check ensures that if the job has been restored from the
+// full backup, or from streaming replication, then we will fail
+// this changefeed since resuming changefeed, from potentially
+// long "sleep", and attempting to write to existing bucket/topic,
+// is more undesirable and dangerous than just failing this job.
+func (b *changefeedResumer) ensureClusterIDMatches(ctx context.Context, clusterID uuid.UUID) error {
+	if createdBy := b.job.Payload().CreationClusterID; createdBy == uuid.Nil {
+		// This cluster was upgraded from a version that did not set clusterID
+		// in the job record -- rectify this issue.
+		if err := b.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			md.Payload.CreationClusterID = clusterID
+			ju.UpdatePayload(md.Payload)
+			return nil
+		}); err != nil {
+			return jobs.MarkAsRetryJobError(err)
+		}
+	} else if clusterID != createdBy {
+		return errors.Newf("this changefeed was originally created by cluster %s; "+
+			"it must be recreated on this cluster if this cluster is now expected "+
+			"to emit to the same destination", createdBy)
 	}
 	return nil
 }
