@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "streamproducer",
     srcs = [
+        "batch_manager.go",
         "event_stream.go",
         "producer_job.go",
         "replication_manager.go",
@@ -58,6 +59,7 @@ go_test(
     name = "streamproducer_test",
     size = "large",
     srcs = [
+        "batch_manager_test.go",
         "main_test.go",
         "producer_job_test.go",
         "replication_manager_test.go",
