@@ -1173,11 +1173,6 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (remo
 func (r *Replica) tick(
 	ctx context.Context, livenessMap liveness.IsLiveMap, ioThresholdMap *ioThresholdMap,
 ) (bool, error) {
-	r.unreachablesMu.Lock()
-	remotes := r.unreachablesMu.remotes
-	r.unreachablesMu.remotes = nil
-	r.unreachablesMu.Unlock()
-
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -1188,12 +1183,16 @@ func (r *Replica) tick(
 		return false, nil
 	}
 
-	for remoteReplica := range remotes {
-		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
-	}
-
 	if r.mu.quiescent {
 		return false, nil
+	}
+
+	r.unreachablesMu.Lock()
+	remotes := r.unreachablesMu.remotes
+	r.unreachablesMu.remotes = nil
+	r.unreachablesMu.Unlock()
+	for remoteReplica := range remotes {
+		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
 	}
 
 	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
