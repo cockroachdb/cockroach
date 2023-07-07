@@ -715,9 +715,6 @@ type PebbleConfig struct {
 	// SharedStorage is a cloud.ExternalStorage that can be used by all Pebble
 	// stores on this node and on other nodes to store sstables.
 	SharedStorage cloud.ExternalStorage
-
-	// onClose is a slice of functions to be invoked before the engine is closed.
-	onClose []func(*Pebble)
 }
 
 // EncryptionStatsHandler provides encryption related stats.
@@ -800,8 +797,6 @@ type Pebble struct {
 	// closer is populated when the database is opened. The closer is associated
 	// with the filesystem.
 	closer io.Closer
-	// onClose is a slice of functions to be invoked before the engine closes.
-	onClose []func(*Pebble)
 
 	wrappedIntentWriter intentDemuxWriter
 
@@ -1078,7 +1073,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		logCtx:           logCtx,
 		storeIDPebbleLog: storeIDContainer,
 		closer:           filesystemCloser,
-		onClose:          cfg.onClose,
 		replayer:         replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
 	}
 
@@ -1335,10 +1329,6 @@ func (p *Pebble) Close() {
 		p.logger.Infof("closing unopened pebble instance")
 		return
 	}
-	for _, closeFunc := range p.onClose {
-		closeFunc(p)
-	}
-
 	p.closed = true
 
 	// Wait for any asynchronous goroutines to exit.
@@ -1475,48 +1465,37 @@ func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 }
 
 // ClearMVCC implements the Engine interface.
-func (p *Pebble) ClearMVCC(key MVCCKey, opts ClearOptions) error {
+func (p *Pebble) ClearMVCC(key MVCCKey) error {
 	if key.Timestamp.IsEmpty() {
 		panic("ClearMVCC timestamp is empty")
 	}
-	return p.clear(key, opts)
+	return p.clear(key)
 }
 
 // ClearUnversioned implements the Engine interface.
-func (p *Pebble) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
-	return p.clear(MVCCKey{Key: key}, opts)
+func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
+	return p.clear(MVCCKey{Key: key})
 }
 
 // ClearIntent implements the Engine interface.
-func (p *Pebble) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
-) error {
-	_, err := p.wrappedIntentWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, nil, opts)
+func (p *Pebble) ClearIntent(key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID) error {
+	_, err := p.wrappedIntentWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, nil)
 	return err
 }
 
 // ClearEngineKey implements the Engine interface.
-func (p *Pebble) ClearEngineKey(key EngineKey, opts ClearOptions) error {
+func (p *Pebble) ClearEngineKey(key EngineKey) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	if !opts.ValueSizeKnown || !p.settings.Version.ActiveVersionOrEmpty(context.TODO()).
-		IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones) {
-		return p.db.Delete(key.Encode(), pebble.Sync)
-	}
-	return p.db.DeleteSized(key.Encode(), opts.ValueSize, pebble.Sync)
+	return p.db.Delete(key.Encode(), pebble.Sync)
 }
 
-func (p *Pebble) clear(key MVCCKey, opts ClearOptions) error {
+func (p *Pebble) clear(key MVCCKey) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	if !opts.ValueSizeKnown || !p.settings.Version.ActiveVersionOrEmpty(context.TODO()).
-		IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones) {
-		return p.db.Delete(EncodeMVCCKey(key), pebble.Sync)
-	}
-	// Use DeleteSized to propagate the value size.
-	return p.db.DeleteSized(EncodeMVCCKey(key), opts.ValueSize, pebble.Sync)
+	return p.db.Delete(EncodeMVCCKey(key), pebble.Sync)
 }
 
 // SingleClearEngineKey implements the Engine interface.
@@ -2165,9 +2144,6 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	var formatVers pebble.FormatMajorVersion
 	// Cases are ordered from newer to older versions.
 	switch {
-	case !version.Less(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete)):
-		formatVers = pebble.ExperimentalFormatDeleteSizedAndObsolete
-
 	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnableFlushableIngest)):
 		formatVers = pebble.FormatFlushableIngest
 
@@ -2413,21 +2389,21 @@ func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCC(key MVCCKey, opts ClearOptions) error {
+func (p *pebbleReadOnly) ClearMVCC(key MVCCKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
+func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key) error {
 	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearEngineKey(key EngineKey, opts ClearOptions) error {
+func (p *pebbleReadOnly) ClearEngineKey(key EngineKey) error {
 	panic("not implemented")
 }
 

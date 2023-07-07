@@ -1823,7 +1823,7 @@ func TestOptimizePuts(t *testing.T) {
 			require.NoError(t, tc.engine.ClearMVCCRangeKey(storage.MVCCRangeKey{
 				StartKey: c.exKey, EndKey: c.exEndKey, Timestamp: hlc.MinTimestamp}))
 		} else if c.exKey != nil {
-			require.NoError(t, tc.engine.ClearUnversioned(c.exKey, storage.ClearOptions{}))
+			require.NoError(t, tc.engine.ClearUnversioned(c.exKey))
 		}
 	}
 }

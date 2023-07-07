@@ -355,18 +355,6 @@ func TestMVCCHistories(t *testing.T) {
 		}
 
 		e := newEvalCtx(ctx, engine)
-		defer func() {
-			require.NoError(t, engine.Compact())
-			m := engine.GetMetrics().Metrics
-			if m.Keys.MissizedTombstonesCount > 0 {
-				// A missized tombstone is a Pebble DELSIZED tombstone that encodes
-				// the wrong size of the value it deletes. This kind of tombstone is
-				// written when ClearOptions.ValueSizeKnown=true. If this assertion
-				// failed, something might be awry in the code clearing the key. Are
-				// we feeding the wrong value length to ValueSize?
-				t.Fatalf("expected to find 0 missized tombstones; found %d", m.Keys.MissizedTombstonesCount)
-			}
-		}()
 		defer e.close()
 		if strings.Contains(path, "_nometamorphiciter") {
 			e.noMetamorphicIter = true
@@ -890,11 +878,11 @@ func (rw intentPrintingReadWriter) PutIntent(
 }
 
 func (rw intentPrintingReadWriter) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts storage.ClearOptions,
+	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID,
 ) error {
 	rw.buf.Printf("called ClearIntent(%v, TDNUM(%t), %v)\n",
 		key, txnDidNotUpdateMeta, txnUUID)
-	return rw.ReadWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, opts)
+	return rw.ReadWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID)
 }
 
 func (e *evalCtx) tryWrapForIntentPrinting(rw storage.ReadWriter) storage.ReadWriter {
@@ -1004,7 +992,7 @@ func cmdClear(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(nil)
 	return e.withWriter("clear", func(rw storage.ReadWriter) error {
-		return rw.ClearMVCC(storage.MVCCKey{Key: key, Timestamp: ts}, storage.ClearOptions{})
+		return rw.ClearMVCC(storage.MVCCKey{Key: key, Timestamp: ts})
 	})
 }
 
