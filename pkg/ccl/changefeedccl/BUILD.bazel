@@ -264,6 +264,7 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/flowinfra",
         "//pkg/sql/importer",
+        "//pkg/sql/isql",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
