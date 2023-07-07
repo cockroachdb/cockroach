@@ -250,7 +250,7 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 	ltk.storeKnobs.BeforeSendSnapshotThrottle = func() {
 		atomic.AddInt64(&count, 1)
 	}
-	ltk.storeKnobs.AfterSendSnapshotThrottle = func() {
+	ltk.storeKnobs.AfterSnapshotThrottle = func() {
 		atomic.AddInt64(&count, -1)
 	}
 	ctx := context.Background()
