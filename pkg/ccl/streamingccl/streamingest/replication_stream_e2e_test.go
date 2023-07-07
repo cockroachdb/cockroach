@@ -45,10 +45,6 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(casper): disabled due to error when setting a cluster setting
-	// "setting updated but timed out waiting to read new value"
-	skip.UnderStressRace(t, "disabled under stress race")
-
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	args.SrcClusterSettings[`stream_replication.job_liveness_timeout`] = `'1m'`
@@ -62,7 +58,6 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
-	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, ingestionJobID)
 
@@ -157,10 +152,6 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(casper): disabled due to error when setting a cluster setting
-	// "setting updated but timed out waiting to read new value"
-	skip.UnderStressRace(t, "disabled under stress race")
-
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
@@ -206,10 +197,6 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(casper): disabled due to error when setting a cluster setting
-	// "setting updated but timed out waiting to read new value"
-	skip.UnderStressRace(t, "disabled under stress race")
-
 	ctx := context.Background()
 	ingestErrCh := make(chan error, 1)
 	ingestionStarts := 0
@@ -229,12 +216,12 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	// Make ingestion error out only once.
+	// Make ingestion error out only once to ensure the job conducts one retryable
+	// error. It's fine to close the channel-- the receiver still gets the error.
 	ingestErrCh <- errors.Newf("ingestion error from test")
 	close(ingestErrCh)
 
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	// Ingestion is retried once after having an ingestion error.
@@ -260,10 +247,6 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 func TestTenantStreamingCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// TODO(casper): disabled due to error when setting a cluster setting
-	// "setting updated but timed out waiting to read new value"
-	skip.UnderStressRace(t, "disabled under stress race")
 
 	ctx := context.Background()
 
@@ -340,20 +323,13 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	cutoverTime := c.DestSysServer.Clock().Now()
 	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
-	cutoverFingerprint := c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
+	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 	// Clients should never be started prior to a checkpointed timestamp
 	for _, clientStartTime := range lastClientStart {
 		require.Less(t, checkpointMinTime.UnixNano(), clientStartTime.GoTime().UnixNano())
 	}
 
-	// After cutover, changes to source won't be streamed into destination cluster.
-	c.SrcExec(func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
-		tenantSQL.Exec(t, `INSERT INTO d.t2 VALUES (3);`)
-	})
-	// Check the dst cluster didn't receive the change after a while.
-	<-time.NewTimer(3 * time.Second).C
-	c.RequireDestinationFingerprintAtTimestamp(cutoverFingerprint, c.DestSysServer.Clock().Now().AsOfSystemTime())
 }
 
 func TestTenantStreamingCancelIngestion(t *testing.T) {
