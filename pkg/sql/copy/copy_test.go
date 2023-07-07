@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
@@ -769,4 +770,58 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func BenchmarkCopyCSVEndToEnd(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{
+		DefaultTestTenant: base.TestTenantDisabled,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanup, err := sqlutils.PGUrlE(
+		s.ServingSQLAddr(),
+		"BenchmarkCopyEndToEnd", /* prefix */
+		url.User(username.RootUser),
+	)
+	require.NoError(b, err)
+	s.Stopper().AddCloser(stop.CloserFn(cleanup))
+
+	_, err = db.Exec("CREATE TABLE t (i INT PRIMARY KEY, s STRING)")
+	require.NoError(b, err)
+
+	conn, err := pgx.Connect(ctx, pgURL.String())
+	require.NoError(b, err)
+
+	rng, _ := randutil.NewTestRand()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		// Create an input of 1_000_000 rows.
+		buf := &bytes.Buffer{}
+		for j := 0; j < 1_000_000; j++ {
+			buf.WriteString(strconv.Itoa(j))
+			buf.WriteString(",")
+			str := randutil.RandString(rng, rng.Intn(50), "abc123\n")
+			buf.WriteString("\"")
+			buf.WriteString(str)
+			buf.WriteString("\"\n")
+		}
+		b.StartTimer()
+
+		// Run the COPY.
+		_, err = conn.PgConn().CopyFrom(ctx, buf, "COPY t FROM STDIN CSV")
+		require.NoError(b, err)
+
+		// Verify that the data was inserted.
+		b.StopTimer()
+		var count int
+		err = db.QueryRow("SELECT count(*) FROM t").Scan(&count)
+		require.NoError(b, err)
+		require.Equal(b, 1_000_000, count)
+		b.StartTimer()
+	}
 }
