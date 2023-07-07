@@ -39,6 +39,7 @@ import (
 func ScanSST(
 	sst *kvpb.RangeFeedSSTable,
 	scanWithin roachpb.Span,
+	// TODO (msbutler): I think we can use a roachpb.kv instead, avoiding EncodeDecode roundtrip.
 	mvccKeyValOp func(key storage.MVCCKeyValue) error,
 	mvccRangeKeyValOp func(rangeKeyVal storage.MVCCRangeKeyValue) error,
 ) error {
