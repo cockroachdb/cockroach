@@ -407,7 +407,7 @@ func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluste
 	destSQL := sqlutils.MakeSQLRunner(destDB)
 
 	srcClusterSettings(t, srcSQL)
-	destClusterSettings(t, destSQL)
+	destClusterSettings(t, destSQL, rd.rs.additionalDuration)
 
 	createTenantAdminRole(t, "src-system", srcSQL)
 	createTenantAdminRole(t, "dst-system", destSQL)
@@ -634,6 +634,31 @@ AS OF SYSTEM TIME '%s'`, startTimeDecimal, aost)
 	require.Equal(rd.t, srcFingerprint, destFingerprint)
 }
 
+// checkParticipatingNodes asserts that multiple nodes in the source and dest cluster are
+// participating in the replication stream, if the test is running on multi node clusters.
+//
+// Note: this isn't a strict requirement of all physical replication streams,
+// rather we check this here because we expect a distributed physical
+// replication stream in a healthy pair of multinode clusters.
+func (rd *replicationDriver) checkParticipatingNodes(ingestionJobId int) {
+	progress := getJobProgress(rd.t, rd.setup.dst.sysSQL, jobspb.JobID(ingestionJobId)).GetStreamIngest()
+	if rd.rs.srcNodes > 1 {
+		require.Greater(rd.t, len(progress.StreamAddresses), 1, "only 1 src node participating")
+	}
+	if rd.rs.dstNodes > 1 {
+		var destNodeCount int
+		destNodes := make(map[int]struct{})
+		for _, dstNode := range progress.PartitionProgress {
+			dstNodeID := int(dstNode.DestSQLInstanceID)
+			if _, ok := destNodes[dstNodeID]; !ok {
+				destNodes[dstNodeID] = struct{}{}
+				destNodeCount++
+			}
+		}
+		require.Greater(rd.t, destNodeCount, 1, "only 1 dst node participating")
+	}
+}
+
 func (rd *replicationDriver) main(ctx context.Context) {
 	metricSnapper := rd.startStatsCollection(ctx)
 	rd.preStreamingWorkload(ctx)
@@ -717,6 +742,8 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.setup.dst.sysSQL.QueryRow(rd.t, "SELECT clock_timestamp()").Scan(&currentTime)
 	cutoverTime := currentTime.Add(-rd.rs.cutover)
 	rd.t.Status("cutover time chosen: ", cutoverTime.String())
+
+	rd.checkParticipatingNodes(ingestionJobID)
 
 	retainedTime := rd.getReplicationRetainedTime()
 
@@ -1332,9 +1359,15 @@ func srcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 	db.ExecMultiple(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true;`)
 }
 
-func destClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
+func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration time.Duration) {
 	db.ExecMultiple(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`)
+
+	if additionalDuration != 0 {
+		replanFrequency := additionalDuration / 2
+		db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING stream_replication.replan_flow_frequency = '%s'`,
+			replanFrequency))
+	}
 }
 
 func copyPGCertsAndMakeURL(
