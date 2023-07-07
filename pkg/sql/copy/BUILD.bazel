@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_test(
     name = "copy_test",
@@ -52,5 +52,22 @@ go_test(
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_library(
+    name = "copy",
+    srcs = [
+        "buffer.go",
+        "reader.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/copy",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/pgwire/pgwirebase",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

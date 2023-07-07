@@ -1717,6 +1717,7 @@ GO_TARGETS = [
     "//pkg/sql/contention:contention_test",
     "//pkg/sql/contentionpb:contentionpb",
     "//pkg/sql/contentionpb:contentionpb_test",
+    "//pkg/sql/copy:copy",
     "//pkg/sql/copy:copy_test",
     "//pkg/sql/covering:covering",
     "//pkg/sql/covering:covering_test",

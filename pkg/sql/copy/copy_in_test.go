@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package copy
+package copy_test
 
 import (
 	"context"
@@ -429,19 +429,22 @@ func TestCopyFromRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const numRows = sql.CopyBatchRowSizeDefault * 5
+	const numRowsDefault = sql.CopyBatchRowSizeDefault * 5
 
 	testCases := []struct {
-		desc           string
-		hook           func(attemptNum int) error
-		atomicEnabled  bool
-		retriesEnabled bool
-		inTxn          bool
-		expectedRows   int
-		expectedErr    bool
+		desc                string
+		hook                func(attemptNum int) error
+		atomicEnabled       bool
+		retriesEnabled      bool
+		inTxn               bool
+		fastPathDisabled    bool
+		expectedRows        int
+		expectedErr         bool
+		atomicCopyRetrySize int
+		numRows             int
 	}{
 		{
-			desc:           "failure in atomic transaction does not retry",
+			desc:           "failure in small atomic copy does retry",
 			atomicEnabled:  true,
 			retriesEnabled: true,
 			hook: func(attemptNum int) error {
@@ -450,7 +453,46 @@ func TestCopyFromRetries(t *testing.T) {
 				}
 				return nil
 			},
-			expectedErr: true,
+			expectedRows: numRowsDefault,
+		},
+		{
+			desc:             "failure in small atomic copy does retry no fastPath",
+			atomicEnabled:    true,
+			retriesEnabled:   true,
+			fastPathDisabled: true,
+			hook: func(attemptNum int) error {
+				if attemptNum == 1 {
+					return &kvpb.TransactionRetryWithProtoRefreshError{}
+				}
+				return nil
+			},
+			expectedRows: numRowsDefault,
+		},
+		{
+			desc:           "failure in too big atomic copy does not retry small cap",
+			atomicEnabled:  true,
+			retriesEnabled: true,
+			hook: func(attemptNum int) error {
+				if attemptNum == 1 {
+					return &kvpb.TransactionRetryWithProtoRefreshError{}
+				}
+				return nil
+			},
+			expectedErr:         true,
+			atomicCopyRetrySize: 10,
+		},
+		{
+			desc:           "succeed in too big atomic copy does retry large cap",
+			atomicEnabled:  true,
+			retriesEnabled: true,
+			hook: func(attemptNum int) error {
+				if attemptNum == 100 {
+					return &kvpb.TransactionRetryWithProtoRefreshError{}
+				}
+				return nil
+			},
+			numRows:      30 << 10,
+			expectedRows: 30 << 10,
 		},
 		{
 			desc:           "does not attempt to retry if disabled",
@@ -487,7 +529,7 @@ func TestCopyFromRetries(t *testing.T) {
 				}
 				return nil
 			},
-			expectedRows: numRows,
+			expectedRows: numRowsDefault,
 		},
 		{
 			desc:           "eventually dies on too many restarts",
@@ -522,6 +564,11 @@ func TestCopyFromRetries(t *testing.T) {
 
 			ctx := context.Background()
 
+			if tc.atomicCopyRetrySize != 0 {
+				_, err := db.Exec(fmt.Sprintf("SET CLUSTER SETTING sql.copy.retry.max_size = '%d'", tc.atomicCopyRetrySize))
+				require.NoError(t, err)
+			}
+
 			// Use pgx instead of lib/pq as pgx doesn't require copy to be in a txn.
 			pgURL, cleanupGoDB := sqlutils.PGUrl(
 				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(username.RootUser))
@@ -532,9 +579,15 @@ func TestCopyFromRetries(t *testing.T) {
 			require.NoError(t, err)
 			_, err = pgxConn.Exec(ctx, "SET copy_from_retries_enabled = $1", fmt.Sprintf("%t", tc.retriesEnabled))
 			require.NoError(t, err)
+			_, err = pgxConn.Exec(ctx, "SET copy_fast_path_enabled = $1", fmt.Sprintf("%t", !tc.fastPathDisabled))
+			require.NoError(t, err)
 
 			if err := func() error {
 				var rows [][]interface{}
+				numRows := numRowsDefault
+				if tc.numRows != 0 {
+					numRows = tc.numRows
+				}
 				for i := 0; i < numRows; i++ {
 					rows = append(rows, []interface{}{i})
 				}
@@ -556,7 +609,7 @@ func TestCopyFromRetries(t *testing.T) {
 				}
 				return txn.Commit(ctx)
 			}(); err != nil {
-				assert.True(t, tc.expectedErr, "got error %+v", err)
+				require.ErrorContains(t, err, "TransactionRetryWithProtoRefreshError")
 			} else {
 				assert.False(t, tc.expectedErr, "expected error but got none")
 			}
