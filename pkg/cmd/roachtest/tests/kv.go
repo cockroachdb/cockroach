@@ -386,7 +386,7 @@ func registerKVContention(r registry.Registry) {
 func registerKVQuiescenceDead(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "kv/quiescence/nodes=3",
-		Owner:   registry.OwnerKV,
+		Owner:   registry.OwnerReplication,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
@@ -410,6 +410,11 @@ func registerKVQuiescenceDead(r registry.Registry) {
 
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
+
+			if _, err := db.ExecContext(ctx,
+				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = 'false'"); err != nil {
+				t.Fatalf("failed to disable SQL stats collection: %v", err)
+			}
 
 			err := WaitFor3XReplication(ctx, t, db)
 			require.NoError(t, err)
