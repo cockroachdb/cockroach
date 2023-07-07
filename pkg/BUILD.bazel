@@ -133,7 +133,6 @@ ALL_TESTS = [
     "//pkg/cmd/label-merged-pr:label-merged-pr_test",
     "//pkg/cmd/mirror/go:go_test",
     "//pkg/cmd/mirror/go:mirror_test",
-    "//pkg/cmd/prereqs:prereqs_test",
     "//pkg/cmd/publish-artifacts:publish-artifacts_test",
     "//pkg/cmd/publish-provisional-artifacts:publish-provisional-artifacts_test",
     "//pkg/cmd/reduce/reduce/reducesql:reducesql_test",
@@ -1054,7 +1053,6 @@ GO_TARGETS = [
     "//pkg/cmd/mirror/npm:ui_lib",
     "//pkg/cmd/prereqs:prereqs",
     "//pkg/cmd/prereqs:prereqs_lib",
-    "//pkg/cmd/prereqs:prereqs_test",
     "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach",
     "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_lib",
     "//pkg/cmd/publish-artifacts:publish-artifacts",
@@ -2457,8 +2455,8 @@ GO_TARGETS = [
 ]
 
 # These suites run only the tests with the appropriate "size" (excepting those
-# tagged "broken_in_bazel", "flaky", or "integration") [1]. Note that tests have
-# a default timeout depending on the size [2].
+# tagged "flaky" or "integration") [1]. Note that tests have a default timeout
+# depending on the size [2].
 
 # [1] https://docs.bazel.build/versions/master/be/general.html#test_suite
 # [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests
@@ -2466,7 +2464,6 @@ GO_TARGETS = [
 test_suite(
     name = "all_tests",
     tags = [
-        "-broken_in_bazel",
         "-integration",
     ],
     tests = ALL_TESTS,
@@ -2475,7 +2472,6 @@ test_suite(
 test_suite(
     name = "ccl_tests",
     tags = [
-        "-broken_in_bazel",
         "-integration",
         "ccl_test",
     ],
@@ -2485,7 +2481,6 @@ test_suite(
 test_suite(
     name = "small_non_ccl_tests",
     tags = [
-        "-broken_in_bazel",
         "-ccl_test",
         "-flaky",
         "-integration",
@@ -2497,7 +2492,6 @@ test_suite(
 test_suite(
     name = "medium_non_ccl_tests",
     tags = [
-        "-broken_in_bazel",
         "-ccl_test",
         "-flaky",
         "-integration",
@@ -2509,7 +2503,6 @@ test_suite(
 test_suite(
     name = "large_non_ccl_tests",
     tags = [
-        "-broken_in_bazel",
         "-ccl_test",
         "-flaky",
         "-integration",
@@ -2521,7 +2514,6 @@ test_suite(
 test_suite(
     name = "enormous_non_ccl_tests",
     tags = [
-        "-broken_in_bazel",
         "-ccl_test",
         "-flaky",
         "-integration",
