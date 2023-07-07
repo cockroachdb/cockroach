@@ -1,0 +1,117 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE supermarket (
+  person STRING PRIMARY KEY,
+  aisle INT NOT NULL,
+  starts_with STRING GENERATED ALWAYS AS (left(person, 1)) STORED,
+  ends_with STRING GENERATED ALWAYS AS (right(person, 3)) STORED,
+  INDEX (starts_with),
+  INDEX (ends_with)
+)
+
+statement ok
+INSERT INTO supermarket (person, aisle)
+  VALUES ('abbie', 1), ('gideon', 2), ('matilda', 3), ('michael', 4)
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+query T
+EXPLAIN (OPT) SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
+----
+project
+ └── scan supermarket
+      ├── constraint: /1: [/'matilda' - /'matilda']
+      └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT)
+UPDATE supermarket
+  SET aisle = (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
+  WHERE person = 'michael'
+----
+update supermarket
+ └── project
+      ├── scan supermarket
+      │    └── constraint: /7: [/'michael' - /'michael']
+      └── projections
+           └── subquery
+                └── project
+                     └── scan supermarket
+                          ├── constraint: /13: [/'matilda' - /'matilda']
+                          └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT)
+WITH s AS
+  (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
+SELECT aisle + 1 FROM s
+----
+with &1 (s)
+ ├── project
+ │    └── scan supermarket
+ │         ├── constraint: /1: [/'matilda' - /'matilda']
+ │         └── locking: for-update,durability-guaranteed
+ └── project
+      ├── with-scan &1 (s)
+      └── projections
+           └── aisle + 1
+
+query T
+EXPLAIN (OPT)
+WITH names AS MATERIALIZED
+  (SELECT 'matilda' AS person)
+SELECT aisle
+  FROM names
+  NATURAL INNER LOOKUP JOIN supermarket
+  FOR UPDATE
+----
+with &1 (names)
+ ├── materialized
+ ├── values
+ │    └── ('matilda',)
+ └── project
+      └── inner-join (lookup supermarket)
+           ├── flags: force lookup join (into right side)
+           ├── lookup columns are key
+           ├── locking: for-update,durability-guaranteed
+           ├── with-scan &1 (names)
+           └── filters (true)
+
+query T
+EXPLAIN (OPT)
+SELECT aisle
+  FROM supermarket@supermarket_starts_with_idx
+  WHERE starts_with = 'm'
+  FOR UPDATE
+----
+project
+ └── index-join supermarket
+      ├── locking: for-update,durability-guaranteed
+      └── scan supermarket@supermarket_starts_with_idx
+           ├── constraint: /3/1: [/'m' - /'m']
+           ├── flags: force-index=supermarket_starts_with_idx
+           └── locking: for-update,durability-guaranteed
+
+query T
+EXPLAIN (OPT)
+SELECT aisle
+  FROM supermarket@{FORCE_ZIGZAG}
+  WHERE starts_with = 'm' AND ends_with = 'lda'
+  FOR UPDATE
+----
+project
+ └── inner-join (lookup supermarket)
+      ├── lookup columns are key
+      ├── locking: for-update,durability-guaranteed
+      ├── inner-join (zigzag supermarket@supermarket_starts_with_idx supermarket@supermarket_ends_with_idx)
+      │    ├── left locking: for-update,durability-guaranteed
+      │    ├── right locking: for-update,durability-guaranteed
+      │    └── filters
+      │         ├── starts_with = 'm'
+      │         └── ends_with = 'lda'
+      └── filters (true)
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE

@@ -490,6 +490,13 @@ func TestExecBuild_select_for_update(
 	runExecBuildLogicTest(t, "select_for_update")
 }
 
+func TestExecBuild_select_for_update_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "select_for_update_read_committed")
+}
+
 func TestExecBuild_select_index(
 	t *testing.T,
 ) {
