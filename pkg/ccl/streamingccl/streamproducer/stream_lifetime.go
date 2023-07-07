@@ -259,8 +259,10 @@ func buildReplicationStreamSpec(
 	}
 
 	var spanConfigsStreamID streampb.StreamID
+	var spanConfigsTenantID roachpb.TenantID
 	if forSpanConfigs {
 		spanConfigsStreamID = streampb.StreamID(builtins.GenerateUniqueInt(builtins.ProcessUniqueID(eval.NodeID.SQLInstanceID())))
+		spanConfigsTenantID = tenantID
 	}
 
 	res := &streampb.ReplicationStreamSpec{
@@ -282,6 +284,7 @@ func buildReplicationStreamSpec(
 				Spans: sp.Spans,
 				Config: streampb.StreamPartitionSpec_ExecutionConfig{
 					MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&eval.Settings.SV),
+					SpanConfigsForTenant:   spanConfigsTenantID,
 				},
 			},
 		})

@@ -311,19 +311,25 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 
 	var event streamingccl.Event
 	if streamEvent.Batch != nil {
-		if len(streamEvent.Batch.Ssts) > 0 {
+		switch {
+		case len(streamEvent.Batch.Ssts) > 0:
 			event = streamingccl.MakeSSTableEvent(streamEvent.Batch.Ssts[0])
 			streamEvent.Batch.Ssts = streamEvent.Batch.Ssts[1:]
-		} else if len(streamEvent.Batch.KeyValues) > 0 {
+		case len(streamEvent.Batch.KeyValues) > 0:
 			event = streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues[0])
 			streamEvent.Batch.KeyValues = streamEvent.Batch.KeyValues[1:]
-		} else if len(streamEvent.Batch.DelRanges) > 0 {
+		case len(streamEvent.Batch.DelRanges) > 0:
 			event = streamingccl.MakeDeleteRangeEvent(streamEvent.Batch.DelRanges[0])
 			streamEvent.Batch.DelRanges = streamEvent.Batch.DelRanges[1:]
+		case len(streamEvent.Batch.SpanConfigs) > 0:
+			event = streamingccl.MakeSpanConfigEvent(streamEvent.Batch.SpanConfigs[0])
+			streamEvent.Batch.SpanConfigs = streamEvent.Batch.SpanConfigs[1:]
 		}
+
 		if len(streamEvent.Batch.KeyValues) == 0 &&
 			len(streamEvent.Batch.Ssts) == 0 &&
-			len(streamEvent.Batch.DelRanges) == 0 {
+			len(streamEvent.Batch.DelRanges) == 0 &&
+			len(streamEvent.Batch.SpanConfigs) == 0 {
 			streamEvent.Batch = nil
 		}
 	}
