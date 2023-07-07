@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -37,8 +38,11 @@ type parquetWriter struct {
 	schemaDef    *parquet.SchemaDefinition
 	datumAlloc   []tree.Datum
 
-	// Cached object builder for when using the `diff` option.
-	vb *json.FixedKeysObjectBuilder
+	// Cached object builder for previous row when using the `diff` option.
+	prevState struct {
+		vb      *json.FixedKeysObjectBuilder
+		version descpb.DescriptorVersion
+	}
 }
 
 // newParquetSchemaDefintion returns a parquet schema definition based on the
@@ -165,7 +169,7 @@ func (w *parquetWriter) populateDatums(
 		if prevRow.IsDeleted() {
 			datums = append(datums, tree.DNull)
 		} else {
-			if w.vb == nil {
+			if w.prevState.vb == nil || w.prevState.version != prevRow.Version {
 				keys := make([]string, 0, len(prevRow.ResultColumns()))
 				_ = prevRow.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
 					keys = append(keys, col.Name)
@@ -175,7 +179,8 @@ func (w *parquetWriter) populateDatums(
 				if err != nil {
 					return err
 				}
-				w.vb = valueBuilder
+				w.prevState.version = prevRow.Version
+				w.prevState.vb = valueBuilder
 			}
 
 			if err := prevRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
@@ -183,12 +188,12 @@ func (w *parquetWriter) populateDatums(
 				if err != nil {
 					return err
 				}
-				return w.vb.Set(col.Name, j)
+				return w.prevState.vb.Set(col.Name, j)
 			}); err != nil {
 				return err
 			}
 
-			j, err := w.vb.Build()
+			j, err := w.prevState.vb.Build()
 			if err != nil {
 				return err
 			}
