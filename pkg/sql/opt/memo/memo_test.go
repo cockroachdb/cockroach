@@ -374,6 +374,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = false
 	notStale()
 
+	// Stale enable_implicit_fk_locking.
+	evalCtx.SessionData().ImplicitFKLocking = true
+	stale()
+	evalCtx.SessionData().ImplicitFKLocking = false
+	notStale()
+
 	// Stale txn isolation level.
 	evalCtx.TxnIsoLevel = isolation.ReadCommitted
 	stale()

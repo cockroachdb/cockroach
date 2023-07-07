@@ -822,6 +822,13 @@ func TestTenantLogic_fk(
 	runLogicTest(t, "fk")
 }
 
+func TestTenantLogic_fk_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "fk_read_committed")
+}
+
 func TestTenantLogic_float(
 	t *testing.T,
 ) {

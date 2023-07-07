@@ -42,6 +42,44 @@ vectorized: true
                   estimated row count: 2
                   label: buffer 1
 
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • scan buffer
+                  estimated row count: 2
+                  label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking
+
 # Use data from a different table as input.
 statement ok
 CREATE TABLE xy (x INT, y INT)
@@ -81,6 +119,49 @@ vectorized: true
                   table: parent@parent_pkey
                   spans: FULL SCAN
 
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN INSERT INTO child SELECT x,y FROM xy
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: child(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: xy@xy_pkey
+│             spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (anti)
+            │ equality: (y) = (p)
+            │ right cols are key
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: parent@parent_pkey
+                  spans: FULL SCAN
+                  locking strength: for share
+
+statement ok
+RESET enable_implicit_fk_locking
+
 statement ok
 CREATE TABLE child_nullable (c INT PRIMARY KEY, p INT REFERENCES parent(p), INDEX (p));
 
@@ -119,6 +200,48 @@ vectorized: true
                 └── • scan buffer
                       estimated row count: 2
                       label: buffer 1
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: child_nullable(c, p)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (column2) = (p)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • filter
+                │ estimated row count: 1
+                │ filter: column2 IS NOT NULL
+                │
+                └── • scan buffer
+                      estimated row count: 2
+                      label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking
 
 # Tests with multicolumn FKs.
 statement ok
@@ -290,6 +413,55 @@ vectorized: true
             └── • scan buffer
                   label: buffer 1
 
+# Even with implicit locking enabled, we should not acquire any shared locks
+# when checking a delete from the parent.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN DELETE FROM parent WHERE p = 3
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: parent@parent_pkey
+│             spans: [/3 - /3]
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: child@child_p_idx
+│           │ equality: (p) = (p)
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child_nullable@child_nullable_p_idx
+            │ equality: (p) = (p)
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking
+
 statement ok
 CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other), INDEX (p))
 
@@ -428,6 +600,53 @@ vectorized: true
                   table: parent@parent_pkey
                   spans: FULL SCAN
 
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN UPDATE child SET p = 4
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • merge join (anti)
+            │ equality: (p_new) = (p)
+            │ right cols are key
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: parent@parent_pkey
+                  spans: FULL SCAN
+                  locking strength: for share
+
+statement ok
+RESET enable_implicit_fk_locking
+
 query T
 EXPLAIN UPDATE child SET p = 4 WHERE c = 10
 ----
@@ -462,6 +681,49 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN UPDATE child SET p = 4 WHERE c = 10
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: [/10 - /10]
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (p_new) = (p)
+            │ equality cols are key
+            │ locking strength: for share
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+statement ok
+RESET enable_implicit_fk_locking
 
 query T
 EXPLAIN UPDATE parent SET p = p+1
@@ -644,6 +906,63 @@ vectorized: true
                       table: grandchild@grandchild_pkey
                       spans: FULL SCAN
 
+# Even with implicit locking enabled, we should not acquire any shared locks
+# when checking an update of the parent (in this case the child is parent of the
+# grandchild).
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN UPDATE child SET c = 4
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: c
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (c) = (c)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: c
+                │
+                └── • scan
+                      missing stats
+                      table: grandchild@grandchild_pkey
+                      spans: FULL SCAN
+
+statement ok
+RESET enable_implicit_fk_locking
+
 # This update shouldn't emit checks for c, since it's unchanged.
 query T
 EXPLAIN UPDATE child SET p = 4
@@ -683,6 +1002,53 @@ vectorized: true
                   missing stats
                   table: parent@parent_pkey
                   spans: FULL SCAN
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN UPDATE child SET p = 4
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • merge join (anti)
+            │ equality: (p_new) = (p)
+            │ right cols are key
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: parent@parent_pkey
+                  spans: FULL SCAN
+                  locking strength: for share
+
+statement ok
+RESET enable_implicit_fk_locking
 
 query T
 EXPLAIN UPDATE child SET p = p
@@ -785,6 +1151,78 @@ vectorized: true
                       table: grandchild@grandchild_pkey
                       spans: FULL SCAN
 
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN UPDATE child SET p = p+1, c = c+1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: child
+│   │ set: c, p
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: child@child_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (anti)
+│           │ equality: (p_new) = (p)
+│           │ right cols are key
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: parent@parent_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for share
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (c) = (c)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: c
+                │
+                └── • scan
+                      missing stats
+                      table: grandchild@grandchild_pkey
+                      spans: FULL SCAN
+
+statement ok
+RESET enable_implicit_fk_locking
+
 # Multiple grandchild tables
 statement ok
 CREATE TABLE grandchild2 (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
@@ -870,6 +1308,53 @@ vectorized: true
                   table: self@self_pkey
                   spans: FULL SCAN
 
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN UPDATE self SET y = 3
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: self
+│   │ set: y
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: self@self_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • merge join (anti)
+            │ equality: (y_new) = (x)
+            │ right cols are key
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: self@self_pkey
+                  spans: FULL SCAN
+                  locking strength: for share
+
+statement ok
+RESET enable_implicit_fk_locking
+
 query T
 EXPLAIN UPDATE self SET x = 3
 ----
@@ -918,6 +1403,62 @@ vectorized: true
                       table: self@self_pkey
                       spans: FULL SCAN
 
+# Even with implicit locking enabled, we should not acquire any shared locks
+# when checking an update of the parent.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN UPDATE self SET x = 3
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: self
+│   │ set: x
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: self@self_pkey
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join
+            │ equality: (x) = (y)
+            │ left cols are key
+            │ right cols are key
+            │
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: y
+                │
+                └── • scan
+                      missing stats
+                      table: self@self_pkey
+                      spans: FULL SCAN
+
+statement ok
+RESET enable_implicit_fk_locking
+
 # Tests for the insert fast path.
 statement ok
 SET enable_insert_fast_path = true
@@ -940,6 +1481,32 @@ vectorized: true
   row 0, expr 1: 1
   row 1, expr 0: 2
   row 1, expr 1: 2
+
+# Try again with implicit locking of the parent row.
+statement ok
+SET enable_implicit_fk_locking = true
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: child(c, p)
+  auto commit
+  FK check: parent@parent_pkey
+  FK check locking strength: for share
+  size: 2 columns, 2 rows
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+  row 1, expr 0: 2
+  row 1, expr 1: 2
+
+statement ok
+RESET enable_implicit_fk_locking
 
 # We shouldn't use the fast path if the VALUES columns are not in order.
 query B

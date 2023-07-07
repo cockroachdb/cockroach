@@ -872,7 +872,7 @@ var varGen = map[string]sessionVar{
 	`enable_implicit_select_for_update`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_implicit_select_for_update`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("enabled_implicit_select_for_update", s)
+			b, err := paramparse.ParseBoolVar("enable_implicit_select_for_update", s)
 			if err != nil {
 				return err
 			}
@@ -2799,6 +2799,23 @@ var varGen = map[string]sessionVar{
 			maxConn := maxNumNonAdminConnections.Get(&evalCtx.ExecCfg.Settings.SV)
 			return strconv.FormatInt(maxConn, 10), nil
 		},
+	},
+
+	// CockroachDB extension.
+	`enable_implicit_fk_locking`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_implicit_fk_locking`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_implicit_fk_locking", s)
+			if err != nil {
+				return err
+			}
+			m.SetImplicitFKLocking(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().ImplicitFKLocking), nil
+		},
+		GlobalDefault: globalFalse,
 	},
 }
 

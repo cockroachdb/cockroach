@@ -188,10 +188,21 @@ func (r *insertFastPathRun) addFKChecks(
 		if r.traceKV {
 			log.VEventf(ctx, 2, "FKScan %s", span)
 		}
+		lockStrength := row.GetKeyLockingStrength(descpb.ToScanLockingStrength(c.Locking.Strength))
+		lockWaitPolicy := row.GetWaitPolicy(descpb.ToScanLockingWaitPolicy(c.Locking.WaitPolicy))
+		// All FK check lock wait policies should be BLOCK.
+		if r.fkBatch.Header.WaitPolicy != lockWaitPolicy {
+			return errors.AssertionFailedf(
+				"FK check lock wait policy %s did not match %s",
+				lockWaitPolicy, r.fkBatch.Header.WaitPolicy,
+			)
+		}
 		reqIdx := len(r.fkBatch.Requests)
 		r.fkBatch.Requests = append(r.fkBatch.Requests, kvpb.RequestUnion{})
 		r.fkBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
 			RequestHeader: kvpb.RequestHeaderFromSpan(span),
+			KeyLocking:    lockStrength,
+			// TODO(michae2): Once #100193 is finished, also include c.Locking.Durability.
 		})
 		r.fkSpanInfo = append(r.fkSpanInfo, insertFastPathFKSpanInfo{
 			check:  c,

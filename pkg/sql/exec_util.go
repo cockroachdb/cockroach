@@ -3608,6 +3608,10 @@ func (m *sessionDataMutator) SetReplicationMode(val sessiondatapb.ReplicationMod
 	m.data.ReplicationMode = val
 }
 
+func (m *sessionDataMutator) SetImplicitFKLocking(val bool) {
+	m.data.ImplicitFKLocking = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
