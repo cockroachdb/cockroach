@@ -48,6 +48,7 @@ go_test(
     embed = [":tenantsettingswatcher"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
