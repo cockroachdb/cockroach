@@ -35,7 +35,7 @@ for platform in "${cross_builds[@]}"; do
 
   echo "Building $platform, os=$os, arch=$arch..."
   # Build cockroach, workload and geos libs.
-  bazel build --config $platform --config ci --config with_ui -c opt --config force_build_cdeps \
+  bazel build --config $platform --config ci -c opt --config force_build_cdeps \
         //pkg/cmd/cockroach //pkg/cmd/workload \
         //c-deps:libgeos
   BAZEL_BIN=$(bazel info bazel-bin --config $platform --config ci -c opt)

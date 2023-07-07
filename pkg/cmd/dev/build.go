@@ -444,15 +444,6 @@ func (d *dev) getBasicBuildArgs(
 		}
 	}
 
-	// Add --config=with_ui iff we're building a target that needs it.
-	for _, target := range buildTargets {
-		if target.fullName == buildTargetMapping["cockroach"] ||
-			target.fullName == buildTargetMapping["cockroach-oss"] ||
-			target.fullName == buildTargetMapping["obsservice"] {
-			args = append(args, "--config=with_ui")
-			break
-		}
-	}
 	if shouldBuildWithTestConfig {
 		args = append(args, "--config=test")
 	}

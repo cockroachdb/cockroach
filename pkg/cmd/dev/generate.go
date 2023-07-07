@@ -39,6 +39,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate bnf           # generates syntax bnf files
         dev generate js            # generates JS protobuf client and seeds local tooling
         dev generate go            # generates go code (execgen, stringer, protobufs, etc.), plus everything 'cgo' generates
+        dev generate go_full       # generates go code (execgen, stringer, protobufs, etc.), plus everything 'cgo' and 'ui' generate
         dev generate go_nocgo      # generates go code (execgen, stringer, protobufs, etc.)
         dev generate protobuf      # *.pb.go files (subset of 'dev generate go')
         dev generate parser        # sql.go and parser dependencies (subset of 'dev generate go')
@@ -47,6 +48,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate schemachanger # schemachanger targets (subset of 'dev generate go')
         dev generate stringer      # stringer targets (subset of 'dev generate go')
         dev generate testlogic     # logictest generated code (subset of 'dev generate bazel')
+        dev generate ui            # Create UI assets to be consumed by 'go build'
 `,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
@@ -75,6 +77,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"execgen":       d.generateExecgen,
 		"js":            d.generateJs,
 		"go":            d.generateGo,
+		"go_full":       d.generateGoFull,
 		"go_nocgo":      d.generateGoNoCgo,
 		"logictest":     d.generateLogicTest,
 		"protobuf":      d.generateProtobuf,
@@ -83,6 +86,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"schemachanger": d.generateSchemaChanger,
 		"stringer":      d.generateStringer,
 		"testlogic":     d.generateLogicTest,
+		"ui":            d.generateUI,
 	}
 
 	if len(targets) == 0 {
@@ -203,6 +207,13 @@ func (d *dev) generateGo(cmd *cobra.Command) error {
 	return d.generateCgo(cmd)
 }
 
+func (d *dev) generateGoFull(cmd *cobra.Command) error {
+	if err := d.generateTarget(cmd.Context(), "//pkg/gen:code_full"); err != nil {
+		return err
+	}
+	return d.generateCgo(cmd)
+}
+
 func (d *dev) generateGoNoCgo(cmd *cobra.Command) error {
 	return d.generateTarget(cmd.Context(), "//pkg/gen:code")
 }
@@ -272,6 +283,10 @@ func (d *dev) generateCgo(cmd *cobra.Command) error {
 		return fmt.Errorf("generating cgo: %w", err)
 	}
 	return nil
+}
+
+func (d *dev) generateUI(cmd *cobra.Command) error {
+	return d.generateTarget(cmd.Context(), "//pkg/gen:ui")
 }
 
 func (d *dev) generateJs(cmd *cobra.Command) error {

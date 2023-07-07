@@ -19,20 +19,6 @@ go_library(
     ],
 )
 
-bool_flag(
-    name = "with_ui_flag",
-    build_setting_default = False,
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "with_ui",
-    flag_values = {
-        ":with_ui_flag": "true",
-    },
-    visibility = ["//visibility:public"],
-)
-
 genrule(
     name = "gen-empty-index.html",
     outs = ["index.html"],
