@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,10 +59,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -1458,6 +1462,187 @@ func (c fakeSnapshotStream) Recv() (*kvserverpb.SnapshotRequest, error) {
 // Send implements the SnapshotResponseStream interface.
 func (c fakeSnapshotStream) Send(request *kvserverpb.SnapshotResponse) error {
 	return nil
+}
+
+type snapshotTestSignals struct {
+	// Receiver-side wait channels.
+	receiveErrCh        chan error
+	batchReceiveReadyCh chan struct{}
+
+	// Sender-side wait channels.
+	svrContextDone        <-chan struct{}
+	receiveStartedCh      chan struct{}
+	batchReceiveStartedCh chan struct{}
+	receiverDoneCh        chan struct{}
+}
+
+// TestReceiveSnapshotLogging tests that a snapshot receiver properly captures
+// the collected tracing spans in the last response, or logs the span if the
+// context is cancelled from the client side.
+func TestReceiveSnapshotLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const senderNodeIdx = 0
+	const receiverNodeIdx = 1
+	const dummyEventMsg = "test receive snapshot logging - dummy event"
+
+	setupTest := func(t *testing.T) (context.Context, *testcluster.TestCluster, *roachpb.RangeDescriptor, *snapshotTestSignals) {
+		ctx := context.Background()
+
+		signals := &snapshotTestSignals{
+			receiveErrCh:        make(chan error),
+			batchReceiveReadyCh: make(chan struct{}),
+
+			svrContextDone:        nil,
+			receiveStartedCh:      make(chan struct{}),
+			batchReceiveStartedCh: make(chan struct{}),
+			receiverDoneCh:        make(chan struct{}, 1),
+		}
+
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableRaftSnapshotQueue: true,
+					},
+				},
+			},
+			ReplicationMode: base.ReplicationManual,
+			ServerArgsPerNode: map[int]base.TestServerArgs{
+				receiverNodeIdx: {
+					Knobs: base.TestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
+							DisableRaftSnapshotQueue: true,
+							ThrottleEmptySnapshots:   true,
+							ReceiveSnapshot: func(ctx context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
+								t.Logf("incoming snapshot on n2")
+								log.Event(ctx, dummyEventMsg)
+								signals.svrContextDone = ctx.Done()
+								close(signals.receiveStartedCh)
+								return <-signals.receiveErrCh
+							},
+							BeforeRecvAcceptedSnapshot: func() {
+								t.Logf("receiving on n2")
+								signals.batchReceiveStartedCh <- struct{}{}
+								<-signals.batchReceiveReadyCh
+							},
+							HandleSnapshotDone: func() {
+								t.Logf("receiver on n2 completed")
+								signals.receiverDoneCh <- struct{}{}
+							},
+						},
+					},
+				},
+			},
+		})
+
+		_, scratchRange, err := tc.Servers[0].ScratchRangeEx()
+		require.NoError(t, err)
+
+		return ctx, tc, &scratchRange, signals
+	}
+
+	snapshotAndValidateLogs := func(t *testing.T, ctx context.Context, tc *testcluster.TestCluster, rngDesc *roachpb.RangeDescriptor, signals *snapshotTestSignals, expectTraceOnSender bool) error {
+		t.Helper()
+
+		repl := tc.GetFirstStoreFromServer(t, senderNodeIdx).LookupReplica(rngDesc.StartKey)
+		chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(receiverNodeIdx))
+
+		testStartTs := timeutil.Now()
+		_, pErr := repl.ChangeReplicas(ctx, rngDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
+
+		// When ready, flush logs and check messages from store_raft.go since
+		// call to repl.ChangeReplicas(..).
+		<-signals.receiverDoneCh
+		log.Flush()
+		entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
+			math.MaxInt64, 100, regexp.MustCompile(`store_raft\.go`), log.WithMarkedSensitiveData)
+		require.NoError(t, err)
+
+		errRegexp, err := regexp.Compile(`incoming snapshot stream failed with error`)
+		require.NoError(t, err)
+		foundEntry := false
+		var entry logpb.Entry
+		for _, entry = range entries {
+			if errRegexp.MatchString(entry.Message) {
+				foundEntry = true
+				break
+			}
+		}
+		expectTraceOnReceiver := !expectTraceOnSender
+		require.Equal(t, expectTraceOnReceiver, foundEntry)
+		if expectTraceOnReceiver {
+			require.Contains(t, entry.Message, dummyEventMsg)
+		}
+
+		// Check that receiver traces were imported in sender's context on success.
+		clientTraces := tracing.SpanFromContext(ctx).GetConfiguredRecording()
+		_, receiverTraceFound := clientTraces.FindLogMessage(dummyEventMsg)
+		require.Equal(t, expectTraceOnSender, receiverTraceFound)
+
+		return pErr
+	}
+
+	t.Run("cancel on header", func(t *testing.T) {
+		ctx, tc, scratchRange, signals := setupTest(t)
+		defer tc.Stopper().Stop(ctx)
+
+		ctx, sp := tracing.EnsureChildSpan(ctx, tc.GetFirstStoreFromServer(t, senderNodeIdx).GetStoreConfig().Tracer(),
+			t.Name(), tracing.WithRecording(tracingpb.RecordingVerbose))
+		defer sp.Finish()
+
+		ctx, cancel := context.WithCancel(ctx)
+		go func() {
+			<-signals.receiveStartedCh
+			cancel()
+			<-signals.svrContextDone
+			time.Sleep(10 * time.Millisecond)
+			signals.receiveErrCh <- errors.Errorf("header is bad")
+		}()
+		err := snapshotAndValidateLogs(t, ctx, tc, scratchRange, signals, false /* expectTraceOnSender */)
+		require.Error(t, err)
+	})
+	t.Run("cancel during receive", func(t *testing.T) {
+		ctx, tc, scratchRange, signals := setupTest(t)
+		defer tc.Stopper().Stop(ctx)
+
+		ctx, sp := tracing.EnsureChildSpan(ctx, tc.GetFirstStoreFromServer(t, senderNodeIdx).GetStoreConfig().Tracer(),
+			t.Name(), tracing.WithRecording(tracingpb.RecordingVerbose))
+		defer sp.Finish()
+
+		ctx, cancel := context.WithCancel(ctx)
+		close(signals.receiveErrCh)
+		go func() {
+			<-signals.receiveStartedCh
+			<-signals.batchReceiveStartedCh
+			cancel()
+			<-signals.svrContextDone
+			time.Sleep(10 * time.Millisecond)
+			close(signals.batchReceiveReadyCh)
+		}()
+		err := snapshotAndValidateLogs(t, ctx, tc, scratchRange, signals, false /* expectTraceOnSender */)
+		require.Error(t, err)
+	})
+	t.Run("successful send", func(t *testing.T) {
+		ctx, tc, scratchRange, signals := setupTest(t)
+		defer tc.Stopper().Stop(ctx)
+
+		ctx, sp := tracing.EnsureChildSpan(ctx, tc.GetFirstStoreFromServer(t, senderNodeIdx).GetStoreConfig().Tracer(),
+			t.Name(), tracing.WithRecording(tracingpb.RecordingVerbose))
+		defer sp.Finish()
+
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		close(signals.receiveErrCh)
+		close(signals.batchReceiveReadyCh)
+		go func() {
+			<-signals.receiveStartedCh
+			<-signals.batchReceiveStartedCh
+		}()
+		err := snapshotAndValidateLogs(t, ctx, tc, scratchRange, signals, true /* expectTraceOnSender */)
+		require.NoError(t, err)
+	})
 }
 
 // TestFailedSnapshotFillsReservation tests that failing to finish applying an

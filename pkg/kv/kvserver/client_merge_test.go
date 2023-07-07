@@ -4813,7 +4813,7 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 			1: {
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						ReceiveSnapshot: func(header *kvserverpb.SnapshotRequest_Header) error {
+						ReceiveSnapshot: func(_ context.Context, header *kvserverpb.SnapshotRequest_Header) error {
 							val := delaySnapshotTrap.Load()
 							if val != nil {
 								fn := val.(func() error)
