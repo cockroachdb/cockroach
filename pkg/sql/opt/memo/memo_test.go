@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -371,6 +372,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = true
 	stale()
 	evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = false
+	notStale()
+
+	// Stale txn isolation level.
+	evalCtx.TxnIsoLevel = isolation.ReadCommitted
+	stale()
+	evalCtx.TxnIsoLevel = isolation.Serializable
 	notStale()
 
 	// User no longer has access to view.

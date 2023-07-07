@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -690,6 +691,18 @@ func (b *Builder) buildScan(
 	}
 	if locking.isSet() {
 		private.Locking = locking.get()
+		if b.evalCtx.TxnIsoLevel != isolation.Serializable {
+			// Under weaker isolation levels we use fully-durable locks for SELECT FOR
+			// UPDATE statements, SELECT FOR SHARE statements, and all other locked
+			// scans (e.g. FK checks), regardless of locking strength and wait
+			// policy. Unlike mutation statements, SELECT FOR UPDATE statements do not
+			// lay down intents, so we cannot rely on the durability of intents to
+			// guarantee exclusion until commit as we do for mutation statements. And
+			// unlike serializable isolation, weaker isolation levels do not perform
+			// read refreshing, so we cannot rely on read refreshing to guarantee
+			// exclusion.
+			private.Locking.Durability = tree.LockDurabilityGuaranteed
+		}
 		if private.Locking.WaitPolicy == tree.LockWaitSkipLocked && tab.FamilyCount() > 1 {
 			// TODO(rytaft): We may be able to support this if enough columns are
 			// pruned that only a single family is scanned.

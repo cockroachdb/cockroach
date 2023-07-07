@@ -17,7 +17,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -2896,11 +2895,9 @@ func (b *Builder) buildLocking(locking opt.Locking) (opt.Locking, error) {
 				"cannot execute %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
-		if locking.Durability == tree.LockDurabilityGuaranteed &&
-			b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		if locking.Durability == tree.LockDurabilityGuaranteed {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
-				100144, "cannot execute SELECT FOR UPDATE statements under %s isolation",
-				b.evalCtx.TxnIsoLevel,
+				100193, "guaranteed-durable locking not yet implemented",
 			)
 		}
 		b.ContainsNonDefaultKeyLocking = true

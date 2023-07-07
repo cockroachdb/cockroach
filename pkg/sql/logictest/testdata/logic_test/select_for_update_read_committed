@@ -36,7 +36,7 @@ COMMIT
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under ReadCommitted isolation
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
 SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
 
 statement ok
@@ -49,7 +49,7 @@ SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 
-query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under Snapshot isolation
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
 SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
 
 statement ok
@@ -65,7 +65,7 @@ BEGIN TRANSACTION
 statement ok
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
-query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under ReadCommitted isolation
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
 UPDATE supermarket
   SET aisle = (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
   WHERE person = 'michael'
@@ -80,7 +80,7 @@ BEGIN TRANSACTION
 statement ok
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
-query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under ReadCommitted isolation
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
 WITH s AS
   (SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE)
 SELECT aisle + 1 FROM s
@@ -98,7 +98,7 @@ CREATE FUNCTION wrangle (name STRING) RETURNS INT LANGUAGE SQL AS $$
 $$
 
 # But calling that function should fail.
-query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under ReadCommitted isolation
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
 INSERT INTO supermarket (person, aisle) VALUES ('grandma', wrangle('matilda'))
 
 statement ok
@@ -109,14 +109,14 @@ statement ok
 PREPARE psa AS SELECT aisle FROM supermarket WHERE person = $1::STRING FOR UPDATE
 
 # But execution should fail.
-query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under ReadCommitted isolation
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
 EXECUTE psa('matilda')
 
 statement ok
 DEALLOCATE psa
 
 # SELECT FOR UPDATE using a lookup join should also fail.
-query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under ReadCommitted isolation
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
 WITH names AS MATERIALIZED
   (SELECT 'matilda' AS person)
 SELECT aisle
@@ -125,14 +125,14 @@ SELECT aisle
   FOR UPDATE
 
 # SELECT FOR UPDATE using an index join should also fail.
-query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under ReadCommitted isolation
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
 SELECT aisle
   FROM supermarket@supermarket_starts_with_idx
   WHERE starts_with = 'm'
   FOR UPDATE
 
 # SELECT FOR UPDATE using a zigzag join should also fail.
-query error pgcode 0A000 cannot execute SELECT FOR UPDATE statements under ReadCommitted isolation
+query error pgcode 0A000 guaranteed-durable locking not yet implemented
 SELECT aisle
   FROM supermarket@{FORCE_ZIGZAG}
   WHERE starts_with = 'm' AND ends_with = 'lda'
