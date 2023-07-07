@@ -833,8 +833,12 @@ func (s *SQLServerWrapper) serveConn(
 	pgServer := s.PGServer()
 	switch status.State {
 	case pgwire.PreServeCancel:
-		pgServer.HandleCancel(ctx, status.CancelKey)
-		return nil
+		// Cancel requests are unauthenticated so run the cancel async to prevent
+		// the client from deriving any info about the cancel based on how long it
+		// takes.
+		return s.stopper.RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
+			pgServer.HandleCancel(ctx, status.CancelKey)
+		})
 	case pgwire.PreServeReady:
 		return pgServer.ServeConn(ctx, conn, status)
 	default:
