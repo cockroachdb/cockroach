@@ -570,3 +570,143 @@ update child
                 │    └── flags: disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:12
+
+# Verify that we lock the parent when necessary.
+build set=enable_implicit_fk_locking_for_serializable=true
+UPDATE child SET p = p+1, c = c+1
+----
+update child
+ ├── columns: <none>
+ ├── fetch columns: child.c:5 child.p:6
+ ├── update-mapping:
+ │    ├── c_new:10 => child.c:1
+ │    └── p_new:9 => child.p:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: p_new:9!null c_new:10!null child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── scan child
+ │    │    └── columns: child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    └── projections
+ │         ├── child.p:6 + 1 [as=p_new:9]
+ │         └── child.c:5 + 1 [as=c_new:10]
+ └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── anti-join (hash)
+      │         ├── columns: p:11!null
+      │         ├── with-scan &1
+      │         │    ├── columns: p:11!null
+      │         │    └── mapping:
+      │         │         └──  p_new:9 => p:11
+      │         ├── scan parent
+      │         │    ├── columns: parent.p:13!null
+      │         │    ├── flags: disabled not visible index feature
+      │         │    └── locking: for-share
+      │         └── filters
+      │              └── p:11 = parent.p:13
+      ├── f-k-checks-item: grandchild(c) -> child(c)
+      │    └── semi-join (hash)
+      │         ├── columns: c:17!null
+      │         ├── except
+      │         │    ├── columns: c:17!null
+      │         │    ├── left columns: c:17!null
+      │         │    ├── right columns: c:18
+      │         │    ├── with-scan &1
+      │         │    │    ├── columns: c:17!null
+      │         │    │    └── mapping:
+      │         │    │         └──  child.c:5 => c:17
+      │         │    └── with-scan &1
+      │         │         ├── columns: c:18!null
+      │         │         └── mapping:
+      │         │              └──  c_new:10 => c:18
+      │         ├── scan grandchild
+      │         │    ├── columns: grandchild.c:20!null
+      │         │    └── flags: disabled not visible index feature
+      │         └── filters
+      │              └── c:17 = grandchild.c:20
+      └── f-k-checks-item: grandchild2(c) -> child(c)
+           └── semi-join (hash)
+                ├── columns: c:23!null
+                ├── except
+                │    ├── columns: c:23!null
+                │    ├── left columns: c:23!null
+                │    ├── right columns: c:24
+                │    ├── with-scan &1
+                │    │    ├── columns: c:23!null
+                │    │    └── mapping:
+                │    │         └──  child.c:5 => c:23
+                │    └── with-scan &1
+                │         ├── columns: c:24!null
+                │         └── mapping:
+                │              └──  c_new:10 => c:24
+                ├── scan grandchild2
+                │    ├── columns: grandchild2.c:26!null
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     └── c:23 = grandchild2.c:26
+
+build set=enable_implicit_fk_locking_for_serializable=true
+UPDATE self SET y = 3
+----
+update self
+ ├── columns: <none>
+ ├── fetch columns: x:5 self.y:6
+ ├── update-mapping:
+ │    └── y_new:9 => self.y:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: y_new:9!null x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── scan self
+ │    │    └── columns: x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    └── projections
+ │         └── 3 [as=y_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: self(y) -> self(x)
+           └── anti-join (hash)
+                ├── columns: y:10!null
+                ├── with-scan &1
+                │    ├── columns: y:10!null
+                │    └── mapping:
+                │         └──  y_new:9 => y:10
+                ├── scan self
+                │    ├── columns: x:11!null
+                │    ├── flags: disabled not visible index feature
+                │    └── locking: for-share
+                └── filters
+                     └── y:10 = x:11
+
+build set=enable_implicit_fk_locking_for_serializable=true
+UPDATE self SET x = 3
+----
+update self
+ ├── columns: <none>
+ ├── fetch columns: self.x:5 y:6
+ ├── update-mapping:
+ │    └── x_new:9 => self.x:1
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: x_new:9!null self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    ├── scan self
+ │    │    └── columns: self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    └── projections
+ │         └── 3 [as=x_new:9]
+ └── f-k-checks
+      └── f-k-checks-item: self(y) -> self(x)
+           └── semi-join (hash)
+                ├── columns: x:10!null
+                ├── except
+                │    ├── columns: x:10!null
+                │    ├── left columns: x:10!null
+                │    ├── right columns: x:11
+                │    ├── with-scan &1
+                │    │    ├── columns: x:10!null
+                │    │    └── mapping:
+                │    │         └──  self.x:5 => x:10
+                │    └── with-scan &1
+                │         ├── columns: x:11!null
+                │         └── mapping:
+                │              └──  x_new:9 => x:11
+                ├── scan self
+                │    ├── columns: y:13!null
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     └── x:10 = y:13

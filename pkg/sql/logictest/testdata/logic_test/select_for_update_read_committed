@@ -1,7 +1,7 @@
 # LogicTest: !local-mixed-22.2-23.1
 
 # SELECT FOR UPDATE is prohibited under weaker isolation levels until we improve
-# locking. See #57031, #75457, #100144.
+# locking. See #57031, #75457, #100144, #100193.
 
 statement ok
 CREATE TABLE supermarket (

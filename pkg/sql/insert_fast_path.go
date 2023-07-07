@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -154,6 +155,10 @@ func (r *insertFastPathRun) inputRow(rowIdx int) tree.Datums {
 func (r *insertFastPathRun) addFKChecks(
 	ctx context.Context, rowIdx int, inputRow tree.Datums,
 ) error {
+	r.fkBatch.Requests = make([]kvpb.RequestUnion, 0, len(r.fkChecks))
+	// Any FK checks using locking should have lock wait policy BLOCK.
+	r.fkBatch.Header.WaitPolicy = lock.WaitPolicy_Block
+
 	for i := range r.fkChecks {
 		c := &r.fkChecks[i]
 
@@ -188,10 +193,20 @@ func (r *insertFastPathRun) addFKChecks(
 		if r.traceKV {
 			log.VEventf(ctx, 2, "FKScan %s", span)
 		}
+		lockStrength := row.GetKeyLockingStrength(descpb.ToScanLockingStrength(c.Locking.Strength))
+		lockWaitPolicy := row.GetWaitPolicy(descpb.ToScanLockingWaitPolicy(c.Locking.WaitPolicy))
+		if r.fkBatch.Header.WaitPolicy != lockWaitPolicy {
+			return errors.AssertionFailedf(
+				"FK check lock wait policy %s did not match %s",
+				lockWaitPolicy, r.fkBatch.Header.WaitPolicy,
+			)
+		}
 		reqIdx := len(r.fkBatch.Requests)
 		r.fkBatch.Requests = append(r.fkBatch.Requests, kvpb.RequestUnion{})
 		r.fkBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
 			RequestHeader: kvpb.RequestHeaderFromSpan(span),
+			KeyLocking:    lockStrength,
+			// TODO(michae2): Once #100193 is finished, also include c.Locking.Durability.
 		})
 		r.fkSpanInfo = append(r.fkSpanInfo, insertFastPathFKSpanInfo{
 			check:  c,
