@@ -18,9 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/obsutil"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/router"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -82,8 +85,10 @@ from one or more CockroachDB clusters.`,
 		stop := stop.NewStopper()
 
 		// Run the event ingestion in the background.
-		consumer := &obsutil.StdOutConsumer{}
-		ingester := ingest.MakeEventIngester(ctx, consumer, nil)
+		eventRouter := router.NewEventRouter(map[obspb.EventType]obslib.EventConsumer{
+			obspb.EventlogEvent: &obsutil.StdOutConsumer{},
+		})
+		ingester := ingest.MakeEventIngester(ctx, eventRouter, nil)
 		listener, err := net.Listen("tcp", otlpAddr)
 		if err != nil {
 			return errors.Wrapf(err, "failed to listen for incoming HTTP connections on address %s", otlpAddr)

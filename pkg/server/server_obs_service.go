@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/obsutil"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/router"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -50,9 +52,13 @@ func (s *Server) startEmbeddedObsService(
 	// Create the internal ingester RPC server.
 	// TODO(abarganier): implement a more useful EventConsumer.
 	// TODO(abarganier): implement unified initialization for EventIngester.
-	var consumer obslib.EventConsumer = &obsutil.StdOutConsumer{}
+	var consumer obslib.EventConsumer
 	if knobs != nil && knobs.TestConsumer != nil {
 		consumer = knobs.TestConsumer
+	} else {
+		consumer = router.NewEventRouter(map[obspb.EventType]obslib.EventConsumer{
+			obspb.EventlogEvent: &obsutil.StdOutConsumer{},
+		})
 	}
 	embeddedObsSvc := ingest.MakeEventIngester(ctx, consumer, nil)
 	// We'll use an RPC server serving on a "loopback" interface implemented with

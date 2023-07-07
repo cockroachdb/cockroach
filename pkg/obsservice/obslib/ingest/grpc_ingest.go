@@ -73,7 +73,7 @@ func (e *EventIngester) unpackAndConsumeEvents(
 				// if we fail to consume just some events that are part of the batch. Log
 				// instead.
 				if err := e.consumer.Consume(ctx, transformed); err != nil {
-					log.Errorf(ctx, "ingesting event: %v", err)
+					log.Errorf(ctx, "ingesting event. err = %v, event = %v", err, transformed)
 				}
 			}
 		}
