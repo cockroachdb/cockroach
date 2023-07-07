@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1376,6 +1377,53 @@ func TestChangefeedProjectionDelete(t *testing.T) {
 		})
 	}
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
+
+// Regression test for https://github.com/cockroachdb/cockroach/issues/106358
+// Ensure that changefeeds upgraded from the version that did not set job record
+// cluster ID continue functioning.
+func TestChangefeedCanResumeWhenClusterIDMissing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (id int primary key, a string)`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'a')`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='wrapped' AS SELECT * FROM foo`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{`foo: [0]->{"after": {"a": "a", "id": 0}}`})
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+
+		// Pause the job and delete the row.
+		require.NoError(t, jobFeed.Pause())
+		sqlDB.Exec(t, `DELETE FROM foo WHERE id = 0`)
+
+		// clear out creation cluster id.
+		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
+		require.NoError(t, func() error {
+			job, err := jobRegistry.LoadJob(context.Background(), jobFeed.JobID())
+			if err != nil {
+				return err
+			}
+			return job.NoTxn().Update(context.Background(), func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				md.Payload.CreationClusterID = uuid.Nil
+				ju.UpdatePayload(md.Payload)
+				return nil
+			})
+		}())
+
+		// Resume; we expect to see deleted row.
+		require.NoError(t, jobFeed.Resume())
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": null}`,
+		})
+
+		// The job payload now has clusterID set.
+		job, err := jobRegistry.LoadJob(context.Background(), jobFeed.JobID())
+		require.NoError(t, err)
+		require.NotEqual(t, uuid.Nil, job.Payload().CreationClusterID)
+	}
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 // If we drop columns which are not targeted by the changefeed, it should not backfill.
