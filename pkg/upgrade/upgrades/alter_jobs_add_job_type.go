@@ -87,6 +87,7 @@ func backfillJobTypeColumn(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	resumeAfter := 0
+	var lastAdded int
 	for batch, done := 0, false; !done; batch++ {
 		if err := d.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			last, err := d.InternalExecutor.QueryBufferedEx(
@@ -102,7 +103,7 @@ func backfillJobTypeColumn(
 				return errors.Wrap(err, "failed to backfill system jobs type column")
 			}
 			if len(last) == 1 && len(last[0]) == 1 && last[0][0] != tree.DNull {
-				resumeAfter = int(tree.MustBeDInt(last[0][0]))
+				lastAdded = int(tree.MustBeDInt(last[0][0]))
 			} else {
 				done = true
 			}
@@ -111,6 +112,7 @@ func backfillJobTypeColumn(
 		}); err != nil {
 			return err
 		}
+		resumeAfter = lastAdded
 	}
 	return nil
 }
