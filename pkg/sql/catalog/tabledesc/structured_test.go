@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	. "github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -50,19 +51,19 @@ func makeIndexDescriptor(name string, columnNames []string) descpb.IndexDescript
 		Name:                name,
 		KeyColumnNames:      columnNames,
 		KeyColumnDirections: dirs,
-		Version:             descpb.EmptyArraysInInvertedIndexesVersion,
+		Version:             descpb.LatestIndexDescriptorVersion,
 	}
 	return idx
 }
 
 func TestAllocateIDs(t *testing.T) {
-	// TODO(postamar): bump idx versions to LatestIndexDescriptorVersion in 22.2
-	// This is not possible until then because of a limitation in 21.2 which
-	// affects mixed-21.2-22.1-version clusters (issue #78426).
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
 	desc := NewBuilder(&descpb.TableDescriptor{
+		DeclarativeSchemaChangerState: &scpb.DescriptorState{
+			JobID: catpb.JobID(1),
+		},
 		ParentID: descpb.ID(bootstrap.TestingUserDescID(0)),
 		ID:       descpb.ID(bootstrap.TestingUserDescID(1)),
 		Name:     "foo",
@@ -95,6 +96,9 @@ func TestAllocateIDs(t *testing.T) {
 	}
 
 	expected := NewBuilder(&descpb.TableDescriptor{
+		DeclarativeSchemaChangerState: &scpb.DescriptorState{
+			JobID: catpb.JobID(1),
+		},
 		ParentID: descpb.ID(bootstrap.TestingUserDescID(0)),
 		ID:       descpb.ID(bootstrap.TestingUserDescID(1)),
 		Version:  1,
@@ -130,7 +134,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnNames:      []string{"b", "a"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.LatestIndexDescriptorVersion,
 			},
 			{
 				ID:                  3,
@@ -139,7 +143,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnNames:      []string{"b"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.LatestIndexDescriptorVersion,
 			},
 			{
 				ID:                  4,
@@ -148,7 +152,7 @@ func TestAllocateIDs(t *testing.T) {
 				KeyColumnNames:      []string{"c"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				EncodingType:        catenumpb.PrimaryIndexEncoding,
-				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				Version:             descpb.LatestIndexDescriptorVersion,
 			},
 		},
 		Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
@@ -670,6 +674,111 @@ func TestUnvalidateConstraints(t *testing.T) {
 	after := catalog.FindConstraintByName(desc, "fk")
 	if after == nil || before.IsConstraintValidated() {
 		t.Fatalf("expected to find an unvalidated constraint fk before, found %v", after)
+	}
+}
+
+func TestMaybeFixSecondaryIndexEncodingType(t *testing.T) {
+	tests := []struct {
+		desc       descpb.TableDescriptor
+		expUpgrade bool
+		verify     func(*testing.T, int, catalog.TableDescriptor) // nil means no extra verification.
+	}{
+		{ // 1
+			desc: descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "baz"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"bar", "baz"}},
+				},
+				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "primary",
+					KeyColumnIDs:        []descpb.ColumnID{1, 2},
+					KeyColumnNames:      []string{"bar", "baz"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+					EncodingType:        catenumpb.PrimaryIndexEncoding,
+					Version:             descpb.LatestIndexDescriptorVersion,
+					ConstraintID:        1,
+				},
+				Indexes: []descpb.IndexDescriptor{{
+					ID:                  2,
+					Name:                "secondary",
+					KeyColumnIDs:        []descpb.ColumnID{2},
+					KeyColumnNames:      []string{"baz"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+					EncodingType:        catenumpb.PrimaryIndexEncoding,
+				}},
+				NextColumnID:     3,
+				NextFamilyID:     1,
+				NextIndexID:      3,
+				NextConstraintID: 2,
+			},
+			expUpgrade: true,
+			verify: func(t *testing.T, _ int, newDesc catalog.TableDescriptor) {
+				require.Equal(t, catenumpb.SecondaryIndexEncoding, newDesc.TableDesc().Indexes[0].EncodingType)
+			},
+		},
+		{ // 2
+			desc: descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "baz"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"bar", "baz"}},
+				},
+				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "primary",
+					KeyColumnIDs:        []descpb.ColumnID{1, 2},
+					KeyColumnNames:      []string{"bar", "baz"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+					EncodingType:        catenumpb.PrimaryIndexEncoding,
+					Version:             descpb.LatestIndexDescriptorVersion,
+					ConstraintID:        1,
+				},
+				Indexes: []descpb.IndexDescriptor{{
+					ID:                  2,
+					Name:                "secondary",
+					KeyColumnIDs:        []descpb.ColumnID{2},
+					KeyColumnNames:      []string{"baz"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+					EncodingType:        catenumpb.PrimaryIndexEncoding,
+				}},
+				DeclarativeSchemaChangerState: &scpb.DescriptorState{
+					JobID: catpb.JobID(1),
+				},
+				NextColumnID:     3,
+				NextFamilyID:     1,
+				NextIndexID:      3,
+				NextConstraintID: 2,
+			},
+			expUpgrade: false,
+		},
+	}
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			b := NewBuilder(&test.desc)
+			require.NoError(t, b.RunPostDeserializationChanges())
+			desc := b.BuildImmutableTable()
+			changes, err := GetPostDeserializationChanges(desc)
+			require.NoError(t, err)
+			upgraded := changes.Contains(catalog.FixSecondaryIndexEncodingType)
+			if upgraded != test.expUpgrade {
+				t.Fatalf("%d: expected upgraded=%t, but got upgraded=%t", i, test.expUpgrade, upgraded)
+			}
+			if test.verify != nil {
+				test.verify(t, i, desc)
+			}
+		})
 	}
 }
 
