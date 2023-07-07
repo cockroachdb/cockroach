@@ -1840,9 +1840,21 @@ func (s *Server) PreStart(ctx context.Context) error {
 		})
 	})
 
+	// Grab the log metrics registry, if it's present.
+	var logRegistry *metric.Registry
+	r := log.LogMetricsRegistry()
+	if r != nil {
+		lr, ok := r.(*metric.Registry)
+		if !ok {
+			panic(fmt.Sprintf("unexpected type for LogMetrics registry: %T", r))
+		}
+		logRegistry = lr
+	}
+
 	// We can now add the node registry.
 	s.recorder.AddNode(
 		s.registry,
+		logRegistry,
 		s.node.Descriptor,
 		s.node.startedAt,
 		s.cfg.AdvertiseAddr,

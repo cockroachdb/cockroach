@@ -118,7 +118,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		manual,
 		st,
 	)
-	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorder.AddNode(reg1, nil, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	nodeDescTenant := roachpb.NodeDescriptor{
 		NodeID: roachpb.NodeID(7),
@@ -137,7 +137,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		manual,
 		stTenant,
 	)
-	recorderTenant.AddNode(regTenant, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorderTenant.AddNode(regTenant, nil, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// ========================================
 	// Verify that the recorder exports metrics for tenants as text.
@@ -435,7 +435,7 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder := NewMetricsRecorder(roachpb.SystemTenantID, roachpb.NewTenantNameContainer(""), nil, nil, manual, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
-	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorder.AddNode(reg1, nil, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual
