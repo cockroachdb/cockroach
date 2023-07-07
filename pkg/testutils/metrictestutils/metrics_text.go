@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/prometheus/common/expfmt"
 )
 
 // GetMetricsText scrapes a metrics registry, filters out the metrics according
@@ -28,7 +29,7 @@ func GetMetricsText(registry *metric.Registry, re *regexp.Regexp) (string, error
 		ex.ScrapeRegistry(registry, true /* includeChildMetrics */)
 	}
 	var in bytes.Buffer
-	if err := ex.ScrapeAndPrintAsText(&in, scrape); err != nil {
+	if err := ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape); err != nil {
 		return "", err
 	}
 	sc := bufio.NewScanner(&in)

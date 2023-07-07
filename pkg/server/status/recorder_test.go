@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -159,14 +160,14 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	recorder.AddTenantRegistry(tenantID, regTenant)
 
 	buf := bytes.NewBuffer([]byte{})
-	err = recorder.PrintAsText(buf)
+	err = recorder.PrintAsText(buf, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application"} 456`)
 
 	bufTenant := bytes.NewBuffer([]byte{})
-	err = recorderTenant.PrintAsText(bufTenant)
+	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -177,14 +178,14 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	appNameContainer.Set("application2")
 
 	buf = bytes.NewBuffer([]byte{})
-	err = recorder.PrintAsText(buf)
+	err = recorder.PrintAsText(buf, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application2"} 456`)
 
 	bufTenant = bytes.NewBuffer([]byte{})
-	err = recorderTenant.PrintAsText(bufTenant)
+	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -694,7 +695,7 @@ func TestMetricsRecorder(t *testing.T) {
 			if _, err := recorder.MarshalJSON(); err != nil {
 				t.Error(err)
 			}
-			_ = recorder.PrintAsText(io.Discard)
+			_ = recorder.PrintAsText(io.Discard, expfmt.FmtText)
 			_ = recorder.GetTimeSeriesData()
 			wg.Done()
 		}()
