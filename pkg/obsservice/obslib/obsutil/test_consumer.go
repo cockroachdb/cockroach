@@ -76,3 +76,17 @@ func (c *TestCaptureConsumer) Contains(apply func(*obspb.Event) bool) bool {
 	}
 	return false
 }
+
+// TestErrorConsumer always returns the error provided at
+// construction on Consume.
+type TestErrorConsumer struct {
+	err error
+}
+
+func NewTestErrorConsumer(err error) *TestErrorConsumer {
+	return &TestErrorConsumer{err: err}
+}
+
+func (c *TestErrorConsumer) Consume(_ context.Context, _ *obspb.Event) error {
+	return c.err
+}

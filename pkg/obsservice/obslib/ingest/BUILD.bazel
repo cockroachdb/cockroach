@@ -11,7 +11,6 @@ go_library(
         "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
         "//pkg/util/log",
         "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
