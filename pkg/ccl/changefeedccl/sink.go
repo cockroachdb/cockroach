@@ -261,6 +261,11 @@ func getSink(
 			}
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
+				var testingKnobs *TestingKnobs
+				if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+					testingKnobs = knobs
+				}
+
 				// Placeholder id for canary sink
 				var nodeID base.SQLInstanceID = 0
 				if serverCfg.NodeID != nil {
@@ -268,7 +273,7 @@ func getSink(
 				}
 				return makeCloudStorageSink(
 					ctx, sinkURL{URL: u}, nodeID, serverCfg.Settings, encodingOpts,
-					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder,
+					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder, testingKnobs,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
@@ -442,10 +447,11 @@ func (s errorWrapperSink) EncodeAndEmitRow(
 	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
+	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
 ) error {
 	if sinkWithEncoder, ok := s.wrapped.(SinkWithEncoder); ok {
-		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, alloc)
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc)
 	}
 	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.wrapped)
 }
@@ -708,6 +714,7 @@ type SinkWithEncoder interface {
 		prevRow cdcevent.Row,
 		topic TopicDescriptor,
 		updated, mvcc hlc.Timestamp,
+		encodingOpts changefeedbase.EncodingOptions,
 		alloc kvevent.Alloc,
 	) error
 

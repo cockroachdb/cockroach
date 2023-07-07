@@ -59,15 +59,15 @@ type frontier interface{ Frontier() hlc.Timestamp }
 
 type kvEventToRowConsumer struct {
 	frontier
-	encoder        Encoder
-	scratch        bufalloc.ByteAllocator
-	sink           EventSink
-	cursor         hlc.Timestamp
-	knobs          TestingKnobs
-	decoder        cdcevent.Decoder
-	details        ChangefeedConfig
-	evaluator      *cdceval.Evaluator
-	encodingFormat changefeedbase.FormatType
+	encoder      Encoder
+	scratch      bufalloc.ByteAllocator
+	sink         EventSink
+	cursor       hlc.Timestamp
+	knobs        TestingKnobs
+	decoder      cdcevent.Decoder
+	details      ChangefeedConfig
+	evaluator    *cdceval.Evaluator
+	encodingOpts changefeedbase.EncodingOptions
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
@@ -257,7 +257,7 @@ func newKVEventToRowConsumer(
 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 		topicNamer:           topicNamer,
 		evaluator:            evaluator,
-		encodingFormat:       encodingOpts.Format,
+		encodingOpts:         encodingOpts,
 		metrics:              metrics,
 		pacer:                pacer,
 	}, nil
@@ -430,9 +430,10 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		}
 	}
 
-	if c.encodingFormat == changefeedbase.OptFormatParquet {
+	if c.encodingOpts.Format == changefeedbase.OptFormatParquet {
 		return c.encodeForParquet(
-			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp, alloc,
+			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp,
+			c.encodingOpts, alloc,
 		)
 	}
 	var keyCopy, valueCopy []byte
@@ -479,6 +480,7 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
+	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
 ) error {
 	sinkWithEncoder, ok := c.sink.(SinkWithEncoder)
@@ -486,7 +488,7 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 		return errors.AssertionFailedf("Expected a SinkWithEncoder for parquet format, found %T", c.sink)
 	}
 	if err := sinkWithEncoder.EncodeAndEmitRow(
-		ctx, updatedRow, prevRow, topic, updated, mvcc, alloc,
+		ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc,
 	); err != nil {
 		return err
 	}

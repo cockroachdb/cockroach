@@ -326,6 +326,12 @@ func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) (hlc.Timestamp, s
 	return extractResolvedTimestamp(t, m), m.Partition
 }
 
+// resolvedRaw represents a JSON object containing the single key "resolved"
+// with a resolved timestamp value.
+type resolvedRaw struct {
+	Resolved string `json:"resolved"`
+}
+
 func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Timestamp {
 	t.Helper()
 	if m.Key != nil {
@@ -335,14 +341,12 @@ func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Time
 		t.Fatal(`expected a resolved timestamp notification`)
 	}
 
-	var resolvedRaw struct {
-		Resolved string `json:"resolved"`
-	}
-	if err := gojson.Unmarshal(m.Resolved, &resolvedRaw); err != nil {
+	var resolved resolvedRaw
+	if err := gojson.Unmarshal(m.Resolved, &resolved); err != nil {
 		t.Fatal(err)
 	}
 
-	return parseTimeToHLC(t, resolvedRaw.Resolved)
+	return parseTimeToHLC(t, resolved.Resolved)
 }
 
 func expectResolvedTimestampAvro(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
@@ -924,9 +928,7 @@ func makeFeedFactoryWithOptions(
 			t.Fatalf("expected externalIODir option to be set")
 		}
 		f := makeCloudFeedFactory(srvOrCluster, db, options.externalIODir)
-		return f, func() {
-			TestingSetIncludeParquetMetadata()()
-		}
+		return f, func() {}
 	case "enterprise":
 		sink, cleanup := pgURLForUser(username.RootUser)
 		f := makeTableFeedFactory(srvOrCluster, db, sink)
@@ -982,12 +984,15 @@ func cdcTestNamedWithSystem(
 		testLabel = fmt.Sprintf("%s/%s", sinkType, name)
 	}
 	t.Run(testLabel, func(t *testing.T) {
+		// Even if the parquet format is not being used, enable metadata
+		// in all tests for simplicity.
 		testServer, cleanupServer := makeServerWithOptions(t, options)
 		feedFactory, cleanupSink := makeFeedFactoryWithOptions(t, sinkType, testServer.Server, testServer.DB, options)
 		feedFactory = maybeUseExternalConnection(feedFactory, testServer.DB, sinkType, options, t)
 		defer cleanupServer()
 		defer cleanupSink()
 		defer cleanupCloudStorage()
+
 		testFn(t, testServer, feedFactory)
 	})
 }
@@ -1176,16 +1181,6 @@ func waitForJobStatus(
 		}
 		return nil
 	})
-}
-
-// TestingSetIncludeParquetMetadata adds the option to turn on adding metadata
-// (primary key column names) to the parquet file which is used to convert parquet
-// data to JSON format
-func TestingSetIncludeParquetMetadata() func() {
-	includeParquetTestMetadata = true
-	return func() {
-		includeParquetTestMetadata = false
-	}
 }
 
 // ChangefeedJobPermissionsTestSetup creates entities and users with various permissions
