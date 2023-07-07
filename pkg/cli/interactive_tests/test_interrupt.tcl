@@ -123,7 +123,7 @@ stop_server $argv
 # Regression test for #92943.
 start_test "Check that SIGTERM sent to an interactive shell terminates the shell."
 
-spawn $argv demo --empty --pid-file=demo_pid
+spawn $argv demo --empty --pid-file=demo_pid --log-dir=logs
 eexpect "Welcome"
 eexpect root@
 eexpect "defaultdb>"
