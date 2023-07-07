@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 
 # This test ensures notices are being sent as expected.
 
-spawn $argv demo --no-line-editor --no-example-database
+spawn $argv demo --no-line-editor --no-example-database --log-dir=logs
 eexpect root@
 
 start_test "Test that notices always appear at the end after all results."

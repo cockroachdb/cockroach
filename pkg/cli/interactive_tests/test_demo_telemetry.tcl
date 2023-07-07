@@ -6,7 +6,7 @@ start_test "Check cockroach demo telemetry can be disabled"
 
 # set the proper environment variable
 set env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "true"
-spawn $argv demo --no-line-editor
+spawn $argv demo --no-line-editor --log-dir=logs
 
 # Expect an informational message.
 eexpect "Telemetry disabled by configuration."

@@ -88,6 +88,13 @@ func TestDockerCLI_test_copy(t *testing.T) {
 	runTestDockerCLI(t, "test_copy", "../cli/interactive_tests/test_copy.tcl")
 }
 
+func TestDockerCLI_test_demo(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_demo", "../cli/interactive_tests/test_demo.tcl")
+}
+
 func TestDockerCLI_test_demo_changefeeds(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
@@ -128,6 +135,13 @@ func TestDockerCLI_test_demo_memory_warning(t *testing.T) {
 	defer s.Close(t)
 
 	runTestDockerCLI(t, "test_demo_memory_warning", "../cli/interactive_tests/test_demo_memory_warning.tcl")
+}
+
+func TestDockerCLI_test_demo_networking(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_demo_networking", "../cli/interactive_tests/test_demo_networking.tcl")
 }
 
 func TestDockerCLI_test_demo_node_cmds(t *testing.T) {

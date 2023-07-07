@@ -5,7 +5,7 @@ source [file join [file dirname $argv0] common.tcl]
 set ::env(COCKROACH_INSECURE) "false"
 set python "python2.7"
 
-spawn $argv demo --empty --no-line-editor --multitenant=true
+spawn $argv demo --empty --no-line-editor --multitenant=true --log-dir=logs
 eexpect "Welcome"
 
 start_test "Check that the cli connect instructions get printed out."
@@ -183,7 +183,7 @@ set spawn_id $demo_spawn_id
 send "\\q\r"
 eexpect eof
 
-spawn $argv demo --empty --no-line-editor --multitenant=true
+spawn $argv demo --empty --no-line-editor --multitenant=true --log-dir=logs
 set demo_spawn_id $spawn_id
 eexpect "Welcome"
 eexpect "defaultdb>"
@@ -208,7 +208,7 @@ eexpect eof
 
 
 start_test "Check that the warning for the system tenant is not printed when there are no secondary tenants"
-spawn $argv demo --empty --no-line-editor --multitenant=false
+spawn $argv demo --empty --no-line-editor --multitenant=false --log-dir=logs
 eexpect "Welcome"
 expect {
     "ATTENTION: YOU ARE CONNECTED TO THE SYSTEM TENANT" { exit 1 }

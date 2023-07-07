@@ -9,7 +9,7 @@ start_test "Check --global flag runs as expected"
 
 # Start a demo with --global set
 # TODO(ajstorm): Disable multitenancy until #76305 is resolved.
-spawn $argv demo --no-line-editor --no-example-database --nodes 9 --global --multitenant=false --insecure
+spawn $argv demo --no-line-editor --no-example-database --nodes 9 --global --multitenant=false --insecure --log-dir=logs
 
 # Ensure db is defaultdb.
 eexpect "defaultdb>"
