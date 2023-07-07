@@ -3,7 +3,7 @@
 subtest select_for_update
 
 # SELECT FOR UPDATE is prohibited under weaker isolation levels until we improve
-# locking. See #57031, #75457, #100144.
+# locking. See #57031, #75457, #100144, #100193.
 
 statement ok
 CREATE TABLE supermarket (

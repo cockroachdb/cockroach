@@ -1,0 +1,119 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE jars (j INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE cookies (c INT PRIMARY KEY, j INT REFERENCES jars (j))
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Foreign key checks of the parent require durable shared locking under weaker
+# isolation levels.
+query T
+EXPLAIN (OPT) INSERT INTO cookies VALUES (1, 1)
+----
+insert cookies
+ ├── values
+ │    └── (1, 1)
+ └── f-k-checks
+      └── f-k-checks-item: cookies(j) -> jars(j)
+           └── anti-join (lookup jars)
+                ├── lookup columns are key
+                ├── locking: for-share,durability-guaranteed
+                ├── with-scan &1
+                └── filters (true)
+
+# Under serializable isolation, locking is not required, unless
+# enable_implicit_fk_locking_for_serializable is true.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+query T
+EXPLAIN (OPT) INSERT INTO cookies VALUES (1, 1)
+----
+insert cookies
+ ├── values
+ │    └── (1, 1)
+ └── f-k-checks
+      └── f-k-checks-item: cookies(j) -> jars(j)
+           └── anti-join (lookup jars)
+                ├── lookup columns are key
+                ├── with-scan &1
+                └── filters (true)
+
+statement ok
+SET enable_implicit_fk_locking_for_serializable = true
+
+query T
+EXPLAIN (OPT) INSERT INTO cookies VALUES (1, 1)
+----
+insert cookies
+ ├── values
+ │    └── (1, 1)
+ └── f-k-checks
+      └── f-k-checks-item: cookies(j) -> jars(j)
+           └── anti-join (lookup jars)
+                ├── lookup columns are key
+                ├── locking: for-share
+                ├── with-scan &1
+                └── filters (true)
+
+statement ok
+RESET enable_implicit_fk_locking_for_serializable
+
+statement ok
+COMMIT
+
+query T
+EXPLAIN (OPT) UPDATE cookies SET j = 2 WHERE c = 1
+----
+update cookies
+ ├── project
+ │    ├── scan cookies
+ │    │    └── constraint: /5: [/1 - /1]
+ │    └── projections
+ │         └── 2
+ └── f-k-checks
+      └── f-k-checks-item: cookies(j) -> jars(j)
+           └── anti-join (lookup jars)
+                ├── lookup columns are key
+                ├── locking: for-share,durability-guaranteed
+                ├── with-scan &1
+                └── filters (true)
+
+# Foreign key checks of the child do not require locking.
+query T
+EXPLAIN (OPT) UPDATE jars SET j = j + 4
+----
+update jars
+ ├── project
+ │    ├── scan jars
+ │    └── projections
+ │         └── jars.j + 4
+ └── f-k-checks
+      └── f-k-checks-item: cookies(j) -> jars(j)
+           └── project
+                └── inner-join (hash)
+                     ├── except-all
+                     │    ├── with-scan &1
+                     │    └── with-scan &1
+                     ├── distinct-on
+                     │    └── scan cookies
+                     └── filters
+                          └── j = cookies.j
+
+query T
+EXPLAIN (OPT) DELETE FROM jars WHERE j = 1
+----
+delete jars
+ ├── scan jars
+ │    └── constraint: /4: [/1 - /1]
+ └── f-k-checks
+      └── f-k-checks-item: cookies(j) -> jars(j)
+           └── semi-join (hash)
+                ├── with-scan &1
+                ├── scan cookies
+                └── filters
+                     └── j = cookies.j
