@@ -638,6 +638,7 @@ func (c *SyncedCluster) Monitor(
 	ch := make(chan NodeMonitorInfo)
 	nodes := c.TargetNodes()
 	var wg sync.WaitGroup
+	monitorCtx, cancel := context.WithCancel(ctx)
 
 	for i := range nodes {
 		wg.Add(1)
@@ -758,9 +759,10 @@ done
 				return
 			}
 
-			// Watch for context cancellation.
+			// Watch for context cancellation, which can happen either if
+			// the test fails, or if the monitor loop exits.
 			go func() {
-				<-ctx.Done()
+				<-monitorCtx.Done()
 				sess.Close()
 			}()
 
@@ -776,6 +778,7 @@ done
 	}
 	go func() {
 		wg.Wait()
+		cancel()
 		close(ch)
 	}()
 

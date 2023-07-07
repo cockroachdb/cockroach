@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -34,7 +35,8 @@ func TestShowTraceReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 98598)
+	skip.UnderStressRace(t) // too slow
+	skip.UnderDeadlock(t)   // too slow
 
 	const numNodes = 4
 
@@ -44,6 +46,7 @@ func TestShowTraceReplica(t *testing.T) {
 	ctx := context.Background()
 	tsArgs := func(node string) base.TestServerArgs {
 		return base.TestServerArgs{
+			ScanMaxIdleTime: 10 * time.Millisecond, // speed up replicate queue
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DefaultZoneConfigOverride:       &zoneConfig,
