@@ -159,6 +159,8 @@ go_library(
         "//pkg/obsservice/obslib/ingest",
         "//pkg/obsservice/obslib/migrations",
         "//pkg/obsservice/obslib/obsutil",
+        "//pkg/obsservice/obslib/router",
+        "//pkg/obsservice/obspb",
         "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
         "//pkg/roachpb",
         "//pkg/rpc",
