@@ -37,6 +37,7 @@ go_library(
         "show_trace.go",
         "sql_fn.go",
         "srfs.go",
+        "statement_tree.go",
         "subquery.go",
         "union.go",
         "update.go",
@@ -105,6 +106,7 @@ go_test(
     srcs = [
         "builder_test.go",
         "name_resolution_test.go",
+        "statement_tree_test.go",
         "union_test.go",
     ],
     args = ["-test.timeout=55s"],
@@ -114,6 +116,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/colinfo/colinfotestutils",
+        "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/opttester",

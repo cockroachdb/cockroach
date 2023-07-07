@@ -1052,7 +1052,7 @@ SELECT i, j FROM u@u_j_idx
 
 # Multiple upserts of the same row. Might succeed after issue 70731 is fixed,
 # depending on the implementation, but should not cause corruption.
-query error pgcode 0A000 multiple modification subqueries of the same table
+query error pgcode 0A000 multiple mutations of the same table
 WITH
   v AS (UPSERT INTO u VALUES (0, 1) RETURNING *),
   w AS (UPSERT INTO u SELECT i, j + 1 FROM v RETURNING *)
@@ -1071,7 +1071,7 @@ SELECT i, j FROM u@u_j_idx
 # Multiple updates of the same row. Might succeed after issue 70731 is fixed,
 # depending on the implementation, but should not cause corruption. The order of
 # CTE execution is not necessarily defined here.
-query error pgcode 0A000 multiple modification subqueries of the same table
+query error pgcode 0A000 multiple mutations of the same table
 WITH
   v AS (UPDATE u SET j = 3 WHERE i = 0 RETURNING *),
   w AS (UPDATE u SET j = 4 WHERE i = 0 RETURNING *)
@@ -1090,7 +1090,7 @@ SELECT i, j FROM u@u_j_idx
 # Multiple updates of the same row. Might succeed after issue 70731 is fixed,
 # depending on the implementation, but should not cause corruption. The order of
 # CTE execution should be deterministic.
-query error pgcode 0A000 multiple modification subqueries of the same table
+query error pgcode 0A000 multiple mutations of the same table
 WITH
   v AS (UPDATE u SET j = 5 WHERE i = 0 RETURNING *),
   w AS (UPDATE u SET j = v.j + 1 FROM v WHERE u.i = v.i RETURNING *)
@@ -1108,7 +1108,7 @@ SELECT i, j FROM u@u_j_idx
 
 # Multiple inserts of the same row into the same table, most should become
 # updates due to conflicts. Might succeed after issue 70731 is fixed.
-query error pgcode 0A000 multiple modification subqueries of the same table
+query error pgcode 0A000 multiple mutations of the same table
 WITH
   v AS (INSERT INTO u VALUES (0, 42), (1, 42) ON CONFLICT (i) DO UPDATE SET j = 52 RETURNING *)
 INSERT INTO u SELECT i, j + 1 FROM v ON CONFLICT (i) DO UPDATE SET j = v.j + 100 RETURNING *
@@ -1125,7 +1125,7 @@ SELECT i, j FROM u@u_j_idx
 
 # Multiple deletes of the same row. Might succeed after issue 70731 is fixed,
 # though the order of CTE execution is undefined.
-query error pgcode 0A000 multiple modification subqueries of the same table
+query error pgcode 0A000 multiple mutations of the same table
 WITH
   v AS (DELETE FROM u ORDER BY i LIMIT 1 RETURNING *),
   w AS (DELETE FROM u ORDER BY i LIMIT 2 RETURNING *)

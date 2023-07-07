@@ -68,8 +68,10 @@ SELECT f2(5,32);
 ----
 (5,32)
 
-statement error pq: multiple modification subqueries of the same table \"t\" are not supported
+query TT
 SELECT f2(5,9), f2(7,11);
+----
+(5,9)  (7,11)
 
 query T nosort
 SELECT f2(x,y) FROM (VALUES (1,16),(1,17)) v(x,y);
@@ -80,10 +82,10 @@ SELECT f2(x,y) FROM (VALUES (1,16),(1,17)) v(x,y);
 query II rowsort
 SELECT * FROM t;
 ----
-1 17
-3 4
-5 32
-7 8
+1  17
+3  4
+5  9
+7  11
 
 statement ok
 CREATE TABLE t2 (a INT, b INT, c INT);
