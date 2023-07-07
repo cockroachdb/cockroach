@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -495,6 +497,31 @@ const (
 
 // DecodeKV decodes key value at specified schema timestamp.
 func (d *eventDecoder) DecodeKV(
+	ctx context.Context, kv roachpb.KeyValue, rt RowType, schemaTS hlc.Timestamp, keyOnly bool,
+) (Row, error) {
+	r, err := d.decodeKV(ctx, kv, rt, schemaTS, keyOnly)
+	if err == nil {
+		return r, nil
+	}
+
+	// Failure to decode roachpb.KeyValue we received from rangefeed is pretty bad.
+	// At this point, we only have guesses why this happened (schema change? data corruption?).
+	// Retrying this error however is likely to produce exactly the same result.
+	// So, be loud and treat this error as a terminal changefeed error.
+	kvBytes, marshalErr := protoutil.Marshal(&kv)
+	if marshalErr != nil {
+		// That's mighty surprising.  Just shove error message into kvBytes.
+		kvBytes = []byte(fmt.Sprintf("marshalErr<%s>", marshalErr.Error()))
+	}
+	err = changefeedbase.WithTerminalError(errors.Wrapf(err,
+		"error decoding key %s@%s (hex_kv: %x)",
+		keys.PrettyPrint(nil, kv.Key), kv.Value.Timestamp, kvBytes))
+	log.Errorf(ctx, "terminal error decoding KV: %v", err)
+	return Row{}, err
+}
+
+// decodeKV decodes key value at specified schema timestamp.
+func (d *eventDecoder) decodeKV(
 	ctx context.Context, kv roachpb.KeyValue, rt RowType, schemaTS hlc.Timestamp, keyOnly bool,
 ) (Row, error) {
 	if err := d.initForKey(ctx, kv.Key, schemaTS, keyOnly); err != nil {
