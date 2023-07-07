@@ -5284,6 +5284,7 @@ enable_auto_rehoming                                       off
 enable_create_stats_using_extremes                         off
 enable_drop_enum_value                                     on
 enable_experimental_alter_column_type_general              off
+enable_implicit_fk_locking                                 off
 enable_implicit_select_for_update                          on
 enable_implicit_transaction_for_batch_statements           on
 enable_insert_fast_path                                    on

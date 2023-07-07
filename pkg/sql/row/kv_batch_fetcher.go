@@ -280,7 +280,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		scanFormat:                 kvpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
 		lockStrength:               GetKeyLockingStrength(args.lockStrength),
-		lockWaitPolicy:             getWaitPolicy(args.lockWaitPolicy),
+		lockWaitPolicy:             GetWaitPolicy(args.lockWaitPolicy),
 		lockTimeout:                args.lockTimeout,
 		acc:                        args.acc,
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,

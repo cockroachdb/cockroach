@@ -865,6 +865,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			ob.Attr(
 				"FK check", fmt.Sprintf("%s@%s", fk.ReferencedTable.Name(), fk.ReferencedIndex.Name()),
 			)
+			e.emitLockingPolicyWithPrefix("FK check ", fk.Locking)
 		}
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))

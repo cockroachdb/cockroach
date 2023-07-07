@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -612,13 +613,25 @@ func resolveTable(ctx context.Context, catalog cat.Catalog, id cat.StableID) cat
 }
 
 // buildOtherTableScan builds a Scan of the "other" table.
-func (h *fkCheckHelper) buildOtherTableScan() (outScope *scope, tabMeta *opt.TableMeta) {
+func (h *fkCheckHelper) buildOtherTableScan(parent bool) (outScope *scope, tabMeta *opt.TableMeta) {
+	locking := noRowLocking
+	if parent && (h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+		h.mb.b.evalCtx.SessionData().ImplicitFKLocking) {
+		locking = lockingSpec{
+			&tree.LockingItem{
+				// TODO(michae2): Change this to ForKeyShare when it is supported.
+				Strength:   tree.ForShare,
+				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(h.otherTab.Name())},
+				WaitPolicy: tree.LockWaitBlock,
+			},
+		}
+	}
 	otherTabMeta := h.mb.b.addTable(h.otherTab, tree.NewUnqualifiedTableName(h.otherTab.Name()))
 	return h.mb.b.buildScan(
 		otherTabMeta,
 		h.otherTabOrdinals,
 		&tree.IndexFlags{IgnoreForeignKeys: true},
-		noRowLocking,
+		locking,
 		h.mb.b.allocScope(),
 		true, /* disableNotVisibleIndex */
 	), otherTabMeta
@@ -709,8 +722,7 @@ func (h *fkCheckHelper) buildInsertionCheck() memo.FKChecksItem {
 
 	// Build an anti-join, with the origin FK columns on the left and the
 	// referenced columns on the right.
-
-	scanScope, refTabMeta := h.buildOtherTableScan()
+	scanScope, refTabMeta := h.buildOtherTableScan(true /* parent */)
 
 	// Build the join filters:
 	//   (origin_a = referenced_a) AND (origin_b = referenced_b) AND ...
@@ -748,7 +760,7 @@ func (h *fkCheckHelper) buildDeletionCheck(
 ) memo.FKChecksItem {
 	// Build a semi join, with the referenced FK columns on the left and the
 	// origin columns on the right.
-	scanScope, origTabMeta := h.buildOtherTableScan()
+	scanScope, origTabMeta := h.buildOtherTableScan(false /* parent */)
 
 	// Note that it's impossible to orphan a row whose FK key columns contain a
 	// NULL, since by definition a NULL never refers to an actual row (in

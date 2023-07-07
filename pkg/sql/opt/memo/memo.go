@@ -168,6 +168,7 @@ type Memo struct {
 	alwaysUseHistograms                        bool
 	hoistUncorrelatedEqualitySubqueries        bool
 	useImprovedComputedColumnFiltersDerivation bool
+	implicitFKLocking                          bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -234,6 +235,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		alwaysUseHistograms:                        evalCtx.SessionData().OptimizerAlwaysUseHistograms,
 		hoistUncorrelatedEqualitySubqueries:        evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries,
 		useImprovedComputedColumnFiltersDerivation: evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation,
+		implicitFKLocking:                          evalCtx.SessionData().ImplicitFKLocking,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -380,6 +382,7 @@ func (m *Memo) IsStale(
 		m.alwaysUseHistograms != evalCtx.SessionData().OptimizerAlwaysUseHistograms ||
 		m.hoistUncorrelatedEqualitySubqueries != evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries ||
 		m.useImprovedComputedColumnFiltersDerivation != evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation ||
+		m.implicitFKLocking != evalCtx.SessionData().ImplicitFKLocking ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
