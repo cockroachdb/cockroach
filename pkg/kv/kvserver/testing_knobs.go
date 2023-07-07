@@ -298,7 +298,10 @@ type StoreTestingKnobs struct {
 	// ReceiveSnapshot is run after receiving a snapshot header but before
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
-	ReceiveSnapshot func(*kvserverpb.SnapshotRequest_Header) error
+	ReceiveSnapshot func(context.Context, *kvserverpb.SnapshotRequest_Header) error
+	// HandleSnapshotDone is run after the entirety of receiving a snapshot,
+	// regardless of whether it succeeds, gets cancelled, times out, or errors.
+	HandleSnapshotDone func()
 	// ReplicaAddSkipLearnerRollback causes replica addition to skip the learner
 	// rollback that happens when either the initial snapshot or the promotion of
 	// a learner to a voter fails.
@@ -428,9 +431,12 @@ type StoreTestingKnobs struct {
 	// BeforeSendSnapshotThrottle intercepts replicas before entering send
 	// snapshot throttling.
 	BeforeSendSnapshotThrottle func()
-	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
-	// send snapshot semaphore.
-	AfterSendSnapshotThrottle func()
+	// AfterSnapshotThrottle intercepts replicas after receiving a spot in the
+	// send/recv snapshot semaphore.
+	AfterSnapshotThrottle func()
+	// BeforeRecvAcceptedSnapshot intercepts replicas before receiving the batches
+	// of a reserved and accepted snapshot.
+	BeforeRecvAcceptedSnapshot func()
 	// SelectDelegateSnapshotSender returns an ordered list of replica which will
 	// be used as delegates for sending a snapshot.
 	SelectDelegateSnapshotSender func(*roachpb.RangeDescriptor) []roachpb.ReplicaDescriptor
