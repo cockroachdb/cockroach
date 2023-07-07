@@ -4164,3 +4164,14 @@ query I
 SELECT count(*) FROM child80828
 ----
 0
+
+# See #104546 which was a regression when an invalid column name was specified,
+# when adding a FK reference.
+subtest unknown_column_name
+
+statement ok
+create table t104546 (a int primary key);
+create table t104546_fk_src (a int primary key, b int);
+
+statement error pgcode 42703 column "b" does not exist
+alter table t104546 add constraint con foreign key (b) references t104546_fk_src(b);

@@ -564,10 +564,7 @@ func addColumnsForSecondaryIndex(
 				expressionTelemtryCounted = true
 			}
 		}
-		colID := getColumnIDFromColumnName(b, tableID, colName)
-		if colID == 0 {
-			panic(colinfo.NewUndefinedColumnError(string(colName)))
-		}
+		colID := getColumnIDFromColumnName(b, tableID, colName, true /* required */)
 		columnTypeElem := mustRetrieveColumnTypeElem(b, tableID, colID)
 		columnElem := mustRetrieveColumnElem(b, tableID, colID)
 		// Column should be accessible.
