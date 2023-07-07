@@ -219,6 +219,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
           renderError={() =>
             LoadingError({
               statsType: "statements",
+              error: sessionsError,
             })
           }
         >

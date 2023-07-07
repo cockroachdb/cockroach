@@ -597,6 +597,7 @@ export class TransactionDetails extends React.Component<
           renderError={() =>
             LoadingError({
               statsType: "transactions",
+              error: error,
             })
           }
         />

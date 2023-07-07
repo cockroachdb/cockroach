@@ -625,9 +625,7 @@ export class IndexDetailsPage extends React.Component<
                     renderError={() =>
                       LoadingError({
                         statsType: "statements",
-                        timeout: this.state.lastStatementsError?.message
-                          ?.toLowerCase()
-                          .includes("timeout"),
+                        error: this.state.lastStatementsError,
                       })
                     }
                   >

@@ -18,3 +18,12 @@
   display: flex;
   flex-direction: row;
 }
+
+.row-small {
+  display: flex;
+  flex-direction: row;
+  font-size:xx-small;
+  color:$colors--neutral-5;
+  max-width: 450px;
+  line-height: 15px;
+}
