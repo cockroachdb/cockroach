@@ -299,11 +299,22 @@ type granterWithStoreReplicatedWorkAdmitted interface {
 	// inform granters of when the write was actually done, post-admission. At
 	// admit-time we did not have sizing info for these writes, so by
 	// intercepting these writes at admit time we're able to make any
-	// outstanding token adjustments in the granter.
+	// outstanding token adjustments in the granter. When adjusting tokens, if
+	// we observe the granter was previously exhausted but is now no longer so,
+	// this interface is allowed to admit other waiting requests.
 	storeWriteDone(originalTokens int64, doneInfo StoreWorkDoneInfo) (additionalTokens int64)
 	// storeReplicatedWorkAdmittedLocked is used by below-raft admission control
 	// to inform granters of work being admitted in order for them to make any
 	// outstanding token adjustments. It's invoked with the coord.mu held.
+	// Unlike storeWriteDone, the token adjustments don't result in further
+	// admission. There are two callsites to get here:
+	// - From (*WorkQueue).granted, invoked in the GrantCoordinator loop. The
+	//   caller itself is looping, so we don't grant further admission. If we
+	//   did, our recursive callstack could be as large as the number of waiting
+	//   requests.
+	// - The fast path in (*WorkQueue).Admit, invoked by the work seeking
+	//   admission that only wants to subtract tokens. Here again there's no
+	//   need for further admission.
 	storeReplicatedWorkAdmittedLocked(originalTokens int64, admittedInfo storeReplicatedWorkAdmittedInfo) (additionalTokens int64)
 }
 
