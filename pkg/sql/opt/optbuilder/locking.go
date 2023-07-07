@@ -78,12 +78,6 @@ func (lm lockingSpec) get() opt.Locking {
 		return opt.Locking{
 			Strength:   spec.Strength,
 			WaitPolicy: spec.WaitPolicy,
-			// We use fully-durable locks for all SELECT FOR UPDATE statements,
-			// regardless of locking strength and wait policy. Unlike mutation
-			// statements, SELECT FOR UPDATE statements do not lay down intents, so we
-			// cannot rely on the durability of intents to guarantee exclusion until
-			// commit as we do for mutation statements.
-			Durability: tree.LockDurabilityGuaranteed,
 		}
 	}
 	return opt.Locking{}
