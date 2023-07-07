@@ -212,11 +212,23 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	t.Status("intentionally leaving the second tenant 11 server on the old binary")
 
-	// Note that here we'd like to validate that the tenant 11 servers can still
-	// query the storage cluster. The problem however, is that due to #88927,
-	// they can't because they're at different binary versions. Once #88927 is
-	// fixed, we should add checks in here that we're able to query from tenant
-	// 11 servers.
+	t.Status("verify first tenant 11 server works with the new binary")
+	{
+		verifySQL(t, tenant11a.pgURL,
+			mkStmt(`SELECT * FROM foo LIMIT 1`).
+				withResults([][]string{{"1", "bar"}}),
+			mkStmt("SHOW CLUSTER SETTING version").
+				withResults([][]string{{initialVersion}}))
+	}
+
+	t.Status("verify second tenant 11 server still works with the old binary")
+	{
+		verifySQL(t, tenant11b.pgURL,
+			mkStmt(`SELECT * FROM foo LIMIT 1`).
+				withResults([][]string{{"1", "bar"}}),
+			mkStmt("SHOW CLUSTER SETTING version").
+				withResults([][]string{{initialVersion}}))
+	}
 
 	t.Status("attempting to upgrade tenant 11 before storage cluster is finalized and expecting a failure")
 	expectErr(t, tenant11a.pgURL,
@@ -242,15 +254,6 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 HINT: check the binary versions of all running SQL server instances to ensure that they are compatible with the attempted upgrade version`, predecessorVersion, finalVersion),
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
-	// Note that here we'd like to validate that the first tenant 11 server can
-	// query the storage cluster. The problem however, is that due to #88927,
-	// they can't because they're at different DistSQL versions. We plan to never change
-	// the DistSQL version again so once we have 23.1 images to test against we should
-	// add a check in here that we're able to query from tenant 11 first server.
-	t.Status("stop the second tenant 11 server and restart it on the new binary")
-	tenant11b.stop(ctx, t, c)
-	tenant11b.start(ctx, t, c, currentBinary)
-
 	t.Status("verify that the first tenant 11 server can now query the storage cluster")
 	{
 		verifySQL(t, tenant11a.pgURL,
@@ -259,6 +262,10 @@ HINT: check the binary versions of all running SQL server instances to ensure th
 			mkStmt("SHOW CLUSTER SETTING version").
 				withResults([][]string{{initialVersion}}))
 	}
+
+	t.Status("stop the second tenant 11 server and restart it on the new binary")
+	tenant11b.stop(ctx, t, c)
+	tenant11b.start(ctx, t, c, currentBinary)
 
 	t.Status("verify the second tenant 11 server works with the new binary")
 	{
