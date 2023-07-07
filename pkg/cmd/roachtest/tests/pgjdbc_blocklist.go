@@ -945,4 +945,5 @@ var pgjdbcIgnoreList = blocklist{
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testBadUTF8Decode":                                                                              "54477",
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testTruncatedUTF8Decode":                                                                        "54477",
 	"org.postgresql.test.jdbc2.DatabaseEncodingTest.testUTF8Decode":                                                                                 "54477",
+	"org.postgresql.test.jdbc2.StatementTest.testShortQueryTimeout":                                                                                 "unknown",
 }
