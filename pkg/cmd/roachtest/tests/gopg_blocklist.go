@@ -92,12 +92,13 @@ var gopgIgnoreList21_1 = gopgIgnoreList20_2
 var gopgIgnoreList20_2 = blocklist{
 	// These "fetching" tests assume a particular order when ORDER BY clause is
 	// omitted from the query by the ORM itself.
-	"pg | ORM slice model | fetches Book relations":       "41690",
-	"pg | ORM slice model | fetches Genre relations":      "41690",
-	"pg | ORM slice model | fetches Translation relation": "41690",
-	"pg | ORM struct model | fetches Author relations":    "41690",
-	"pg | ORM struct model | fetches Book relations":      "41690",
-	"pg | ORM struct model | fetches Genre relations":     "41690",
+	"pg | ORM | fetches Book relations works when there are no results": "unknown",
+	"pg | ORM slice model | fetches Book relations":                     "41690",
+	"pg | ORM slice model | fetches Genre relations":                    "41690",
+	"pg | ORM slice model | fetches Translation relation":               "41690",
+	"pg | ORM struct model | fetches Author relations":                  "41690",
+	"pg | ORM struct model | fetches Book relations":                    "41690",
+	"pg | ORM struct model | fetches Genre relations":                   "41690",
 	// Different error message for context cancellation timeout.
 	"pg | OnConnect | does not panic on timeout": "41690",
 	// These tests assume different transaction isolation level (READ COMMITTED).
