@@ -84,16 +84,16 @@ func TestCaseOp(t *testing.T) {
 			inputTypes: []*types.T{types.Int},
 		},
 	} {
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
-			caseOp, err := colexectestutils.CreateTestProjectingOperator(
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+			caseOp, closers, err := colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, inputs[0], tc.inputTypes, tc.renderExpr, testMemAcc,
 			)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			// We will project out the input columns in order to have test
 			// cases be less verbose.
-			return colexecbase.NewSimpleProjectOp(caseOp, len(tc.inputTypes)+1, []uint32{uint32(len(tc.inputTypes))}), nil
+			return colexecbase.NewSimpleProjectOp(caseOp, len(tc.inputTypes)+1, []uint32{uint32(len(tc.inputTypes))}), closers, nil
 		})
 	}
 }

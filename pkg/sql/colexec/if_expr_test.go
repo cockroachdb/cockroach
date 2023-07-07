@@ -76,16 +76,16 @@ func TestIfExprBasic(t *testing.T) {
 		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			t, testAllocator, []colexectestutils.Tuples{tc.tuples}, [][]*types.T{tc.inputTypes},
 			tc.expected, colexectestutils.OrderedVerifier,
-			func(inputs []colexecop.Operator) (colexecop.Operator, error) {
-				ifExprOp, err := colexectestutils.CreateTestProjectingOperator(
+			func(inputs []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+				ifExprOp, closers, err := colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, inputs[0], tc.inputTypes, tc.renderExpr, testMemAcc,
 				)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				// We will project out the input columns in order to have test
 				// cases be less verbose.
-				return colexecbase.NewSimpleProjectOp(ifExprOp, len(tc.inputTypes)+1, []uint32{uint32(len(tc.inputTypes))}), nil
+				return colexecbase.NewSimpleProjectOp(ifExprOp, len(tc.inputTypes)+1, []uint32{uint32(len(tc.inputTypes))}), closers, nil
 			},
 			// Random nulls injection can lead to a division by zero error in
 			// some test cases, so we want to skip it.

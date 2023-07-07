@@ -124,7 +124,7 @@ func TestIsNullProjOp(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
-		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
+		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
 				fmt.Sprintf("@1 %s", c.projExpr), testMemAcc,
@@ -231,7 +231,7 @@ func TestIsNullSelOp(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
-		opConstructor := func(sources []colexecop.Operator) (colexecop.Operator, error) {
+		opConstructor := func(sources []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
 			typs := []*types.T{types.Int}
 			spec := &execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},
@@ -249,9 +249,9 @@ func TestIsNullSelOp(t *testing.T) {
 			}
 			result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
-			return result.Root, nil
+			return result.Root, result.ToClose, nil
 		}
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
 	}

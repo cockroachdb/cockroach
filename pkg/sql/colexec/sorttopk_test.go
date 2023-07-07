@@ -113,8 +113,8 @@ func TestTopKSorter(t *testing.T) {
 
 	for _, tc := range topKSortTestCases {
 		log.Infof(context.Background(), "%s", tc.description)
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, tc.k, execinfra.DefaultMemoryLimit), nil
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, tc.k, execinfra.DefaultMemoryLimit), nil, nil
 		})
 	}
 }
@@ -157,8 +157,8 @@ func TestTopKSortRandomized(t *testing.T) {
 					log.Infof(ctx, "%s", name)
 					colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected[:k],
 						colexectestutils.OrderedVerifier,
-						func(input []colexecop.Operator) (colexecop.Operator, error) {
-							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k), execinfra.DefaultMemoryLimit), nil
+						func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, matchLen, uint64(k), execinfra.DefaultMemoryLimit), nil, nil
 						})
 				}
 			}

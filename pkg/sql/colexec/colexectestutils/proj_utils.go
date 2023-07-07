@@ -66,17 +66,17 @@ func CreateTestProjectingOperator(
 	inputTypes []*types.T,
 	projectingExpr string,
 	testMemAcc *mon.BoundAccount,
-) (colexecop.Operator, error) {
+) (colexecop.Operator, colexecop.Closers, error) {
 	expr, err := parser.ParseExpr(projectingExpr)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	p := &MockTypeContext{Typs: inputTypes}
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.IVarContainer = p
 	typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	renderExprs := make([]execinfrapb.Expression, len(inputTypes)+1)
 	for i := range inputTypes {
@@ -100,7 +100,7 @@ func CreateTestProjectingOperator(
 	}
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return result.Root, nil
+	return result.Root, result.ToClose, nil
 }

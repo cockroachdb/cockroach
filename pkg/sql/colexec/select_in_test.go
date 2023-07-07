@@ -74,7 +74,7 @@ func TestSelectInInt64(t *testing.T) {
 
 	for _, c := range testCases {
 		log.Infof(context.Background(), "%s", c.desc)
-		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
+		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
 			op := selectInOpInt64{
 				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
 				colIdx:         0,
@@ -82,7 +82,7 @@ func TestSelectInInt64(t *testing.T) {
 				negate:         c.negate,
 				hasNulls:       c.hasNulls,
 			}
-			return &op, nil
+			return &op, nil, nil
 		}
 		if !c.hasNulls || !c.negate {
 			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier, opConstructor)
@@ -217,7 +217,7 @@ func TestProjectInInt64(t *testing.T) {
 	for _, c := range testCases {
 		log.Infof(ctx, "%s", c.desc)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier,
-			func(input []colexecop.Operator) (colexecop.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], []*types.T{types.Int},
 					fmt.Sprintf("@1 %s", c.inClause), testMemAcc,

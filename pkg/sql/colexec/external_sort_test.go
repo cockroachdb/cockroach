@@ -81,7 +81,7 @@ func TestExternalSort(t *testing.T) {
 					[][]*types.T{tc.typs},
 					tc.expected,
 					colexectestutils.OrderedVerifier,
-					func(input []colexecop.Operator) (colexecop.Operator, error) {
+					func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
 						// A sorter should never exceed ExternalSorterMinPartitions, even
 						// during repartitioning. A panic will happen if a sorter requests
 						// more than this number of file descriptors.
@@ -102,7 +102,7 @@ func TestExternalSort(t *testing.T) {
 						// Check that the sort as well as the disk spiller were
 						// added as Closers.
 						require.Equal(t, 2, len(closers))
-						return sorter, err
+						return sorter, closers, err
 					})
 				for i, sem := range semsToCheck {
 					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
@@ -190,7 +190,7 @@ func TestExternalSortRandomized(t *testing.T) {
 						[]colexectestutils.Tuples{tups},
 						expected,
 						colexectestutils.OrderedVerifier,
-						func(input []colexecop.Operator) (colexecop.Operator, error) {
+						func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
 							sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 							semsToCheck = append(semsToCheck, sem)
 							sorter, closers, err := createDiskBackedSorter(
@@ -202,7 +202,7 @@ func TestExternalSortRandomized(t *testing.T) {
 							// TODO(asubiotto): Explicitly Close when testing.T is passed into
 							//  this constructor and we do a substring match.
 							require.Equal(t, 2, len(closers))
-							return sorter, err
+							return sorter, closers, err
 						})
 					for i, sem := range semsToCheck {
 						require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
@@ -312,7 +312,7 @@ func createDiskBackedSorter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, []colexecop.Closer, error) {
+) (colexecop.Operator, colexecop.Closers, error) {
 	sorterSpec := &execinfrapb.SorterSpec{
 		OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
 		OrderingMatchLen: uint32(matchLen),

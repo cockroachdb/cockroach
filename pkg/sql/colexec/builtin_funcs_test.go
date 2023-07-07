@@ -115,7 +115,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	for _, tc := range testCases {
 		log.Infof(ctx, "%s", tc.desc)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.inputTuples}, tc.outputTuples, colexectestutils.OrderedVerifier,
-			func(input []colexecop.Operator) (colexecop.Operator, error) {
+			func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, input[0], tc.inputTypes, tc.expr, testMemAcc,
 				)
@@ -168,10 +168,11 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 
 	typs := []*types.T{types.Int}
 	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-	op, err := colexectestutils.CreateTestProjectingOperator(
+	op, closers, err := colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, source, typs, "abs(@1)" /* projectingExpr */, testMemAcc,
 	)
 	require.NoError(b, err)
+	require.Nil(b, closers)
 	op.Init(ctx)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))

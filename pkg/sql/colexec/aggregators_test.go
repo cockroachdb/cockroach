@@ -824,7 +824,7 @@ func TestAggregators(t *testing.T) {
 				verifier = colexectestutils.UnorderedVerifier
 			}
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier,
-				func(input []colexecop.Operator) (colexecop.Operator, error) {
+				func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
 					args := &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
 						MemAccount:     testMemAcc,
@@ -837,7 +837,7 @@ func TestAggregators(t *testing.T) {
 						OutputTypes:    outputTypes,
 					}
 					args.TestingKnobs.HashTableNumBuckets = uint32(1 + rng.Intn(7))
-					return agg.new(ctx, args), nil
+					return agg.new(ctx, args), nil, nil
 				})
 		}
 	}

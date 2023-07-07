@@ -67,8 +67,8 @@ func TestLimit(t *testing.T) {
 	for _, tc := range tcs {
 		// The tuples consisting of all nulls still count as separate rows, so if
 		// we replace all values with nulls, we should get the same output.
-		colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, nil, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-			return NewLimitOp(input[0], tc.limit), nil
+		colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, nil, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, colexecop.Closers, error) {
+			return NewLimitOp(input[0], tc.limit), nil, nil
 		})
 	}
 }
