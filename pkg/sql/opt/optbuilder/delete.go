@@ -72,7 +72,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	b.checkPrivilege(depName, tab, privilege.SELECT)
 
 	// Check if this table has already been mutated in another subquery.
-	b.checkMultipleMutations(tab, false /* simpleInsert */)
+	b.checkMultipleMutations(tab, generalMutation)
 
 	var mb mutationBuilder
 	mb.init(b, "delete", tab, alias)

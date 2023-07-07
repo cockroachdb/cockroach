@@ -1620,3 +1620,122 @@ project
                      │                             │    └── false
                      │                             └── null
                      └── const: 1
+
+
+# --------------------------------------------------
+# UDFs with mutations.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION ups(x INT, y INT, z INT) RETURNS BOOL LANGUAGE SQL AS $$
+  UPSERT INTO abc VALUES (x, y, z);
+  SELECT true;
+$$
+----
+
+# A single UPSERT to abc is allowed.
+build format=hide-all
+SELECT ups(1, 2, 3)
+----
+project
+ ├── values
+ │    └── ()
+ └── projections
+      └── ups(1, 2, 3)
+
+# Multiple mutations to abc by the root statement and the UDF.
+build
+UPDATE abc SET c = 3 WHERE ups(1, 2, 3)
+----
+error (0A000): multiple mutations of the same table "abc" are not supported unless they all use INSERT without ON CONFLICT; this is to prevent data corruption, see documentation of sql.multiple_modifications_of_table.enabled
+
+# Multiple mutations to abc by the root statement and the UDF is allowed with
+# enable_multiple_modifications_of_table enabled.
+build set=enable_multiple_modifications_of_table=true
+UPDATE abc SET c = 3 WHERE ups(1, 2, 3)
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── c_new:23 => c:3
+ └── project
+      ├── columns: c_new:23!null a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      ├── select
+      │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    ├── scan abc
+      │    │    └── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
+      │    └── filters
+      │         └── ups(1, 2, 3)
+      └── projections
+           └── 3 [as=c_new:23]
+
+# Multiple mutations to abc by the root statement and the UDF.
+build
+WITH x AS (
+  SELECT a FROM abc WHERE ups(1, 2, 3)
+), y AS (
+  UPSERT INTO abc VALUES (4, 5, 6) RETURNING j
+)
+SELECT * FROM x
+----
+error (0A000): multiple mutations of the same table "abc" are not supported unless they all use INSERT without ON CONFLICT; this is to prevent data corruption, see documentation of sql.multiple_modifications_of_table.enabled
+
+exec-ddl
+CREATE FUNCTION upd_ups(x INT, y INT, z INT) RETURNS VOID LANGUAGE SQL AS $$
+  UPDATE abc SET c = 3 WHERE ups(x, y, z);
+$$
+----
+
+# Multiple mutations to abc by the two UDFs invoked.
+build
+SELECT upd_ups(1, 2, 3)
+----
+error (0A000): multiple mutations of the same table "abc" are not supported unless they all use INSERT without ON CONFLICT; this is to prevent data corruption, see documentation of sql.multiple_modifications_of_table.enabled
+
+# Multiple mutations to abc by the two UDFs invoked is allowed with
+# enabled_multiple_modifications_of_table enabled.
+build set=enable_multiple_modifications_of_table=true
+SELECT upd_ups(1, 2, 3)
+----
+project
+ ├── columns: upd_ups:27
+ ├── values
+ │    └── ()
+ └── projections
+      └── upd_ups(1, 2, 3) [as=upd_ups:27]
+
+exec-ddl
+CREATE FUNCTION ups2(a1 INT, b1 INT, c1 INT, a2 INT, b2 INT, c2 INT) RETURNS BOOL LANGUAGE SQL AS $$
+  UPSERT INTO abc VALUES (a1, b1, c1);
+  UPSERT INTO abc VALUES (a2, b2, c2);
+  SELECT true;
+$$
+----
+
+# Multiple mutations to abc in sibling statements in the UDF is allowed.
+build format=hide-all
+SELECT ups2(1, 2, 3, 4, 5, 6)
+----
+project
+ ├── values
+ │    └── ()
+ └── projections
+      └── ups2(1, 2, 3, 4, 5, 6)
+
+exec-ddl
+CREATE FUNCTION ups3(a1 INT, b1 INT, c1 INT, a2 INT, b2 INT, c2 INT) RETURNS BOOL LANGUAGE SQL AS $$
+  UPSERT INTO abc VALUES (a1, b1, c1);
+  SELECT ups(a2, b2, c2);
+$$
+----
+
+# Multiple mutations to abc in sibling statements in the UDF is allowed.
+build format=hide-all
+SELECT ups3(1, 2, 3, 4, 5, 6)
+----
+project
+ ├── values
+ │    └── ()
+ └── projections
+      └── ups3(1, 2, 3, 4, 5, 6)
