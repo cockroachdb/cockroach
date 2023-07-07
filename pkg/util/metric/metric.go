@@ -206,6 +206,29 @@ func HdrEnabled() bool {
 	return hdrEnabled
 }
 
+// useNativeHistogramsEnvVar can be used to enable the Prometheus native
+// histogram feature, which represents a histogram as a single time series
+// rather than a collection of per-bucket counter series. If enabled, both
+// conventional and native histograms are exported.
+const useNativeHistogramsEnvVar = "COCKROACH_ENABLE_PROMETHEUS_NATIVE_HISTOGRAMS"
+
+var nativeHistogramsEnabled = envutil.EnvOrDefaultBool(useNativeHistogramsEnvVar, false)
+
+// nativeHistogramsBucketFactorEnvVar can be used to override the default
+// bucket size exponential factor for Prometheus native histograms, if enabled.
+// If not set, use the default factor of 1.1.
+const nativeHistogramsBucketFactorEnvVar = "COCKROACH_PROMETHEUS_NATIVE_HISTOGRAMS_BUCKET_FACTOR"
+
+var nativeHistogramsBucketFactor = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketFactorEnvVar, 1.1)
+
+// nativeHistogramsBucketCountMultiplierEnvVar can be used to override the
+// default maximum bucket count for Prometheus native histograms, if enabled.
+// The maximum bucket count is set to the number of conventional buckets for
+// the histogram metric multiplied by the multiplier, which defaults to 1.0.
+const nativeHistogramsBucketCountMultiplierEnvVar = "COCKROACH_PROMETHEUS_NATIVE_HISTOGRAMS_BUCKET_COUNT_MULTIPLIER"
+
+var nativeHistogramsBucketCountMultiplier = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketCountMultiplierEnvVar, 1)
+
 type HistogramMode byte
 
 const (
@@ -282,6 +305,10 @@ func newHistogram(
 	}
 	opts := prometheus.HistogramOpts{
 		Buckets: buckets,
+	}
+	if bucketConfig.distribution == Exponential && nativeHistogramsEnabled {
+		opts.NativeHistogramBucketFactor = nativeHistogramsBucketFactor
+		opts.NativeHistogramMaxBucketNumber = uint32(float64(len(buckets)) * nativeHistogramsBucketCountMultiplier)
 	}
 	cum := prometheus.NewHistogram(opts)
 	h := &Histogram{

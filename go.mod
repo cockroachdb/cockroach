@@ -11,7 +11,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/mock v1.6.0
-	github.com/golang/protobuf v1.5.2
+	github.com/golang/protobuf v1.5.3
 	github.com/golang/snappy v0.0.4
 	github.com/google/btree v1.0.1
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
@@ -22,7 +22,7 @@ require (
 	golang.org/x/mod v0.11.0 // indirect
 	golang.org/x/net v0.10.0
 	golang.org/x/oauth2 v0.5.0
-	golang.org/x/sync v0.1.0
+	golang.org/x/sync v0.2.0
 	golang.org/x/sys v0.8.0
 	golang.org/x/text v0.9.0
 	golang.org/x/time v0.1.0
@@ -30,7 +30,7 @@ require (
 	google.golang.org/api v0.110.0
 	google.golang.org/genproto v0.0.0-20230227214838-9b19f0bdc514
 	google.golang.org/grpc v1.53.0
-	google.golang.org/protobuf v1.28.1
+	google.golang.org/protobuf v1.30.0
 )
 
 // If any of the following dependencies get updated as a side-effect
@@ -198,9 +198,9 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/pressly/goose/v3 v3.5.3
-	github.com/prometheus/client_golang v1.12.1
-	github.com/prometheus/client_model v0.2.1-0.20210607210712-147c58e9608a
-	github.com/prometheus/common v0.32.1
+	github.com/prometheus/client_golang v1.16.0
+	github.com/prometheus/client_model v0.3.0
+	github.com/prometheus/common v0.42.0
 	github.com/prometheus/prometheus v1.8.2-0.20210914090109-37468d88dce8
 	github.com/pseudomuto/protoc-gen-doc v1.3.2
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
@@ -285,7 +285,7 @@ require (
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/felixge/httpsnoop v1.0.1 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
-	github.com/go-kit/log v0.1.0 // indirect
+	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-logr/logr v1.2.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -369,7 +369,7 @@ require (
 	github.com/pkg/profile v1.6.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/pquerna/cachecontrol v0.0.0-20200921180117-858c6e7e6b7e // indirect
-	github.com/prometheus/procfs v0.7.3 // indirect
+	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/pseudomuto/protokit v0.2.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
@@ -444,3 +444,5 @@ replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
 
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c
+
+replace google.golang.org/protobuf => google.golang.org/protobuf v1.28.1

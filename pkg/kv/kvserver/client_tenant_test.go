@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,7 +104,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 			ex.ScrapeRegistry(store.Registry(), true /* includeChildMetrics */)
 		}
 		var in bytes.Buffer
-		if err := ex.ScrapeAndPrintAsText(&in, scrape); err != nil {
+		if err := ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape); err != nil {
 			t.Fatalf("failed to print prometheus data: %v", err)
 		}
 		if seen != 2 {
