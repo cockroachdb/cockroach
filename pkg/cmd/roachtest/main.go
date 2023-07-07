@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -531,6 +532,13 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
+	// Install goroutine leak checker and run it at the end of the entire test
+	// run. If a test is leaking a goroutine, then it will likely be still around.
+	// We could diff goroutine snapshots before/after each executed test, but that
+	// could yield false positives; e.g., user-specified test teardown goroutines
+	// may still be running long after the test has completed.
+	defer leaktest.AfterTest(l)()
+
 	err := runner.Run(
 		ctx, specs, cfg.count, cfg.parallelism, opt,
 		testOpts{
@@ -545,11 +553,6 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	// kills the process.
 	l.PrintfCtx(ctx, "runTests destroying all clusters")
 	cr.destroyAllClusters(context.Background(), l)
-
-	// Dump all stacks to the build log.
-	// N.B. we expect no user-defined goroutines to be running at this point.
-	// In the future, we can enforce a leak check, analogous to leaktest.AfterTest
-	fmt.Fprintf(os.Stderr, "all stacks:\n\n%s\n", allstacks.Get())
 
 	if teamCity {
 		// Collect the runner logs.
@@ -603,13 +606,11 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 		select {
 		case <-sig:
 			shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting. Cluster might be left behind.")
-			fmt.Fprintf(os.Stderr, "all stacks:\n\n%s\n", allstacks.Get())
-			os.Exit(2)
 		case <-destroyCh:
 			shout(ctx, l, os.Stderr, "Done destroying all clusters.")
-			fmt.Fprintf(os.Stderr, "all stacks:\n\n%s\n", allstacks.Get())
-			os.Exit(2)
 		}
+		l.Printf("all stacks:\n\n%s\n", allstacks.Get())
+		os.Exit(2)
 	}()
 }
 

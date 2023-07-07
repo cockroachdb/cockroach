@@ -101,17 +101,26 @@ var leakDetectorDisabled uint32
 // cycle.
 var PrintLeakedStoppers = func(t testing.TB) {}
 
+// T allows failing tests.
+type T interface {
+	Errorf(fmt string, args ...interface{})
+}
+
 // AfterTest snapshots the currently-running goroutines and returns a
 // function to be run at the end of tests to see whether any
 // goroutines leaked.
-func AfterTest(t testing.TB) func() {
+func AfterTest(t T) func() {
 	if atomic.LoadUint32(&leakDetectorDisabled) != 0 {
 		return func() {}
 	}
 
 	orig := interestingGoroutines()
 	return func() {
-		t.Helper()
+		if h, ok := t.(interface {
+			Helper()
+		}); ok {
+			h.Helper()
+		}
 		// If there was a panic, "leaked" goroutines are expected.
 		if r := recover(); r != nil {
 			// Inhibit the leak detector for future tests, in case someone (insanely?)
@@ -120,20 +129,24 @@ func AfterTest(t testing.TB) func() {
 			// the middle of another test's execution and trip the leak detector for
 			// that innocent test.
 			atomic.StoreUint32(&leakDetectorDisabled, 1)
-			t.Logf("panic: %s", r)
+			t.Errorf("panic: %s", r)
 			panic(r)
 		}
 
 		// If the test already failed, we don't pile on any more errors but we check
 		// to see if the leak detector should be disabled for future tests.
-		if t.Failed() {
+		if f, ok := t.(interface {
+			Failed() bool
+		}); ok && f.Failed() {
 			if err := diffGoroutines(orig); err != nil {
 				atomic.StoreUint32(&leakDetectorDisabled, 1)
 			}
 			return
 		}
 
-		PrintLeakedStoppers(t)
+		if tb, ok := t.(testing.TB); ok {
+			PrintLeakedStoppers(tb)
+		}
 
 		// Loop, waiting for goroutines to shut down.
 		// Wait up to 5 seconds, but finish as quickly as possible.
@@ -145,7 +158,7 @@ func AfterTest(t testing.TB) func() {
 					continue
 				}
 				atomic.StoreUint32(&leakDetectorDisabled, 1)
-				t.Error(err)
+				t.Errorf("%v", err)
 			}
 			break
 		}
