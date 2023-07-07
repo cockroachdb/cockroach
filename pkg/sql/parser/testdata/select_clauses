@@ -3069,3 +3069,11 @@ SELECT * FROM ROWS FROM (json_to_record('')) AS t (a "Nice Enum 📙", b STRING,
 SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t (a "Nice Enum 📙", b STRING, c foo) -- fully parenthesized
 SELECT * FROM ROWS FROM (json_to_record('_')) AS t (a "Nice Enum 📙", b STRING, c foo) -- literals removed
 SELECT * FROM ROWS FROM (json_to_record('')) AS _ (_ _, _ STRING, _ _) -- identifiers removed
+
+parse
+SELECT 123 AS OF FROM t
+----
+SELECT 123 AS of FROM t -- normalized!
+SELECT (123) AS of FROM t -- fully parenthesized
+SELECT _ AS of FROM t -- literals removed
+SELECT 123 AS _ FROM _ -- identifiers removed
