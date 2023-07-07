@@ -156,6 +156,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 	coord := &GrantCoordinator{
 		settings:       sgc.settings,
 		useGrantChains: false,
+		knobs:          sgc.knobs,
 	}
 	coord.mu.numProcs = 1
 
@@ -301,7 +302,11 @@ type GrantCoordinator struct {
 	// is too low. For testing queueing behavior, we do not want the enforcement
 	// to be turned off in a non-deterministic manner so add a testing flag to
 	// disable that feature.
+	//
+	// TODO(irfansharif): Fold into the testing knobs struct below.
 	testingDisableSkipEnforcement bool
+
+	knobs *TestingKnobs
 }
 
 var _ CPULoadListener = &GrantCoordinator{}
@@ -397,9 +402,13 @@ func NewGrantCoordinators(
 	metrics := makeGrantCoordinatorMetrics()
 	registry.AddMetricStruct(metrics)
 
+	if knobs == nil {
+		knobs = &TestingKnobs{}
+	}
+
 	return GrantCoordinators{
 		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry, onLogEntryAdmitted, knobs),
-		Regular: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry),
+		Regular: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry, knobs),
 		Elastic: makeElasticGrantCoordinator(ambientCtx, st, registry),
 	}
 }
@@ -438,9 +447,6 @@ func makeStoresGrantCoordinators(
 	onLogEntryAdmitted OnLogEntryAdmitted,
 	knobs *TestingKnobs,
 ) *StoreGrantCoordinators {
-	if knobs == nil {
-		knobs = &TestingKnobs{}
-	}
 	// These metrics are shared across all stores and broken down by priority for
 	// the common priorities.
 	// TODO(baptist): Add per-store metrics.
@@ -473,6 +479,7 @@ func makeRegularGrantCoordinator(
 	st *cluster.Settings,
 	metrics GrantCoordinatorMetrics,
 	registry *metric.Registry,
+	knobs *TestingKnobs,
 ) *GrantCoordinator {
 	makeRequester := makeWorkQueue
 	if opts.makeRequesterFunc != nil {
@@ -494,6 +501,7 @@ func makeRegularGrantCoordinator(
 		settings:                      st,
 		useGrantChains:                true,
 		testingDisableSkipEnforcement: opts.TestingDisableSkipEnforcement,
+		knobs:                         knobs,
 	}
 	coord.mu.grantChainID = 1
 	coord.mu.cpuOverloadIndicator = kvSlotAdjuster
@@ -893,6 +901,7 @@ func (coord *GrantCoordinator) tryGrantLocked() {
 OuterLoop:
 	for ; coord.mu.grantChainIndex < numWorkKinds; coord.mu.grantChainIndex++ {
 		localDone := false
+
 		granter := coord.granters[coord.mu.grantChainIndex]
 		if granter == nil {
 			// A GrantCoordinator can be limited to certain WorkKinds, and the
