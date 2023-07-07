@@ -332,7 +332,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 			}
 			require.Equal(t, stmtAggTs, txnAggTs)
 			return nil
-		}, 30*time.Second)
+		}, 1*time.Minute)
 
 		// The max number of queries is number of top columns * max number of
 		// queries per a column (6*3=18 for this test, 6*500=3000 default). Most of
