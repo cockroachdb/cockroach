@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/errors"
 )
 
@@ -102,10 +101,14 @@ func MarkRetryableError(cause error) error {
 	return errors.Mark(cause, &retryableError{})
 }
 
+type drainHelper interface {
+	IsDraining() bool
+}
+
 // AsTerminalError determines if the cause error is a terminal changefeed
 // error.  Returns non-nil error if changefeed should terminate with the
 // returned error.
-func AsTerminalError(ctx context.Context, lm *lease.Manager, cause error) (termErr error) {
+func AsTerminalError(ctx context.Context, dh drainHelper, cause error) (termErr error) {
 	if cause == nil {
 		return nil
 	}
@@ -116,7 +119,7 @@ func AsTerminalError(ctx context.Context, lm *lease.Manager, cause error) (termE
 		return err
 	}
 
-	if lm.IsDraining() {
+	if dh.IsDraining() {
 		// This node is being drained. It's safe to propagate this error (to the
 		// job registry) since job registry should not be able to commit this error
 		// to the jobs table; but to be safe, make sure this error is marked as jobs
@@ -131,6 +134,11 @@ func AsTerminalError(ctx context.Context, lm *lease.Manager, cause error) (termE
 
 	// Explicitly marked terminal errors are terminal.
 	if errors.Is(cause, &terminalError{}) {
+		return cause
+	}
+
+	// Assertion failures are terminal.
+	if errors.HasAssertionFailure(cause) {
 		return cause
 	}
 

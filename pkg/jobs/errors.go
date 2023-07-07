@@ -34,6 +34,11 @@ func MarkAsRetryJobError(err error) error {
 	return errors.Mark(err, errRetryJobSentinel)
 }
 
+// IsRetryJobError checks whether the given error is a job retry error.
+func IsRetryJobError(err error) bool {
+	return errors.Is(err, errRetryJobSentinel)
+}
+
 // Registry does not retry a job that fails due to a permanent error.
 var errJobPermanentSentinel = errors.New("permanent job error")
 
