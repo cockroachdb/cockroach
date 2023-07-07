@@ -317,7 +317,7 @@ func (node *ShowChangefeedJobs) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowSurvivalGoal represents a SHOW REGIONS statement
+// ShowSurvivalGoal represents a SHOW SURVIVAL GOAL statement
 type ShowSurvivalGoal struct {
 	DatabaseName Name
 }
