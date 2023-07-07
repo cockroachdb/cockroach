@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/obsservice/obslib",
         "//pkg/obsservice/obspb",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

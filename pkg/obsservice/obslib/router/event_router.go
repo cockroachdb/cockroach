@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,16 +37,19 @@ func (e *EventRouter) Consume(ctx context.Context, event *obspb.Event) error {
 	if event.Scope == nil {
 		// TODO(abarganier): track drop records due to validation errors such as
 		// this using metrics.
+		log.Errorf(ctx, "unable to route event, missing instrumentation scope: %v", event)
 		return errors.Newf("missing event InstrumentationScope: %v", event)
 	}
 	if route, ok := e.routes[obspb.EventType(event.Scope.Name)]; ok {
 		if err := route.Consume(ctx, event); err != nil {
-			return errors.Newf("consuming event: %v", err)
+			log.Errorf(ctx, "unable to consume event: %v", event)
+			return errors.Wrapf(err, "consuming event")
 		}
 	} else {
 		// TODO(abarganier): track drop records due to validation errors such as
 		// this using metrics.
-		return errors.Newf("router does not know how to route event type: %q", event.Scope)
+		log.Errorf(ctx, "router not equipped to handle event type: %s", event.Scope.Name)
+		return errors.Newf("router does not know how to route event type: %q", event.Scope.Name)
 	}
 	return nil
 }
