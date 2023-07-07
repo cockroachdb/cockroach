@@ -12,7 +12,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"sort"
 	"testing"
 	"time"
 
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -37,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -71,35 +68,6 @@ func getTestRandomClientURI(tenantID roachpb.TenantID, tenantName roachpb.Tenant
 	dupProbability := 0.2
 	return makeTestStreamURI(valueRange, kvsPerResolved, numPartitions, kvFrequency,
 		dupProbability, tenantID, tenantName)
-}
-
-func sstMaker(t *testing.T, keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable {
-	sort.Slice(keyValues, func(i, j int) bool {
-		return keyValues[i].Key.Compare(keyValues[j].Key) < 0
-	})
-	batchTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	kvs := make(storageutils.KVs, 0, len(keyValues))
-	for i, keyVal := range keyValues {
-		if i > 0 && keyVal.Key.Equal(keyValues[i-1].Key) {
-			continue
-		}
-		kvs = append(kvs, storage.MVCCKeyValue{
-			Key: storage.MVCCKey{
-				Key:       keyVal.Key,
-				Timestamp: batchTS,
-			},
-			Value: keyVal.Value.RawBytes,
-		})
-	}
-	data, start, end := storageutils.MakeSST(t, clustersettings.MakeTestingClusterSettings(), kvs)
-	return kvpb.RangeFeedSSTable{
-		Data: data,
-		Span: roachpb.Span{
-			Key:    start,
-			EndKey: end,
-		},
-		WriteTS: batchTS,
-	}
 }
 
 // streamClientValidatorWrapper wraps a Validator and exposes additional methods
@@ -198,7 +166,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	client.RegisterInterception(completeJobAfterCheckpoints)
 	client.RegisterInterception(validateFnWithValidator(t, streamValidator))
 	client.RegisterSSTableGenerator(func(keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable {
-		return sstMaker(t, keyValues)
+		return replicationtestutils.SSTMaker(t, keyValues)
 	})
 
 	var receivedRevertRequest chan struct{}
