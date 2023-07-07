@@ -25,6 +25,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/inverted",
@@ -78,6 +79,7 @@ go_test(
     ],
     embed = [":memo"],
     deps = [
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/settings/cluster",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",
