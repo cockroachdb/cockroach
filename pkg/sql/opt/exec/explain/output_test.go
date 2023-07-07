@@ -19,14 +19,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -130,8 +128,6 @@ func TestMaxDiskSpillUsage(t *testing.T) {
 	distSQLKnobs := &execinfra.TestingKnobs{}
 	distSQLKnobs.ForceDiskSpill = true
 	testClusterArgs.ServerArgs.Knobs.DistSQL = distSQLKnobs
-	testClusterArgs.ServerArgs.Insecure = true
-	serverutils.InitTestServerFactory(server.TestServerFactory)
 	tc := testcluster.StartTestCluster(t, 1, testClusterArgs)
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
@@ -150,9 +146,6 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS 
 		for rows.Next() {
 			var res string
 			assert.NoError(t, rows.Scan(&res))
-			var sb strings.Builder
-			sb.WriteString(res)
-			sb.WriteByte('\n')
 			if matches := re.FindStringSubmatch(res); len(matches) > 0 {
 				return true
 			}
@@ -184,10 +177,8 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 	distSQLKnobs := &execinfra.TestingKnobs{}
 	distSQLKnobs.ForceDiskSpill = true
 	testClusterArgs.ServerArgs.Knobs.DistSQL = distSQLKnobs
-	testClusterArgs.ServerArgs.Insecure = true
 	const numNodes = 3
 
-	serverutils.InitTestServerFactory(server.TestServerFactory)
 	tc := testcluster.StartTestCluster(t, numNodes, testClusterArgs)
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
@@ -244,4 +235,88 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 	runQuery("SELECT * FROM (SELECT * FROM t WHERE x > 2000 AND x < 3000) s1 JOIN t ON s1.x = t.x", false /* hideCPU */)
 	runQuery("SELECT * FROM (VALUES (1), (2), (3)) v(a) INNER LOOKUP JOIN t ON a = x", false /* hideCPU */)
 	runQuery("SELECT count(*) FROM generate_series(1, 100000)", false /* hideCPU */)
+}
+
+// TestContentionTimeOnWrites verifies that the contention encountered during a
+// mutation is reported on EXPLAIN ANALYZE output.
+func TestContentionTimeOnWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(tc.Conns[0])
+	runner.Exec(t, "CREATE TABLE t (k INT PRIMARY KEY, v INT)")
+
+	// The test involves two goroutines:
+	// - the worker goroutine (that is about to be spun up) is performing a
+	//   mutation without committing a txn. It notifies the main goroutine by
+	//   closing sem once the mutation has been performed. It sleeps for some
+	//   time before committing, to allow for the main goroutine to experience
+	//   contention on its mutation.
+	// - the main goroutine is first blocked until sem is closed and then
+	//   executes a mutation that should contend with the worker's already
+	//   executed-but-not-committed mutation. It verifies that contention time
+	//   is reported in EXPLAIN ANALYZE.
+
+	sem := make(chan struct{})
+	errCh := make(chan error, 1)
+	go func() {
+		// Ensure that sem is always closed (in case we encounter an error
+		// before the mutation is performed).
+		var closedSem bool
+		defer func() {
+			if !closedSem {
+				close(sem)
+			}
+			close(errCh)
+		}()
+		txn, err := tc.Conns[0].Begin()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		_, err = txn.Exec("INSERT INTO t VALUES (1, 1)")
+		if err != nil {
+			errCh <- err
+			return
+		}
+		// Notify the main goroutine that the mutation has been performed.
+		close(sem)
+		closedSem = true
+		// Allow the main goroutine's mutation to experience contention.
+		time.Sleep(3 * time.Second)
+		if err = txn.Commit(); err != nil {
+			errCh <- err
+			return
+		}
+	}()
+
+	// Block until the worker's mutation is done.
+	<-sem
+	// Check that no error was encountered before that.
+	select {
+	case err := <-errCh:
+		t.Fatal(err)
+	default:
+	}
+
+	// Now execute our own mutation and ensure that contention is reported.
+	contentionRE := regexp.MustCompile(`cumulative time spent due to contention.*`)
+	rows := runner.Query(t, "EXPLAIN ANALYZE UPSERT INTO t VALUES (1, 2)")
+	var foundContention bool
+	for rows.Next() {
+		var line string
+		require.NoError(t, rows.Scan(&line))
+		if contentionRE.MatchString(line) {
+			foundContention = true
+		}
+	}
+	require.True(t, foundContention)
+
+	// Sanity check that the worker didn't run into any errors.
+	err := <-errCh
+	require.NoError(t, err)
 }

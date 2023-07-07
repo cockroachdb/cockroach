@@ -47,6 +47,7 @@ type planNodeToRowSource struct {
 	// run time state machine values
 	row rowenc.EncDatumRow
 
+	contentionEventsListener  execstats.ContentionEventsListener
 	tenantConsumptionListener execstats.TenantConsumptionListener
 }
 
@@ -168,7 +169,7 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 }
 
 func (p *planNodeToRowSource) Start(ctx context.Context) {
-	ctx = p.StartInternal(ctx, nodeName(p.node), &p.tenantConsumptionListener)
+	ctx = p.StartInternal(ctx, nodeName(p.node), &p.contentionEventsListener, &p.tenantConsumptionListener)
 	p.params.ctx = ctx
 	// This starts all of the nodes below this node.
 	if err := startExec(p.params, p.node); err != nil {
@@ -260,13 +261,14 @@ func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetad
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (p *planNodeToRowSource) execStatsForTrace() *execinfrapb.ComponentStats {
-	// Propagate RUs from IO requests.
-	// TODO(drewk): we should consider propagating other stats for planNode
-	// operators.
-	if p.tenantConsumptionListener.ConsumedRU == 0 {
+	// Propagate contention time and RUs from IO requests.
+	if p.contentionEventsListener.CumulativeContentionTime == 0 && p.tenantConsumptionListener.ConsumedRU == 0 {
 		return nil
 	}
 	return &execinfrapb.ComponentStats{
+		KV: execinfrapb.KVStats{
+			ContentionTime: optional.MakeTimeValue(p.contentionEventsListener.CumulativeContentionTime),
+		},
 		Exec: execinfrapb.ExecStats{
 			ConsumedRU: optional.MakeUint(p.tenantConsumptionListener.ConsumedRU),
 		},
