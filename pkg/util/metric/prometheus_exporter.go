@@ -111,9 +111,10 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMet
 // printAsText writes all metrics in the families map to the io.Writer in
 // prometheus' text format. It removes individual metrics from the families
 // as it goes, readying the families for another found of registry additions.
-func (pm *PrometheusExporter) printAsText(w io.Writer) error {
+func (pm *PrometheusExporter) printAsText(w io.Writer, contentType expfmt.Format) error {
+	enc := expfmt.NewEncoder(w, contentType)
 	for _, family := range pm.families {
-		if _, err := expfmt.MetricFamilyToText(w, family); err != nil {
+		if err := enc.Encode(family); err != nil {
 			return err
 		}
 	}
@@ -127,12 +128,12 @@ func (pm *PrometheusExporter) printAsText(w io.Writer) error {
 // as it goes, readying the families for another found of registry additions.
 // It does this under lock so it is thread safe and can be called concurrently.
 func (pm *PrometheusExporter) ScrapeAndPrintAsText(
-	w io.Writer, scrapeFunc func(*PrometheusExporter),
+	w io.Writer, contentType expfmt.Format, scrapeFunc func(*PrometheusExporter),
 ) error {
 	pm.muScrapeAndPrint.Lock()
 	defer pm.muScrapeAndPrint.Unlock()
 	scrapeFunc(pm)
-	return pm.printAsText(w)
+	return pm.printAsText(w, contentType)
 }
 
 // Verify GraphiteExporter implements Gatherer interface.

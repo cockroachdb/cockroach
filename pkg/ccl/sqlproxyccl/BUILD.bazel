@@ -50,6 +50,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_jackc_pgproto3_v2//:pgproto3",
         "@com_github_pires_go_proxyproto//:go-proxyproto",
+        "@com_github_prometheus_common//expfmt",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//credentials/insecure",

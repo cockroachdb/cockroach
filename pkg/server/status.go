@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/prometheus/common/expfmt"
 	raft "go.etcd.io/raft/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -130,7 +131,7 @@ var (
 
 type metricMarshaler interface {
 	json.Marshaler
-	PrintAsText(io.Writer) error
+	PrintAsText(io.Writer, expfmt.Format) error
 	ScrapeIntoPrometheus(pm *metric.PrometheusExporter)
 }
 
@@ -2025,8 +2026,9 @@ type varsHandler struct {
 func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
-	err := h.metricSource.PrintAsText(w)
+	contentType := expfmt.Negotiate(r.Header)
+	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
+	err := h.metricSource.PrintAsText(w, contentType)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
