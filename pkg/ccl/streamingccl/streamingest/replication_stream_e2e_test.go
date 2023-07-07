@@ -714,6 +714,8 @@ func TestStreamingAutoReplan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 106451)
+
 	skip.UnderStressRace(t, "c2c multi node unit tests flake under stress race. see #106194")
 
 	ctx := context.Background()

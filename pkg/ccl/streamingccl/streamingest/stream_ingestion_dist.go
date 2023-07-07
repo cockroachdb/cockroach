@@ -40,7 +40,7 @@ var replanThreshold = settings.RegisterFloatSetting(
 	"stream_replication.replan_flow_threshold",
 	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
 		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
-	0.1,
+	0,
 	settings.NonNegativeFloatWithMaximum(1),
 )
 
