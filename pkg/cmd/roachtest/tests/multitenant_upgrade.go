@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -70,6 +71,14 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 //   - Tenant14{Binary: Cur, Cluster: Cur}: Create tenant 14 and verify it works.
 //   - Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 14 and make sure it still works.
 func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, v version.Version) {
+	// Update this map with every new release.
+	versionToMinSupportedVersion := map[string]string{
+		"23.2": "22.2",
+	}
+	curBinaryMajorAndMinorVersion := getMajorAndMinorVersionOnly(v)
+	currentBinaryMinSupportedVersion, ok := versionToMinSupportedVersion[curBinaryMajorAndMinorVersion]
+	require.True(t, ok, "current binary '%s' not found in 'versionToMinSupportedVersion' map", curBinaryMajorAndMinorVersion)
+
 	predecessor, err := version.PredecessorVersion(v)
 	require.NoError(t, err)
 
@@ -192,7 +201,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{currentBinaryMinSupportedVersion}}),
 	)
 
 	t.Status("stopping the first tenant 11 server ahead of upgrading")
@@ -203,11 +212,23 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	t.Status("intentionally leaving the second tenant 11 server on the old binary")
 
-	// Note that here we'd like to validate that the tenant 11 servers can still
-	// query the storage cluster. The problem however, is that due to #88927,
-	// they can't because they're at different binary versions. Once #88927 is
-	// fixed, we should add checks in here that we're able to query from tenant
-	// 11 servers.
+	t.Status("verify first tenant 11 server works with the new binary")
+	{
+		verifySQL(t, tenant11a.pgURL,
+			mkStmt(`SELECT * FROM foo LIMIT 1`).
+				withResults([][]string{{"1", "bar"}}),
+			mkStmt("SHOW CLUSTER SETTING version").
+				withResults([][]string{{initialVersion}}))
+	}
+
+	t.Status("verify second tenant 11 server still works with the old binary")
+	{
+		verifySQL(t, tenant11b.pgURL,
+			mkStmt(`SELECT * FROM foo LIMIT 1`).
+				withResults([][]string{{"1", "bar"}}),
+			mkStmt("SHOW CLUSTER SETTING version").
+				withResults([][]string{{initialVersion}}))
+	}
 
 	t.Status("attempting to upgrade tenant 11 before storage cluster is finalized and expecting a failure")
 	expectErr(t, tenant11a.pgURL,
@@ -220,19 +241,18 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		"SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]",
 		[][]string{{"true"}})
 
+	tenant11aRunner, tenant11aRunnerCloser := openDBAndMakeSQLRunner(t, tenant11a.pgURL)
+	defer tenant11aRunnerCloser()
+
+	finalVersion := tenant11aRunner.QueryStr(t, "SELECT * FROM crdb_internal.node_executable_version();")[0][0]
+	// Remove patch release from predecessorVersion.
+	predecessorVersion := predecessor[:strings.LastIndex(predecessor, ".")]
+
 	t.Status("migrating first tenant 11 server to the current version after system tenant is finalized which should fail because second server is still on old binary - expecting a failure here too")
 	expectErr(t, tenant11a.pgURL,
-		`pq: error validating the version of one or more SQL server instances: validate cluster version failed: some tenant pods running on binary less than 23.1`,
+		fmt.Sprintf(`pq: error validating the version of one or more SQL server instances: rpc error: code = Unknown desc = sql server 2 is running a binary version %s which is less than the attempted upgrade version %s
+HINT: check the binary versions of all running SQL server instances to ensure that they are compatible with the attempted upgrade version`, predecessorVersion, finalVersion),
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
-
-	// Note that here we'd like to validate that the first tenant 11 server can
-	// query the storage cluster. The problem however, is that due to #88927,
-	// they can't because they're at different DistSQL versions. We plan to never change
-	// the DistSQL version again so once we have 23.1 images to test against we should
-	// add a check in here that we're able to query from tenant 11 first server.
-	t.Status("stop the second tenant 11 server and restart it on the new binary")
-	tenant11b.stop(ctx, t, c)
-	tenant11b.start(ctx, t, c, currentBinary)
 
 	t.Status("verify that the first tenant 11 server can now query the storage cluster")
 	{
@@ -242,6 +262,10 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 			mkStmt("SHOW CLUSTER SETTING version").
 				withResults([][]string{{initialVersion}}))
 	}
+
+	t.Status("stop the second tenant 11 server and restart it on the new binary")
+	tenant11b.stop(ctx, t, c)
+	tenant11b.start(ctx, t, c, currentBinary)
 
 	t.Status("verify the second tenant 11 server works with the new binary")
 	{
@@ -396,4 +420,10 @@ func expectErr(t test.Test, url string, error string, query string) {
 	runner, closer := openDBAndMakeSQLRunner(t, url)
 	defer closer()
 	runner.ExpectErr(t, error, query)
+}
+
+func getMajorAndMinorVersionOnly(v version.Version) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d.%d", v.Major(), v.Minor())
+	return b.String()
 }
