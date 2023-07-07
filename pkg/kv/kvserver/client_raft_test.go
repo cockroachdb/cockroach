@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -1458,6 +1459,150 @@ func (c fakeSnapshotStream) Recv() (*kvserverpb.SnapshotRequest, error) {
 // Send implements the SnapshotResponseStream interface.
 func (c fakeSnapshotStream) Send(request *kvserverpb.SnapshotResponse) error {
 	return nil
+}
+
+// TestReceiveSnapshotLogging tests that a snapshot receiver properly captures
+// the collected tracing spans in the last response, or logs the span if the
+// context is cancelled from the client side.
+func TestReceiveSnapshotLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const senderNodeIdx = 0
+	const receiverNodeIdx = 1
+
+	var receiveStartedCh, reservationStartedCh, reservationReadyCh,
+		batchReceiveStartedCh, batchReceiveReadyCh, validateLogsReadyCh chan struct{}
+	var receiveErrCh chan error
+	initChans := func() {
+		receiveStartedCh = make(chan struct{})
+		receiveErrCh = make(chan error)
+		reservationStartedCh = make(chan struct{})
+		reservationReadyCh = make(chan struct{})
+		batchReceiveStartedCh = make(chan struct{})
+		batchReceiveReadyCh = make(chan struct{})
+		validateLogsReadyCh = make(chan struct{})
+	}
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			receiverNodeIdx: {
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						ThrottleEmptySnapshots: true,
+						ReceiveSnapshot: func(header *kvserverpb.SnapshotRequest_Header) error {
+							t.Logf("incoming snapshot on n2")
+							close(receiveStartedCh)
+							return <-receiveErrCh
+						},
+						AfterSnapshotThrottle: func() {
+							t.Logf("reserved spot on n2")
+							close(reservationStartedCh)
+							<-reservationReadyCh
+						},
+						BeforeRecvAcceptedSnapshot: func() {
+							t.Logf("receiving on n2")
+							close(batchReceiveStartedCh)
+							<-batchReceiveReadyCh
+						},
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, rngDesc, err := tc.Servers[0].ScratchRangeEx()
+	require.NoError(t, err)
+	scratchKey := rngDesc.StartKey.AsRawKey()
+
+	senderStore := tc.GetFirstStoreFromServer(t, senderNodeIdx)
+	repl := senderStore.LookupReplica(rngDesc.StartKey)
+	chgs := kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(receiverNodeIdx))
+
+	snapshotAndValidateLogs := func(ctx context.Context, expectErrFound bool) error {
+		t.Helper()
+
+		testStartTs := timeutil.Now()
+		scratchRng := tc.LookupRangeOrFatal(t, scratchKey)
+		_, pErr := repl.ChangeReplicas(ctx, &scratchRng, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
+
+		// When ready, flush logs and check messages from store_snapshot.go since
+		// call to repl.ChangeReplicas(..).
+		<-validateLogsReadyCh
+		log.Flush()
+		entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
+			math.MaxInt64, 100, regexp.MustCompile(`store_snapshot\.go`), log.WithMarkedSensitiveData)
+		require.NoError(t, err)
+
+		errRegexp, err := regexp.Compile(`incoming snapshot stream .* failed with error`)
+		require.NoError(t, err)
+		foundEntry := false
+		for _, entry := range entries {
+			if errRegexp.MatchString(entry.Message) {
+				foundEntry = true
+				break
+			}
+		}
+		require.Equal(t, expectErrFound, foundEntry)
+
+		return pErr
+	}
+
+	t.Run("cancel on header", func(t *testing.T) {
+		initChans()
+		ctx, cancel := context.WithCancel(ctx)
+		go func() {
+			<-receiveStartedCh
+			cancel()
+			time.Sleep(time.Millisecond)
+			receiveErrCh <- errors.Errorf("header is bad")
+			close(validateLogsReadyCh)
+		}()
+		err := snapshotAndValidateLogs(ctx, true)
+		require.Error(t, err)
+	})
+	t.Run("timeout during reservation", func(t *testing.T) {
+		initChans()
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+		defer cancel()
+		close(receiveErrCh)
+		go func() {
+			<-reservationStartedCh
+			time.Sleep(50 * time.Millisecond)
+			close(reservationReadyCh)
+			close(validateLogsReadyCh)
+		}()
+		err := snapshotAndValidateLogs(ctx, true)
+		require.Error(t, err)
+	})
+	t.Run("cancel during receive", func(t *testing.T) {
+		initChans()
+		ctx, cancel := context.WithCancel(ctx)
+		close(receiveErrCh)
+		close(reservationReadyCh)
+		go func() {
+			<-batchReceiveStartedCh
+			cancel()
+			time.Sleep(time.Millisecond)
+			close(batchReceiveReadyCh)
+			close(validateLogsReadyCh)
+		}()
+		err := snapshotAndValidateLogs(ctx, true)
+		require.Error(t, err)
+	})
+	t.Run("successful send", func(t *testing.T) {
+		initChans()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		close(receiveErrCh)
+		close(reservationReadyCh)
+		close(batchReceiveReadyCh)
+		close(validateLogsReadyCh)
+		err := snapshotAndValidateLogs(ctx, false)
+		require.NoError(t, err)
+	})
 }
 
 // TestFailedSnapshotFillsReservation tests that failing to finish applying an

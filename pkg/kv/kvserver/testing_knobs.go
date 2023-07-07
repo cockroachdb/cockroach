@@ -428,9 +428,12 @@ type StoreTestingKnobs struct {
 	// BeforeSendSnapshotThrottle intercepts replicas before entering send
 	// snapshot throttling.
 	BeforeSendSnapshotThrottle func()
-	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
-	// send snapshot semaphore.
-	AfterSendSnapshotThrottle func()
+	// AfterSnapshotThrottle intercepts replicas after receiving a spot in the
+	// send/recv snapshot semaphore.
+	AfterSnapshotThrottle func()
+	// BeforeRecvAcceptedSnapshot intercepts replicas before receiving the batches
+	// of a reserved and accepted snapshot.
+	BeforeRecvAcceptedSnapshot func()
 	// SelectDelegateSnapshotSender returns an ordered list of replica which will
 	// be used as delegates for sending a snapshot.
 	SelectDelegateSnapshotSender func(*roachpb.RangeDescriptor) []roachpb.ReplicaDescriptor

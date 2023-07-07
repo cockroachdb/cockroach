@@ -104,13 +104,11 @@ func (l loggingIncomingSnapshotStream) Send(
 	ctx context.Context, resp *kvserverpb.SnapshotResponse,
 ) error {
 	err := l.stream.Send(resp)
-	if err != nil && ctx.Err() != nil {
+	if err != nil {
 		// Log trace of incoming snapshot on context cancellation (e.g.
 		// times out or caller goes away).
-		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
-			log.Infof(ctx, "incoming snapshot stream response send failed with error: %s\ntrace:\n%s",
-				err, sp.GetConfiguredRecording())
-		}
+		log.Infof(ctx, "incoming snapshot stream response send failed with error: %v\ntrace:\n%v",
+			err, resp.CollectedSpans)
 	}
 	return err
 }
@@ -119,13 +117,11 @@ func (l loggingIncomingSnapshotStream) Recv(
 	ctx context.Context,
 ) (*kvserverpb.SnapshotRequest, error) {
 	req, err := l.stream.Recv()
-	if err != nil && ctx.Err() != nil {
+	if err != nil {
 		// Log trace of incoming snapshot on context cancellation (e.g.
 		// times out or caller goes away).
-		if sp := tracing.SpanFromContext(ctx); sp != nil && !sp.IsNoop() {
-			log.Infof(ctx, "incoming snapshot stream request recv failed with error: %s\ntrace:\n%s",
-				err, sp.GetConfiguredRecording())
-		}
+		log.Infof(ctx, "incoming snapshot stream recv failed with error: %v\ntrace:\n%v",
+			err, tracing.SpanFromContext(ctx).GetConfiguredRecording())
 	}
 	return req, err
 }
@@ -420,6 +416,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	recordBytesReceived snapshotRecordMetrics,
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, kvserverpb.SnapshotRequest_KV_BATCH)
+	if fn := s.cfg.TestingKnobs.BeforeRecvAcceptedSnapshot; fn != nil {
+		fn()
+	}
 
 	// These stopwatches allow us to time the various components of Receive().
 	// - totalTime Stopwatch measures the total time spent within this function.
@@ -823,7 +822,7 @@ func (s *Store) throttleSnapshot(
 		select {
 		case permit = <-task.GetWaitChan():
 			// Got a spot in the snapshotQueue, continue with sending the snapshot.
-			if fn := s.cfg.TestingKnobs.AfterSendSnapshotThrottle; fn != nil {
+			if fn := s.cfg.TestingKnobs.AfterSnapshotThrottle; fn != nil {
 				fn()
 			}
 			log.Event(ctx, "acquired spot in the snapshot snapshotQueue")
