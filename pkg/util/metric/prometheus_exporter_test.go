@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -122,7 +123,7 @@ func TestPrometheusExporter(t *testing.T) {
 	// Test ScrapeAndPrintAsText
 	var buf bytes.Buffer
 	pe = MakePrometheusExporter()
-	err = pe.ScrapeAndPrintAsText(&buf, func(exporter *PrometheusExporter) {
+	err = pe.ScrapeAndPrintAsText(&buf, expfmt.FmtText, func(exporter *PrometheusExporter) {
 		exporter.ScrapeRegistry(r1, true)
 	})
 	require.NoError(t, err)
