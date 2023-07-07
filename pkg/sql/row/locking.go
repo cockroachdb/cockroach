@@ -44,9 +44,9 @@ func GetKeyLockingStrength(lockStrength descpb.ScanLockingStrength) lock.Strengt
 	}
 }
 
-// getWaitPolicy returns the configured lock wait policy to use for key-value
+// GetWaitPolicy returns the configured lock wait policy to use for key-value
 // scans.
-func getWaitPolicy(lockWaitPolicy descpb.ScanLockingWaitPolicy) lock.WaitPolicy {
+func GetWaitPolicy(lockWaitPolicy descpb.ScanLockingWaitPolicy) lock.WaitPolicy {
 	switch lockWaitPolicy {
 	case descpb.ScanLockingWaitPolicy_BLOCK:
 		return lock.WaitPolicy_Block

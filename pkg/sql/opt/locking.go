@@ -46,10 +46,11 @@ type Locking struct {
 
 	// The third property is the durability of the locking. A guaranteed-durable
 	// lock always persists until commit time, while a best-effort lock may
-	// sometimes be lost before commit. We currently only require
-	// guaranteed-durable locks for SELECT FOR UPDATE statements under SNAPSHOT
-	// and READ COMMITTED isolation. Other locking statements, such as UPDATE,
-	// rely on the durability of intents for correctness, rather than the
+	// sometimes be lost before commit (for example, during a lease transfer). We
+	// currently only require guaranteed-durable locks for SELECT FOR UPDATE
+	// statements and system-maintained constraint checks (e.g. FK checks) under
+	// SNAPSHOT and READ COMMITTED isolation. Other locking statements, such as
+	// UPDATE, rely on the durability of intents for correctness, rather than the
 	// durability of locks.
 	Durability tree.LockingDurability
 }

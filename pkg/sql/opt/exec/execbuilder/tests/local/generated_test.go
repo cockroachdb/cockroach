@@ -217,6 +217,13 @@ func TestExecBuild_fk(
 	runExecBuildLogicTest(t, "fk")
 }
 
+func TestExecBuild_fk_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "fk_read_committed")
+}
+
 func TestExecBuild_forecast(
 	t *testing.T,
 ) {

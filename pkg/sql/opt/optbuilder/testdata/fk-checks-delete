@@ -180,3 +180,43 @@ delete parent
                 │    └── flags: disabled not visible index feature
                 └── filters
                      └── other:16 = child2.p:18
+
+# Verify that we do *not* lock the child, even with implicit FK locking.
+build set=enable_implicit_fk_locking_for_serializable=true
+DELETE FROM parent WHERE p = 3
+----
+delete parent
+ ├── columns: <none>
+ ├── fetch columns: x:6 parent.p:7 parent.other:8
+ ├── input binding: &1
+ ├── select
+ │    ├── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    ├── scan parent
+ │    │    └── columns: x:6 parent.p:7!null parent.other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    └── filters
+ │         └── parent.p:7 = 3
+ └── f-k-checks
+      ├── f-k-checks-item: child(p) -> parent(p)
+      │    └── semi-join (hash)
+      │         ├── columns: p:11!null
+      │         ├── with-scan &1
+      │         │    ├── columns: p:11!null
+      │         │    └── mapping:
+      │         │         └──  parent.p:7 => p:11
+      │         ├── scan child
+      │         │    ├── columns: child.p:13!null
+      │         │    └── flags: disabled not visible index feature
+      │         └── filters
+      │              └── p:11 = child.p:13
+      └── f-k-checks-item: child2(p) -> parent(other)
+           └── semi-join (hash)
+                ├── columns: other:16
+                ├── with-scan &1
+                │    ├── columns: other:16
+                │    └── mapping:
+                │         └──  parent.other:8 => other:16
+                ├── scan child2
+                │    ├── columns: child2.p:18!null
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     └── other:16 = child2.p:18

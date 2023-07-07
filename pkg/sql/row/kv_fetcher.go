@@ -185,7 +185,7 @@ func NewStreamingKVFetcher(
 		stopper,
 		txn,
 		st,
-		getWaitPolicy(lockWaitPolicy),
+		GetWaitPolicy(lockWaitPolicy),
 		streamerBudgetLimit,
 		streamerBudgetAcc,
 		&kvPairsRead,

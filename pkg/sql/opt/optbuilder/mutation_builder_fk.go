@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -64,6 +65,11 @@ import (
 //	                └── filters
 //	                     └── column2:5 = parent.p:6
 //
+// When enable_implicit_fk_locking_for_serializable is true, or when using a
+// weaker isolation level than Serializable, the insertion FK check will lock
+// the parent row(s) to prevent concurrent mutations of the parent from
+// violating the FK constraint.
+//
 // See testdata/fk-checks-insert for more examples.
 func (mb *mutationBuilder) buildFKChecksForInsert() {
 	if mb.tab.OutboundForeignKeyCount() == 0 {
@@ -106,6 +112,13 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 //	                │    └── columns: child.p:9!null
 //	                └── filters
 //	                     └── p:7 = child.p:9
+//
+// Unlike for insertion FK checks, for deletion FK checks we do *not* acquire
+// locks on the child row(s) regardless of
+// enable_implicit_fk_locking_for_serializable or isolation level. Instead we
+// rely on the intents created by the delete to conflict with the locks of the
+// parent from the insertion FK check of any concurrent inserts or updates to
+// the child.
 //
 // See testdata/fk-checks-delete for more examples.
 //
@@ -196,6 +209,10 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 //     └── filters
 //     └── column5:6 = parent.p:8
 //
+//     As in insertion checks, if enable_implicit_fk_locking_for_serializable is
+//     true, or we're using a weaker isolation level, the insertion-side check
+//     will lock the parent row(s).
+//
 //   - deletion-side checks are similar to the checks we issue for delete; they
 //     are a semi-join but the left side input is more complicated: it is an
 //     Except between a WithScan of the "old" values and a WithScan of the "new"
@@ -224,6 +241,10 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 //     │    └── columns: child.p:11!null
 //     └── filters
 //     └── p:8 = child.p:11
+//
+//     As in deletion checks, the deletion-side check will not lock the child
+//     rows, regardless of enable_implicit_fk_locking_for_serializable or
+//     isolation level.
 //
 // Only FK relations that involve updated columns result in FK checks.
 func (mb *mutationBuilder) buildFKChecksForUpdate() {
@@ -611,14 +632,36 @@ func resolveTable(ctx context.Context, catalog cat.Catalog, id cat.StableID) cat
 	return ref.(cat.Table)
 }
 
-// buildOtherTableScan builds a Scan of the "other" table.
-func (h *fkCheckHelper) buildOtherTableScan() (outScope *scope, tabMeta *opt.TableMeta) {
+// buildOtherTableScan builds a Scan of the "other" table. If parent is true,
+// the "other" table is the FK parent table (the referenced table) and this scan
+// is part of an insertion-side check. If parent is false, the "other" table is
+// the FK child table (the table containing the FK reference) and this scan is
+// part of a deletion-side check.
+func (h *fkCheckHelper) buildOtherTableScan(parent bool) (outScope *scope, tabMeta *opt.TableMeta) {
+	locking := noRowLocking
+	// For insertion-side checks, if enable_implicit_fk_locking_for_serializable
+	// is true or we're using a weaker isolation level, we lock the parent row(s)
+	// to prevent concurrent mutations of the parent from violating the FK
+	// constraint. Deletion-side checks don't need to lock because they can rely
+	// on the deletion intent conflicting with locks from any concurrent inserts
+	// or updates of the child.
+	if parent && (h.mb.b.evalCtx.TxnIsoLevel != isolation.Serializable ||
+		h.mb.b.evalCtx.SessionData().ImplicitFKLockingForSerializable) {
+		locking = lockingSpec{
+			&tree.LockingItem{
+				// TODO(michae2): Change this to ForKeyShare when it is supported.
+				Strength:   tree.ForShare,
+				Targets:    []tree.TableName{tree.MakeUnqualifiedTableName(h.otherTab.Name())},
+				WaitPolicy: tree.LockWaitBlock,
+			},
+		}
+	}
 	otherTabMeta := h.mb.b.addTable(h.otherTab, tree.NewUnqualifiedTableName(h.otherTab.Name()))
 	return h.mb.b.buildScan(
 		otherTabMeta,
 		h.otherTabOrdinals,
 		&tree.IndexFlags{IgnoreForeignKeys: true},
-		noRowLocking,
+		locking,
 		h.mb.b.allocScope(),
 		true, /* disableNotVisibleIndex */
 	), otherTabMeta
@@ -709,8 +752,7 @@ func (h *fkCheckHelper) buildInsertionCheck() memo.FKChecksItem {
 
 	// Build an anti-join, with the origin FK columns on the left and the
 	// referenced columns on the right.
-
-	scanScope, refTabMeta := h.buildOtherTableScan()
+	scanScope, refTabMeta := h.buildOtherTableScan(true /* parent */)
 
 	// Build the join filters:
 	//   (origin_a = referenced_a) AND (origin_b = referenced_b) AND ...
@@ -748,7 +790,7 @@ func (h *fkCheckHelper) buildDeletionCheck(
 ) memo.FKChecksItem {
 	// Build a semi join, with the referenced FK columns on the left and the
 	// origin columns on the right.
-	scanScope, origTabMeta := h.buildOtherTableScan()
+	scanScope, origTabMeta := h.buildOtherTableScan(false /* parent */)
 
 	// Note that it's impossible to orphan a row whose FK key columns contain a
 	// NULL, since by definition a NULL never refers to an actual row (in
