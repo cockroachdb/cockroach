@@ -1210,14 +1210,14 @@ const (
 	// on the leaseholder of the locked row. Best-effort locks do not propagate
 	// via Raft to other nodes, and are therefore much faster to acquire than
 	// guaranteed-durable locks. For this reason we prefer to use best-effort
-	// locks when possible (i.e. when locking is used as an optimization rather
-	// than as a guarantor of exclusion).
+	// locks when possible (i.e. whenever locking is used as an optimization
+	// rather than as a guarantor of exclusion).
 	LockDurabilityBestEffort LockingDurability = iota
 
 	// LockDurabilityGuaranteed guarantees that if the transaction commits, the
 	// lock was held until commit, even in the face of lease transfers, range
 	// splits, range merges, node failures, memory limits, etc. Guaranteed-durable
-	// locks *must* be used when correctness depends on locking.
+	// locks *must* be used whenever correctness depends on locking.
 	LockDurabilityGuaranteed
 )
 
