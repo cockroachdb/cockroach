@@ -3043,10 +3043,11 @@ Support status: [reserved](#support-status)
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| node_id | [string](#cockroach.server.serverpb.ProfileRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. node_id translates to a KV node ID on a storage server and SQL instance ID on a SQL only server. | [reserved](#support-status) |
+| node_id | [string](#cockroach.server.serverpb.ProfileRequest-string) |  | node_id is a string so that "local" or "all" can be used to specify that no forwarding is necessary. node_id translates to a KV node ID on a storage server and SQL instance ID on a SQL only server. | [reserved](#support-status) |
 | type | [ProfileRequest.Type](#cockroach.server.serverpb.ProfileRequest-cockroach.server.serverpb.ProfileRequest.Type) |  | The type of profile to retrieve. | [reserved](#support-status) |
 | seconds | [int32](#cockroach.server.serverpb.ProfileRequest-int32) |  | applies only to Type=CPU, defaults to 30 | [reserved](#support-status) |
-| labels | [bool](#cockroach.server.serverpb.ProfileRequest-bool) |  | applies only to Type=CPU, defaults to false | [reserved](#support-status) |
+| labels | [bool](#cockroach.server.serverpb.ProfileRequest-bool) |  | Labels can be specified for Type=CPU or Type=GOROUTINE.<br><br>- If true for CPU profiles, we request a CPU profile with pprof labels.<br><br>- If true for GOROUTINE profiles, we request an aggregated goroutine profile with debug=1. | [reserved](#support-status) |
+| label_filter | [string](#cockroach.server.serverpb.ProfileRequest-string) |  | LabelFilter only applies to Type=GOROUTINE. Only goroutines with a pprof label matching the filter will be returned. | [reserved](#support-status) |
 | sender_server_version | [cockroach.roachpb.Version](#cockroach.server.serverpb.ProfileRequest-cockroach.roachpb.Version) |  | SenderServerVersion is the server version of the node sending the Profile request. If this field is set then the node processing the request will only collect the profile if its server version is equal to the sender's server version.<br><br>Currently, this is only used when collecting profiles that will be merged using pprof.Merge as all the samples must be from the same binary version. | [reserved](#support-status) |
 
 

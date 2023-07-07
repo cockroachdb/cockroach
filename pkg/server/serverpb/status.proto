@@ -753,7 +753,7 @@ message GetFilesResponse {
 }
 
 message ProfileRequest {
-  // node_id is a string so that "local" can be used to specify that no
+  // node_id is a string so that "local" or "all" can be used to specify that no
   // forwarding is necessary. node_id translates to a KV node ID on a storage
   // server and SQL instance ID on a SQL only server.
   string node_id = 1;
@@ -771,7 +771,18 @@ message ProfileRequest {
   Type type = 5;
 
   int32 seconds = 6; // applies only to Type=CPU, defaults to 30
-  bool labels = 7; // applies only to Type=CPU, defaults to false
+
+  // Labels can be specified for Type=CPU or Type=GOROUTINE.
+  //
+  // - If true for CPU profiles, we request a CPU profile with pprof labels.
+  //
+  // - If true for GOROUTINE profiles, we request an aggregated goroutine
+  // profile with debug=1.
+  bool labels = 7;
+
+  // LabelFilter only applies to Type=GOROUTINE. Only goroutines with a pprof
+  // label matching the filter will be returned.
+  string label_filter = 9;
 
   // SenderServerVersion is the server version of the node sending the Profile
   // request. If this field is set then the node processing the request will
