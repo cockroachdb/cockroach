@@ -24,7 +24,7 @@ func TestStreamEventBatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	seb := makeStreamEventBatcher()
+	seb := makeStreamEventBatcher(nil, roachpb.MustMakeTenantID(1))
 
 	var runningSize int
 	kv := roachpb.KeyValue{Key: roachpb.Key{'1'}}

@@ -276,6 +276,11 @@ func getReplicationStreamSpec(
 		nil /* planner */, nil /* txn */, sql.DistributionTypeSystemTenantOnly)
 
 	details, ok := j.Details().(jobspb.StreamReplicationDetails)
+	var spanConfigsForTenant roachpb.TenantID
+	if details.ForSpanConfigs {
+		spanConfigsForTenant = details.TenantID
+	}
+
 	if !ok {
 		return nil, errors.Errorf("job with id %d is not a replication stream job", streamID)
 	}
@@ -301,6 +306,7 @@ func getReplicationStreamSpec(
 				Spans: sp.Spans,
 				Config: streampb.StreamPartitionSpec_ExecutionConfig{
 					MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
+					SpanConfigsForTenant:   spanConfigsForTenant,
 				},
 			},
 		})

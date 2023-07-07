@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -319,7 +321,7 @@ func encodeSpec(
 	tables ...string,
 ) []byte {
 	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, tables...)
-	return encodeSpecForSpans(t, initialScanTime, previousReplicatedTime, spans)
+	return encodeSpecForSpans(t, initialScanTime, previousReplicatedTime, spans, roachpb.TenantID{})
 }
 
 func encodeSpecForSpans(
@@ -327,6 +329,7 @@ func encodeSpecForSpans(
 	initialScanTime hlc.Timestamp,
 	previousReplicatedTime hlc.Timestamp,
 	spans []roachpb.Span,
+	spanConfigsForTenant roachpb.TenantID,
 ) []byte {
 	spec := &streampb.StreamPartitionSpec{
 		InitialScanTimestamp:        initialScanTime,
@@ -334,6 +337,7 @@ func encodeSpecForSpans(
 		Spans:                       spans,
 		Config: streampb.StreamPartitionSpec_ExecutionConfig{
 			MinCheckpointFrequency: 10 * time.Millisecond,
+			SpanConfigsForTenant:   spanConfigsForTenant,
 		},
 	}
 
@@ -685,7 +689,7 @@ USE d;
 	// Only subscribe to table t1 and t2, not t3.
 	// We start the stream at a resume timestamp to avoid any initial scan.
 	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, "t1", "t2")
-	spec := encodeSpecForSpans(t, initialScanTimestamp, streamResumeTimestamp, spans)
+	spec := encodeSpecForSpans(t, initialScanTimestamp, streamResumeTimestamp, spans, roachpb.TenantID{})
 
 	source, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
 		streamPartitionQuery, streamID, spec)
@@ -804,4 +808,118 @@ USE d;
 	require.Equal(t, t2Span.Key, receivedKVs[0].Key)
 	require.Equal(t, batchHLCTime, receivedKVs[0].Value.Timestamp)
 	require.Equal(t, expectedDelRanges, receivedDelRanges)
+}
+
+func TestStreamSpanConfigs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
+		// Test hangs when run within the default test tenant. Tracked with
+		// #76378.
+		DefaultTestTenant: base.TODOTestTenantDisabled,
+	})
+	defer cleanup()
+
+	h.SysSQL.Exec(t, `
+CREATE DATABASE d;
+USE d;`)
+
+	const dummySpanConfigurationsFQN = "dummy_span_configurations"
+
+	h.SysSQL.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummySpanConfigurationsFQN))
+
+	tenantID := roachpb.MustMakeTenantID(uint64(10))
+	tenantName := roachpb.TenantName("app")
+
+	_, tenantCleanup := h.CreateTenant(t, tenantID, tenantName)
+	defer tenantCleanup()
+
+	tenantCodec := keys.MakeSQLCodec(tenantID)
+
+	accessor := spanconfigkvaccessor.New(
+		h.SysServer.DB(),
+		h.SysServer.InternalExecutor().(isql.Executor),
+		h.SysServer.ClusterSettings(),
+		h.SysServer.Clock(),
+		"d."+dummySpanConfigurationsFQN,
+		nil, /* knobs */
+	)
+
+	replicationProducerSpec := h.StartReplicationStream(t, tenantName, true)
+	streamID := replicationProducerSpec.StreamID
+	initialScanTimestamp := replicationProducerSpec.ReplicationStartTime
+	streamResumeTimestamp := h.SysServer.Clock().Now()
+
+	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
+	// Only subscribe to table t1 and t2, not t3.
+	// We start the stream at a resume timestamp to avoid any initial scan.
+
+	spans := spansForTables(h.SysServer.DB(), keys.SystemSQLCodec, dummySpanConfigurationsFQN)
+	spec := encodeSpecForSpans(t, initialScanTimestamp, streamResumeTimestamp, spans, tenantID)
+
+	source, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
+		streamPartitionQuery, streamID, spec)
+	defer feed.Close(ctx)
+
+	expectedUpdates := 2
+	// Add a few more use cases:
+	// - delete a span config record
+	// - add several span config records in one accessor batch
+	// -  update a subset of the tenant key space
+
+	makeRecord := func(targetSpan roachpb.Span, ttl int) spanconfig.Record {
+		fullTenantTarget := spanconfig.MakeTargetFromSpan(targetSpan)
+		spanConfig := roachpb.SpanConfig{
+			GCPolicy: roachpb.GCPolicy{
+				TTLSeconds: int32(ttl),
+			},
+		}
+		// check that all updates are observed.
+		record, err := spanconfig.MakeRecord(fullTenantTarget, spanConfig)
+		require.NoError(t, err)
+		return record
+	}
+
+	recordToEntry := func(record spanconfig.Record) *roachpb.SpanConfigEntry {
+		t := record.GetTarget().ToProto()
+		c := record.GetConfig()
+		return &roachpb.SpanConfigEntry{
+			Target: t,
+			Config: c,
+		}
+	}
+
+	expectedSpanConfigs := make(map[string]struct{})
+
+	for _, record := range []spanconfig.Record{
+		makeRecord(tenantCodec.TenantSpan(), 2),
+		makeRecord(tenantCodec.TenantSpan(), 3),
+	} {
+		record := record
+		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, nil, []spanconfig.Record{record},
+			hlc.MinTimestamp,
+			hlc.MaxTimestamp))
+		expectedSpanConfigs[recordToEntry(record).String()] = struct{}{}
+	}
+
+	receivedSpanConfigs := make(map[string]struct{})
+	codec := source.mu.codec.(*partitionStreamDecoder)
+	for {
+		source.mu.Lock()
+		require.True(t, source.mu.rows.Next())
+		source.mu.codec.decode()
+		if codec.e.Batch != nil {
+			for _, cfg := range codec.e.Batch.SpanConfigs {
+				receivedSpanConfigs[cfg.String()] = struct{}{}
+			}
+		}
+		source.mu.Unlock()
+		if len(receivedSpanConfigs) >= expectedUpdates {
+			break
+		}
+	}
+	require.Equal(t, expectedSpanConfigs, receivedSpanConfigs)
 }

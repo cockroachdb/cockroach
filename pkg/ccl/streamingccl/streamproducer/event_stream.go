@@ -13,8 +13,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -22,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -48,13 +52,14 @@ type eventStream struct {
 	data tree.Datums // Data to send to the consumer
 
 	// Fields below initialized when Start called.
-	rf          *rangefeed.RangeFeed          // Currently running rangefeed.
-	streamGroup ctxgroup.Group                // Context group controlling stream execution.
-	doneChan    chan struct{}                 // Channel signaled to close the stream loop.
-	eventsCh    chan kvcoord.RangeFeedMessage // Channel receiving rangefeed events.
-	errCh       chan error                    // Signaled when error occurs in rangefeed.
-	streamCh    chan tree.Datums              // Channel signaled to forward datums to consumer.
-	sp          *tracing.Span                 // Span representing the lifetime of the eventStream.
+	rf                *rangefeed.RangeFeed          // Currently running rangefeed.
+	streamGroup       ctxgroup.Group                // Context group controlling stream execution.
+	doneChan          chan struct{}                 // Channel signaled to close the stream loop.
+	eventsCh          chan kvcoord.RangeFeedMessage // Channel receiving rangefeed events.
+	errCh             chan error                    // Signaled when error occurs in rangefeed.
+	streamCh          chan tree.Datums              // Channel signaled to forward datums to consumer.
+	sp                *tracing.Span                 // Span representing the lifetime of the eventStream.
+	spanConfigDecoder cdcevent.Decoder
 }
 
 var _ eval.ValueGenerator = (*eventStream)(nil)
@@ -93,6 +98,10 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	s.streamCh = make(chan tree.Datums)
 
 	s.doneChan = make(chan struct{})
+
+	if err := s.maybeInitSpanConfigDecoder(ctx); err != nil {
+		return err
+	}
 
 	// Common rangefeed options.
 	opts := []rangefeed.Option{
@@ -158,6 +167,25 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	// bound account resources).
 	s.startStreamProcessor(ctx, frontier)
 	return nil
+}
+
+func (s *eventStream) maybeInitSpanConfigDecoder(ctx context.Context) error {
+	if !s.spec.Config.SpanConfigsForTenant.IsSet() {
+		return nil
+	}
+	_, tableID, err := keys.SystemSQLCodec.DecodeTablePrefix(s.spec.Spans[0].Key)
+	if err != nil {
+		return err
+	}
+	targets := changefeedbase.Targets{}
+	targets.Add(changefeedbase.Target{
+		Type:       jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
+		TableID:    descpb.ID(tableID),
+		FamilyName: "primary",
+	})
+
+	s.spanConfigDecoder, err = cdcevent.NewEventDecoder(ctx, s.execCfg, targets, false, false)
+	return err
 }
 
 func (s *eventStream) maybeSetError(err error) {
@@ -363,11 +391,14 @@ func (p *checkpointPacer) shouldCheckpoint(
 
 // Add a RangeFeedSSTable into current batch.
 func (s *eventStream) addSST(
-	sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.Span, seb *streamEventBatcher,
+	ctx context.Context,
+	sst *kvpb.RangeFeedSSTable,
+	registeredSpan roachpb.Span,
+	seb *streamEventBatcher,
 ) error {
 	// We send over the whole SSTable if the sst span is within
 	// the registered span boundaries.
-	if registeredSpan.Contains(sst.Span) {
+	if registeredSpan.Contains(sst.Span) && !s.spec.Config.SpanConfigsForTenant.IsSet() {
 		seb.addSST(sst)
 		return nil
 	}
@@ -381,11 +412,15 @@ func (s *eventStream) addSST(
 	// key value and each MVCCRangeKey value in the trimmed SSTable.
 	return replicationutils.ScanSST(sst, registeredSpan,
 		func(mvccKV storage.MVCCKeyValue) error {
-			seb.addKV(&roachpb.KeyValue{
+			kv := roachpb.KeyValue{
 				Key: mvccKV.Key.Key,
 				Value: roachpb.Value{
 					RawBytes:  mvccKV.Value,
-					Timestamp: mvccKV.Key.Timestamp}})
+					Timestamp: mvccKV.Key.Timestamp}}
+			if s.spec.Config.SpanConfigsForTenant.IsSet() {
+				return seb.addKVAsSpanConfig(ctx, &kv)
+			}
+			seb.addKV(&kv)
 			return nil
 		}, func(rangeKeyVal storage.MVCCRangeKeyValue) error {
 			seb.addDelRange(&kvpb.RangeFeedDeleteRange{
@@ -403,7 +438,7 @@ func (s *eventStream) addSST(
 // accumulating them in a batch, and sending those events to the ValueGenerator.
 func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) error {
 	pacer := makeCheckpointPacer(s.spec.Config.MinCheckpointFrequency)
-	seb := makeStreamEventBatcher()
+	seb := makeStreamEventBatcher(s.spanConfigDecoder, s.spec.Config.SpanConfigsForTenant)
 
 	maybeFlushBatch := func(force bool) error {
 		if (force && seb.getSize() > 0) || seb.getSize() > int(s.spec.Config.BatchByteSize) {
@@ -431,10 +466,15 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 		case ev := <-s.eventsCh:
 			switch {
 			case ev.Val != nil:
-				seb.addKV(&roachpb.KeyValue{
+				keyValue := roachpb.KeyValue{
 					Key:   ev.Val.Key,
 					Value: ev.Val.Value,
-				})
+				}
+				if !s.spec.Config.SpanConfigsForTenant.IsSet() {
+					seb.addKV(&keyValue)
+				} else if err := seb.addKVAsSpanConfig(ctx, &keyValue); err != nil {
+					return err
+				}
 				if err := maybeFlushBatch(flushIfNeeded); err != nil {
 					return err
 				}
@@ -454,7 +494,7 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 					}
 				}
 			case ev.SST != nil:
-				err := s.addSST(ev.SST, ev.RegisteredSpan, seb)
+				err := s.addSST(ctx, ev.SST, ev.RegisteredSpan, seb)
 				if err != nil {
 					return err
 				}
