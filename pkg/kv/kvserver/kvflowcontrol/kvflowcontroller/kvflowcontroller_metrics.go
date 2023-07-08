@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -129,17 +130,20 @@ func annotateMetricTemplateWithWorkClass(
 }
 
 type metrics struct {
-	FlowTokensAvailable   [admissionpb.NumWorkClasses]*metric.Gauge
-	FlowTokensDeducted    [admissionpb.NumWorkClasses]*metric.Counter
-	FlowTokensReturned    [admissionpb.NumWorkClasses]*metric.Counter
-	FlowTokensUnaccounted [admissionpb.NumWorkClasses]*metric.Counter
-	RequestsWaiting       [admissionpb.NumWorkClasses]*metric.Gauge
-	RequestsAdmitted      [admissionpb.NumWorkClasses]*metric.Counter
-	RequestsErrored       [admissionpb.NumWorkClasses]*metric.Counter
-	RequestsBypassed      [admissionpb.NumWorkClasses]*metric.Counter
-	WaitDuration          [admissionpb.NumWorkClasses]metric.IHistogram
-	TotalStreamCount      [admissionpb.NumWorkClasses]*metric.Gauge
-	BlockedStreamCount    [admissionpb.NumWorkClasses]*metric.Gauge
+	ElasticFlowTokensDeducted    *metric.Counter
+	ElasticFlowTokensReturned    *metric.Counter
+	ElasticFlowTokensUnaccounted *metric.Counter
+	RegularFlowTokensDeducted    *metric.Counter
+	RegularFlowTokensReturned    *metric.Counter
+	RegularFlowTokensUnaccounted *metric.Counter
+	FlowTokensAvailable          [admissionpb.NumWorkClasses]*metric.Gauge
+	RequestsWaiting              [admissionpb.NumWorkClasses]*metric.Gauge
+	RequestsAdmitted             [admissionpb.NumWorkClasses]*metric.Counter
+	RequestsErrored              [admissionpb.NumWorkClasses]*metric.Counter
+	RequestsBypassed             [admissionpb.NumWorkClasses]*metric.Counter
+	WaitDuration                 [admissionpb.NumWorkClasses]metric.IHistogram
+	TotalStreamCount             [admissionpb.NumWorkClasses]*metric.Gauge
+	BlockedStreamCount           [admissionpb.NumWorkClasses]*metric.Gauge
 }
 
 var _ metric.Struct = &metrics{}
@@ -157,21 +161,35 @@ func newMetrics(c *Controller) *metrics {
 				sum := int64(0)
 				c.mu.Lock()
 				defer c.mu.Unlock()
-				for _, b := range c.mu.buckets {
+				c.mu.buckets.Range(func(key, value any) bool {
+					b := value.(*bucket)
 					sum += int64(b.tokens(wc))
-				}
+					return true
+				})
 				return sum
 			},
 		)
-		m.FlowTokensDeducted[wc] = metric.NewCounter(
-			annotateMetricTemplateWithWorkClass(wc, flowTokensDeducted),
-		)
-		m.FlowTokensReturned[wc] = metric.NewCounter(
-			annotateMetricTemplateWithWorkClass(wc, flowTokensReturned),
-		)
-		m.FlowTokensUnaccounted[wc] = metric.NewCounter(
-			annotateMetricTemplateWithWorkClass(wc, flowTokensUnaccounted),
-		)
+		if wc == regular {
+			m.RegularFlowTokensDeducted = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensDeducted),
+			)
+			m.RegularFlowTokensReturned = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensReturned),
+			)
+			m.RegularFlowTokensUnaccounted = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensUnaccounted),
+			)
+		} else {
+			m.ElasticFlowTokensDeducted = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensDeducted),
+			)
+			m.ElasticFlowTokensReturned = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensReturned),
+			)
+			m.ElasticFlowTokensUnaccounted = metric.NewCounter(
+				annotateMetricTemplateWithWorkClass(wc, flowTokensUnaccounted),
+			)
+		}
 		m.RequestsWaiting[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClass(wc, requestsWaiting),
 		)
@@ -197,7 +215,7 @@ func newMetrics(c *Controller) *metrics {
 			func() int64 {
 				c.mu.Lock()
 				defer c.mu.Unlock()
-				return int64(len(c.mu.buckets))
+				return int64(c.mu.bucketCount)
 			},
 		)
 
@@ -212,13 +230,16 @@ func newMetrics(c *Controller) *metrics {
 				c.mu.Lock()
 				defer c.mu.Unlock()
 
-				for s, wbc := range c.mu.buckets {
-					if wbc.tokens(wc) <= 0 {
+				c.mu.buckets.Range(func(key, value any) bool {
+					stream := key.(kvflowcontrol.Stream)
+					b := value.(*bucket)
+
+					if b.tokens(wc) <= 0 {
 						count += 1
 
 						if shouldLog {
 							if count > 10 {
-								continue // cap output to 10 blocked streams
+								return false // cap output to 10 blocked streams
 							}
 							if count == 1 {
 								buf.Reset()
@@ -226,10 +247,11 @@ func newMetrics(c *Controller) *metrics {
 							if count > 1 {
 								buf.WriteString(", ")
 							}
-							buf.WriteString(s.String())
+							buf.WriteString(stream.String())
 						}
 					}
-				}
+					return true
+				})
 				if shouldLog && count > 0 {
 					log.Warningf(context.Background(), "%d blocked %s replication stream(s): %s", count, wc, buf.String())
 				}
@@ -263,19 +285,21 @@ func (m *metrics) onErrored(class admissionpb.WorkClass, dur time.Duration) {
 }
 
 func (m *metrics) onTokenAdjustment(adjustment tokensPerWorkClass) {
-	for class, delta := range adjustment {
-		if delta < 0 {
-			m.FlowTokensDeducted[class].Inc(-int64(delta))
-		} else if delta > 0 {
-			m.FlowTokensReturned[class].Inc(int64(delta))
-		}
+	if adjustment.regular < 0 {
+		m.RegularFlowTokensDeducted.Inc(-int64(adjustment.regular))
+	} else {
+		m.RegularFlowTokensReturned.Inc(int64(adjustment.regular))
+	}
+	if adjustment.elastic < 0 {
+		m.ElasticFlowTokensDeducted.Inc(-int64(adjustment.elastic))
+	} else {
+		m.ElasticFlowTokensReturned.Inc(int64(adjustment.elastic))
 	}
 }
 
 func (m *metrics) onUnaccounted(unaccounted tokensPerWorkClass) {
-	for class, delta := range unaccounted {
-		m.FlowTokensUnaccounted[class].Inc(int64(delta))
-	}
+	m.RegularFlowTokensUnaccounted.Inc(int64(unaccounted.regular))
+	m.ElasticFlowTokensUnaccounted.Inc(int64(unaccounted.elastic))
 }
 
 // MetricStruct implements the metric.Struct interface.

@@ -43,6 +43,8 @@ func (a *admittedLogEntryAdaptor) AdmittedLogEntry(
 	rangeID roachpb.RangeID,
 	pos admission.LogPosition,
 ) {
+	// TODO(irfansharif,aaditya): This contributes to a high count of
+	// inuse_objects. Look to address it as part of #104154.
 	a.dispatchWriter.Dispatch(ctx, origin, kvflowcontrolpb.AdmittedRaftLogEntries{
 		RangeID:           rangeID,
 		AdmissionPriority: int32(pri),
