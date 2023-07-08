@@ -143,7 +143,8 @@ func NewWindowAggregatorOperator(
 type windowAggregatorBase struct {
 	partitionSeekerBase
 	colexecop.CloserHelper
-	allocator *colmem.Allocator
+	allocator     *colmem.Allocator
+	cancelChecker colexecutils.CancelChecker
 
 	outputColIdx int
 	inputIdxs    []uint32
@@ -187,6 +188,7 @@ func (a *windowAggregatorBase) startNewPartition() {
 // Init implements the bufferedWindower interface.
 func (a *windowAggregatorBase) Init(ctx context.Context) {
 	a.InitHelper.Init(ctx)
+	a.cancelChecker.Init(a.Ctx)
 }
 
 // Close implements the bufferedWindower interface.
@@ -260,6 +262,7 @@ func aggregateOverIntervals(intervals []windowInterval, removeRows bool) {
 		start, end := interval.start, interval.end
 		intervalLen := interval.end - interval.start
 		for intervalLen > 0 {
+			a.cancelChecker.Check()
 			for j, idx := range a.inputIdxs {
 				a.vecs[j], start, end = a.buffer.GetVecWithTuple(a.Ctx, int(idx), intervalIdx)
 			}
