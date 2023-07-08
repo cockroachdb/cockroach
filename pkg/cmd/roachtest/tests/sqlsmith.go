@@ -247,9 +247,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					for _, exp := range []string{
 						// Optimizer panic-injection surfaces as an internal error.
 						"injected panic in optimizer",
-						// TODO(yuzefovich): we temporarily ignore internal errors
-						// that are because of #40929.
-						"could not parse \"0E-2019\" as type decimal",
 					} {
 						expectedError = expectedError || strings.Contains(es, exp)
 					}
