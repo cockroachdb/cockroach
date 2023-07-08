@@ -845,15 +845,21 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	// Make a copy of the stats so we don't modify the original.
 	spanStatsUnion.CopyFrom(s)
+	origRowCount := s.RowCount
+	origSelectivity := s.Selectivity
 
 	// Get the stats for each span and union them together.
 	c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(0))
 	sb.constrainScan(scan, &c, pred, relProps, &spanStatsUnion)
+	s.RowCount = origRowCount
+	s.Selectivity = origSelectivity
 	for i, n := 1, scan.Constraint.Spans.Count(); i < n; i++ {
 		spanStats.CopyFrom(s)
 		c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(i))
 		sb.constrainScan(scan, &c, pred, relProps, &spanStats)
 		spanStatsUnion.UnionWith(&spanStats)
+		s.RowCount = origRowCount
+		s.Selectivity = origSelectivity
 	}
 
 	// Now that we have the correct row count, use the combined spans and the
