@@ -328,7 +328,7 @@ func (e *evaluator) EvalDivDecimalIntOp(
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
-	if r == 0 {
+	if l.Form != apd.NaN && r == 0 {
 		return nil, tree.ErrDivByZero
 	}
 	dd := &tree.DDecimal{}
@@ -342,8 +342,10 @@ func (e *evaluator) EvalDivDecimalOp(
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
-	if r.IsZero() {
+	if r.IsZero() && l.Form != apd.NaN {
 		return nil, tree.ErrDivByZero
+	} else if r.Form == apd.Infinite && l.Form == apd.Finite {
+		return tree.DZeroDecimal, nil
 	}
 	dd := &tree.DDecimal{}
 	_, err := tree.DecimalCtx.Quo(&dd.Decimal, l, r)
@@ -353,11 +355,12 @@ func (e *evaluator) EvalDivDecimalOp(
 func (e *evaluator) EvalDivFloatOp(
 	ctx context.Context, _ *tree.DivFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	r := *right.(*tree.DFloat)
-	if r == 0.0 {
+	l := float64(*left.(*tree.DFloat))
+	r := float64(*right.(*tree.DFloat))
+	if r == 0.0 && !math.IsNaN(l) {
 		return nil, tree.ErrDivByZero
 	}
-	return tree.NewDFloat(*left.(*tree.DFloat) / r), nil
+	return tree.NewDFloat(tree.DFloat(l / r)), nil
 }
 
 func (e *evaluator) EvalDivIntDecimalOp(
@@ -367,6 +370,8 @@ func (e *evaluator) EvalDivIntDecimalOp(
 	r := &right.(*tree.DDecimal).Decimal
 	if r.IsZero() {
 		return nil, tree.ErrDivByZero
+	} else if r.Form == apd.Infinite {
+		return tree.DZeroDecimal, nil
 	}
 	dd := &tree.DDecimal{}
 	dd.SetInt64(int64(l))
@@ -418,7 +423,7 @@ func (e *evaluator) EvalFloorDivDecimalIntOp(
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
-	if r == 0 {
+	if r == 0 && l.Form != apd.NaN {
 		return nil, tree.ErrDivByZero
 	}
 	dd := &tree.DDecimal{}
@@ -432,8 +437,10 @@ func (e *evaluator) EvalFloorDivDecimalOp(
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
-	if r.IsZero() {
+	if r.IsZero() && l.Form != apd.NaN {
 		return nil, tree.ErrDivByZero
+	} else if r.Form == apd.Infinite && l.Form == apd.Finite {
+		return tree.DZeroDecimal, nil
 	}
 	dd := &tree.DDecimal{}
 	_, err := tree.HighPrecisionCtx.QuoInteger(&dd.Decimal, l, r)
@@ -445,7 +452,7 @@ func (e *evaluator) EvalFloorDivFloatOp(
 ) (tree.Datum, error) {
 	l := float64(*left.(*tree.DFloat))
 	r := float64(*right.(*tree.DFloat))
-	if r == 0.0 {
+	if r == 0.0 && !math.IsNaN(l) {
 		return nil, tree.ErrDivByZero
 	}
 	return tree.NewDFloat(tree.DFloat(math.Trunc(l / r))), nil
@@ -458,6 +465,8 @@ func (e *evaluator) EvalFloorDivIntDecimalOp(
 	r := &right.(*tree.DDecimal).Decimal
 	if r.IsZero() {
 		return nil, tree.ErrDivByZero
+	} else if r.Form == apd.Infinite {
+		return tree.DZeroDecimal, nil
 	}
 	dd := &tree.DDecimal{}
 	dd.SetInt64(int64(l))
@@ -996,7 +1005,7 @@ func (e *evaluator) EvalModDecimalIntOp(
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
-	if r == 0 {
+	if r == 0 && l.Form != apd.NaN {
 		return nil, tree.ErrDivByZero
 	}
 	dd := &tree.DDecimal{}
@@ -1010,7 +1019,7 @@ func (e *evaluator) EvalModDecimalOp(
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
-	if r.IsZero() {
+	if r.IsZero() && l.Form != apd.NaN {
 		return nil, tree.ErrDivByZero
 	}
 	dd := &tree.DDecimal{}
@@ -1023,7 +1032,7 @@ func (e *evaluator) EvalModFloatOp(
 ) (tree.Datum, error) {
 	l := float64(*left.(*tree.DFloat))
 	r := float64(*right.(*tree.DFloat))
-	if r == 0.0 {
+	if r == 0.0 && !math.IsNaN(l) {
 		return nil, tree.ErrDivByZero
 	}
 	return tree.NewDFloat(tree.DFloat(math.Mod(l, r))), nil

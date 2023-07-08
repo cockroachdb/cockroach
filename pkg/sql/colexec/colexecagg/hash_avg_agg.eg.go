@@ -447,6 +447,7 @@ func (a *avgDecimalHashAgg) Compute(
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++
@@ -466,6 +467,7 @@ func (a *avgDecimalHashAgg) Compute(
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.curCount++

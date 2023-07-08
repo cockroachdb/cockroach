@@ -617,6 +617,7 @@ func (a *avgDecimalWindowAgg) Compute(
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+
 				}
 
 				a.curCount++
@@ -637,6 +638,7 @@ func (a *avgDecimalWindowAgg) Compute(
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+
 				}
 
 				a.curCount++
@@ -713,6 +715,7 @@ func (a *avgDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, sta
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+
 				}
 
 				a.curCount--
@@ -733,6 +736,7 @@ func (a *avgDecimalWindowAgg) Remove(vecs []coldata.Vec, inputIdxs []uint32, sta
 					if err != nil {
 						colexecerror.ExpectedError(err)
 					}
+
 				}
 
 				a.curCount--
