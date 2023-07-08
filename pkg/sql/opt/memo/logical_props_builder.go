@@ -2550,14 +2550,15 @@ func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
 		return
 	}
 	for leftTable, leftTableOrds := range leftTables {
+		baseTabFDs := MakeTableFuncDep(md, leftTable)
 		for rightTable, rightTableOrds := range rightTables {
 			if md.TableMeta(leftTable).Table.ID() != md.TableMeta(rightTable).Table.ID() {
 				continue
 			}
 			// This is a self-join. If there are equalities between columns at the
 			// same ordinal positions in each (meta) table and those columns form a
-			// key on each input, *every* pair of columns at the same ordinal position
-			// is equal.
+			// key on the base table, *every* pair of columns at the same ordinal
+			// position is equal.
 			var eqCols opt.ColSet
 			colOrds := leftTableOrds.Intersection(rightTableOrds)
 			for colOrd, ok := colOrds.Next(0); ok; colOrd, ok = colOrds.Next(colOrd + 1) {
@@ -2567,8 +2568,7 @@ func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
 					eqCols.Add(rightCol)
 				}
 			}
-			if !eqCols.Empty() && h.leftProps.FuncDeps.ColsAreStrictKey(eqCols) &&
-				h.rightProps.FuncDeps.ColsAreStrictKey(eqCols) {
+			if !eqCols.Empty() && baseTabFDs.ColsAreStrictKey(eqCols) {
 				// Add equalities between each pair of columns at the same ordinal
 				// position, ignoring those that aren't part of the output.
 				for colOrd, ok := colOrds.Next(0); ok; colOrd, ok = colOrds.Next(colOrd + 1) {
