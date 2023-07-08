@@ -2948,18 +2948,18 @@ JOIN t88659 AS t4 ON (t3.a) = (t4.b) AND (t2.b) = (t4.a) AND (t2.a) = (t4.a);
 ----
 inner-join (lookup t88659)
  ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null a:19!null b:20!null c:21
- ├── key columns: [20] = [13]
+ ├── key columns: [7] = [19]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19), (8)==(2,7,19), (2)==(7,8,19), (13)-->(14,15), (3)==(9,15), (9)==(3,15), (15)==(3,9), (19)-->(20,21), (13)==(20), (20)==(13), (19)==(2,7,8)
+ ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,13,14,19,20), (8)==(2,7,13,14,19,20), (2)==(7,8,13,14,19,20), (13)-->(15), (3)==(9,15,21), (9)==(3,15,21), (15)==(3,9,21), (19)-->(21), (13)==(2,7,8,14,19,20), (20)==(2,7,8,13,14,19), (19)==(2,7,8,13,14,20), (21)==(3,9,15), (14)==(2,7,8,13,19,20)
  ├── inner-join (lookup t88659)
- │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:19!null b:20!null c:21
- │    ├── key columns: [7] = [19]
+ │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null
+ │    ├── key columns: [2] = [13]
  │    ├── lookup columns are key
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19,20), (8)==(2,7,19,20), (19)-->(21), (19)==(2,7,8,20), (20)==(2,7,8,19), (9)==(3,21), (21)==(3,9), (2)==(7,8,19,20), (3)==(9,21)
+ │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,13,14), (8)==(2,7,13,14), (13)-->(15), (9)==(3,15), (15)==(3,9), (13)==(2,7,8,14), (14)==(2,7,8,13), (2)==(7,8,13,14), (3)==(9,15)
  │    ├── inner-join (lookup t88659)
  │    │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null
  │    │    ├── key columns: [1] = [1]
@@ -2988,9 +2988,12 @@ inner-join (lookup t88659)
  │    │    │    └── filters (true)
  │    │    └── filters
  │    │         └── c:3 = c:9 [outer=(3,9), immutable, constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
- │    └── filters (true)
+ │    └── filters
+ │         ├── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
+ │         └── b:2 = b:14 [outer=(2,14), constraints=(/2: (/NULL - ]; /14: (/NULL - ]), fd=(2)==(14), (14)==(2)]
  └── filters
-      └── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
+      ├── a:13 = b:20 [outer=(13,20), constraints=(/13: (/NULL - ]; /20: (/NULL - ]), fd=(13)==(20), (20)==(13)]
+      └── c:3 = c:21 [outer=(3,21), immutable, constraints=(/3: (/NULL - ]; /21: (/NULL - ]), fd=(3)==(21), (21)==(3)]
 
 # Regression test for #90761 - don't drop LeftJoin filter when there are enough
 # InnerJoin edges to "link" all relations and the LeftJoin doesn't get
@@ -3369,3 +3372,76 @@ project
            │    └── filters
            │         └── (patient2_.id:11 IS NULL) OR (site3_.id:15 IN (1, 2)) [outer=(11,15)]
            └── filters (true)
+
+# Regression test for #106371 - only infer self-join equalities if the original
+# equality columns form a key over the *base* table, not just the join inputs.
+exec-ddl
+CREATE TABLE t106371 (x INT NOT NULL, y INT NOT NULL);
+----
+
+# Don't add an "a.y = b.y" filter.
+reorderjoins
+SELECT * FROM (SELECT * FROM t106371 ORDER BY y DESC LIMIT 1) a
+JOIN (SELECT DISTINCT ON (x) * FROM t106371) b ON a.x = b.x;
+----
+--------------------------------------------------------------------------------
+Join Tree #1
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── limit
+   │    ├── scan t106371
+   │    └── 1
+   ├── distinct-on
+   │    ├── scan t106371
+   │    └── aggregations
+   │         └── first-agg
+   │              └── y
+   └── filters
+        └── x = x
+Vertexes
+  A:
+    limit
+     ├── scan t106371
+     └── 1
+  B:
+    distinct-on
+     ├── scan t106371
+     └── aggregations
+          └── first-agg
+               └── y
+Edges
+  x = x [inner, ses=AB, tes=AB, rules=()]
+Joining AB
+  A B [inner, refs=AB]
+  B A [inner, refs=AB]
+Joins Considered: 2
+================================================================================
+Final Plan
+================================================================================
+inner-join (hash)
+ ├── columns: x:1!null y:2!null x:6!null y:7!null
+ ├── cardinality: [0 - 1]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: ()
+ ├── fd: ()-->(1,2,6,7), (6)==(1), (1)==(6)
+ ├── distinct-on
+ │    ├── columns: x:6!null y:7!null
+ │    ├── grouping columns: x:6!null
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
+ │    ├── scan t106371
+ │    │    └── columns: x:6!null y:7!null
+ │    └── aggregations
+ │         └── first-agg [as=y:7, outer=(7)]
+ │              └── y:7
+ ├── top-k
+ │    ├── columns: x:1!null y:2!null
+ │    ├── internal-ordering: -2
+ │    ├── k: 1
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    └── scan t106371
+ │         └── columns: x:1!null y:2!null
+ └── filters
+      └── x:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
