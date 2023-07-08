@@ -186,6 +186,22 @@ func (c Catalog) LookupNamespaceEntry(key catalog.NameKey) NamespaceEntry {
 	return e.(NamespaceEntry)
 }
 
+// LookupNameEntry looks up a descriptor ID by parentID, parentSchemaID and
+// name.
+func (c Catalog) LookupNameEntry(
+	parentID, parentSchemaID descpb.ID, name string,
+) catalog.NameEntry {
+	if !c.IsInitialized() {
+		return nil
+	}
+	got, _ := get(c.byName.t, byNameItem{
+		parentID:       parentID,
+		parentSchemaID: parentSchemaID,
+		name:           name,
+	}.get()).(catalog.NameEntry)
+	return got
+}
+
 // OrderedDescriptors returns the descriptors in an ordered fashion.
 func (c Catalog) OrderedDescriptors() []catalog.Descriptor {
 	if !c.IsInitialized() {

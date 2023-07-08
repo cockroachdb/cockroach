@@ -1260,3 +1260,57 @@ func getDatabaseNames(allDBs []catalog.DatabaseDescriptor) []string {
 	}
 	return names
 }
+
+// BenchmarkDescriptorCache measures the CPU and memory requirements of looking
+// up a non-virtual cached table descriptor by name.
+func BenchmarkDescriptorCache(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(b, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(b, `CREATE DATABASE db`)
+	tdb.Exec(b, `USE db`)
+	tdb.Exec(b, `CREATE SCHEMA schema`)
+	tdb.Exec(b, `CREATE TABLE db.schema.table()`)
+
+	s0 := tc.Server(0)
+	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
+	b.Run("immutable table descriptor", func(b *testing.B) {
+		require.NoError(b, sql.DescsTxn(ctx, &execCfg, func(
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+		) error {
+			tn := tree.MakeTableNameWithSchema("db", "schema", "table")
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				// Access the table descriptor.
+				_, _, err := descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn.KV()).MaybeGet(), &tn)
+				if err != nil {
+					return err
+				}
+			}
+			b.StopTimer()
+			return nil
+		}))
+	})
+	b.Run("mutable table descriptor", func(b *testing.B) {
+		require.NoError(b, sql.DescsTxn(ctx, &execCfg, func(
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+		) error {
+			tn := tree.MakeTableNameWithSchema("db", "schema", "table")
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				// Access the table descriptor.
+				_, _, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
+				if err != nil {
+					return err
+				}
+			}
+			b.StopTimer()
+			return nil
+		}))
+	})
+}
