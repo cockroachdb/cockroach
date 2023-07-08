@@ -300,6 +300,9 @@ const (
 	// ReportTypeLogFatal signifies that this is an error report that
 	// was generated via a log.Fatal call.
 	ReportTypeLogFatal
+	// ReportTypeAssertionFailure signifies that an assertion was violated (see
+	// expect package).
+	ReportTypeAssertionFailure
 )
 
 // sendCrashReport posts to sentry.
@@ -359,6 +362,8 @@ func SendReport(
 		event.Tags["report_type"] = "error"
 	case ReportTypeLogFatal:
 		event.Tags["report_type"] = "log_fatal"
+	case ReportTypeAssertionFailure:
+		event.Tags["report_type"] = "assertion"
 	}
 
 	for _, f := range tagFns {
