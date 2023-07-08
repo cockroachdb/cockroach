@@ -1226,8 +1226,7 @@ func (s *Server) serveImpl(
 	// canceled our context and that's how we got here; in that case, this will
 	// be a no-op.
 	c.stmtBuf.Close()
-	// Cancel the processor's context.
-	c.cancelConn()
+
 	// In case the authenticator is blocked on waiting for data from the client,
 	// tell it that there's no more data coming. This is a no-op if authentication
 	// was completed already.

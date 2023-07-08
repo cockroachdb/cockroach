@@ -3159,7 +3159,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			return err
 		}},
 		// We drain at the end, since it may evict us.
-		{"Drain", codes.Unknown, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Drain", codes.DeadlineExceeded, func(ctx context.Context, c serverpb.AdminClient) error {
 			stream, err := c.Drain(ctx, &serverpb.DrainRequest{DoDrain: true})
 			if err != nil {
 				return err

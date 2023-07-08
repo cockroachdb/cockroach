@@ -178,12 +178,6 @@ func (c *conn) processCommandsAsync(
 			if reservedOwned {
 				reserved.Close(ctx)
 			}
-			// Notify the connection's goroutine that we're terminating. The
-			// connection might know already, as it might have triggered this
-			// goroutine's finish, but it also might be us that we're triggering the
-			// connection's death. This context cancelation serves to interrupt a
-			// network read on the connection's goroutine.
-			c.cancelConn()
 
 			pgwireKnobs := sqlServer.GetExecutorConfig().PGWireTestingKnobs
 			if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
