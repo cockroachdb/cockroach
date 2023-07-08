@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/errors"
 )
 
 // Remove unused warning.
@@ -118,6 +119,18 @@ func (a *boolAndWindowAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows bool_and and bool_or operators to be
+// used when the window frame only grows. For the case when the window frame can
+// shrink, the default quadratic-scaling implementation is necessary.
+func (*boolAndWindowAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	colexecerror.InternalError(
+		errors.AssertionFailedf("Remove called on boolAndWindowAgg"),
+	)
+}
+
 func newBoolOrWindowAggAlloc(
 	allocator *colmem.Allocator, allocSize int64,
 ) aggregateFuncAlloc {
@@ -212,4 +225,16 @@ func (a *boolOrWindowAggAlloc) newAggFunc() AggregateFunc {
 	f.Reset()
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
+}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows bool_and and bool_or operators to be
+// used when the window frame only grows. For the case when the window frame can
+// shrink, the default quadratic-scaling implementation is necessary.
+func (*boolOrWindowAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	colexecerror.InternalError(
+		errors.AssertionFailedf("Remove called on boolOrWindowAgg"),
+	)
 }
