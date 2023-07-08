@@ -413,6 +413,12 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// It's not so clear why this test fails under deadlock but not
+	// under race. If it was "just slow" it would fail both. Maybe the
+	// failure indicates a real deadlock? Also, why does it fail only on
+	// the 23.1 branch and not on the master branch?
+	skip.UnderDeadlock(t, "flaky test - see #102854")
+
 	ctx := context.Background()
 
 	t.Logf("starting test cluster")
