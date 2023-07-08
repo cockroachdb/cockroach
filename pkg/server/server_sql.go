@@ -904,7 +904,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// The collector requires nodeliveness to get a list of all the nodes in the
 	// cluster.
 	var getNodes func(ctx context.Context) ([]roachpb.NodeID, error)
-	if isMixedSQLAndKVNode {
+	if isMixedSQLAndKVNode && hasNodeLiveness {
 		// TODO(dt): any reason not to just always use the instance reader? And just
 		// pass it directly instead of making a new closure here?
 		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
