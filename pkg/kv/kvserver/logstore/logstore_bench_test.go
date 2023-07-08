@@ -38,7 +38,11 @@ func (b *discardBatch) Commit(bool) error {
 
 type noopSyncCallback struct{}
 
-func (noopSyncCallback) OnLogSync(context.Context, []raftpb.Message, storage.BatchCommitStats) {}
+func (noopSyncCallback) OnLogSync(
+	context.Context, []raftpb.Message, storage.BatchCommitStats,
+) error {
+	return nil
+}
 
 func BenchmarkLogStore_StoreEntries(b *testing.B) {
 	defer log.Scope(b).Close(b)

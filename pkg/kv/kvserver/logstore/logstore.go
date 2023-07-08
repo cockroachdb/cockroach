@@ -119,7 +119,7 @@ type LogStore struct {
 // are associated with the MsgStorageAppend that triggered the fsync.
 // commitStats is populated iff this was a non-blocking sync.
 type SyncCallback interface {
-	OnLogSync(context.Context, []raftpb.Message, storage.BatchCommitStats)
+	OnLogSync(context.Context, []raftpb.Message, storage.BatchCommitStats) error
 }
 
 func newStoreEntriesBatch(eng storage.Engine) storage.Batch {
@@ -279,7 +279,9 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		if wantsSync {
 			logCommitEnd := stats.PebbleEnd
 			s.Metrics.RaftLogCommitLatency.RecordValue(logCommitEnd.Sub(stats.PebbleBegin).Nanoseconds())
-			cb.OnLogSync(ctx, m.Responses, storage.BatchCommitStats{})
+			if err := cb.OnLogSync(ctx, m.Responses, storage.BatchCommitStats{}); err != nil {
+				return RaftState{}, err
+			}
 		}
 	}
 	stats.Sync = wantsSync
@@ -340,12 +342,13 @@ type nonBlockingSyncWaiterCallback struct {
 }
 
 // run is the callback's logic. It is executed on the SyncWaiterLoop goroutine.
-func (cb *nonBlockingSyncWaiterCallback) run() {
+func (cb *nonBlockingSyncWaiterCallback) run() error {
 	dur := timeutil.Since(cb.logCommitBegin).Nanoseconds()
 	cb.metrics.RaftLogCommitLatency.RecordValue(dur)
 	commitStats := cb.batch.CommitStats()
-	cb.cb.OnLogSync(cb.ctx, cb.msgs, commitStats)
+	err := cb.cb.OnLogSync(cb.ctx, cb.msgs, commitStats)
 	cb.release()
+	return err
 }
 
 func (cb *nonBlockingSyncWaiterCallback) release() {

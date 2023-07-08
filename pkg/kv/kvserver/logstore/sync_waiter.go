@@ -37,7 +37,7 @@ var _ syncWaiter = storage.Batch(nil)
 // then pool the allocation of that object.
 type syncWaiterCallback interface {
 	// run executes the callback.
-	run()
+	run() error
 }
 
 // SyncWaiterLoop waits on a sequence of in-progress disk writes, notifying
@@ -95,7 +95,9 @@ func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
 			if err := w.wg.SyncWait(); err != nil {
 				log.Fatalf(ctx, "SyncWait error: %+v", err)
 			}
-			w.cb.run()
+			if err := w.cb.run(); err != nil {
+				log.Fatalf(ctx, "%+v", err)
+			}
 			w.wg.Close()
 		case <-stopper.ShouldQuiesce():
 			return

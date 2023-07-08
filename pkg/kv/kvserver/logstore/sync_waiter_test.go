@@ -97,4 +97,7 @@ func (c chanSyncWaiter) Close() {}
 // funcSyncWaiterCallback implements the syncWaiterCallback interface.
 type funcSyncWaiterCallback func()
 
-func (f funcSyncWaiterCallback) run() { f() }
+func (f funcSyncWaiterCallback) run() error {
+	f()
+	return nil
+}
