@@ -28,6 +28,10 @@ import (
 // entries to specific nodes, and (ii) to read pending dispatches.
 type Dispatch struct {
 	mu struct {
+		// TODO(irfansharif,aaditya): On kv0/enc=false/nodes=3/cpu=96 this mutex
+		// is responsible for ~3.7% of the mutex contention. Look to address it
+		// as part of #104154. Perhaps shard this mutex by node ID? Or use a
+		// sync.Map instead?
 		syncutil.Mutex
 		// outbox maintains pending dispatches on a per-node basis.
 		outbox map[roachpb.NodeID]dispatches
@@ -153,6 +157,10 @@ func (d *Dispatch) PendingDispatchFor(
 
 	var entries []kvflowcontrolpb.AdmittedRaftLogEntries
 	for key, dispatch := range d.mu.outbox[nodeID] {
+		// TODO(irfansharif,aaditya): This contributes to 0.5% of alloc_objects
+		// under kv0/enc=false/nodes=3/cpu=96. Maybe address it as part of
+		// #104154; we're simply copying things over. Maybe use a sync.Pool here
+		// and around the outbox map?
 		entries = append(entries, kvflowcontrolpb.AdmittedRaftLogEntries{
 			RangeID:             key.RangeID,
 			StoreID:             key.StoreID,
