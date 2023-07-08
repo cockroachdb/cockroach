@@ -23,4 +23,7 @@ func TestCrdbTestOn(t *testing.T) {
 	if bazel.BuiltWithBazel() {
 		require.True(t, CrdbTestBuild)
 	}
+
+	require.True(t, likelyRunningUnderTest)
+	require.True(t, RunningUnderTest())
 }

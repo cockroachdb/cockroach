@@ -7,8 +7,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "buildutil",
     srcs = select({
-        "//build/toolchains:crdb_test": [":gen-crdb-test-on"],
-        "//conditions:default": [":gen-crdb-test-off"],
+        "//build/toolchains:crdb_test": [
+            "util.go",
+            ":gen-crdb-test-on",
+        ],
+        "//conditions:default": [
+            "util.go",
+            ":gen-crdb-test-off",
+        ],
     }),
     importpath = "github.com/cockroachdb/cockroach/pkg/util/buildutil",
     visibility = ["//visibility:public"],
