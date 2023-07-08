@@ -57,7 +57,6 @@ const regular, elastic = admissionpb.RegularWorkClass, admissionpb.ElasticWorkCl
 type Controller struct {
 	mu struct {
 		syncutil.Mutex
-
 		// Token limit per work class, tracking
 		// kvadmission.flow_controller.{regular,elastic}_tokens_per_stream.
 		limit tokensPerWorkClass
@@ -69,7 +68,7 @@ type Controller struct {
 		// streams get closed permanently (tenants get deleted, nodes removed)
 		// or when completely inactive (no tokens deducted/returned over 30+
 		// minutes), clear these out.
-		buckets map[kvflowcontrol.Stream]bucket
+		buckets map[kvflowcontrol.Stream]*bucket
 	}
 	metrics  *metrics
 	clock    *hlc.Clock
@@ -91,7 +90,7 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 		regular: regularTokens,
 		elastic: elasticTokens,
 	}
-	c.mu.buckets = make(map[kvflowcontrol.Stream]bucket)
+	c.mu.buckets = make(map[kvflowcontrol.Stream]*bucket)
 	regularTokensPerStream.SetOnChange(&settings.SV, func(ctx context.Context) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -110,8 +109,10 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 		}
 		c.mu.limit = now
 		for _, b := range c.mu.buckets {
-			b.tokens[regular] += adjustment[regular]
-			b.tokens[elastic] += adjustment[elastic]
+			b.mu.Lock()
+			b.mu.tokens[regular] += adjustment[regular]
+			b.mu.tokens[elastic] += adjustment[elastic]
+			b.mu.Unlock()
 			c.metrics.onTokenAdjustment(adjustment)
 			if adjustment[regular] > 0 || adjustment[elastic] > 0 {
 				b.signal() // signal a waiter, if any
@@ -144,9 +145,9 @@ func (c *Controller) Admit(
 	for {
 		c.mu.Lock()
 		b := c.getBucketLocked(connection.Stream())
-		tokens := b.tokens[class]
 		c.mu.Unlock()
 
+		tokens := b.tokens(class)
 		if tokens > 0 ||
 			// In addition to letting requests through when there are tokens
 			// being available, we'll also let them through if we're not
@@ -243,12 +244,14 @@ func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
 
 	var streams []kvflowinspectpb.Stream
 	for stream, b := range c.mu.buckets {
+		b.mu.Lock()
 		streams = append(streams, kvflowinspectpb.Stream{
 			TenantID:               stream.TenantID,
 			StoreID:                stream.StoreID,
-			AvailableRegularTokens: int64(b.tokens[regular]),
-			AvailableElasticTokens: int64(b.tokens[elastic]),
+			AvailableRegularTokens: int64(b.tokensLocked(regular)),
+			AvailableElasticTokens: int64(b.tokensLocked(elastic)),
 		})
+		b.mu.Unlock()
 	}
 	sort.Slice(streams, func(i, j int) bool { // for determinism
 		if streams[i].TenantID != streams[j].TenantID {
@@ -281,9 +284,8 @@ func (c *Controller) adjustTokens(
 	class := admissionpb.WorkClassFromPri(pri)
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	b := c.getBucketLocked(stream)
+	c.mu.Unlock()
 	adjustment, unaccounted := b.adjust(ctx, class, delta, c.mu.limit)
 	c.metrics.onTokenAdjustment(adjustment)
 	c.metrics.onUnaccounted(unaccounted)
@@ -292,12 +294,14 @@ func (c *Controller) adjustTokens(
 	}
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
+		b.mu.Lock()
 		log.Infof(ctx, "adjusted flow tokens (pri=%s stream=%s delta=%s): regular=%s elastic=%s",
-			pri, stream, delta, b.tokens[regular], b.tokens[elastic])
+			pri, stream, delta, b.tokensLocked(regular), b.tokensLocked(elastic))
+		b.mu.Unlock()
 	}
 }
 
-func (c *Controller) getBucketLocked(stream kvflowcontrol.Stream) bucket {
+func (c *Controller) getBucketLocked(stream kvflowcontrol.Stream) *bucket {
 	b, ok := c.mu.buckets[stream]
 	if !ok {
 		b = newBucket(c.mu.limit)
@@ -310,7 +314,11 @@ func (c *Controller) getBucketLocked(stream kvflowcontrol.Stream) bucket {
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
 type bucket struct {
-	tokens tokensPerWorkClass // protected by Controller.mu
+	mu struct {
+		syncutil.Mutex
+		tokens tokensPerWorkClass
+	}
+
 	// Waiting requests do so by waiting on signalCh without holding mutexes.
 	// Requests first check for available tokens, waiting if unavailable.
 	// - Whenever tokens are returned, signalCh is signaled, waking up a single
@@ -326,14 +334,25 @@ type bucket struct {
 	signalCh chan struct{}
 }
 
-func newBucket(t tokensPerWorkClass) bucket {
-	return bucket{
-		tokens: map[admissionpb.WorkClass]kvflowcontrol.Tokens{
-			regular: t[regular],
-			elastic: t[elastic],
-		},
+func newBucket(t tokensPerWorkClass) *bucket {
+	b := bucket{
 		signalCh: make(chan struct{}, 1),
 	}
+	b.mu.tokens = map[admissionpb.WorkClass]kvflowcontrol.Tokens{
+		regular: t[regular],
+		elastic: t[elastic],
+	}
+	return &b
+}
+
+func (b *bucket) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.tokensLocked(wc)
+}
+
+func (b *bucket) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	return b.mu.tokens[wc]
 }
 
 func (b *bucket) signal() {
@@ -353,35 +372,38 @@ func (b *bucket) adjust(
 	delta kvflowcontrol.Tokens,
 	limit tokensPerWorkClass,
 ) (adjustment, unaccounted tokensPerWorkClass) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	unaccounted = tokensPerWorkClass{
 		regular: 0,
 		elastic: 0,
 	}
 
 	before := tokensPerWorkClass{
-		regular: b.tokens[regular],
-		elastic: b.tokens[elastic],
+		regular: b.mu.tokens[regular],
+		elastic: b.mu.tokens[elastic],
 	}
 
 	switch class {
 	case elastic:
 		// Elastic {deductions,returns} only affect elastic flow tokens.
-		b.tokens[class] += delta
-		if delta > 0 && b.tokens[class] > limit[class] {
-			unaccounted[class] = b.tokens[class] - limit[class]
-			b.tokens[class] = limit[class] // enforce ceiling
+		b.mu.tokens[class] += delta
+		if delta > 0 && b.mu.tokens[class] > limit[class] {
+			unaccounted[class] = b.mu.tokens[class] - limit[class]
+			b.mu.tokens[class] = limit[class] // enforce ceiling
 		}
 	case regular:
-		b.tokens[class] += delta
-		if delta > 0 && b.tokens[class] > limit[class] {
-			unaccounted[class] = b.tokens[class] - limit[class]
-			b.tokens[class] = limit[class] // enforce ceiling
+		b.mu.tokens[class] += delta
+		if delta > 0 && b.mu.tokens[class] > limit[class] {
+			unaccounted[class] = b.mu.tokens[class] - limit[class]
+			b.mu.tokens[class] = limit[class] // enforce ceiling
 		}
 
-		b.tokens[elastic] += delta
-		if delta > 0 && b.tokens[elastic] > limit[elastic] {
-			unaccounted[elastic] = b.tokens[elastic] - limit[elastic]
-			b.tokens[elastic] = limit[elastic] // enforce ceiling
+		b.mu.tokens[elastic] += delta
+		if delta > 0 && b.mu.tokens[elastic] > limit[elastic] {
+			unaccounted[elastic] = b.mu.tokens[elastic] - limit[elastic]
+			b.mu.tokens[elastic] = limit[elastic] // enforce ceiling
 		}
 	}
 
@@ -391,8 +413,8 @@ func (b *bucket) adjust(
 	}
 
 	adjustment = tokensPerWorkClass{
-		regular: b.tokens[regular] - before[regular],
-		elastic: b.tokens[elastic] - before[elastic],
+		regular: b.mu.tokens[regular] - before[regular],
+		elastic: b.mu.tokens[elastic] - before[elastic],
 	}
 	return adjustment, unaccounted
 }
@@ -416,12 +438,16 @@ func validateTokenRange(b int64) error {
 }
 
 func (c *Controller) getTokensForStream(stream kvflowcontrol.Stream) tokensPerWorkClass {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	ret := make(map[admissionpb.WorkClass]kvflowcontrol.Tokens)
-	for wc, c := range c.getBucketLocked(stream).tokens {
-		ret[wc] = c
+	c.mu.Lock()
+	b := c.getBucketLocked(stream)
+	c.mu.Unlock()
+
+	b.mu.Lock()
+	for _, wc := range []admissionpb.WorkClass{regular, elastic} {
+		ret[wc] = b.tokensLocked(wc)
 	}
+	b.mu.Unlock()
 	return ret
 }
 
@@ -462,8 +488,11 @@ func (c *Controller) TestingNonBlockingAdmit(
 
 		c.mu.Lock()
 		b := c.getBucketLocked(connection.Stream())
-		tokens := b.tokens[class]
 		c.mu.Unlock()
+
+		b.mu.Lock()
+		tokens := b.mu.tokens[class]
+		b.mu.Unlock()
 
 		if tokens <= 0 {
 			return false
@@ -497,7 +526,7 @@ func (c *Controller) TestingMetrics() interface{} {
 	return c.metrics
 }
 
-func (c *Controller) testingGetBucket(stream kvflowcontrol.Stream) bucket {
+func (c *Controller) testingGetBucket(stream kvflowcontrol.Stream) *bucket {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.getBucketLocked(stream)

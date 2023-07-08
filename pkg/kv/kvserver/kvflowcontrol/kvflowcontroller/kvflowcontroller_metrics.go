@@ -157,8 +157,10 @@ func newMetrics(c *Controller) *metrics {
 				sum := int64(0)
 				c.mu.Lock()
 				defer c.mu.Unlock()
-				for _, wbc := range c.mu.buckets {
-					sum += int64(wbc.tokens[wc])
+				for _, b := range c.mu.buckets {
+					b.mu.Lock()
+					sum += int64(b.tokensLocked(wc))
+					b.mu.Unlock()
 				}
 				return sum
 			},
@@ -213,7 +215,7 @@ func newMetrics(c *Controller) *metrics {
 				defer c.mu.Unlock()
 
 				for s, wbc := range c.mu.buckets {
-					if wbc.tokens[wc] <= 0 {
+					if wbc.tokens(wc) <= 0 {
 						count += 1
 
 						if shouldLog {
