@@ -2948,18 +2948,18 @@ JOIN t88659 AS t4 ON (t3.a) = (t4.b) AND (t2.b) = (t4.a) AND (t2.a) = (t4.a);
 ----
 inner-join (lookup t88659)
  ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null a:19!null b:20!null c:21
- ├── key columns: [20] = [13]
+ ├── key columns: [7] = [19]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
- ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19), (8)==(2,7,19), (2)==(7,8,19), (13)-->(14,15), (3)==(9,15), (9)==(3,15), (15)==(3,9), (19)-->(20,21), (13)==(20), (20)==(13), (19)==(2,7,8)
+ ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,13,14,19,20), (8)==(2,7,13,14,19,20), (2)==(7,8,13,14,19,20), (13)-->(15), (3)==(9,15,21), (9)==(3,15,21), (15)==(3,9,21), (19)-->(21), (13)==(2,7,8,14,19,20), (20)==(2,7,8,13,14,19), (19)==(2,7,8,13,14,20), (21)==(3,9,15), (14)==(2,7,8,13,19,20)
  ├── inner-join (lookup t88659)
- │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:19!null b:20!null c:21
- │    ├── key columns: [7] = [19]
+ │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null
+ │    ├── key columns: [2] = [13]
  │    ├── lookup columns are key
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19,20), (8)==(2,7,19,20), (19)-->(21), (19)==(2,7,8,20), (20)==(2,7,8,19), (9)==(3,21), (21)==(3,9), (2)==(7,8,19,20), (3)==(9,21)
+ │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,13,14), (8)==(2,7,13,14), (13)-->(15), (9)==(3,15), (15)==(3,9), (13)==(2,7,8,14), (14)==(2,7,8,13), (2)==(7,8,13,14), (3)==(9,15)
  │    ├── inner-join (lookup t88659)
  │    │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null
  │    │    ├── key columns: [1] = [1]
@@ -2988,9 +2988,12 @@ inner-join (lookup t88659)
  │    │    │    └── filters (true)
  │    │    └── filters
  │    │         └── c:3 = c:9 [outer=(3,9), immutable, constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
- │    └── filters (true)
+ │    └── filters
+ │         ├── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
+ │         └── b:2 = b:14 [outer=(2,14), constraints=(/2: (/NULL - ]; /14: (/NULL - ]), fd=(2)==(14), (14)==(2)]
  └── filters
-      └── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
+      ├── a:13 = b:20 [outer=(13,20), constraints=(/13: (/NULL - ]; /20: (/NULL - ]), fd=(13)==(20), (20)==(13)]
+      └── c:3 = c:21 [outer=(3,21), immutable, constraints=(/3: (/NULL - ]; /21: (/NULL - ]), fd=(3)==(21), (21)==(3)]
 
 # Regression test for #90761 - don't drop LeftJoin filter when there are enough
 # InnerJoin edges to "link" all relations and the LeftJoin doesn't get
@@ -3368,4 +3371,262 @@ project
            │    │         └── site_id:12 = site3_.id:15 [outer=(12,15), constraints=(/12: (/NULL - ]; /15: (/NULL - ]), fd=(12)==(15), (15)==(12)]
            │    └── filters
            │         └── (patient2_.id:11 IS NULL) OR (site3_.id:15 IN (1, 2)) [outer=(11,15)]
+           └── filters (true)
+
+# Regression test for #106371 - only infer self-join equalities if the original
+# equality columns form a key over the *base* table, not just the join inputs.
+exec-ddl
+CREATE TABLE queries_note (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  note VARCHAR(100) NOT NULL,
+  misc VARCHAR(25) NOT NULL,
+  tag_id INT8 NULL,
+  negate BOOL NOT NULL,
+  CONSTRAINT queries_note_pkey PRIMARY KEY (id ASC)
+);
+----
+
+exec-ddl
+CREATE TABLE queries_item (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  name VARCHAR(10) NOT NULL,
+  created TIMESTAMPTZ NOT NULL,
+  modified TIMESTAMPTZ NULL,
+  creator_id INT8 NOT NULL,
+  note_id INT8 NOT NULL,
+  CONSTRAINT queries_item_pkey PRIMARY KEY (id ASC),
+  CONSTRAINT queries_item_note_id_9de00e4b_fk_queries_note_id FOREIGN KEY (note_id) REFERENCES queries_note(id)
+);
+----
+
+exec-ddl
+CREATE TABLE queries_item_tags (                                                                      
+  id INT8 NOT NULL DEFAULT unique_rowid(),                                                                 
+  item_id INT8 NOT NULL,                                                                                   
+  tag_id INT8 NOT NULL,                                                                                    
+  CONSTRAINT queries_item_tags_pkey PRIMARY KEY (id ASC),                                                  
+  CONSTRAINT queries_item_tags_item_id_9b8a9088_fk_queries_item_id FOREIGN KEY (item_id) REFERENCES queries_item(id),                                                   
+  UNIQUE INDEX queries_item_tags_item_id_tag_id_d9956f47_uniq (item_id ASC, tag_id ASC)                    
+);
+----
+
+# Don't add a "queries_item_tags.tag_id = t4.tag_id" filter.
+reorderjoins
+SELECT queries_item.id, queries_item.name, queries_item.created, queries_item.modified, queries_item.creator_id, queries_item.note_id
+FROM queries_item
+INNER JOIN queries_item_tags
+ON (queries_item.id = queries_item_tags.item_id)
+INNER JOIN queries_item_tags AS t4
+ON (queries_item.id = t4.item_id)
+INNER JOIN queries_note
+ON (queries_item.note_id = queries_note.id)
+WHERE ((queries_item_tags.tag_id = 880570232933416961)
+AND (t4.tag_id = 880570232939020289))
+ORDER BY queries_note.note DESC, queries_item.name ASC;
+----
+--------------------------------------------------------------------------------
+Join Tree #1
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── scan queries_item
+   ├── select
+   │    ├── scan queries_item_tags
+   │    └── filters
+   │         └── queries_item_tags.tag_id = 880570232933416961
+   └── filters
+        └── queries_item.id = queries_item_tags.item_id
+Vertexes
+  A:
+    scan queries_item
+  B:
+    select
+     ├── scan queries_item_tags
+     └── filters
+          └── queries_item_tags.tag_id = 880570232933416961
+Edges
+  queries_item.id = queries_item_tags.item_id [inner, ses=AB, tes=AB, rules=()]
+Joining AB
+  A B [inner, refs=AB]
+  B A [inner, refs=AB]
+Joins Considered: 2
+--------------------------------------------------------------------------------
+Join Tree #2
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── scan queries_item
+   │    ├── select
+   │    │    ├── scan queries_item_tags
+   │    │    └── filters
+   │    │         └── queries_item_tags.tag_id = 880570232933416961
+   │    └── filters
+   │         └── queries_item.id = queries_item_tags.item_id
+   ├── select
+   │    ├── scan queries_item_tags [as=t4]
+   │    └── filters
+   │         └── t4.tag_id = 880570232939020289
+   └── filters
+        └── queries_item.id = t4.item_id
+Vertexes
+  A:
+    scan queries_item
+  B:
+    select
+     ├── scan queries_item_tags
+     └── filters
+          └── queries_item_tags.tag_id = 880570232933416961
+  C:
+    select
+     ├── scan queries_item_tags [as=t4]
+     └── filters
+          └── t4.tag_id = 880570232939020289
+Edges
+  queries_item.id = queries_item_tags.item_id [inner, ses=AB, tes=AB, rules=()]
+  queries_item.id = t4.item_id [inner, ses=AC, tes=AC, rules=()]
+  queries_item_tags.item_id = t4.item_id [inner, ses=BC, tes=BC, rules=()]
+Joining AB
+  A B [inner, refs=AB]
+  B A [inner, refs=AB]
+Joining AC
+  A C [inner, refs=AC]
+  C A [inner, refs=AC]
+Joining BC
+  B C [inner, refs=BC]
+  C B [inner, refs=BC]
+Joining ABC
+  A BC [inner, refs=AB]
+  BC A [inner, refs=AB]
+  B AC [inner, refs=AB]
+  AC B [inner, refs=AB]
+  AB C [inner, refs=AC]
+  C AB [inner, refs=AC]
+Joins Considered: 12
+--------------------------------------------------------------------------------
+Join Tree #3
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── inner-join (hash)
+   │    ├── inner-join (hash)
+   │    │    ├── scan queries_item
+   │    │    ├── select
+   │    │    │    ├── scan queries_item_tags
+   │    │    │    └── filters
+   │    │    │         └── queries_item_tags.tag_id = 880570232933416961
+   │    │    └── filters
+   │    │         └── queries_item.id = queries_item_tags.item_id
+   │    ├── select
+   │    │    ├── scan queries_item_tags [as=t4]
+   │    │    └── filters
+   │    │         └── t4.tag_id = 880570232939020289
+   │    └── filters
+   │         └── queries_item.id = t4.item_id
+   ├── scan queries_note
+   └── filters
+        └── note_id = queries_note.id
+Vertexes
+  A:
+    scan queries_item
+  B:
+    select
+     ├── scan queries_item_tags
+     └── filters
+          └── queries_item_tags.tag_id = 880570232933416961
+  C:
+    select
+     ├── scan queries_item_tags [as=t4]
+     └── filters
+          └── t4.tag_id = 880570232939020289
+  D:
+    scan queries_note
+Edges
+  queries_item.id = queries_item_tags.item_id [inner, ses=AB, tes=AB, rules=()]
+  queries_item.id = t4.item_id [inner, ses=AC, tes=AC, rules=()]
+  note_id = queries_note.id [inner, ses=AD, tes=AD, rules=()]
+  queries_item_tags.item_id = t4.item_id [inner, ses=BC, tes=BC, rules=()]
+Joining AB
+  A B [inner, refs=AB]
+  B A [inner, refs=AB]
+Joining AC
+  A C [inner, refs=AC]
+  C A [inner, refs=AC]
+Joining BC
+  B C [inner, refs=BC]
+  C B [inner, refs=BC]
+Joining ABC
+  A BC [inner, refs=AB]
+  BC A [inner, refs=AB]
+  B AC [inner, refs=AB]
+  AC B [inner, refs=AB]
+  AB C [inner, refs=AC]
+  C AB [inner, refs=AC]
+Joining AD
+  A D [inner, refs=AD]
+  D A [inner, refs=AD]
+Joining ABD
+  B AD [inner, refs=AB]
+  AD B [inner, refs=AB]
+  AB D [inner, refs=AD]
+  D AB [inner, refs=AD]
+Joining ACD
+  C AD [inner, refs=AC]
+  AD C [inner, refs=AC]
+  AC D [inner, refs=AD]
+  D AC [inner, refs=AD]
+Joining ABCD
+  B ACD [inner, refs=AB]
+  ACD B [inner, refs=AB]
+  C ABD [inner, refs=AC]
+  ABD C [inner, refs=AC]
+  BC AD [inner, refs=AB]
+  AD BC [inner, refs=AB]
+  ABC D [inner, refs=AD]
+  D ABC [inner, refs=AD]
+Joins Considered: 30
+================================================================================
+Final Plan
+================================================================================
+sort
+ ├── columns: id:1!null name:2!null created:3!null modified:4 creator_id:5!null note_id:6!null  [hidden: note:20!null]
+ ├── key: (1)
+ ├── fd: (1)-->(2-6), (6)-->(20)
+ ├── ordering: -20,+2
+ └── project
+      ├── columns: queries_item.id:1!null name:2!null created:3!null modified:4 creator_id:5!null note_id:6!null note:20!null
+      ├── key: (1)
+      ├── fd: (1)-->(2-6), (6)-->(20)
+      └── inner-join (lookup queries_note)
+           ├── columns: queries_item.id:1!null name:2!null created:3!null modified:4 creator_id:5!null note_id:6!null queries_item_tags.item_id:10!null queries_item_tags.tag_id:11!null t4.item_id:15!null t4.tag_id:16!null queries_note.id:19!null note:20!null
+           ├── key columns: [6] = [19]
+           ├── lookup columns are key
+           ├── key: (15)
+           ├── fd: ()-->(11,16), (1)-->(2-6), (1)==(10,15), (10)==(1,15), (15)==(1,10), (19)-->(20), (6)==(19), (19)==(6)
+           ├── inner-join (lookup queries_item_tags@queries_item_tags_item_id_tag_id_d9956f47_uniq [as=t4])
+           │    ├── columns: queries_item.id:1!null name:2!null created:3!null modified:4 creator_id:5!null note_id:6!null queries_item_tags.item_id:10!null queries_item_tags.tag_id:11!null t4.item_id:15!null t4.tag_id:16!null
+           │    ├── key columns: [1 27] = [15 16]
+           │    ├── lookup columns are key
+           │    ├── key: (15)
+           │    ├── fd: ()-->(11,16), (1)-->(2-6), (1)==(10,15), (10)==(1,15), (15)==(1,10)
+           │    ├── project
+           │    │    ├── columns: "lookup_join_const_col_@16":27!null queries_item.id:1!null name:2!null created:3!null modified:4 creator_id:5!null note_id:6!null queries_item_tags.item_id:10!null queries_item_tags.tag_id:11!null
+           │    │    ├── key: (10)
+           │    │    ├── fd: ()-->(11,27), (1)-->(2-6), (1)==(10), (10)==(1)
+           │    │    ├── inner-join (lookup queries_item)
+           │    │    │    ├── columns: queries_item.id:1!null name:2!null created:3!null modified:4 creator_id:5!null note_id:6!null queries_item_tags.item_id:10!null queries_item_tags.tag_id:11!null
+           │    │    │    ├── key columns: [10] = [1]
+           │    │    │    ├── lookup columns are key
+           │    │    │    ├── key: (10)
+           │    │    │    ├── fd: ()-->(11), (1)-->(2-6), (1)==(10), (10)==(1)
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: queries_item_tags.item_id:10!null queries_item_tags.tag_id:11!null
+           │    │    │    │    ├── key: (10)
+           │    │    │    │    ├── fd: ()-->(11)
+           │    │    │    │    ├── scan queries_item_tags
+           │    │    │    │    │    ├── columns: queries_item_tags.item_id:10!null queries_item_tags.tag_id:11!null
+           │    │    │    │    │    └── key: (10,11)
+           │    │    │    │    └── filters
+           │    │    │    │         └── queries_item_tags.tag_id:11 = 880570232933416961 [outer=(11), constraints=(/11: [/880570232933416961 - /880570232933416961]; tight), fd=()-->(11)]
+           │    │    │    └── filters (true)
+           │    │    └── projections
+           │    │         └── 880570232939020289 [as="lookup_join_const_col_@16":27]
+           │    └── filters (true)
            └── filters (true)
