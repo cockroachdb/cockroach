@@ -12,6 +12,7 @@ package storage
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"testing"
 	"unsafe"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -166,7 +168,7 @@ func TestEngineKeyValidate(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run("", func(t *testing.T) {
+		t.Run(fmt.Sprint(tc.key), func(t *testing.T) {
 			var ek EngineKey
 			switch k := tc.key.(type) {
 			case EngineKey:
@@ -178,13 +180,73 @@ func TestEngineKeyValidate(t *testing.T) {
 				ek = key
 			}
 
-			if err := ek.Validate(); err != nil {
-				require.True(t, tc.invalid)
-				return
+			err := ek.Validate()
+			if tc.invalid {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				// Ensure EngineKey.Validate doesn't allocate for valid keys.
+				// Regression test for #106464.
+				require.Equal(t, 0.0, testing.AllocsPerRun(1, func() {
+					_ = ek.Validate()
+				}))
 			}
-			require.False(t, tc.invalid)
 		})
 	}
+
+	// Test randomly generated valid keys.
+	rng, _ := randutil.NewTestRand()
+	t.Run("randomized", func(t *testing.T) {
+		t.Run("MVCCKey", func(t *testing.T) {
+			for i := 0; i < 100; i++ {
+				k := randomMVCCKey(rng)
+				ek := EngineKey{Key: k.Key, Version: encodeMVCCTimestamp(k.Timestamp)}
+				if err := ek.Validate(); err != nil {
+					t.Errorf("%q.Validate() = %q, want nil", ek, err)
+				}
+				require.Equal(t, 0.0, testing.AllocsPerRun(1, func() {
+					_ = ek.Validate()
+				}))
+			}
+		})
+		t.Run("LockTableKey", func(t *testing.T) {
+			var buf []byte
+			for i := 0; i < 100; i++ {
+				k := randomLockTableKey(rng)
+				ek, _ := k.ToEngineKey(buf)
+				if err := ek.Validate(); err != nil {
+					t.Errorf("%q.Validate() = %q, want nil", ek, err)
+				}
+				require.Equal(t, 0.0, testing.AllocsPerRun(1, func() {
+					_ = ek.Validate()
+				}))
+				buf = ek.Key[:0]
+			}
+		})
+	})
+}
+
+func randomMVCCKey(r *rand.Rand) MVCCKey {
+	k := MVCCKey{
+		Key:       randutil.RandBytes(r, randutil.RandIntInRange(r, 1, 12)),
+		Timestamp: hlc.Timestamp{WallTime: r.Int63()},
+	}
+	if r.Intn(2) == 1 {
+		k.Timestamp.Logical = r.Int31()
+	}
+	k.Timestamp.Synthetic = r.Intn(5) == 1
+	return k
+}
+
+func randomLockTableKey(r *rand.Rand) LockTableKey {
+	k := LockTableKey{
+		Key:      randutil.RandBytes(r, randutil.RandIntInRange(r, 1, 12)),
+		Strength: lock.Exclusive,
+	}
+	var txnID uuid.UUID
+	txnID.DeterministicV4(r.Uint64(), math.MaxUint64)
+	k.TxnUUID = txnID[:]
+	return k
 }
 
 func engineKey(key string, ts int) EngineKey {
