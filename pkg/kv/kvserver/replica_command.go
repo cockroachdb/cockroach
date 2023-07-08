@@ -2782,7 +2782,9 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	defer func() {
 		// Report the snapshot status to Raft, which expects us to do this once we
 		// finish sending the snapshot.
-		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
+		if err := r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr); err != nil {
+			retErr = err
+		}
 	}()
 
 	r.mu.RLock()

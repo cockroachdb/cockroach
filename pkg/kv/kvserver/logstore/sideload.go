@@ -224,30 +224,6 @@ func MaybeInlineSideloadedRaftCommand(
 	return &ent, nil
 }
 
-// AssertSideloadedRaftCommandInlined asserts that if the provided entry is a
-// sideloaded entry, then its payload has already been inlined. Doing so
-// requires unmarshalling the raft command, so this assertion should be kept out
-// of performance critical paths.
-func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
-	typ, err := raftlog.EncodingOf(*ent)
-	if err != nil {
-		log.Fatalf(ctx, "%v", err)
-	}
-	if !typ.IsSideloaded() {
-		return
-	}
-
-	e, err := raftlog.NewEntry(*ent)
-	if err != nil {
-		log.Fatalf(ctx, "%v", err)
-	}
-
-	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) == 0 {
-		// The entry is "thin", which is what this assertion is checking for.
-		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", e.Cmd)
-	}
-}
-
 // maybePurgeSideloaded removes [firstIndex, ..., lastIndex] at the given term
 // and returns the total number of bytes removed. Nonexistent entries are
 // silently skipped over.
