@@ -980,14 +980,22 @@ CREATE TABLE t.foo (v INT);
 func TestTxnObeysTableModificationTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 85876)
 	params := createTestServerParams()
+	params.ScanMaxIdleTime = time.Millisecond
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
+	require.NoError(t, err)
+
+	// Refresh protected timestamp cache immediately to make MVCC GC queue to
+	// process GC immediately.
+	_, err = sqlDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
+	require.NoError(t, err)
 
 	// This test intentionally relies on uncontended transactions not being pushed
 	// in order to verify what it claims to verify. The default closed timestamp
@@ -1011,11 +1019,6 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 
-	{
-		_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID())
-		require.NoError(t, err)
-	}
-
 	// A read-write transaction that uses the old version of the descriptor.
 	txReadWrite, err := sqlDB.Begin()
 	if err != nil {
@@ -1036,10 +1039,6 @@ INSERT INTO t.kv VALUES ('a', 'b');
 
 	// Modify the table descriptor.
 	if _, err := sqlDB.Exec(`ALTER TABLE t.kv ADD m CHAR DEFAULT 'z';`); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := sqlDB.Exec(`SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC')`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1185,12 +1184,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		return tests.CheckKeyCountE(t, kvDB, tableSpan, 2)
+		return tests.CheckKeyCountIncludingTombstonedE(t, s, tableSpan, 2)
 	})
-
-	// TODO(erik, vivek): Transactions using old descriptors should fail and
-	// rollback when the index keys have been removed by ClearRange
-	// and the consistency issue is resolved. See #31563.
 }
 
 // Test that a lease on a table descriptor is always acquired on the latest
