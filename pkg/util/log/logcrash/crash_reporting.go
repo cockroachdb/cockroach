@@ -317,6 +317,9 @@ const (
 	// ReportTypeLogFatal signifies that this is an error report that
 	// was generated via a log.Fatal call.
 	ReportTypeLogFatal
+	// ReportTypeAssertionFailure signifies that an assertion was violated (see
+	// expect package).
+	ReportTypeAssertionFailure
 )
 
 // sendCrashReport posts to sentry.
@@ -376,6 +379,8 @@ func SendReport(
 		event.Tags["report_type"] = "error"
 	case ReportTypeLogFatal:
 		event.Tags["report_type"] = "log_fatal"
+	case ReportTypeAssertionFailure:
+		event.Tags["report_type"] = "assertion"
 	}
 
 	for _, f := range tagFns {
@@ -437,13 +442,15 @@ func RegisterTagFn(key string, value func(context.Context) string) {
 	tagFns = append(tagFns, tagFn{key, value})
 }
 
-func maybeSendCrashReport(ctx context.Context, err error) {
+func maybeSendCrashReport(ctx context.Context, err error, reportType ReportType) {
 	// We load the ReportingSettings from global singleton in this call path.
 	if sv := getGlobalSettings(); sv != nil {
-		sendCrashReport(ctx, sv, err, ReportTypeLogFatal)
+		sendCrashReport(ctx, sv, err, reportType)
 	}
 }
 
 func init() {
-	log.MaybeSendCrashReport = maybeSendCrashReport
+	log.MaybeSendCrashReport = func(ctx context.Context, err error) {
+		maybeSendCrashReport(ctx, err, ReportTypeLogFatal)
+	}
 }
