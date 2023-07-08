@@ -11,12 +11,14 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -188,10 +190,32 @@ func (k EngineKey) ToLockTableKey() (LockTableKey, error) {
 
 // Validate checks if the EngineKey is a valid MVCCKey or LockTableKey.
 func (k EngineKey) Validate() error {
-	_, errMVCC := k.ToMVCCKey()
-	_, errLock := k.ToLockTableKey()
-	if errMVCC != nil && errLock != nil {
-		return errors.Newf("key %s is neither an MVCCKey or LockTableKey", k)
+	if !k.IsLockTableKey() {
+		_, errMVCC := k.ToMVCCKey()
+		return errMVCC
+	}
+
+	// It's a lock table key. Check that it has the prefix.
+	if !bytes.HasPrefix(k.Key, keys.LocalRangeLockTablePrefix) {
+		return errors.Errorf("key %q does not have %q prefix",
+			k.Key, keys.LocalRangeLockTablePrefix)
+	}
+	// Cut the prefix.
+	b := k.Key[len(keys.LocalRangeLockTablePrefix):]
+	// Check that it's a single-key lock.
+	if !bytes.HasPrefix(b, keys.LockTableSingleKeyInfix) {
+		return errors.Errorf("key %q is not for a single-key lock", k.Key)
+	}
+	// Cut the prefix.
+	b = b[len(keys.LockTableSingleKeyInfix):]
+	var err error
+	b, err = encoding.ValidateDecodeBytesAscending(b)
+	if err != nil {
+		return err
+	}
+	if len(b) != 0 {
+		return errors.Errorf("key %q has left-over bytes %d after decoding",
+			k.Key, len(b))
 	}
 	return nil
 }
