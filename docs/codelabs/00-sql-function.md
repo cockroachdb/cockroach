@@ -99,7 +99,7 @@ equal to the OID of the last current built-in + 1 (OIDs must be unique).
 ``` go
 2413: whois(string...) -> string
 ```
-this indicates that, `whois` is the name of the built-in & it takes variable number of string arguments & return one string value.
+this indicates that `whois` is the name of the built-in, it accepts a variable number of string arguments, and returns one string value.
 
 If you’ve followed the instructions in [CONTRIBUTING.md], you should be able to build CockroachDB from source:
 
