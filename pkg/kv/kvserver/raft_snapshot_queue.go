@@ -140,8 +140,10 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 			// described above, this will cause raft to keep asking for a snap and at
 			// some point the snapshot lock above will be released and we'll fall
 			// through to the logic below.
-			repl.reportSnapshotStatus(ctx, repDesc.ReplicaID, err)
-			return false, nil
+			if reportErr := repl.reportSnapshotStatus(ctx, repDesc.ReplicaID, err); reportErr != nil {
+				return false, err
+			}
+			return false, err
 		}
 	}
 
