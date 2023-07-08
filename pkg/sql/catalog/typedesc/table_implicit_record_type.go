@@ -188,8 +188,10 @@ func (v *tableImplicitRecordType) GetRawBytesInStorage() []byte {
 }
 
 // ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
-func (v *tableImplicitRecordType) ForEachUDTDependentForHydration(_ func(t *types.T) error) error {
-	return nil
+func (v *tableImplicitRecordType) ForEachUDTDependentForHydration(
+	_ func(t *types.T) error,
+) (error, bool) {
+	return nil, false
 }
 
 // TypeDesc implements the catalog.TypeDescriptor interface.

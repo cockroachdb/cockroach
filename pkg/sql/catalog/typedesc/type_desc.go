@@ -883,24 +883,26 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 }
 
 // ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
-func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) (error, bool) {
 	if desc.Alias != nil && catid.IsOIDUserDefined(desc.Alias.Oid()) {
 		if err := fn(desc.Alias); err != nil {
-			return iterutil.Map(err)
+			err = iterutil.Map(err)
+			return err, err == nil
 		}
 	}
 	if desc.Composite == nil {
-		return nil
+		return nil, false
 	}
 	for _, e := range desc.Composite.Elements {
 		if !catid.IsOIDUserDefined(e.ElementType.Oid()) {
 			continue
 		}
 		if err := fn(e.ElementType); err != nil {
-			return iterutil.Map(err)
+			err = iterutil.Map(err)
+			return err, err == nil
 		}
 	}
-	return nil
+	return nil, false
 }
 
 // GetIDClosure implements the TypeDescriptor interface.

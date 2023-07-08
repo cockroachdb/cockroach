@@ -255,8 +255,9 @@ type Descriptor interface {
 
 	// ForEachUDTDependentForHydration iterates over all the user-defined types.T
 	// referenced by this descriptor which must be hydrated prior to using it.
-	// iterutil.StopIteration is supported.
-	ForEachUDTDependentForHydration(func(t *types.T) error) error
+	// iterutil.StopIteration is supported. The second return value is true if
+	// a iterutil.StopIteration error was generated.
+	ForEachUDTDependentForHydration(func(t *types.T) error) (error, bool)
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.
@@ -1076,12 +1077,13 @@ func HasConcurrentDeclarativeSchemaChange(desc Descriptor) bool {
 	return desc.GetDeclarativeSchemaChangerState() != nil
 }
 
+func stopIteration(t *types.T) error {
+	return iterutil.StopIteration()
+}
+
 // MaybeRequiresHydration returns false if the descriptor definitely does not
 // depend on any types.T being hydrated.
 func MaybeRequiresHydration(desc Descriptor) (ret bool) {
-	_ = desc.ForEachUDTDependentForHydration(func(t *types.T) error {
-		ret = true
-		return iterutil.StopIteration()
-	})
+	_, ret = desc.ForEachUDTDependentForHydration(stopIteration)
 	return ret
 }

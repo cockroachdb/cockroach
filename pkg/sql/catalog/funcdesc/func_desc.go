@@ -405,19 +405,25 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 }
 
 // ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
-func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) (error, bool) {
 	for _, p := range desc.Params {
 		if !catid.IsOIDUserDefined(p.Type.Oid()) {
 			continue
 		}
 		if err := fn(p.Type); err != nil {
-			return iterutil.Map(err)
+			err = iterutil.Map(err)
+			return err, err == nil
 		}
 	}
 	if !catid.IsOIDUserDefined(desc.ReturnType.Type.Oid()) {
-		return nil
+		return nil, false
 	}
-	return iterutil.Map(fn(desc.ReturnType.Type))
+	err := fn(desc.ReturnType.Type)
+	if err != nil {
+		err = iterutil.Map(fn(desc.ReturnType.Type))
+		return err, err == nil
+	}
+	return err, false
 }
 
 // IsUncommittedVersion implements the catalog.LeasableDescriptor interface.

@@ -20,14 +20,23 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+func forEachUDTDependentForHydration(
+	iterFunc func(t *types.T) error, desc catalog.Descriptor,
+) error {
+	err, _ := desc.ForEachUDTDependentForHydration(iterFunc)
+	return err
+}
+
 // HydrateTypesInDescriptor ensures that all types that the descriptor is
 // depending on are hydrated.
 func HydrateTypesInDescriptor(
 	ctx context.Context, desc catalog.Descriptor, res catalog.TypeDescriptorResolver,
 ) error {
-	return desc.ForEachUDTDependentForHydration(func(t *types.T) error {
+	return forEachUDTDependentForHydration(func(t *types.T) error {
 		return EnsureTypeIsHydrated(ctx, t, res)
-	})
+	},
+		desc,
+	)
 }
 
 // ResolveHydratedTByOID is a convenience function which delegates to

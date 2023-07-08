@@ -605,13 +605,14 @@ func (desc *wrapper) GetInProgressImportStartTime() int64 {
 }
 
 // ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
-func (desc *wrapper) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+func (desc *wrapper) ForEachUDTDependentForHydration(fn func(t *types.T) error) (error, bool) {
 	for _, c := range desc.UserDefinedTypeColumns() {
 		if err := fn(c.GetType()); err != nil {
-			return iterutil.Map(err)
+			err = iterutil.Map(err)
+			return err, err == nil
 		}
 	}
-	return nil
+	return nil, false
 }
 
 // IsSchemaLocked implements the TableDescriptor interface.

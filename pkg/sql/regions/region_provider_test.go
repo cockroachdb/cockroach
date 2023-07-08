@@ -234,8 +234,8 @@ func (d fakeSystemDatabase) GetID() descpb.ID           { return keys.SystemData
 func (d fakeSystemDatabase) Dropped() bool              { return false }
 func (d fakeSystemDatabase) IsUncommittedVersion() bool { return false }
 func (d fakeSystemDatabase) Adding() bool               { return false }
-func (d fakeSystemDatabase) ForEachUDTDependentForHydration(func(t *types.T) error) error {
-	return nil
+func (d fakeSystemDatabase) ForEachUDTDependentForHydration(func(t *types.T) error) (error, bool) {
+	return nil, false
 }
 
 type fakeLeasedDescriptor struct {
@@ -277,8 +277,10 @@ func (f fakeRegionEnum) SkipNamespace() bool        { return true }
 func (d fakeRegionEnum) Dropped() bool              { return false }
 func (d fakeRegionEnum) IsUncommittedVersion() bool { return false }
 func (d fakeRegionEnum) Adding() bool               { return false }
-func (d fakeRegionEnum) ForEachUDTDependentForHydration(func(t *types.T) error) error {
-	return nil
+func (d fakeRegionEnum) ForEachUDTDependentForHydration(
+	func(t *types.T) error,
+) (err error, ret bool) {
+	return nil, false
 }
 func (d fakeRegionEnum) AsEnumTypeDescriptor() catalog.EnumTypeDescriptor {
 	if d.isNotEnum {

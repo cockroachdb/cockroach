@@ -534,8 +534,8 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 }
 
 // ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
-func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
-	return nil
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) (error, bool) {
+	return nil, false
 }
 
 // maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the

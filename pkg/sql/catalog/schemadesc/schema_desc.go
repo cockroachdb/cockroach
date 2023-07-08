@@ -78,7 +78,7 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 }
 
 // ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
-func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) (error, bool) {
 	for _, f := range desc.Functions {
 		for _, sig := range f.Signatures {
 			for _, typ := range sig.ArgTypes {
@@ -86,18 +86,20 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 					continue
 				}
 				if err := fn(typ); err != nil {
-					return iterutil.Map(err)
+					err = iterutil.Map(err)
+					return err, err == nil
 				}
 			}
 			if !catid.IsOIDUserDefined(sig.ReturnType.Oid()) {
 				continue
 			}
 			if err := fn(sig.ReturnType); err != nil {
-				return iterutil.Map(err)
+				err = iterutil.Map(err)
+				return err, err == nil
 			}
 		}
 	}
-	return nil
+	return nil, false
 }
 
 // SafeMessage makes Mutable a SafeMessager.

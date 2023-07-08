@@ -140,8 +140,8 @@ func (p synthetic) ForEachFunctionSignature(
 }
 
 // ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
-func (p synthetic) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
-	return nil
+func (p synthetic) ForEachUDTDependentForHydration(fn func(t *types.T) error) (error, bool) {
+	return nil, false
 }
 
 func (p synthetic) GetRawBytesInStorage() []byte {
