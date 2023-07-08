@@ -92,9 +92,9 @@ unfinished, so we’ll return an error for now.
 
 Go ahead and add the above code to `pkg/sql/sem/builtins/builtins.go`. 
 
-Now, we need to declare this built-in in `pkg/sql/sem/builtins/fixed_oids.go` also,
-add the declaration in `builtinOidsArray []string` array, go to the end of the array,
-and increment the oid of last builtin by 1(i.e. the number(oid) assigned must be unique)
+Now, we need to assign an OID for this built-in in `pkg/sql/sem/builtins/fixed_oids.go`
+by adding an entry to the end of the `builtinOidsArray []string` array with the index
+equal to the OID of the last current built-in + 1 (OIDs must be unique).
 
 ``` go
 2413: whois(string...) -> string
