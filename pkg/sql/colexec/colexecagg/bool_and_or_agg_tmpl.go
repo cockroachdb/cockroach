@@ -198,6 +198,21 @@ func (a *bool_OP_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// {{if eq "_AGGKIND" "Window"}}
+
+// Remove implements the slidingWindowAggregateFunc interface (see
+// window_aggregator_tmpl.go). This allows bool_and and bool_or operators to be
+// used when the window frame only grows. For the case when the window frame can
+// shrink, the default quadratic-scaling implementation is necessary.
+func (*bool_OP_TYPE_AGGKINDAgg) Remove(
+	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int,
+) {
+	colexecerror.InternalError(
+		errors.AssertionFailedf("Remove called on bool_OP_TYPE_AGGKINDAgg"),
+	)
+}
+
+// {{end}}
 // {{end}}
 
 // {{/*

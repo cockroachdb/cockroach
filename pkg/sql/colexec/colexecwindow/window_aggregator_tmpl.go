@@ -116,6 +116,20 @@ func NewWindowAggregatorOperator(
 				agg:                  agg.(slidingWindowAggregateFunc),
 			}
 		}
+	case execinfrapb.BoolAnd, execinfrapb.BoolOr:
+		if WindowFrameCanShrink(frame, ordering) {
+			// TODO(drewk): add optimized implementations that can handle a shrinking
+			// window by tracking counts of true, false, null values instead of just
+			// the final aggregate value.
+			windower = &windowAggregator{windowAggregatorBase: base, agg: agg}
+		} else {
+			// These aggregates can only be used in a sliding-window context if the
+			// window does not shrink.
+			windower = &slidingWindowAggregator{
+				windowAggregatorBase: base,
+				agg:                  agg.(slidingWindowAggregateFunc),
+			}
+		}
 	default:
 		if slidingWindowAgg, ok := agg.(slidingWindowAggregateFunc); ok {
 			windower = &slidingWindowAggregator{windowAggregatorBase: base, agg: slidingWindowAgg}
