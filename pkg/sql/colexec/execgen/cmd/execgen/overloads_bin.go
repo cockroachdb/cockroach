@@ -312,6 +312,10 @@ func checkRightIsZero(binOp treebin.BinaryOperatorSymbol) bool {
 	return binOp == treebin.Div || binOp == treebin.FloorDiv || binOp == treebin.Mod
 }
 
+func checkRightIsInf(binOp treebin.BinaryOperatorSymbol) bool {
+	return binOp == treebin.Div || binOp == treebin.FloorDiv
+}
+
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		binOp := op.overloadBase.BinOp
@@ -319,6 +323,7 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Ctx":              binaryOpDecCtx[binOp],
 			"Op":               binaryOpDecMethod[binOp],
 			"CheckRightIsZero": checkRightIsZero(binOp),
+			"CheckRightIsInf":  checkRightIsInf(binOp),
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
@@ -327,7 +332,7 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 		t := template.Must(template.New("").Parse(`
 			{
 				{{if .CheckRightIsZero}}
-				if {{.Right}}.IsZero() {
+				if {{.Right}}.IsZero() && {{.Left}}.Form != apd.NaN {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
@@ -335,6 +340,11 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
+				{{if .CheckRightIsInf}}
+				if {{.Right}}.Form == apd.Infinite && {{.Left}}.Form == apd.Finite {
+					{{.Target}} = apd.Decimal{}
+				}
+				{{end}}
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -359,6 +369,7 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 		args := map[string]interface{}{
 			"CheckRightIsZero": checkRightIsZero(binOp),
 			"Target":           targetElem,
+			"Left":             leftElem,
 			"Right":            rightElem,
 			"ComputeBinOp":     computeBinOp,
 		}
@@ -366,7 +377,7 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 		t := template.Must(template.New("").Parse(`
 			{
 				{{if .CheckRightIsZero}}
-				if {{.Right}} == 0.0 {
+				if {{.Right}} == 0.0 && !math.IsNaN({{.Left}}) {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
@@ -541,7 +552,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 		t := template.Must(template.New("").Parse(`
 			{
 				{{if .CheckRightIsZero}}
-				if {{.Right}} == 0 {
+				if {{.Right}} == 0 && {{.Left}}.Form != apd.NaN {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
@@ -566,6 +577,7 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Ctx":              binaryOpDecCtx[binOp],
 			"Op":               binaryOpDecMethod[binOp],
 			"CheckRightIsZero": checkRightIsZero(binOp),
+			"CheckRightIsInf":  checkRightIsInf(binOp),
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
@@ -584,6 +596,11 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
+				{{if .CheckRightIsInf}}
+				if {{.Right}}.Form == apd.Infinite {
+					{{.Target}} = apd.Decimal{}
+				}
+				{{end}}
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {

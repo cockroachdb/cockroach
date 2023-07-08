@@ -431,6 +431,7 @@ func (a *sumDecimalHashAgg) Compute(
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.numNonNull++
@@ -450,6 +451,7 @@ func (a *sumDecimalHashAgg) Compute(
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
+
 						}
 
 						a.numNonNull++
