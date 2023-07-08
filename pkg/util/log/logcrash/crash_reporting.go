@@ -420,13 +420,15 @@ func RegisterTagFn(key string, value func(context.Context) string) {
 	tagFns = append(tagFns, tagFn{key, value})
 }
 
-func maybeSendCrashReport(ctx context.Context, err error) {
+func maybeSendCrashReport(ctx context.Context, err error, reportType ReportType) {
 	// We load the ReportingSettings from global singleton in this call path.
 	if sv := getGlobalSettings(); sv != nil {
-		sendCrashReport(ctx, sv, err, ReportTypeLogFatal)
+		sendCrashReport(ctx, sv, err, reportType)
 	}
 }
 
 func init() {
-	log.MaybeSendCrashReport = maybeSendCrashReport
+	log.MaybeSendCrashReport = func(ctx context.Context, err error) {
+		maybeSendCrashReport(ctx, err, ReportTypeLogFatal)
+	}
 }
