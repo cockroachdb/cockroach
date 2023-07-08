@@ -3,7 +3,7 @@
 source [file join [file dirname $argv0] common.tcl]
 
 start_test "Check that demo insecure says hello properly, multitenant"
-spawn $argv demo --no-line-editor --insecure=true --multitenant=true
+spawn $argv demo --no-line-editor --insecure=true --multitenant=true --log-dir=logs
 # Be polite.
 eexpect "Welcome"
 # Warn the user that they won't get persistence.
@@ -28,7 +28,7 @@ eexpect eof
 end_test
 
 start_test "Check that demo insecure says hello properly, singletenant"
-spawn $argv demo --no-line-editor --insecure=true --multitenant=false
+spawn $argv demo --no-line-editor --insecure=true --multitenant=false --log-dir=logs
 # Check that the connection URL is printed; and that we're still
 # using default ports.
 eexpect "(webui)"
@@ -44,7 +44,7 @@ end_test
 start_test "Check that demo insecure, env var, says hello properly"
 # With env var.
 set ::env(COCKROACH_INSECURE) "true"
-spawn $argv demo --no-line-editor --no-example-database
+spawn $argv demo --no-line-editor --no-example-database --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 end_test
@@ -79,7 +79,7 @@ eexpect eof
 
 # With command-line override.
 set ::env(COCKROACH_INSECURE) "false"
-spawn $argv demo --no-line-editor --insecure=true --no-example-database
+spawn $argv demo --no-line-editor --insecure=true --no-example-database --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 
@@ -103,7 +103,7 @@ start_test "Check that demo secure says hello properly"
 
 # With env var.
 set ::env(COCKROACH_INSECURE) "false"
-spawn $argv demo --no-line-editor --no-example-database
+spawn $argv demo --no-line-editor --no-example-database --log-dir=logs
 eexpect "Welcome"
 
 eexpect "(webui)"
@@ -144,7 +144,7 @@ eexpect eof
 
 # With command-line override.
 set ::env(COCKROACH_INSECURE) "true"
-spawn $argv demo --no-line-editor --insecure=false --no-example-database
+spawn $argv demo --no-line-editor --insecure=false --no-example-database --log-dir=logs
 eexpect "Welcome"
 eexpect "Username: \"demo\", password"
 eexpect "defaultdb>"
@@ -168,7 +168,7 @@ end_test
 
 start_test "Check that the user can override the password."
 set ::env(COCKROACH_DEMO_PASSWORD) "hunter2"
-spawn $argv demo --no-line-editor --insecure=false --no-example-database
+spawn $argv demo --no-line-editor --insecure=false --no-example-database --log-dir=logs
 eexpect "Connection parameters"
 eexpect "(sql)"
 eexpect "postgresql://demo:hunter2@"
@@ -179,7 +179,7 @@ end_test
 
 # Test that demo displays connection URLs for nodes in the cluster.
 start_test "Check that node URLs are displayed"
-spawn $argv demo --no-line-editor --insecure --no-example-database
+spawn $argv demo --no-line-editor --insecure --no-example-database --log-dir=logs
 # Check that we see our message.
 eexpect "Connection parameters"
 eexpect "(webui)"
@@ -189,7 +189,7 @@ send_eof
 eexpect eof
 
 # Start the test again with a multi node cluster.
-spawn $argv demo --no-line-editor --insecure --nodes 3 --no-example-database
+spawn $argv demo --no-line-editor --insecure --nodes 3 --no-example-database --log-dir=logs
 
 # Check that we get a message for each node.
 eexpect "Connection parameters"
@@ -215,7 +215,7 @@ eexpect "defaultdb>"
 send_eof
 eexpect eof
 
-spawn $argv demo --no-line-editor --insecure=false --no-example-database
+spawn $argv demo --no-line-editor --insecure=false --no-example-database --log-dir=logs
 # Expect that security related tags are part of the connection URL.
 eexpect "(sql)"
 eexpect "sslmode=require"
@@ -249,7 +249,7 @@ end_test
 
 start_test "Check that the port numbers can be overridden from the command line."
 
-spawn $argv demo --no-line-editor --no-example-database --nodes 3 --http-port 8000
+spawn $argv demo --no-line-editor --no-example-database --nodes 3 --http-port 8000 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 
@@ -266,7 +266,7 @@ eexpect "defaultdb>"
 send_eof
 eexpect eof
 
-spawn $argv demo --no-line-editor --no-example-database --nodes 3 --sql-port 23000
+spawn $argv demo --no-line-editor --no-example-database --nodes 3 --sql-port 23000 --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 
@@ -314,7 +314,7 @@ end_test
 
 start_test "Check that demo populates the connection URL in a configured file"
 
-spawn $argv demo --no-line-editor --no-example-database --listening-url-file=test.url
+spawn $argv demo --no-line-editor --no-example-database --listening-url-file=test.url --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 
@@ -325,7 +325,7 @@ send_eof
 eexpect eof
 
 # Ditto, insecure
-spawn $argv demo --no-line-editor --no-example-database --listening-url-file=test.url --insecure
+spawn $argv demo --no-line-editor --no-example-database --listening-url-file=test.url --insecure --log-dir=logs
 eexpect "Welcome"
 eexpect "defaultdb>"
 

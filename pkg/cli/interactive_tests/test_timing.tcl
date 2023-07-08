@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 
 # This test ensures timing displayed in the CLI works as expected.
 
-spawn $argv demo movr --no-line-editor
+spawn $argv demo movr --no-line-editor --log-dir=logs
 eexpect root@
 
 start_test "Test that server execution time and network latency are printed by default."

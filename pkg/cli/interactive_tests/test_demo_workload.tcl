@@ -5,7 +5,7 @@ source [file join [file dirname $argv0] common.tcl]
 start_test "Check cockroach demo --with-load runs the movr workload"
 
 # Start demo with movr and the movr workload.
-spawn $argv demo movr --with-load  --no-line-editor
+spawn $argv demo movr --with-load  --no-line-editor --log-dir=logs
 
 eexpect "movr>"
 
@@ -42,7 +42,7 @@ start_test "Check that controlling ranges of the movr dataset works"
 set timeout 30
 # Need to disable multi-tenant mode here, as splitting is not supported.
 # See 54254 for more details.
-spawn $argv demo movr --num-ranges=6 --multitenant=false  --no-line-editor
+spawn $argv demo movr --num-ranges=6 --multitenant=false  --no-line-editor --log-dir=logs
 
 eexpect "movr>"
 

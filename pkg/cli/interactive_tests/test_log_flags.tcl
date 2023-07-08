@@ -83,7 +83,7 @@ eexpect ":/# "
 end_test
 
 start_test "Check that by default, cockroach demo shows the fatal errors"
-send "$argv demo --no-line-editor --empty\r"
+send "$argv demo --no-line-editor --empty --log-dir=logs \r"
 eexpect "Welcome"
 eexpect "root@"
 eexpect "defaultdb>"
