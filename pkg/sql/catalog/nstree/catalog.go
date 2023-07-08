@@ -186,6 +186,24 @@ func (c Catalog) LookupNamespaceEntry(key catalog.NameKey) NamespaceEntry {
 	return e.(NamespaceEntry)
 }
 
+// LookupNameEntryUsingUnwrappedNameKeyFields looks up a descriptor ID by
+// parentID, parentSchemaID and name, the fields of a `catalog.NameKey`. This
+// function is similar to LookupNamespaceEntry, but by accepting non-interface
+// arguments, may prevent the arguments from escaping to heap memory.
+func (c Catalog) LookupNameEntryUsingUnwrappedNameKeyFields(
+	parentID, parentSchemaID descpb.ID, name string,
+) catalog.NameEntry {
+	if !c.IsInitialized() {
+		return nil
+	}
+	got, _ := get(c.byName.t, byNameItem{
+		parentID:       parentID,
+		parentSchemaID: parentSchemaID,
+		name:           name,
+	}.get()).(catalog.NameEntry)
+	return got
+}
+
 // OrderedDescriptors returns the descriptors in an ordered fashion.
 func (c Catalog) OrderedDescriptors() []catalog.Descriptor {
 	if !c.IsInitialized() {

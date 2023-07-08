@@ -553,14 +553,12 @@ func (tc *Collection) getNonVirtualDescriptorID(
 	}
 	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
 		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
-		if tc.isShadowedName(ni) {
+		_, isShadowedName := tc.shadowedNames[ni]
+		if isShadowedName {
 			return continueLookups, descpb.InvalidID, nil
 		}
-		if tc.cr.IsNameInCache(&ni) {
-			if e := tc.cr.Cache().LookupNamespaceEntry(&ni); e != nil {
-				return haltLookups, e.GetID(), nil
-			}
-			return haltLookups, descpb.InvalidID, nil
+		if e := tc.cr.Cache().LookupNameEntryUsingUnwrappedNameKeyFields(ni.GetParentID(), ni.GetParentSchemaID(), ni.GetName()); e != nil {
+			return haltLookups, e.GetID(), nil
 		}
 		return continueLookups, descpb.InvalidID, nil
 	}
