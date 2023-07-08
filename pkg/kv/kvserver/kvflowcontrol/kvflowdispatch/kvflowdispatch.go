@@ -142,10 +142,11 @@ func (d *Dispatch) PendingDispatch() []roachpb.NodeID {
 
 // PendingDispatchFor is part of the kvflowcontrol.Dispatch interface.
 func (d *Dispatch) PendingDispatchFor(
+	// XXX: Allocations underneath
 	nodeID roachpb.NodeID,
 ) []kvflowcontrolpb.AdmittedRaftLogEntries {
 	d.mu.Lock()
-	defer d.mu.Unlock()
+	defer d.mu.Unlock() // XXX: This also appears in mutex profiles.
 
 	if _, ok := d.mu.outbox[nodeID]; !ok {
 		return nil

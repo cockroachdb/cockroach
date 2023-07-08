@@ -69,6 +69,7 @@ func New(
 // Track token deductions of the given priority with the given raft log
 // position.
 func (dt *Tracker) Track(
+	// XXX: Allocations underneath
 	ctx context.Context,
 	pri admissionpb.WorkPriority,
 	tokens kvflowcontrol.Tokens,

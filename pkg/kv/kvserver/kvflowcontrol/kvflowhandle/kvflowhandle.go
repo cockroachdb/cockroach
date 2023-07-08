@@ -205,7 +205,7 @@ func (h *Handle) ReturnTokensUpto(
 		stream.TenantID = h.tenantID
 	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	defer h.mu.Unlock() // XXX: This appears in mutex profiles.
 	if h.mu.closed {
 		log.Errorf(ctx, "operating on a closed handle")
 		return
