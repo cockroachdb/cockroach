@@ -43,7 +43,7 @@ func (a *admittedLogEntryAdaptor) AdmittedLogEntry(
 	rangeID roachpb.RangeID,
 	pos admission.LogPosition,
 ) {
-	a.dispatchWriter.Dispatch(ctx, origin, kvflowcontrolpb.AdmittedRaftLogEntries{
+	a.dispatchWriter.Dispatch(ctx, origin, kvflowcontrolpb.AdmittedRaftLogEntries{ // XXX: Inuse objects
 		RangeID:           rangeID,
 		AdmissionPriority: int32(pri),
 		UpToRaftLogPosition: kvflowcontrolpb.RaftLogPosition{

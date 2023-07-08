@@ -108,8 +108,8 @@ func TestFlowTokenAdjustment(t *testing.T) {
 				var buf strings.Builder
 				buf.WriteString("                   regular |  elastic\n")
 				buf.WriteString(fmt.Sprintf("                  %8s | %8s\n",
-					printTrimmedTokens(limit[admissionpb.RegularWorkClass]),
-					printTrimmedTokens(limit[admissionpb.ElasticWorkClass]),
+					printTrimmedTokens(limit.regular),
+					printTrimmedTokens(limit.elastic),
 				))
 				buf.WriteString("======================================\n")
 				for _, h := range adjustments {
@@ -137,10 +137,10 @@ func (h adjustment) String() string {
 	class := admissionpb.WorkClassFromPri(h.pri)
 
 	comment := ""
-	if h.post[admissionpb.RegularWorkClass] <= 0 {
+	if h.post.regular <= 0 {
 		comment = "regular"
 	}
-	if h.post[admissionpb.ElasticWorkClass] <= 0 {
+	if h.post.elastic <= 0 {
 		if len(comment) == 0 {
 			comment = "elastic"
 		} else {
@@ -153,8 +153,8 @@ func (h adjustment) String() string {
 	return fmt.Sprintf("%8s %7s  %8s | %8s%s",
 		printTrimmedTokens(h.delta),
 		class,
-		printTrimmedTokens(h.post[admissionpb.RegularWorkClass]),
-		printTrimmedTokens(h.post[admissionpb.ElasticWorkClass]),
+		printTrimmedTokens(h.post.regular),
+		printTrimmedTokens(h.post.elastic),
 		comment,
 	)
 }
@@ -229,4 +229,35 @@ func (m *mockConnectedStream) Stream() kvflowcontrol.Stream {
 
 func (m *mockConnectedStream) Disconnected() <-chan struct{} {
 	return nil
+}
+
+func BenchmarkController(b *testing.B) {
+	ctx := context.Background()
+	makeStream := func(id uint64) kvflowcontrol.Stream {
+		return kvflowcontrol.Stream{
+			TenantID: roachpb.MustMakeTenantID(id),
+			StoreID:  roachpb.StoreID(id),
+		}
+	}
+	makeConnectedStream := func(id uint64) kvflowcontrol.ConnectedStream {
+		return &mockConnectedStream{
+			stream: makeStream(id),
+		}
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	elasticTokensPerStream.Override(ctx, &st.SV, 8<<20 /* 8 MiB */)
+	regularTokensPerStream.Override(ctx, &st.SV, 16<<20 /* 16 MiB */)
+	controller := New(metric.NewRegistry(), st, hlc.NewClockForTesting(nil))
+
+	// Deduct some {regular,elastic} tokens from s1/t1 and verify that Inspect()
+	// renders the state correctly.
+	t1s1 := makeStream(1)
+	ct1s1 := makeConnectedStream(1)
+
+	for i := 0; i < b.N; i++ {
+		_ = controller.Admit(ctx, admissionpb.NormalPri, time.Time{}, ct1s1)
+		controller.DeductTokens(ctx, admissionpb.NormalPri, kvflowcontrol.Tokens(1 /* 1b */), t1s1)
+		controller.ReturnTokens(ctx, admissionpb.NormalPri, kvflowcontrol.Tokens(1 /* 1b */), t1s1)
+	}
 }
