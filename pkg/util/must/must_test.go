@@ -66,7 +66,7 @@ func TestExpensive(t *testing.T) {
 		called = true
 	})
 
-	if util.RaceEnabled {
+	if util.RaceEnabled || buildutil.Invariants {
 		require.True(t, called)
 	} else {
 		require.False(t, called)
