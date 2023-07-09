@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/must"
@@ -68,7 +69,7 @@ func TestExpensive(t *testing.T) {
 		called = true
 	})
 
-	if util.RaceEnabled {
+	if util.RaceEnabled || buildutil.Invariants {
 		require.True(t, called)
 	} else {
 		require.False(t, called)
