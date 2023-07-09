@@ -966,11 +966,10 @@ func (s *Server) serveImpl(
 		systemIdentity = c.sessionArgs.User
 	}
 	authPipe := newAuthPipe(c, logAuthn, authOpt, systemIdentity)
-	var authenticator authenticatorIO = authPipe
 
 	// procCh is the channel on which we'll receive the termination signal from
 	// the command processor.
-	var procCh <-chan error
+	procCh := make(chan struct{})
 
 	// We need a value for the unqualified int size here, but it is controlled
 	// by a session variable, and this layer doesn't have access to the session
@@ -984,17 +983,20 @@ func (s *Server) serveImpl(
 	if !inTestWithoutSQL {
 		// Spawn the command processing goroutine, which also handles connection
 		// authentication). It will notify us when it's done through procCh, and
-		// we'll also interact with the authentication process through ac.
-		var ac AuthConn = authPipe
-		procCh = c.processCommandsAsync(
-			ctx,
-			authOpt,
-			ac,
-			sqlServer,
-			reserved,
-			onDefaultIntSizeChange,
-			sessionID,
-		)
+		// we'll also interact with the authentication process through authPipe.
+		go func() {
+			// Inform the connection goroutine.
+			defer close(procCh)
+			c.processCommands(
+				ctx,
+				authOpt,
+				authPipe,
+				sqlServer,
+				reserved,
+				onDefaultIntSizeChange,
+				sessionID,
+			)
+		}()
 	} else {
 		// sqlServer == nil means we are in a local test. In this case
 		// we only need the minimum to make pgx happy.
@@ -1009,12 +1011,9 @@ func (s *Server) serveImpl(
 		if err != nil {
 			return
 		}
-		var ac AuthConn = authPipe
 		// Simulate auth succeeding.
-		ac.AuthOK(ctx)
-		dummyCh := make(chan error)
-		close(dummyCh)
-		procCh = dummyCh
+		authPipe.AuthOK(ctx)
+		close(procCh)
 
 		if err := c.bufferInitialReadyForQuery(0 /* queryCancelKey */); err != nil {
 			return
@@ -1098,13 +1097,13 @@ func (s *Server) serveImpl(
 					// Pass the data to the authenticator. This hopefully causes it to finish
 					// authentication in the background and give us an intSizer when we loop
 					// around.
-					if err = authenticator.sendPwdData(pwd); err != nil {
+					if err = authPipe.sendPwdData(pwd); err != nil {
 						return false, isSimpleQuery, err
 					}
 					return false, isSimpleQuery, nil
 				}
 				// Wait for the auth result.
-				if err = authenticator.authResult(); err != nil {
+				if err = authPipe.authResult(); err != nil {
 					// The error has already been sent to the client.
 					return true, isSimpleQuery, nil //nolint:returnerrcheck
 				}
@@ -1225,12 +1224,9 @@ func (s *Server) serveImpl(
 	// In case the authenticator is blocked on waiting for data from the client,
 	// tell it that there's no more data coming. This is a no-op if authentication
 	// was completed already.
-	authenticator.noMorePwdData()
+	authPipe.noMorePwdData()
 
-	// Wait for the processor goroutine to finish, if it hasn't already. We're
-	// ignoring the error we get from it, as we have no use for it. It might be a
-	// connection error, or a context cancelation error case this goroutine is the
-	// one that triggered the execution to stop.
+	// Wait for the processor goroutine to finish, if it hasn't already.
 	<-procCh
 
 	if terminateSeen {
