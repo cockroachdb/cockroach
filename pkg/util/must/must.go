@@ -133,7 +133,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/constraints"
@@ -174,7 +174,7 @@ func failDepth(ctx context.Context, depth int, format string, args ...interface{
 // or race builds. The given function should use assertions as usual, which will
 // always fatal since Expensive is never enabled in release builds.
 func Expensive(f func()) {
-	if util.RaceEnabled {
+	if buildutil.Invariants {
 		f()
 	}
 }
