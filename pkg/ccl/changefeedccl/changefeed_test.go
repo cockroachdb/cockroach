@@ -8094,7 +8094,11 @@ func TestChangefeedTestTimesOut(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		nada := feed(t, f, "CREATE CHANGEFEED FOR foo WITH resolved='100ms'")
-		defer closeFeed(t, nada)
+		defer func() {
+			// close could return an error due to the race in withTimeout function
+			// which cancels the job.
+			_ = nada.Close()
+		}()
 
 		expectResolvedTimestamp(t, nada) // Make sure feed is running.
 
