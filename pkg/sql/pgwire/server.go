@@ -789,6 +789,15 @@ func (s *Server) ServeConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
+	// procCh is the channel on which we'll receive the termination signal from
+	// the command processor.
+	procCh := make(chan struct{})
+	defer func() {
+		<-procCh
+	}()
+
+	// cancelConn must be called before <-procCh to interrupt
+	// long-running queries.
 	ctx, cancelConn := context.WithCancel(ctx)
 	defer cancelConn()
 	c := s.newConn(
@@ -803,6 +812,7 @@ func (s *Server) ServeConn(
 	s.serveImpl(
 		ctx,
 		c,
+		procCh,
 		&tenantReserved,
 		authOptions{
 			connType:        preServeStatus.ConnType,
@@ -924,6 +934,7 @@ const maxRepeatedErrorCount = 1 << 15
 func (s *Server) serveImpl(
 	ctx context.Context,
 	c *conn,
+	procCh chan struct{},
 	reserved *mon.BoundAccount,
 	authOpt authOptions,
 	sessionID clusterunique.ID,
@@ -968,10 +979,6 @@ func (s *Server) serveImpl(
 	authPipe := newAuthPipe(c, logAuthn, authOpt, systemIdentity)
 	var authenticator authenticatorIO = authPipe
 
-	// procCh is the channel on which we'll receive the termination signal from
-	// the command processor.
-	var procCh <-chan error
-
 	// We need a value for the unqualified int size here, but it is controlled
 	// by a session variable, and this layer doesn't have access to the session
 	// data. The callback below is called whenever default_int_size changes.
@@ -986,8 +993,9 @@ func (s *Server) serveImpl(
 		// authentication). It will notify us when it's done through procCh, and
 		// we'll also interact with the authentication process through ac.
 		var ac AuthConn = authPipe
-		procCh = c.processCommandsAsync(
+		c.processCommandsAsync(
 			ctx,
+			procCh,
 			authOpt,
 			ac,
 			sqlServer,
@@ -1012,9 +1020,7 @@ func (s *Server) serveImpl(
 		var ac AuthConn = authPipe
 		// Simulate auth succeeding.
 		ac.AuthOK(ctx)
-		dummyCh := make(chan error)
-		close(dummyCh)
-		procCh = dummyCh
+		close(procCh)
 
 		if err := c.bufferInitialReadyForQuery(0 /* queryCancelKey */); err != nil {
 			return
@@ -1226,12 +1232,6 @@ func (s *Server) serveImpl(
 	// tell it that there's no more data coming. This is a no-op if authentication
 	// was completed already.
 	authenticator.noMorePwdData()
-
-	// Wait for the processor goroutine to finish, if it hasn't already. We're
-	// ignoring the error we get from it, as we have no use for it. It might be a
-	// connection error, or a context cancelation error case this goroutine is the
-	// one that triggered the execution to stop.
-	<-procCh
 
 	if terminateSeen {
 		return

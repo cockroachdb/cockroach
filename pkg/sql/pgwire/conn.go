@@ -157,18 +157,18 @@ func (c *conn) authLogEnabled() bool {
 // (instead, it's expected to always be monitoring the network connection).
 func (c *conn) processCommandsAsync(
 	ctx context.Context,
+	procCh chan struct{},
 	authOpt authOptions,
 	ac AuthConn,
 	sqlServer *sql.Server,
 	reserved *mon.BoundAccount,
 	onDefaultIntSizeChange func(newSize int32),
 	sessionID clusterunique.ID,
-) <-chan error {
-	// reservedOwned is true while we own reserved, false when we pass ownership
-	// away.
-	reservedOwned := true
-	retCh := make(chan error, 1)
+) {
 	go func() {
+		// reservedOwned is true while we own reserved, false when we pass ownership
+		// away.
+		reservedOwned := true
 		var retErr error
 		var connHandler sql.ConnectionHandler
 		var authOK bool
@@ -212,8 +212,8 @@ func (c *conn) processCommandsAsync(
 			if connCloseAuthHandler != nil {
 				connCloseAuthHandler()
 			}
-			// Inform the connection goroutine of success or failure.
-			retCh <- retErr
+			// Inform the connection goroutine.
+			close(procCh)
 		}()
 
 		// Authenticate the connection.
@@ -264,7 +264,6 @@ func (c *conn) processCommandsAsync(
 			c.cancelConn,
 		)
 	}()
-	return retCh
 }
 
 func (c *conn) bufferParamStatus(param, value string) error {

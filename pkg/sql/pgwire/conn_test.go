@@ -92,6 +92,11 @@ func TestConn(t *testing.T) {
 	serverAddr := ln.Addr()
 	log.Infof(context.Background(), "started listener on %s", serverAddr)
 
+	procCh := make(chan struct{})
+	defer func() {
+		<-procCh
+	}()
+
 	var g errgroup.Group
 	ctx, cancelConn := context.WithCancel(context.Background())
 	defer cancelConn()
@@ -124,6 +129,7 @@ func TestConn(t *testing.T) {
 		server.serveImpl(
 			serveCtx,
 			conn,
+			procCh,
 			&mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 			clusterunique.ID{},
@@ -1097,6 +1103,11 @@ func TestMaliciousInputs(t *testing.T) {
 				close(errChan)
 			}(tc)
 
+			procCh := make(chan struct{})
+			defer func() {
+				<-procCh
+			}()
+
 			ctx, cancelConn := context.WithCancel(ctx)
 			defer cancelConn()
 			s := newTestServer()
@@ -1114,6 +1125,7 @@ func TestMaliciousInputs(t *testing.T) {
 			s.serveImpl(
 				ctx,
 				conn,
+				procCh,
 				&mon.BoundAccount{}, /* reserved */
 				authOptions{testingSkipAuth: true, connType: hba.ConnHostAny},
 				clusterunique.ID{},
