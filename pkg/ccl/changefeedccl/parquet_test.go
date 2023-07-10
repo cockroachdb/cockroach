@@ -159,7 +159,7 @@ func TestParquetRows(t *testing.T) {
 
 func makeRangefeedReaderAndDecoder(
 	t *testing.T, s serverutils.TestServerInterface,
-) (func(t *testing.T) *kvpb.RangeFeedValue, func(), cdcevent.Decoder) {
+) (func(t testing.TB) *kvpb.RangeFeedValue, func(), cdcevent.Decoder) {
 	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), tableDesc)
 	targets := changefeedbase.Targets{}
