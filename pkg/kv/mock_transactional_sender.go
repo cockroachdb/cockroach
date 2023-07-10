@@ -72,6 +72,11 @@ func (m *MockTransactionalSender) TxnStatus() roachpb.TransactionStatus {
 	return m.txn.Status
 }
 
+// ClientFinalized is part of the TxnSender interface.
+func (m *MockTransactionalSender) ClientFinalized() bool {
+	return m.txn.Status.IsFinalized()
+}
+
 // SetUserPriority is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetUserPriority(pri roachpb.UserPriority) error {
 	m.txn.Priority = roachpb.MakePriority(pri)
@@ -237,6 +242,11 @@ func (m *MockTransactionalSender) HasPerformedReads() bool {
 // HasPerformedWrites is part of TxnSenderFactory.
 func (m *MockTransactionalSender) HasPerformedWrites() bool {
 	panic("unimplemented")
+}
+
+// TestingRandomRetryableErrorsEnabled is part of TxnSenderFactory.
+func (m *MockTransactionalSender) TestingRandomRetryableErrorsEnabled() bool {
+	return false
 }
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.

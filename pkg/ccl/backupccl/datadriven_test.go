@@ -134,15 +134,16 @@ func (d *datadrivenTestState) cleanup(ctx context.Context, t *testing.T) {
 }
 
 type clusterCfg struct {
-	name           string
-	iodir          string
-	nodes          int
-	splits         int
-	ioConf         base.ExternalIODirConfig
-	localities     string
-	beforeVersion  string
-	testingKnobCfg string
-	disableTenant  bool
+	name             string
+	iodir            string
+	nodes            int
+	splits           int
+	ioConf           base.ExternalIODirConfig
+	localities       string
+	beforeVersion    string
+	testingKnobCfg   string
+	disableTenant    bool
+	randomTxnRetries bool
 }
 
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
@@ -157,6 +158,9 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 			// The tests in this package are particular about the tenant IDs
 			// they get in CREATE TENANT.
 			EnableTenantIDReuse: true,
+		},
+		KVClient: &kvcoord.ClientTestingKnobs{
+			EnableRandomTransactionRetryErrors: cfg.randomTxnRetries,
 		},
 	}
 
@@ -513,17 +517,21 @@ func TestDataDriven(t *testing.T) {
 					disableTenant = true
 				}
 
+				// TODO(ssd): Once TestServer starts up reliably enough:
+				// randomTxnRetries := !d.HasArg("disable-txn-retries")
+				randomTxnRetries := false
 				lastCreatedCluster = name
 				cfg := clusterCfg{
-					name:           name,
-					iodir:          iodir,
-					nodes:          nodes,
-					splits:         splits,
-					ioConf:         io,
-					localities:     localities,
-					beforeVersion:  beforeVersion,
-					testingKnobCfg: testingKnobCfg,
-					disableTenant:  disableTenant,
+					name:             name,
+					iodir:            iodir,
+					nodes:            nodes,
+					splits:           splits,
+					ioConf:           io,
+					localities:       localities,
+					beforeVersion:    beforeVersion,
+					testingKnobCfg:   testingKnobCfg,
+					disableTenant:    disableTenant,
+					randomTxnRetries: randomTxnRetries,
 				}
 				err := ds.addCluster(t, cfg)
 				if err != nil {

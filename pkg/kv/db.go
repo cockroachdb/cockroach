@@ -962,7 +962,13 @@ func (db *DB) TxnRootKV(ctx context.Context, retryable func(context.Context, *Tx
 // runTxn runs the given retryable transaction function using the given *Txn.
 func runTxn(ctx context.Context, txn *Txn, retryable func(context.Context, *Txn) error) error {
 	err := txn.exec(ctx, func(ctx context.Context, txn *Txn) error {
-		return retryable(ctx, txn)
+		if err := retryable(ctx, txn); err != nil {
+			return err
+		}
+		if txn.TestingShouldReturnRandomRetry() {
+			return txn.GenerateForcedRetryableErr(ctx, "randomized retriable error")
+		}
+		return nil
 	})
 	if err != nil {
 		if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
