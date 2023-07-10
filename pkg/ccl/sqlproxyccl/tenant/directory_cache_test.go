@@ -437,22 +437,21 @@ func TestResume(t *testing.T) {
 	}
 
 	// Eventually the tenant process will be resumed.
-	var processes map[net.Addr]*tenantdirsvr.Process
+	var sqlAddr string
 	testutils.SucceedsSoon(t, func() error {
-		processes = tds.Get(tenantID)
+		processes := tds.Get(tenantID)
 		if len(processes) != 1 {
 			return errors.Newf("expected 1 processes found %d", len(processes))
 		}
+		sqlAddr = processes[0].SQLAddr
 		return nil
 	})
 
 	// Wait until background goroutines complete.
 	wait.Wait()
 
-	for addr := range processes {
-		for i := 0; i < lookupCount; i++ {
-			require.Equal(t, addr.String(), addrs[i])
-		}
+	for i := 0; i < lookupCount; i++ {
+		require.Equal(t, sqlAddr, addrs[i])
 	}
 }
 
@@ -609,9 +608,8 @@ func destroyTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) err
 }
 
 func startTenant(
-	ctx context.Context, srv serverutils.TestServerInterface, id uint64,
-) (*tenantdirsvr.Process, error) {
-	tenantStopper := tenantdirsvr.NewSubStopper(srv.Stopper())
+	ctx context.Context, tenantStopper *stop.Stopper, srv serverutils.TestServerInterface, id uint64,
+) (string, error) {
 	t, err := srv.StartTenant(
 		ctx,
 		base.TestTenantArgs{
@@ -625,15 +623,11 @@ func startTenant(
 	if err != nil {
 		// Remap tenant "not found" error to GRPC NotFound error.
 		if testutils.IsError(err, "not found|no tenant found") {
-			return nil, status.Errorf(codes.NotFound, "tenant %d not found", id)
+			return "", status.Errorf(codes.NotFound, "tenant %d not found", id)
 		}
-		return nil, err
+		return "", err
 	}
-	sqlAddr, err := net.ResolveTCPAddr("tcp", t.SQLAddr())
-	if err != nil {
-		return nil, err
-	}
-	return &tenantdirsvr.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
+	return t.SQLAddr(), nil
 }
 
 // Setup directory cache that uses a client connected to a test directory server
@@ -657,17 +651,16 @@ func newTestDirectoryCache(
 	})
 	clusterStopper := tc.Stopper()
 	var err error
-	tds, err = tenantdirsvr.New(clusterStopper)
-	require.NoError(t, err)
-	tds.TenantStarterFunc = func(ctx context.Context, tenantID uint64) (*tenantdirsvr.Process, error) {
+	tds, err = tenantdirsvr.New(clusterStopper, func(ctx context.Context, stopper *stop.Stopper, tenantID uint64) (string, error) {
 		t.Logf("starting tenant %d", tenantID)
-		process, err := startTenant(ctx, tc.Server(0), tenantID)
+		sqlAddr, err := startTenant(ctx, stopper, tc.Server(0), tenantID)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		t.Logf("tenant %d started", tenantID)
-		return process, nil
-	}
+		return sqlAddr, nil
+	})
+	require.NoError(t, err)
 
 	listenPort, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
