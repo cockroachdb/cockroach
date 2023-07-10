@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
@@ -282,21 +284,21 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverload(
 			tree.ParamTypes{},
 			types.String,
-			makeWorkloadIndexRecsGeneratorFactory(false, false),
+			makeWorkloadIndexRecsGeneratorFactory(-1, -1),
 			"Returns set of index recommendations",
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "timestamptz", Typ: types.TimestampTZ}},
 			types.String,
-			makeWorkloadIndexRecsGeneratorFactory(true, false),
+			makeWorkloadIndexRecsGeneratorFactory(0, -1),
 			"Returns set of index recommendations",
 			volatility.Immutable,
 		),
 		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "budget", Typ: types.String}},
 			types.String,
-			makeWorkloadIndexRecsGeneratorFactory(false, true),
+			makeWorkloadIndexRecsGeneratorFactory(-1, 0),
 			"Returns set of index recommendations",
 			volatility.Immutable,
 		),
@@ -306,7 +308,7 @@ var generators = map[string]builtinDefinition{
 				{Name: "budget", Typ: types.String},
 			},
 			types.String,
-			makeWorkloadIndexRecsGeneratorFactory(true, true),
+			makeWorkloadIndexRecsGeneratorFactory(0, 1),
 			"Returns set of index recommendations",
 			volatility.Immutable,
 		),
@@ -1117,14 +1119,38 @@ func (s *multipleArrayValueGenerator) Values() (tree.Datums, error) {
 }
 
 // makeWorkloadIndexRecsGeneratorFactory uses the arrayValueGenerator to
-// return all the index recommendations as an array of strings
-func makeWorkloadIndexRecsGeneratorFactory(hasTs bool, hasBgt bool) eval.GeneratorOverload {
-	return func(_ context.Context, _ *eval.Context, _ tree.Datums) (eval.ValueGenerator, error) {
-		// Invoke the workloadindexrec.FindWorkloadRecs() to get indexRecs, err once it is implemented.
-		indexRecs := []string{"1", "2", "3"}
+// return all the index recommendations as an array of strings.
+// tsId, bgtId mean the index for the arguments
+func makeWorkloadIndexRecsGeneratorFactory(tsId int, bgtId int) eval.GeneratorOverload {
+	return func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+		var ts tree.DTimestampTZ
+		var budget int64
+		var err error
+
+		if tsId != -1 {
+			ts = tree.MustBeDTimestampTZ(args[tsId])
+		} else {
+			ts = tree.DTimestampTZ{}
+		}
+
+		if bgtId != -1 {
+			budget, err = humanizeutil.ParseBytes(string(tree.MustBeDString(args[bgtId])))
+			if err != nil {
+				return &arrayValueGenerator{}, err
+			}
+		} else {
+			budget = (1 << 63) - 1
+		}
+
+		var indexRecs []string
+		indexRecs, err = workloadindexrec.FindWorkloadRecs(ctx, evalCtx, &ts, budget)
+		if err != nil {
+			return &arrayValueGenerator{}, err
+		}
+
 		arr := tree.NewDArray(types.String)
 		for _, indexRec := range indexRecs {
-			if err := arr.Append(tree.NewDString(indexRec)); err != nil {
+			if err = arr.Append(tree.NewDString(indexRec)); err != nil {
 				return nil, err
 			}
 		}

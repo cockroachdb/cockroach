@@ -68,6 +68,7 @@ go_library(
         "//pkg/sql/lexbase",
         "//pkg/sql/memsize",
         "//pkg/sql/oidext",
+        "//pkg/sql/opt/workloadindexrec",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
