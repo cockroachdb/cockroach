@@ -2783,7 +2783,9 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	// and rebalancing. By default rebalancing uses CPU whilst the UI will use
 	// QPS.
 	rankingsAccumulator := NewReplicaAccumulator(load.CPU, load.Queries)
-	rankingsByTenantAccumulator := NewTenantReplicaAccumulator()
+	// rankingsByTenantAccumulator collects top replicas by QPS only as far as it is
+	// used in Db Console only.
+	rankingsByTenantAccumulator := NewTenantReplicaAccumulator(load.Queries)
 
 	// Query the current L0 sublevels and record the updated maximum to metrics.
 	l0SublevelsMax = int64(syncutil.LoadFloat64(&s.metrics.l0SublevelsWindowedMax))
@@ -3361,7 +3363,7 @@ func (s *Store) HottestReplicas() []HotReplicaInfo {
 // tenant ID. It works identically as HottestReplicas func with only exception that
 // hottest replicas are grouped by tenant ID.
 func (s *Store) HottestReplicasByTenant(tenantID roachpb.TenantID) []HotReplicaInfo {
-	topQPS := s.replRankingsByTenant.TopQPS(tenantID)
+	topQPS := s.replRankingsByTenant.TopLoad(tenantID, load.Queries)
 	return mapToHotReplicasInfo(topQPS)
 }
 
