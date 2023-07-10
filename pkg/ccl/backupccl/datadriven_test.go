@@ -827,11 +827,9 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			}
 			codec := execCfg.Codec
 			dummyTable := systemschema.SettingsTable
-			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				id, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
-				if err != nil {
-					return err
-				}
+			id, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
+			require.NoError(t, err)
+			err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				mut := dummyTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
 				mut.ID = id
 				mut.Name = fmt.Sprintf("%s_%d", "crdb_internal_copy", id)
