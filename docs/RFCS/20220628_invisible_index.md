@@ -379,9 +379,9 @@ their SQL anyway.
 ### b. SHOW INDEX Statements
 The three options are `is_hidden`, `is_visible`, and `visible`. 
 
-- Reason why `is_hidden` is good: invisible column feature is using `is_hidden` for [`SHOW COLUMNS`](https://www.cockroachlabs.com/docs/stable/show-columns.html).
+- Reason why `is_hidden` is good: invisible column feature is using `is_hidden` for [`SHOW COLUMNS`](https://www.cockroachlabs.com/docs/stable/show-columns).
 - Reason why `visible` is good: this is more consistent what we chose with the first syntax --- VISIBLE | NOT VISIBLE. MySQL is also using [`visible`](https://dev.mysql.com/doc/refman/8.0/en/show-index.html).
-- Reason why `is_visible` is bad: less consistent with other columns in [`SHOW INDEX`](https://www.cockroachlabs.com/docs/stable/show-index.html) such as `storing, implicit, non_unique`.
+- Reason why `is_visible` is bad: less consistent with other columns in [`SHOW INDEX`](https://www.cockroachlabs.com/docs/stable/show-index) such as `storing, implicit, non_unique`.
 
 **Conclusion**: `visible` it is more important to stay consistent with the first user-facing syntax.
 

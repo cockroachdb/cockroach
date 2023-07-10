@@ -148,7 +148,7 @@ come with large UX hurdles that limit the situations in which they can be used.
 The most damaging of these hurdles is that, for all intents and purposes, follower
 reads cannot be used in any read-write transaction - their use is limited to read-only
 transactions. This dramatically reduces their usefulness, which has caused us to
-look for other solutions to this problem, such as [duplicated indexes](https://www.cockroachlabs.com/docs/stable/topology-duplicate-indexes.html)
+look for other solutions to this problem, such as [duplicated indexes](https://www.cockroachlabs.com/docs/v19.1/topology-duplicate-indexes)
 to avoid WAN hops on foreign key checks.
 
 Another hurdle is that the staleness they permit requires buy-in, so accessing
@@ -171,7 +171,7 @@ spectrum of possible solutions to address these shortcomings.
 ## What's wrong with the "duplicate index" pattern?
 
 CRDB's current "solution" for people wanting local consistent reads is the
-[duplicated index pattern](https://www.cockroachlabs.com/docs/stable/topology-duplicate-indexes.html).
+[duplicated index pattern](https://www.cockroachlabs.com/docs/v20.2/topology-duplicate-indexes).
 This RFC proposes replacing that pattern with capabilities built into the lower
 layers of the system, on the argument that it will result in a simpler, cheaper
 and more reliable system. This section discusses the current pattern (in
@@ -380,7 +380,7 @@ servable locally in all regions, not just in the single region that the tables'
 leaseholders happens to land. A common example of this arises with foreign keys
 on static tables.
 
-Until now, our best solution to this problem has been [duplicated indexes](https://www.cockroachlabs.com/docs/v19.1/pology-duplicate-indexes.html).
+Until now, our best solution to this problem has been [duplicated indexes](https://www.cockroachlabs.com/docs/v19.1/topology-duplicate-indexes).
 This solution requires users to create a collection of secondary SQL indexes that
 each contain every single column in the table. Users then use zone configurations
 to place a leaseholder for each of these indexes in every geographical locality.

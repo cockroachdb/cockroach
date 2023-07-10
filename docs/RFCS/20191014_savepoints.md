@@ -347,7 +347,7 @@ does not exist after the transaction commits.
 
 Note that the ordering of DDL vs DML statements remain restricted as
 per previously, none of the [known
-limitations](https://www.cockroachlabs.com/docs/v19.1/online-schema-changes.html#no-schema-changes-within-transactions)
+limitations](https://www.cockroachlabs.com/docs/v19.1/online-schema-changes#no-schema-changes-within-transactions)
 are lifted in this work.
 
 

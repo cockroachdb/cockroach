@@ -149,14 +149,14 @@ key/value (KV) interface, which is request-oriented (with transactions
 explicitly attached to every request).
 
 To hint at the complications: it is
-[sometimes necessary](https://www.cockroachlabs.com/docs/stable/transactions.html#transaction-retries)
+[sometimes necessary](https://www.cockroachlabs.com/docs/stable/transactions#transaction-retries)
 to retry statements in CockroachDB, usually because of serializability
 violations or data contention. A single SQL statement executed outside of a SQL
 transaction (i.e. an implicit transaction) can be retried automatically.
 However, it is not safe to retry a SQL transaction spanning multiple client
 statements, since they may be conditional on client logic (i.e. different
 `SELECT` results may trigger different subsequent statements). In this case, we
-bubble up a [retryable error](https://www.cockroachlabs.com/docs/stable/transactions.html#client-side-intervention)
+bubble up a [retryable error](https://www.cockroachlabs.com/docs/stable/transactions#client-side-intervention)
 to the client.
 
 `connExecutor` serves as a coordinator between different components during
@@ -362,7 +362,7 @@ Now that we've built a normalized memo, `buildExecMemo()` goes on to
 This explores possible query plans by applying Optgen
 [transformation rules](https://github.com/cockroachdb/cockroach/blob/bc95d8f5e79576e38208b89af65a2050ab52b982/pkg/sql/opt/xform/rules)
 to generate equivalent memo groups, and tries to pick the best combination through
-[cost-based optimization](https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html)
+[cost-based optimization](https://www.cockroachlabs.com/docs/stable/cost-based-optimizer)
 based on [table statistics](https://www.cockroachlabs.com/docs/stable/create-statistics).
 
 The optimizer [starts](https://github.com/cockroachdb/cockroach/blob/5ffe3c531385bbf52e5a414addbc489279f3d535/pkg/sql/opt/xform/optimizer.go#L226)
@@ -567,7 +567,7 @@ implements the [`DistSQL` gRPC service](https://github.com/cockroachdb/cockroach
 The [`SetupFlow()`](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql/server.go#L515)
 method ends up [dispatching](https://github.com/cockroachdb/cockroach/blob/a18b86331b33a76589f76cab0f86032f75c801a7/pkg/sql/distsql/server.go#L462)
 to [`colflow.NewVectorizedFlow()`](https://github.com/cockroachdb/cockroach/blob/cbcdb5ff33da15e86614aa0c1cff6df21d228e75/pkg/sql/colflow/vectorized_flow.go#L166)
-which sets up the flow using the [vectorized execution engine](https://www.cockroachlabs.com/docs/stable/vectorized-execution.html)
+which sets up the flow using the [vectorized execution engine](https://www.cockroachlabs.com/docs/stable/vectorized-execution)
 (the only engine we'll discuss here). This engine represents processors and
 stream infrastructure as
 [`colexecop.Operator`](https://github.com/cockroachdb/cockroach/blob/3d764753c54bd927b130656db49aa4f372abf8a7/pkg/sql/colexecop/operator.go#L26),
@@ -711,7 +711,7 @@ We'll now leave the SQL engine behind, and dive into the key/value service.
 The KV layer of CockroachDB is a transactional, distributed key/value
 storage service. A full description of its architecture is outside of the
 scope of this article, see the
-[architecture overview](https://www.cockroachlabs.com/docs/stable/architecture/overview.html)
+[architecture overview](https://www.cockroachlabs.com/docs/stable/architecture/overview)
 for details.
 
 Briefly, the KV service maintains a single ordered key/value map, split into
@@ -720,7 +720,7 @@ to a separate [Raft](https://raft.github.io) consensus cluster, where each Raft
 node is called a replica. A single CockroachDB node contains many replicas
 belonging to many ranges, using a common underlying on-disk data store.
 Cross-range transactions are achieved through a
-[distributed 2-phase commit protocol](https://www.cockroachlabs.com/docs/stable/architecture/transaction-layer.html)
+[distributed 2-phase commit protocol](https://www.cockroachlabs.com/docs/stable/architecture/transaction-layer)
 coordinated by the KV client.
 
 The KV service is request-oriented, with a
@@ -751,7 +751,7 @@ and calling methods on it such as
 and [`Put()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L452).
 Recall the SQL engine using this to execute statements in the context of a
 transaction. KV transactions are [ACID](https://en.wikipedia.org/wiki/ACID)-compliant
-with [serializable](https://www.cockroachlabs.com/docs/stable/demo-serializable.html)
+with [serializable](https://www.cockroachlabs.com/docs/stable/demo-serializable)
 isolation, so their writes only take effect after calling
 [`Commit()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L675),
 and they can be discarded with [`Rollback()`](https://github.com/cockroachdb/cockroach/blob/4e4f31a0ed1a8ea985b9ab6f72e29266b259900e/pkg/kv/txn.go#L751).

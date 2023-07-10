@@ -12,8 +12,10 @@ package docs
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/mozillazg/go-slugify"
 )
 
 // URLBase is the root URL for the version of the docs associated with this
@@ -22,12 +24,14 @@ var URLBase = "https://www.cockroachlabs.com/docs/" + build.BinaryVersionPrefix(
 
 // URLReleaseNotesBase is the root URL for the release notes for the .0 patch
 // release associated with this binary.
-var URLReleaseNotesBase = fmt.Sprintf("https://www.cockroachlabs.com/docs/releases/%s.0.html",
-	build.BinaryVersionPrefix())
+var URLReleaseNotesBase = fmt.Sprintf("https://www.cockroachlabs.com/docs/releases/%s#%s",
+	build.BinaryVersionPrefix(),
+	slugify.Slugify(build.BinaryVersionPrefix())+"-0",
+)
 
 // URL generates the URL to pageName in the version of the docs associated
 // with this binary.
-func URL(pageName string) string { return URLBase + "/" + pageName }
+func URL(pageName string) string { return URLBase + "/" + strings.Replace(pageName, ".html", "", -1) }
 
 // ReleaseNotesURL generates the URL to pageName in the .0 patch release notes
 // docs associated with this binary.

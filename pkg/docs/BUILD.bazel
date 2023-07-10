@@ -5,5 +5,8 @@ go_library(
     srcs = ["docs.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/docs",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/build"],
+    deps = [
+        "//pkg/build",
+        "@com_github_mozillazg_go_slugify//:go-slugify",
+    ],
 )

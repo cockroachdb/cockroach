@@ -406,4 +406,4 @@ haven't noticed it being a problem in practice.
 [#33336]: https://github.com/cockroachdb/cockroach/pull/33336
 [#34126]: https://github.com/cockroachdb/cockroach/pull/34126
 [#34130]: https://github.com/cockroachdb/cockroach/issues/34130
-[per-replica constraints]: https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html#scope-of-constraints
+[per-replica constraints]: https://www.cockroachlabs.com/docs/stable/configure-replication-zones#scope-of-constraints

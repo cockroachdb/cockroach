@@ -12,7 +12,7 @@ download a copy of this directory), fill in the constants at the top of
 clusters, optionally make any desired modifications to
 [cockroachdb-statefulset-secure.yaml](cockroachdb-statefulset-secure.yaml) as
 explained in [our Kubernetes performance tuning
-guide](https://www.cockroachlabs.com/docs/stable/kubernetes-performance.html),
+guide](https://www.cockroachlabs.com/docs/stable/kubernetes-performance),
 then finally run [setup.py](setup.py).
 
 You should see a lot of output as it does its thing, hopefully ending after
@@ -25,7 +25,7 @@ making other modifications as you please.
 
 If anything goes wrong along the way, please let us know via any of the [normal
 troubleshooting
-channels](https://www.cockroachlabs.com/docs/stable/support-resources.html).
+channels](https://www.cockroachlabs.com/docs/stable/support-resources).
 While we believe this creates a highly available, maintainable multi-region
 deployment, it is still pushing the boundaries of how Kubernetes is typically
 used, so feedback and issue reports are very appreciated.

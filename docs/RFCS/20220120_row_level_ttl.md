@@ -485,6 +485,6 @@ N/A
 [#75189]: https://github.com/cockroachdb/cockroach/pull/75189
 [#28296]: https://github.com/cockroachdb/cockroach/issues/28296
 [#83908]: https://github.com/cockroachdb/cockroach/issues/83908
-[cockroach TTL advice]: https://www.cockroachlabs.com/docs/stable/bulk-delete-data.html
+[cockroach TTL advice]: https://www.cockroachlabs.com/docs/stable/bulk-delete-data
 [admission control]: https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/admission_control.md
 [comparison doc]: https://docs.google.com/document/d/1HkFg3S-k3s2PahPRQhTgUkCR4WIAtjkSNVylarMC-gY/edit#heading=h.o6cn5faoiokv

@@ -1048,7 +1048,7 @@ CREATE TABLE articles (id int PRIMARY KEY, published DATE) ON sch (published);
 [example: date partitioning]: #example-date-partitioning
 [example: geographic partitioning]: #example-geographic-partitioning
 [index key prefix]: https://github.com/cockroachdb/cockroach/blob/1f3c72f17546f944490e0a4dcd928fd96a375987/docs/RFCS/sql_partitioning.md#key-encoding
-[interleaved tables]: https://www.cockroachlabs.com/docs/stable/interleave-in-parent.html
+[interleaved tables]: https://www.cockroachlabs.com/docs/stable/interleave-in-parent
 [leases follow the sun]: https://github.com/cockroachdb/cockroach/blob/763d21e6fad69728a523d3cdd8b449c8513094b7/docs/RFCS/20170125_leaseholder_locality.md
 [locality–resilience tradeoff]: #usage-localityresilience-tradeoff
 [partitioning and index columns]: #partitioning-and-index-columns
@@ -1057,4 +1057,4 @@ CREATE TABLE articles (id int PRIMARY KEY, published DATE) ON sch (published);
 [range splits]: #range-splits
 [select from partition]: #select-from-partition
 [system.subzones]: https://github.com/cockroachdb/cockroach/blob/1f3c72f17546f944490e0a4dcd928fd96a375987/docs/RFCS/sql_partitioning.md#table-subzones
-[zone config]: https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html
+[zone config]: https://www.cockroachlabs.com/docs/stable/configure-replication-zones

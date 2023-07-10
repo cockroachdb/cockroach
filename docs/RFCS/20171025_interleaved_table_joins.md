@@ -49,7 +49,7 @@
 # Summary
 
 We [currently permit
-users](https://www.cockroachlabs.com/docs/stable/interleave-in-parent.html) to
+users](https://www.cockroachlabs.com/docs/stable/interleave-in-parent) to
 specify if a child table should be interleaved on-disk under its specified
 parent table. This feature was adopted from [Google Spanner's interleaved
 tables](https://cloud.google.com/spanner/docs/schema-and-data-model#creating_interleaved_tables)
@@ -85,13 +85,13 @@ This RFC identifies two implementation phases for interleaved table joins:
 # Motivation
 
 We currently highlight [some of the
-benefits](https://www.cockroachlabs.com/docs/stable/interleave-in-parent.html#benefits)
+benefits](https://www.cockroachlabs.com/docs/stable/interleave-in-parent#benefits)
 for interleaved tables such as joins, yet we do not currently execute them
 differently for interleaved tables compared to non-interleaved tables. In
 fact, since we do two separate table scans for the parent and child table in
 an interleaved configuration, there is a performance impact to scan disjoint
 KV ranges as [noted in the interleave table
-docs themselves](https://www.cockroachlabs.com/docs/stable/interleave-in-parent.html#tradeoffs).
+docs themselves](https://www.cockroachlabs.com/docs/stable/interleave-in-parent#tradeoffs).
 
 To illustrate the current behavior, let us interleave table `child` into
 table `parent`:
@@ -185,7 +185,7 @@ a parent table (e.g. via a foreign key) should be interleaved in the the parent 
 
 In general, tables that are consistently subject to hierarchical querying patterns
 (i.e. queried together via multi-way joins) can see improvements with interleaving.
-The [current docs](https://www.cockroachlabs.com/docs/stable/interleave-in-parent.html)
+The [current docs](https://www.cockroachlabs.com/docs/stable/interleave-in-parent)
 do a good job highlighting the benefits and tradeoffs of interleaved tables
 in the general case. See [Drawbacks](#drawbacks) for caveats on advising users
 with respect to interleaved tables.
@@ -979,7 +979,7 @@ processor, namely:
 
 ### [7] Index joins
 
-Although we [do not publicly advertise](https://www.cockroachlabs.com/docs/stable/interleave-in-parent.html)
+Although we [do not publicly advertise](https://www.cockroachlabs.com/docs/stable/interleave-in-parent)
 interleaving secondary indexes under primary indexes, this is possible
 with the syntax
 ```sql

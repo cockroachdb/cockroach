@@ -56,8 +56,8 @@ Schemas also can be checked for the following:
 [#17690]: https://github.com/cockroachdb/cockroach/issues/17690
 [#18533]: https://github.com/cockroachdb/cockroach/issues/18533
 [#18705]: https://github.com/cockroachdb/cockroach/issues/18705
-[STORING]: https://www.cockroachlabs.com/docs/stable/create-index.html#store-columns
-[FAMILY]: https://www.cockroachlabs.com/docs/stable/column-families.html
+[STORING]: https://www.cockroachlabs.com/docs/stable/create-index#store-columns
+[FAMILY]: https://www.cockroachlabs.com/docs/stable/column-families
 [Composite encodings]: https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/encoding.md#composite-encoding
 
 

@@ -159,7 +159,7 @@ CockroachDB Community License Agreement
         CockroachDB Enterprise Edition that are not designated as “Enterprise
         features” at
 
-            https://www.cockroachlabs.com/docs/stable/enterprise-licensing.html
+            https://www.cockroachlabs.com/docs/stable/enterprise-licensing
 
         and do not require a license key (e.g. the feature does not require
         the use of the ‘enterprise.license’ cluster setting, and the software

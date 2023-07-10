@@ -3,7 +3,7 @@
 This document is an updated version of the original design documents
 by Spencer Kimball from early 2014. It may not always be completely up to date.
 For a more approachable explanation of how CockroachDB works, consider reading
-the [Architecture docs](https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
+the [Architecture docs](https://www.cockroachlabs.com/docs/stable/architecture/overview).
 
 # Overview
 

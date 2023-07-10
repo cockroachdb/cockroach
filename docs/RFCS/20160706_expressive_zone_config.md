@@ -9,7 +9,7 @@
 
 This document has been made partially obsolete by more recent changes to
 ZoneConfig constraints. For the latest information, please see [the
-docs](https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html).
+docs](https://www.cockroachlabs.com/docs/stable/configure-replication-zones).
 
 # Motivation
 

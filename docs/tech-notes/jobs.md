@@ -134,7 +134,7 @@ A more user-readable version of `system.jobs` with the parsed `payload` and
 `progress` information can be monitored through the
 [`crdb_internal.jobs`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/sql/crdb_internal.go#L660)
 table (which simply reads from `system.jobs`).  The [`SHOW
-JOBS`](https://www.cockroachlabs.com/docs/stable/show-jobs.html) command
+JOBS`](https://www.cockroachlabs.com/docs/stable/show-jobs) command
 operates by [reading from
 `crdb_internal.jobs`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/sql/delegate/show_jobs.go#L23).
 
@@ -308,7 +308,7 @@ an empty value or the next iteration according to the `schedule_expr`, while
 Job Schedules are stored in the
 [`system.scheduled_jobs`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/sql/catalog/systemschema/system.go#L432)
 table. A more user-readable version can be viewed using the [`SHOW
-SCHEDULES`](https://www.cockroachlabs.com/docs/stable/show-schedules.html) SQL
+SCHEDULES`](https://www.cockroachlabs.com/docs/stable/show-schedules) SQL
 statement.
 
 ```sql
@@ -470,7 +470,7 @@ during execution. Next we'll discuss how certain CRDB features spawn jobs in the
 
 ### CCL Job Planning
 A subset of CRDB features -- BACKUP, RESTORE, IMPORT,
-CHANGEFEED --  are licensed under the [Cockroach Community License (CCL)](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html)
+CHANGEFEED --  are licensed under the [Cockroach Community License (CCL)](https://www.cockroachlabs.com/docs/stable/licensing-faqs)
 and plan jobs in a similar fashion.
 
 During logical planning, each CCL job [executes](https://github.com/cockroachdb/cockroach/blob/31db44da69bf21e67ebbef6fbb8c8bfb2e498efe/pkg/sql/opaque.go#L204)

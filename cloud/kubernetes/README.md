@@ -260,7 +260,7 @@ kubectl exec -it cockroachdb-client-secure -- ./cockroach sql --certs-dir=/cockr
 You can see example SQL statements for inserting and querying data in the
 included [demo script](demo.sh), but can use almost any Postgres-style SQL
 commands. Some more basic examples can be found within
-[CockroachDB's documentation](https://www.cockroachlabs.com/docs/stable/learn-cockroachdb-sql.html).
+[CockroachDB's documentation](https://www.cockroachlabs.com/docs/stable/learn-cockroachdb-sql).
 
 ## Accessing the admin UI
 
@@ -387,7 +387,7 @@ kubectl scale statefulset cockroachdb --replicas=4
 You should never scale the StatefulSet down by more than one replica at a time.
 Doing so could lead to data unavailability. For best practices on safely
 removing nodes from a safely, see our docs on [node
-decommissioning](https://www.cockroachlabs.com/docs/stable/remove-nodes.html).
+decommissioning](https://www.cockroachlabs.com/docs/stable/node-shutdown?filters=decommission).
 
 ## Doing a rolling upgrade to a different CockroachDB version
 
@@ -403,7 +403,7 @@ kubectl edit statefulset cockroachdb
 Kubernetes will then automatically replace the pods in your StatefulSet one by
 one to run on the newly specified image. For more details on upgrading
 CockroachDB, see [our
-docs](https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html).
+docs](https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version).
 For how to use alternative rolling update commands such as `kubectl patch` and
 `kubectl replace`, see the [Kubernetes
 docs](https://kubernetes.io/docs/tutorials/stateful-application/basic-stateful-set/#rolling-update).

@@ -689,7 +689,7 @@ an alias if we build support for CockroachDB to CockroachDB replication.
 [amazon redshift]: https://aws.amazon.com/redshift/
 [avro]: #appendix-avro-background
 [rangefeed]: https://github.com/cockroachdb/cockroach/blob/381e4dafa596c5f3621a48fcb5fce1f62b18c186/docs/RFCS/20170613_change_feeds_storage_primitive.md
-[column family]: https://www.cockroachlabs.com/docs/stable/column-families.html
+[column family]: https://www.cockroachlabs.com/docs/stable/column-families
 [confluent schema registry]: https://docs.confluent.io/current/schema-registry/docs/index.html
 [cross-row and cross-table ordering]: #cross-row-and-cross-table-ordering
 [data warehouse example: amazon redshift]: #data-warehouse-example-amazon-redshift
@@ -701,8 +701,8 @@ an alias if we build support for CockroachDB to CockroachDB replication.
 [exactly-once delivery]: #exactly-once-delivery
 [follower reads]: https://github.com/cockroachdb/cockroach/pull/26362
 [full-text index example: elasticsearch]: #full-text-index-example-elasticsearch
-[garbage collection]: https://www.cockroachlabs.com/docs/stable/architecture/storage-layer.html#garbage-collection
-[incremental backups]: https://www.cockroachlabs.com/docs/stable/backup.html
+[garbage collection]: https://www.cockroachlabs.com/docs/stable/architecture/storage-layer#garbage-collection
+[incremental backups]: https://www.cockroachlabs.com/docs/stable/backup
 [jdbc source connector]: https://docs.confluent.io/current/connect/connect-jdbc/docs/source_connector.html
 [kafka]: https://kafka.apache.org/intro
 [other cdc syntaxes]: #appendix-other-cdc-syntaxes

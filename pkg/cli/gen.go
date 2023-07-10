@@ -256,10 +256,10 @@ Output the list of cluster settings known to this binary.
 			}
 
 			settingDesc := setting.Description()
-			alterRoleLink := "ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
+			alterRoleLink := "ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role"
 			if sqlExecCtx.TableDisplayFormat == clisqlexec.TableDisplayRawHTML {
 				settingDesc = html.EscapeString(settingDesc)
-				alterRoleLink = `<a href="alter-role.html"><code>ALTER ROLE... SET</code></a>`
+				alterRoleLink = `<a href="alter-role"><code>ALTER ROLE... SET</code></a>`
 			}
 			if strings.Contains(name, "sql.defaults") {
 				settingDesc = fmt.Sprintf(`%s

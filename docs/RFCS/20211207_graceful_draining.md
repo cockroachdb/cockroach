@@ -425,7 +425,7 @@ See the motivation part.
 See “questions not fully answered” in the Technical Design section.
 
 [postgres_shutdown]: https://www.postgresql.org/docs/current/server-shutdown.html
-[cockroach cluster settings]: https://www.cockroachlabs.com/docs/stable/cluster-settings.html
+[cockroach cluster settings]: https://www.cockroachlabs.com/docs/stable/cluster-settings
 [HirakiCP]: https://github.com/brettwooldridge/HikariCP
 [demo code]: https://github.com/janeCockroachDB/hikari_demo
 [demo recording current draining]: https://www.dropbox.com/s/6333e4x6yzwswfu/CurrentDraining.mp4?dl=0
@@ -439,6 +439,6 @@ See “questions not fully answered” in the Technical Design section.
 [survey link]: https://docs.google.com/forms/d/1_BWgza8n5iYBwVR7WSrKT4jL8RClE-PMoOmzlUWvnl8/edit?usp=sharing
 [Issue 74412]: https://github.com/cockroachdb/cockroach/issues/74412
 [Issue 73274]: https://github.com/cockroachdb/cockroach/issues/73274
-[Cluster Setting Page]: https://www.cockroachlabs.com/docs/v21.2/cluster-settings.html
+[Cluster Setting Page]: https://www.cockroachlabs.com/docs/v21.2/cluster-settings
 [improvement recording]: https://www.dropbox.com/s/j8o81htifdi0nfw/ImprovedDrainingWMp3.mp4?dl=0
 [Lease Transfer Issue]: https://github.com/cockroachdb/cockroach/issues/75520

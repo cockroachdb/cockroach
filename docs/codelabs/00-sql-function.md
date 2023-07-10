@@ -390,5 +390,5 @@ That’s it! You’ve successfully added a bug-free built-in SQL function to
 CockroachDB.
 
 [CONTRIBUTING.md]: https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md
-[built-ins]: https://www.cockroachlabs.com/docs/stable/functions-and-operators.html#built-in-functions
+[built-ins]: https://www.cockroachlabs.com/docs/stable/functions-and-operators#built-in-functions
 [blog-maps]: https://blog.golang.org/go-maps-in-action#TOC_7.

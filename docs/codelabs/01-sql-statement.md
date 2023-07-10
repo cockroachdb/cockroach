@@ -570,5 +570,5 @@ SQL parser and execution engine.
 
 [CONTRIBUTING.md]: https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md
 [sql-function]: https://github.com/cockroachdb/cockroach/blob/master/docs/codelabs/00-sql-function.md
-[statements]: https://www.cockroachlabs.com/docs/stable/sql-statements.html
+[statements]: https://www.cockroachlabs.com/docs/stable/sql-statements
 [jargon-file]: http://www.catb.org/jargon/html/F/frobnicate.html

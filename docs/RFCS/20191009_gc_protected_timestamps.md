@@ -17,7 +17,7 @@ jobs to prevent relevant data from being garbage collected.
 # Motivation
 
 CockroachDB internally uses
-[MVCC](https://www.cockroachlabs.com/docs/stable/architecture/storage-layer.html#mvcc)
+[MVCC](https://www.cockroachlabs.com/docs/stable/architecture/storage-layer#mvcc)
 to store key-value pairs. Old values need to be removed eventually.
 Today's default GC TTL is 25 hours. This value comes from an
 assumption about common backup strategies; we assume that customers frequently
@@ -165,7 +165,7 @@ controlled by cluster settings.
 ### The GC Process
 
 GC TTLs are defined in 
-[Zone Configurations](https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html).
+[Zone Configurations](https://www.cockroachlabs.com/docs/stable/configure-replication-zones).
 Leaseholders decide whether to run GC based on a heuristic which estimates
 how much garbage would be collected if GC were to run (see 
 [this comment](https://github.com/cockroachdb/cockroach/blob/cc439f0a319031d4dc70de35243f376aed6f3d9f/pkg/storage/gc_queue.go#L188-L264)).

@@ -304,7 +304,7 @@ customer's identity provider (IdP) or (2) CC Console.
 A new API geared towards CC-rooted service accounts, `GenerateTokensService`, will generate
 access tokens. Service accounts will need an API key to access the API, and admins will be
 able to
-[manage the API keys for this API in the console access management UI](https://www.cockroachlabs.com/docs/cockroachcloud/console-access-management.html#api-access).
+[manage the API keys for this API in the console access management UI](https://www.cockroachlabs.com/docs/cockroachcloud/console-access-management#api-access).
 CC Console uses the specified cluster ID in order to set a proper audience field in the access token.
 Assuming the checks succeed, the API will return an access token. Endpoint: `/oauth2/servicetoken`
 

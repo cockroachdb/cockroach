@@ -198,7 +198,7 @@ logging parameters:
 - Additionally, it also already supports using different logging
   directories for different logs, for example it is possible to separate
   the main logs from that used for [SQL audit
-  logging](https://www.cockroachlabs.com/docs/v20.1/sql-audit-logging.html)
+  logging](https://www.cockroachlabs.com/docs/v20.1/sql-audit-logging)
   (an experimental feature introduced in v2.1).
 
 - Additionally, it also supports the introduction of [redaction

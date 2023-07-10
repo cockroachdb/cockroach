@@ -1210,7 +1210,7 @@ everything). <sup>[ret](#a1)</sup>
 [cascade]: https://github.com/cockroachdb/cockroach/pull/30426
 [la-planning]: https://github.com/cockroachdb/cockroach/blob/692fa83ce377c86cf1b6f865a7583a383c458ce2/pkg/sql/opt_catalog.go#L455-L466
 [pseudo-ids]: https://github.com/cockroachdb/cockroach/blob/ce1c68397db8ebc222ed201fef1f9ca92485ddcd/pkg/keys/constants.go#L379-L385
-[conf-reports]: https://www.cockroachlabs.com/docs/v21.1/query-replication-reports.html
+[conf-reports]: https://www.cockroachlabs.com/docs/v21.1/query-replication-reports
 [commit-deadline]: https://github.com/cockroachdb/cockroach/blob/31847acd14ed27a340dfc620a544c3e33cbd7c9a/pkg/roachpb/api.proto#L608-L614
 [schema-leases]: https://github.com/cockroachdb/cockroach/blob/f2fa4c5cb1604e1f483bf253107c0f0d9ae56f59/pkg/sql/catalog/descs/collection.go#L339-L347
 [spanconfig-mgr]: https://github.com/cockroachdb/cockroach/pull/68522

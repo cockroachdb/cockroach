@@ -1,6 +1,6 @@
 # Running CockroachDB across multiple Kubernetes clusters (EKS)
 
-The configuration files in this directory enable a multi-region CockroachDB deployment on [Amazon EKS](https://aws.amazon.com/eks/), using multiple Kubernetes clusters in different geographic regions. They are primarily intended for use with our [Orchestrate CockroachDB Across Multiple Kubernetes Clusters](https://www.cockroachlabs.com/docs/stable/orchestrate-cockroachdb-with-kubernetes-multi-cluster.html#eks) tutorial, but can be modified for use with any multi-region CockroachDB deployment hosted on EKS.
+The configuration files in this directory enable a multi-region CockroachDB deployment on [Amazon EKS](https://aws.amazon.com/eks/), using multiple Kubernetes clusters in different geographic regions. They are primarily intended for use with our [Orchestrate CockroachDB Across Multiple Kubernetes Clusters](https://www.cockroachlabs.com/docs/stable/orchestrate-cockroachdb-with-kubernetes-multi-cluster#eks) tutorial, but can be modified for use with any multi-region CockroachDB deployment hosted on EKS.
 
 Note that a successful multi-region deployment also requires configuring your EC2 network for inter-region traffic, which is covered fully in our tutorial.
 
@@ -48,7 +48,7 @@ You can then deploy the StatefulSet in each region, specifying the appropriate c
 kubectl create -f <statefulset> --context=<cluster-context> --namespace=<cluster-namespace>
 ```
 
-Before initializing the cluster, however, you must enable CockroachDB pods to communicate across regions. This includes peering the VPCs in all 3 regions with each other, setting up a [Network Load Balancer](#set-up-load-balancing) in each region, and [configuring a CoreDNS service](#configure-coredns) to route DNS traffic to the appropriate pods. For information on configuring the EC2 network, see our [documentation](https://www.cockroachlabs.com/docs/stable/orchestrate-cockroachdb-with-kubernetes-multi-cluster.html#eks).
+Before initializing the cluster, however, you must enable CockroachDB pods to communicate across regions. This includes peering the VPCs in all 3 regions with each other, setting up a [Network Load Balancer](#set-up-load-balancing) in each region, and [configuring a CoreDNS service](#configure-coredns) to route DNS traffic to the appropriate pods. For information on configuring the EC2 network, see our [documentation](https://www.cockroachlabs.com/docs/stable/orchestrate-cockroachdb-with-kubernetes-multi-cluster#eks).
 
 ### Set up load balancing
 

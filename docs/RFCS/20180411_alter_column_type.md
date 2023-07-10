@@ -132,7 +132,7 @@ as `UUID -> STRING`.
 Assisted conversions involve applying a `USING expression` to the
 existing column data, such as `FLOAT -> INT USING ceil(column_name)`.
 The allowable expressions are the same as those used in
-[computed columns](https://www.cockroachlabs.com/docs/stable/computed-columns.html#creation),
+[computed columns](https://www.cockroachlabs.com/docs/stable/computed-columns#creation),
 namely pure functions using the data available in a single row.
 
 ## Two-phase change
@@ -379,7 +379,7 @@ actions in other `TableDescriptor` instances.
 ## Allowable conversions
 
 In general, scalar types can be converted per the existing [cast and
-conversion rules](https://www.cockroachlabs.com/docs/stable/data-types.html)
+conversion rules](https://www.cockroachlabs.com/docs/stable/data-types)
 outlined in the existing documentation.
 
 Unless otherwise noted in the Notes field below, a type conversion can

@@ -36,7 +36,7 @@ As of v20.1, CockroachDB supports a few role-level options which can be granted
 via the `CREATE ROLE` or `ALTER ROLE` statement. One example is `CREATEROLE`,
 which grants users the ability to create, alter, and drop other roles. A
 complete list is available at
-https://www.cockroachlabs.com/docs/v20.1/alter-role.html#parameters.
+https://www.cockroachlabs.com/docs/v20.1/alter-role#parameters.
 
 In order to support granting admin-like abilities, we add several new role
 options:
