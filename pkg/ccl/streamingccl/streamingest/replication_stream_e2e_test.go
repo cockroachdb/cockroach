@@ -910,9 +910,8 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 		if completeReplication {
 			c.DestSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", replicationJobID))
 			jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
-			var cutoverTime time.Time
-			c.DestSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-			c.Cutover(producerJobID, replicationJobID, cutoverTime, false)
+			var emptyCutoverTime time.Time
+			c.Cutover(producerJobID, replicationJobID, emptyCutoverTime, false)
 		}
 
 		// Set GC TTL low, so that the GC job completes quickly in the test.
