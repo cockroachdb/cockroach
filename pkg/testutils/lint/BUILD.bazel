@@ -1,5 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-
 exports_files(["testdata/errcheck_excludes.txt"])
 
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -21,7 +19,10 @@ go_test(
         "nightly_lint_test.go",
     ],
     args = ["-test.timeout=295s"],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@co_honnef_go_tools//cmd/staticcheck",
+        "@go_sdk//:files",
+    ],
     embed = [":lint"],
     embedsrcs = ["gcassert_paths.txt"],
     gotags = ["lint"],
@@ -43,5 +44,3 @@ go_test(
         "@org_golang_x_tools//go/packages",
     ],
 )
-
-get_x_data(name = "get_x_data")

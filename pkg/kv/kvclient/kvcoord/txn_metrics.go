@@ -198,12 +198,6 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRestartsPossibleReplay = metric.Metadata{
-		Name:        "txn.restarts.possiblereplay",
-		Help:        "Number of restarts due to possible replays of command batches at the storage layer",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaRestartsAsyncWriteFailure = metric.Metadata{
 		Name:        "txn.restarts.asyncwritefailure",
 		Help:        "Number of restarts due to async consensus writes that failed to leave intents",

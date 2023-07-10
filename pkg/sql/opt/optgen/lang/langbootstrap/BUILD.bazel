@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 # Langgen is a bootstrapping compiler. We symlink the bootstrap sources into
@@ -27,5 +26,3 @@ go_library(
         "@org_golang_x_text//language",
     ],
 )
-
-get_x_data(name = "get_x_data")

@@ -1,4 +1,3 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -99,5 +98,3 @@ stringer(
     additional_args = ["--trimprefix=tableEvent"],
     typ = "tableEventType",
 )
-
-get_x_data(name = "get_x_data")

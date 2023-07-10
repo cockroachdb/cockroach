@@ -49,18 +49,14 @@ test:test --test_env=TZ=
 # If those values are updated, the script should be updated accordingly.
 test:race --test_timeout=1200,6000,18000,72000
 
-# CI should always run with `--config=ci` or `--config=cinolint`.
-# Prefer the first to the second unless some other job will handle linting the
-# same code you're building.
-build:ci --config=cinolint
 build:ci --lintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
-test:cinolint --test_env=GO_TEST_WRAP_TESTV=1
+test:ci --test_env=GO_TEST_WRAP_TESTV=1
 # Dump all output for failed tests to the build log.
-test:cinolint --test_output=errors
+test:ci --test_output=errors
 # Put all tmp artifacts in /artifacts/tmp.
-build:cinolint --test_tmpdir=/artifacts/tmp
+build:ci --test_tmpdir=/artifacts/tmp
 
 build:cross --stamp
 

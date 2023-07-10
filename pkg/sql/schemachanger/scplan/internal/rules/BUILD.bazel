@@ -1,5 +1,4 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 
 go_library(
     name = "rules",
@@ -23,5 +22,3 @@ go_library(
         "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
-
-get_x_data(name = "get_x_data")

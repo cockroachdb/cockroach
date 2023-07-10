@@ -249,8 +249,7 @@ func TestLogic_tmp(t *testing.T) {
 // There is probably room for optimization here. Among other things:
 // some tests may declare a testdata dependency they don't actually need, and
 // the sizes for some of these tests can probably be smaller than "enormous".
-const buildFileTemplate = `load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_test")
+const buildFileTemplate = `load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "{{ .TestRuleName }}_test",
@@ -284,8 +283,6 @@ go_test(
         "//pkg/util/randutil",
     ],
 )
-
-get_x_data(name = "get_x_data")
 `
 
 var (

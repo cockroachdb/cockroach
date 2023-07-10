@@ -45,6 +45,18 @@ const cockroachDB = "github.com/cockroachdb/cockroach"
 //go:embed gcassert_paths.txt
 var rawGcassertPaths string
 
+func init() {
+	if bazel.BuiltWithBazel() {
+		gobin, err := bazel.Runfile("bin/go")
+		if err != nil {
+			panic(err)
+		}
+		if err := os.Setenv("PATH", fmt.Sprintf("%s%c%s", filepath.Dir(gobin), os.PathListSeparator, os.Getenv("PATH"))); err != nil {
+			panic(err)
+		}
+	}
+}
+
 func dirCmd(
 	dir string, name string, args ...string,
 ) (*exec.Cmd, *bytes.Buffer, stream.Filter, error) {
@@ -125,6 +137,15 @@ func TestLint(t *testing.T) {
 	}
 
 	pkgVar, pkgSpecified := os.LookupEnv("PKG")
+
+	var nogoConfig map[string]any
+	nogoJson, err := os.ReadFile(filepath.Join(crdbDir, "build", "bazelutil", "nogo_config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(nogoJson, &nogoConfig); err != nil {
+		t.Error(err)
+	}
 
 	t.Run("TestLowercaseFunctionNames", func(t *testing.T) {
 		skip.UnderShort(t)
@@ -1730,16 +1751,55 @@ func TestLint(t *testing.T) {
 	t.Run("TestStaticCheck", func(t *testing.T) {
 		// staticcheck uses 2.4GB of ram (as of 2019-05-10), so don't parallelize it.
 		skip.UnderShort(t)
+		// If run outside of Bazel, we assume this binary must be in the PATH.
+		staticcheck := "staticcheck"
 		if bazel.BuiltWithBazel() {
-			skip.IgnoreLint(t, "the staticcheck tests are run during the bazel build")
+			var err error
+			staticcheck, err = bazel.Runfile("external/co_honnef_go_tools/cmd/staticcheck/staticcheck_/staticcheck")
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
-		cmd, stderr, filter, err := dirCmd(
-			crdbDir,
-			"staticcheck",
-			pkgScope)
+		// Determine the list of files to exclude."
+
+		cmd, stderr, filter, err := dirCmd(crdbDir, staticcheck, pkgScope)
 		if err != nil {
 			t.Fatal(err)
+		}
+
+		staticcheckCheckNameRe := regexp.MustCompile(`^(S|SA|ST|U)[0-9][0-9][0-9][0-9]$`)
+		filters := []stream.Filter{
+			filter,
+			stream.GrepNot(`\.pb\.go`),
+			stream.GrepNot(`\.pb\.gw\.go`),
+			// NB: we define a data structure here that mirrors the shape of a stdlib
+			// data structure. This causes staticcheck to think fields in the structure
+			// are unused, when in fact the runtime uses them.
+			stream.GrepNot(`pkg/util/goschedstats/runtime_go1\.19\.go:.*\(U1000\)`),
+			// NB: Looks like false positives in this file. Maybe due to the bazel build tag.
+			// If this situation gets much worse, we can look at running staticcheck multiple
+			// times and merging the results: https://staticcheck.io/docs/running-staticcheck/cli/build-tags/
+			// This is more trouble than it's worth right now.
+			stream.GrepNot(`pkg/cmd/mirror/go/mirror.go`),
+			stream.GrepNot(`pkg/roachprod/vm/aws/embedded.go:.*"io/ioutil" has been deprecated`),
+			stream.GrepNot(`pkg/security/securitytest/embedded.go:.*"io/ioutil" has been deprecated`),
+		}
+		for analyzerName, config := range nogoConfig {
+			if !staticcheckCheckNameRe.MatchString(analyzerName) {
+				continue
+			}
+			// NB: We're not loading only_files because right now we don't need it.
+			// This could lead to disagreements between `nogo` and `lint` if things change.
+			excludeFiles := config.(map[string]any)["exclude_files"]
+			if excludeFiles == nil {
+				continue
+			}
+			for excludeRegexp := range excludeFiles.(map[string]any) {
+				excludeRegexp = strings.TrimPrefix(excludeRegexp, "cockroach/")
+				excludeRegexp = strings.TrimSuffix(excludeRegexp, "$")
+				filters = append(filters, stream.GrepNot(excludeRegexp+`:.*\(`+analyzerName+`\)$`))
+			}
 		}
 
 		if err := cmd.Start(); err != nil {
@@ -1747,65 +1807,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(
-			stream.Sequence(
-				filter,
-				// Skip .pb.go and .pb.gw.go generated files.
-				stream.GrepNot(`pkg/.*\.pb(\.gw|)\.go:`),
-				// This file is a conditionally-compiled stub implementation that
-				// will produce fake "func is unused" errors.
-				stream.GrepNot(`pkg/build/bazel/non_bazel.go`),
-				// These binaries are Bazel-only and the unused linter gets confused
-				// about the stub implementation mentioned in
-				// pkg/build/bazel/non_bazel.go above.
-				stream.GrepNot(`pkg/cmd/mirror/go/mirror.go`),
-				stream.GrepNot(`pkg/cmd/generate-distdir/main.go`),
-				// Skip generated file.
-				stream.GrepNot(`pkg/ui/distoss/bindata.go`),
-				stream.GrepNot(`pkg/ui/distccl/bindata.go`),
-				// sql.go is the generated parser, which sets sqlDollar in all cases,
-				// even if it might not be used again.
-				stream.GrepNot(`pkg/sql/parser/sql.go:.*this value of sqlDollar is never used`),
-				// Generated file containing many unused postgres error codes.
-				stream.GrepNot(`pkg/sql/pgwire/pgcode/codes.go:.* var .* is unused`),
-				// The methods in exprgen.customFuncs are used via reflection.
-				stream.GrepNot(`pkg/sql/opt/optgen/exprgen/custom_funcs.go:.* func .* is unused`),
-				// Using deprecated method to COPY because the copyin driver does not
-				// implement StmtExecContext as of 07/06/2020.
-				stream.GrepNot(`pkg/cli/nodelocal.go:.* stmt.Exec is deprecated: .*`),
-				stream.GrepNot(`pkg/cli/userfile.go:.* stmt.Exec is deprecated: .*`),
-				// Cause is a method used by pkg/cockroachdb/errors (through an unnamed
-				// interface).
-				stream.GrepNot(`pkg/.*.go:.* func .*\.Cause is unused`),
-				// Using deprecated WireLength call.
-				stream.GrepNot(`pkg/rpc/stats_handler.go:.*v.WireLength is deprecated: This field is never set.*`),
-				// kv/kvpb/api.go needs v1 Protobuf reflection
-				stream.GrepNot(`pkg/kv/kvpb/api_test.go:.*"github.com/golang/protobuf/proto" is deprecated: Use the "google.golang.org/protobuf/proto" package instead.`),
-				// rpc/codec.go imports the same proto package that grpc-go imports (as of crdb@dd87d1145 and grpc-go@7b167fd6).
-				stream.GrepNot(`pkg/rpc/codec.go:.*"github.com/golang/protobuf/proto" is deprecated: Use the "google.golang.org/protobuf/proto" package instead.`),
-				// goschedstats contains partial copies of go runtime structures, with
-				// many fields that we're not using.
-				stream.GrepNot(`pkg/util/goschedstats/runtime.*\.go:.*is unused`),
-				// Ignore ioutil.ReadDir uses that I couldn't get rid of easily.
-				stream.GrepNot(`pkg/roachprod/.*\.go:.*"io/ioutil" has been deprecated since Go 1\.16: As of Go 1\.16`),
-				stream.GrepNot(`pkg/security/securityassets/security_assets\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
-				stream.GrepNot(`pkg/security/securitytest/embedded\.go:.*"io/ioutil" has been deprecated since Go 1\.16`),
-				stream.GrepNot(`pkg/server/dumpstore.*\.go.*"io/ioutil" has been deprecated since Go 1\.16: As of Go 1\.16`),
-				stream.GrepNot(`pkg/server/profiler/profilestore_test\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
-				stream.GrepNot(`pkg/util/log/file_api\.go.*"io/ioutil" has been deprecated since Go 1\.16`),
-				// TODO(yuzefovich): remove these exclusions.
-				stream.GrepNot(`pkg/sql/conn_executor.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/instrumentation.go:.*SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/planner.go:.*SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/schema_changer.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/distsql/server.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/execinfra/processorsbase.go:.*SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/importer/import_table_creation.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/row/expr_walker_test.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/schemachanger/scbuild/tree_context_builder.go:.* evalCtx.SetDeprecatedContext is deprecated: .*`),
-				stream.GrepNot(`pkg/sql/schemachanger/scplan/internal/rules/.*/.*go:.* should not use dot imports \(ST1001\)`),
-				// TODO(yuzefovich): remove this exclusion (#100438).
-				stream.GrepNot(`pkg/util/bulk/tracing_aggregator.go:.*SetLazyTagLocked is deprecated: .*`),
-			), func(s string) {
+			stream.Sequence(filters...), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
 			t.Error(err)
@@ -2216,15 +2218,8 @@ func TestLint(t *testing.T) {
 		//    If the next-to-last argument is a string, then this may be a Printf wrapper.
 		//    Otherwise it may be a Print wrapper.
 		// Note we retrieve the list of printfuncs from nogo_config.json.
-		jsonFile, err := os.ReadFile(filepath.Join(crdbDir, "build", "bazelutil", "nogo_config.json"))
-		if err != nil {
-			t.Error(err)
-		}
-		var printSchema map[string]map[string]map[string]string
-		if err := json.Unmarshal(jsonFile, &printSchema); err != nil {
-			t.Error(err)
-		}
-		printfuncs := printSchema["printf"]["analyzer_flags"]["funcs"]
+		analyzerFlags := nogoConfig["printf"].(map[string]any)
+		printfuncs := analyzerFlags["analyzer_flags"].(map[string]any)["funcs"].(string)
 		nakedGoroutineExceptions := `(` + strings.Join([]string{
 			`pkg/.*_test\.go`,
 			`pkg/acceptance/.*\.go`,
