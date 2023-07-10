@@ -15,13 +15,11 @@ genrule(
     cmd = """
     export GOPATH=/nonexist-gopath
       $(location :pgrepl-gen) $(location pgrepl.y) pgrepl ""\
-          $(location pgrepl.go) $(location @org_golang_x_tools//cmd/goyacc) \
-          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
+          $(location pgrepl.go) $(location @org_golang_x_tools//cmd/goyacc)
 
     """,
     exec_tools = [
         ":pgrepl-gen",
-        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@org_golang_x_tools//cmd/goyacc",
     ],
     visibility = ["//visibility:public"],
