@@ -2,6 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "roachtest_lib",
+    testonly = 1,
     srcs = [
         "cluster.go",
         "github.go",
@@ -62,6 +63,7 @@ go_library(
 
 go_binary(
     name = "roachtest",
+    testonly = 1,
     embed = [":roachtest_lib"],
     visibility = ["//visibility:public"],
 )
@@ -69,6 +71,7 @@ go_binary(
 go_test(
     name = "roachtest_test",
     size = "small",
+    testonly = 1,
     srcs = [
         "cluster_test.go",
         "github_test.go",
