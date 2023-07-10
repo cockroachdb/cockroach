@@ -1,0 +1,4 @@
+echo
+----
+message with ‹argument›: 0xc000506030 == 0xc000506030, &hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false}
+message with ‹argument›: 0x0 == 0x0, (*hlc.Timestamp)(nil)
