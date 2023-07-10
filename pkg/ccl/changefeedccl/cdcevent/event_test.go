@@ -407,7 +407,6 @@ CREATE TABLE foo (
 			}
 		})
 	}
-
 }
 
 func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
@@ -751,5 +750,49 @@ func TestMakeRowFromTuple(t *testing.T) {
 		require.Equal(t, current.valAsString, tree.AsStringWithFlags(d, tree.FmtExport))
 		return nil
 	}))
+}
 
+func BenchmarkEventDecoder(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	b.StopTimer()
+	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(b, `
+CREATE TABLE foo (
+  a INT, 
+  b STRING, 
+  c STRING,
+  PRIMARY KEY (b, a)
+)`)
+
+	tableDesc := cdctest.GetHydratedTableDescriptor(b, s.ExecutorConfig(), "foo")
+	popRow, cleanup := cdctest.MakeRangeFeedValueReader(b, s.ExecutorConfig(), tableDesc)
+	sqlDB.Exec(b, "INSERT INTO foo VALUES (5, 'hello', 'world')")
+	v := popRow(b)
+	cleanup()
+
+	targets := changefeedbase.Targets{}
+	targets.Add(changefeedbase.Target{
+		TableID: tableDesc.GetID(),
+	})
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	ctx := context.Background()
+	decoder, err := NewEventDecoder(ctx, &execCfg, targets, false, false)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := decoder.DecodeKV(
+			ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, CurrentRow, v.Timestamp(), false)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }

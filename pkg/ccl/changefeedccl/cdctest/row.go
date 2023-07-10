@@ -33,8 +33,8 @@ import (
 // Instead of trying to generate KVs ourselves (subject to encoding restrictions, etc), it is
 // simpler to just "INSERT ..." into the table, and then use this function to read next value.
 func MakeRangeFeedValueReader(
-	t *testing.T, execCfgI interface{}, desc catalog.TableDescriptor,
-) (func(t *testing.T) *kvpb.RangeFeedValue, func()) {
+	t testing.TB, execCfgI interface{}, desc catalog.TableDescriptor,
+) (func(t testing.TB) *kvpb.RangeFeedValue, func()) {
 	t.Helper()
 	execCfg := execCfgI.(sql.ExecutorConfig)
 	rows := make(chan *kvpb.RangeFeedValue)
@@ -60,7 +60,7 @@ func MakeRangeFeedValueReader(
 
 	// Helper to read next rangefeed value.
 	dups := make(map[string]struct{})
-	return func(t *testing.T) *kvpb.RangeFeedValue {
+	return func(t testing.TB) *kvpb.RangeFeedValue {
 		t.Helper()
 		for {
 			select {
@@ -84,7 +84,7 @@ func MakeRangeFeedValueReader(
 // GetHydratedTableDescriptor returns a table descriptor for the specified
 // table.  The descriptor is "hydrated" if it has user defined data types.
 func GetHydratedTableDescriptor(
-	t *testing.T, execCfgI interface{}, parts ...tree.Name,
+	t testing.TB, execCfgI interface{}, parts ...tree.Name,
 ) (td catalog.TableDescriptor) {
 	t.Helper()
 	dbName, scName, tableName := func() (tree.Name, tree.Name, tree.Name) {
