@@ -248,8 +248,9 @@ func RangesInfoEvenDistribution(
 }
 
 func RangesInfoWithPercentOfReplicas(
-	storeList []StoreID, percentOfReplicas []float64, ranges int, keyspace int, replicationFactor int, rangeSize int64,
+	stores int, percentOfReplicas []float64, ranges int, keyspace int, replicationFactor int, rangeSize int64,
 ) RangesInfo {
+	storeList := makeStoreList(stores)
 	spanConfig := defaultSpanConfig
 	spanConfig.NumReplicas = int32(replicationFactor)
 	spanConfig.NumVoters = int32(replicationFactor)
@@ -282,12 +283,7 @@ func NewStateWithDistribution(
 	// store per node.
 	clusterInfo := ClusterInfoWithStoreCount(numNodes, 1 /* storesPerNode */)
 	s := LoadClusterInfo(clusterInfo, settings)
-
-	stores := make([]StoreID, numNodes)
-	for i, store := range s.Stores() {
-		stores[i] = store.StoreID()
-	}
-	rangesInfo := RangesInfoWithPercentOfReplicas(stores, percentOfReplicas, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	rangesInfo := RangesInfoWithPercentOfReplicas(numNodes, percentOfReplicas, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
 	LoadRangeInfo(s, rangesInfo...)
 	return s
 }
