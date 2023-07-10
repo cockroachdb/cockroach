@@ -14,10 +14,12 @@ package floatcmp
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -40,7 +42,7 @@ const (
 	//
 	// CloseMargin is greater than 0 otherwise if either expected or actual were
 	// 0 the calculated tolerance from the fraction would be 0.
-	CloseMargin float64 = CloseFraction * CloseFraction
+	CloseMargin = CloseFraction * CloseFraction
 )
 
 // EqualApprox reports whether expected and actual are deeply equal with the
@@ -81,6 +83,79 @@ func EqualApprox(expected interface{}, actual interface{}, fraction float64, mar
 	return cmp.Equal(expected, actual, cmpopts.EquateApprox(fraction, margin), cmpopts.EquateNaNs())
 }
 
+// FloatsMatchApprox returns whether two floating point represented as
+// strings are equal within a tolerance.
+func FloatsMatchApprox(expectedString, actualString string) (bool, error) {
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	if err != nil {
+		return false, err
+	}
+	return EqualApprox(expected, actual, CloseFraction, CloseMargin), nil
+}
+
+// FloatsMatch returns whether two floating point numbers represented as
+// strings have matching 15 significant decimal digits (this is the precision
+// that Postgres supports for 'double precision' type).
+func FloatsMatch(expectedString, actualString string) (bool, error) {
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	if err != nil {
+		return false, err
+	}
+	// Check special values - NaN, +Inf, -Inf, 0.
+	if math.IsNaN(expected) || math.IsNaN(actual) {
+		return math.IsNaN(expected) == math.IsNaN(actual), nil
+	}
+	if math.IsInf(expected, 0 /* sign */) || math.IsInf(actual, 0 /* sign */) {
+		bothNegativeInf := math.IsInf(expected, -1 /* sign */) == math.IsInf(actual, -1 /* sign */)
+		bothPositiveInf := math.IsInf(expected, 1 /* sign */) == math.IsInf(actual, 1 /* sign */)
+		return bothNegativeInf || bothPositiveInf, nil
+	}
+	if expected == 0 || actual == 0 {
+		return expected == actual, nil
+	}
+	// Check that the numbers have the same sign.
+	if expected*actual < 0 {
+		return false, nil
+	}
+	expected = math.Abs(expected)
+	actual = math.Abs(actual)
+	// Check that 15 significant digits match. We do so by normalizing the
+	// numbers and then checking one digit at a time.
+	//
+	// normalize converts f to base * 10**power representation where base is in
+	// [1.0, 10.0) range.
+	normalize := func(f float64) (base float64, power int) {
+		for f >= 10 {
+			f = f / 10
+			power++
+		}
+		for f < 1 {
+			f *= 10
+			power--
+		}
+		return f, power
+	}
+	var expPower, actPower int
+	expected, expPower = normalize(expected)
+	actual, actPower = normalize(actual)
+	if expPower != actPower {
+		return false, nil
+	}
+	// TODO(yuzefovich): investigate why we can't always guarantee deterministic
+	// 15 significant digits and switch back from 14 to 15 digits comparison
+	// here. See #56446 for more details.
+	for i := 0; i < 14; i++ {
+		expDigit := int(expected)
+		actDigit := int(actual)
+		if expDigit != actDigit {
+			return false, nil
+		}
+		expected -= (expected - float64(expDigit)) * 10
+		actual -= (actual - float64(actDigit)) * 10
+	}
+	return true, nil
+}
+
 // RoundFloatsInString rounds floats in a given string to the given number of significant figures.
 func RoundFloatsInString(s string, significantFigures int) string {
 	return string(regexp.MustCompile(`(\d+\.\d+)`).ReplaceAllFunc([]byte(s), func(x []byte) []byte {
@@ -102,4 +177,18 @@ func ParseRoundInStringsDirective(directive string) (int, error) {
 		return 6, nil
 	}
 	return strconv.Atoi(kv[1])
+}
+
+// parseExpectedAndActualFloats converts the strings expectedString and
+// actualString to float64 values.
+func parseExpectedAndActualFloats(expectedString, actualString string) (float64, float64, error) {
+	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing expected")
+	}
+	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing actual")
+	}
+	return expected, actual, nil
 }

@@ -17,6 +17,8 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,10 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/go-cmp/cmp"
 )
 
 type queryComparisonTest struct {
@@ -378,4 +382,19 @@ func (h *queryComparisonHelper) logVerboseOutput() {
 // statements run so far.
 func (h *queryComparisonHelper) makeError(err error, msg string) error {
 	return errors.Wrapf(err, "%s. %d statements run", msg, h.stmtNo)
+}
+
+// unsortedMatricesDiff sorts and compares rows of data.
+func unsortedMatricesDiff(rowMatrix1, rowMatrix2 [][]string) string {
+	var rows1 []string
+	for _, row := range rowMatrix1 {
+		rows1 = append(rows1, strings.Join(row[:], ","))
+	}
+	var rows2 []string
+	for _, row := range rowMatrix2 {
+		rows2 = append(rows2, strings.Join(row[:], ","))
+	}
+	sort.Strings(rows1)
+	sort.Strings(rows2)
+	return cmp.Diff(rows1, rows2)
 }
