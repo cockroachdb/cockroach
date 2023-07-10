@@ -154,18 +154,20 @@ var (
 		return names
 	}()
 
+	fewBankRows      = 100
 	bankPossibleRows = []int{
-		100,    // creates keys with long revision history
-		1_000,  // small backup
-		10_000, // larger backups (a few GiB when using 128 KiB payloads)
+		fewBankRows, // creates keys with long revision history (not valid with largeBankPayload)
+		1_000,       // small backup
+		10_000,      // larger backups (a few GiB when using 128 KiB payloads)
 	}
 
+	largeBankPayload         = 128 << 10 // 128 KiB
 	bankPossiblePayloadBytes = []int{
-		0,         // workload default
-		9,         // 1 random byte (`initial-` + 1)
-		500,       // 5x default at the time of writing
-		16 << 10,  // 16 KiB
-		128 << 10, // 128 KiB
+		0,                // workload default
+		9,                // 1 random byte (`initial-` + 1)
+		500,              // 5x default at the time of writing
+		16 << 10,         // 16 KiB
+		largeBankPayload, // 128 KiB
 	}
 )
 
@@ -2107,8 +2109,20 @@ func registerBackupMixedVersion(r registry.Registry) {
 				Flag("warehouses", numWarehouses).
 				Option("tolerate-errors")
 
-			bankRows := bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
 			bankPayload := bankPossiblePayloadBytes[testRNG.Intn(len(bankPossiblePayloadBytes))]
+			bankRows := bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
+			// A small number of rows with large payloads will typically
+			// lead to really large ranges that may cause the test to fail
+			// (e.g., `split failed... cannot find valid split key`). We
+			// avoid this combination.
+			//
+			// TODO(renato): consider reintroducing this combination when
+			// #102284 is fixed.
+			for bankPayload == largeBankPayload && bankRows == fewBankRows {
+				bankPayload = bankPossiblePayloadBytes[testRNG.Intn(len(bankPossiblePayloadBytes))]
+				bankRows = bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
+			}
+
 			bankInit := roachtestutil.NewCommand("./cockroach workload init bank").
 				Flag("rows", bankRows).
 				MaybeFlag(bankPayload != 0, "payload-bytes", bankPayload).
