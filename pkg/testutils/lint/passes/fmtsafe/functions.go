@@ -162,6 +162,29 @@ var requireConstFmt = map[string]bool{
 
 	"(github.com/cockroachdb/cockroach/pkg/kv/kvpb.TestPrinter).Printf": true,
 
+	// must assertions.
+	"github.com/cockroachdb/cockroach/pkg/util/must.Fail":           true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.failDepth":      true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.True":           true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.False":          true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.Equal":          true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.NotEqual":       true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.Greater":        true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.GreaterOrEqual": true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.Less":           true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.LessOrEqual":    true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.Error":          true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.NoError":        true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.Len":            true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.Empty":          true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.NotEmpty":       true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.Nil":            true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.NotNil":         true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.Same":           true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.NotSame":        true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.Zero":           true,
+	"github.com/cockroachdb/cockroach/pkg/util/must.NotZero":        true,
+
 	// Error things are populated in the init() message.
 }
 

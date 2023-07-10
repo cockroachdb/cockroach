@@ -1,0 +1,5 @@
+echo
+----
+message with ‹argument›: 0 < 1
+message with ‹argument›: 2.717 < 3.14
+message with ‹argument›: ‹a› < ‹b›
