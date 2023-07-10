@@ -54,6 +54,10 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 				arg.Scan(t, i, &cfg.PreVote)
 			case "checkquorum":
 				arg.Scan(t, i, &cfg.CheckQuorum)
+			case "max-committed-size-per-ready":
+				arg.Scan(t, i, &cfg.MaxCommittedSizePerReady)
+			case "disable-conf-change-validation":
+				arg.Scan(t, i, &cfg.DisableConfChangeValidation)
 			case "read-only":
 				switch arg.Vals[i] {
 				case "safe":

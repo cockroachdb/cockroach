@@ -1,0 +1,76 @@
+# This test verifies the DisableConfChangeValidation setting.
+# With it set, raft should allow configuration changes to enter the log even
+# if they appear to be incompatible with the currently active configuration.
+#
+# The test sets up a single-voter group that applies entries one at a time.
+# Then it proposes a bogus entry followed by a conf change. When the bogus entry
+# has applied, a second (compatible, but the node doesn't know this yet)
+# configuration change is proposed. That configuration change is accepted into
+# the log since due to DisableConfChangeValidation=true.
+add-nodes 1 voters=(1) index=2 max-committed-size-per-ready=1 disable-conf-change-validation=true
+----
+INFO 1 switched to configuration voters=(1)
+INFO 1 became follower at term 0
+INFO newRaft 1 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
+
+campaign 1
+----
+INFO 1 is starting a new election at term 0
+INFO 1 became candidate at term 1
+
+stabilize log-level=none
+----
+ok
+
+# Dummy entry.
+propose 1 foo
+----
+ok
+
+propose-conf-change 1 transition=explicit
+l2 l3
+----
+ok
+
+# Entries both get appended.
+process-ready 1
+----
+Ready MustSync=true:
+Entries:
+1/4 EntryNormal "foo"
+1/5 EntryConfChangeV2 l2 l3
+
+# Dummy entry comes up for application.
+process-ready 1
+----
+Ready MustSync=false:
+HardState Term:1 Vote:1 Commit:5
+CommittedEntries:
+1/4 EntryNormal "foo"
+
+# Propose new config change. Note how it isn't rejected,
+# which is due to DisableConfChangeValidation=true.
+propose-conf-change 1
+----
+ok
+
+# Turn on autopilot: the first config change applies, the
+# second one gets committed and also applies.
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=true:
+  Entries:
+  1/6 EntryConfChangeV2
+  CommittedEntries:
+  1/5 EntryConfChangeV2 l2 l3
+  INFO 1 switched to configuration voters=(1)&&(1) learners=(2 3)
+> 1 handling Ready
+  Ready MustSync=false:
+  HardState Term:1 Vote:1 Commit:6
+  CommittedEntries:
+  1/6 EntryConfChangeV2
+  Messages:
+  1->2 MsgApp Term:1 Log:1/5 Commit:5 Entries:[1/6 EntryConfChangeV2]
+  1->3 MsgApp Term:1 Log:1/5 Commit:5 Entries:[1/6 EntryConfChangeV2]
+  INFO 1 switched to configuration voters=(1) learners=(2 3)
