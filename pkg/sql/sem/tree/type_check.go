@@ -2796,8 +2796,17 @@ func typeCheckSameTypedTupleExprs(
 		return nil, nil, err
 	}
 
-	// All tuples must have the same length.
+	// Ensure the number of labels matches the number of expressions. This
+	// mimics the check in (*Tuple).TypeCheck.
 	firstLen := len(first.Exprs)
+	if len(first.Labels) > 0 && len(first.Labels) != firstLen {
+		return nil, nil, pgerror.Newf(pgcode.Syntax,
+			"mismatch in tuple definition: %d expressions, %d labels",
+			len(first.Exprs), len(first.Labels),
+		)
+	}
+
+	// All tuples must have the same length.
 	if err := checkAllTuplesHaveLength(exprs[1:], firstLen); err != nil {
 		return nil, nil, err
 	}
