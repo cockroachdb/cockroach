@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -147,7 +148,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
-	exists, canLoginSQL, _, isSuperuser, defaultSettings, pwRetrievalFn, err :=
+	exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
@@ -207,6 +208,22 @@ func (c *conn) handleAuthentication(
 			if _, ok := c.sessionArgs.SessionDefaults[keyVal[0]]; !ok {
 				c.sessionArgs.SessionDefaults[keyVal[0]] = keyVal[1]
 			}
+		}
+	}
+
+	// Check replication privilege.
+	if c.sessionArgs.SessionDefaults["replication"] != "" {
+		m, err := sql.ReplicationModeFromString(c.sessionArgs.SessionDefaults["replication"])
+		if err == nil && m != sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED && !canUseReplicationMode {
+			ac.LogAuthFailed(ctx, eventpb.AuthFailReason_NO_REPLICATION_ROLEOPTION, nil)
+			return connClose, c.sendError(
+				ctx,
+				execCfg,
+				pgerror.Newf(
+					pgcode.InsufficientPrivilege,
+					"must have REPLICATION on the user to start streaming replication",
+				),
+			)
 		}
 	}
 

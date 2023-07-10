@@ -80,6 +80,7 @@ func GetUserSessionInitInfo(
 	exists bool,
 	canLoginSQL bool,
 	canLoginDBConsole bool,
+	canUseReplicationMode bool,
 	isSuperuser bool,
 	defaultSettings []sessioninit.SettingsCacheEntry,
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
@@ -109,7 +110,7 @@ func GetUserSessionInitInfo(
 
 		// Root user cannot have password expiry and must have login.
 		// It also never has default settings applied to it.
-		return true, true, true, true, nil, rootFn, nil
+		return true, true, true, true, true, nil, rootFn, nil
 	}
 
 	var authInfo sessioninit.AuthInfo
@@ -125,9 +126,9 @@ func GetUserSessionInitInfo(
 			return err
 		}
 
-		// Find whether the user is an admin and has the NOSQLLOGIN global
-		// privilege. These calls have their own caches, so it's OK to make them
-		// outside of the retrieveSessionInitInfoWithCache call above.
+		// Find whether the user is an admin and has the NOSQLLOGIN or REPLICATION
+		// global privilege. These calls have their own caches, so it's OK to make
+		// them outside of the retrieveSessionInitInfoWithCache call above.
 		return execCfg.InternalDB.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
@@ -160,6 +161,31 @@ func GetUserSessionInitInfo(
 				}
 			}
 
+			// Only check for replication if the user can login.
+			if canLoginSQL {
+				canUseReplicationMode = authInfo.CanUseReplicationRoleOpt
+				// Only check the global privilege if we do not already have replication
+				// privileges.
+				if !canUseReplicationMode {
+					privs, err := execCfg.SyntheticPrivilegeCache.Get(
+						ctx, txn, txn.Descriptors(), syntheticprivilege.GlobalPrivilegeObject,
+					)
+					if err != nil {
+						return err
+					}
+					if privs.CheckPrivilege(user, privilege.REPLICATION) {
+						canUseReplicationMode = true
+					} else {
+						for parentRole := range memberships {
+							if privs.CheckPrivilege(parentRole, privilege.REPLICATION) {
+								canUseReplicationMode = true
+								break
+							}
+						}
+					}
+				}
+			}
+
 			return nil
 		},
 		)
@@ -171,6 +197,7 @@ func GetUserSessionInitInfo(
 	return authInfo.UserExists,
 		canLoginSQL,
 		authInfo.CanLoginDBConsoleRoleOpt,
+		canUseReplicationMode,
 		isSuperuser,
 		settingsEntries,
 		func(ctx context.Context) (expired bool, ret password.PasswordHash, err error) {
@@ -286,7 +313,7 @@ func retrieveAuthInfo(
 
 	// Use fully qualified table name to avoid looking up "".system.role_options.
 	const getLoginDependencies = `SELECT option, value FROM system.public.role_options ` +
-		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN')`
+		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN', 'REPLICATION')`
 
 	roleOptsIt, err := ie.QueryIteratorEx(
 		ctx, "get-login-dependencies", nil, /* txn */
@@ -311,16 +338,15 @@ func retrieveAuthInfo(
 	for ok, err = roleOptsIt.Next(ctx); ok; ok, err = roleOptsIt.Next(ctx) {
 		row := roleOptsIt.Cur()
 		option := string(tree.MustBeDString(row[0]))
-
-		if option == "NOLOGIN" {
+		switch option {
+		case "NOLOGIN":
 			aInfo.CanLoginSQLRoleOpt = false
 			aInfo.CanLoginDBConsoleRoleOpt = false
-		}
-		if option == "NOSQLLOGIN" {
+		case "NOSQLLOGIN":
 			aInfo.CanLoginSQLRoleOpt = false
-		}
-
-		if option == "VALID UNTIL" {
+		case "REPLICATION":
+			aInfo.CanUseReplicationRoleOpt = true
+		case "VALID UNTIL":
 			if tree.DNull.Compare(nil, row[1]) != 0 {
 				ts := string(tree.MustBeDString(row[1]))
 				// This is okay because the VALID UNTIL is stored as a string
