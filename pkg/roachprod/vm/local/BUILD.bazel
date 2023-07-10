@@ -1,18 +1,34 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "local",
-    srcs = ["local.go"],
+    srcs = [
+        "dns.go",
+        "local.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/local",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
+        "//pkg/roachprod/lock",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
-        "//pkg/util/intsets",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//maps",
+    ],
+)
+
+go_test(
+    name = "local_test",
+    srcs = ["dns_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":local"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "@com_github_stretchr_testify//require",
     ],
 )
