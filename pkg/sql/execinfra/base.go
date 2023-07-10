@@ -92,6 +92,9 @@ type RowReceiver interface {
 	// and they might not all be aware of the last status returned).
 	//
 	// Implementations of Push() must be thread-safe.
+	// TODO(yuzefovich): some implementations (DistSQLReceiver and
+	// copyingRowReceiver) are not actually thread-safe. Figure out whether we
+	// want to fix them or to update the contract.
 	Push(row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) ConsumerStatus
 }
 

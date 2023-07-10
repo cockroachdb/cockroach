@@ -24,9 +24,7 @@ storiesOf("StatementsPage", module)
     <div style={{ backgroundColor: "#F5F7FA" }}>{storyFn()}</div>
   ))
   .add("with data", () => <StatementsPage {...statementsPagePropsFixture} />)
-  .add("without data", () => (
-    <StatementsPage {...statementsPagePropsFixture} statements={[]} />
-  ))
+  .add("without data", () => <StatementsPage {...statementsPagePropsFixture} />)
   .add("with empty search result", () => {
     const props = cloneDeep(statementsPagePropsFixture);
     const { history } = props;
@@ -37,19 +35,13 @@ storiesOf("StatementsPage", module)
       <StatementsPage
         {...props}
         {...statementsPagePropsFixture}
-        statements={[]}
         history={history}
       />
     );
   })
   .add("with error", () => {
-    return (
-      <StatementsPage
-        {...statementsPagePropsWithRequestError}
-        statements={[]}
-      />
-    );
+    return <StatementsPage {...statementsPagePropsWithRequestError} />;
   })
   .add("with loading state", () => {
-    return <StatementsPage {...statementsPagePropsFixture} statements={null} />;
+    return <StatementsPage {...statementsPagePropsFixture} />;
   });
