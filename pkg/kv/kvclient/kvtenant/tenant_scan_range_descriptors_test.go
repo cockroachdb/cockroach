@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/stretchr/testify/require"
 )
@@ -51,6 +52,7 @@ func setup(
 // scan range descriptors iff they correspond to tenant owned ranges.
 func TestScanRangeDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, tenant2, iteratorFactory := setup(t, ctx)
@@ -124,6 +126,7 @@ func TestScanRangeDescriptors(t *testing.T) {
 
 func TestScanRangeDescriptorsOutsideTenantKeyspace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc, _, iteratorFactory := setup(t, ctx)

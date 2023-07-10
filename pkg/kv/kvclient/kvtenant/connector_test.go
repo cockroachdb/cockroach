@@ -242,6 +242,7 @@ func newConnector(cfg ConnectorConfig, addrs []string) *connector {
 // kvcoord.NodeDescStore and as a config.SystemConfigProvider.
 func TestConnectorGossipSubscription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -400,6 +401,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 // kvcoord.RangeDescriptorDB.
 func TestConnectorRangeLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -485,6 +487,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 // on one of them.
 func TestConnectorRetriesUnreachable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -572,6 +575,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 // immediately if it is not.
 func TestConnectorRetriesError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
