@@ -94,6 +94,7 @@ func newTestConnector(
 // settingswatcher.OverridesMonitor.
 func TestConnectorSettingOverrides(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	c, cleanup, startedC, eventCh := newTestConnector(t, ctx)
@@ -226,6 +227,7 @@ func expectSettings(t *testing.T, c *connector, exp string) <-chan struct{} {
 // tenant metadata provider.
 func TestConnectorTenantMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	c, cleanup, startedC, eventCh := newTestConnector(t, ctx)
@@ -312,6 +314,7 @@ func expectMetadata(t *testing.T, c *connector, exp string) <-chan struct{} {
 // can talk to an old-version connector.
 func TestCrossVersionMetadataSupport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, b := range []bool{false, true} {
 		oldVersionClient := b
