@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "workloadindexrec",
+    srcs = [
+        "index_trie.go",
+        "workload_indexrecs.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "workloadindexrec_test",
+    srcs = ["index_trie_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":workloadindexrec"],
+    deps = ["//pkg/sql/sem/tree"],
+)
