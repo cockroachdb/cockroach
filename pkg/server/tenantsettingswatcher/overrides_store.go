@@ -11,6 +11,7 @@
 package tenantsettingswatcher
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -90,8 +91,8 @@ func (s *overridesStore) SetAll(allOverrides map[roachpb.TenantID][]kvpb.TenantS
 		})
 		// Sanity check.
 		for i := 1; i < len(overrides); i++ {
-			if overrides[i].Name == overrides[i-1].Name {
-				panic("duplicate setting")
+			if overrides[i].Name == overrides[i-1].Name && overrides[i].Value != overrides[i-1].Value {
+				panic(fmt.Sprintf("duplicate setting override for setting %q on tenant %d with differing values", overrides[i].Name, tenantID.InternalValue))
 			}
 		}
 		s.mu.tenants[tenantID] = newTenantOverrides(overrides)
