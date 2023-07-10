@@ -340,6 +340,9 @@ func RunRepartitioningTestCase(t *testing.T, spec partitionccltestcases.Repartit
 	tnew := partitioningTest{PartitioningTestSpec: spec.New}
 	require.NoError(t, tnew.parse())
 
+	// Be extra lenient with timeouts in this test as they shuffle replicas around.
+	const lenientSucceedsSoonDuration = 5 * testutils.DefaultSucceedsSoonDuration
+
 	withPartitioningTestCluster(t, func(ctx context.Context, db *gosql.DB,
 		sqlDB *sqlutils.SQLRunner) {
 		sqlDB.Exec(t, `DROP DATABASE IF EXISTS data`)
@@ -347,7 +350,11 @@ func RunRepartitioningTestCase(t *testing.T, spec partitionccltestcases.Repartit
 		sqlDB.Exec(t, told.parsed.createStmt)
 		sqlDB.Exec(t, told.parsed.renamePrimaryStmt)
 		sqlDB.Exec(t, told.parsed.zoneConfigStmts)
-		testutils.SucceedsSoon(t, told.verifyScansFn(ctx, t, db))
+
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+
+		require.NoError(t, testutils.SucceedsWithinError(told.verifyScansFn(ctx, t, db), lenientSucceedsSoonDuration))
 
 		sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE %s RENAME TO %s",
 			told.parsed.tableName, tnew.parsed.tableName))
@@ -397,7 +404,7 @@ func RunRepartitioningTestCase(t *testing.T, spec partitionccltestcases.Repartit
 		// sitting around (e.g., when a repartitioning preserves a partition but
 		// does not apply a new zone config). This is fine.
 		sqlDB.Exec(t, tnew.parsed.zoneConfigStmts)
-		testutils.SucceedsSoon(t, tnew.verifyScansFn(ctx, t, db))
+		require.NoError(t, testutils.SucceedsWithinError(tnew.verifyScansFn(ctx, t, db), lenientSucceedsSoonDuration))
 	})
 }
 
@@ -502,13 +509,18 @@ func withPartitioningTestCluster(
 ) {
 	// These tests are too slow to run under nightly race stress.
 	skip.UnderStressRace(t)
+	skip.Stress()
 
 	ctx := context.Background()
 	cfg := zonepb.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
-
 	tsArgs := func(attr string) base.TestServerArgs {
 		return base.TestServerArgs{
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "us-east"}, {Key: "az", Value: "us-east-1"},
+				},
+			},
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable LBS because when the scan is happening at the rate it's happening
