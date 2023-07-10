@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -517,9 +518,11 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				defaultTestTenant = base.TODOTestTenantDisabled
 			}
 
-			// TODO(ssd): Once TestServer starts up reliably enough:
-			// randomTxnRetries := !d.HasArg("disable-txn-retries")
-			randomTxnRetries := false
+			randomTxnRetries := !d.HasArg("disable-txn-retries")
+			if util.RaceEnabled {
+				randomTxnRetries = false
+			}
+
 			lastCreatedCluster = name
 			cfg := clusterCfg{
 				name:              name,
