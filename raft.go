@@ -1242,17 +1242,17 @@ func stepLeader(r *raft, m pb.Message) error {
 				alreadyJoint := len(r.prs.Config.Voters[1]) > 0
 				wantsLeaveJoint := len(cc.AsV2().Changes) == 0
 
-				var refused string
+				var failedCheck string
 				if alreadyPending {
-					refused = fmt.Sprintf("possible unapplied conf change at index %d (applied to %d)", r.pendingConfIndex, r.raftLog.applied)
+					failedCheck = fmt.Sprintf("possible unapplied conf change at index %d (applied to %d)", r.pendingConfIndex, r.raftLog.applied)
 				} else if alreadyJoint && !wantsLeaveJoint {
-					refused = "must transition out of joint config first"
+					failedCheck = "must transition out of joint config first"
 				} else if !alreadyJoint && wantsLeaveJoint {
-					refused = "not in joint state; refusing empty conf change"
+					failedCheck = "not in joint state; refusing empty conf change"
 				}
 
-				if refused != "" {
-					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.prs.Config, refused)
+				if failedCheck != "" {
+					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.prs.Config, failedCheck)
 					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
 				} else {
 					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
