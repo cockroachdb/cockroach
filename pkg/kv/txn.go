@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1428,6 +1429,27 @@ func (txn *Txn) GenerateForcedRetryableErr(ctx context.Context, msg redact.Redac
 	defer txn.mu.Unlock()
 	now := txn.db.clock.NowAsClockTimestamp()
 	return txn.mu.sender.GenerateForcedRetryableErr(ctx, now.ToTimestamp(), msg)
+}
+
+var (
+	randRetryRngSource, _     = randutil.NewPseudoRand()
+	randomTxnRetryProbability = 0.1
+)
+
+// TestingShouldReturnRandomRetry returns true if we should generate a
+// random, retriable error for this transaction.
+func (txn *Txn) TestingShouldReturnRandomRetry() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
+	if !txn.mu.sender.TestingRandomRetryableErrorsEnabled() {
+		return false
+	}
+
+	if txn.mu.sender.ClientFinalized() {
+		return false
+	}
+	return randRetryRngSource.Float64() < randomTxnRetryProbability
 }
 
 // IsSerializablePushAndRefreshNotPossible returns true if the transaction is
