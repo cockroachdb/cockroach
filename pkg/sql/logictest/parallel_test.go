@@ -195,6 +195,8 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 		sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(mode))
 		// Disable automatic stats - they can interfere with the test shutdown.
 		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+		stats.UseStatisticsOnSystemTables.Override(ctx, &st.SV, false)
+		stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
 	}
 
 	t.clients = make([][]*gosql.DB, spec.ClusterSize)
