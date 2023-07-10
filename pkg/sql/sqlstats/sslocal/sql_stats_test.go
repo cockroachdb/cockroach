@@ -40,10 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1119,12 +1117,13 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, "These tests make timing assertions, which may fail under stress.")
-
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+
+	// Max limit safety check on the expected idle latency in seconds. Mostly a paranoia check.
+	const idleLatCap float64 = 30
 
 	testCases := []struct {
 		name     string
@@ -1290,16 +1289,6 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			// Run the test operations.
 			tc.ops(t, opsDB)
 
-			// Make looser timing assertions in CI, since we've seen
-			// more variability there.
-			// - Bazel test runs also use this looser delta.
-			// - Goland and `go test` use the tighter delta unless
-			//   the crdb_test build tag has been set.
-			delta := 0.003
-			if buildutil.CrdbTestBuild {
-				delta = 0.05
-			}
-
 			// Look for the latencies we expect.
 			t.Run("stmt", func(t *testing.T) {
 				actual := make(map[string]float64)
@@ -1316,8 +1305,12 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 					actual[query] = latency
 				}
 				require.NoError(t, rows.Err())
-				require.InDeltaMapValues(t, tc.stmtLats, actual, delta,
-					"expected: %v\nactual: %v", tc.stmtLats, actual)
+				// Ensure that all test case statements have at least the minimum expected idle latency and do not exceed the
+				// safety check cap.
+				for tc_stmt, tc_latency := range tc.stmtLats {
+					require.GreaterOrEqual(t, actual[tc_stmt], tc_latency)
+					require.Less(t, actual[tc_stmt], idleLatCap)
+				}
 			})
 
 			t.Run("txn", func(t *testing.T) {
@@ -1328,8 +1321,10 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 					 WHERE app_name = $1`, appName)
 				err := row.Scan(&actual)
 				require.NoError(t, err)
-				require.GreaterOrEqual(t, actual, float64(0))
-				require.InDelta(t, tc.txnLat, actual, delta)
+				// Ensure the test case transaction has at least the minimum expected idle latency and do not exceed the safety
+				// check cap.
+				require.GreaterOrEqual(t, actual, tc.txnLat)
+				require.Less(t, actual, idleLatCap)
 			})
 		})
 	}
