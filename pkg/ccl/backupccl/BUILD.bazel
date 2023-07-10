@@ -224,7 +224,6 @@ go_test(
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
-        "//pkg/ccl/utilccl/sampledataccl",
         "//pkg/cloud",
         "//pkg/cloud/amazon",
         "//pkg/cloud/azure",
