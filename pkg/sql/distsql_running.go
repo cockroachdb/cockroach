@@ -100,6 +100,15 @@ type runnerResult struct {
 	err    error
 }
 
+type dialErr struct {
+	error
+}
+
+func isDialErr(err error) bool {
+	_, ok := err.(dialErr)
+	return ok
+}
+
 // run executes the request. An error, if encountered, is both sent on the
 // result channel and returned.
 func (req runnerRequest) run() error {
@@ -111,6 +120,9 @@ func (req runnerRequest) run() error {
 
 	conn, err := req.podNodeDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
 	if err != nil {
+		// Mark this error as special dialErr so that we could retry this
+		// distributed query as local.
+		err = dialErr{error: err}
 		res.err = err
 		return err
 	}
@@ -1979,7 +1991,9 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 			// cancellation has already occurred.
 			return
 		}
-		if !pgerror.IsSQLRetryableError(distributedErr) && !flowinfra.IsFlowRetryableError(distributedErr) {
+		if !pgerror.IsSQLRetryableError(distributedErr) &&
+			!flowinfra.IsFlowRetryableError(distributedErr) &&
+			!isDialErr(distributedErr) {
 			// Only re-run the query if we think there is a high chance of a
 			// successful local execution.
 			return
