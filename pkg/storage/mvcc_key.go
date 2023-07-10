@@ -176,6 +176,11 @@ func (k MVCCKey) Len() int {
 //
 // The sentinel byte can be used to detect a key without a timestamp, since
 // timeLength will never be 0 (it includes itself in the length).
+//
+// The timeSynthetic form is no longer written by the current version of the
+// code, but can be encountered in the wild until we migrate it away. Until
+// then, decoding routines must be prepared to handle it, but can ignore the
+// synthetic bit.
 func EncodeMVCCKey(key MVCCKey) []byte {
 	keyLen := encodedMVCCKeyLength(key)
 	buf := make([]byte, keyLen)
@@ -280,11 +285,8 @@ func EncodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) []byte {
 // buffer must have the correct size, and the timestamp must not be empty.
 func encodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) {
 	binary.BigEndian.PutUint64(buf, uint64(ts.WallTime))
-	if ts.Logical != 0 || ts.Synthetic {
+	if ts.Logical != 0 {
 		binary.BigEndian.PutUint32(buf[mvccEncodedTimeWallLen:], uint32(ts.Logical))
-		if ts.Synthetic {
-			buf[mvccEncodedTimeWallLen+mvccEncodedTimeLogicalLen] = 1
-		}
 	}
 }
 
@@ -296,12 +298,8 @@ func encodedMVCCKeyLength(key MVCCKey) int {
 	keyLen := len(key.Key) + mvccEncodedTimeSentinelLen
 	if !key.Timestamp.IsEmpty() {
 		keyLen += mvccEncodedTimeWallLen + mvccEncodedTimeLengthLen
-		if key.Timestamp.Logical != 0 || key.Timestamp.Synthetic {
+		if key.Timestamp.Logical != 0 {
 			keyLen += mvccEncodedTimeLogicalLen
-			if key.Timestamp.Synthetic {
-				// TODO(nvanbenschoten): stop writing Synthetic timestamps in v23.1.
-				keyLen += mvccEncodedTimeSyntheticLen
-			}
 		}
 	}
 	return keyLen
@@ -355,14 +353,11 @@ func decodeMVCCTimestamp(encodedTS []byte) (hlc.Timestamp, error) {
 		// No-op.
 	case 8:
 		ts.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
-	case 12:
+	case 12, 13:
 		ts.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
 		ts.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
-	case 13:
-		ts.WallTime = int64(binary.BigEndian.Uint64(encodedTS[0:8]))
-		ts.Logical = int32(binary.BigEndian.Uint32(encodedTS[8:12]))
-		// TODO(nvanbenschoten): stop writing Synthetic timestamps in v23.1.
-		ts.Synthetic = encodedTS[12] != 0
+		// NOTE: byte 13 used to store the timestamp's synthetic bit, but this is no
+		// longer consulted and can be ignored during decoding.
 	default:
 		return hlc.Timestamp{}, errors.Errorf("bad timestamp %x", encodedTS)
 	}

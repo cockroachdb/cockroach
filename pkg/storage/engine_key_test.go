@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -88,7 +89,6 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 		{key: MVCCKey{Key: roachpb.Key("a")}},
 		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
 		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
-		{key: MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -130,6 +130,34 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 	}
 }
 
+// TestMVCCAndEngineKeyDecodeSyntheticTimestamp tests decoding an MVCC key with
+// a synthetic timestamp. The synthetic timestamp bit is now ignored during key
+// encoding and decoding, but synthetic timestamps may still be present in the
+// wild, so they must not confuse decoding.
+func TestMVCCAndEngineKeyDecodeSyntheticTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	key := MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}
+	keyNoSynthetic := key
+	keyNoSynthetic.Timestamp.Synthetic = false
+
+	// encodedStr was computed from key using a previous version of the code that
+	// that included synthetic timestamps in the MVCC key encoding.
+	encodedStr := "6261720000000000000000630000002d010e"
+	encoded, err := hex.DecodeString(encodedStr)
+	require.NoError(t, err)
+
+	// Decode to demonstrate that the synthetic timestamp can be decoded.
+	eKeyDecoded, ok := DecodeEngineKey(encoded)
+	require.True(t, ok)
+	require.False(t, eKeyDecoded.IsLockTableKey())
+	require.True(t, eKeyDecoded.IsMVCCKey())
+	require.NoError(t, eKeyDecoded.Validate())
+	keyDecoded, err := eKeyDecoded.ToMVCCKey()
+	require.NoError(t, err)
+	require.Equal(t, keyNoSynthetic, keyDecoded)
+}
+
 func TestEngineKeyValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	uuid1 := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
@@ -141,7 +169,6 @@ func TestEngineKeyValidate(t *testing.T) {
 		{key: MVCCKey{Key: roachpb.Key("a")}},
 		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
 		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
-		{key: MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
 
 		// Valid LockTableKeys.
 		{

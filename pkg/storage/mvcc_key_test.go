@@ -75,7 +75,6 @@ func TestMVCCKeyCompare(t *testing.T) {
 	b0 := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 0}}
 	b1 := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 1}}
 	b2 := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 2}}
-	b2S := MVCCKey{roachpb.Key("b"), hlc.Timestamp{Logical: 2, Synthetic: true}}
 
 	testcases := map[string]struct {
 		a      MVCCKey
@@ -90,7 +89,6 @@ func TestMVCCKeyCompare(t *testing.T) {
 		"empty time lt set":   {b0, b1, -1}, // empty MVCC timestamps sort before non-empty
 		"set time gt empty":   {b1, b0, 1},  // empty MVCC timestamps sort before non-empty
 		"key time precedence": {a1, b2, -1}, // a before b, but 2 before 1; key takes precedence
-		"synthetic equal":     {b2, b2S, 0}, // synthetic bit does not affect ordering
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -153,10 +151,6 @@ func (k randMVCCKey) Generate(r *rand.Rand, size int) reflect.Value {
 	k.Key = []byte([...]string{"a", "b", "c"}[r.Intn(3)])
 	k.Timestamp.WallTime = r.Int63n(5)
 	k.Timestamp.Logical = r.Int31n(5)
-	if !k.Timestamp.IsEmpty() {
-		// NB: the zero timestamp cannot be synthetic.
-		k.Timestamp.Synthetic = r.Intn(2) != 0
-	}
 	return reflect.ValueOf(k)
 }
 
@@ -168,16 +162,12 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 		ts      hlc.Timestamp
 		encoded string // hexadecimal
 	}{
-		"empty":                  {"", hlc.Timestamp{}, "00"},
-		"only key":               {"foo", hlc.Timestamp{}, "666f6f00"},
-		"no key":                 {"", hlc.Timestamp{WallTime: 1643550788737652545}, "0016cf10bc0505574109"},
-		"walltime":               {"foo", hlc.Timestamp{WallTime: 1643550788737652545}, "666f6f0016cf10bc0505574109"},
-		"logical":                {"foo", hlc.Timestamp{Logical: 65535}, "666f6f0000000000000000000000ffff0d"},
-		"synthetic":              {"foo", hlc.Timestamp{Synthetic: true}, "666f6f00000000000000000000000000010e"},
-		"walltime and logical":   {"foo", hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535}, "666f6f0016cf10bc050557410000ffff0d"},
-		"walltime and synthetic": {"foo", hlc.Timestamp{WallTime: 1643550788737652545, Synthetic: true}, "666f6f0016cf10bc0505574100000000010e"},
-		"logical and synthetic":  {"foo", hlc.Timestamp{Logical: 65535, Synthetic: true}, "666f6f0000000000000000000000ffff010e"},
-		"all":                    {"foo", hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535, Synthetic: true}, "666f6f0016cf10bc050557410000ffff010e"},
+		"empty":                {"", hlc.Timestamp{}, "00"},
+		"only key":             {"foo", hlc.Timestamp{}, "666f6f00"},
+		"no key":               {"", hlc.Timestamp{WallTime: 1643550788737652545}, "0016cf10bc0505574109"},
+		"walltime":             {"foo", hlc.Timestamp{WallTime: 1643550788737652545}, "666f6f0016cf10bc0505574109"},
+		"logical":              {"foo", hlc.Timestamp{Logical: 65535}, "666f6f0000000000000000000000ffff0d"},
+		"walltime and logical": {"foo", hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535}, "666f6f0016cf10bc050557410000ffff0d"},
 	}
 
 	buf := []byte{}
@@ -268,6 +258,31 @@ func TestDecodeUnnormalizedMVCCKey(t *testing.T) {
 			// keys that only contain (at most) a walltime.
 			equalToNormal: false,
 		},
+		"synthetic": {
+			encoded: "666f6f00000000000000000000000000010e",
+			// Synthetic bit set to true when decoded by older versions of the code.
+			expected: MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 0, Logical: 0}},
+			// See comment above on "zero walltime and logical".
+			equalToNormal: false,
+		},
+		"walltime and synthetic": {
+			encoded: "666f6f0016cf10bc0505574100000000010e",
+			// Synthetic bit set to true when decoded by older versions of the code.
+			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545, Logical: 0}},
+			equalToNormal: true,
+		},
+		"logical and synthetic": {
+			encoded: "666f6f0000000000000000000000ffff010e",
+			// Synthetic bit set to true when decoded by older versions of the code.
+			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 0, Logical: 65535}},
+			equalToNormal: true,
+		},
+		"walltime, logical, and synthetic": {
+			encoded: "666f6f0016cf10bc050557410000ffff010e",
+			// Synthetic bit set to true when decoded by older versions of the code.
+			expected:      MVCCKey{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535}},
+			equalToNormal: true,
+		},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -345,7 +360,6 @@ func BenchmarkEncodeMVCCKey(b *testing.B) {
 		"empty":            {},
 		"walltime":         {WallTime: 1643550788737652545},
 		"walltime+logical": {WallTime: 1643550788737652545, Logical: 4096},
-		"all":              {WallTime: 1643550788737652545, Logical: 4096, Synthetic: true},
 	}
 	buf := make([]byte, 0, 65536)
 	for keyDesc, key := range keys {
@@ -373,7 +387,6 @@ func BenchmarkDecodeMVCCKey(b *testing.B) {
 		"empty":            {},
 		"walltime":         {WallTime: 1643550788737652545},
 		"walltime+logical": {WallTime: 1643550788737652545, Logical: 4096},
-		"all":              {WallTime: 1643550788737652545, Logical: 4096, Synthetic: true},
 	}
 	var mvccKey MVCCKey
 	var err error
@@ -585,11 +598,6 @@ func TestMVCCRangeKeyEncodedSize(t *testing.T) {
 		"only end":      {MVCCRangeKey{EndKey: roachpb.Key("foo")}, 5},
 		"only walltime": {MVCCRangeKey{Timestamp: hlc.Timestamp{WallTime: 1}}, 11},
 		"only logical":  {MVCCRangeKey{Timestamp: hlc.Timestamp{Logical: 1}}, 15},
-		"all": {MVCCRangeKey{
-			StartKey:  roachpb.Key("start"),
-			EndKey:    roachpb.Key("end"),
-			Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1, Synthetic: true},
-		}, 24},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {

@@ -440,10 +440,6 @@ func makeRandEncodedKeys() [][]byte {
 			// 20% of keys have a logical component.
 			k.Timestamp.Logical = rng.Int31n(4) + 1
 		}
-		if rng.Int31n(1000) == 0 && !k.Timestamp.IsEmpty() {
-			// 0.1% of keys have a synthetic component.
-			k.Timestamp.Synthetic = true
-		}
 		keys[i] = EncodeMVCCKey(k)
 	}
 	return keys
