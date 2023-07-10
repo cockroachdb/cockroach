@@ -549,7 +549,7 @@ func TestLongDBName(t *testing.T) {
 	defer te.Close()
 
 	defer testutils.TestingHook(&BackendDial, func(
-		_ *pgproto3.StartupMessage, outgoingAddr string, _ *tls.Config,
+		_ context.Context, _ *pgproto3.StartupMessage, outgoingAddr string, _ *tls.Config,
 	) (net.Conn, error) {
 		require.Equal(t, outgoingAddr, "127.0.0.1:26257")
 		return nil, withCode(errors.New("boom"), codeParamsRoutingFailed)
@@ -588,7 +588,7 @@ func TestBackendDownRetry(t *testing.T) {
 
 	callCount := 0
 	defer testutils.TestingHook(&BackendDial, func(
-		_ *pgproto3.StartupMessage, outgoingAddr string, _ *tls.Config,
+		_ context.Context, _ *pgproto3.StartupMessage, outgoingAddr string, _ *tls.Config,
 	) (net.Conn, error) {
 		callCount++
 		// After 3 dials, we delete the tenant.
@@ -820,7 +820,7 @@ func TestProxyTLSConf(t *testing.T) {
 		defer te.Close()
 
 		defer testutils.TestingHook(&BackendDial, func(
-			_ *pgproto3.StartupMessage, _ string, tlsConf *tls.Config,
+			_ context.Context, _ *pgproto3.StartupMessage, _ string, tlsConf *tls.Config,
 		) (net.Conn, error) {
 			require.Nil(t, tlsConf)
 			return nil, withCode(errors.New("boom"), codeParamsRoutingFailed)
@@ -843,7 +843,7 @@ func TestProxyTLSConf(t *testing.T) {
 		defer te.Close()
 
 		defer testutils.TestingHook(&BackendDial, func(
-			_ *pgproto3.StartupMessage, _ string, tlsConf *tls.Config,
+			_ context.Context, _ *pgproto3.StartupMessage, _ string, tlsConf *tls.Config,
 		) (net.Conn, error) {
 			require.True(t, tlsConf.InsecureSkipVerify)
 			return nil, withCode(errors.New("boom"), codeParamsRoutingFailed)
@@ -867,7 +867,7 @@ func TestProxyTLSConf(t *testing.T) {
 		defer te.Close()
 
 		defer testutils.TestingHook(&BackendDial, func(
-			_ *pgproto3.StartupMessage, outgoingAddress string, tlsConf *tls.Config,
+			_ context.Context, _ *pgproto3.StartupMessage, outgoingAddress string, tlsConf *tls.Config,
 		) (net.Conn, error) {
 			outgoingHost, _, err := addr.SplitHostPort(outgoingAddress, "")
 			require.NoError(t, err)
@@ -987,7 +987,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 
 	originalBackendDial := BackendDial
 	defer testutils.TestingHook(&BackendDial, func(
-		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
+		ctx context.Context, msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
 		params := msg.Parameters
 		authToken, ok := params["authToken"]
@@ -1003,7 +1003,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 		delete(params, "authToken")
 		params["user"] = "testuser"
 
-		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
+		return originalBackendDial(ctx, msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
 	s, proxyAddr, _ := newSecureProxyServer(ctx, t, sql.Stopper(), &ProxyOptions{})
@@ -1125,7 +1125,7 @@ func TestErroneousBackend(t *testing.T) {
 	defer te.Close()
 
 	defer testutils.TestingHook(&BackendDial, func(
-		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
+		_ context.Context, msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
 		return nil, errors.New(backendError)
 	})()
@@ -1151,7 +1151,7 @@ func TestProxyRefuseConn(t *testing.T) {
 	defer te.Close()
 
 	defer testutils.TestingHook(&BackendDial, func(
-		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
+		_ context.Context, msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
 		return nil, withCode(errors.New("too many attempts"), codeProxyRefusedConnection)
 	})()
@@ -1248,9 +1248,9 @@ func TestDenylistUpdate(t *testing.T) {
 
 	originalBackendDial := BackendDial
 	defer testutils.TestingHook(&BackendDial, func(
-		msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
+		ctx context.Context, msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 	) (net.Conn, error) {
-		return originalBackendDial(msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
+		return originalBackendDial(ctx, msg, sql.ServingSQLAddr(), proxyOutgoingTLSConfig)
 	})()
 
 	opts := &ProxyOptions{
@@ -1352,7 +1352,7 @@ func TestDirectoryConnect(t *testing.T) {
 		// Retry the backend connection 3 times before permanent failure.
 		countFailures := 0
 		defer testutils.TestingHook(&BackendDial, func(
-			*pgproto3.StartupMessage, string, *tls.Config,
+			context.Context, *pgproto3.StartupMessage, string, *tls.Config,
 		) (net.Conn, error) {
 			countFailures++
 			if countFailures >= 3 {
