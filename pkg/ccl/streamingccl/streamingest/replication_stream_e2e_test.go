@@ -510,7 +510,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer alternateSrcTenantConn.Close()
 	alternateSrcTenantSQL := sqlutils.MakeSQLRunner(alternateSrcTenantConn)
 
-	cleanUpTenant := c.CreateDestTenantSQL(ctx)
+	cleanUpTenant := c.StartDestTenant(ctx)
 	defer func() {
 		require.NoError(t, cleanUpTenant())
 	}()
@@ -708,7 +708,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	require.Greater(t, len(clientAddresses), 1)
 }
 
-// TestTenantReplicationProtectedTimestampManagement tests the active protected
+// TestProtectedTimestampManagement tests the active protected
 // timestamps management on the destination tenant's keyspan.
 func TestProtectedTimestampManagement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
