@@ -303,6 +303,7 @@ type queryComparisonHelper struct {
 
 	statements            []string
 	statementsAndExplains []sqlAndOutput
+	colTypes              []string
 }
 
 // runQuery runs the given query and returns the output. If the stmt doesn't
@@ -327,6 +328,14 @@ func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 			return nil, err
 		}
 		defer rows.Close()
+		cts, err := rows.ColumnTypes()
+		if err != nil {
+			return nil, err
+		}
+		h.colTypes = make([]string, len(cts))
+		for i, ct := range cts {
+			h.colTypes[i] = ct.DatabaseTypeName()
+		}
 		return sqlutils.RowsToStrMatrix(rows)
 	}
 
@@ -382,6 +391,86 @@ func (h *queryComparisonHelper) logVerboseOutput() {
 // statements run so far.
 func (h *queryComparisonHelper) makeError(err error, msg string) error {
 	return errors.Wrapf(err, "%s. %d statements run", msg, h.stmtNo)
+}
+
+// unsortedMatricesDiffWithFloatComp sorts and compares the rows in rowMatrix1
+// to rowMatrix2 and outputs a diff or message related to the comparison. If a
+// string comparison of the rows fails, and they contain floats or decimals, it
+// performs an approximate comparison of the values.
+func unsortedMatricesDiffWithFloatComp(
+	rowMatrix1, rowMatrix2 [][]string, colTypes []string,
+) (string, error) {
+	// Use an unlikely string as a separator when joining rows for initial
+	// comparison, so that we can split the sorted rows if we need to make
+	// additional comparisons.
+	sep := ",unsortedMatricesDiffWithFloatComp separator,"
+	var rows1 []string
+	for _, row := range rowMatrix1 {
+		rows1 = append(rows1, strings.Join(row[:], sep))
+	}
+	var rows2 []string
+	for _, row := range rowMatrix2 {
+		rows2 = append(rows2, strings.Join(row[:], sep))
+	}
+	sort.Strings(rows1)
+	sort.Strings(rows2)
+	result := cmp.Diff(rows1, rows2)
+	if result == "" {
+		return result, nil
+	}
+	if len(rows1) != len(rows2) {
+		return fmt.Sprintf("row counts are not the same (%d vs %d)", len(rows1), len(rows2)), nil
+	}
+	var decimalIdxs []int
+	var floatIdxs []int
+	for i := range colTypes {
+		// On s390x, check that values for both float and decimal coltypes are
+		// approximately equal to take into account platform differences in floating
+		// point calculations. On other architectures, check float values only.
+		if runtime.GOARCH == "s390x" && colTypes[i] == "DECIMAL" {
+			decimalIdxs = append(decimalIdxs, i)
+		}
+		if colTypes[i] == "FLOAT4" || colTypes[i] == "FLOAT8" {
+			floatIdxs = append(floatIdxs, i)
+		}
+	}
+	if len(decimalIdxs) == 0 && len(floatIdxs) == 0 {
+		return result, nil
+	}
+	for i := range rows1 {
+		// Split the sorted rows.
+		row1 := strings.Split(rows1[i], sep)
+		row2 := strings.Split(rows2[i], sep)
+
+		// Check that decimal values are approximately equal.
+		for j := range decimalIdxs {
+			match, err := floatcmp.FloatsMatchApprox(row1[j], row2[j])
+			if err != nil {
+				return "", err
+			}
+			if !match {
+				return result, nil
+			}
+		}
+
+		// Check that float values are approximately equal.
+		for j := range floatIdxs {
+			var err error
+			var match bool
+			if runtime.GOARCH == "s390x" {
+				match, err = floatcmp.FloatsMatchApprox(row1[j], row2[j])
+			} else {
+				match, err = floatcmp.FloatsMatch(row1[j], row2[j])
+			}
+			if err != nil {
+				return "", err
+			}
+			if !match {
+				return result, nil
+			}
+		}
+	}
+	return "", nil
 }
 
 // unsortedMatricesDiff sorts and compares rows of data.
