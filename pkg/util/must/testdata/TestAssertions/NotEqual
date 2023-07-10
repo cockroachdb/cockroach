@@ -1,0 +1,9 @@
+echo
+----
+message with ‹argument›: true == true
+message with ‹argument›: 1 == 1
+message with ‹argument›: 3.14 == 3.14
+message with ‹argument›: ‹"a"› == ‹"a"›
+message with ‹argument›: hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false} == hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false}
+message with ‹argument›: &hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false} == &hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false}
+message with ‹argument›: (*hlc.Timestamp)(nil) == (*hlc.Timestamp)(nil)

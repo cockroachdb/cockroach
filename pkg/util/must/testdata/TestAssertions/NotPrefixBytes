@@ -1,0 +1,12 @@
+echo
+----
+message with ‹argument›: ‹""› has prefix ‹""›
+message with ‹argument›: ‹""› has prefix ‹""›
+message with ‹argument›: ‹"foo"› has prefix ‹""›
+message with ‹argument›: ‹"foo"› has prefix ‹""›
+message with ‹argument›: ‹"foo"› has prefix ‹"f"›
+message with ‹argument›: ‹"foo"› has prefix ‹"foo"›
+message with ‹argument›: ‹"\x01\x02\x03"› has prefix ‹"\x01\x02\x03"›
+message with ‹argument›: ‹"foo"› has prefix ‹"f"›
+message with ‹argument›: ‹"foo"› has prefix ‹"foo"›
+message with ‹argument›: /System/NodeLiveness/1 has prefix /System/NodeLiveness
