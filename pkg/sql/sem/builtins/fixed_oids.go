@@ -2434,9 +2434,7 @@ var builtinOidsArray = []string{
 	2461: `crdb_internal.plpgsql_raise(severity: string, message: string, detail: string, hint: string, code: string) -> int`,
 	2462: `workload_index_recs() -> string`,
 	2463: `workload_index_recs(timestamptz: timestamptz) -> string`,
-	2464: `workload_index_recs(budget: string) -> string`,
-	2465: `workload_index_recs(timestamptz: timestamptz, budget: string) -> string`,
-	2466: `crdb_internal.setup_span_configs_stream(tenant_name: string) -> bytes`,
+	2464: `crdb_internal.setup_span_configs_stream(tenant_name: string) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
