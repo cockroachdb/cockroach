@@ -338,6 +338,8 @@ type TxnSender interface {
 
 	// HasPerformedWrites returns true if a write has been performed.
 	HasPerformedWrites() bool
+
+	TestingRandomRetryableErrorsEnabled() bool
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

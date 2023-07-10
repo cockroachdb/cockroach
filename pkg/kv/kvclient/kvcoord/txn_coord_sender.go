@@ -1532,6 +1532,10 @@ func (tc *TxnCoordSender) HasPerformedWrites() bool {
 	return tc.hasPerformedWritesLocked()
 }
 
+func (tc *TxnCoordSender) TestingRandomRetryableErrorsEnabled() bool {
+	return tc.testingKnobs.EnableRandomTransactionRetryErrors
+}
+
 func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {
 	return !tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.empty()
 }

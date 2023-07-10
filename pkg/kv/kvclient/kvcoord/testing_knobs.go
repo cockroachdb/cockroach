@@ -61,6 +61,10 @@ type ClientTestingKnobs struct {
 	// error which, if non-nil, becomes the result of the batch. Otherwise, execution
 	// continues.
 	OnRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
+
+	// EnableRandomTransactionRetryErrors allows transaction retry
+	// loops to randomly inject retriable errors.
+	EnableRandomTransactionRetryErrors bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

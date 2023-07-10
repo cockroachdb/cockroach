@@ -142,6 +142,7 @@ type clusterCfg struct {
 	beforeVersion     string
 	testingKnobCfg    string
 	defaultTestTenant base.DefaultTestTenantOptions
+	randomTxnRetries  bool
 }
 
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
@@ -157,6 +158,9 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 			// The tests in this package are particular about the tenant IDs
 			// they get in CREATE TENANT.
 			EnableTenantIDReuse: true,
+		},
+		KVClient: &kvcoord.ClientTestingKnobs{
+			EnableRandomTransactionRetryErrors: cfg.randomTxnRetries,
 		},
 	}
 
@@ -513,6 +517,9 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				defaultTestTenant = base.TestTenantDisabled
 			}
 
+			// TODO(ssd): Once TestServer starts up reliably enough:
+			// randomTxnRetries := !d.HasArg("disable-txn-retries")
+			randomTxnRetries := false
 			lastCreatedCluster = name
 			cfg := clusterCfg{
 				name:              name,
@@ -524,6 +531,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				beforeVersion:     beforeVersion,
 				testingKnobCfg:    testingKnobCfg,
 				defaultTestTenant: defaultTestTenant,
+				randomTxnRetries:  randomTxnRetries,
 			}
 			err := ds.addCluster(t, cfg)
 			if err != nil {
