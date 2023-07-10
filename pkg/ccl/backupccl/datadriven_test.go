@@ -517,9 +517,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				defaultTestTenant = base.TestTenantDisabled
 			}
 
-			// TODO(ssd): Once TestServer starts up reliably enough:
-			// randomTxnRetries := !d.HasArg("disable-txn-retries")
-			randomTxnRetries := false
+			randomTxnRetries := !d.HasArg("disable-txn-retries")
 			lastCreatedCluster = name
 			cfg := clusterCfg{
 				name:              name,
