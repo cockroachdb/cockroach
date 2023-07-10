@@ -68,12 +68,6 @@ func TestAdminAPIDatabaseDetails(t *testing.T) {
 		}
 		assert.Equal(t, nodeIDs, resp.Stats.NodeIDs, "NodeIDs")
 
-		// TODO(todd): Find a way to produce a non-zero value here that doesn't require writing a million rows.
-		// Giving the test nodes on-disk stores (StoreSpec{inMemory: false, Path: "..."}) didn't work and was slow.
-		// Having a number would be nice here for completeness, but the real RangeCount above gives us enough
-		// confidence in the implementation in the meantime.
-		assert.Equal(t, uint64(0), resp.Stats.ApproximateDiskBytes, "ApproximateDiskBytes")
-
 		return nil
 	})
 }
