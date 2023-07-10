@@ -1,0 +1,4 @@
+echo
+----
+message with ‹argument›: 0xc0004d0000 == 0xc0004d0000
+message with ‹argument›: 0x0 == 0x0

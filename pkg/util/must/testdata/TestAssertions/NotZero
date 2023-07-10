@@ -1,0 +1,8 @@
+echo
+----
+message with ‹argument›: is zero-valued%!(EXTRA bool=false)
+message with ‹argument›: is zero-valued%!(EXTRA int=0)
+message with ‹argument›: is zero-valued%!(EXTRA float64=0)
+message with ‹argument›: is zero-valued%!(EXTRA string=)
+message with ‹argument›: is zero-valued%!(EXTRA hlc.Timestamp=0,0)
+message with ‹argument›: is zero-valued%!(EXTRA *hlc.Timestamp=<nil>)

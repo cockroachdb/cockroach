@@ -1,0 +1,8 @@
+echo
+----
+message with ‹argument›: true is not zero-valued
+message with ‹argument›: 1 is not zero-valued
+message with ‹argument›: 0.1 is not zero-valued
+message with ‹argument›: ‹"a"› is not zero-valued
+message with ‹argument›: hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false} is not zero-valued
+message with ‹argument›: &hlc.Timestamp{WallTime:0, Logical:0, Synthetic:false} is not zero-valued
