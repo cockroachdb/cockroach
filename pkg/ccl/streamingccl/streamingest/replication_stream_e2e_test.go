@@ -652,12 +652,9 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "takes too long with multiple nodes")
-
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	args.SrcNumNodes = 4
-	args.DestNumNodes = 3
+	args.MultitenantSingleClusterNumNodes = 3
 
 	// Track the number of unique addresses that were connected to
 	clientAddresses := make(map[string]struct{})
@@ -670,7 +667,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 		},
 	}
 
-	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
 
 	// Make sure we have data on all nodes, so that we will have multiple

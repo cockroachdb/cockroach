@@ -1167,6 +1167,30 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	return partitions, err
 }
 
+func debug(span roachpb.Span, instance base.SQLInstanceID) bool {
+	if span.Equal(roachpb.Span{}) {
+		if instance != base.SQLInstanceID(1) {
+			//fmt.Printf("Sql instance %s !!!\n", instance)
+			return true
+		}
+	}
+	_, tenantID, err := keys.DecodeTenantPrefix(span.Key)
+	if err != nil {
+		return false
+	}
+	_, endKeytenantID, err := keys.DecodeTenantPrefix(span.EndKey)
+	if err != nil {
+		return false
+	}
+	if tenantID.Equal(roachpb.MustMakeTenantID(10)) && !endKeytenantID.Equal(roachpb.
+		MustMakeTenantID(10)) {
+		//fmt.Printf("Span; %s\n", span.String())
+		return true
+	}
+
+	return false
+}
+
 // partitionSpansEx is the same as PartitionSpans but additionally returns a
 // boolean indicating whether the misplanned ranges metadata should not be
 // generated.
@@ -1176,6 +1200,7 @@ func (dsp *DistSQLPlanner) partitionSpansEx(
 	if len(spans) == 0 {
 		return nil, false, errors.AssertionFailedf("no spans")
 	}
+
 	if planCtx.isLocal {
 		// If we're planning locally, map all spans to the gateway. Note that we
 		// always ignore misplanned ranges for local-only plans, and we choose
@@ -1212,6 +1237,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	getSQLInstanceIDForKVNodeID func(roachpb.NodeID) base.SQLInstanceID,
 	ignoreMisplannedRanges *bool,
 ) (_ []SpanPartition, lastPartitionIdx int, _ error) {
+	debugTrue := debug(span, base.SQLInstanceID(1))
 	it := planCtx.spanIter
 	// rSpan is the span we are currently partitioning.
 	rSpan, err := keys.SpanAddr(span)
@@ -1229,6 +1255,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	// separate nodes). We then create "partitioned spans" using the end keys of
 	// these individual ranges.
 	for it.Seek(ctx, span, kvcoord.Ascending); ; it.Next(ctx) {
+
 		if !it.Valid() {
 			return nil, 0, it.Error()
 		}
@@ -1252,6 +1279,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 		}
 
 		sqlInstanceID := getSQLInstanceIDForKVNodeID(replDesc.NodeID)
+
 		partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
 		if !inNodeMap {
 			partitionIdx = len(partitions)
@@ -1284,6 +1312,10 @@ func (dsp *DistSQLPlanner) partitionSpan(
 				Key:    lastKey.AsRawKey(),
 				EndKey: endKey.AsRawKey(),
 			})
+		}
+		if debugTrue {
+			fmt.Printf("Node %d to cover span %s\n", sqlInstanceID,
+				partition.Spans[len(partition.Spans)-1])
 		}
 
 		if !endKey.Less(rSpan.EndKey) {
@@ -1367,6 +1399,7 @@ func (dsp *DistSQLPlanner) deprecatedSQLInstanceIDForKVNodeIDSystem(
 	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID,
 ) base.SQLInstanceID {
 	sqlInstanceID := base.SQLInstanceID(nodeID)
+	debug(roachpb.Span{}, sqlInstanceID)
 	status := dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, sqlInstanceID)
 	// If the node is unhealthy or its DistSQL version is incompatible, use the
 	// gateway to process this span instead of the unhealthy host. An empty
