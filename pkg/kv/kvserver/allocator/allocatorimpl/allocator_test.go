@@ -8121,6 +8121,146 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 	}
 }
 
+// Trying to reproduce #98020.
+// localities:
+//
+//	us-east-1,us-east-1,
+//	us-west-1,us-west-1,
+//	us-central-1,us-central-1,us-central-1,
+//	eu-west-1,eu-west-1,eu-west-1
+//
+// zone_config:
+//
+//	num_replicas:6 num_voters:5
+//	constraints
+//	  constraints:<num_replicas:1 constraints:<key:"region" value:"eu-west-1">>
+//	  constraints:<num_replicas:1 constraints:<key:"region" value:"us-central-1">>
+//	  constraints:<num_replicas:1 constraints:<key:"region" value:"us-east-1">>
+//	  constraints:<num_replicas:1 constraints:<key:"region" value:"us-west-1">>
+//	voter_constraints
+//	  voter_constraints:<num_replicas:2 constraints:<key:"region" value:"us-west-1">>
+//	  voter_constraints:<num_replicas:2 constraints:<key:"region" value:"us-east-1">>
+//	lease_preferences:
+//	  lease_preferences:<constraints:<key:"region" value:"us-west-1">>
+//	  lease_preferences:<constraints:<key:"region" value:"us-east-1">>
+//
+// existing replicas
+//
+//	voters=[n1,n2,n4,n5,n8]
+//	non_voters=[n3]
+func TestAllocatorRebalanceConstraintsNonVoter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	regions := []string{
+		"us-east-1", "us-east-1", "us-west-1", "us-west-1", "us-central-1", "us-central-1",
+		"us-central-1", "eu-west-1", "eu-west-1", "eu-west-1",
+	}
+
+	// [(n1,s1):1, (n5,s5):2, (n2,s2):8, (n4,s4):4, (n8,s8):5, (n3,s3):7NON_VOTER, next=9, gen=16]
+	// num_replicas:6 num_voters:5
+	// constraints
+	//   constraints:<num_replicas:1 constraints:<key:"region" value:"eu-west-1">>
+	//   constraints:<num_replicas:1 constraints:<key:"region" value:"us-central-1">>
+	//   constraints:<num_replicas:1 constraints:<key:"region" value:"us-east-1">>
+	//   constraints:<num_replicas:1 constraints:<key:"region" value:"us-west-1">>
+	// voter_constraints
+	//   voter_constraints:<num_replicas:2 constraints:<key:"region" value:"us-west-1">>
+	//   voter_constraints:<num_replicas:2 constraints:<key:"region" value:"us-east-1">>
+	// lease_preferences:
+	//   lease_preferences:<constraints:<key:"region" value:"us-west-1">>
+	//   lease_preferences:<constraints:<key:"region" value:"us-east-1">>
+	replicas := replicas(1, 2, 3, 4, 5, 8)
+	replicas[2].Type = roachpb.NON_VOTER
+
+	rset := roachpb.MakeReplicaSet(replicas)
+	voters := rset.Voters().AsProto()
+	nonVoters := rset.NonVoters().AsProto()
+	log.Infof(ctx, "replicas: voters=%v non-voters=%v", voters, nonVoters)
+
+	var stores []*roachpb.StoreDescriptor
+	for i := 0; i < 10; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(i + 1),
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(i + 1),
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: regions[i]},
+				}},
+			},
+			Capacity: roachpb.StoreCapacity{RangeCount: 30},
+		})
+	}
+
+	constraintRegions := []string{"us-west-1", "us-east-1", "us-central-1", "eu-west-1"}
+	var constraints []roachpb.ConstraintsConjunction
+	var voterConstraints []roachpb.ConstraintsConjunction
+
+	for _, region := range constraintRegions {
+		constraints = append(constraints, roachpb.ConstraintsConjunction{
+			NumReplicas: 1,
+			Constraints: []roachpb.Constraint{
+				{
+					Type:  roachpb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: region,
+				},
+			},
+		})
+	}
+
+	for _, region := range constraintRegions[:2] {
+		voterConstraints = append(voterConstraints, roachpb.ConstraintsConjunction{
+			NumReplicas: 2,
+			Constraints: []roachpb.Constraint{
+				{
+					Type:  roachpb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: region,
+				},
+			},
+		})
+	}
+
+	spanConfig := roachpb.TestingDefaultSpanConfig()
+	spanConfig.Constraints = constraints
+	spanConfig.VoterConstraints = voterConstraints
+	spanConfig.NumReplicas = 6
+	spanConfig.NumVoters = 5
+	log.Infof(ctx, "span_config: %s", spanConfig.String())
+
+	stopper, g, sp, a, _ := CreateTestAllocator(ctx, len(stores) /* numNodes */, true /* deterministic */)
+	defer stopper.Stop(ctx)
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+
+	add, remove, details, ok := a.RebalanceVoter(
+		ctx,
+		sp,
+		spanConfig,
+		nil,
+		voters,
+		nonVoters,
+		allocator.RangeUsageInfo{},
+		storepool.StoreFilterThrottled,
+		a.ScorerOptions(ctx),
+	)
+	log.Infof(ctx, "rebalance_voter: add=%v remove=%v details=%v ok=%v", add, remove, details, ok)
+
+	add, remove, details, ok = a.RebalanceNonVoter(
+		ctx,
+		sp,
+		spanConfig,
+		nil,
+		voters,
+		nonVoters,
+		allocator.RangeUsageInfo{},
+		storepool.StoreFilterThrottled,
+		a.ScorerOptions(ctx),
+	)
+	log.Infof(ctx, "rebalance_non_voter: add=%v remove=%v details=%v ok=%v", add, remove, details, ok)
+}
+
 // TestAllocatorRebalanceDeterminism tests that calls to RebalanceVoter are
 // deterministic.
 func TestAllocatorRebalanceDeterminism(t *testing.T) {
