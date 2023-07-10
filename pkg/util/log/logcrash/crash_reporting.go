@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/must"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	sentry "github.com/getsentry/sentry-go"
@@ -301,7 +302,7 @@ const (
 	// was generated via a log.Fatal call.
 	ReportTypeLogFatal
 	// ReportTypeAssertionFailure signifies that an assertion was violated (see
-	// expect package).
+	// must package).
 	ReportTypeAssertionFailure
 )
 
@@ -435,5 +436,8 @@ func maybeSendCrashReport(ctx context.Context, err error, reportType ReportType)
 func init() {
 	log.MaybeSendCrashReport = func(ctx context.Context, err error) {
 		maybeSendCrashReport(ctx, err, ReportTypeLogFatal)
+	}
+	must.MaybeSendReport = func(ctx context.Context, err error) {
+		maybeSendCrashReport(ctx, err, ReportTypeAssertionFailure)
 	}
 }
