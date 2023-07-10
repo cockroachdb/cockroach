@@ -2802,6 +2802,16 @@ func typeCheckSameTypedTupleExprs(
 		return nil, nil, err
 	}
 
+	// All labeled tuples must have the same number of expressions as labels.
+	for i := range exprs {
+		if e, ok := exprs[i].(*Tuple); ok && len(e.Labels) > 0 && len(e.Labels) != len(e.Exprs) {
+			return nil, nil, pgerror.Newf(pgcode.Syntax,
+				"mismatch in tuple definition: %d expressions, %d labels",
+				len(e.Exprs), len(e.Labels),
+			)
+		}
+	}
+
 	// All expressions within tuples at the same indexes must be the same type.
 	resTypes := types.MakeLabeledTuple(make([]*types.T, firstLen), first.Labels)
 	sameTypeExprs := make([]Expr, 0, len(exprs))
