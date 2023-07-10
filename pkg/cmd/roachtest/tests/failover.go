@@ -237,6 +237,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		c.Run(ctx, c.Node(10), fmt.Sprintf(
 			`./cockroach workload init kv --splits 1000 --insert-count %d {pgurl:1}`, insertCount))
 		time.Sleep(45*time.Second) // give deadlocked mutex time to explode
+		return nil
 	})
 	m.Wait()
 
