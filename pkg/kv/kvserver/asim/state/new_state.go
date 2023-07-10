@@ -247,6 +247,24 @@ func RangesInfoEvenDistribution(
 		int64(MinKey), int64(keyspace), rangeSize)
 }
 
+func RangesInfoWithPercentOfReplicas(
+	storeList []StoreID, percentOfReplicas []float64, ranges int, keyspace int, replicationFactor int, rangeSize int64,
+) RangesInfo {
+	spanConfig := defaultSpanConfig
+	spanConfig.NumReplicas = int32(replicationFactor)
+	spanConfig.NumVoters = int32(replicationFactor)
+	return RangesInfoWithDistribution(
+		storeList,
+		percentOfReplicas,
+		percentOfReplicas,
+		ranges,
+		spanConfig,
+		int64(MinKey),
+		int64(keyspace),
+		0, /* rangeSize */
+	)
+}
+
 // NewStateWithDistribution returns a State where the stores given are
 // initialized with the specified % of the replicas. This is done on a best
 // effort basis, given the replication factor. It may be impossible to satisfy
@@ -269,20 +287,7 @@ func NewStateWithDistribution(
 	for i, store := range s.Stores() {
 		stores[i] = store.StoreID()
 	}
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
-
-	rangesInfo := RangesInfoWithDistribution(
-		stores,
-		percentOfReplicas,
-		percentOfReplicas,
-		ranges,
-		spanConfig,
-		int64(MinKey),
-		int64(keyspace),
-		0, /* rangeSize */
-	)
+	rangesInfo := RangesInfoWithPercentOfReplicas(stores, percentOfReplicas, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
 	LoadRangeInfo(s, rangesInfo...)
 	return s
 }
