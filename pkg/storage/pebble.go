@@ -2010,7 +2010,7 @@ func (p *Pebble) PreIngestDelay(ctx context.Context) {
 
 // GetTableMetrics implements the Engine interface.
 func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error) {
-	tableInfo, err := p.db.SSTables(pebble.WithKeyRangeFilter(start, end))
+	tableInfo, err := p.db.SSTables(pebble.WithKeyRangeFilter(start, end), pebble.WithProperties(), pebble.WithApproximateSpanBytes())
 
 	if err != nil {
 		return []enginepb.SSTableMetricsInfo{}, err
@@ -2032,7 +2032,8 @@ func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetr
 			}
 
 			tableID := sstableInfo.TableInfo.FileNum
-			metricsInfo = append(metricsInfo, enginepb.SSTableMetricsInfo{TableID: uint64(tableID), Level: int32(level), TableInfoJSON: marshalTableInfo})
+			approximateSpanBytes := sstableInfo.Properties.UserProperties["approximate-span-bytes"]
+			metricsInfo = append(metricsInfo, enginepb.SSTableMetricsInfo{TableID: uint64(tableID), Level: int32(level), ApproximateSpanBytes: []byte(approximateSpanBytes), TableInfoJSON: marshalTableInfo})
 		}
 	}
 	return metricsInfo, nil
