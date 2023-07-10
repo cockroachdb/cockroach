@@ -181,7 +181,7 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 
 	srv := http.Server{Handler: s.mux}
 
-	go func() {
+	err := s.Stopper.RunAsyncTask(ctx, "sqlproxy-http-cleanup", func(ctx context.Context) {
 		<-ctx.Done()
 
 		// Wait up to 15 seconds for the HTTP server to shut itself
@@ -196,11 +196,13 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 				// Ignore any errors as this routine will only be called
 				// when the server is shutting down.
 				_ = srv.Shutdown(shutdownCtx)
-
 				return nil
 			},
 		)
-	}()
+	})
+	if err != nil {
+		return err
+	}
 
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
