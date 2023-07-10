@@ -13,6 +13,7 @@ package issues
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,7 +21,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
@@ -273,11 +273,9 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				return v
 			}
 
-			l, err := logger.RootLogger("", false)
-			require.NoError(t, err)
 			p := &poster{
 				Options: &opts,
-				l:       l,
+				l:       log.Default(),
 			}
 
 			createdIssue := false
@@ -419,10 +417,7 @@ func TestPostEndToEnd(t *testing.T) {
 		HelpCommand: UnitTestHelpCommand(""),
 	}
 
-	l, err := logger.RootLogger("", false)
-	require.NoError(t, err)
-
-	require.NoError(t, Post(context.Background(), l, UnitTestFormatter, req))
+	require.NoError(t, Post(context.Background(), log.Default(), UnitTestFormatter, req))
 }
 
 // setEnv overrides the env variables corresponding to the input map. The

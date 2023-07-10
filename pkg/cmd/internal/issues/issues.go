@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/google/go-github/github"
@@ -99,7 +98,7 @@ func (p *poster) getProbableMilestone(ctx *postCtx) *int {
 type poster struct {
 	*Options
 
-	l *logger.Logger
+	l Logger
 
 	createIssue func(ctx context.Context, owner string, repo string,
 		issue *github.IssueRequest) (*github.Issue, *github.Response, error)
@@ -115,7 +114,7 @@ type poster struct {
 		opt *github.ProjectCardOptions) (*github.ProjectCard, *github.Response, error)
 }
 
-func newPoster(l *logger.Logger, client *github.Client, opts *Options) *poster {
+func newPoster(l Logger, client *github.Client, opts *Options) *poster {
 	return &poster{
 		Options:           opts,
 		l:                 l,
@@ -437,11 +436,20 @@ type PostRequest struct {
 	ProjectColumnID int
 }
 
+// Logger is an interface that allows callers to plug their own log
+// implementation when they post GitHub issues. It avoids us having to
+// link against heavy dependencies in certain cases (such as in
+// `bazci`) while still allowing other callers (such as `roachtest`)
+// to use other logger implementations.
+type Logger interface {
+	Printf(format string, args ...interface{})
+}
+
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue. GITHUB_API_TOKEN must be set to a valid GitHub token
 // that has permissions to search and create issues and comments or an error
 // will be returned.
-func Post(ctx context.Context, l *logger.Logger, formatter IssueFormatter, req PostRequest) error {
+func Post(ctx context.Context, l Logger, formatter IssueFormatter, req PostRequest) error {
 	opts := DefaultOptionsFromEnv()
 	if !opts.CanPost() {
 		return errors.Newf("GITHUB_API_TOKEN env variable is not set; cannot post issue")
