@@ -171,7 +171,11 @@ func runUnoptimizedQueryOracleImpl(
 		//nolint:returnerrcheck
 		return nil
 	}
-	if diff := unsortedMatricesDiff(unoptimizedRows, optimizedRows); diff != "" {
+	diff, err := unsortedMatricesDiffWithFloatComp(unoptimizedRows, optimizedRows, h.colTypes)
+	if err != nil {
+		return err
+	}
+	if diff != "" {
 		// We have a mismatch in the unoptimized vs optimized query outputs.
 		verboseLogging = true
 		return h.makeError(errors.Newf(
