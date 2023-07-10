@@ -510,7 +510,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer alternateSrcTenantConn.Close()
 	alternateSrcTenantSQL := sqlutils.MakeSQLRunner(alternateSrcTenantConn)
 
-	cleanUpTenant := c.CreateDestTenantSQL(ctx)
+	cleanUpTenant := c.StartDestTenant(ctx)
 	defer func() {
 		require.NoError(t, cleanUpTenant())
 	}()
@@ -715,8 +715,6 @@ func TestStreamingAutoReplan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.WithIssue(t, 106451)
-
-	skip.UnderStressRace(t, "c2c multi node unit tests flake under stress race. see #106194")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs

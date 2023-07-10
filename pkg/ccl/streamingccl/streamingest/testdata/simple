@@ -33,7 +33,7 @@ postgres://root@?sslcert=redacted&sslkey=redacted&sslmode=verify-full&sslrootcer
 query-sql as=source-system
 SHOW TENANT source WITH REPLICATION STATUS
 ----
-10 source ready none <nil> <nil> <nil> <nil> <nil> <nil>
+10 source ready shared <nil> <nil> <nil> <nil> <nil> <nil>
 
 exec-sql as=source-tenant
 CREATE TABLE d.x (id INT PRIMARY KEY, n INT);
@@ -51,7 +51,7 @@ query-sql as=source-system
 SHOW TENANTS
 ----
 1 system ready shared
-10 source ready none
+10 source ready shared
 
 query-sql as=destination-system
 SHOW TENANTS
@@ -74,6 +74,12 @@ cutover ts=$ts
 
 start-replicated-tenant
 ----
+
+query-sql as=destination-system
+SHOW TENANTS
+----
+1 system ready shared
+2 destination ready shared
 
 compare-tenant-fingerprints from=$start to=$ts with_revisions table_fingerprints
 ----
