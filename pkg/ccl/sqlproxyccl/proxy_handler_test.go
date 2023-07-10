@@ -1389,13 +1389,17 @@ func TestDirectoryConnect(t *testing.T) {
 		})
 	})
 
+	// Drain the tenant server gracefully. This is a workaround for #106537.
+	// Draining the server allows the server to delete the sql instance row.
+	require.NoError(t, tenants[0].DrainClients(ctx))
+
 	// Stop the directory server and the tenant SQL process started earlier.
 	// This tests whether the proxy can recover when the directory server and
 	// SQL pod restarts.
 	tds.Stop(ctx)
 	tenantStopper.Stop(ctx)
 
-	// Drain old pod and add a new one before starting the directory server.
+	// Drain the old pod and add a new one before starting the directory server.
 	tds.DrainPod(tenantID, tenants[0].SQLAddr())
 	tenants = startTestTenantPods(ctx, t, s, tenantID, 1, base.TestingKnobs{})
 	tds.AddPod(tenantID, &tenant.Pod{
@@ -1407,15 +1411,15 @@ func TestDirectoryConnect(t *testing.T) {
 	require.NoError(t, tds.Start(ctx))
 
 	t.Run("successful connection after restart", func(t *testing.T) {
-		require.Eventually(t, func() bool {
+		testutils.SucceedsSoon(t, func() error {
 			conn, err := pgx.Connect(ctx, connectionString)
 			if err != nil {
-				return false
+				return err
 			}
 			defer func() { _ = conn.Close(ctx) }()
 			require.NoError(t, runTestQuery(ctx, conn))
-			return true
-		}, 30*time.Second, 100*time.Millisecond)
+			return nil
+		})
 	})
 }
 
