@@ -1,0 +1,8 @@
+echo
+----
+message with ‹argument›: 0xf00 != 0xf00
+0xf00 is &hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false}
+0xf00 is &hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false}'
+message with ‹argument›: 0xf00 != 0x0
+0xf00 is &hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false}
+0x0 is (*hlc.Timestamp)(nil)'
