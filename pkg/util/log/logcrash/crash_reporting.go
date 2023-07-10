@@ -407,6 +407,8 @@ func SendReport(
 //
 // Like SendCrashReport, the format string should not contain any sensitive
 // data, and unsafe reportables will be redacted before reporting.
+//
+// DEPRECATED: use the must package instead.
 func ReportOrPanic(
 	ctx context.Context, sv *settings.Values, format string, reportables ...interface{},
 ) {
