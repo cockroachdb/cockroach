@@ -1472,29 +1472,31 @@ func (m mockAddressResolver) GetAllInstances(
 	return res, nil
 }
 
-// TODO(msbutler): add check for locality strength the other returned value of ClosesInstances
-
 func TestClosestInstances(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	type instances map[int]string
 	type picked []int
 
 	for _, tc := range []struct {
-		instances instances
-		loc       string
-		expected  []int
+		instances                instances
+		loc                      string
+		expected                 []int
+		expectedLocalityStrength int
 	}{
-		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "z=z", picked{}},
-		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "", picked{}},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "z=z", picked{}, 0},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "", picked{}, 0},
 
-		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=x", picked{1}},
-		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=z", picked{3}},
-		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=x", picked{1, 2}},
-		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=z", picked{3, 4}},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=x", picked{1}, 1},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=z", picked{3}, 1},
+		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=x", picked{1, 2}, 1},
+		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=z", picked{3, 4}, 1},
 
-		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x", picked{1, 2, 3}},
-		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x,b=2", picked{2}},
-		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=z", picked{5}},
+		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x",
+			picked{1, 2, 3}, 1},
+		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x,b=2",
+			picked{2}, 2},
+		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=z",
+			picked{5}, 1},
 	} {
 		t.Run("", func(t *testing.T) {
 			var l roachpb.Locality
@@ -1510,11 +1512,12 @@ func TestClosestInstances(t *testing.T) {
 				infos = append(infos, info)
 			}
 			var got picked
-			instances, _ := ClosestInstances(infos, l)
+			instances, strength := ClosestInstances(infos, l)
 			for _, i := range instances {
 				got = append(got, int(i))
 			}
 			require.ElementsMatch(t, tc.expected, got)
+			require.Equal(t, tc.expectedLocalityStrength, strength)
 		})
 	}
 }
