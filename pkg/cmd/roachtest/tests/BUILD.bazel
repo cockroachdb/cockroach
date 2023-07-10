@@ -288,6 +288,7 @@ go_test(
     srcs = [
         "blocklist_test.go",
         "drt_test.go",
+        "query_comparison_util_test.go",
         "tpcc_test.go",
         "util_load_group_test.go",
         ":mocks_drt",  # keep

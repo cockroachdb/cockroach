@@ -114,7 +114,11 @@ func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelp
 		return nil
 	}
 
-	if diff := unsortedMatricesDiff(controlRows, perturbRows); diff != "" {
+	diff, err := unsortedMatricesDiffWithFloatComp(controlRows, perturbRows, h.colTypes)
+	if err != nil {
+		return err
+	}
+	if diff != "" {
 		// We have a mismatch in the perturbed vs control query outputs.
 		h.logStatements()
 		h.logVerboseOutput()
