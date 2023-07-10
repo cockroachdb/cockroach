@@ -227,6 +227,26 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "sample", &sample)
 				top := runs[sample-1].S.Topology()
 				return (&top).String()
+      case "state":
+        var sample = len(runs)
+        var ranges []int
+				scanIfExists(t, d, "sample", &sample)
+        scanIfExists(t, d, "ranges", &ranges)
+
+        s := runs[sample-1].S
+
+        if len(ranges) != 0 {
+          var buf strings.Builder
+          for _, rangeID := range ranges {
+            if rng, ok := s.Range(state.RangeID(rangeID)); !ok {
+              fmt.Fprintf(&buf, "r%d not found", rangeID)
+            } else {
+              fmt.Fprintf(&buf, "%v\n", rng.Descriptor())
+            }
+          }
+          return buf.String()
+        } 
+        return s.String()
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
@@ -241,6 +261,28 @@ func TestDataDriven(t *testing.T) {
 				var config string
 				scanArg(t, d, "config", &config)
 				clusterGen = loadClusterInfo(config)
+				return ""
+			case "set_locality":
+				var nodeID int
+				var localityString string
+				var delay time.Duration
+				scanArg(t, d, "node", &nodeID)
+				scanArg(t, d, "locality", &localityString)
+				scanIfExists(t, d, "delay", &delay)
+
+				addEvent := event.DelayedEvent{
+					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
+						if localityString != "" {
+							var locality roachpb.Locality
+							if err := locality.Set(localityString); err != nil {
+								panic(fmt.Sprintf("unable to set node locality %s", err.Error()))
+							}
+							s.SetNodeLocality(state.NodeID(nodeID), locality)
+						}
+					},
+					At: settingsGen.Settings.StartTime.Add(delay),
+				}
+				eventGen.DelayedEvents = append(eventGen.DelayedEvents, addEvent)
 				return ""
 			case "add_node":
 				var delay time.Duration
@@ -310,12 +352,14 @@ func TestDataDriven(t *testing.T) {
 
 				return ""
 			case "eval":
+				failEarlyExit := false
 				samples := 1
 				seed := rand.Int63()
 				duration := 30 * time.Minute
 				failureExists := false
 
 				scanIfExists(t, d, "duration", &duration)
+				scanIfExists(t, d, "fail_early_exit", &failEarlyExit)
 				scanIfExists(t, d, "samples", &samples)
 				scanIfExists(t, d, "seed", &seed)
 
@@ -341,6 +385,11 @@ func TestDataDriven(t *testing.T) {
 						}
 					}
 					sampleAssertFailures[sample] = strings.Join(assertionFailures, "")
+					if failureExists && failEarlyExit {
+						// Don't continue to evaluate samples when the test specifies an
+						// early exit on the first failure.
+						break
+					}
 				}
 
 				// Every sample passed every assertion.

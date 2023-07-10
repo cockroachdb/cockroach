@@ -1,0 +1,66 @@
+gen_cluster nodes=10
+----
+
+gen_ranges ranges=2
+----
+
+set_locality node=1 locality=region=us-east-1
+----
+
+set_locality node=2 locality=region=us-east-1
+----
+
+set_locality node=3 locality=region=us-west-1
+----
+
+set_locality node=4 locality=region=us-west-1
+----
+
+set_locality node=5 locality=region=us-central-1
+----
+
+set_locality node=6 locality=region=us-central-1
+----
+
+set_locality node=7 locality=region=us-central-1
+----
+
+set_locality node=8 locality=region=eu-west-1
+----
+
+set_locality node=9 locality=region=eu-west-1
+----
+
+set_locality node=10 locality=region=eu-west-1
+----
+
+set_span_config 
+[0,10000): num_replicas=6 num_voters=5 constraints={'+region=eu-west-1':1,'+region=us-central-1':1,'+region=us-east-1':2,'+region=us-west-1':2} voter_constraints={'+region=eu-west-1':1,'+region=us-central-1':1,'+region=us-east-1':2,'+region=us-west-1':1}
+----
+
+set_span_config delay=10m
+[0,10000): num_replicas=6 num_voters=5 constraints={'+region=eu-west-1':1,'+region=us-central-1':1,'+region=us-east-1':1,'+region=us-west-1':1} voter_constraints={'+region=us-west-1':2,'+region=us-east-1':2}
+----
+
+
+assertion type=conformance under=0 over=0 unavailable=0 violating=0
+----
+
+eval duration=20m samples=1 fail_early_exit=true seed=42
+----
+failed assertion sample 1
+  conformance unavailable=0 under=0 over=0 violating=0 
+  actual unavailable=0 under=0, over=0 violating=1
+violating constraints:
+  r2:00000{05000-10000} [(n4,s4):1, (n5,s5):2, (n3,s3):7, (n10,s10):4, (n1,s1):5, (n2,s2):6NON_VOTER] applying num_replicas=6 num_voters=5 constraints=[+region=eu-west-1:1 +region=us-central-1:1 +region=us-east-1:1 +region=us-west-1:1] voter_constraints=[+region=us-east-1:2 +region=us-west-1:2]
+
+topology
+----
+eu-west-1
+  └── [8 9 10]
+us-central-1
+  └── [5 6 7]
+us-east-1
+  └── [1 2]
+us-west-1
+  └── [3 4]
