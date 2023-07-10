@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	. "github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -678,6 +679,111 @@ func TestUnvalidateConstraints(t *testing.T) {
 	}
 	if c, ok := after["fk"]; !ok || !c.Unvalidated {
 		t.Fatalf("expected to find an unvalidated constraint fk before, found %v", c)
+	}
+}
+
+func TestMaybeFixSecondaryIndexEncodingType(t *testing.T) {
+	tests := []struct {
+		desc       descpb.TableDescriptor
+		expUpgrade bool
+		verify     func(*testing.T, int, catalog.TableDescriptor) // nil means no extra verification.
+	}{
+		{ // 1
+			desc: descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "baz"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"bar", "baz"}},
+				},
+				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "primary",
+					KeyColumnIDs:        []descpb.ColumnID{1, 2},
+					KeyColumnNames:      []string{"bar", "baz"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					Version:             descpb.LatestIndexDescriptorVersion,
+					ConstraintID:        1,
+				},
+				Indexes: []descpb.IndexDescriptor{{
+					ID:                  2,
+					Name:                "secondary",
+					KeyColumnIDs:        []descpb.ColumnID{2},
+					KeyColumnNames:      []string{"baz"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					EncodingType:        descpb.PrimaryIndexEncoding,
+				}},
+				NextColumnID:     3,
+				NextFamilyID:     1,
+				NextIndexID:      3,
+				NextConstraintID: 2,
+			},
+			expUpgrade: true,
+			verify: func(t *testing.T, _ int, newDesc catalog.TableDescriptor) {
+				require.Equal(t, descpb.SecondaryIndexEncoding, newDesc.TableDesc().Indexes[0].EncodingType)
+			},
+		},
+		{ // 2
+			desc: descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "baz"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"bar", "baz"}},
+				},
+				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "primary",
+					KeyColumnIDs:        []descpb.ColumnID{1, 2},
+					KeyColumnNames:      []string{"bar", "baz"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+					EncodingType:        descpb.PrimaryIndexEncoding,
+					Version:             descpb.LatestIndexDescriptorVersion,
+					ConstraintID:        1,
+				},
+				Indexes: []descpb.IndexDescriptor{{
+					ID:                  2,
+					Name:                "secondary",
+					KeyColumnIDs:        []descpb.ColumnID{2},
+					KeyColumnNames:      []string{"baz"},
+					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+					EncodingType:        descpb.PrimaryIndexEncoding,
+				}},
+				DeclarativeSchemaChangerState: &scpb.DescriptorState{
+					JobID: catpb.JobID(1),
+				},
+				NextColumnID:     3,
+				NextFamilyID:     1,
+				NextIndexID:      3,
+				NextConstraintID: 2,
+			},
+			expUpgrade: false,
+		},
+	}
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			b := NewBuilder(&test.desc)
+			require.NoError(t, b.RunPostDeserializationChanges())
+			desc := b.BuildImmutableTable()
+			changes, err := GetPostDeserializationChanges(desc)
+			require.NoError(t, err)
+			upgraded := changes.Contains(catalog.FixSecondaryIndexEncodingType)
+			if upgraded != test.expUpgrade {
+				t.Fatalf("%d: expected upgraded=%t, but got upgraded=%t", i, test.expUpgrade, upgraded)
+			}
+			if test.verify != nil {
+				test.verify(t, i, desc)
+			}
+		})
 	}
 }
 
