@@ -346,30 +346,6 @@ func (a *TraceAnalyzer) ProcessStats() error {
 			a.nodeLevelStats.NetworkBytesSentGroupedByNode[originInstanceID] += bytes
 		}
 
-		// The row execution flow attaches flow stats to a stream stat with the
-		// last outbox, so we need to check stream stats for max memory and disk
-		// usage.
-		// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that
-		// are associated with streams, since it's a flow level stat. However,
-		// due to the row exec engine infrastructure, it is too complicated to
-		// attach this to a flow level span. If the row exec engine gets
-		// removed, getting maxMemUsage from streamStats should be removed as
-		// well.
-		if stats.stats.FlowStats.MaxMemUsage.HasValue() {
-			memUsage := int64(stats.stats.FlowStats.MaxMemUsage.Value())
-			if memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[originInstanceID] {
-				a.nodeLevelStats.MaxMemoryUsageGroupedByNode[originInstanceID] = memUsage
-			}
-		}
-		if stats.stats.FlowStats.MaxDiskUsage.HasValue() {
-			if diskUsage := int64(stats.stats.FlowStats.MaxDiskUsage.Value()); diskUsage > a.nodeLevelStats.MaxDiskUsageGroupedByNode[originInstanceID] {
-				a.nodeLevelStats.MaxDiskUsageGroupedByNode[originInstanceID] = diskUsage
-			}
-		}
-		if stats.stats.FlowStats.ConsumedRU.HasValue() {
-			a.nodeLevelStats.RUEstimateGroupedByNode[originInstanceID] += int64(stats.stats.FlowStats.ConsumedRU.Value())
-		}
-
 		numMessages, err := getNumNetworkMessagesFromComponentsStats(stats.stats)
 		if err != nil {
 			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating number of network messages"))
