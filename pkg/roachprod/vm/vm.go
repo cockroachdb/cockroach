@@ -79,6 +79,12 @@ type VM struct {
 	Labels      map[string]string `json:"labels"`
 	// The provider-internal DNS name for the VM instance
 	DNS string `json:"dns"`
+
+	// PublicDNS is the public DNS name that can be used to connect to the VM.
+	PublicDNS string `json:"public_dns"`
+	// The DNS provider to use for DNS operations performed for this VM.
+	DNSProvider string `json:"dns_provider"`
+
 	// The name of the cloud provider that hosts the VM instance
 	Provider string `json:"provider"`
 	// The provider-specific id for the instance.  This may or may not be the same as Name, depending
@@ -98,16 +104,6 @@ type VM struct {
 	// Project represents the project to which this vm belongs, if the VM is in a
 	// cloud that supports project (i.e. GCE). Empty otherwise.
 	Project string `json:"project"`
-
-	// SQLPort is the port on which the cockroach process is listening for SQL
-	// connections.
-	// Usually config.DefaultSQLPort, except for local clusters.
-	SQLPort int `json:"sql_port"`
-
-	// AdminUIPort is the port on which the cockroach process is listening for
-	// HTTP traffic for the Admin UI.
-	// Usually config.DefaultAdminUIPort, except for local clusters.
-	AdminUIPort int `json:"adminui_port"`
 
 	// LocalClusterName is only set for VMs in a local cluster.
 	LocalClusterName string `json:"local_cluster_name,omitempty"`
