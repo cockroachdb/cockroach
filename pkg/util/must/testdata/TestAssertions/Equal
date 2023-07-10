@@ -1,0 +1,9 @@
+echo
+----
+message with ‹argument›: true != false
+message with ‹argument›: 0 != 1
+message with ‹argument›: 3.14 != 2.717
+message with ‹argument›: ‹"a"› != ‹"b"›
+message with ‹argument›: hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false} != hlc.Timestamp{WallTime:0, Logical:2, Synthetic:false}
+message with ‹argument›: &hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false} != &hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false}
+message with ‹argument›: (*hlc.Timestamp)(nil) != &hlc.Timestamp{WallTime:0, Logical:1, Synthetic:false}

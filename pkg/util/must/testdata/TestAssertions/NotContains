@@ -1,0 +1,4 @@
+echo
+----
+message with ‹argument›: 1 is in [1 2 3]
+message with ‹argument›: ‹bar› is in [‹foo› ‹bar›]

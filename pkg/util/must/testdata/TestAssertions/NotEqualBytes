@@ -1,0 +1,7 @@
+echo
+----
+message with ‹argument›: ‹""› == ‹""›
+message with ‹argument›: ‹"foo"› == ‹"foo"›
+message with ‹argument›: ‹""› == ‹""›
+message with ‹argument›: ‹"foo"› == ‹"foo"›
+message with ‹argument›: /System/NodeLiveness/1 == /System/NodeLiveness/1
