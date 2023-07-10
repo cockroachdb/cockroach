@@ -338,6 +338,10 @@ func (f *KVFetcher) SetupNextFetch(
 	)
 }
 
+func (f *KVFetcher) reset(b KVBatchFetcher) {
+	*f = KVFetcher{KVBatchFetcher: b}
+}
+
 // KVProvider is a KVBatchFetcher that returns a set slice of kvs.
 type KVProvider struct {
 	KVs []roachpb.KeyValue
