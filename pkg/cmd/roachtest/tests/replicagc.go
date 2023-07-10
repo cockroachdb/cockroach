@@ -43,6 +43,8 @@ func registerReplicaGC(r registry.Registry) {
 
 var deadNodeAttr = "deadnode"
 
+const storeDeadTimeout = 60 * time.Second
+
 // runReplicaGCChangedPeers checks that when a node has all of its replicas
 // taken away in absentia restarts, without it being able to talk to any of its
 // old peers, it will still replicaGC its (now stale) replicas quickly.
@@ -62,7 +64,6 @@ func runReplicaGCChangedPeers(
 	}
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, 3))
 
@@ -71,8 +72,20 @@ func runReplicaGCChangedPeers(
 	t.Status("waiting for full replication")
 	h.waitForFullReplication(ctx)
 
+	// Set dead store timeout to 1 minute to work around allocator issue mentioned
+	// in waitForZeroReplicasOnN3.
+	func() {
+		db := c.Conn(ctx, t.L(), 1)
+		defer db.Close()
+		if _, err := db.ExecContext(ctx,
+			"SET CLUSTER SETTING server.time_until_store_dead = $1", storeDeadTimeout.String(),
+		); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
 	// Fill in a bunch of data.
-	c.Run(ctx, c.Node(1), "./workload init kv {pgurl:1} --splits 100")
+	c.Run(ctx, c.Node(1), "./cockroach workload init kv {pgurl:1} --splits 100")
 
 	// Kill the third node so it won't know that all of its replicas are moved
 	// elsewhere (we don't use the first because that's what roachprod will
@@ -142,7 +155,7 @@ func runReplicaGCChangedPeers(
 		t.Fatal(err)
 	}
 	startOpts := option.DefaultStartOpts()
-	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--join="+internalAddrs[0], "--attrs="+deadNodeAttr, "--vmodule=raft=5,replicate_queue=5,allocator=5")
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--join="+internalAddrs[0], "--attrs="+deadNodeAttr)
 	c.Start(ctx, t.L(), startOpts, settings, c.Node(3))
 
 	// Loop for two metric sample intervals (10s) to make sure n3 doesn't see any
@@ -207,7 +220,7 @@ func (h *replicagcTestHelper) numReplicas(ctx context.Context, db *gosql.DB, tar
 	).Scan(&n); err != nil {
 		h.t.Fatal(err)
 	}
-	h.t.L().Printf("found %d replicas found on n%d\n", n, targetNode)
+	h.t.L().Printf("found %d replicas on n%d\n", n, targetNode)
 	return n
 }
 
@@ -261,29 +274,53 @@ func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int)
 }
 
 func waitForZeroReplicasOnN3(ctx context.Context, t test.Test, db *gosql.DB) {
-	if err := retry.ForDuration(5*time.Minute, func() error {
-		const q = `select range_id, replicas from crdb_internal.ranges_no_leases where replicas @> ARRAY[3];`
-		rows, err := db.QueryContext(ctx, q)
-		if err != nil {
-			return err
-		}
-		m := make(map[int64]string)
-		for rows.Next() {
-			var rangeID int64
-			var replicas string
-			if err := rows.Scan(&rangeID, &replicas); err != nil {
+	var err error
+	// Note that deadline is a special case for dead node. Dead nodes are not
+	// reported as decommissioning internally and stay as
+	// livenesspb.NodeLivenessStatus_UNAVAILABLE. This is preventing allocator
+	// from eagerly moving replicas off the node. It will only do so when node
+	// will be marked livenesspb.NodeLivenessStatus_DEAD. To reach latter status
+	// it has to stay unavailable for server.time_until_store_dead (configured
+	// down from 5 to 1 min in this test). So resulting timeout for replicas to
+	// move is 1 min + how much allocator needs to move replicas. Since we set it
+	// to process queue aggressively, we give it one minute. In practice, it
+	// usually takes about 10 seconds.
+	deadline := timeutil.Now().Add(storeDeadTimeout + time.Minute)
+	// We don't use exponential backoff here because we don't expect it to succeed
+	// immediately.
+	for r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     10 * time.Second,
+	}); r.Next() && timeutil.Now().Before(deadline); {
+		err = func() error {
+			const q = `select range_id, replicas from crdb_internal.ranges_no_leases where replicas @> ARRAY[3];`
+			rows, err := db.QueryContext(ctx, q)
+			if err != nil {
 				return err
 			}
-			m[rangeID] = replicas
+			m := make(map[int64]string)
+			for rows.Next() {
+				var rangeID int64
+				var replicas string
+				if err := rows.Scan(&rangeID, &replicas); err != nil {
+					return err
+				}
+				m[rangeID] = replicas
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			t.L().Printf("found %d replicas on n3\n", len(m))
+			if len(m) == 0 {
+				return nil
+			}
+			return errors.Errorf("ranges remained on n3 (according to meta2): %+v", m)
+		}()
+		if err == nil {
+			break
 		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		if len(m) == 0 {
-			return nil
-		}
-		return errors.Errorf("ranges remained on n3 (according to meta2): %+v", m)
-	}); err != nil {
+	}
+	if err != nil {
 		t.Fatal(err)
 	}
 }
