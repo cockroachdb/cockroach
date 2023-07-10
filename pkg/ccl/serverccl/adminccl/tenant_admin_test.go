@@ -42,7 +42,12 @@ func TestTenantAdminAPI(t *testing.T) {
 		StoreDisableCoalesceAdjacent: true,
 	}
 
-	testHelper := serverccl.NewTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
+	testHelper := serverccl.NewTestTenantHelper(
+		t,
+		3, /* tenantClusterSize */
+		1, /* numNodes */
+		knobs,
+	)
 	defer testHelper.Cleanup(ctx, t)
 
 	t.Run("tenant_jobs", func(t *testing.T) {

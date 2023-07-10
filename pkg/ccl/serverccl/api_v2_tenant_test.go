@@ -32,7 +32,12 @@ func TestExecSQL(t *testing.T) {
 
 	ctx := context.Background()
 
-	testHelper := NewTestTenantHelper(t, 3 /* tenantClusterSize */, base.TestingKnobs{})
+	testHelper := NewTestTenantHelper(
+		t,
+		3, /* tenantClusterSize */
+		1, /* numNodes */
+		base.TestingKnobs{},
+	)
 	defer testHelper.Cleanup(ctx, t)
 
 	tenantCluster := testHelper.TestCluster()

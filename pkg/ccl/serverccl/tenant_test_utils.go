@@ -141,7 +141,7 @@ var _ TenantTestHelper = &tenantTestHelper{}
 
 // NewTestTenantHelper constructs a TenantTestHelper instance.
 func NewTestTenantHelper(
-	t *testing.T, tenantClusterSize int, knobs base.TestingKnobs,
+	t *testing.T, tenantClusterSize int, numNodes int, knobs base.TestingKnobs,
 ) TenantTestHelper {
 	t.Helper()
 
@@ -151,9 +151,13 @@ func NewTestTenantHelper(
 	params.Knobs = knobs
 	// We're running tenant tests, no need for a default tenant.
 	params.DefaultTestTenant = base.TestTenantDisabled
-	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
-		ServerArgs: params,
-	})
+	testCluster := serverutils.StartNewTestCluster(
+		t,
+		numNodes,
+		base.TestClusterArgs{
+			ServerArgs: params,
+		},
+	)
 	server := testCluster.Server(0)
 
 	return &tenantTestHelper{
