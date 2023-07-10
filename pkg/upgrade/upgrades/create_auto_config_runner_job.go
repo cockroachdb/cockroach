@@ -31,10 +31,10 @@ func createAutoConfigRunnerJob(
 	}
 
 	if err := d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		row, err := d.DB.Executor().QueryRowEx(
+		row, err := txn.QueryRowEx(
 			ctx,
 			"check for existing auto config runner job",
-			nil,
+			txn.KV(),
 			sessiondata.RootUserSessionDataOverride,
 			"SELECT 1 FROM system.jobs WHERE id = $1",
 			jobs.AutoConfigRunnerJobID,
