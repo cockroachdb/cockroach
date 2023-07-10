@@ -1764,6 +1764,16 @@ func (ief *InternalDB) txn(
 			if err != nil {
 				return err
 			}
+			// We check this testing condition here since
+			// a random retry cannot be generated after a
+			// successful commit. Since we commit below,
+			// this is our last chance to generate a
+			// random retry for users of
+			// (*InternalDB).Txn.
+			if kvTxn.TestingShouldReturnRandomRetry() {
+				return kvTxn.GenerateForcedRetryableError(ctx, "randomized retriable error")
+			}
+
 			return commitTxnFn(ctx)
 		}); descs.IsTwoVersionInvariantViolationError(err) {
 			continue
