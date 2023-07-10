@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1437,7 +1438,22 @@ func (r *Replica) refreshProposalsLocked(
 			continue
 
 		case reasonTicks:
-			if p.proposedAtTicks <= r.mu.ticks-refreshAtDelta {
+			// Usually, commands get refreshed every refreshAtDelta. However, for lower-priority
+			// commands as well as larger mutations, we use a larger multiplier of refreshAtDelta,
+			// between initially two, then three, etc, all the way up to ten.
+			mult := 1
+			if wp := admissionpb.WorkPriority(
+				p.Request.AdmissionHeader.Priority,
+			); wp < admissionpb.NormalPri || len(p.encodedCommand) > 256*(1<<10) {
+				d := 1 + (p.createdAtTicks-r.mu.ticks)/refreshAtDelta
+				if max := 10; d < max {
+					mult += d
+				} else {
+					d += max
+				}
+			}
+
+			if p.proposedAtTicks <= r.mu.ticks-mult*refreshAtDelta {
 				// The command was proposed a while ago and may have been dropped. Try it again.
 				reproposals = append(reproposals, p)
 			}
