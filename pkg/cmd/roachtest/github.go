@@ -28,7 +28,7 @@ type githubIssues struct {
 	disable      bool
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(context.Context, *logger.Logger, issues.IssueFormatter, issues.PostRequest) error
+	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest) error
 	teamLoader   func() (team.Map, error)
 }
 
