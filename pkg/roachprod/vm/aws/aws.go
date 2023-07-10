@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
@@ -944,8 +943,6 @@ func (p *Provider) listRegion(
 				VPC:                    in.VpcID,
 				MachineType:            in.InstanceType,
 				Zone:                   in.Placement.AvailabilityZone,
-				SQLPort:                config.DefaultSQLPort,
-				AdminUIPort:            config.DefaultAdminUIPort,
 				NonBootAttachedVolumes: nonBootableVolumes,
 			}
 			ret = append(ret, m)

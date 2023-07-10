@@ -33,19 +33,6 @@ import (
 func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 
-	t.L().Printf("retrieving VM addresses")
-	addrs, err := c.InternalAddr(ctx, t.L(), c.All())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// TODO(tbg): this should never happen, but I saw it locally. The result
-	// is the test hanging forever, because all nodes will create their own
-	// single node cluster and waitForFullReplication never returns.
-	if addrs[0] == "" {
-		t.Fatal("no address for first node")
-	}
-
 	// We start all nodes with the same join flags and then issue an "init"
 	// command to one of the nodes. We do this twice, since roachtest has some
 	// special casing for the first node in a cluster (the join flags of all nodes
@@ -63,7 +50,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// won't allow init'ing any but the first node - we require
 		// that all nodes can discover the init'ed node (transitively)
 		// via their join flags.
-		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--join="+strings.Join(addrs, ","))
+		startOpts.RoachprodOpts.JoinTargets = c.All()
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
 
 		urlMap := make(map[int]string)

@@ -267,12 +267,18 @@ func CreateCluster(
 
 // DestroyCluster TODO(peter): document
 func DestroyCluster(l *logger.Logger, c *Cluster) error {
-	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+	err := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		// Enable a fast-path for providers that can destroy a cluster in one shot.
 		if x, ok := p.(vm.DeleteCluster); ok {
 			return x.DeleteCluster(l, c.Name)
 		}
 		return p.Delete(l, vms)
+	})
+	if err != nil {
+		return err
+	}
+	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
+		return p.DeleteRecordsBySubdomain(c.Name)
 	})
 }
 

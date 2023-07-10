@@ -60,23 +60,26 @@ func StartTenant(
 	if startOpts.TenantID < 2 {
 		return errors.Errorf("invalid tenant ID %d (must be 2 or higher)", startOpts.TenantID)
 	}
+	// TODO(herko): Allow users to pass in a tenant name.
+	startOpts.TenantName = fmt.Sprintf("tenant-%d", startOpts.TenantID)
 
-	// Create tenant, if necessary. We need to run this SQL against a single host,
-	// so temporarily restrict the target nodes to 1.
-	saveNodes := hc.Nodes
-	hc.Nodes = hc.Nodes[:1]
+	// Create tenant, if necessary. We need to run this SQL against a single host.
 	l.Printf("Creating tenant metadata")
-	if err := hc.ExecSQL(ctx, l, "", []string{
+	if err := hc.ExecSQL(ctx, l, hc.Nodes[:1], "", []string{
 		`-e`,
 		fmt.Sprintf(createTenantIfNotExistsQuery, startOpts.TenantID),
 	}); err != nil {
 		return err
 	}
-	hc.Nodes = saveNodes
 
+	l.Printf("Starting tenant nodes")
 	var kvAddrs []string
 	for _, node := range hc.Nodes {
-		kvAddrs = append(kvAddrs, fmt.Sprintf("%s:%d", hc.Host(node), hc.NodePort(node)))
+		port, err := hc.NodePort(node)
+		if err != nil {
+			return err
+		}
+		kvAddrs = append(kvAddrs, fmt.Sprintf("%s:%d", hc.Host(node), port))
 	}
 	startOpts.KVAddrs = strings.Join(kvAddrs, ",")
 	startOpts.KVCluster = hc

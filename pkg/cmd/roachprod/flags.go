@@ -354,7 +354,7 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 		cmd.Flags().BoolVar(&secure,
 			"secure", false, "use a secure cluster")
 	}
-	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd} {
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd} {
 		cmd.Flags().StringVar(&tenantName,
 			"tenant-name", "", "specific tenant to connect to")
 	}

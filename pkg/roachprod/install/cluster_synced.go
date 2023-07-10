@@ -629,7 +629,11 @@ func (c *SyncedCluster) Monitor(
 		go func(i int) {
 			defer wg.Done()
 			node := nodes[i]
-
+			port, err := c.NodePort(node)
+			if err != nil {
+				ch <- NodeMonitorInfo{Node: node, Err: err}
+				return
+			}
 			// On each monitored node, we loop looking for a cockroach process.
 			data := struct {
 				OneShot     bool
@@ -641,7 +645,7 @@ func (c *SyncedCluster) Monitor(
 				OneShot:     opts.OneShot,
 				IgnoreEmpty: opts.IgnoreEmptyNodes,
 				Store:       c.NodeDir(node, 1 /* storeIndex */),
-				Port:        c.NodePort(node),
+				Port:        port,
 				Local:       c.IsLocal(),
 			}
 
@@ -2265,7 +2269,15 @@ func (c *SyncedCluster) pgurls(
 	}
 	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
-		m[node] = c.NodeURL(host, c.NodePort(node), tenantName)
+		desc, err := c.DiscoverService(node, tenantName, ServiceTypeSQL)
+		if err != nil {
+			return nil, err
+		}
+		sharedTenantName := ""
+		if desc.ServiceMode == ServiceModeShared {
+			sharedTenantName = tenantName
+		}
+		m[node] = c.NodeURL(host, desc.Port, sharedTenantName)
 	}
 	return m, nil
 }

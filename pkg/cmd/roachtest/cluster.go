@@ -2491,8 +2491,7 @@ func addrToAdminUIAddr(c *clusterImpl, addr string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Roachprod makes Admin UI's port to be node's port + 1.
-	return fmt.Sprintf("%s:%d", host, webPort+1), nil
+	return fmt.Sprintf("%s:%d", host, webPort), nil
 }
 
 func urlToAddr(pgURL string) (string, error) {
@@ -2529,12 +2528,16 @@ func (c *clusterImpl) InternalAdminUIAddr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
 	var addrs []string
-	urls, err := c.InternalAddr(ctx, l, node)
+	externalAddrs, err := roachprod.AdminURL(l, c.MakeNodes(node), "", "", false, false, false)
 	if err != nil {
 		return nil, err
 	}
-	for _, u := range urls {
-		adminUIAddr, err := addrToAdminUIAddr(c, u)
+	for _, u := range externalAddrs {
+		adder, err := urlToAddr(u)
+		if err != nil {
+			return nil, err
+		}
+		adminUIAddr, err := addrToAdminUIAddr(c, adder)
 		if err != nil {
 			return nil, err
 		}
@@ -2546,15 +2549,19 @@ func (c *clusterImpl) InternalAdminUIAddr(
 // ExternalAdminUIAddr returns the external Admin UI address in the form host:port
 // for the specified node.
 func (c *clusterImpl) ExternalAdminUIAddr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
+	_ context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
 	var addrs []string
-	externalAddrs, err := c.ExternalAddr(ctx, l, node)
+	externalAddrs, err := roachprod.AdminURL(l, c.MakeNodes(node), "", "", true, false, false)
 	if err != nil {
 		return nil, err
 	}
 	for _, u := range externalAddrs {
-		adminUIAddr, err := addrToAdminUIAddr(c, u)
+		adder, err := urlToAddr(u)
+		if err != nil {
+			return nil, err
+		}
+		adminUIAddr, err := addrToAdminUIAddr(c, adder)
 		if err != nil {
 			return nil, err
 		}

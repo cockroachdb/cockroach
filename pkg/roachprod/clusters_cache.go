@@ -57,11 +57,13 @@ func readSyncedClusters(key string) (*cloud.Cluster, bool) {
 // InitDirs initializes the directories for storing cluster metadata and debug
 // logs.
 func InitDirs() error {
-	cd := os.ExpandEnv(config.ClustersDir)
-	if err := os.MkdirAll(cd, 0755); err != nil {
-		return err
+	dirs := []string{config.ClustersDir, config.DefaultDebugDir, config.DNSDir}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(os.ExpandEnv(dir), 0755); err != nil {
+			return err
+		}
 	}
-	return os.MkdirAll(os.ExpandEnv(config.DefaultDebugDir), 0755)
+	return nil
 }
 
 // saveCluster creates (or overwrites) the file in config.ClusterDir storing the

@@ -448,7 +448,7 @@ func SQL(
 	if len(c.Nodes) == 1 {
 		return c.ExecOrInteractiveSQL(ctx, l, tenantName, cmdArray)
 	}
-	return c.ExecSQL(ctx, l, tenantName, cmdArray)
+	return c.ExecSQL(ctx, l, c.Nodes, tenantName, cmdArray)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -682,6 +682,8 @@ func DefaultStartOpts() install.StartOpts {
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: "",
 		InitTarget:         1,
+		SQLPort:            config.DefaultSQLPort,
+		AdminUIPort:        config.DefaultAdminUIPort,
 	}
 }
 
@@ -929,10 +931,14 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
+		desc, err := c.DiscoverService(nodes[i], opts.TenantName, install.ServiceTypeSQL)
+		if err != nil {
+			return nil, err
+		}
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, c.NodePort(nodes[i]), opts.TenantName))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.TenantName))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
@@ -946,6 +952,7 @@ type urlConfig struct {
 	openInBrowser bool
 	secure        bool
 	port          int
+	tenantName    string
 }
 
 func urlGenerator(
@@ -966,8 +973,13 @@ func urlGenerator(
 		if uConfig.usePublicIP {
 			host = c.VMs[node-1].PublicIP
 		}
-		if uConfig.port == 0 {
-			uConfig.port = c.NodeUIPort(node)
+		port := uConfig.port
+		if port == 0 {
+			desc, err := c.DiscoverService(node, uConfig.tenantName, install.ServiceTypeUI)
+			if err != nil {
+				return nil, err
+			}
+			port = desc.Port
 		}
 		scheme := "http"
 		if c.Secure {
@@ -976,7 +988,7 @@ func urlGenerator(
 		if !strings.HasPrefix(uConfig.path, "/") {
 			uConfig.path = "/" + uConfig.path
 		}
-		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, uConfig.port, uConfig.path)
+		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, port, uConfig.path)
 		urls = append(urls, url)
 		if uConfig.openInBrowser {
 			cmd := browserCmd(url)
@@ -1007,7 +1019,7 @@ func browserCmd(url string) *exec.Cmd {
 
 // AdminURL generates admin UI URLs for the nodes in a cluster.
 func AdminURL(
-	l *logger.Logger, clusterName, path string, usePublicIP, openInBrowser, secure bool,
+	l *logger.Logger, clusterName, tenantName, path string, usePublicIP, openInBrowser, secure bool,
 ) ([]string, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
@@ -1021,6 +1033,7 @@ func AdminURL(
 		usePublicIP:   usePublicIP,
 		openInBrowser: openInBrowser,
 		secure:        secure,
+		tenantName:    tenantName,
 	}
 	return urlGenerator(c, l, c.TargetNodes(), uConfig)
 }
@@ -1070,7 +1083,10 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 		node := nodes[i]
 		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
-		port := c.NodeUIPort(node)
+		port, err := c.NodeUIPort(node)
+		if err != nil {
+			return nil, err
+		}
 		scheme := "http"
 		if c.Secure {
 			scheme = "https"
@@ -1915,9 +1931,12 @@ func sendCaptureCommand(
 	_, err := c.ParallelE(ctx, l, len(nodes),
 		func(ctx context.Context, i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
+			port, err := c.NodeUIPort(node)
+			if err != nil {
+				return nil, err
+			}
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
-			port := c.NodeUIPort(node)
 			scheme := "http"
 			if c.Secure {
 				scheme = "https"
