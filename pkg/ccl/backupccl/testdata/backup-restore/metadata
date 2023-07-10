@@ -2,7 +2,7 @@
 #
 # This also serves as a regression test for #86806 -- a bug in which 2
 # or more forecsts would break metadata SST writing.
-new-cluster name=s
+new-cluster name=s disable-txn-retries
 ----
 
 exec-sql
