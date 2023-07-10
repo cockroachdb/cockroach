@@ -1,0 +1,20 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "workloadindexrec",
+    srcs = [
+        "index_trie.go",
+        "workload_indexrecs.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+    ],
+)
+
+get_x_data(name = "get_x_data")
