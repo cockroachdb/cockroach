@@ -12,6 +12,7 @@ package state
 
 import (
 	"fmt"
+	"math/rand"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -36,6 +37,22 @@ func evenDistribution(n int) []float64 {
 	frac := 1.0 / float64(n)
 	for i := 0; i < n; i++ {
 		distribution = append(distribution, frac)
+	}
+	return distribution
+}
+
+// TODO COMMENT
+func randomDistribution(randSource *rand.Rand, n int) []float64 {
+	total := float64(0)
+	distribution := []float64{}
+	for i := 0; i < n; i++ {
+		num := float64(randSource.Intn(10))
+		distribution[i] = num
+		total += num
+	}
+
+	for i := 0; i < n; i++ {
+		distribution[i] = distribution[i] / total
 	}
 	return distribution
 }
@@ -221,6 +238,21 @@ func RangesInfoWithReplicaCounts(
 	ranges := total / replicationFactor
 
 	distribution := exactDistribution(counts)
+	storeList := makeStoreList(stores)
+
+	spanConfig := defaultSpanConfig
+	spanConfig.NumReplicas = int32(replicationFactor)
+	spanConfig.NumVoters = int32(replicationFactor)
+
+	return RangesInfoWithDistribution(
+		storeList, distribution, distribution, ranges, spanConfig,
+		int64(MinKey), int64(keyspace), rangeSize)
+}
+
+func RangesInfoRandomDistribution(
+	randSource *rand.Rand, stores int, ranges int, keyspace int, replicationFactor int, rangeSize int64,
+) RangesInfo {
+	distribution := randomDistribution(randSource, stores)
 	storeList := makeStoreList(stores)
 
 	spanConfig := defaultSpanConfig
