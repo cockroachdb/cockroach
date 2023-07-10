@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -50,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"golang.org/x/sys/unix"
 )
 
 // verifyClusterName ensures that the given name conforms to
@@ -224,24 +224,6 @@ func CachedClusters(l *logger.Logger, fn func(clusterName string, numVMs int)) {
 	}
 }
 
-// acquireFilesystemLock acquires a filesystem lock in order that concurrent
-// operations or roachprod processes that access shared system resources do
-// not conflict.
-func acquireFilesystemLock() (unlockFn func(), _ error) {
-	lockFile := os.ExpandEnv("$HOME/.roachprod/LOCK")
-	f, err := os.Create(lockFile)
-	if err != nil {
-		return nil, errors.Wrapf(err, "creating lock file %q", lockFile)
-	}
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
-		f.Close()
-		return nil, errors.Wrap(err, "acquiring lock on %q")
-	}
-	return func() {
-		f.Close()
-	}, nil
-}
-
 // Sync grabs an exclusive lock on the roachprod state and then proceeds to
 // read the current state from the cloud and write it out to disk. The locking
 // protects both the reading and the writing in order to prevent the hazard
@@ -251,7 +233,7 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 	if !config.Quiet {
 		l.Printf("Syncing...")
 	}
-	unlock, err := acquireFilesystemLock()
+	unlock, err := lock.AcquireFilesystemLock(config.DefaultLockPath)
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +429,7 @@ func SQL(
 	if len(c.Nodes) == 1 {
 		return c.ExecOrInteractiveSQL(ctx, l, tenantName, cmdArray)
 	}
-	return c.ExecSQL(ctx, l, tenantName, cmdArray)
+	return c.ExecSQL(ctx, l, c.Nodes, tenantName, cmdArray)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -585,7 +567,7 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string) error {
 
 	// Configure SSH for machines in the zones we operate on.
 	if err := vm.ProvidersSequential(providers, func(p vm.Provider) error {
-		unlock, lockErr := acquireFilesystemLock()
+		unlock, lockErr := lock.AcquireFilesystemLock(config.DefaultLockPath)
 		if lockErr != nil {
 			return lockErr
 		}
@@ -681,6 +663,8 @@ func DefaultStartOpts() install.StartOpts {
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: "",
 		InitTarget:         1,
+		SQLPort:            config.DefaultSQLPort,
+		AdminUIPort:        config.DefaultAdminUIPort,
 	}
 }
 
@@ -939,10 +923,14 @@ func PgURL(
 
 	var urls []string
 	for i, ip := range ips {
+		desc, err := c.DiscoverService(nodes[i], opts.TenantName, install.ServiceTypeSQL)
+		if err != nil {
+			return nil, err
+		}
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, c.NodePort(nodes[i]), opts.TenantName))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.TenantName))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
@@ -956,6 +944,7 @@ type urlConfig struct {
 	openInBrowser bool
 	secure        bool
 	port          int
+	tenantName    string
 }
 
 func urlGenerator(
@@ -976,8 +965,13 @@ func urlGenerator(
 		if uConfig.usePublicIP {
 			host = c.VMs[node-1].PublicIP
 		}
-		if uConfig.port == 0 {
-			uConfig.port = c.NodeUIPort(node)
+		port := uConfig.port
+		if port == 0 {
+			desc, err := c.DiscoverService(node, uConfig.tenantName, install.ServiceTypeUI)
+			if err != nil {
+				return nil, err
+			}
+			port = desc.Port
 		}
 		scheme := "http"
 		if c.Secure {
@@ -986,7 +980,7 @@ func urlGenerator(
 		if !strings.HasPrefix(uConfig.path, "/") {
 			uConfig.path = "/" + uConfig.path
 		}
-		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, uConfig.port, uConfig.path)
+		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, port, uConfig.path)
 		urls = append(urls, url)
 		if uConfig.openInBrowser {
 			cmd := exec.Command("python", "-m", "webbrowser", url)
@@ -1001,7 +995,7 @@ func urlGenerator(
 
 // AdminURL generates admin UI URLs for the nodes in a cluster.
 func AdminURL(
-	l *logger.Logger, clusterName, path string, usePublicIP, openInBrowser, secure bool,
+	l *logger.Logger, clusterName, tenantName, path string, usePublicIP, openInBrowser, secure bool,
 ) ([]string, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
@@ -1015,6 +1009,7 @@ func AdminURL(
 		usePublicIP:   usePublicIP,
 		openInBrowser: openInBrowser,
 		secure:        secure,
+		tenantName:    tenantName,
 	}
 	return urlGenerator(c, l, c.TargetNodes(), uConfig)
 }
@@ -1062,7 +1057,10 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 	err = c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
-		port := c.NodeUIPort(node)
+		port, err := c.NodeUIPort(node)
+		if err != nil {
+			return nil, err
+		}
 		scheme := "http"
 		if c.Secure {
 			scheme = "https"
@@ -1317,7 +1315,7 @@ func Create(
 	if isLocal {
 		// To ensure that multiple processes don't create local clusters at
 		// the same time (causing port collisions), acquire the lock file.
-		unlockFn, err := acquireFilesystemLock()
+		unlockFn, err := lock.AcquireFilesystemLock(config.DefaultLockPath)
 		if err != nil {
 			return err
 		}
@@ -1754,9 +1752,12 @@ func sendCaptureCommand(
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
 	_, _, err := c.ParallelE(ctx, l, nodes,
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+			port, err := c.NodeUIPort(node)
+			if err != nil {
+				return nil, err
+			}
 			res := &install.RunResultDetails{Node: node}
 			host := c.Host(node)
-			port := c.NodeUIPort(node)
 			scheme := "http"
 			if c.Secure {
 				scheme = "https"
