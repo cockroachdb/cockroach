@@ -737,7 +737,7 @@ func randEncDatumPrimaryFamily(
 
 // readSortedRangeFeedValues reads n values, and sorts them based on key order.
 func readSortedRangeFeedValues(
-	t *testing.T, n int, row func(t *testing.T) *kvpb.RangeFeedValue,
+	t *testing.T, n int, row func(t testing.TB) *kvpb.RangeFeedValue,
 ) (res []kvpb.RangeFeedValue) {
 	t.Helper()
 	for i := 0; i < n; i++ {
