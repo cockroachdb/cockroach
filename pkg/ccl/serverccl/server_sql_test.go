@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -412,4 +414,45 @@ func TestTenantInstanceIDReclaimLoop(t *testing.T) {
 func TestSystemConfigWatcherCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	systemconfigwatchertest.TestSystemConfigWatcher(t, false /* skipSecondary */)
+}
+
+func TestStartTenantWithStaleInstance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	rpcAddr := func() string {
+		tenantStopper := stop.NewStopper()
+		defer tenantStopper.Stop(ctx)
+		server, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
+			Stopper:  tenantStopper,
+			TenantID: serverutils.TestTenantID(),
+		},
+		)
+		defer db.Close()
+		return server.RPCAddr()
+	}()
+
+	listener, err := net.Listen("tcp", rpcAddr)
+	require.NoError(t, err)
+	defer func() {
+		_ = listener.Close()
+	}()
+
+	_, db := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+	})
+	defer func() {
+		_ = db.Close()
+	}()
+
+	// Query a table to make sure the tenant is healthy, doesn't really matter
+	// which table.
+	_, err = db.Exec("SELECT count(*) FROM system.sqlliveness")
+	require.NoError(t, err)
 }
