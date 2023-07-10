@@ -14,6 +14,7 @@
 #   BENCH_TIMEOUT: timeout for each microbenchmark on a function level (default: 20m)
 #   BENCH_EXCLUDE: comma-separated list of benchmarks to exclude (default: none)
 #   TEST_ARGS: additional arguments to pass to the test binary (default: none)
+#   ROACHPROD_CREATE_ARGS: additional arguments to pass to `roachprod create` (default: none)
 
 set -exuo pipefail
 
@@ -61,7 +62,7 @@ fi
 ./dev test-binaries "$BENCH_PACKAGE" --docker-args="$docker_args"
 
 # Create roachprod cluster
-./bin/roachprod create "$ROACHPROD_CLUSTER" -n "$GCE_NODE_COUNT" \
+./bin/roachprod create "$ROACHPROD_CLUSTER" -n "$GCE_NODE_COUNT" $ROACHPROD_CREATE_ARGS \
   --lifetime "$CLUSTER_LIFETIME" \
   --clouds gce \
   --gce-machine-type "$GCE_MACHINE_TYPE" \
