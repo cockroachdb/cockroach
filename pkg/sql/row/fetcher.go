@@ -671,10 +671,13 @@ func (rf *Fetcher) ConsumeKVProvider(ctx context.Context, f *KVProvider) error {
 	if !rf.args.WillUseKVProvider {
 		return errors.AssertionFailedf("ConsumeKVProvider is called instead of StartScan")
 	}
-	if rf.kvFetcher != nil {
+	if rf.kvFetcher == nil {
+		rf.kvFetcher = newKVFetcher(f)
+	} else {
 		rf.kvFetcher.Close(ctx)
+		rf.kvFetcher.reset(f)
 	}
-	rf.kvFetcher = newKVFetcher(f)
+
 	return rf.startScan(ctx)
 }
 
