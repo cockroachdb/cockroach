@@ -99,12 +99,10 @@ export HOME=$(GENDIR)
 export GOPATH=/nonexist-gopath
 export GOROOT=
 $(location :sql-gen) $(location sql.y) sql $(location replace_help_rules.awk) \
-    $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
-    $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
+    $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc)
 """,
     exec_tools = [
         ":sql-gen",
-        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@go_sdk//:bin/go",
         "@org_golang_x_tools//cmd/goyacc",
     ],
