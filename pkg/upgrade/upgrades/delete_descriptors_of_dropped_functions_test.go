@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -34,20 +35,20 @@ import (
 
 const countToDeleteFunctionQuery = `
 WITH to_json AS (
-    SELECT 
+    SELECT
       id,
       crdb_internal.pb_to_json(
         'cockroach.sql.sqlbase.Descriptor',
         descriptor,
         false
       ) AS d
-    FROM 
+    FROM
       system.descriptor
 ),
 to_delete AS (
     SELECT id
     FROM to_json
-    WHERE 
+    WHERE
       d->'function' IS NOT NULL
       AND d->'function'->>'declarativeSchemaChangerState' IS NULL
       AND d->'function'->>'state' = 'DROP'
@@ -60,20 +61,20 @@ FROM to_delete
 // declarative schema changer.
 const countTotalDroppedFunctionQuery = `
 WITH to_json AS (
-    SELECT 
+    SELECT
       id,
       crdb_internal.pb_to_json(
         'cockroach.sql.sqlbase.Descriptor',
         descriptor,
         false
       ) AS d
-    FROM 
+    FROM
       system.descriptor
 ),
 to_delete AS (
     SELECT id
     FROM to_json
-    WHERE 
+    WHERE
       d->'function' IS NOT NULL
       AND d->'function'->>'state' = 'DROP'
 )
@@ -85,20 +86,20 @@ FROM to_delete
 // declarative schema changer.
 const countTotalFunctionQuery = `
 WITH to_json AS (
-    SELECT 
+    SELECT
       id,
       crdb_internal.pb_to_json(
         'cockroach.sql.sqlbase.Descriptor',
         descriptor,
         false
       ) AS d
-    FROM 
+    FROM
       system.descriptor
 ),
 to_delete AS (
     SELECT id
     FROM to_json
-    WHERE 
+    WHERE
       d->'function' IS NOT NULL
 )
 SELECT count(id)
@@ -133,6 +134,9 @@ func TestDeleteDescriptorsOfDroppedFunctions(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Settings: settings,
 			Knobs: base.TestingKnobs{
+				KVClient: &kvcoord.ClientTestingKnobs{
+					EnableRandomTransactionRetryErrors: true,
+				},
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride:          v0,

@@ -147,6 +147,7 @@ go_test(
         "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
