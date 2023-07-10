@@ -99,3 +99,12 @@ func allNodes(numNodesInCluster int) Nodes {
 	}
 	return r
 }
+
+func (n Nodes) Contains(node Node) bool {
+	for _, v := range n {
+		if v == node {
+			return true
+		}
+	}
+	return false
+}

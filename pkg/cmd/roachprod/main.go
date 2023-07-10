@@ -945,7 +945,7 @@ var adminurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		urls, err := roachprod.AdminURL(config.Logger, args[0], adminurlPath, adminurlIPs, adminurlOpen, secure)
+		urls, err := roachprod.AdminURL(config.Logger, args[0], tenantName, adminurlPath, adminurlIPs, adminurlOpen, secure)
 		if err != nil {
 			return err
 		}

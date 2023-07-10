@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -58,8 +57,9 @@ func VMDir(clusterName string, nodeIdx int) string {
 // Init initializes the Local provider and registers it into vm.Providers.
 func Init(storage VMStorage) error {
 	vm.Providers[ProviderName] = &Provider{
-		clusters: make(cloud.Clusters),
-		storage:  storage,
+		clusters:    make(cloud.Clusters),
+		storage:     storage,
+		DNSProvider: NewDNSProvider(config.DNSDir, "local-zone"),
 	}
 	return nil
 }
@@ -93,7 +93,8 @@ func DeleteCluster(l *logger.Logger, name string) error {
 	}
 
 	delete(p.clusters, name)
-	return nil
+
+	return p.DeleteRecordsBySubdomain(c.Name)
 }
 
 // Clusters returns a list of all known local clusters.
@@ -116,8 +117,8 @@ type VMStorage interface {
 // A Provider is used to create stub VM objects.
 type Provider struct {
 	clusters cloud.Clusters
-
-	storage VMStorage
+	storage  VMStorage
+	vm.DNSProvider
 }
 
 func (p *Provider) CreateVolumeSnapshot(
@@ -189,30 +190,6 @@ func (p *Provider) Create(
 		return errors.Errorf("'%s' is not a valid local cluster name", c.Name)
 	}
 
-	// We will need to assign ports to the nodes, and they must not conflict with
-	// any other local clusters.
-	var portsTaken intsets.Fast
-	for _, c := range p.clusters {
-		for i := range c.VMs {
-			portsTaken.Add(c.VMs[i].SQLPort)
-			portsTaken.Add(c.VMs[i].AdminUIPort)
-		}
-	}
-	sqlPort := config.DefaultSQLPort
-	adminUIPort := config.DefaultAdminUIPort
-
-	// getPort returns the first available port (starting at *port), and modifies
-	// (*port) to be the following value.
-	getPort := func(port *int) int {
-		for portsTaken.Contains(*port) {
-			(*port)++
-		}
-		result := *port
-		portsTaken.Add(result)
-		(*port)++
-		return result
-	}
-
 	for i := range names {
 		c.VMs[i] = vm.VM{
 			Name:             "localhost",
@@ -220,14 +197,14 @@ func (p *Provider) Create(
 			Lifetime:         time.Hour,
 			PrivateIP:        "127.0.0.1",
 			Provider:         ProviderName,
+			DNSProvider:      ProviderName,
 			ProviderID:       ProviderName,
 			PublicIP:         "127.0.0.1",
+			PublicDNS:        "localhost",
 			RemoteUser:       config.OSUser.Username,
 			VPC:              ProviderName,
 			MachineType:      ProviderName,
 			Zone:             ProviderName,
-			SQLPort:          getPort(&sqlPort),
-			AdminUIPort:      getPort(&adminUIPort),
 			LocalClusterName: c.Name,
 		}
 		path := VMDir(c.Name, i+1)

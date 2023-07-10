@@ -15,6 +15,7 @@ go_library(
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/install",
+        "//pkg/roachprod/lock",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
         "//pkg/roachprod/vm",
@@ -30,6 +31,5 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@org_golang_x_sys//unix",
     ],
 )
