@@ -12,8 +12,10 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"net"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,10 +38,35 @@ func TestBackendDialTLSInsecure(t *testing.T) {
 	sql, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer sql.Stopper().Stop(ctx)
 
-	conn, err := BackendDial(startupMsg, sql.ServingSQLAddr(), &tls.Config{})
+	conn, err := BackendDial(context.Background(), startupMsg, sql.ServingSQLAddr(), &tls.Config{})
 	require.Error(t, err)
 	require.Regexp(t, "target server refused TLS connection", err)
 	require.Nil(t, conn)
+}
+
+func TestBackendDialBlackhole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	conChannel := make(chan net.Conn, 1)
+	go func() {
+		// accept then ignore the connection
+		conn, err := listener.Accept()
+		require.NoError(t, err)
+		conChannel <- conn
+	}()
+
+	startupMsg := &pgproto3.StartupMessage{ProtocolVersion: pgproto3.ProtocolVersionNumber}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	_, err = BackendDial(ctx, startupMsg, listener.Addr().String(), &tls.Config{})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ctx.Err())
+	(<-conChannel).Close()
 }
 
 func TestBackendDialTLS(t *testing.T) {
@@ -118,7 +145,7 @@ func TestBackendDialTLS(t *testing.T) {
 			tenantConfig, err := tlsConfigForTenant(tenantID, tc.addr, tlsConfig)
 			require.NoError(t, err)
 
-			conn, err := BackendDial(startupMsg, tc.addr, tenantConfig)
+			conn, err := BackendDial(context.Background(), startupMsg, tc.addr, tenantConfig)
 
 			if tc.errCode != codeNone {
 				require.Equal(t, tc.errCode, getErrorCode(err))
