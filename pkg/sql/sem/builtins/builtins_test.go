@@ -124,7 +124,7 @@ CREATE TABLE t (
   j INT
 )`)
 
-		numberOfRows := 10000
+		numberOfRows := 100000
 
 		// Insert rows.
 		tdb.Exec(t, fmt.Sprintf(`
