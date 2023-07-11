@@ -194,6 +194,18 @@ func (n *createViewNode) startExec(params runParams) error {
 	var retErr error
 	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
 		retErr = func() error {
+			// Check for references to cross-database types. We use a parsable
+			// formatting of view query instead of a serializable one because
+			// user defined type IDs, which are used in serializable formats,
+			// will cause the cross-database reference errors.
+			//
+			// TODO(mgartner): This check should happen when optbuilder resolves
+			// types while building the view statement.
+			parsableViewQuery := tree.AsStringWithFlags(n.cv.AsSource, tree.FmtParsable)
+			if err := checkCrossReferences(params.ctx, &params.p.semaCtx, parsableViewQuery); err != nil {
+				return err
+			}
+
 			// If replacingDesc != nil, we found an existing view while resolving
 			// the name for our view. So instead of creating a new view, replace
 			// the existing one.
@@ -211,19 +223,6 @@ func (n *createViewNode) startExec(params runParams) error {
 					return err
 				}
 			} else {
-				// Check for references to cross-database types. We use a
-				// parsable formatting of view query instead of a serializable
-				// one because user defined type IDs, which are used in
-				// serializable formats, will cause the cross-database refernce
-				// errors.
-				//
-				// TODO(mgartner): This check should happen when optbuilder
-				// resolves types while building the view statement.
-				parsableViewQuery := tree.AsStringWithFlags(n.cv.AsSource, tree.FmtParsable)
-				if err := checkCrossReferences(params.ctx, &params.p.semaCtx, parsableViewQuery); err != nil {
-					return err
-				}
-
 				// If we aren't replacing anything, make a new table descriptor.
 				id, err := params.EvalContext().DescIDGenerator.
 					GenerateUniqueDescID(params.ctx)
