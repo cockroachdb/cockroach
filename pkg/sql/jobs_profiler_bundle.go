@@ -31,6 +31,7 @@ import (
 )
 
 const bundleChunkSize = 1 << 20 // 1 MiB
+const finalChunkSuffix = "_final"
 
 // RequestExecutionDetails implements the JobProfiler interface.
 func (p *planner) RequestExecutionDetails(ctx context.Context, jobID jobspb.JobID) error {
@@ -86,7 +87,7 @@ func (e *ExecutionDetailsBuilder) WriteExecutionDetail(
 				chunk = chunk[:chunkSize]
 			} else {
 				// This is the last chunk we will write, assign it a sentinel file name.
-				chunkFileName = chunkFileName + "_final"
+				chunkFileName = chunkFileName + finalChunkSuffix
 			}
 			chunkData = chunkData[len(chunk):]
 			var err error
@@ -154,6 +155,35 @@ func (e *ExecutionDetailsBuilder) ReadExecutionDetail(
 	return buf.Bytes(), nil
 }
 
+// ListExecutionDetailFiles lists all the files that have been generated as part
+// of a job's execution details.
+func (e *ExecutionDetailsBuilder) ListExecutionDetailFiles(ctx context.Context) ([]string, error) {
+	var res []string
+	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		jobInfo := jobs.InfoStorageForJob(txn, e.jobID)
+
+		// Iterate over all the files that have been stored as part of the job's
+		// execution details.
+		files := make([]string, 0)
+		if err := jobInfo.Iterate(ctx, profilerconstants.ExecutionDetailsChunkKeyPrefix,
+			func(infoKey string, value []byte) error {
+				// Look for the final chunk of each file to find the unique file name.
+				if idx := strings.Index(infoKey, finalChunkSuffix); idx != -1 {
+					files = append(files, strings.TrimPrefix(infoKey[:idx], profilerconstants.ExecutionDetailsChunkKeyPrefix))
+				}
+				return nil
+			}); err != nil {
+			return errors.Wrapf(err, "failed to iterate over execution detail files for job %d", jobID)
+		}
+		res = files
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 // MakeJobProfilerExecutionDetailsBuilder returns an instance of an ExecutionDetailsBuilder.
 func MakeJobProfilerExecutionDetailsBuilder(
 	db isql.DB, jobID jobspb.JobID,
@@ -175,7 +205,7 @@ func (e *ExecutionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 	}
 	if row[0] != tree.DNull {
 		dspDiagramURL := string(tree.MustBeDString(row[0]))
-		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405"))
+		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405.00"))
 		if err := e.WriteExecutionDetail(ctx, filename,
 			[]byte(fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, dspDiagramURL))); err != nil {
 			log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %+v", e.jobID, err.Error())

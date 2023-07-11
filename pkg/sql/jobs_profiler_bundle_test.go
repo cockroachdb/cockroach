@@ -66,7 +66,7 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 				infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
 				p.PhysicalInfrastructure = infra
 				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
-				checkForPlanDiagram(ctx, t, s.InternalDB().(isql.DB), j.ID())
+				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), 1)
 				return nil
 			},
 		}
@@ -83,6 +83,93 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		checkExecutionDetails(t, s, jobspb.JobID(importJobID), "distsql")
 	})
+}
+
+func TestListProfilerExecutionDetails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Timeout the test in a few minutes if it hasn't succeeded.
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Minute*2)
+	defer cancel()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	defer jobs.ResetConstructors()()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	expectedDiagrams := 1
+	jobs.RegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return fakeExecResumer{
+			OnResume: func(ctx context.Context) error {
+				p := sql.PhysicalPlan{}
+				infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
+				p.PhysicalInfrastructure = infra
+				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
+				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), expectedDiagrams)
+				if err := execCfg.JobRegistry.CheckPausepoint("fakeresumer.pause"); err != nil {
+					return err
+				}
+				return nil
+			},
+		}
+	}, jobs.UsesTenantCostControl)
+
+	runner.Exec(t, `CREATE TABLE t (id INT)`)
+	runner.Exec(t, `INSERT INTO t SELECT generate_series(1, 100)`)
+
+	t.Run("list DistSQL diagram", func(t *testing.T) {
+		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'fakeresumer.pause'`)
+		var importJobID int
+		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
+		jobutils.WaitForJobToPause(t, runner, jobspb.JobID(importJobID))
+
+		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
+		files := listExecutionDetails(t, s, jobspb.JobID(importJobID))
+		require.Len(t, files, 1)
+		require.Regexp(t, "distsql\\..*\\.html", files[0])
+
+		// Resume the job, so it can write another DistSQL diagram.
+		runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+		expectedDiagrams = 2
+		runner.Exec(t, `RESUME JOB $1`, importJobID)
+		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
+		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
+		files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
+		require.Len(t, files, 2)
+		require.Regexp(t, "distsql\\..*\\.html", files[0])
+		require.Regexp(t, "distsql\\..*\\.html", files[1])
+	})
+}
+
+func listExecutionDetails(
+	t *testing.T, s serverutils.TestServerInterface, jobID jobspb.JobID,
+) []string {
+	t.Helper()
+
+	client, err := s.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	url := s.AdminURL().String() + fmt.Sprintf("/_status/list_job_profiler_execution_details/%d", jobID)
+	req, err := http.NewRequest("GET", url, nil)
+	require.NoError(t, err)
+
+	req.Header.Set("Content-Type", httputil.ProtoContentType)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	edResp := serverpb.ListJobProfilerExecutionDetailsResponse{}
+	require.NoError(t, protoutil.Unmarshal(body, &edResp))
+	return edResp.Files
 }
 
 func checkExecutionDetails(
