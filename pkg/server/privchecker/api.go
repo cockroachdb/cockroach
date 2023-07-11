@@ -77,6 +77,12 @@ type SQLPrivilegeChecker interface {
 
 	// HasGlobalPrivilege is a convenience wrapper
 	HasGlobalPrivilege(ctx context.Context, user username.SQLUsername, privilege privilege.Kind) (bool, error)
+
+	// HasAdminPrivilege is a convenience wrapper
+	HasViewActivityRedacted(ctx context.Context, user username.SQLUsername) (bool, error)
+
+	// HasAdminPrivilege is a convenience wrapper
+	HasViewActivity(ctx context.Context, user username.SQLUsername) (bool, error)
 }
 
 // NewChecker constructs a new CheckerForRPCHandlers.
