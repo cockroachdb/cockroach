@@ -859,6 +859,8 @@ func createAndStartServerAsync(
 			go func() {
 				select {
 				case req := <-s.ShutdownRequested():
+					shutdownCtx := s.AnnotateCtx(context.Background())
+					log.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
 					shutdownReqC <- req
 				case <-stopper.ShouldQuiesce():
 				}
