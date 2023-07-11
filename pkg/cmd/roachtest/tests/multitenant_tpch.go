@@ -30,9 +30,10 @@ import (
 func runMultiTenantTPCH(
 	ctx context.Context, t test.Test, c cluster.Cluster, enableDirectScans bool,
 ) {
+	secure := true
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
-	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(install.SecureOption(secure)), c.All())
 
 	setupNames := []string{"single-tenant", "multi-tenant"}
 	const numRunsPerQuery = 3
@@ -50,7 +51,7 @@ func runMultiTenantTPCH(
 		}
 		t.Status("restoring TPCH dataset for Scale Factor 1 in ", setupNames[setupIdx])
 		if err := loadTPCHDataset(
-			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
+			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false /* disableMergeQueue */, secure,
 		); err != nil {
 			t.Fatal(err)
 		}

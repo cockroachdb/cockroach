@@ -105,7 +105,7 @@ OR
 	// permanently (the wiping prevents the test runner from failing the
 	// test after it has passed - we cannot restart those nodes).
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(6, 8))
-	c.Wipe(ctx, c.Range(6, 8))
+	c.Wipe(ctx, false /* preserveCerts */, c.Range(6, 8))
 
 	// Should not be able to read from it even (generously) after a lease timeout.
 	_, err = db.QueryContext(ctx, `SET statement_timeout = '15s'; SELECT * FROM lostrange;`)

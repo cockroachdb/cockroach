@@ -776,8 +776,11 @@ func (c *SyncedCluster) useStartSingleNode() bool {
 // distributeCerts distributes certs if it's a secure cluster and we're
 // starting n1.
 func (c *SyncedCluster) distributeCerts(ctx context.Context, l *logger.Logger) error {
+	if !c.Secure {
+		return nil
+	}
 	for _, node := range c.TargetNodes() {
-		if node == 1 && c.Secure {
+		if node == 1 {
 			return c.DistributeCerts(ctx, l)
 		}
 	}

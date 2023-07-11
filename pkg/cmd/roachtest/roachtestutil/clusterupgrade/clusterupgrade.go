@@ -117,7 +117,10 @@ func UploadVersion(
 func InstallFixtures(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodes option.NodeListOption, v string,
 ) error {
-	c.Run(ctx, nodes, "mkdir -p {store-dir}")
+	if err := c.RunE(ctx, nodes, "mkdir -p {store-dir}"); err != nil {
+		return fmt.Errorf("creating store-dir: %w", err)
+	}
+
 	vv := version.MustParse("v" + v)
 	// The fixtures use cluster version (major.minor) but the input might be
 	// a patch release.
@@ -133,21 +136,24 @@ func InstallFixtures(
 		}
 	}
 	// Extract fixture. Fail if there's already an LSM in the store dir.
-	c.Run(ctx, nodes, "ls {store-dir}/marker.* 1> /dev/null 2>&1 && exit 1 || (cd {store-dir} && tar -xf fixture.tgz)")
+	if err := c.RunE(ctx, nodes, "ls {store-dir}/marker.* 1> /dev/null 2>&1 && exit 1 || (cd {store-dir} && tar -xf fixture.tgz)"); err != nil {
+		return fmt.Errorf("extracting fixtures: %w", err)
+	}
+
 	return nil
 }
 
-// StartWithBinary starts a cockroach binary, assumed to already be
-// present in the nodes in the path given.
-func StartWithBinary(
+// StartWithSettings starts cockroach and constructs settings according
+// to the setting options passed.
+func StartWithSettings(
 	ctx context.Context,
 	l *logger.Logger,
 	c cluster.Cluster,
 	nodes option.NodeListOption,
-	binaryPath string,
 	startOpts option.StartOpts,
+	opts ...install.ClusterSettingOption,
 ) error {
-	settings := install.MakeClusterSettings(install.BinaryOption(binaryPath))
+	settings := install.MakeClusterSettings(opts...)
 	return c.StartE(ctx, l, startOpts, settings, nodes)
 }
 
@@ -171,6 +177,7 @@ func RestartNodesWithNewBinary(
 	nodes option.NodeListOption,
 	startOpts option.StartOpts,
 	newVersion string,
+	settings ...install.ClusterSettingOption,
 ) error {
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
@@ -200,7 +207,9 @@ func RestartNodesWithNewBinary(
 		if err != nil {
 			return err
 		}
-		if err := StartWithBinary(ctx, l, c, c.Node(node), binary, startOpts); err != nil {
+		if err := StartWithSettings(
+			ctx, l, c, c.Node(node), startOpts, append(settings, install.BinaryOption(binary))...,
+		); err != nil {
 			return err
 		}
 

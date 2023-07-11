@@ -127,7 +127,7 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err := c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), crdbNodes); err != nil {
 		// Node detected corruption on start and crashed. This is good. No need
 		// to run workload; the test is complete.
-		_ = c.WipeE(ctx, t.L(), corruptNodes)
+		_ = c.WipeE(ctx, t.L(), false /* preserveCerts */, corruptNodes)
 		return
 	}
 
@@ -174,7 +174,7 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	// Exempt corrupted nodes from roachtest harness' post-test liveness checks.
-	_ = c.WipeE(ctx, t.L(), corruptNodes)
+	_ = c.WipeE(ctx, t.L(), false /* preserveCerts */, corruptNodes)
 }
 
 func registerSSTableCorruption(r registry.Registry) {

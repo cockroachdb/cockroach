@@ -39,7 +39,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return timeutil.Now().After(deadline)
 	}
 	for j := 1; !done(); j++ {
-		c.Wipe(ctx, node)
+		c.Wipe(ctx, false /* preserveCerts */, node)
 
 		// The first 2 iterations we start the cockroach node and kill it right
 		// away. The 3rd iteration we let cockroach run so that we can check after
@@ -97,5 +97,5 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// that consistency checks can be run, but in this case there's not much
 	// there in the first place anyway.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), node)
-	c.Wipe(ctx, node)
+	c.Wipe(ctx, false /* preserveCerts */, node)
 }

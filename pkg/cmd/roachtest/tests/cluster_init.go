@@ -52,7 +52,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// default to just the first node) and we want to make sure that we're not
 	// relying on it.
 	for _, initNode := range []int{2, 1} {
-		c.Wipe(ctx)
+		c.Wipe(ctx, false /* preserveCerts */)
 		t.L().Printf("starting test with init node %d", initNode)
 		startOpts := option.DefaultStartOpts()
 
