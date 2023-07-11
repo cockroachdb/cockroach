@@ -39,6 +39,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
+        "//pkg/keys",
         "//pkg/kv/kvserver/asim",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/event",

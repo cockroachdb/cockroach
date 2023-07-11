@@ -12,10 +12,12 @@ package tests
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // Cluster default setting.
@@ -42,6 +44,8 @@ func loadClusterInfoGen(configName string) gen.LoadedCluster {
 		clusterInfo = state.MultiRegionConfig
 	case "complex":
 		clusterInfo = state.ComplexConfig
+	case "MultiRegionSecondaryReproConfig":
+		clusterInfo = state.MultiRegionSecondaryReproConfig
 	default:
 		panic(fmt.Sprintf("unknown cluster config %s", configName))
 	}
@@ -126,4 +130,174 @@ func defaultPlotSettings() plotSettings {
 		height: defaultHeight,
 		width:  defaultWidth,
 	}
+}
+
+func allSpanConfig() roachpb.Span {
+	return roachpb.Span{
+		Key:    state.MinKey.ToRKey().AsRawKey(),
+		EndKey: state.MaxKey.ToRKey().AsRawKey(),
+	}
+}
+func testingSpanConfigInitial() zonepb.ZoneConfig {
+	config := zonepb.DefaultZoneConfig()
+	numReplicas, numVoters := int32(6), int32(5)
+	config.NumReplicas = &numReplicas
+	config.NumVoters = &numVoters
+	config.Constraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "eu-west-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-central-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 2,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-west-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 2,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-east-1",
+				},
+			},
+		},
+	}
+	config.VoterConstraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "eu-west-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-central-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-west-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 2,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-east-1",
+				},
+			},
+		},
+	}
+	return config
+}
+
+func testingSpanConfigWithDelay() zonepb.ZoneConfig {
+	config := zonepb.DefaultZoneConfig()
+	numReplicas, numVoters := int32(6), int32(5)
+	config.NumReplicas = &numReplicas
+	config.NumVoters = &numVoters
+	config.Constraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "eu-west-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-central-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-west-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 1,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-east-1",
+				},
+			},
+		},
+	}
+	config.VoterConstraints = []zonepb.ConstraintsConjunction{
+		{
+			NumReplicas: 2,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-west-1",
+				},
+			},
+		},
+		{
+			NumReplicas: 2,
+			Constraints: []zonepb.Constraint{
+				{
+					Type:  zonepb.Constraint_REQUIRED,
+					Key:   "region",
+					Value: "us-east-1",
+				},
+			},
+		},
+	}
+	return config
 }

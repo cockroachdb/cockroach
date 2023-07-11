@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"strings"
 	"testing"
@@ -84,12 +85,28 @@ func runRandomizedTest(
 	duration time.Duration,
 ) (history asim.History, failed bool, reason string) {
 	ctx := context.Background()
-	clusterGen := randomClusterInfoGen(randSource)
+	clusterGen := loadClusterInfoGen("MultiRegionSecondaryReproConfig")
+	spanCfgInitial := testingSpanConfigInitial()
+	spanCfgWithDelay := testingSpanConfigWithDelay()
 	rg := NewRandomizedGenerators(randSource)
 	rangeGen := rg.randomBasicRangesGen(randSource, defaultWeightedRand(clusterGen.Info.GetNumOfStores()))
 	loadGen := defaultLoadGen()
 	settingsGen := defaultSettingsGen()
 	eventGen := defaultEventGen()
+	var delay time.Duration
+	eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
+		EventFn: func(ctx context.Context, tick time.Time, s state.State) {
+			s.SetSpanConfig(allSpanConfig(), spanCfgInitial.AsSpanConfig())
+		},
+		At: settingsGen.Settings.StartTime.Add(delay),
+	})
+	delay = 10 * time.Minute
+	eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
+		EventFn: func(ctx context.Context, tick time.Time, s state.State) {
+			s.SetSpanConfig(allSpanConfig(), spanCfgWithDelay.AsSpanConfig())
+		},
+		At: settingsGen.Settings.StartTime.Add(delay),
+	})
 	assertions := defaultAssertions()
 	simulator := gen.GenerateSimulation(duration, clusterGen, rangeGen, loadGen, settingsGen, eventGen, randSource.Int63())
 	simulator.RunSim(ctx)

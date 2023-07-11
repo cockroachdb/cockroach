@@ -116,6 +116,72 @@ var ComplexConfig = ClusterInfo{
 	},
 }
 
+var MultiRegionSecondaryReproConfig = ClusterInfo{
+	DiskCapacityGB: 2048,
+	Regions: []Region{
+		{
+			Name: "US_East_1",
+			Zones: []Zone{
+				{Name: "US_East_1", NodeCount: 1},
+			},
+		},
+		{
+			Name: "US_East_1",
+			Zones: []Zone{
+				{Name: "US_East_1", NodeCount: 1},
+			},
+		},
+		{
+			Name: "US_West_1",
+			Zones: []Zone{
+				{Name: "US_West_1", NodeCount: 1},
+			},
+		},
+		{
+			Name: "US_West_1",
+			Zones: []Zone{
+				{Name: "US_West_1", NodeCount: 1},
+			},
+		},
+		{
+			Name: "US_Central_1",
+			Zones: []Zone{
+				{Name: "US_East_1", NodeCount: 1},
+			},
+		},
+		{
+			Name: "US_Central_1",
+			Zones: []Zone{
+				{Name: "US_East_1", NodeCount: 1},
+			},
+		},
+		{
+			Name: "US_Central_1",
+			Zones: []Zone{
+				{Name: "US_East_1", NodeCount: 1},
+			},
+		},
+		{
+			Name: "EU_West_1",
+			Zones: []Zone{
+				{Name: "EU_West_1", NodeCount: 1},
+			},
+		},
+		{
+			Name: "EU_West_1",
+			Zones: []Zone{
+				{Name: "EU_West_1", NodeCount: 1},
+			},
+		},
+		{
+			Name: "EU_West_1",
+			Zones: []Zone{
+				{Name: "EU_West_1", NodeCount: 1},
+			},
+		},
+	},
+}
+
 // SingleRangeConfig is a single range config where there are 3 replicas on
 // stores 1, 2 and 3. Store 1 is the leaseholder.
 var SingleRangeConfig = []RangeInfo{
