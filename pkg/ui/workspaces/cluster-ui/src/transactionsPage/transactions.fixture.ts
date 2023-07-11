@@ -49,6 +49,7 @@ export const timeScale: TimeScale = {
   sampleSize: moment.duration(5, "minutes"),
   fixedWindowEnd: moment.utc("2021.08.12"),
   key: "Custom",
+  requestTime: false,
 };
 export const timestamp = new protos.google.protobuf.Timestamp({
   seconds: new Long(Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3),

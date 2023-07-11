@@ -231,6 +231,7 @@ export class InternalLineGraph extends React.Component<LineGraphProps, {}> {
       key: "Custom",
       windowSize: moment.duration(moment.unix(end).diff(moment.unix(start))),
       fixedWindowEnd: moment.unix(end),
+      requestTime: false,
     };
     if (this.props.adjustTimeScaleOnChange) {
       newTimeScale = this.props.adjustTimeScaleOnChange(

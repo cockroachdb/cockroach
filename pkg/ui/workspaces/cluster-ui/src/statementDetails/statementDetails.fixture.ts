@@ -841,6 +841,7 @@ export const getStatementDetailsPropsFixture = (
     sampleSize: moment.duration(5, "minutes"),
     fixedWindowEnd: moment.utc("2021.12.12"),
     key: "Custom",
+    requestTime: false,
   },
   statementFingerprintID: "4705782015019656142",
   statementDetails: withData ? statementDetailsData : statementDetailsNoData,

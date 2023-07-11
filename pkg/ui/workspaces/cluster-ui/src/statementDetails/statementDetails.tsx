@@ -248,7 +248,7 @@ export class StatementDetails extends React.Component<
 
   changeTimeScale = (ts: TimeScale): void => {
     if (ts.key !== "Custom") {
-      ts.fixedWindowEnd = moment();
+      ts.requestTime = moment();
     }
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
@@ -701,7 +701,7 @@ export class StatementDetails extends React.Component<
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
-              setTimeScale={this.props.onTimeScaleChange}
+              setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>

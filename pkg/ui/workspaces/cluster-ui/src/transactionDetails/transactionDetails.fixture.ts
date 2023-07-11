@@ -540,4 +540,5 @@ export const timeScale: TimeScale = {
   sampleSize: moment.duration(1, "day"),
   fixedWindowEnd: moment.utc("2021.12.31"),
   key: "Custom",
+  requestTime: false,
 };

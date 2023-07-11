@@ -79,6 +79,7 @@ export class TimeScaleState {
         windowValid: val.windowValid && moment.duration(val.windowValid),
         sampleSize: val.sampleSize && moment.duration(val.sampleSize),
         fixedWindowEnd: val.fixedWindowEnd && moment(val.fixedWindowEnd),
+        requestTime: val.requestTime && moment(val.requestTime),
       };
     } catch (e) {
       console.warn(
@@ -90,6 +91,7 @@ export class TimeScaleState {
       ...defaultTimeScaleOptions["Past 10 Minutes"],
       key: "Past 10 Minutes",
       fixedWindowEnd: false,
+      requestTime: moment(),
     };
     this.metricsTime = {
       // This is explicitly initialized as undefined to match the prior implementation while satisfying Typescript.

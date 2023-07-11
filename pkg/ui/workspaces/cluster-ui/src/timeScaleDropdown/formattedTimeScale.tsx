@@ -30,8 +30,8 @@ export const FormattedTimescale = (props: { ts: TimeScale }) => {
     omitDayFormat || startEndOnSameDay ? "" : endTz.format(dateFormat);
   const timeStart = startTz.format(timeFormat);
   const timeEnd =
-    props.ts.key !== "Custom" && props.ts.fixedWindowEnd
-      ? props.ts.fixedWindowEnd.tz(timezone).format(timeFormat)
+    props.ts.key !== "Custom" && props.ts.requestTime
+      ? props.ts.requestTime.tz(timezone).format(timeFormat)
       : endTz.format(timeFormat);
 
   return (

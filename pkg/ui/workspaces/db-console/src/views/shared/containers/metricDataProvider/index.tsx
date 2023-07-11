@@ -273,7 +273,7 @@ const timeInfoSelector = createSelector(
     // (also known as resolution) is too small for a start and end time
     // that is before the data's ttl.
     const adjusted = adjustTimeScale(
-      { ...syncedScale, fixedWindowEnd: false },
+      { ...syncedScale, fixedWindowEnd: false, requestTime: false },
       { start: startMoment, end: endMoment },
       sTTL,
       mTTL,

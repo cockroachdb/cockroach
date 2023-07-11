@@ -149,6 +149,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       ...options[rangeOption.label],
       key: rangeOption.label,
       fixedWindowEnd: false,
+      requestTime: moment(),
     };
     if (adjustTimeScaleOnChange) {
       const timeWindow: TimeWindow = {
@@ -251,6 +252,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
       windowSize: moment.duration(end.diff(start)),
       fixedWindowEnd: end,
       key: "Custom",
+      requestTime: false,
     };
     if (adjustTimeScaleOnChange) {
       timeScale = adjustTimeScaleOnChange(timeScale, { start, end });
@@ -293,6 +295,7 @@ export const getValidOption = (
       ...options[firstValidKey],
       key: firstValidKey,
       fixedWindowEnd: false,
+      requestTime: false,
     };
   }
   return currentScale;

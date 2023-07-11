@@ -67,6 +67,7 @@ const TimeScaleDropdownWithSearchParams = (
         ),
         windowSize: moment.duration(end.diff(start)),
         fixedWindowEnd: false,
+        requestTime: false,
       };
       // Check if the end is close to now, with "close" defined as being no more than `sampleSize` behind.
       if (now > end.subtract(timeScale.sampleSize)) {

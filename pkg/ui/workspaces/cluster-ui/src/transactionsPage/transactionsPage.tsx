@@ -386,7 +386,7 @@ export class TransactionsPage extends React.Component<
 
   changeTimeScale = (ts: TimeScale): void => {
     if (ts.key !== "Custom") {
-      ts.fixedWindowEnd = moment();
+      ts.requestTime = moment();
     }
     this.setState(prevState => ({ ...prevState, timeScale: ts }));
   };
@@ -408,7 +408,7 @@ export class TransactionsPage extends React.Component<
       this.props.onChangeReqSort(this.state.reqSortSetting);
     }
 
-    // Force an update on TimeScale to update the fixedWindowEnd
+    // Force an update on TimeScale to update the requestTime
     this.changeTimeScale(this.state.timeScale);
     if (this.props.timeScale !== this.state.timeScale) {
       this.props.onTimeScaleChange(this.state.timeScale);
