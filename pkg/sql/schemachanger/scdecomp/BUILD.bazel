@@ -42,13 +42,10 @@ go_test(
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
-        "//pkg/base",
         "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql",
-        "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/sctest",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
