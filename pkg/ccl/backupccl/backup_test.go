@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -7068,7 +7069,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 				{
 					`10`, `true`, `tenant-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
 				},
 			},
@@ -7095,6 +7096,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreConn10 = nil
 
 		// Mark tenant as DROP.
+		restoreDB.Exec(t, `ALTER TENANT [10] STOP SERVICE`)
 		restoreDB.Exec(t, `DROP TENANT [10]`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
@@ -7143,14 +7145,19 @@ func TestBackupRestoreTenant(t *testing.T) {
 				{
 					`10`, `true`, `tenant-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
 				},
 			},
 		)
 
+		tenantID := roachpb.MustMakeTenantID(10)
+		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+			t.Fatal(err)
+		}
+
 		_, restoreConn10 = serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: tenantID},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 = sqlutils.MakeSQLRunner(restoreConn10)
@@ -7158,6 +7165,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
 
+		restoreDB.Exec(t, `ALTER TENANT [10] STOP SERVICE`)
 		restoreDB.Exec(t, `DROP TENANT [10]`)
 		// Wait for tenant GC job to complete.
 		restoreDB.CheckQueryResultsRetry(
@@ -7189,7 +7197,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 				{
 					`10`, `true`, `tenant-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
 				},
 			},
@@ -7229,14 +7237,19 @@ func TestBackupRestoreTenant(t *testing.T) {
 				{
 					`10`, `true`, `tenant-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
 				},
 			},
 		)
 
+		tenantID := roachpb.MustMakeTenantID(10)
+		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+			t.Fatal(err)
+		}
+
 		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: tenantID},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -7286,26 +7299,31 @@ func TestBackupRestoreTenant(t *testing.T) {
 				{
 					`10`, `true`, `tenant-10`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "10"}`,
 				},
 				{
 					`11`, `true`, `tenant-11`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "11"}`,
 				},
 				{
 					`20`, `true`, `tenant-20`,
 					strconv.Itoa(int(mtinfopb.DataStateReady)),
-					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					strconv.Itoa(int(mtinfopb.ServiceModeExternal)),
 					`{"capabilities": {"canUseNodelocalStorage": true}, "deprecatedId": "20"}`,
 				},
 			},
 		)
 
+		tenantID := roachpb.MustMakeTenantID(10)
+		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+			t.Fatal(err)
+		}
+
 		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: tenantID},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -7317,8 +7335,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
 		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.write_payload_cost_per_mebibyte`, [][]string{{"456"}})
 
+		tenantID = roachpb.MustMakeTenantID(11)
+		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+			t.Fatal(err)
+		}
+
 		_, restoreConn11 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(11)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: tenantID},
 		)
 		defer restoreConn11.Close()
 		restoreTenant11 := sqlutils.MakeSQLRunner(restoreConn11)
@@ -7328,9 +7351,16 @@ func TestBackupRestoreTenant(t *testing.T) {
 		// Check the all-tenant override.
 		restoreTenant11.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
 
+		restoreDB.Exec(t, `ALTER TENANT [20] STOP SERVICE`)
 		restoreDB.Exec(t, `DROP TENANT [20] IMMEDIATE`)
 
 		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster_name = 'tenant-20'`)
+
+		tenantID = roachpb.MustMakeTenantID(20)
+		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+			t.Fatal(err)
+		}
+
 		_, restoreConn20 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantName: "tenant-20", DisableCreateTenant: true},
 		)
@@ -7343,6 +7373,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant20.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.read_payload_cost_per_mebibyte`, [][]string{{"123"}})
 
 		// Remove tenant 11, then confirm restoring 11 over 10 fails.
+		restoreDB.Exec(t, `ALTER TENANT [11] STOP SERVICE`)
 		restoreDB.Exec(t, `DROP TENANT [11] IMMEDIATE`)
 		restoreDB.ExpectErr(t, `exists`, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH virtual_cluster_name = 'tenant-10'`)
 
@@ -7362,8 +7393,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
 
+		tenantID := roachpb.MustMakeTenantID(10)
+		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+			t.Fatal(err)
+		}
+
 		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: tenantID},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -7383,8 +7419,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 20 FROM 'nodelocal://1/t20'`)
 
+		tenantID := roachpb.MustMakeTenantID(20)
+		if err := restoreTC.Server(0).(*server.TestServer).WaitForTenantReadiness(ctx, tenantID); err != nil {
+			t.Fatal(err)
+		}
+
 		_, restoreConn20 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(20)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: tenantID},
 		)
 		defer restoreConn20.Close()
 		restoreTenant20 := sqlutils.MakeSQLRunner(restoreConn20)
