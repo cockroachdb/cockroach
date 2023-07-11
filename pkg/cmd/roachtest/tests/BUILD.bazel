@@ -225,6 +225,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
+        "//pkg/testutils/release",
         "//pkg/testutils/sqlutils",
         "//pkg/ts/tspb",
         "//pkg/util",

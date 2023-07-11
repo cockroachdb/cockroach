@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
@@ -37,7 +38,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 				maxOps = 10
 				concurrency = 2
 			}
-			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency, *t.BuildVersion())
+			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency, t.BuildVersion())
 		},
 	})
 }
@@ -85,9 +86,9 @@ func runSchemaChangeMixedVersions(
 	c cluster.Cluster,
 	maxOps int,
 	concurrency int,
-	buildVersion version.Version,
+	buildVersion *version.Version,
 ) {
-	predecessorVersion, err := version.PredecessorVersion(buildVersion)
+	predecessorVersion, err := release.LatestPredecessor(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

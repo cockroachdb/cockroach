@@ -18,6 +18,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/testutils/release",
         "//pkg/util/ctxgroup",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",

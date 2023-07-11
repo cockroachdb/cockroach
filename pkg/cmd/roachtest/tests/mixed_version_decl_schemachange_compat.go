@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
@@ -34,7 +35,7 @@ func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
 			if c.Spec().Cloud != spec.GCE {
 				t.Skip("uses gs://cockroach-corpus; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
-			runDeclSchemaChangeCompatMixedVersions(ctx, t, c, *t.BuildVersion())
+			runDeclSchemaChangeCompatMixedVersions(ctx, t, c, t.BuildVersion())
 		},
 	})
 }
@@ -127,10 +128,10 @@ func validateCorpusFile(
 //     version (specifically focused on master during development before
 //     a version bump).
 func runDeclSchemaChangeCompatMixedVersions(
-	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
+	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion *version.Version,
 ) {
 	versionRegex := regexp.MustCompile(`(\d+\.\d+)`)
-	predecessorVersion, err := version.PredecessorVersion(buildVersion)
+	predecessorVersion, err := release.LatestPredecessor(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
