@@ -328,7 +328,7 @@ stop_server $argv
 start_test "Check that client-side options can be overridden with set"
 
 # First establish a baseline with all the defaults.
-send "$argv demo --no-line-editor --no-example-database\r"
+send "$argv demo --no-line-editor --no-example-database --log-dir=logs \r"
 eexpect root@
 send "\\set display_format csv\r"
 send "\\set\r"
@@ -343,7 +343,7 @@ send_eof
 eexpect ":/# "
 
 # Then verify that the defaults can be overridden.
-send "$argv demo --no-line-editor --no-example-database --set=auto_trace=on --set=check_syntax=false --set=echo=true --set=errexit=true --set=prompt1=%n@haa --set=show_times=false\r"
+send "$argv demo --no-line-editor --no-example-database --set=auto_trace=on --set=check_syntax=false --set=echo=true --set=errexit=true --set=prompt1=%n@haa --set=show_times=false --log-dir=logs \r"
 eexpect root@
 send "\\set display_format csv\r"
 send "\\set\r"
