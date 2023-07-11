@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -301,11 +302,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, s := range tc.Servers {
 			id := s.NodeID()
-			live, err := nl.IsLive(id)
-			if err != nil {
-				return err
-			}
-			if !live {
+			if !nl.GetNodeVitalityFromCache(id).IsLive(livenesspb.Upgrade) {
 				return errors.Newf("n%s not live yet", id)
 			}
 		}

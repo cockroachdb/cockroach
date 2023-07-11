@@ -55,8 +55,8 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		}))
 
 	{
-		ctr, down, under, over := calcRangeCounter(1100, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.IsLiveMap{
-			1000: livenesspb.IsLiveMapEntry{IsLive: true}, // by NodeID
+		ctr, down, under, over := calcRangeCounter(1100, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+			1000: livenesspb.FakeNodeVitality(true), // by NodeID
 		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
 
 		require.True(t, ctr)
@@ -66,8 +66,8 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 	}
 
 	{
-		ctr, down, under, over := calcRangeCounter(1000, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.IsLiveMap{
-			1000: livenesspb.IsLiveMapEntry{IsLive: false},
+		ctr, down, under, over := calcRangeCounter(1000, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+			1000: livenesspb.FakeNodeVitality(false),
 		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
 
 		// Does not confuse a non-live entry for a live one. In other words,
@@ -79,11 +79,11 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 	}
 
 	{
-		ctr, down, under, over := calcRangeCounter(11, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.IsLiveMap{
-			10:   livenesspb.IsLiveMapEntry{IsLive: true},
-			100:  livenesspb.IsLiveMapEntry{IsLive: true},
-			1000: livenesspb.IsLiveMapEntry{IsLive: true},
-			2000: livenesspb.IsLiveMapEntry{IsLive: true},
+		ctr, down, under, over := calcRangeCounter(11, threeVotersAndSingleNonVoter, leaseStatus, livenesspb.NodeVitalityMap{
+			10:   livenesspb.FakeNodeVitality(true),
+			100:  livenesspb.FakeNodeVitality(true),
+			1000: livenesspb.FakeNodeVitality(true),
+			2000: livenesspb.FakeNodeVitality(true),
 		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
 
 		require.True(t, ctr)
@@ -94,11 +94,11 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 
 	{
 		// Single non-voter dead
-		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.IsLiveMap{
-			10:   livenesspb.IsLiveMapEntry{IsLive: true},
-			100:  livenesspb.IsLiveMapEntry{IsLive: true},
-			1000: livenesspb.IsLiveMapEntry{IsLive: false},
-			2000: livenesspb.IsLiveMapEntry{IsLive: true},
+		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
+			10:   livenesspb.FakeNodeVitality(true),
+			100:  livenesspb.FakeNodeVitality(true),
+			1000: livenesspb.FakeNodeVitality(false),
+			2000: livenesspb.FakeNodeVitality(true),
 		}, 1 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
 
 		require.True(t, ctr)
@@ -109,11 +109,11 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 
 	{
 		// All non-voters are dead, but range is not unavailable
-		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.IsLiveMap{
-			10:   livenesspb.IsLiveMapEntry{IsLive: true},
-			100:  livenesspb.IsLiveMapEntry{IsLive: false},
-			1000: livenesspb.IsLiveMapEntry{IsLive: false},
-			2000: livenesspb.IsLiveMapEntry{IsLive: false},
+		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
+			10:   livenesspb.FakeNodeVitality(true),
+			100:  livenesspb.FakeNodeVitality(false),
+			1000: livenesspb.FakeNodeVitality(false),
+			2000: livenesspb.FakeNodeVitality(false),
 		}, 1 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
 
 		require.True(t, ctr)
@@ -124,11 +124,11 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 
 	{
 		// More non-voters than needed
-		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.IsLiveMap{
-			10:   livenesspb.IsLiveMapEntry{IsLive: true},
-			100:  livenesspb.IsLiveMapEntry{IsLive: true},
-			1000: livenesspb.IsLiveMapEntry{IsLive: true},
-			2000: livenesspb.IsLiveMapEntry{IsLive: true},
+		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, leaseStatus, livenesspb.NodeVitalityMap{
+			10:   livenesspb.FakeNodeVitality(true),
+			100:  livenesspb.FakeNodeVitality(true),
+			1000: livenesspb.FakeNodeVitality(true),
+			2000: livenesspb.FakeNodeVitality(true),
 		}, 1 /* numVoters */, 3 /* numReplicas */, 4 /* clusterNodes */)
 
 		require.True(t, ctr)
@@ -238,9 +238,9 @@ func TestCalcRangeCounterLeaseHolder(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.desc, func(t *testing.T) {
-			livenessMap := livenesspb.IsLiveMap{}
+			livenessMap := livenesspb.NodeVitalityMap{}
 			for _, nodeID := range tc.liveNodes {
-				livenessMap[nodeID] = livenesspb.IsLiveMapEntry{IsLive: true}
+				livenessMap[nodeID] = livenesspb.FakeNodeVitality(true)
 			}
 			ctr, _, _, _ := calcRangeCounter(tc.storeID, rangeDesc, tc.leaseStatus, livenessMap,
 				3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)

@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
@@ -2950,10 +2949,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	)
 
 	now := s.cfg.Clock.NowAsClockTimestamp()
-	var livenessMap livenesspb.IsLiveMap
-	if s.cfg.NodeLiveness != nil {
-		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
-	}
 	clusterNodes := s.ClusterNodeCount()
 
 	s.mu.RLock()
@@ -2966,6 +2961,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	ioOverload, _ = s.ioThreshold.t.Score()
 	s.ioThreshold.Unlock()
 
+	// We want to avoid having to read this multiple times during the replica
+	// visiting, so load it once up front for all nodes.
+	livenessMap := s.cfg.NodeLiveness.ScanNodeVitalityFromCache()
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
 		if metrics.Leader {

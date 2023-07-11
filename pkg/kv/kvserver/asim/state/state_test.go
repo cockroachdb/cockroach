@@ -625,7 +625,7 @@ func TestSetNodeLiveness(t *testing.T) {
 		for i := 6; i <= 10; i++ {
 			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DEAD)
 		}
-		require.Equal(t, 5, countFn())
+		require.Equal(t, 0, countFn())
 	})
 }
 

@@ -47,14 +47,6 @@ func (l Liveness) IsLive(now hlc.Timestamp) bool {
 	return now.Less(l.Expiration.ToTimestamp())
 }
 
-// IsDead returns true if the liveness expired more than threshold ago.
-//
-// Note that, because of threshold, IsDead() is not the inverse of IsLive().
-func (l Liveness) IsDead(now hlc.Timestamp, threshold time.Duration) bool {
-	expiration := l.Expiration.ToTimestamp().AddDuration(threshold)
-	return !now.Less(expiration)
-}
-
 // Compare returns an integer comparing two pieces of liveness information,
 // based on which liveness information is more recent.
 func (l Liveness) Compare(o Liveness) int {
@@ -214,9 +206,11 @@ const (
 	ReplicaProgress
 	Metrics
 	LeaseCampaign
+	LeaseCampaignWeak
 	RangeQuiesience
 	NetworkMap
 	LossOfQuorum
+	ReplicaGCQueue
 )
 
 func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
@@ -250,13 +244,31 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 				// of caution and don't campaign, so assume it is alive.
 				return true
 			}
-			return nv.isAlive()
+			return nv.isAliveAndConnected()
+		}
+	case LeaseCampaignWeak:
+		{
+			if !nv.isValid() {
+				// If we don't know about the leader in our liveness map, then we err on the side
+				// of caution and don't campaign, so assume it is alive.
+				return true
+			}
+			return nv.now.Less(nv.livenessExpiration)
 		}
 	case RangeQuiesience:
-		return nv.isAliveAndConnected()
+		{
+			if !nv.isValid() {
+				// If we don't know about the node, then we err on the side
+				// of caution and don't quiesce, so assume it is alive.
+				return true
+			}
+			return nv.isAliveAndConnected()
+		}
 	case NetworkMap:
 		return nv.connected
 	case LossOfQuorum:
+		return nv.isAlive()
+	case ReplicaGCQueue:
 		return nv.isAlive()
 	}
 

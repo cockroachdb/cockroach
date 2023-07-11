@@ -42,7 +42,7 @@ type state struct {
 	stores                  map[StoreID]*store
 	load                    map[RangeID]ReplicaLoad
 	loadsplits              map[StoreID]LoadSplitter
-	quickLivenessMap        map[NodeID]livenesspb.NodeLivenessStatus
+	quickLivenessMap        livenesspb.TestNodeVitality
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
 	configChangeListeners   []ConfigChangeListener
@@ -71,7 +71,7 @@ func newState(settings *config.SimulationSettings) *state {
 		nodes:             make(map[NodeID]*node),
 		stores:            make(map[StoreID]*store),
 		loadsplits:        make(map[StoreID]LoadSplitter),
-		quickLivenessMap:  make(map[NodeID]livenesspb.NodeLivenessStatus),
+		quickLivenessMap:  livenesspb.TestNodeVitality{},
 		capacityOverrides: make(map[StoreID]CapacityOverride),
 		clock:             &ManualSimClock{nanos: settings.StartTime.UnixNano()},
 		ranges:            newRMap(),
@@ -366,7 +366,7 @@ func (s *state) AddNode() Node {
 		stores: []StoreID{},
 	}
 	s.nodes[nodeID] = node
-	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
+	s.quickLivenessMap.AddNode(roachpb.NodeID(nodeID))
 	return node
 }
 func (s *state) SetNodeLocality(nodeID NodeID, locality roachpb.Locality) {
@@ -1037,7 +1037,18 @@ func (s *state) NextReplicasFn(storeID StoreID) func() []Replica {
 // SetNodeLiveness sets the liveness status of the node with ID NodeID to be
 // the status given.
 func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessStatus) {
-	s.quickLivenessMap[nodeID] = status
+	switch status {
+	case livenesspb.NodeLivenessStatus_DRAINING:
+		s.quickLivenessMap.Draining(roachpb.NodeID(nodeID), true)
+	case livenesspb.NodeLivenessStatus_DECOMMISSIONED:
+		s.quickLivenessMap.Decommissioned(roachpb.NodeID(nodeID), false)
+	case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
+		s.quickLivenessMap.Decommissioning(roachpb.NodeID(nodeID), true)
+	case livenesspb.NodeLivenessStatus_LIVE:
+		s.quickLivenessMap.RestartNode(roachpb.NodeID(nodeID))
+	case livenesspb.NodeLivenessStatus_DEAD:
+		s.quickLivenessMap.DownNode(roachpb.NodeID(nodeID))
+	}
 }
 
 // NodeLivenessFn returns a function, that when called will return the
@@ -1045,7 +1056,7 @@ func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessSta
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
 	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
-		return s.quickLivenessMap[NodeID(nid)]
+		return s.quickLivenessMap[nid].Convert().LivenessStatus()
 	}
 }
 
@@ -1055,8 +1066,8 @@ func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
 func (s *state) NodeCountFn() storepool.NodeCountFunc {
 	return func() int {
 		count := 0
-		for _, status := range s.quickLivenessMap {
-			if status != livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+		for _, entry := range s.quickLivenessMap {
+			if entry.Convert().IsLive(livenesspb.Rebalance) {
 				count++
 			}
 		}
@@ -1152,54 +1163,6 @@ func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
 	return status
 }
 
-func (s *state) GetIsLiveMap() livenesspb.IsLiveMap {
-	isLiveMap := livenesspb.IsLiveMap{}
-
-	for nodeID, status := range s.quickLivenessMap {
-		nid := roachpb.NodeID(nodeID)
-		entry := livenesspb.IsLiveMapEntry{
-			Liveness: livenesspb.Liveness{
-				NodeID:     nid,
-				Expiration: hlc.LegacyTimestamp{WallTime: math.MaxInt64},
-				Draining:   false,
-				Membership: livenesspb.MembershipStatus_ACTIVE,
-			},
-			IsLive: true,
-		}
-
-		switch status {
-		case livenesspb.NodeLivenessStatus_UNKNOWN:
-			continue
-		case livenesspb.NodeLivenessStatus_DEAD:
-			// Set liveness expiration to be greater than
-			// server.time_until_store_dead in the past - so that the store is
-			// considered dead.
-			entry.Liveness.Expiration.WallTime = int64(0)
-			entry.IsLive = false
-		case livenesspb.NodeLivenessStatus_UNAVAILABLE:
-			// Set liveness expiration to be just recently expired. This needs to be
-			// within now - server.time_until_store_dead and now, otherwise the store
-			// will be considered dead, not unavailable.
-			entry.Liveness.Expiration.WallTime = s.clock.Now().Add(-time.Second).UnixNano()
-			entry.IsLive = false
-		case livenesspb.NodeLivenessStatus_LIVE:
-		case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
-			entry.Membership = livenesspb.MembershipStatus_DECOMMISSIONING
-		case livenesspb.NodeLivenessStatus_DECOMMISSIONED:
-			// Similar to DEAD, set the expiration in the past. A decommissioned
-			// store should not have a valid liveness expiration.
-			entry.Membership = livenesspb.MembershipStatus_DECOMMISSIONED
-			entry.Liveness.Expiration.WallTime = int64(0)
-			entry.IsLive = false
-		case livenesspb.NodeLivenessStatus_DRAINING:
-			entry.Draining = true
-		}
-		isLiveMap[nid] = entry
-	}
-
-	return isLiveMap
-}
-
 func (s *state) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
 	if descs := s.StoreDescriptors(false, StoreID(storeID)); len(descs) == 0 {
 		return roachpb.StoreDescriptor{}, false
@@ -1261,7 +1224,7 @@ func (s *state) Scan(
 // state of ranges.
 func (s *state) Report() roachpb.SpanConfigConformanceReport {
 	reporter := spanconfigreporter.New(
-		s, s, s, s,
+		s.quickLivenessMap, s, s, s,
 		cluster.MakeClusterSettings(), &spanconfig.TestingKnobs{})
 	report, err := reporter.SpanConfigConformance(context.Background(), []roachpb.Span{{}})
 	if err != nil {
