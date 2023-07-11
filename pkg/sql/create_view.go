@@ -45,14 +45,10 @@ import (
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
 	// viewName is the fully qualified name of the new view.
-	viewName     *tree.TableName
-	cv           *tree.CreateView
-	ifNotExists  bool
-	replace      bool
-	persistence  tree.Persistence
-	materialized bool
-	dbDesc       catalog.DatabaseDescriptor
-	columns      colinfo.ResultColumns
+	viewName *tree.TableName
+	cv       *tree.CreateView
+	dbDesc   catalog.DatabaseDescriptor
+	columns  colinfo.ResultColumns
 
 	// planDeps tracks which tables and views the view being created
 	// depends on. This is collected during the construction of
@@ -75,9 +71,9 @@ func (n *createViewNode) ReadingOwnWrites() {}
 
 func (n *createViewNode) startExec(params runParams) error {
 	tableType := tree.GetTableType(
-		false /* isSequence */, true /* isView */, n.materialized,
+		false /* isSequence */, true /* isView */, n.cv.Materialized,
 	)
-	if n.replace {
+	if n.cv.Replace {
 		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter(fmt.Sprintf("or_replace_%s", tableType)))
 	} else {
 		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter(tableType))
@@ -118,14 +114,14 @@ func (n *createViewNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if !n.persistence.IsTemporary() && backRefMutable.Temporary {
+			if !n.cv.Persistence.IsTemporary() && backRefMutable.Temporary {
 				hasTempBackref = true
 			}
 			backRefMutables[id] = backRefMutable
 		}
 	}
 	if hasTempBackref {
-		n.persistence = tree.PersistenceTemporary
+		n.cv.Persistence = tree.PersistenceTemporary
 		// This notice is sent from pg, let's imitate.
 		params.p.BufferClientNotice(
 			params.ctx,
@@ -134,16 +130,16 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	var replacingDesc *tabledesc.Mutable
-	schema, err := getSchemaForCreateTable(params, n.dbDesc, n.persistence, n.viewName,
-		tree.ResolveRequireViewDesc, n.ifNotExists)
+	schema, err := getSchemaForCreateTable(params, n.dbDesc, n.cv.Persistence, n.viewName,
+		tree.ResolveRequireViewDesc, n.cv.IfNotExists)
 	if err != nil && !sqlerrors.IsRelationAlreadyExistsError(err) {
 		return err
 	}
 	if err != nil {
 		switch {
-		case n.ifNotExists:
+		case n.cv.IfNotExists:
 			return nil
-		case n.replace:
+		case n.cv.Replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
 			id, err := params.p.Descriptors().LookupObjectID(
@@ -172,7 +168,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	if n.persistence.IsTemporary() {
+	if n.cv.Persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
@@ -248,14 +244,14 @@ func (n *createViewNode) startExec(params runParams) error {
 					&params.p.semaCtx,
 					params.p.EvalContext(),
 					params.p.EvalContext().Settings,
-					n.persistence,
+					n.cv.Persistence,
 					n.dbDesc.IsMultiRegion(),
 					params.p)
 				if err != nil {
 					return err
 				}
 
-				if n.materialized {
+				if n.cv.Materialized {
 					// If the view is materialized, set up some more state on the view descriptor.
 					// In particular,
 					// * mark the descriptor as a materialized view

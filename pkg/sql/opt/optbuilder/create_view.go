@@ -109,16 +109,10 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			Schema:   schID,
 			ViewName: &viewName,
 			Syntax:   cv,
-			// TODO(mgartner): Remove the cv fields now that Syntax contains
-			// them.
-			IfNotExists:  cv.IfNotExists,
-			Replace:      cv.Replace,
-			Persistence:  cv.Persistence,
-			Materialized: cv.Materialized,
-			Columns:      p,
-			Deps:         b.schemaDeps,
-			TypeDeps:     b.schemaTypeDeps,
-			WithData:     cv.WithData,
+			Columns:  p,
+			Deps:     b.schemaDeps,
+			TypeDeps: b.schemaTypeDeps,
+			WithData: cv.WithData,
 		},
 	)
 	return outScope

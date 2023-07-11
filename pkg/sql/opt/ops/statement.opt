@@ -39,10 +39,6 @@ define CreateViewPrivate {
     Schema SchemaID
     ViewName TableName
     Syntax CreateView
-    Persistence Persistence
-    IfNotExists bool
-    Replace bool
-    Materialized bool
 
     # Columns that correspond to the output of the view query, with the names
     # they will have as part of the view.
