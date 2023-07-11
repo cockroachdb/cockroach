@@ -30,6 +30,7 @@ import {
   selectTransactionsDataValid,
   selectTransactionsLastUpdated,
   selectTransactionsDataInFlight,
+  selectRequestTime,
 } from "./transactionsPage.selectors";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
@@ -95,6 +96,7 @@ export const TransactionsPageConnected = withRouter(
         hasAdminRole: selectHasAdminRole(state),
         limit: selectTxnsPageLimit(state),
         reqSortSetting: selectTxnsPageReqSort(state),
+        requestTime: selectRequestTime(state),
       },
       activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),
@@ -181,6 +183,14 @@ export const TransactionsPageConnected = withRouter(
               sortValue: sort,
             }),
           ),
+        onRequestTimeChange: (t: moment.Moment) => {
+          dispatch(
+            localStorageActions.update({
+              key: "requestTime/StatementsPage",
+              value: t,
+            }),
+          );
+        },
       },
       activePageProps: mapDispatchToRecentTransactionsPageProps(dispatch),
     }),

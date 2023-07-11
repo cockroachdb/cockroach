@@ -50,6 +50,7 @@ import {
 } from "src/api";
 import { TimeScale } from "../timeScaleDropdown";
 import { getMatchParamByName, statementAttr } from "src/util";
+import { selectRequestTime } from "src/statementsPage/statementsPage.selectors";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -76,6 +77,7 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     isTenant: selectIsTenant(state),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     hasAdminRole: selectHasAdminRole(state),
+    requestTime: selectRequestTime(state),
     statementFingerprintInsights: selectStatementFingerprintInsights(
       state,
       props,
@@ -169,6 +171,14 @@ const mapDispatchToProps = (
         tableName,
       }),
     ),
+  onRequestTimeChange: (t: moment.Moment) => {
+    dispatch(
+      localStorageActions.update({
+        key: "requestTime/StatementsPage",
+        value: t,
+      }),
+    );
+  },
   onBackToStatementsClick: () =>
     dispatch(
       analyticsActions.track({

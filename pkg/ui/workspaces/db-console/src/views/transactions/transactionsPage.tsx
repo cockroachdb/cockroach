@@ -86,6 +86,12 @@ export const sortSettingLocalSetting = new LocalSetting(
   { ascending: false, columnTitle: "executionCount" },
 );
 
+export const requestTimeLocalSetting = new LocalSetting(
+  "requestTime/TransactionsPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
+);
+
 export const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
   "filters/TransactionsPage",
   (state: AdminUIState) => state.localSettings,
@@ -144,6 +150,7 @@ const fingerprintsPageActions = {
   onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
   onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
   onApplySearchCriteria: trackApplySearchCriteriaAction,
+  onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
 };
 
 type StateProps = {
@@ -182,6 +189,7 @@ const TransactionsPageConnected = withRouter(
         hasAdminRole: selectHasAdminRole(state),
         limit: limitSetting.selector(state),
         reqSortSetting: reqSortSetting.selector(state),
+        requestTime: requestTimeLocalSetting.selector(state),
       },
       activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),
