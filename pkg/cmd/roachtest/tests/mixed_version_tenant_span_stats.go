@@ -15,11 +15,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -138,9 +140,34 @@ func fetchSpanStatsFromNode(
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting internal admin ui address")
 	}
-	res, err := c.RunWithDetailsSingleNode(ctx, l, node,
-		"curl", "-X", "POST", fmt.Sprintf("http://%s/_status/span",
-			adminAddrs[0]), "-H", "'Content-Type: application/json'", "-d", fmt.Sprintf("'%s'", reqBody))
+	loginCmd := fmt.Sprintf(
+		"%s auth-session login root --certs-dir ./certs --format raw",
+		mixedversion.CurrentCockroachPath,
+	)
+	res, err := c.RunWithDetailsSingleNode(ctx, l, node, loginCmd)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to authenticate")
+	}
+
+	var sessionCookie string
+	for _, line := range strings.Split(res.Stdout, "\n") {
+		if strings.HasPrefix(line, "session=") {
+			sessionCookie = line
+		}
+	}
+	if sessionCookie == "" {
+		return nil, fmt.Errorf("failed to find session cookie in `login` output")
+	}
+
+	curlCmd := roachtestutil.NewCommand("curl").
+		Option("k").
+		Flag("X", "POST").
+		Flag("H", "'Content-Type: application/json'").
+		Flag("cookie", fmt.Sprintf("'%s'", sessionCookie)).
+		Flag("d", fmt.Sprintf("'%s'", reqBody)).
+		Arg("https://%s/_status/span", adminAddrs[0]).
+		String()
+	res, err = c.RunWithDetailsSingleNode(ctx, l, node, curlCmd)
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting span statistics")
 	}
