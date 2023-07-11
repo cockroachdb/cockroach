@@ -280,24 +280,28 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 			scName = scDesc.GetName()
 		}
 
-		// Create an entry for the descriptor.
-		objMap := schemaMap[scName]
-		if objMap == nil {
-			objMap = make(map[string]descpb.ID)
+		// Create an entry for the descriptor in `r.ObjsByName` (if it's not a
+		// function) and `r.ObjIDsBySchema`.
+		// Note: `r.DescByID` has been previously populated already.
+		if kind != "function" {
+			objMap := schemaMap[scName]
+			if objMap == nil {
+				objMap = make(map[string]descpb.ID)
+			}
+			descName := desc.GetName()
+			// Handle special case of system.namespace table which used to be named
+			// system.namespace2.
+			if desc.GetID() == keys.NamespaceTableID &&
+				desc.GetPostDeserializationChanges().Contains(catalog.UpgradedNamespaceName) {
+				descName = catconstants.PreMigrationNamespaceTableName
+			}
+			if _, ok := objMap[descName]; ok {
+				return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
+					kind, parentDesc.GetName(), scName, descName, desc.GetID(), objMap[descName])
+			}
+			objMap[descName] = desc.GetID()
+			r.ObjsByName[parentDesc.GetID()][scName] = objMap
 		}
-		descName := desc.GetName()
-		// Handle special case of system.namespace table which used to be named
-		// system.namespace2.
-		if desc.GetID() == keys.NamespaceTableID &&
-			desc.GetPostDeserializationChanges().Contains(catalog.UpgradedNamespaceName) {
-			descName = catconstants.PreMigrationNamespaceTableName
-		}
-		if _, ok := objMap[descName]; ok {
-			return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
-				kind, parentDesc.GetName(), scName, descName, desc.GetID(), objMap[descName])
-		}
-		objMap[descName] = desc.GetID()
-		r.ObjsByName[parentDesc.GetID()][scName] = objMap
 
 		objIDsMap := r.ObjIDsBySchema[parentDesc.GetID()]
 		objIDs := objIDsMap[scName]
