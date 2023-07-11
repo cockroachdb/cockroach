@@ -130,7 +130,7 @@ func runIterate(
 
 	// Store the database in this directory so we don't have to regenerate it on
 	// each benchmark run.
-	eng, err := loadTestData("mvcc_data", numKeys, numBatches, batchTimeSpan, valueBytes)
+	eng, err := loadTestData("mvcc_data_v22.2", numKeys, numBatches, batchTimeSpan, valueBytes)
 	if err != nil {
 		b.Fatal(err)
 	}
