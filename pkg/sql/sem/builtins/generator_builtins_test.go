@@ -90,6 +90,7 @@ func TestGetSSTableMetricsMultiNode(t *testing.T) {
 	var storeID int
 	var level int
 	var fileNum int
+	var approximateSpanBytes []byte
 	var metrics []byte
 
 	for idx, id := range tc.NodeIDs() {
@@ -121,7 +122,7 @@ func TestGetSSTableMetricsMultiNode(t *testing.T) {
 			nodeIDArg, storeIDArg))
 
 		for rows.Next() {
-			require.NoError(t, rows.Scan(&nodeID, &storeID, &level, &fileNum, &metrics))
+			require.NoError(t, rows.Scan(&nodeID, &storeID, &level, &fileNum, &approximateSpanBytes, &metrics))
 			require.NoError(t, json.Unmarshal(metrics, &enginepb.SSTableMetricsInfo{}))
 			require.Equal(t, nodeID, nodeIDArg)
 			require.Equal(t, storeID, storeIDArg)
@@ -137,7 +138,7 @@ func TestGetSSTableMetricsMultiNode(t *testing.T) {
 			nodeIDArg, storeIDArg))
 
 		for rows.Next() {
-			require.NoError(t, rows.Scan(&nodeID, &storeID, &level, &fileNum, &metrics))
+			require.NoError(t, rows.Scan(&nodeID, &storeID, &level, &fileNum, &approximateSpanBytes, &metrics))
 			require.NoError(t, json.Unmarshal(metrics, &enginepb.SSTableMetricsInfo{}))
 			require.Equal(t, nodeID, nodeIDArg)
 			require.Equal(t, storeID, storeIDArg)
@@ -183,10 +184,11 @@ func TestGetSSTableMetricsSingleNode(t *testing.T) {
 	var storeID int
 	var level int
 	var fileNum int
+	var approximateSpanBytes []byte
 	var metrics []byte
 
 	for rows.Next() {
-		require.NoError(t, rows.Scan(&nodeID, &storeID, &level, &fileNum, &metrics))
+		require.NoError(t, rows.Scan(&nodeID, &storeID, &level, &fileNum, &approximateSpanBytes, &metrics))
 		require.NoError(t, json.Unmarshal(metrics, &enginepb.SSTableMetricsInfo{}))
 		require.Equal(t, nodeID, nodeIDArg)
 		require.Equal(t, storeID, storeIDArg)
