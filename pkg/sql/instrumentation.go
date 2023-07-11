@@ -407,6 +407,9 @@ func (ih *instrumentationHelper) Finish(
 		)
 		phaseTimes := statsCollector.PhaseTimes()
 		execLatency := phaseTimes.GetServiceLatencyNoOverhead()
+		// Note that we want to remove the request from the local registry
+		// _before_ inserting the bundle to prevent rare test flakes (#106284).
+		ih.stmtDiagnosticsRecorder.MaybeRemoveRequest(ih.diagRequestID, ih.diagRequest, execLatency)
 		if ih.stmtDiagnosticsRecorder.IsConditionSatisfied(ih.diagRequest, execLatency) {
 			placeholders := p.extendedEvalCtx.Placeholders
 			ob := ih.emitExplainAnalyzePlanToOutputBuilder(ih.explainFlags, phaseTimes, queryLevelStats)
@@ -429,7 +432,6 @@ func (ih *instrumentationHelper) Finish(
 			)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 		}
-		ih.stmtDiagnosticsRecorder.MaybeRemoveRequest(ih.diagRequestID, ih.diagRequest, execLatency)
 	}
 
 	// If there was a communication error already, no point in setting any
