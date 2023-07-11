@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -437,7 +438,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	listenerReg := testutils.NewListenerRegistry()
+	listenerReg := listenerutil.NewListenerRegistry()
 	defer listenerReg.Close()
 
 	storeReg := server.NewStickyInMemEnginesRegistry()

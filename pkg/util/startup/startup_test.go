@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -137,7 +137,7 @@ func runCircuitBreakerTestForKey(
 	)
 	ctx := context.Background()
 
-	lReg := testutils.NewListenerRegistry()
+	lReg := listenerutil.NewListenerRegistry()
 	defer lReg.Close()
 	reg := server.NewStickyInMemEnginesRegistry()
 	defer reg.CloseAllStickyInMemEngines()

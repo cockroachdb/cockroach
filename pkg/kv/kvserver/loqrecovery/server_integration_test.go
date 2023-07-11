@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -704,13 +705,13 @@ func prepTestCluster(
 	*testcluster.TestCluster,
 	server.StickyInMemEnginesRegistry,
 	map[int]loqrecovery.PlanStore,
-	testutils.ListenerRegistry,
+	listenerutil.ListenerRegistry,
 ) {
 	skip.UnderStressRace(t, "cluster frequently fails to start under stress race")
 
 	reg := server.NewStickyInMemEnginesRegistry()
 
-	lReg := testutils.NewListenerRegistry()
+	lReg := listenerutil.NewListenerRegistry()
 
 	args := base.TestClusterArgs{
 		ServerArgsPerNode: make(map[int]base.TestServerArgs),

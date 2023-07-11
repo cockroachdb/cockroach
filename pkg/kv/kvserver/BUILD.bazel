@@ -457,6 +457,7 @@ go_test(
         "//pkg/testutils/echotest",
         "//pkg/testutils/gossiputil",
         "//pkg/testutils/kvclientutils",
+        "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
