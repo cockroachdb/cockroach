@@ -18,8 +18,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -391,30 +389,11 @@ func productionRepos(released, next *semver.Version) ([]prRepo, error) {
 		}
 	}
 
-	// The roachtest predecessor file changed locations after a
-	// refactoring that took place in the 23.1 cycle, so we account for
-	// that difference here.
-	// TODO(renato): remove this logic once we stop releasing anything
-	// older than v23 releases.
-	releaseBranchRe := regexp.MustCompile(`^release-(\d\d).\d.*`)
-	updateRoachtestPred := func(branch string) *exec.Cmd {
-		predecessorFile := "pkg/util/version/predecessor_version.json"
-		if matches := releaseBranchRe.FindStringSubmatch(branch); matches != nil {
-			major, _ := strconv.Atoi(matches[1])
-			if major < 23 {
-				predecessorFile = "pkg/cmd/roachtest/tests/predecessor_version.json"
-			}
-		}
-		return exec.Command(self, "update-roachtest-predecessors",
-			"--version", released.Original(), "--version-map-file", predecessorFile,
-		)
-	}
-
 	// the PR will be created against the "next" branch: for latest stable versions it is "master",
 	// for other versions it is the next release version's branch. The following logic combines all
 	// changes in a single PR.
 	updateVersionPr := newCrdbRepo(nextBranch)
-	updateVersionPr.commands = []*exec.Cmd{updateRoachtestPred(nextBranch)}
+	updateVersionPr.commands = []*exec.Cmd{}
 	// Releases 23.{minor} and above include the version.txt file that
 	// needs to be bumped when a release is published.
 	// TODO(renato): remove this logic once we stop releasing anything
@@ -433,14 +412,6 @@ func productionRepos(released, next *semver.Version) ([]prRepo, error) {
 	}
 
 	repos := []prRepo{updateVersionPr}
-
-	// If we are updating the predecessor version on a branch other than
-	// master, then we need to update the predecessors on master as well.
-	if nextBranch != "master" {
-		updateVersionMaster := newCrdbRepo("master")
-		updateVersionMaster.commands = []*exec.Cmd{updateRoachtestPred("master")}
-		repos = append(repos, updateVersionMaster)
-	}
 
 	// Repos to change for the latest stable releases only
 	if latest {
@@ -522,4 +493,16 @@ func updateCommitMessage(released, next *semver.Version) string {
 		nextVersionMsg = ". Next version: " + next.String()
 	}
 	return fmt.Sprintf(commitTemplate, released, nextVersionMsg)
+}
+
+// nextReleaseSeries parses the version and returns the next release series assuming we have 2 releases yearly
+func nextReleaseSeries(version *semver.Version) string {
+	nextMinor := version.IncMinor()
+	// TODO(rail): revisit when we have more than 2 releases a year
+	if nextMinor.Minor() > 2 {
+		nextMinor = nextMinor.IncMajor()
+		// IncMajor() resets all version parts to 0, thus we need to bump the minor part to match our version schema.
+		nextMinor = nextMinor.IncMinor()
+	}
+	return fmt.Sprintf("%d.%d", nextMinor.Major(), nextMinor.Minor())
 }
