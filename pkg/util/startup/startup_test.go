@@ -149,8 +149,8 @@ func runCircuitBreakerTestForKey(
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
 
 	args := base.TestClusterArgs{
-		ServerArgsPerNode: make(map[int]base.TestServerArgs),
-		ReusableListeners: true,
+		ServerArgsPerNode:   make(map[int]base.TestServerArgs),
+		ReusableListenerReg: lReg,
 	}
 	var enableFaults atomic.Bool
 	for i := 0; i < nodes; i++ {
