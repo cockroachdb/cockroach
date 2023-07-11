@@ -851,14 +851,6 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				rctx.LocalDesc.StoreID,
 				rctx.LocalDesc.Capacity.Load(),
 			)
-			log.KvDistribution.Infof(
-				ctx,
-				"r%d's %s load is too little to matter relative to s%d's %s total load",
-				candidateReplica.GetRangeID(),
-				candidateReplica.RangeUsageInfo().Load(),
-				rctx.LocalDesc.StoreID,
-				rctx.LocalDesc.Capacity.Load(),
-			)
 			continue
 		}
 
