@@ -318,6 +318,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		tenantStopper.Stop(ctx)
 
 		// Drop the record.
+		sqlDB.Exec(t, `ALTER TENANT [$1] STOP SERVICE`, tenID.ToUint64())
 		sqlDB.Exec(t, `DROP TENANT [$1]`, tenID.ToUint64())
 
 		sqlDB.CheckQueryResultsRetry(

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
@@ -196,7 +197,7 @@ func NewSeparateProcessTenantServer(
 		},
 	}
 
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps)
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeExternal)
 }
 
 // newSharedProcessTenantServer creates a tenant-specific, SQL-only
@@ -230,7 +231,7 @@ func newSharedProcessTenantServer(
 			return spanconfiglimiter.NoopLimiter{}
 		},
 	}
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps)
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeShared)
 }
 
 // newTenantServer constructs a SQLServerWrapper.
@@ -243,6 +244,7 @@ func newTenantServer(
 	sqlCfg SQLConfig,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	deps tenantServerDeps,
+	serviceMode mtinfopb.TenantServiceMode,
 ) (*SQLServerWrapper, error) {
 	// TODO(knz): Make the license application a per-server thing
 	// instead of a global thing.
@@ -254,7 +256,7 @@ func newTenantServer(
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
-	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, serviceMode)
 	if err != nil {
 		return nil, err
 	}
@@ -967,6 +969,7 @@ func makeTenantSQLServerArgs(
 	sqlCfg SQLConfig,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	deps tenantServerDeps,
+	serviceMode mtinfopb.TenantServiceMode,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -1232,6 +1235,7 @@ func makeTenantSQLServerArgs(
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			spanLimiterFactory: deps.spanLimiterFactory,
 			tenantConnect:      tenantConnect,
+			serviceMode:        serviceMode,
 			promRuleExporter:   promRuleExporter,
 		},
 		SQLConfig:                &sqlCfg,
