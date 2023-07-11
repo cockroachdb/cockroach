@@ -394,13 +394,6 @@ var (
 		Measurement: "Updates",
 		Unit:        metric.Unit_COUNT,
 	}
-
-	metaChangefeedReplanCount = metric.Metadata{
-		Name:        "changefeed.replan_count",
-		Help:        "Number of replans triggered across all feeds",
-		Measurement: "Replans",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaChangefeedEventConsumerFlushNanos = metric.Metadata{
 		Name:        "changefeed.nprocs_flush_nanos",
 		Help:        "Total time spent idle waiting for the parallel consumer to flush",
@@ -689,7 +682,6 @@ type Metrics struct {
 	CheckpointHistNanos            metric.IHistogram
 	FrontierUpdates                *metric.Counter
 	ThrottleMetrics                cdcutils.Metrics
-	ReplanCount                    *metric.Counter
 	ParallelConsumerFlushNanos     metric.IHistogram
 	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
@@ -728,7 +720,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		}),
 		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
 		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
-		ReplanCount:     metric.NewCounter(metaChangefeedReplanCount),
 		// Below two metrics were never implemented using the hdr histogram. Set ForceUsePrometheus
 		// to true.
 		ParallelConsumerFlushNanos: metric.NewHistogram(metric.HistogramOptions{

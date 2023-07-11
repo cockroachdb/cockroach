@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -209,21 +208,6 @@ func fetchSpansForTables(
 		sd, tableDescs[0], initialHighwater, target, sc)
 }
 
-var replanChangefeedThreshold = settings.RegisterFloatSetting(
-	settings.TenantWritable,
-	"changefeed.replan_flow_threshold",
-	"fraction of initial flow instances that would be added or updated above which a redistribution would occur (0=disabled)",
-	0.0,
-)
-
-var replanChangefeedFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"changefeed.replan_flow_frequency",
-	"frequency at which changefeed checks to see if redistributing would change its physical execution plan",
-	10*time.Minute,
-	settings.PositiveDuration,
-)
-
 // startDistChangefeed starts distributed changefeed execution.
 func startDistChangefeed(
 	ctx context.Context,
@@ -249,7 +233,6 @@ func startDistChangefeed(
 		return err
 	}
 	localState.trackedSpans = trackedSpans
-	cfKnobs := execCfg.DistSQLSrv.TestingKnobs.Changefeed
 
 	// Changefeed flows handle transactional consistency themselves.
 	var noTxn *kv.Txn
@@ -267,28 +250,7 @@ func startDistChangefeed(
 		return err
 	}
 
-	replanOracle := sql.ReplanOnChangedFraction(
-		func() float64 {
-			return replanChangefeedThreshold.Get(execCtx.ExecCfg().SV())
-		},
-	)
-	if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil && knobs.ShouldReplan != nil {
-		replanOracle = knobs.ShouldReplan
-	}
-
-	var replanNoCheckpoint *jobspb.ChangefeedProgress_Checkpoint
-	var replanNoDrainingNodes []roachpb.NodeID
-	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
-		p,
-		makePlan(execCtx, jobID, details, initialHighWater,
-			trackedSpans, replanNoCheckpoint, replanNoDrainingNodes),
-		execCtx,
-		replanOracle,
-		func() time.Duration { return replanChangefeedFrequency.Get(execCtx.ExecCfg().SV()) },
-	)
-
 	execPlan := func(ctx context.Context) error {
-		defer stopReplanner()
 		// Derive a separate context so that we can shut down the changefeed
 		// as soon as we see an error.
 		ctx, cancel := execCtx.ExecCfg().DistSQLSrv.Stopper.WithCancelOnQuiesce(ctx)
@@ -343,11 +305,7 @@ func startDistChangefeed(
 		return resultRows.Err()
 	}
 
-	if err = ctxgroup.GoAndWait(ctx, execPlan, replanner); errors.Is(err, sql.ErrPlanChanged) {
-		execCtx.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).ReplanCount.Inc(1)
-	}
-
-	return err
+	return ctxgroup.GoAndWait(ctx, execPlan)
 }
 
 var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
