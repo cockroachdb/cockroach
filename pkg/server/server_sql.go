@@ -905,42 +905,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 	}
 
-	// Setup the trace collector that is used to fetch inflight trace spans from
-	// all nodes in the cluster.
-	// The collector requires nodeliveness to get a list of all the nodes in the
-	// cluster.
-	var getNodes func(ctx context.Context) ([]roachpb.NodeID, error)
-	if isMixedSQLAndKVNode && hasNodeLiveness {
-		// TODO(dt): any reason not to just always use the instance reader? And just
-		// pass it directly instead of making a new closure here?
-		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
-			var ns []roachpb.NodeID
-			ls, err := nodeLiveness.GetLivenessesFromKV(ctx)
-			if err != nil {
-				return nil, err
-			}
-			for _, l := range ls {
-				if l.Membership.Decommissioned() {
-					continue
-				}
-				ns = append(ns, l.NodeID)
-			}
-			return ns, nil
-		}
-	} else {
-		getNodes = func(ctx context.Context) ([]roachpb.NodeID, error) {
-			instances, err := cfg.sqlInstanceReader.GetAllInstances(ctx)
-			if err != nil {
-				return nil, err
-			}
-			instanceIDs := make([]roachpb.NodeID, len(instances))
-			for i, instance := range instances {
-				instanceIDs[i] = roachpb.NodeID(instance.InstanceID)
-			}
-			return instanceIDs, err
-		}
-	}
-	traceCollector := collector.New(cfg.Tracer, getNodes, cfg.podNodeDialer)
+	// Set up the trace collector that is used to fetch inflight trace spans
+	// from all instances in the cluster.
+	traceCollector := collector.New(cfg.Tracer, cfg.sqlInstanceReader.GetAllInstances, cfg.podNodeDialer)
 	contentionMetrics := contention.NewMetrics()
 	cfg.registry.AddMetricStruct(contentionMetrics)
 
