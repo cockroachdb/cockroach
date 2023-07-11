@@ -86,6 +86,11 @@ type Entry struct {
 	ServiceMode        mtinfopb.TenantServiceMode
 }
 
+// Ready indicates whether the metadata record is populated.
+func (e Entry) Ready() bool {
+	return e.TenantCapabilities != nil
+}
+
 // Update represents an update to the global tenant capability state.
 type Update struct {
 	Entry
