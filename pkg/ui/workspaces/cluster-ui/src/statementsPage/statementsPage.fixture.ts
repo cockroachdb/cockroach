@@ -355,6 +355,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     ascending: false,
     columnTitle: "executionCount",
   },
+  requestTime: moment.utc("2021.12.12"),
   search: "",
   filters: {
     app: "",
@@ -380,6 +381,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   isTenant: false,
   hasViewActivityRedactedRole: false,
   hasAdminRole: true,
+  statementDiagnostics: [],
   dismissAlertMessage: noop,
   refreshDatabases: noop,
   refreshStatementDiagnosticsRequests: noop,
@@ -398,7 +400,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onChangeLimit: noop,
   onChangeReqSort: noop,
   onApplySearchCriteria: noop,
-  statementDiagnostics: [],
+  onRequestTimeChange: noop,
 };
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {

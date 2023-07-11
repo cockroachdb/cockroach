@@ -22,6 +22,7 @@ import {
   reqSortSetting,
   limitSetting,
   selectTxns,
+  requestTimeLocalSetting,
 } from "src/views/transactions/transactionsPage";
 import {
   TransactionDetailsStateProps,
@@ -55,6 +56,7 @@ export default withRouter(
         hasAdminRole: selectHasAdminRole(state),
         limit: limitSetting.selector(state),
         reqSortSetting: reqSortSetting.selector(state),
+        requestTime: requestTimeLocalSetting.selector(state),
       };
     },
     {
@@ -63,6 +65,7 @@ export default withRouter(
       refreshUserSQLRoles,
       onTimeScaleChange: setGlobalTimeScaleAction,
       refreshTransactionInsights: refreshTxnInsights,
+      onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
     },
   )(TransactionDetails),
 );

@@ -53,6 +53,7 @@ import { appNamesAttr, statementAttr } from "src/util/constants";
 import { selectTimeScale } from "src/redux/timeScale";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
+import { requestTimeLocalSetting } from "./statementsPage";
 
 const { generateStmtDetailsToID } = util;
 
@@ -133,6 +134,7 @@ const mapStateToProps = (
     ),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     hasAdminRole: selectHasAdminRole(state),
+    requestTime: requestTimeLocalSetting.selector(state),
     statementFingerprintInsights: selectStatementFingerprintInsights(
       state,
       props,
@@ -158,6 +160,7 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
   },
   onTabChanged: trackStatementDetailsSubnavSelectionAction,
   onTimeScaleChange: setGlobalTimeScaleAction,
+  onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
   onDiagnosticBundleDownload: trackDownloadDiagnosticsBundleAction,
   onDiagnosticCancelRequest: (
     report: clusterUiApi.StatementDiagnosticsReport,
