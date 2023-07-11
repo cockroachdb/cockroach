@@ -679,7 +679,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 			// non-gateway nodes use the last outbox to send this information
 			// over.
 			f.sp.RecordStructured(&execinfrapb.ComponentStats{
-				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
+				Component: f.FlowCtx.FlowComponentID(),
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(f.FlowCtx.DiskMonitor.MaximumBytes())),
