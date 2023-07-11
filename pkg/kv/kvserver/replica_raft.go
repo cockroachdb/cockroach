@@ -158,12 +158,7 @@ func (r *Replica) evalAndPropose(
 		// dealt with proactively rather than waiting for a future command to
 		// find them.
 		proposal.ec = makeUnreplicatedEndCmds(r, g, *st)
-		pr := proposalResult{
-			Reply:              proposal.Local.Reply,
-			Err:                pErr,
-			EncounteredIntents: intents,
-			EndTxns:            endTxns,
-		}
+		pr := makeProposalResult(proposal.Local.Reply, pErr, intents, endTxns)
 		proposal.finishApplication(ctx, pr)
 		return proposalCh, func() {}, "", nil, nil
 	}
@@ -219,10 +214,7 @@ func (r *Replica) evalAndPropose(
 		// Signal the proposal's response channel immediately.
 		reply := *proposal.Local.Reply
 		reply.Responses = append([]kvpb.ResponseUnion(nil), reply.Responses...)
-		pr := proposalResult{
-			Reply:              &reply,
-			EncounteredIntents: proposal.Local.DetachEncounteredIntents(),
-		}
+		pr := makeProposalResult(&reply, nil /* pErr */, proposal.Local.DetachEncounteredIntents(), nil /* eti */)
 		proposal.signalProposalResult(pr)
 
 		// Continue with proposal...
@@ -1426,13 +1418,10 @@ func (r *Replica) refreshProposalsLocked(
 			if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
 				r.cleanupFailedProposalLocked(p)
 				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-				p.finishApplication(ctx, proposalResult{
-					Err: kvpb.NewError(
-						kvpb.NewAmbiguousResultErrorf(
-							"unable to determine whether command was applied via snapshot",
-						),
-					),
-				})
+				p.finishApplication(ctx, makeProposalResultErr(
+					kvpb.NewAmbiguousResultErrorf(
+						"unable to determine whether command was applied via snapshot",
+					)))
 			}
 			continue
 
@@ -1498,9 +1487,8 @@ func (r *Replica) refreshProposalsLocked(
 			p.idKey, p.command.MaxLeaseIndex, p.command.ClosedTimestamp, reason)
 		if err := r.mu.proposalBuf.ReinsertLocked(ctx, p); err != nil {
 			r.cleanupFailedProposalLocked(p)
-			p.finishApplication(ctx, proposalResult{
-				Err: kvpb.NewError(kvpb.NewAmbiguousResultError(err)),
-			})
+			p.finishApplication(ctx, makeProposalResultErr(
+				kvpb.NewAmbiguousResultError(err)))
 		}
 	}
 }
@@ -1518,7 +1506,7 @@ func (r *Replica) poisonInflightLatches(err error) {
 			aErr := kvpb.NewAmbiguousResultError(err)
 			// NB: this does not release the request's latches. It's important that
 			// the latches stay in place, since the command could still apply.
-			p.signalProposalResult(proposalResult{Err: kvpb.NewError(aErr)})
+			p.signalProposalResult(makeProposalResultErr(aErr))
 		}
 	}
 }
