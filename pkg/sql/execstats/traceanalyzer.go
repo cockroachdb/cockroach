@@ -11,11 +11,13 @@
 package execstats
 
 import (
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -156,6 +158,8 @@ type QueryLevelStats struct {
 	ContentionEvents                   []kvpb.ContentionEvent
 	RUEstimate                         int64
 	CPUTime                            time.Duration
+	SqlInstanceIds                     map[base.SQLInstanceID]struct{}
+	Regions                            []string
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -205,6 +209,15 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 	s.RUEstimate += other.RUEstimate
 	s.CPUTime += other.CPUTime
+	if len(s.SqlInstanceIds) == 0 && len(other.SqlInstanceIds) > 0 {
+		s.SqlInstanceIds = other.SqlInstanceIds
+	} else if len(other.SqlInstanceIds) > 0 && len(s.SqlInstanceIds) > 0 {
+		for id := range other.SqlInstanceIds {
+			s.SqlInstanceIds[id] = struct{}{}
+		}
+	}
+
+	s.Regions = util.CombineUniqueString(s.Regions, other.Regions)
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -349,13 +362,23 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		}
 	}
 
+	instanceIds := make(map[base.SQLInstanceID]struct{}, len(a.flowStats))
+	// Default to 1 since most queries only use a single region.
+	regions := make([]string, 0, 1)
+
 	// Process flowStats.
 	for instanceID, stats := range a.flowStats {
 		if stats.stats == nil {
 			continue
 		}
 
+		instanceIds[instanceID] = struct{}{}
 		for _, v := range stats.stats {
+			// Avoid duplicates and empty string.
+			if v.Component.Region != "" {
+				regions = util.CombineUniqueString(regions, []string{v.Component.Region})
+			}
+
 			if v.FlowStats.MaxMemUsage.HasValue() {
 				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] {
 					a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] = memUsage
@@ -374,7 +397,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	// Process query level stats.
 	a.queryLevelStats = QueryLevelStats{}
+	a.queryLevelStats.SqlInstanceIds = instanceIds
+	sort.Strings(regions)
 
+	a.queryLevelStats.Regions = regions
 	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
 		a.queryLevelStats.NetworkBytesSent += bytesSentByNode
 	}

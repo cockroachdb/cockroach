@@ -110,7 +110,7 @@ func NewOutbox(
 	m.numOutboxes = numOutboxes
 	m.isGatewayNode = isGatewayNode
 	m.streamStats.Component = flowCtx.StreamComponentID(streamID)
-	m.flowStats.Component = execinfrapb.FlowComponentID(flowCtx.NodeID.SQLInstanceID(), flowCtx.ID)
+	m.flowStats.Component = flowCtx.FlowComponentID()
 	return m
 }
 

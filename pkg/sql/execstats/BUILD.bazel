@@ -13,6 +13,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvpb",
         "//pkg/sql/execinfrapb",
+        "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/optional",
         "//pkg/util/protoutil",
