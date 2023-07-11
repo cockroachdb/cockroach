@@ -10,7 +10,11 @@
 
 package base
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+)
 
 const (
 	// DefaultMaxClockOffset is the default maximum acceptable clock offset value.
@@ -18,13 +22,6 @@ const (
 	// clock offsets generally stay below 250ms. See comments on Config.MaxOffset
 	// for more on this setting.
 	DefaultMaxClockOffset = 500 * time.Millisecond
-
-	// DefaultTxnHeartbeatInterval is how often heartbeats are sent from the
-	// transaction coordinator to a live transaction. These keep it from
-	// being preempted by other transactions writing the same keys. If a
-	// transaction fails to be heartbeat within 5x the heartbeat interval,
-	// it may be aborted by conflicting txns.
-	DefaultTxnHeartbeatInterval = 1 * time.Second
 
 	// SlowRequestThreshold is the amount of time to wait before considering a
 	// request to be "slow".
@@ -57,3 +54,11 @@ const (
 	// configuring the CRDB node to run the Obs Service internally.
 	ObsServiceEmbedFlagValue = "embed"
 )
+
+// DefaultTxnHeartbeatInterval is how often heartbeats are sent from the
+// transaction coordinator to a live transaction. These keep it from
+// being preempted by other transactions writing the same keys. If a
+// transaction fails to be heartbeat within 5x the heartbeat interval,
+// it may be aborted by conflicting txns.
+var DefaultTxnHeartbeatInterval = envutil.EnvOrDefaultDuration(
+	"COCKROACH_TXN_LIVENESS_HEARTBEAT_INTERVAL", 3*time.Second)
