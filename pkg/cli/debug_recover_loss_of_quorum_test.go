@@ -462,7 +462,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 					StickyEngineRegistry: storeReg,
 				},
 			},
-			Listener: listenerReg.MustGetOrCreate(t, i),
 			StoreSpecs: []base.StoreSpec{
 				{
 					InMemory: true,
@@ -471,8 +470,8 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		}
 	}
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
-		ReusableListeners: true,
-		ServerArgsPerNode: sa,
+		ReusableListenerReg: listenerReg,
+		ServerArgsPerNode:   sa,
 	})
 	tc.Start(t)
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -555,7 +554,6 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	// NB: If recovery is not performed, server will just hang on startup.
 	// This is caused by liveness range becoming unavailable and preventing any
 	// progress. So it is likely that test will timeout if basic workflow fails.
-	require.NoError(t, listenerReg.MustGet(t, 0).Reopen())
 	require.NoError(t, tc.RestartServer(0), "restart failed")
 	s = sqlutils.MakeSQLRunner(tc.Conns[0])
 

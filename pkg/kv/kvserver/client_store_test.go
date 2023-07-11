@@ -129,11 +129,10 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, expOnly)
 
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ReusableListeners: true,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: listenerReg,
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
-				Listener: listenerReg.MustGetOrCreate(t, 0),
 				RaftConfig: base.RaftConfig{
 					RaftTickInterval: 100 * time.Millisecond,
 				},
