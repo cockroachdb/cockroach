@@ -121,14 +121,18 @@ func (b *Builder) analyzeReturningList(
 // As a side-effect, the appropriate scopes are updated with aggregations
 // (scope.groupby.aggs)
 //
-// If we are building a function, the `selects` expressions will be overwritten
-// with expressions that replace any `*` expressions with their columns.
+// If we are building a function or view, any `*` expressions in selects will be
+// replaced with a list of columns equivalent to the star expansion. Also, the
+// untyped expressions in selects will be replaced with typed expressions.
 func (b *Builder) analyzeSelectList(
 	selects *tree.SelectExprs, desiredTypes []*types.T, inScope, outScope *scope,
 ) {
-	var expansions tree.SelectExprs
+	var newSelects tree.SelectExprs
+	if b.insideFuncDef || b.insideViewDef {
+		newSelects = make(tree.SelectExprs, 0, len(*selects))
+	}
 	for i, e := range *selects {
-		expanded := false
+		addedToNewSelects := false
 		// Start with fast path, looking for simple column reference.
 		texpr := b.resolveColRef(e.Expr, inScope)
 		if texpr == nil {
@@ -149,13 +153,13 @@ func (b *Builder) analyzeSelectList(
 
 					aliases, exprs := b.expandStar(e.Expr, inScope)
 					if b.insideFuncDef || b.insideViewDef {
-						expanded = true
+						addedToNewSelects = true
 						for _, expr := range exprs {
 							switch col := expr.(type) {
 							case *scopeColumn:
-								expansions = append(expansions, tree.SelectExpr{Expr: tree.NewColumnItem(&col.table, col.name.ReferenceName())})
+								newSelects = append(newSelects, tree.SelectExpr{Expr: tree.NewColumnItem(&col.table, col.name.ReferenceName())})
 							case *tree.ColumnAccessExpr:
-								expansions = append(expansions, tree.SelectExpr{Expr: col})
+								newSelects = append(newSelects, tree.SelectExpr{Expr: col})
 							default:
 								panic(errors.AssertionFailedf("unexpected column type in expansion"))
 							}
@@ -177,6 +181,13 @@ func (b *Builder) analyzeSelectList(
 			}
 
 			texpr = inScope.resolveType(e.Expr, desired)
+			if b.insideViewDef || b.insideFuncDef {
+				addedToNewSelects = true
+				// e is a copy of the tree.SelectExpr in selects, so we can
+				// safely mutate it.
+				e.Expr = texpr
+				newSelects = append(newSelects, e)
+			}
 		}
 
 		// Output column names should exactly match the original expression, so we
@@ -187,12 +198,12 @@ func (b *Builder) analyzeSelectList(
 		}
 		alias := b.getColName(e)
 		outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
-		if (b.insideViewDef || b.insideFuncDef) && !expanded {
-			expansions = append(expansions, e)
+		if (b.insideViewDef || b.insideFuncDef) && !addedToNewSelects {
+			newSelects = append(newSelects, e)
 		}
 	}
 	if b.insideFuncDef || b.insideViewDef {
-		*selects = expansions
+		*selects = newSelects
 	}
 }
 

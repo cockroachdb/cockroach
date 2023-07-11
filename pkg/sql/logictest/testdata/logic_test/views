@@ -1893,3 +1893,19 @@ query T
 SELECT * FROM v104927
 ----
 [{"i": 1, "s": "foo"}]
+
+# Regression test for #105259. Do not re-type check view queries outside
+# optbuilder. Doing so can cause internal errors if the view has a subquery.
+subtest regression_105259
+
+statement ok
+CREATE TYPE e105259 AS ENUM ('foo');
+
+statement ok
+CREATE VIEW v105259 AS
+SELECT (SELECT 'foo')::e105259
+
+query T
+SELECT * FROM v105259
+----
+foo

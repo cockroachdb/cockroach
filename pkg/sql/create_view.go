@@ -189,7 +189,7 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	var newDesc *tabledesc.Mutable
 	applyGlobalMultiRegionZoneConfig := false
-	viewQuery := tree.AsStringWithFlags(n.cv.AsSource, tree.FmtParsable)
+	viewQuery := tree.AsStringWithFlags(n.cv.AsSource, tree.FmtSerializable)
 
 	var retErr error
 	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
@@ -197,6 +197,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			// If replacingDesc != nil, we found an existing view while resolving
 			// the name for our view. So instead of creating a new view, replace
 			// the existing one.
+			// TODO(mgartner): Check for cross-database type references here.
 			if replacingDesc != nil {
 				newDesc, err = params.p.replaceViewDesc(
 					params.ctx,
@@ -210,6 +211,19 @@ func (n *createViewNode) startExec(params runParams) error {
 					return err
 				}
 			} else {
+				// Check for references to cross-database types. We use a
+				// parsable formatting of view query instead of a serializable
+				// one because user defined type IDs, which are used in
+				// serializable formats, will cause the cross-database refernce
+				// errors.
+				//
+				// TODO(mgartner): This check should happen when optbuilder
+				// resolves types while building the view statement.
+				parsableViewQuery := tree.AsStringWithFlags(n.cv.AsSource, tree.FmtParsable)
+				if err := checkCrossReferences(params.ctx, &params.p.semaCtx, parsableViewQuery); err != nil {
+					return err
+				}
+
 				// If we aren't replacing anything, make a new table descriptor.
 				id, err := params.EvalContext().DescIDGenerator.
 					GenerateUniqueDescID(params.ctx)
@@ -420,12 +434,6 @@ func makeViewTableDesc(
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery, false /* multiStmt */)
-	if err != nil {
-		return tabledesc.Mutable{}, err
-	}
-	desc.ViewQuery = typeReplacedQuery
-
 	if err := addResultColumns(ctx, semaCtx, evalCtx, st, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
 	}
@@ -436,7 +444,9 @@ func makeViewTableDesc(
 // replaceSeqNamesWithIDs prepares to walk the given viewQuery by defining the
 // function used to replace sequence names with IDs, and parsing the
 // viewQuery into a statement.
-// TODO (Chengxiong): move this to a better place.
+// TODO(Chengxiong): move this to a better place.
+// TODO(mgartner): This should operate on the AST, not the query string. Or the
+// sequence names should be replaced with IDs during serialisable formatting.
 func replaceSeqNamesWithIDs(
 	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool,
 ) (string, error) {
@@ -493,6 +503,38 @@ func replaceSeqNamesWithIDs(
 	}
 
 	return fmtCtx.String(), nil
+}
+
+func checkCrossReferences(ctx context.Context, semaCtx *tree.SemaContext, query string) error {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		var typRef tree.ResolvableTypeReference
+		switch n := expr.(type) {
+		case *tree.CastExpr:
+			typRef = n.Type
+		case *tree.AnnotateTypeExpr:
+			typRef = n.Type
+		default:
+			return true, expr, nil
+		}
+		// semaCtx may be nil if this is a virtual view being created at
+		// init time.
+		var typeResolver tree.TypeReferenceResolver
+		if semaCtx != nil {
+			typeResolver = semaCtx.TypeResolver
+		}
+		// If there is a cross-database reference, then tree.ResolveType will
+		// return an error.
+		_, err = tree.ResolveType(ctx, typRef, typeResolver)
+		return false, expr, err
+	}
+
+	stmt, err := parser.ParseOne(query)
+	if err != nil {
+		return err
+	}
+
+	_, err = tree.SimpleStmtVisit(stmt.AST, replaceFunc)
+	return err
 }
 
 // serializeUserDefinedTypes will walk the given view query
