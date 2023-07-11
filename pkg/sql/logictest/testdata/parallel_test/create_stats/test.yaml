@@ -3,7 +3,7 @@
 
 cluster_size: 3
 
-range_split_size: 32768
+range_split_size: 67108864
 
 run:
    # First run setup
