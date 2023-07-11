@@ -12,19 +12,16 @@ package sql
 
 import (
 	"context"
-	"strconv"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // EngineMetrics groups a set of SQL metrics.
@@ -178,18 +175,16 @@ func (ex *connExecutor) recordStatementSummary(
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
 
-	// We only have node information when it was collected with trace, but we know at least the current
-	// node should be on the list.
-	nodeID, err := strconv.ParseInt(ex.server.sqlStats.GetSQLInstanceID().String(), 10, 64)
-	if err != nil {
-		log.Warningf(ctx, "failed to convert node ID to int: %s", err)
-	}
+	var sqlInstanceIds []int64
+	if queryLevelStatsOk {
+		sqlInstanceIds = make([]int64, 0, len(queryLevelStats.SqlInstanceIds))
+		for sqlInstanceId := range queryLevelStats.SqlInstanceIds {
+			sqlInstanceIds = append(sqlInstanceIds, int64(sqlInstanceId))
+		}
 
-	nodes := util.CombineUnique(getNodesFromPlanner(planner), []int64{nodeID})
-
-	regions := []string{}
-	if region, ok := ex.server.cfg.Locality.Find("region"); ok {
-		regions = append(regions, region)
+		sort.Slice(sqlInstanceIds, func(i, j int) bool {
+			return sqlInstanceIds[i] < sqlInstanceIds[j]
+		})
 	}
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
@@ -207,8 +202,7 @@ func (ex *connExecutor) recordStatementSummary(
 		BytesRead:            stats.bytesRead,
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,
-		Nodes:                nodes,
-		Regions:              regions,
+		Nodes:                sqlInstanceIds,
 		StatementType:        stmt.AST.StatementType(),
 		Plan:                 planner.instrumentation.PlanForStats(ctx),
 		PlanGist:             planner.instrumentation.planGist.String(),
@@ -314,17 +308,4 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 // We only want to keep track of DML (Data Manipulation Language) statements in our latency metrics.
 func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
 	return stmt.AST.StatementType() == tree.TypeDML
-}
-
-func getNodesFromPlanner(planner *planner) []int64 {
-	// Retrieve the list of all nodes which the statement was executed on.
-	var nodes []int64
-	if _, ok := planner.instrumentation.Tracing(); !ok {
-		trace := planner.instrumentation.sp.GetRecording(tracingpb.RecordingStructured)
-		// ForEach returns nodes in order.
-		execinfrapb.ExtractNodesFromSpans(trace).ForEach(func(i int) {
-			nodes = append(nodes, int64(i))
-		})
-	}
-	return nodes
 }
