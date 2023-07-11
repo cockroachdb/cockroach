@@ -190,12 +190,16 @@ func (ts *httpTestServer) GetAuthenticatedHTTPClientAndCookie(
 
 // CreateAuthUser is exported for use in tests.
 func (ts *httpTestServer) CreateAuthUser(userName username.SQLUsername, isAdmin bool) error {
-	if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
-		"create-auth-user", nil,
-		sessiondata.RootUserSessionDataOverride,
-		fmt.Sprintf("CREATE USER %s", userName.Normalized()),
-	); err != nil {
+	if userExists, err := ts.checkIfUserExists(userName); err != nil {
 		return err
+	} else if !userExists {
+		if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
+			"create-auth-user", nil,
+			sessiondata.RootUserSessionDataOverride,
+			fmt.Sprintf("CREATE USER %s", userName.Normalized()),
+		); err != nil {
+			return err
+		}
 	}
 	if isAdmin {
 		if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
@@ -207,4 +211,20 @@ func (ts *httpTestServer) CreateAuthUser(userName username.SQLUsername, isAdmin 
 		}
 	}
 	return nil
+}
+
+// checkIfUserExists checks if a user exists in the system.users table.
+func (ts *httpTestServer) checkIfUserExists(userName username.SQLUsername) (bool, error) {
+	rows, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
+		"check-user-exists", nil,
+		sessiondata.RootUserSessionDataOverride,
+		fmt.Sprintf("SELECT username FROM system.users WHERE username = '%s'", userName.Normalized()),
+	)
+	if err != nil {
+		return false, err
+	}
+	if rows == 1 {
+		return true, nil
+	}
+	return false, nil
 }

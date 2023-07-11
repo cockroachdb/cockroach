@@ -307,6 +307,38 @@ func (c *adminPrivilegeChecker) HasRoleOption(
 	return bool(dbDatum), nil
 }
 
+func (c *adminPrivilegeChecker) HasViewActivityRedacted(
+	ctx context.Context, user username.SQLUsername,
+) (bool, error) {
+	if hasViewRedacted, err := c.HasGlobalPrivilege(ctx, user, privilege.VIEWACTIVITYREDACTED); err != nil {
+		return false, err
+	} else if hasViewRedacted {
+		return true, nil
+	}
+	if hasViewRedacted, err := c.HasRoleOption(ctx, user, roleoption.VIEWACTIVITYREDACTED); err != nil {
+		return false, err
+	} else if hasViewRedacted {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (c *adminPrivilegeChecker) HasViewActivity(
+	ctx context.Context, user username.SQLUsername,
+) (bool, error) {
+	if hasView, err := c.HasGlobalPrivilege(ctx, user, privilege.VIEWACTIVITY); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
+	}
+	if hasView, err := c.HasRoleOption(ctx, user, roleoption.VIEWACTIVITY); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
+	}
+	return false, nil
+}
+
 // HasGlobalPrivilege is a helper function which calls
 // CheckPrivilege and returns a true/false based on the returned
 // result.

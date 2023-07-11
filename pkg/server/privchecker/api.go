@@ -53,6 +53,8 @@ type CheckerForRPCHandlers interface {
 	RequireViewActivityAndNoViewActivityRedactedPermission(ctx context.Context) error
 	RequireViewClusterMetadataPermission(ctx context.Context) error
 	RequireViewDebugPermission(ctx context.Context) error
+	HasViewActivityRedacted(ctx context.Context, user username.SQLUsername) (bool, error)
+	HasViewActivity(ctx context.Context, user username.SQLUsername) (bool, error)
 }
 
 // SQLPrivilegeChecker is the part of the privilege checker that can
