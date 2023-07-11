@@ -4,7 +4,7 @@ genrule(
     name = "genassets",
     srcs = ["//pkg/ui/workspaces/db-console:db-console-oss"],
     outs = ["assets.tar.gz"],
-    cmd = """$(location //pkg/util/targz/gen) $< $@""",
+    cmd = """$(location //pkg/util/targz/gen) $@ $(SRCS)""",
     exec_tools = ["//pkg/util/targz/gen"],
     visibility = ["//pkg/gen:__subpackages__"],
 )
