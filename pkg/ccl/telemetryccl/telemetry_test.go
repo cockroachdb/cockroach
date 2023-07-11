@@ -23,6 +23,7 @@ func TestTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1min under race")
+	skip.UnderDeadlock(t, "takes >1min under deadlock")
 
 	sqltestutils.TelemetryTest(
 		t,
