@@ -462,7 +462,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 					StickyEngineRegistry: storeReg,
 				},
 			},
-			Listener: listenerReg.GetOrFail(t, i),
+			Listener: listenerReg.MustGetOrCreate(t, i),
 			StoreSpecs: []base.StoreSpec{
 				{
 					InMemory: true,

@@ -170,7 +170,7 @@ func runCircuitBreakerTestForKey(
 					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
 				},
 			},
-			Listener: lReg.GetOrFail(t, i),
+			Listener: lReg.MustGetOrCreate(t, i),
 		}
 		args.ServerArgsPerNode[i] = a
 	}
