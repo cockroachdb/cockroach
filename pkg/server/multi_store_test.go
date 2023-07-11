@@ -39,7 +39,10 @@ func TestAddNewStoresToExistingNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Nine stores is a lot of goroutines.
 	skip.UnderStress(t, "too many new stores and nodes for stress")
+	skip.UnderRace(t, "too many new stores and nodes for race")
+	skip.UnderDeadlock(t, "too many new stores and nodes for deadlock")
 
 	ctx := context.Background()
 
