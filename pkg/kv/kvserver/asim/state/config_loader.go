@@ -12,14 +12,16 @@ package state
 
 import (
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // TODO(kvoli): Add a loader/translator for the existing
 // []*roachpb.StoreDescriptor configurations in kvserver/*_test.go and
 // allocatorimpl/*_test.go.
+
+var ClusterOptions = [...]string{"single_region", "single_region_multi_store", "multi_region", "complex"}
 
 // SingleRegionConfig is a simple cluster config with a single region and 3
 // zones, all have the same number of nodes.
@@ -257,6 +259,19 @@ func LoadConfig(c ClusterInfo, r RangesInfo, settings *config.SimulationSettings
 	s := LoadClusterInfo(c, settings)
 	LoadRangeInfo(s, r...)
 	return s
+}
+
+func (c ClusterInfo) GetNumOfStores() (totalStores int) {
+	for _, r := range c.Regions {
+		for _, z := range r.Zones {
+			storesPerNode := z.StoresPerNode
+			if storesPerNode < 1 {
+				storesPerNode = 1
+			}
+			totalStores += storesPerNode * z.NodeCount
+		}
+	}
+	return totalStores
 }
 
 // LoadClusterInfo loads a predefined configuration which contains cluster

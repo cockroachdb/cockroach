@@ -44,7 +44,7 @@ func evenDistribution(n int) []float64 {
 // TODO COMMENT
 func randomDistribution(randSource *rand.Rand, n int) []float64 {
 	total := float64(0)
-	distribution := []float64{}
+	distribution := make([]float64, n)
 	for i := 0; i < n; i++ {
 		num := float64(randSource.Intn(10))
 		distribution[i] = num
@@ -55,6 +55,35 @@ func randomDistribution(randSource *rand.Rand, n int) []float64 {
 		distribution[i] = distribution[i] / total
 	}
 	return distribution
+}
+
+func weightedRandDistribution(randSource *rand.Rand, weightedStores []float64) []float64 {
+	cumulativeWeights := make([]float64, len(weightedStores))
+	prefixSumWeight := float64(0)
+	for i, item := range weightedStores {
+		prefixSumWeight += item
+		cumulativeWeights[i] = prefixSumWeight
+	}
+
+	// Vote for 10 times and give a distribution.
+	numSamples := 10
+	votes := make([]int, len(weightedStores))
+	for i := 0; i < numSamples; i++ {
+		random := randSource.Float64()
+		index := sort.Search(len(cumulativeWeights), func(i int) bool { return cumulativeWeights[i] > random })
+		votes[index] += 1
+	}
+
+	return exactDistribution(votes)
+}
+
+func NormalizedSkewedDistribution(n int) []float64 {
+	distribution := make([]int, n)
+	pow := 2
+	for i := 0; i < n; i++ {
+		distribution[i] = pow * pow
+	}
+	return exactDistribution(distribution)
 }
 
 func skewedDistribution(n, k int) []float64 {
@@ -249,6 +278,27 @@ func RangesInfoWithReplicaCounts(
 		int64(MinKey), int64(keyspace), rangeSize)
 }
 
+// Weighted distribution: vote for 10 times and see which bucket the number falls under
+func RangesInfoWeightedRandomDistribution(
+	randSource *rand.Rand, weightedStores []float64, ranges int, keyspace int, replicationFactor int, rangeSize int64,
+) RangesInfo {
+	distribution := weightedRandDistribution(randSource, weightedStores)
+	storeList := makeStoreList(len(weightedStores))
+	spanConfig := defaultSpanConfig
+	spanConfig.NumReplicas = int32(replicationFactor)
+	spanConfig.NumVoters = int32(replicationFactor)
+	return RangesInfoWithDistribution(
+		storeList,
+		distribution,
+		distribution,
+		ranges,
+		spanConfig,
+		int64(MinKey),
+		int64(keyspace),
+		rangeSize, /* rangeSize */
+	)
+}
+
 func RangesInfoRandomDistribution(
 	randSource *rand.Rand, stores int, ranges int, keyspace int, replicationFactor int, rangeSize int64,
 ) RangesInfo {
@@ -280,9 +330,9 @@ func RangesInfoEvenDistribution(
 }
 
 func RangesInfoWithPercentOfReplicas(
-	stores int, percentOfReplicas []float64, ranges int, keyspace int, replicationFactor int, rangeSize int64,
+	percentOfReplicas []float64, ranges int, keyspace int, replicationFactor int, rangeSize int64,
 ) RangesInfo {
-	storeList := makeStoreList(stores)
+	storeList := makeStoreList(len(percentOfReplicas))
 	spanConfig := defaultSpanConfig
 	spanConfig.NumReplicas = int32(replicationFactor)
 	spanConfig.NumVoters = int32(replicationFactor)
@@ -294,7 +344,7 @@ func RangesInfoWithPercentOfReplicas(
 		spanConfig,
 		int64(MinKey),
 		int64(keyspace),
-		0, /* rangeSize */
+		rangeSize,
 	)
 }
 
@@ -315,7 +365,7 @@ func NewStateWithDistribution(
 	// store per node.
 	clusterInfo := ClusterInfoWithStoreCount(numNodes, 1 /* storesPerNode */)
 	s := LoadClusterInfo(clusterInfo, settings)
-	rangesInfo := RangesInfoWithPercentOfReplicas(numNodes, percentOfReplicas, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	rangesInfo := RangesInfoWithPercentOfReplicas(percentOfReplicas, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
 	LoadRangeInfo(s, rangesInfo...)
 	return s
 }

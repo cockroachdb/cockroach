@@ -16,13 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"time"
-)
-
-const (
-	defaultNumIterations = 5
-	defaultSeed          = 42
-	defaultDuration      = 30 * time.Minute
 )
 
 // Cluster default setting.
@@ -65,25 +58,7 @@ func defaultEventGen() gen.StaticEvents {
 	return gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
 }
 
-// range default setting
-const (
-	defaultRanges            = 1
-	defaultPlacementType     = gen.Uniform
-	defaultReplicationFactor = 3
-	defaultBytes             = 0
-)
-
-func defaultBasicRangesGen() gen.BasicRanges {
-	return gen.BasicRanges{
-		Ranges:            defaultRanges,
-		PlacementType:     defaultPlacementType,
-		KeySpace:          defaultKeyspace,
-		ReplicationFactor: defaultReplicationFactor,
-		Bytes:             defaultBytes,
-	}
-}
-
-const defaultKeyspace = 1000000
+const defaultKeyspace = 200000
 
 // Load default setting.
 const (
@@ -102,5 +77,53 @@ func defaultLoadGen() gen.BasicLoad {
 		MaxBlockSize: defaultMaxBlock,
 		MinKey:       defaultMinKey,
 		MaxKey:       defaultMaxKey,
+	}
+}
+
+// range default setting
+const (
+	defaultRanges            = 1
+	defaultPlacementType     = gen.Uniform
+	defaultReplicationFactor = 3
+	defaultBytes             = 0
+)
+
+func defaultBasicRangesGen() gen.BasicRanges {
+	// No WeightedRand needed since the defaultPlacementType is uniform.
+	return gen.BasicRanges{
+		Ranges:            defaultRanges,
+		PlacementType:     defaultPlacementType,
+		KeySpace:          defaultKeyspace,
+		ReplicationFactor: defaultReplicationFactor,
+		Bytes:             defaultBytes,
+	}
+}
+
+func defaultAssertions() []SimulationAssertion {
+	return []SimulationAssertion{
+		conformanceAssertion{
+			underreplicated: 0,
+			overreplicated:  0,
+			violating:       0,
+			unavailable:     0,
+		},
+	}
+}
+
+const (
+	defaultStat                 = "replicas"
+	defaultHeight, defaultWidth = 15, 80
+)
+
+type plotSettings struct {
+	stat          string
+	height, width int
+}
+
+func defaultPlotSettings() plotSettings {
+	return plotSettings{
+		stat:   defaultStat,
+		height: defaultHeight,
+		width:  defaultWidth,
 	}
 }

@@ -5,6 +5,7 @@ go_test(
     srcs = [
         "datadriven_simulation_test.go",
         "helpers_test.go",
+        "random_test.go",
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
@@ -30,12 +31,21 @@ go_test(
 
 go_library(
     name = "tests",
-    srcs = ["assert.go"],
+    srcs = [
+        "assert.go",
+        "random_setting.go",
+        "settings.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/event",
+        "//pkg/kv/kvserver/asim/gen",
         "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/workload",
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/util/log",

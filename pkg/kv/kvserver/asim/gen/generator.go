@@ -202,24 +202,48 @@ type BasicRanges struct {
 	Bytes             int64
 }
 
-// Generate returns an updated simulator state, where the cluster is loaded
-// with ranges based on the parameters of basic ranges.
-func (br BasicRanges) Generate(
-	seed int64, settings *config.SimulationSettings, s state.State,
-) state.State {
-	stores := len(s.Stores())
-	var rangesInfo state.RangesInfo
+func NewBasicRanges(
+	ranges int,
+	placementType PlacementType,
+	keySpace int,
+	replicationFactor int,
+	bytes int64,
+) BasicRanges {
+	return BasicRanges{
+		Ranges:            ranges,
+		PlacementType:     placementType,
+		KeySpace:          keySpace,
+		ReplicationFactor: replicationFactor,
+		Bytes:             bytes,
+	}
+}
+
+func (br BasicRanges) GetRangesInfo(stores int) (rangesInfo state.RangesInfo) {
 	switch br.PlacementType {
 	case Uniform:
 		rangesInfo = state.RangesInfoEvenDistribution(stores, br.Ranges, br.KeySpace, br.ReplicationFactor, br.Bytes)
 	case Skewed:
 		rangesInfo = state.RangesInfoSkewedDistribution(stores, br.Ranges, br.KeySpace, br.ReplicationFactor, br.Bytes)
 	}
+	return rangesInfo
+}
+
+func (br BasicRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) state.State {
 	for _, rangeInfo := range rangesInfo {
 		rangeInfo.Size = br.Bytes
 	}
 	state.LoadRangeInfo(s, rangesInfo...)
 	return s
+}
+
+// Generate returns an updated simulator state, where the cluster is loaded
+// with ranges based on the parameters of basic ranges.
+func (br BasicRanges) Generate(
+	seed int64, settings *config.SimulationSettings, s state.State,
+) state.State {
+	stores := len(s.Stores())
+	rangesInfo := br.GetRangesInfo(stores)
+	return br.LoadRangeInfo(s, rangesInfo)
 }
 
 // StaticEvents implements the EventGen interface.
