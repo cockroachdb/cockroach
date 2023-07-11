@@ -144,6 +144,7 @@ export interface StatementDetailsDispatchProps {
     ascending: boolean,
   ) => void;
   onBackToStatementsClick?: () => void;
+  onRequestTimeChange: (t: moment.Moment) => void;
 }
 
 export interface StatementDetailsStateProps {
@@ -160,6 +161,7 @@ export interface StatementDetailsStateProps {
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
   statementFingerprintInsights?: StmtInsightEvent[];
+  requestTime: moment.Moment;
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -247,12 +249,10 @@ export class StatementDetails extends React.Component<
     this.props.diagnosticsReports.length > 0;
 
   changeTimeScale = (ts: TimeScale): void => {
-    if (ts.key !== "Custom") {
-      ts.fixedWindowEnd = moment();
-    }
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
+    this.props.onRequestTimeChange(moment());
   };
 
   refreshStatementDetails = (): void => {
@@ -700,14 +700,17 @@ export class StatementDetails extends React.Component<
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
               currentScale={this.props.timeScale}
-              setTimeScale={this.props.onTimeScaleChange}
+              setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>
         <p className={timeScaleStylesCx("time-label", "label-margin")}>
           Showing aggregated stats from{" "}
           <span className={timeScaleStylesCx("bold")}>
-            <FormattedTimescale ts={this.props.timeScale} />
+            <FormattedTimescale
+              ts={this.props.timeScale}
+              requestTime={moment(this.props.requestTime)}
+            />
           </span>
         </p>
         <section className={cx("section")}>
@@ -898,7 +901,10 @@ export class StatementDetails extends React.Component<
         <p className={timeScaleStylesCx("time-label", "label-margin")}>
           Showing explain plans from{" "}
           <span className={timeScaleStylesCx("bold")}>
-            <FormattedTimescale ts={this.props.timeScale} />
+            <FormattedTimescale
+              ts={this.props.timeScale}
+              requestTime={moment(this.props.requestTime)}
+            />
           </span>
         </p>
         <section className={cx("section")}>
