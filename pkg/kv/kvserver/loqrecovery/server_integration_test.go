@@ -630,7 +630,6 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	for _, id := range planDetails.UpdatedNodes {
 		tc.StopServer(int(id.NodeID - 1))
-		require.NoError(t, lReg.MustGet(t, int(id.NodeID-1)).Reopen())
 		require.NoError(t, tc.RestartServer(int(id.NodeID-1)), "failed to restart node")
 	}
 
@@ -682,7 +681,6 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 	tc.StopServer(1)
 	require.NoError(t, pss[1].SavePlan(plan), "failed to inject plan into storage")
-	require.NoError(t, lReg.MustGet(t, 1).Reopen())
 	require.NoError(t, tc.RestartServer(1), "failed to restart server")
 
 	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
@@ -705,6 +703,8 @@ func prepTestCluster(
 	*testcluster.TestCluster,
 	server.StickyInMemEnginesRegistry,
 	map[int]loqrecovery.PlanStore,
+	// TODO(during PR): no caller uses this now except to close it, so close it
+	// via stopper and don't return it.
 	*listenerutil.ListenerRegistry,
 ) {
 	skip.UnderStressRace(t, "cluster frequently fails to start under stress race")
@@ -714,8 +714,8 @@ func prepTestCluster(
 	lReg := listenerutil.NewListenerRegistry()
 
 	args := base.TestClusterArgs{
-		ServerArgsPerNode: make(map[int]base.TestServerArgs),
-		ReusableListeners: true,
+		ServerArgsPerNode:   make(map[int]base.TestServerArgs),
+		ReusableListenerReg: lReg,
 	}
 	for i := 0; i < nodes; i++ {
 		args.ServerArgsPerNode[i] = base.TestServerArgs{
@@ -733,7 +733,6 @@ func prepTestCluster(
 					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
 				},
 			},
-			Listener: lReg.MustGetOrCreate(t, i),
 		}
 	}
 	tc := testcluster.NewTestCluster(t, nodes, args)
