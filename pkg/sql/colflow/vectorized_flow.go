@@ -485,11 +485,12 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 			result = append(result, s.GetStats())
 		}
 		if lastOutboxOnRemoteNode {
+			region, _ := flowCtx.Cfg.Locality.Find("region")
 			// At the last outbox, we can accurately retrieve stats for the
 			// whole flow from parent monitors. These stats are added to a
 			// flow-level span.
 			result = append(result, &execinfrapb.ComponentStats{
-				Component: execinfrapb.FlowComponentID(originSQLInstanceID, flowCtx.ID),
+				Component: execinfrapb.FlowComponentID(originSQLInstanceID, flowCtx.ID, region),
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(flowCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),

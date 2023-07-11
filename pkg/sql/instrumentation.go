@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -683,9 +682,8 @@ func (m execNodeTraceMetadata) associateNodeWithComponents(
 // where executed on.
 func (m execNodeTraceMetadata) annotateExplain(
 	plan *explain.Plan, spans []tracingpb.RecordedSpan, makeDeterministic bool, p *planner,
-) []string {
+) {
 	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
-	var allRegions []string
 
 	// Retrieve which region each node is on.
 	regionsInfo := make(map[int64]string)
@@ -762,7 +760,6 @@ func (m execNodeTraceMetadata) annotateExplain(
 				}
 				sort.Strings(regions)
 				nodeStats.Regions = regions
-				allRegions = util.CombineUnique(allRegions, regions)
 				n.Annotate(exec.ExecutionStatsID, &nodeStats)
 			}
 		}
@@ -779,8 +776,6 @@ func (m execNodeTraceMetadata) annotateExplain(
 	for i := range plan.Checks {
 		walk(plan.Checks[i])
 	}
-
-	return allRegions
 }
 
 // SetIndexRecommendations checks if we should generate a new index recommendation.
