@@ -158,12 +158,12 @@ func (b *baseStatusServer) getLocalSessions(
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
-	hasViewActivityRedacted, err := b.privilegeChecker.HasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITYREDACTED)
+	hasViewActivityRedacted, err := b.privilegeChecker.HasPrivilegeOrRoleOption(ctx, sessionUser, privilege.VIEWACTIVITYREDACTED)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
 
-	hasViewActivity, err := b.privilegeChecker.HasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITY)
+	hasViewActivity, err := b.privilegeChecker.HasPrivilegeOrRoleOption(ctx, sessionUser, privilege.VIEWACTIVITY)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -204,6 +204,11 @@ func (b *baseStatusServer) getLocalSessions(
 		}
 	}
 
+	// At this point, we have decided if we are going to show all sessions so we
+	// can set the username to the session user if it is undefined.
+	if reqUsername.Undefined() {
+		reqUsername = sessionUser
+	}
 	reqUserNameNormalized := reqUsername.Normalized()
 
 	userSessions := make([]serverpb.Session, 0, len(sessions)+len(closedSessions))

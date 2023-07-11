@@ -77,6 +77,9 @@ type SQLPrivilegeChecker interface {
 
 	// HasGlobalPrivilege is a convenience wrapper
 	HasGlobalPrivilege(ctx context.Context, user username.SQLUsername, privilege privilege.Kind) (bool, error)
+
+	// HasPrivilegeOrRoleOption is a convenience wrapper
+	HasPrivilegeOrRoleOption(ctx context.Context, user username.SQLUsername, priv privilege.Kind) (bool, error)
 }
 
 // NewChecker constructs a new CheckerForRPCHandlers.
