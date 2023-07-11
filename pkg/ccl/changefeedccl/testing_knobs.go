@@ -50,8 +50,6 @@ type TestingKnobs struct {
 	NullSinkIsExternalIOAccounted bool
 	// OnDistflowSpec is called when specs for distflow planning have been created
 	OnDistflowSpec func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, frontierSpec *execinfrapb.ChangeFrontierSpec)
-	// ShouldReplan is used to see if a replan for a changefeed should be triggered
-	ShouldReplan func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool
 	// RaiseRetryableError is a knob used to possibly return an error.
 	RaiseRetryableError func() error
 
