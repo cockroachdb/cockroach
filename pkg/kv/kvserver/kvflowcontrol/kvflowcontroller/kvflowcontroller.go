@@ -154,7 +154,7 @@ func (c *Controller) Admit(
 			c.mode() == kvflowcontrol.ApplyToElastic && class == admissionpb.RegularWorkClass {
 
 			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Infof(ctx, "admitted request (pri=%s stream=%s tokens=%s wait-duration=%s mode=%s)",
+				log.VEventf(ctx, 2, "admitted request (pri=%s stream=%s tokens=%s wait-duration=%s mode=%s)",
 					pri, connection.Stream(), tokens, c.clock.PhysicalTime().Sub(tstart), c.mode())
 			}
 
@@ -182,7 +182,7 @@ func (c *Controller) Admit(
 		}
 
 		if !logged && log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "waiting for flow tokens (pri=%s stream=%s tokens=%s)",
+			log.VEventf(ctx, 2, "waiting for flow tokens (pri=%s stream=%s tokens=%s)",
 				pri, connection.Stream(), tokens)
 			logged = true
 		}
@@ -292,7 +292,7 @@ func (c *Controller) adjustTokens(
 	}
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "adjusted flow tokens (pri=%s stream=%s delta=%s): regular=%s elastic=%s",
+		log.VEventf(ctx, 2, "adjusted flow tokens (pri=%s stream=%s delta=%s): regular=%s elastic=%s",
 			pri, stream, delta, b.tokens[regular], b.tokens[elastic])
 	}
 }
