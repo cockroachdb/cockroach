@@ -375,6 +375,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     sampleSize: moment.duration(5, "minutes"),
     fixedWindowEnd: moment.utc("2021.12.12"),
     key: "Custom",
+    requestTime: false,
   },
   columns: null,
   isTenant: false,

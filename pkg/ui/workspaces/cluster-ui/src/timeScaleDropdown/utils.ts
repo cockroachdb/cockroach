@@ -85,6 +85,7 @@ export const defaultTimeScaleSelected: TimeScale = {
   ...defaultTimeScaleOptions["Past Hour"],
   key: "Past Hour",
   fixedWindowEnd: false,
+  requestTime: false,
 };
 
 // toDateRange returns the actual value of start and end date, based on
@@ -172,6 +173,7 @@ export const createTimeScaleFromDateRange = (
     windowSize: moment.duration(end.diff(start)),
     fixedWindowEnd: end,
     key: "Custom",
+    requestTime: false,
   };
 
   return timeScale;

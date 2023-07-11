@@ -42,6 +42,9 @@ export interface TimeScale {
    * It is unclear if there are legitimate reasons for the two being out of sync.
    */
   fixedWindowEnd: moment.Moment | false;
+  // For cases where the value is not custom and we want to clarify the time a request was made,
+  // because we're pausing the rolling window.
+  requestTime: moment.Moment | false;
 }
 
 export class TimeScaleState {
@@ -56,7 +59,7 @@ export class TimeScaleState {
   }
 }
 
-export type TimeScaleOption = Omit<TimeScale, "fixedWindowEnd">;
+export type TimeScaleOption = Omit<TimeScale, "fixedWindowEnd" | "requestTime">;
 
 export interface TimeScaleOptions {
   [key: string]: TimeScaleOption;

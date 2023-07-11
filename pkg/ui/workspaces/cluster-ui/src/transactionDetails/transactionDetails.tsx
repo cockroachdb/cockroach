@@ -225,7 +225,7 @@ export class TransactionDetails extends React.Component<
 
   changeTimeScale = (ts: TimeScale): void => {
     if (ts.key !== "Custom") {
-      ts.fixedWindowEnd = moment();
+      ts.requestTime = moment();
     }
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
