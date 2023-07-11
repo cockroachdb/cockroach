@@ -1585,12 +1585,18 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "fa9274fc947298b348e950311262402fb25daaa99c4f85ef16d211d26955660b",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230701135918-609ae80aea41",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230701135918-609ae80aea41.zip",
-        ],
+        vcs = "git",
+        remote = "https://github.com/bananabrick/pebble",  # Custom fork.
+        commit = "e1537d394337e2ce644efb6220ae92564f5172ba",  # Custom commit.
     )
+#     go_repository(
+#        name = "com_github_cockroachdb_sentry_go",
+#        build_file_proto_mode = "disable_global",
+#        importpath = "github.com/cockroachdb/sentry-go",
+#        vcs = "git",
+#        remote = "https://github.com/rickystewart/sentry-go",  # Custom fork.
+#        commit = "6c8e10aca9672de108063d4953399bd331b54037",  # Custom commit.
+#    )
     go_repository(
         name = "com_github_cockroachdb_redact",
         build_file_proto_mode = "disable_global",
