@@ -2095,6 +2095,7 @@ GO_TARGETS = [
     "//pkg/testutils/lint/passes/unconvert:unconvert_test",
     "//pkg/testutils/lint:lint",
     "//pkg/testutils/lint:lint_test",
+    "//pkg/testutils/listenerutil:listenerutil",
     "//pkg/testutils/localtestcluster:localtestcluster",
     "//pkg/testutils/metrictestutils:metrictestutils",
     "//pkg/testutils/pgtest:pgtest",
