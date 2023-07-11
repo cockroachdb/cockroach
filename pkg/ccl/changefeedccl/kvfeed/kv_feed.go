@@ -413,8 +413,8 @@ func (f *kvFeed) scanIfShould(
 				}
 			}
 			if !scanTime.Equal(ev.After.GetModificationTime()) {
-				return nil, hlc.Timestamp{}, errors.AssertionFailedf(
-					"found event in shouldScan which did not occur at the scan time %v: %v",
+				return nil, hlc.Timestamp{}, errors.Newf(
+					"found event in scanIfShould which did not occur at the scan time %v: %v",
 					scanTime, ev)
 			}
 		}

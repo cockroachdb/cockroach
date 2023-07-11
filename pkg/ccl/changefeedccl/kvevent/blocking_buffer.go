@@ -214,7 +214,7 @@ func (b *blockingBuffer) enqueue(ctx context.Context, e Event) (err error) {
 
 	if b.mu.closed {
 		logcrash.ReportOrPanic(ctx, b.sv, "buffer unexpectedly closed")
-		return errors.AssertionFailedf("buffer unexpectedly closed")
+		return errors.New("buffer unexpectedly closed")
 	}
 
 	b.metrics.BufferEntriesIn.Inc(1)

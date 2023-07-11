@@ -17,7 +17,6 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/settings",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/lease",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util",
@@ -28,13 +27,27 @@ go_library(
 
 go_test(
     name = "changefeedbase_test",
-    srcs = ["options_test.go"],
+    srcs = [
+        "errors_test.go",
+        "main_test.go",
+        "options_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":changefeedbase"],
     tags = ["ccl_test"],
     deps = [
+        "//pkg/ccl",
+        "//pkg/jobs",
+        "//pkg/kv/kvpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
