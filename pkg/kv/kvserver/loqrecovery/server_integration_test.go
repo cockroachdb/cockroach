@@ -705,7 +705,7 @@ func prepTestCluster(
 	*testcluster.TestCluster,
 	server.StickyInMemEnginesRegistry,
 	map[int]loqrecovery.PlanStore,
-	listenerutil.ListenerRegistry,
+	*listenerutil.ListenerRegistry,
 ) {
 	skip.UnderStressRace(t, "cluster frequently fails to start under stress race")
 
