@@ -501,6 +501,15 @@ type ClientNoticeSender interface {
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 }
 
+// DeferredRoutineSender allows a nested routine to send the information needed
+// for its own evaluation to a parent routine. This is used to defer execution
+// for tail-call optimization. It can only be used during local execution.
+type DeferredRoutineSender interface {
+	// SendDeferredRoutine sends a local nested routine and its arguments to its
+	// parent routine.
+	SendDeferredRoutine(expr *tree.RoutineExpr, args tree.Datums)
+}
+
 // PrivilegedAccessor gives access to certain queries that would otherwise
 // require someone with RootUser access to query a given data source.
 // It is defined independently to prevent a circular dependency on sql, tree and sqlbase.

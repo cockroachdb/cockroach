@@ -470,7 +470,8 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 	for _, param := range b.params {
 		addArg(tree.Name(param.Name), param.Typ)
 	}
-	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def})
+	// PLpgSQL continuation routines are always in tail-call position.
+	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def, TailCall: true})
 
 	returnColName := scopeColName("").WithMetadataName(con.def.Name)
 	returnScope := s.push()

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -254,7 +255,9 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	}
 	plan := p.(*planComponents)
 	rowResultWriter := NewRowResultWriter(&a.run.rightRows)
-	if err := runPlanInsidePlan(ctx, params, plan, rowResultWriter); err != nil {
+	if err := runPlanInsidePlan(
+		ctx, params, plan, rowResultWriter, nil, /* deferredRoutineSender */
+	); err != nil {
 		return err
 	}
 	a.run.rightRowsIterator = newRowContainerIterator(ctx, a.run.rightRows)
@@ -264,7 +267,11 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 // runPlanInsidePlan is used to run a plan and gather the results in the
 // resultWriter, as part of the execution of an "outer" plan.
 func runPlanInsidePlan(
-	ctx context.Context, params runParams, plan *planComponents, resultWriter rowResultWriter,
+	ctx context.Context,
+	params runParams,
+	plan *planComponents,
+	resultWriter rowResultWriter,
+	deferredRoutineSender eval.DeferredRoutineSender,
 ) error {
 	defer plan.close(ctx)
 	execCfg := params.ExecCfg()
@@ -317,9 +324,13 @@ func runPlanInsidePlan(
 		}
 	}
 
-	// Make a copy of the EvalContext so it can be safely modified.
-	evalCtx := params.p.ExtendedEvalContextCopy()
+	// Copy the planner and EvalContext so that they can be safely modified.
 	plannerCopy := *params.p
+	plannerCopy.extendedEvalCtx = *plannerCopy.ExtendedEvalContextCopy()
+	evalCtx := &plannerCopy.extendedEvalCtx
+	if deferredRoutineSender != nil {
+		evalCtx.RoutineSender = deferredRoutineSender
+	}
 	// If we reach this part when re-executing a pausable portal, we won't want to
 	// resume the flow bound to it. The inner-plan should have its own lifecycle
 	// for its flow.
