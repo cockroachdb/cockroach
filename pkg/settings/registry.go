@@ -169,6 +169,8 @@ var retiredSettings = map[string]struct{}{
 	// removed as of 23.2.
 	"sql.log.unstructured_entries.enabled":                     {},
 	"sql.auth.createrole_allows_grant_role_membership.enabled": {},
+	"changefeed.replan_flow_frequency":                         {},
+	"changefeed.replan_flow_threshold":                         {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
