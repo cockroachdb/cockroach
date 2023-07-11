@@ -6697,8 +6697,7 @@ func TestRaftPreVoteUnquiesceDeadLeader(t *testing.T) {
 	manualClock.Forward(lv.Expiration.WallTime + 1)
 
 	for i := 0; i < tc.NumServers(); i++ {
-		isLive, err := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness).IsLive(1)
-		require.NoError(t, err)
+		isLive := tc.Server(i).NodeLiveness().(*liveness.NodeLiveness).GetNodeVitalityFromCache(1).IsLive(livenesspb.LeaseCampaign)
 		require.False(t, isLive)
 		tc.GetFirstStoreFromServer(t, i).UpdateLivenessMap()
 	}

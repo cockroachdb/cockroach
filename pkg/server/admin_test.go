@@ -2499,7 +2499,6 @@ func checkNodeCheckResultReady(
 	require.Equal(t, serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 		NodeID:                nID,
 		DecommissionReadiness: serverpb.DecommissionPreCheckResponse_READY,
-		LivenessStatus:        livenesspb.NodeLivenessStatus_LIVE,
 		ReplicaCount:          replicaCount,
 		CheckedRanges:         nil,
 	}, checkResult)
@@ -2615,16 +2614,16 @@ func TestDecommissionPreCheckUnready(t *testing.T) {
 
 	awaitDecommissioned := func(nID roachpb.NodeID) {
 		testutils.SucceedsSoon(t, func() error {
-			livenesses, err := adminSrv.NodeLiveness().(*liveness.NodeLiveness).GetLivenessesFromKV(ctx)
+			livenesses, err := adminSrv.NodeLiveness().(*liveness.NodeLiveness).ScanNodeVitalityFromKV(ctx)
 			if err != nil {
 				return err
 			}
-			for _, nodeLiveness := range livenesses {
-				if nodeLiveness.NodeID == nID {
-					if nodeLiveness.Membership == livenesspb.MembershipStatus_DECOMMISSIONED {
+			for nodeID, nodeLiveness := range livenesses {
+				if nodeID == nID {
+					if nodeLiveness.IsDecommissioned() {
 						return nil
 					} else {
-						return errors.Errorf("n%d has membership: %s", nID, nodeLiveness.Membership)
+						return errors.Errorf("n%d has membership: %s", nID, nodeLiveness.MembershipStatus())
 					}
 				}
 			}
@@ -2859,7 +2858,6 @@ func TestDecommissionPreCheckInvalidNode(t *testing.T) {
 	require.Equal(t, serverpb.DecommissionPreCheckResponse_NodeCheckResult{
 		NodeID:                invalidDecommissioningNodeID,
 		DecommissionReadiness: serverpb.DecommissionPreCheckResponse_UNKNOWN,
-		LivenessStatus:        livenesspb.NodeLivenessStatus_UNKNOWN,
 		ReplicaCount:          0,
 		CheckedRanges:         nil,
 	}, resp.CheckedNodes[1])

@@ -532,8 +532,7 @@ message DecommissionPreCheckResponse {
     // The node's decommission readiness status.
     NodeReadiness decommission_readiness = 2;
 
-    // The liveness status of the given node.
-    kv.kvserver.liveness.livenesspb.NodeLivenessStatus liveness_status = 3;
+    reserved 3; // Previously used
 
     // The number of total replicas on the node, computed by scanning range
     // descriptors.

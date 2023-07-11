@@ -268,12 +268,12 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 	tArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				OnDecommissionedCallback: func(rec livenesspb.Liveness) {
+				OnDecommissionedCallback: func(id roachpb.NodeID) {
 					cb.Lock()
 					if cb.m == nil {
 						cb.m = map[roachpb.NodeID]bool{}
 					}
-					cb.m[rec.NodeID] = true
+					cb.m[id] = true
 					cb.Unlock()
 				},
 			},

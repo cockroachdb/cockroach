@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -44,14 +43,6 @@ import (
 )
 
 const (
-	// TestTimeUntilNodeDead is the test value for TimeUntilNodeDead to quickly
-	// mark stores as dead. This needs to be longer than gossip.StoresInterval
-	TestTimeUntilNodeDead = 15 * time.Second
-
-	// TestTimeUntilNodeDeadOff is the test value for TimeUntilNodeDead that
-	// prevents the store pool from marking stores as dead.
-	TestTimeUntilNodeDeadOff = 24 * time.Hour
-
 	timeUntilNodeDeadSettingName    = "server.time_until_store_dead"
 	timeAfterNodeSuspectSettingName = "server.time_after_store_suspect"
 )
@@ -284,8 +275,8 @@ type NodeLiveness struct {
 	heartbeatPaused       uint32
 	heartbeatToken        chan struct{}
 	metrics               Metrics
-	onNodeDecommissioned  func(livenesspb.Liveness)  // noop if nil
-	onNodeDecommissioning OnNodeDecommissionCallback // noop if nil
+	onNodeDecommissioned  func(id roachpb.NodeID) // noop if nil
+	onNodeDecommissioning func(id roachpb.NodeID) // noop if nil
 	nodeDialer            *nodedialer.Dialer
 	engineSyncs           *singleflight.Group
 
@@ -335,11 +326,10 @@ type NodeLivenessOptions struct {
 	// node was permanently removed from the cluster. This method must be
 	// idempotent as it may be invoked multiple times and defaults to a
 	// noop.
-	// TODO(baptist): Change this to not take the liveness record
-	OnNodeDecommissioned func(livenesspb.Liveness)
+	OnNodeDecommissioned func(id roachpb.NodeID)
 	// OnNodeDecommissioning is invoked when a node is detected to be
 	// decommissioning.
-	OnNodeDecommissioning OnNodeDecommissionCallback
+	OnNodeDecommissioning func(id roachpb.NodeID)
 	Engines               []diskStorage.Engine
 	OnSelfHeartbeat       HeartbeatCallback
 	NodeDialer            *nodedialer.Dialer
@@ -570,7 +560,7 @@ func (nl *NodeLiveness) cacheUpdated(old livenesspb.Liveness, new livenesspb.Liv
 		}
 	}
 	if !old.Membership.Decommissioned() && new.Membership.Decommissioned() && nl.onNodeDecommissioned != nil {
-		nl.onNodeDecommissioned(new)
+		nl.onNodeDecommissioned(new.NodeID)
 	}
 	if !old.Membership.Decommissioning() && new.Membership.Decommissioning() && nl.onNodeDecommissioning != nil {
 		nl.onNodeDecommissioning(new.NodeID)
@@ -628,57 +618,6 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 
 	return statusChanged, nil
 }
-
-// GetLivenessThreshold returns the maximum duration between heartbeats
-// before a node is considered not-live.
-func (nl *NodeLiveness) GetLivenessThreshold() time.Duration {
-	return nl.livenessThreshold
-}
-
-// IsLive returns whether or not the specified node is considered live based on
-// whether or not its liveness has expired regardless of the liveness status. It
-// is an error if the specified node is not in the local liveness table.
-func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
-	liveness, ok := nl.GetLiveness(nodeID)
-	if !ok {
-		// TODO(irfansharif): We only expect callers to supply us with node IDs
-		// they learnt through existing liveness records, which implies we
-		// should never find ourselves here. We should clean up this conditional
-		// once we re-visit the caching structure used within NodeLiveness;
-		// we should be able to return ErrMissingRecord instead.
-		return false, ErrRecordCacheMiss
-	}
-	// NB: We use clock.Now() in order to consider clock signals from other nodes.
-	return liveness.IsLive(nl.clock.Now()), nil
-}
-
-// IsAvailable returns whether or not the specified node is available to serve
-// requests. It checks both the liveness and decommissioned states, but not
-// draining or decommissioning (since it may still be a leaseholder for ranges).
-// Returns false if the node is not in the local liveness table.
-func (nl *NodeLiveness) IsAvailable(nodeID roachpb.NodeID) bool {
-	liveness, ok := nl.GetLiveness(nodeID)
-	return ok && liveness.IsLive(nl.clock.Now()) && !liveness.Membership.Decommissioned()
-}
-
-// IsAvailableNotDraining returns whether or not the specified node is available
-// to serve requests (i.e. it is live and not decommissioned) and is not in the
-// process of draining/decommissioning. Note that draining/decommissioning nodes
-// could still be leaseholders for ranges until drained, so this should not be
-// used when the caller needs to be able to contact leaseholders directly.
-// Returns false if the node is not in the local liveness table.
-func (nl *NodeLiveness) IsAvailableNotDraining(nodeID roachpb.NodeID) bool {
-	liveness, ok := nl.GetLiveness(nodeID)
-	return ok &&
-		liveness.IsLive(nl.clock.Now()) &&
-		!liveness.Membership.Decommissioning() &&
-		!liveness.Membership.Decommissioned() &&
-		!liveness.Draining
-}
-
-// OnNodeDecommissionCallback is a callback that is invoked when a node is
-// detected to be decommissioning.
-type OnNodeDecommissionCallback func(nodeID roachpb.NodeID)
 
 // Start starts a periodic heartbeat to refresh this node's last
 // heartbeat in the node liveness table. The optionally provided
@@ -782,48 +721,6 @@ of network connectivity problems. For help troubleshooting, visit:
     https://www.cockroachlabs.com/docs/stable/cluster-setup-troubleshooting.html#node-liveness-issues
 
 `
-
-// PauseHeartbeatLoopForTest stops the periodic heartbeat. The function
-// waits until it acquires the heartbeatToken (unless heartbeat was
-// already paused); this ensures that no heartbeats happen after this is
-// called. Returns a closure to call to re-enable the heartbeat loop.
-// This function is only safe for use in tests.
-func (nl *NodeLiveness) PauseHeartbeatLoopForTest() func() {
-	if swapped := atomic.CompareAndSwapUint32(&nl.heartbeatPaused, 0, 1); swapped {
-		<-nl.heartbeatToken
-	}
-	return func() {
-		if swapped := atomic.CompareAndSwapUint32(&nl.heartbeatPaused, 1, 0); swapped {
-			nl.heartbeatToken <- struct{}{}
-		}
-	}
-}
-
-// PauseSynchronousHeartbeatsForTest disables all node liveness
-// heartbeats triggered from outside the normal Start loop.
-// Returns a closure to call to re-enable synchronous heartbeats. Only
-// safe for use in tests.
-func (nl *NodeLiveness) PauseSynchronousHeartbeatsForTest() func() {
-	nl.selfSem <- struct{}{}
-	nl.otherSem <- struct{}{}
-	return func() {
-		<-nl.selfSem
-		<-nl.otherSem
-	}
-}
-
-// PauseAllHeartbeatsForTest disables all node liveness heartbeats,
-// including those triggered from outside the normal Start
-// loop. Returns a closure to call to re-enable heartbeats. Only safe
-// for use in tests.
-func (nl *NodeLiveness) PauseAllHeartbeatsForTest() func() {
-	enableLoop := nl.PauseHeartbeatLoopForTest()
-	enableSync := nl.PauseSynchronousHeartbeatsForTest()
-	return func() {
-		enableLoop()
-		enableSync()
-	}
-}
 
 var errNodeAlreadyLive = errors.New("node already live")
 
@@ -1016,24 +913,6 @@ func (nl *NodeLiveness) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 		statusMap[l.NodeID] = nl.convertToNodeVitality(l)
 	}
 	return statusMap
-}
-
-// GetLivenessesFromKV returns a slice containing the liveness record of all
-// nodes that have ever been a part of the cluster. The records are read from
-// the KV layer in a KV transaction. This is in contrast to GetLivenesses above,
-// which consults a (possibly stale) in-memory cache.
-// TODO(baptist): Remove.
-func (nl *NodeLiveness) GetLivenessesFromKV(ctx context.Context) ([]livenesspb.Liveness, error) {
-	records, err := nl.storage.scan(ctx)
-	if err != nil {
-		return nil, err
-	}
-	livenesses := make([]livenesspb.Liveness, len(records))
-	for i, r := range records {
-		livenesses[i] = r.Liveness
-		nl.cache.maybeUpdate(ctx, r)
-	}
-	return livenesses, nil
 }
 
 // ScanNodeVitalityFromKV returns the status for all the nodes from KV including
@@ -1292,9 +1171,10 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	if update.oldRaw == nil {
 		l, ok := nl.cache.GetLiveness(update.newLiveness.NodeID)
 		if !ok {
-			// TODO(irfansharif): See TODO in `NodeLiveness.IsLive`, the same
-			// applies to this conditional. We probably want to be able to
-			// return ErrMissingRecord here instead.
+			// TODO(baptist): We only expect callers to supply us with node IDs
+			// they learnt through existing liveness records, which implies we
+			// should never find ourselves here. We should be able to return
+			// ErrMissingRecord instead.
 			return Record{}, ErrRecordCacheMiss
 		}
 		if l.Liveness != update.oldLiveness {
@@ -1333,26 +1213,4 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 		}
 	}
 	return liveNodes
-}
-
-// TestingSetDrainingInternal is a testing helper to set the internal draining
-// state for a NodeLiveness instance.
-func (nl *NodeLiveness) TestingSetDrainingInternal(
-	ctx context.Context, liveness Record, drain bool,
-) error {
-	return nl.setDrainingInternal(ctx, liveness, drain, nil /* reporter */)
-}
-
-// TestingSetDecommissioningInternal is a testing helper to set the internal
-// decommissioning state for a NodeLiveness instance.
-func (nl *NodeLiveness) TestingSetDecommissioningInternal(
-	ctx context.Context, oldLivenessRec Record, targetStatus livenesspb.MembershipStatus,
-) (changeCommitted bool, err error) {
-	return nl.setMembershipStatusInternal(ctx, oldLivenessRec, targetStatus)
-}
-
-// TestingMaybeUpdate replaces the liveness (if it appears newer) and invokes
-// the registered callbacks if the node became live in the process. For testing.
-func (nl *NodeLiveness) TestingMaybeUpdate(ctx context.Context, newRec Record) {
-	nl.cache.maybeUpdate(ctx, newRec)
 }

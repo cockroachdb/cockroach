@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -1847,9 +1848,8 @@ func (n *Node) ResetQuorum(
 	log.Infof(ctx, "retrieved original range descriptor %s", desc)
 
 	// Check that we've actually lost quorum.
-	livenessMap := n.storeCfg.NodeLiveness.GetIsLiveMap()
 	available := desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
-		return livenessMap[rDesc.NodeID].IsLive
+		return n.storeCfg.NodeLiveness.GetNodeVitalityFromCache(rDesc.NodeID).IsLive(livenesspb.ReplicaProgress)
 	})
 	if available {
 		return nil, errors.Errorf("targeted range to recover has not lost quorum.")

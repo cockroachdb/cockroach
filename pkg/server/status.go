@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -916,7 +917,7 @@ func (s *systemStatusServer) AllocatorRange(
 		return nil, err
 	}
 
-	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	isLiveMap := s.nodeLiveness.ScanNodeVitalityFromCache()
 	type nodeResponse struct {
 		nodeID roachpb.NodeID
 		resp   *serverpb.AllocatorResponse
@@ -2019,10 +2020,15 @@ func (s *systemStatusServer) nodesHelper(
 		Nodes: statuses,
 	}
 
-	clock := s.clock
-	resp.LivenessByNodeID, err = getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now(), s.st)
+	nodeStatusMap, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
 	if err != nil {
 		return nil, 0, err
+	}
+	// TODO(baptist): Consider returning something better than LivenessStatus. It
+	// is an unfortunate mix of values.
+	resp.LivenessByNodeID = make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeStatusMap))
+	for nodeID, status := range nodeStatusMap {
+		resp.LivenessByNodeID[nodeID] = status.LivenessStatus()
 	}
 	return &resp, next, nil
 }
@@ -2485,7 +2491,7 @@ func (s *systemStatusServer) rangesHelper(
 		}
 	}
 
-	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	isLiveMap := s.nodeLiveness.ScanNodeVitalityFromCache()
 	clusterNodes := s.storePool.ClusterNodeCount()
 
 	// There are two possibilities for ordering of ranges in the results:
