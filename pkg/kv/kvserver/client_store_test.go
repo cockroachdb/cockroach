@@ -133,7 +133,7 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 			ReusableListeners: true,
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
-				Listener: listenerReg.GetOrFail(t, 0),
+				Listener: listenerReg.MustGetOrCreate(t, 0),
 				RaftConfig: base.RaftConfig{
 					RaftTickInterval: 100 * time.Millisecond,
 				},

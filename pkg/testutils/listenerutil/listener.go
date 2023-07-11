@@ -36,16 +36,16 @@ type ListenerRegistry struct {
 }
 
 // NewListenerRegistry creates a registry of reusable listeners to be used with
-// test cluster. Once created use ListenerRegistry.GetOrFail to create new
+// test cluster. Once created use ListenerRegistry.MustGetOrCreate to create new
 // listeners and inject them into test cluster using Listener field of
 // base.TestServerArgs.
 func NewListenerRegistry() ListenerRegistry {
 	return ListenerRegistry{listeners: make(map[int]*ReusableListener)}
 }
 
-// GetOrFail returns an existing reusable socket listener or creates a new one
+// MustGetOrCreate returns an existing reusable socket listener or creates a new one
 // on a random local port.
-func (r *ListenerRegistry) GetOrFail(t *testing.T, idx int) *ReusableListener {
+func (r *ListenerRegistry) MustGetOrCreate(t *testing.T, idx int) *ReusableListener {
 	t.Helper()
 	if l, ok := r.listeners[idx]; ok {
 		return l
