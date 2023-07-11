@@ -699,13 +699,7 @@ export class DatabaseTablePage extends React.Component<
                 renderError={() =>
                   LoadingError({
                     statsType: "databases",
-                    timeout:
-                      this.props.details.lastError?.name
-                        ?.toLowerCase()
-                        .includes("timeout") ||
-                      this.props.stats.lastError?.name
-                        ?.toLowerCase()
-                        .includes("timeout"),
+                    error: this.props.details.lastError,
                   })
                 }
               />
@@ -727,9 +721,7 @@ export class DatabaseTablePage extends React.Component<
                 renderError={() =>
                   LoadingError({
                     statsType: "databases",
-                    timeout: this.props.details.lastError?.name
-                      ?.toLowerCase()
-                      .includes("timeout"),
+                    error: this.props.details.lastError,
                   })
                 }
               />

@@ -386,6 +386,7 @@ export class StatementDetails extends React.Component<
             renderError={() =>
               LoadingError({
                 statsType: "statements",
+                error: error,
               })
             }
           />
@@ -475,7 +476,7 @@ export class StatementDetails extends React.Component<
             intent="danger"
             title={LoadingError({
               statsType: "statements",
-              timeout: true,
+              error: this.props.statementsError,
             })}
           />
         )}

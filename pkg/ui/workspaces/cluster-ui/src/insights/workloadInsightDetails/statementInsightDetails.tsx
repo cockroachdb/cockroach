@@ -172,9 +172,7 @@ export const StatementInsightDetails: React.FC<
                         renderError={() =>
                           LoadingError({
                             statsType: "explain plan",
-                            timeout: explainPlanState.error?.name
-                              ?.toLowerCase()
-                              .includes("timeout"),
+                            error: explainPlanState.error,
                           })
                         }
                       >
