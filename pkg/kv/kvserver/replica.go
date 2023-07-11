@@ -181,6 +181,34 @@ type raftSparseStatus struct {
 	Progress map[uint64]tracker.Progress
 }
 
+// ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
+// usages specific to the replica mutex.
+type ReplicaMutex syncutil.RWMutex
+
+func (mu *ReplicaMutex) Lock() {
+	(*syncutil.RWMutex)(mu).Lock()
+}
+
+func (mu *ReplicaMutex) Unlock() {
+	(*syncutil.RWMutex)(mu).Unlock()
+}
+
+func (mu *ReplicaMutex) RLock() {
+	(*syncutil.RWMutex)(mu).RLock()
+}
+
+func (mu *ReplicaMutex) AssertHeld() {
+	(*syncutil.RWMutex)(mu).AssertHeld()
+}
+
+func (mu *ReplicaMutex) AssertRHeld() {
+	(*syncutil.RWMutex)(mu).AssertRHeld()
+}
+
+func (mu *ReplicaMutex) RUnlock() {
+	(*syncutil.RWMutex)(mu).RUnlock()
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -386,7 +414,7 @@ type Replica struct {
 
 	mu struct {
 		// Protects all fields in the mu struct.
-		syncutil.RWMutex
+		ReplicaMutex
 		// The destroyed status of a replica indicating if it's alive, corrupt,
 		// scheduled for destruction or has been GCed.
 		// destroyStatus should only be set while also holding the raftMu and
