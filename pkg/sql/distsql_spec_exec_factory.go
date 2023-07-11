@@ -1044,10 +1044,6 @@ func (e *distSQLSpecExecFactory) ConstructCreateTableAs(
 func (e *distSQLSpecExecFactory) ConstructCreateView(
 	schema cat.Schema,
 	viewName *cat.DataSourceName,
-	ifNotExists bool,
-	replace bool,
-	persistence tree.Persistence,
-	materialized bool,
 	cv *tree.CreateView,
 	columns colinfo.ResultColumns,
 	deps opt.SchemaDeps,

@@ -623,10 +623,6 @@ define CreateTableAs {
 define CreateView {
     Schema cat.Schema
     ViewName *cat.DataSourceName
-    IfNotExists bool
-    Replace bool
-    Persistence tree.Persistence
-    Materialized bool
     Cv *tree.CreateView
     Columns colinfo.ResultColumns
     deps opt.SchemaDeps

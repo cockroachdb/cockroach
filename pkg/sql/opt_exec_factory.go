@@ -1835,10 +1835,6 @@ func (ef *execFactory) ConstructCreateTableAs(
 func (ef *execFactory) ConstructCreateView(
 	schema cat.Schema,
 	viewName *cat.DataSourceName,
-	ifNotExists bool,
-	replace bool,
-	persistence tree.Persistence,
-	materialized bool,
 	cv *tree.CreateView,
 	columns colinfo.ResultColumns,
 	deps opt.SchemaDeps,
@@ -1860,17 +1856,13 @@ func (ef *execFactory) ConstructCreateView(
 	}
 
 	return &createViewNode{
-		viewName:     viewName,
-		ifNotExists:  ifNotExists,
-		replace:      replace,
-		materialized: materialized,
-		persistence:  persistence,
-		cv:           cv,
-		dbDesc:       schema.(*optSchema).database,
-		columns:      columns,
-		planDeps:     planDeps,
-		typeDeps:     typeDepSet,
-		withData:     withData,
+		viewName: viewName,
+		cv:       cv,
+		dbDesc:   schema.(*optSchema).database,
+		columns:  columns,
+		planDeps: planDeps,
+		typeDeps: typeDepSet,
+		withData: withData,
 	}, nil
 }
 
