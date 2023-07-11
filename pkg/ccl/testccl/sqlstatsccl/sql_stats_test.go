@@ -13,19 +13,24 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,6 +38,7 @@ func TestSQLStatsRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "test is to slow for race")
 	skip.UnderStress(t, "test is too heavy to run under stress")
 
 	// We build a small multiregion cluster, with the proper settings for
@@ -102,6 +108,8 @@ func TestSQLStatsRegions(t *testing.T) {
 
 			// Create a multi-region database.
 			db.Exec(t, "SET enable_multiregion_placement_policy = true")
+			db.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;`)
+
 			db.Exec(t, fmt.Sprintf(`CREATE DATABASE testdb PRIMARY REGION "%s" PLACEMENT RESTRICTED`, regionNames[0]))
 			for i := 1; i < len(regionNames); i++ {
 				db.Exec(t, fmt.Sprintf(`ALTER DATABASE testdb ADD region "%s"`, regionNames[i]))
@@ -113,39 +121,86 @@ func TestSQLStatsRegions(t *testing.T) {
 
 			// Add some data to each region.
 			for i, regionName := range regionNames {
-				db.Exec(t, "INSERT INTO test (crdb_region, a) VALUES ($1, $2)", regionName, i)
+				db.Exec(t, "INSERT INTO test (a, crdb_region) VALUES ($1, $2)", i, regionName)
 			}
 
-			// Select from the table and see what statement statistics were written.
-			db.Exec(t, "SET application_name = $1", t.Name())
-			db.Exec(t, "SELECT * FROM test")
-			row := db.QueryRow(t, `
+			// It takes a while for the region replication to complete.
+			testutils.SucceedsWithin(t, func() error {
+				var expectedNodes []int64
+				var expectedRegions []string
+				_, err := db.DB.ExecContext(ctx, `USE testdb`)
+				if err != nil {
+					return err
+				}
+
+				// Use EXPLAIN ANALYSE (DISTSQL) to get the accurate list of nodes.
+				explainInfo, err := db.DB.QueryContext(ctx, `EXPLAIN ANALYSE (DISTSQL) SELECT * FROM test`)
+				if err != nil {
+					return err
+				}
+				for explainInfo.Next() {
+					var explainStr string
+					if err := explainInfo.Scan(&explainStr); err != nil {
+						t.Fatal(err)
+					}
+
+					explainStr = strings.ReplaceAll(explainStr, " ", "")
+					// Example str "  regions: cp-us-central1,gcp-us-east1,gcp-us-west1"
+					if strings.HasPrefix(explainStr, "regions:") {
+						explainStr = strings.ReplaceAll(explainStr, "regions:", "")
+						explainStr = strings.ReplaceAll(explainStr, " ", "")
+						expectedRegions = strings.Split(explainStr, ",")
+						if len(expectedRegions) < len(regionNames) {
+							return fmt.Errorf("rows are not replicated to all regions %s\n", expectedRegions)
+						}
+					}
+
+					// Example str " nodes: n1, n2, n4, n9"
+					if strings.HasPrefix(explainStr, "nodes:") {
+						explainStr = strings.ReplaceAll(explainStr, "nodes:", "")
+						explainStr = strings.ReplaceAll(explainStr, "n", "")
+
+						split := strings.Split(explainStr, ",")
+						if len(split) < len(regionNames) {
+							return fmt.Errorf("rows are not replicated to all regions %s\n", split)
+						}
+
+						// Gateway node was not included in the explain plan. Add it to the list
+						if split[0] != "1" {
+							expectedNodes = append(expectedNodes, int64(1))
+						}
+
+						for _, val := range split {
+							node, err := strconv.Atoi(val)
+							require.NoError(t, err)
+							expectedNodes = append(expectedNodes, int64(node))
+						}
+					}
+				}
+
+				// Select from the table and see what statement statistics were written.
+				db.Exec(t, "SET application_name = $1", t.Name())
+				db.Exec(t, "SELECT * FROM test")
+				row := db.QueryRow(t, `
 				SELECT statistics->>'statistics'
 				  FROM crdb_internal.statement_statistics
 				 WHERE app_name = $1`, t.Name())
 
-			var actualJSON string
-			row.Scan(&actualJSON)
-			var actual appstatspb.StatementStatistics
-			err := json.Unmarshal([]byte(actualJSON), &actual)
-			require.NoError(t, err)
+				var actualJSON string
+				row.Scan(&actualJSON)
+				var actual appstatspb.StatementStatistics
+				err = json.Unmarshal([]byte(actualJSON), &actual)
+				require.NoError(t, err)
 
-			require.Equal(t,
-				appstatspb.StatementStatistics{
-					// TODO(todd): It appears we do not yet reliably record
-					//  the nodes for the statement. (I have manually verified
-					//  that the above query does indeed fan out across the
-					//  regions, via EXPLAIN (DISTSQL).) Filed as #96647.
-					//Nodes:   []int64{1, 2, 3},
-					//Regions: regionNames,
-					Nodes:   []int64{1},
-					Regions: []string{regionNames[0]},
-				},
-				appstatspb.StatementStatistics{
-					Nodes:   actual.Nodes,
-					Regions: actual.Regions,
-				},
-			)
+				// Replication to all regions can take some time to complete. During
+				// this time a incomplete list will be returned.
+				if !assert.ObjectsAreEqual(expectedNodes, actual.Nodes) {
+					return fmt.Errorf("nodes are not equal. Expected: %d, Actual: %d", expectedNodes, actual.Nodes)
+				}
+
+				require.Equal(t, expectedRegions, actual.Regions)
+				return nil
+			}, 4*time.Minute)
 		})
 	}
 }
