@@ -104,6 +104,123 @@ func TestListSessionsSecurity(t *testing.T) {
 	}
 }
 
+// TestListSessionsPrivileges tests that the VIEWACTIVITY and VIEWACTIVITYREDACTED privileges
+// are respected when listing sessions, particularly for other users' sessions.
+func TestListSessionsPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Skip under stress race as the sleep query might finish before the stress race can finish.
+	skip.UnderStressRace(t, "list sessions privileges")
+
+	ts, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer ts.Stopper().Stop(context.Background())
+	endpoint := "sessions"
+	appName := "test_sessions_privileges"
+	user := apiconstants.TestingUserNameNoAdmin().Normalized()
+	sleepQuery := "SELECT pg_sleep(3000)"
+	sleepQueryRedacted := "SELECT pg_sleep(_)"
+
+	serverSQL := sqlutils.MakeSQLRunner(sqlDB)
+	serverSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, appName))
+	queryCtx, cancel := context.WithCancel(context.Background())
+
+	// Run a sleep query as root in another goroutine to make sure that root's session has one
+	// active query while we list sessions. This sleep query will be cancelled at the end of the
+	// test.
+	errRE := "context canceled"
+	go func() {
+		_, err := serverSQL.DB.ExecContext(queryCtx, sleepQuery)
+		if !testutils.IsError(err, errRE) {
+			t.Errorf("expected error '%s', got: %v", errRE, err)
+		}
+	}()
+
+	// We test all combinations of VIEWACTIVITY and VIEWACTIVITYREDACTED. We could also start
+	// by granting all privileges and then revoking them one by one, but we want to keep the
+	// tests as isolated as possible. If a non-admin user has neither privilege, they should
+	// not see root's session. If a non-admin user has VIEWACTIVITY, they should see root's
+	// session with the full query. If a non-admin user has VIEWACTIVITYREDACTED, they should
+	// see root's session with the redacted query. If a non-admin user has both privileges,
+	// VIEWACTIVITYREDACTED should take precedence.
+	testCases := []struct {
+		grantViewActivity         bool
+		grantViewActivityRedacted bool
+		expectedQuery             string
+	}{
+		{false, false, ""},
+		{false, true, sleepQueryRedacted},
+		{true, false, sleepQuery},
+		{true, true, sleepQueryRedacted},
+	}
+
+	// Filters sessions by appName.
+	filterSessions := func(sessions []serverpb.Session) []serverpb.Session {
+		var filteredSessions []serverpb.Session
+		for _, s := range sessions {
+			if s.ApplicationName == appName {
+				filteredSessions = append(filteredSessions, s)
+			}
+		}
+		return filteredSessions
+	}
+
+	for _, tc := range testCases {
+		if tc.grantViewActivity {
+			serverSQL.Exec(t, fmt.Sprintf(`GRANT SYSTEM VIEWACTIVITY TO %s`, user))
+		}
+		if tc.grantViewActivityRedacted {
+			serverSQL.Exec(t, fmt.Sprintf(`GRANT SYSTEM VIEWACTIVITYREDACTED TO %s`, user))
+		}
+
+		var response serverpb.ListSessionsResponse
+		err := srvtestutils.GetStatusJSONProtoWithAdminOption(ts, endpoint, &response, false)
+
+		if err != nil {
+			t.Errorf("unexpected failure listing sessions from %s; error: %v; response errors: %v",
+				endpoint, err, response.Errors)
+		}
+
+		filteredSessions := filterSessions(response.Sessions)
+		numberOfSessions := len(filteredSessions)
+
+		// A non-admin user with no privileges should not see any other users' sessions.
+		if !tc.grantViewActivity && !tc.grantViewActivityRedacted {
+			if numberOfSessions != 0 {
+				t.Errorf("expected 0 sessions, but got %d", numberOfSessions)
+			}
+			continue
+		}
+
+		// A non-admin user with at least one of the privileges should see other users' sessions.
+		if numberOfSessions != 1 {
+			t.Errorf("expected 1 session, but got %d", numberOfSessions)
+		} else {
+			session := filteredSessions[0]
+			numberOfActiveQueries := len(session.ActiveQueries)
+			if numberOfActiveQueries != 1 {
+				t.Errorf("expected 1 active query, but got %d", numberOfActiveQueries)
+			} else {
+				activeQuery := session.ActiveQueries[0].Sql
+				if activeQuery != tc.expectedQuery {
+					t.Errorf("expected active query to be %s, but got %s", tc.expectedQuery, activeQuery)
+				}
+			}
+		}
+
+		// Only revoke the privilege if we granted it in this test case.
+		if tc.grantViewActivity {
+			serverSQL.Exec(t, fmt.Sprintf(`REVOKE SYSTEM VIEWACTIVITY FROM %s`, user))
+		}
+		if tc.grantViewActivityRedacted {
+			serverSQL.Exec(t, fmt.Sprintf(`REVOKE SYSTEM VIEWACTIVITYREDACTED FROM %s`, user))
+		}
+	}
+
+	// Cancel the query so that the test can finish.
+	cancel()
+}
+
 func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
