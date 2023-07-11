@@ -1781,6 +1781,7 @@ func populateQueryLevelStatsAndRegions(
 		}
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
+		ih.regions = queryLevelStats.Regions
 		// If this query is being run by a tenant, record the RUs consumed by CPU
 		// usage and network egress to the client.
 		if multitenant.TenantRUEstimateEnabled.Get(cfg.SV()) && cfg.DistSQLSrv != nil {
@@ -1794,7 +1795,7 @@ func populateQueryLevelStatsAndRegions(
 		}
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
-		ih.regions = ih.traceMetadata.annotateExplain(
+		ih.traceMetadata.annotateExplain(
 			ih.explainPlan,
 			trace,
 			cfg.TestingKnobs.DeterministicExplain,
