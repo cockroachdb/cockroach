@@ -25,6 +25,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/server/autoconfig/acprovider",
         "//pkg/settings/cluster",
+        "//pkg/testutils/listenerutil",
         "//pkg/util",
         "//pkg/util/envutil",
         "//pkg/util/humanizeutil",

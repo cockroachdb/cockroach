@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -209,7 +210,18 @@ type TestClusterArgs struct {
 	// proxy listeners to TestServerArgs.Listener that would survive
 	// net.Listener.Close() and then allow restarted server to use them again.
 	// See testutils.ListenerRegistry.
+	//
+	// TODO(during PR): phase this out.
 	ReusableListeners bool
+
+	// If set, listeners will be created from the below registry and they will be
+	// retained across restarts (i.e. servers are kept on the same ports, but
+	// avoiding races where another process grabs the port while the server is
+	// down). It's also possible not to set this field but set a *ReusableListener
+	// directly in TestServerArgs.Listener. If a non-reusable listener is set in
+	// that field, RestartServer will return an error to guide the developer
+	// towards a non-flaky pattern.
+	ReusableListenerReg *listenerutil.ListenerRegistry
 }
 
 // DefaultTestTenantOptions specifies the conditions under which the default
