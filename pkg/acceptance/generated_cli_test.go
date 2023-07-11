@@ -389,6 +389,13 @@ func TestDockerCLI_test_sql_demo_node_cmds(t *testing.T) {
 	runTestDockerCLI(t, "test_sql_demo_node_cmds", "../cli/interactive_tests/test_sql_demo_node_cmds.tcl")
 }
 
+func TestDockerCLI_test_sql_mem_monitor(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_sql_mem_monitor", "../cli/interactive_tests/test_sql_mem_monitor.tcl")
+}
+
 func TestDockerCLI_test_sql_safe_updates(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
