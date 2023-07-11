@@ -27,7 +27,6 @@ go_test(
         "main_test.go",
         "schemachanger_test.go",
         ":test_gen",  # keep
-        ":test_mixed_gen",  # keep
     ],
     args = select({
         "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
@@ -81,7 +80,7 @@ sctest_gen(
     name = "test_gen",
     out = "sctest_generated_test.go",
     ccl = False,
-    new_cluster_func = "sctest.SingleNodeCluster",
+    new_cluster_factory = "sctest.SingleNodeTestClusterFactory{}",
     package = "schemachanger",
     test_data = [
         ":end_to_end_testdata_definitions",
@@ -91,25 +90,8 @@ sctest_gen(
         "ExecuteWithDMLInjection",
         "GenerateSchemaChangeCorpus",
         "Pause",
+        "PauseMixedVersion",
         "Rollback",
-    ],
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
-    ],
-)
-
-sctest_gen(
-    name = "test_mixed_gen",
-    out = "sctest_mixed_generated_test.go",
-    ccl = False,
-    new_cluster_func = "sctest.SingleNodeMixedCluster",
-    package = "schemachanger",
-    test_data = [
-        ":end_to_end_testdata_definitions",
-    ],
-    tests = [
-        "ValidateMixedVersionElements",
     ],
     visibility = [
         ":__pkg__",
