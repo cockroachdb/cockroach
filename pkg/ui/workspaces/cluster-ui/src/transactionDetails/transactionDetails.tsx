@@ -116,6 +116,7 @@ export interface TransactionDetailsStateProps {
   transactionInsights: TxnInsightEvent[];
   hasAdminRole?: UIConfigState["hasAdminRole"];
   txnStatsResp: RequestState<SqlStatsResponse>;
+  requestTime: moment.Moment;
 }
 
 export interface TransactionDetailsDispatchProps {
@@ -124,6 +125,7 @@ export interface TransactionDetailsDispatchProps {
   refreshUserSQLRoles: () => void;
   refreshTransactionInsights: (req: TxnInsightsRequest) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
+  onRequestTimeChange: (t: moment.Moment) => void;
 }
 
 export type TransactionDetailsProps = TransactionDetailsStateProps &
@@ -224,12 +226,10 @@ export class TransactionDetails extends React.Component<
   };
 
   changeTimeScale = (ts: TimeScale): void => {
-    if (ts.key !== "Custom") {
-      ts.fixedWindowEnd = moment();
-    }
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
+    this.props.onRequestTimeChange(moment());
   };
 
   refreshData = (): void => {
@@ -289,7 +289,12 @@ export class TransactionDetails extends React.Component<
     const error = this.props.txnStatsResp?.error;
     const { latestTransactionText, statements } = this.state;
     const transactionStats = transaction?.stats_data?.stats;
-    const period = <FormattedTimescale ts={this.props.timeScale} />;
+    const period = (
+      <FormattedTimescale
+        ts={this.props.timeScale}
+        requestTime={moment(this.props.requestTime)}
+      />
+    );
 
     return (
       <div>

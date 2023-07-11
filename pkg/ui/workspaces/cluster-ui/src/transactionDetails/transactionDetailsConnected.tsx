@@ -11,7 +11,7 @@
 import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
-
+import { actions as localStorageActions } from "src/store/localStorage";
 import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
@@ -42,6 +42,7 @@ import { StatementsRequest } from "src/api/statementsApi";
 import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
 import { actions as analyticsActions } from "../store/analytics";
+import { selectRequestTime } from "src/transactionsPage/transactionsPage.selectors";
 
 const mapStateToProps = (
   state: AppState,
@@ -61,6 +62,7 @@ const mapStateToProps = (
     hasAdminRole: selectHasAdminRole(state),
     limit: selectTxnsPageLimit(state),
     reqSortSetting: selectTxnsPageReqSort(state),
+    requestTime: selectRequestTime(state),
   };
 };
 
@@ -87,6 +89,14 @@ const mapDispatchToProps = (
   },
   refreshTransactionInsights: (req: TxnInsightsRequest) => {
     dispatch(transactionInsights.refresh(req));
+  },
+  onRequestTimeChange: (t: moment.Moment) => {
+    dispatch(
+      localStorageActions.update({
+        key: "requestTime/StatementsPage",
+        value: t,
+      }),
+    );
   },
 });
 

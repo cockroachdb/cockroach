@@ -355,6 +355,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     ascending: false,
     columnTitle: "executionCount",
   },
+  requestTime: moment.utc("2021.12.12"),
   search: "",
   filters: {
     app: "",
@@ -398,6 +399,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onChangeLimit: noop,
   onChangeReqSort: noop,
   onApplySearchCriteria: noop,
+  onRequestTimeChange: noop,
 };
 
 export const statementsPagePropsWithRequestError: StatementsPageProps = {

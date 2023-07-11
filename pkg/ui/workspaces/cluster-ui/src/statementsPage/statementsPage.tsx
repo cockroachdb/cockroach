@@ -134,6 +134,7 @@ export interface StatementsPageDispatchProps {
   onChangeLimit: (limit: number) => void;
   onChangeReqSort: (sort: SqlStatsSortType) => void;
   onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => void;
+  onRequestTimeChange: (t: moment.Moment) => void;
 }
 export interface StatementsPageStateProps {
   statementsResponse: RequestState<SqlStatsResponse>;
@@ -150,6 +151,7 @@ export interface StatementsPageStateProps {
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
   stmtsTotalRuntimeSecs: number;
+  requestTime: moment.Moment;
 }
 
 export interface StatementsPageState {
@@ -262,9 +264,6 @@ export class StatementsPage extends React.Component<
   };
 
   changeTimeScale = (ts: TimeScale): void => {
-    if (ts.key !== "Custom") {
-      ts.fixedWindowEnd = moment();
-    }
     this.setState(prevState => ({
       ...prevState,
       timeScale: ts,
@@ -280,8 +279,6 @@ export class StatementsPage extends React.Component<
       this.props.onChangeReqSort(this.state.reqSortSetting);
     }
 
-    // Force an update on TimeScale to update the fixedWindowEnd
-    this.changeTimeScale(this.state.timeScale);
     if (this.props.timeScale !== this.state.timeScale) {
       this.props.onTimeScaleChange(this.state.timeScale);
     }
@@ -292,6 +289,7 @@ export class StatementsPage extends React.Component<
         getSortLabel(this.state.reqSortSetting, "Statement"),
       );
     }
+    this.props.onRequestTimeChange(moment());
     this.refreshStatements();
     const ss: SortSetting = {
       ascending: false,
@@ -586,7 +584,12 @@ export class StatementsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const period = <FormattedTimescale ts={this.props.timeScale} />;
+    const period = (
+      <FormattedTimescale
+        ts={this.props.timeScale}
+        requestTime={moment(this.props.requestTime)}
+      />
+    );
     const sortSettingLabel = getSortLabel(
       this.props.reqSortSetting,
       "Statement",
