@@ -11,7 +11,7 @@ def _sctest_gen_impl(ctx):
             _flatten(*[["--tests", t] for t in ctx.attr.tests]),
             ["--ccl"] if ctx.attr.ccl else [],
             ["--suffix", ctx.attr.suffix],
-            ["--new-cluster-func", ctx.attr.new_cluster_func],
+            ["--new-cluster-factory", ctx.attr.new_cluster_factory],
             ["--out", ctx.outputs.out.path],
             [f.path for f in ctx.files.test_data],
         ),
@@ -26,7 +26,7 @@ sctest_gen = rule(
         "test_data": attr.label_list(allow_empty = False, allow_files = True),
         "ccl": attr.bool(),
         "suffix": attr.string(),
-        "new_cluster_func": attr.string(),
+        "new_cluster_factory": attr.string(),
         "package": attr.string(),
         "_tool": attr.label(
             default = "//pkg/sql/schemachanger/sctest/sctestgen",
