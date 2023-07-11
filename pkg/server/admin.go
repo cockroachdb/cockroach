@@ -3915,14 +3915,11 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(ctx context.Contex
 	if isAdmin {
 		return nil
 	}
-	if hasView, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY); err != nil {
+	hasView, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.VIEWACTIVITY)
+	if err != nil {
 		return serverError(ctx, err)
-	} else if hasView {
-		return nil
 	}
-	if hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY); err != nil {
-		return serverError(ctx, err)
-	} else if hasView {
+	if hasView {
 		return nil
 	}
 	return grpcstatus.Errorf(
@@ -3941,24 +3938,18 @@ func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermiss
 	if isAdmin {
 		return nil
 	}
-	if hasView, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY); err != nil {
+	hasView, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.VIEWACTIVITY)
+	if err != nil {
 		return serverError(ctx, err)
-	} else if hasView {
+	}
+	if hasView {
 		return nil
 	}
-	if hasViewRedacted, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED); err != nil {
+	hasViewRedacted, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.VIEWACTIVITYREDACTED)
+	if err != nil {
 		return serverError(ctx, err)
-	} else if hasViewRedacted {
-		return nil
 	}
-	if hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY); err != nil {
-		return serverError(ctx, err)
-	} else if hasView {
-		return nil
-	}
-	if hasViewRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED); err != nil {
-		return serverError(ctx, err)
-	} else if hasViewRedacted {
+	if hasViewRedacted {
 		return nil
 	}
 	return grpcstatus.Errorf(
@@ -3977,24 +3968,18 @@ func (c *adminPrivilegeChecker) requireViewClusterSettingOrModifyClusterSettingP
 	if isAdmin {
 		return nil
 	}
-	if hasView, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERSETTING); err != nil {
+	hasView, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.VIEWCLUSTERSETTING)
+	if err != nil {
 		return serverError(ctx, err)
-	} else if hasView {
+	}
+	if hasView {
 		return nil
 	}
-	if hasModify, err := c.hasGlobalPrivilege(ctx, userName, privilege.MODIFYCLUSTERSETTING); err != nil {
+	hasModify, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.MODIFYCLUSTERSETTING)
+	if err != nil {
 		return serverError(ctx, err)
-	} else if hasModify {
-		return nil
 	}
-	if hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWCLUSTERSETTING); err != nil {
-		return serverError(ctx, err)
-	} else if hasView {
-		return nil
-	}
-	if hasModify, err := c.hasRoleOption(ctx, userName, roleoption.MODIFYCLUSTERSETTING); err != nil {
-		return serverError(ctx, err)
-	} else if hasModify {
+	if hasModify {
 		return nil
 	}
 	return grpcstatus.Errorf(
@@ -4149,6 +4134,28 @@ func (c *adminPrivilegeChecker) hasRoleOption(
 		return false, errors.AssertionFailedf("hasRoleOption: expected bool, got %T", row[0])
 	}
 	return bool(dbDatum), nil
+}
+
+// HasPrivilegeOrRoleOption is a helper function which calls both HasGlobalPrivilege and HasRoleOption.
+func (c *adminPrivilegeChecker) HasPrivilegeOrRoleOption(
+	ctx context.Context, username username.SQLUsername, privilege privilege.Kind,
+) (bool, error) {
+	if privilegeName, err := c.hasGlobalPrivilege(ctx, username, privilege); err != nil {
+		return false, err
+	} else if privilegeName {
+		return true, nil
+	}
+	privName := privilege.String()
+	roleOption, ok := roleoption.ByName[privName]
+	if !ok {
+		return false, nil
+	}
+	if hasRoleOption, err := c.hasRoleOption(ctx, username, roleOption); err != nil {
+		return false, err
+	} else if hasRoleOption {
+		return true, nil
+	}
+	return false, nil
 }
 
 // hasGlobalPrivilege is a helper function which calls
