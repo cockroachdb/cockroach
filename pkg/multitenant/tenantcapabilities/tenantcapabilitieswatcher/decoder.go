@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,9 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,7 +41,7 @@ type decoder struct {
 
 // newDecoder constructs and returns a decoder.
 func newDecoder(st *cluster.Settings) *decoder {
-	columns := systemschema.TenantsTable.PublicColumns()
+	columns := systemschema.TenantsTable.VisibleColumns()
 	return &decoder{
 		columns: columns,
 		decoder: valueside.MakeDecoder(columns),
@@ -55,7 +53,6 @@ func (d *decoder) decode(
 	ctx context.Context, kv roachpb.KeyValue,
 ) (tenantcapabilities.Entry, error) {
 	// First we decode the tenantID from the key.
-	var tenID roachpb.TenantID
 	types := []*types.T{d.columns[0].GetType()}
 	tenantIDRow := make([]rowenc.EncDatum, 1)
 	if _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, tenantIDRow, nil /* colDirs */, kv.Key); err != nil {
@@ -65,16 +62,12 @@ func (d *decoder) decode(
 		return tenantcapabilities.Entry{},
 			errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode key in system.tenants %v", kv.Key)
 	}
-	tenID, err := roachpb.MakeTenantID(uint64(tree.MustBeDInt(tenantIDRow[0].Datum)))
-	if err != nil {
-		return tenantcapabilities.Entry{}, err
-	}
 
 	// The remaining columns are stored in the value; we're just interested in the
 	// info column.
 	if !kv.Value.IsPresent() {
 		return tenantcapabilities.Entry{},
-			errors.AssertionFailedf("missing value for tenant: %v", tenID)
+			errors.AssertionFailedf("missing value for tenant: %v", tenantIDRow[0].Datum)
 	}
 
 	bytes, err := kv.Value.GetTuple()
@@ -86,55 +79,20 @@ func (d *decoder) decode(
 		return tenantcapabilities.Entry{}, err
 	}
 
-	var tenantInfo mtinfopb.ProtoInfo
-	if i := datums[2]; i != tree.DNull {
-		infoBytes := tree.MustBeDBytes(i)
-		if err := protoutil.Unmarshal([]byte(infoBytes), &tenantInfo); err != nil {
-			return tenantcapabilities.Entry{}, errors.Wrapf(err, "failed to unmarshall tenant info")
-		}
-	}
+	// The tenant ID is the first column and comes from the PK decoder above.
+	datums[0] = tenantIDRow[0].Datum
 
-	// The name, data state and service mode columns only exist after the
-	// V23_1TenantNamesStateAndServiceMode migration has run. We need to
-	// keep it optional here until we're not supporting running against
-	// v23.1 versions any more.
-	var name roachpb.TenantName
-	// Compatibility with rows prior to the
-	// V23_1TenantNamesStateAndServiceMode migration.
-	dataState := mtinfopb.DataStateReady
-	serviceMode := mtinfopb.ServiceModeExternal
-	if len(datums) >= 6 {
-		if i := datums[3]; i != tree.DNull {
-			name = roachpb.TenantName(tree.MustBeDString(i))
-		}
-		if i := datums[4]; i != tree.DNull {
-			rawDataState := tree.MustBeDInt(i)
-			if rawDataState >= 0 && rawDataState <= tree.DInt(mtinfopb.MaxDataState) {
-				dataState = mtinfopb.TenantDataState(rawDataState)
-			} else {
-				// This can happen if e.g. an invalid value was added into the
-				// table manually.
-				log.Warningf(ctx, "invalid data state %d for tenant %d", rawDataState, tenID)
-			}
-		}
-		if i := datums[5]; i != tree.DNull {
-			rawServiceMode := tree.MustBeDInt(i)
-			if rawServiceMode >= 0 && rawServiceMode <= tree.DInt(mtinfopb.MaxServiceMode) {
-				serviceMode = mtinfopb.TenantServiceMode(rawServiceMode)
-			} else {
-				// This can happen if e.g. an invalid value was added into the
-				// table manually.
-				log.Warningf(ctx, "invalid service mode %d for tenant %d", rawServiceMode, tenID)
-			}
-		}
+	tid, info, err := mtinfo.GetTenantInfoFromSQLRow(datums)
+	if err != nil {
+		return tenantcapabilities.Entry{}, err
 	}
 
 	return tenantcapabilities.Entry{
-		TenantID:           tenID,
-		TenantCapabilities: &tenantInfo.Capabilities,
-		Name:               name,
-		DataState:          dataState,
-		ServiceMode:        serviceMode,
+		TenantID:           tid,
+		TenantCapabilities: &info.Capabilities,
+		Name:               info.Name,
+		DataState:          info.DataState,
+		ServiceMode:        info.ServiceMode,
 	}, nil
 }
 
