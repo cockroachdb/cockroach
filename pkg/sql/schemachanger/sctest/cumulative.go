@@ -1100,23 +1100,20 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 				if p.Stages[stageIdx].Type() == scop.BackfillType && hasDMLInSetup {
 					successExpected.Store(false)
 				}
-				// If the plan has no post-commit stages, we'll close the
-				// stageChan eagerly.
-				if p.Stages[len(p.Stages)-1].Phase < scop.PostCommitPhase {
-
-					// The other test goroutine will set stageChan to nil later on.
-					// We only want to close it once, and then we don't want to look
-					// at it again. Avoid the racy access to stageChan by consulting
-					// the bool.
-					if !closedStageChan {
+				if p.Stages[stageIdx].Phase == scop.StatementPhase {
+					return nil
+				}
+				if p.Stages[stageIdx].Phase == scop.PreCommitPhase {
+					if p.Stages[len(p.Stages)-1].Phase < scop.PostCommitPhase && !closedStageChan {
+						// We've seen all stmts in the test case (bc we're in PreCommitPhase)
+						// and there is no PostCommitPhase in the plan. Close stageChan eagerly
+						// and use a bool to ensure we only close it once.
 						closedStageChan = true
 						close(stageChan)
 					}
 					return nil
 				}
-				if p.Stages[stageIdx].Phase < scop.PostCommitPhase {
-					return nil
-				}
+
 				if stageChan != nil {
 					s := stage{p: p, stageIdx: stageIdx, resume: make(chan error)}
 					select {
