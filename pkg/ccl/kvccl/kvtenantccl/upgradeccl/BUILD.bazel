@@ -23,6 +23,7 @@ go_test(
         "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/upgrade",
