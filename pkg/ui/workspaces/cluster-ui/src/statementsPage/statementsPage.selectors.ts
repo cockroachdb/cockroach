@@ -38,6 +38,11 @@ export const selectSortSetting = createSelector(
   localStorage => localStorage["sortSetting/StatementsPage"],
 );
 
+export const selectRequestTime = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["requestTime/StatementsPage"],
+);
+
 export const selectFilters = createSelector(
   localStorageSelector,
   localStorage => localStorage["filters/StatementsPage"],
