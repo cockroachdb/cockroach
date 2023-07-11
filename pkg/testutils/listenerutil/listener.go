@@ -12,7 +12,6 @@ package listenerutil
 
 import (
 	"net"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -45,8 +44,10 @@ func NewListenerRegistry() ListenerRegistry {
 
 // MustGetOrCreate returns an existing reusable socket listener or creates a new one
 // on a random local port.
-func (r *ListenerRegistry) MustGetOrCreate(t *testing.T, idx int) *ReusableListener {
-	t.Helper()
+func (r *ListenerRegistry) MustGetOrCreate(t require.TestingT, idx int) *ReusableListener {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
 	if l, ok := r.listeners[idx]; ok {
 		return l
 	}
