@@ -70,12 +70,11 @@ func TestSpanStatsMetaScan(t *testing.T) {
 	}
 }
 
-func TestLocalSpanStats(t *testing.T) {
+func TestSpanStatsFanOut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStress(t)
 	ctx := context.Background()
-	numNodes := 3
+	const numNodes = 3
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
@@ -149,47 +148,47 @@ func TestLocalSpanStats(t *testing.T) {
 		{spans[4], 2, int64(numNodes * 3)},
 		{spans[5], 1, int64(numNodes * 2)},
 	}
-	// Multi-span request
-	multiResult, err := s.StatusServer().(serverpb.StatusServer).SpanStats(ctx,
-		&roachpb.SpanStatsRequest{
-			NodeID: "0",
-			Spans:  spans,
-		},
-	)
-	require.NoError(t, err)
 
-	// Verify stats across different spans.
-	for _, tcase := range testCases {
-		rSpan, err := keys.SpanAddr(tcase.span)
+	testutils.SucceedsSoon(t, func() error {
+
+		// Multi-span request
+		multiResult, err := s.StatusServer().(serverpb.StatusServer).SpanStats(ctx,
+			&roachpb.SpanStatsRequest{
+				NodeID: "0",
+				Spans:  spans,
+			},
+		)
 		require.NoError(t, err)
 
-		// Assert expected values from multi-span request
-		spanStats := multiResult.SpanToStats[tcase.span.String()]
-		require.Equal(
-			t,
-			tcase.expectedRanges,
-			spanStats.RangeCount,
-			fmt.Sprintf(
-				"Multi-span: expected %d ranges in span [%s - %s], found %d",
-				tcase.expectedRanges,
-				rSpan.Key.String(),
-				rSpan.EndKey.String(),
-				spanStats.RangeCount,
-			),
-		)
-		require.Equal(
-			t,
-			tcase.expectedKeys,
-			spanStats.TotalStats.LiveCount,
-			fmt.Sprintf(
-				"Multi-span: expected %d keys in span [%s - %s], found %d",
-				tcase.expectedKeys,
-				rSpan.Key.String(),
-				rSpan.EndKey.String(),
-				spanStats.TotalStats.LiveCount,
-			),
-		)
-	}
+		// Verify stats across different spans.
+		for _, tcase := range testCases {
+			rSpan, err := keys.SpanAddr(tcase.span)
+			require.NoError(t, err)
+
+			// Assert expected values from multi-span request
+			spanStats := multiResult.SpanToStats[tcase.span.String()]
+			if tcase.expectedRanges != spanStats.RangeCount {
+				return errors.Newf("Multi-span: expected %d ranges in span [%s - %s], found %d",
+					tcase.expectedRanges,
+					rSpan.Key.String(),
+					rSpan.EndKey.String(),
+					spanStats.RangeCount,
+				)
+			}
+			if tcase.expectedKeys != spanStats.TotalStats.LiveCount {
+				return errors.Newf(
+					"Multi-span: expected %d keys in span [%s - %s], found %d",
+					tcase.expectedKeys,
+					rSpan.Key.String(),
+					rSpan.EndKey.String(),
+					spanStats.TotalStats.LiveCount,
+				)
+			}
+		}
+
+		return nil
+	})
+
 }
 
 // BenchmarkSpanStats measures the cost of collecting span statistics.
