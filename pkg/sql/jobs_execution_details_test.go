@@ -63,18 +63,23 @@ func (d fakeExecResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ er
 
 // checkForPlanDiagram is a method used in tests to wait for the existence of a
 // DSP diagram for the provided jobID.
-func checkForPlanDiagram(ctx context.Context, t *testing.T, db isql.DB, jobID jobspb.JobID) {
+func checkForPlanDiagrams(
+	ctx context.Context, t *testing.T, db isql.DB, jobID jobspb.JobID, expectedNumDiagrams int,
+) {
 	testutils.SucceedsSoon(t, func() error {
 		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			infoStorage := jobs.InfoStorageForJob(txn, jobID)
-			var found bool
-			err := infoStorage.GetLast(ctx, profilerconstants.DSPDiagramInfoKeyPrefix,
+			var found int
+			err := infoStorage.Iterate(ctx, profilerconstants.DSPDiagramInfoKeyPrefix,
 				func(infoKey string, value []byte) error {
-					found = true
+					found++
 					return nil
 				})
-			if err != nil || !found {
-				return errors.New("not found")
+			if err != nil {
+				return err
+			}
+			if found != expectedNumDiagrams {
+				return errors.Newf("found %d diagrams, expected %d", found, expectedNumDiagrams)
 			}
 			return nil
 		})
@@ -107,7 +112,7 @@ func TestJobsExecutionDetails(t *testing.T) {
 				infra := physicalplan.NewPhysicalInfrastructure(uuid.FastMakeV4(), base.SQLInstanceID(1))
 				p.PhysicalInfrastructure = infra
 				jobsprofiler.StorePlanDiagram(ctx, s.Stopper(), &p, s.InternalDB().(isql.DB), j.ID())
-				checkForPlanDiagram(ctx, t, s.InternalDB().(isql.DB), j.ID())
+				checkForPlanDiagrams(ctx, t, s.InternalDB().(isql.DB), j.ID(), 1)
 				return nil
 			},
 		}
