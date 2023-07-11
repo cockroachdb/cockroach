@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -61,6 +62,8 @@ import (
 type TestCluster struct {
 	Servers []*server.TestServer
 	Conns   []*gosql.DB
+	// ReusableListeners is populated if (and only if) TestClusterArgs.ReusableListeners is set.
+	ReusableListeners map[int] /* idx */ *listenerutil.ReusableListener
 
 	// Connection to the storage cluster. Typically, the first connection in
 	// Conns, but could be different if we're transparently running in a test
@@ -279,6 +282,18 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 			serverArgs = perNodeServerArgs
 		} else {
 			serverArgs = tc.clusterArgs.ServerArgs
+		}
+
+		// If a reusable listener registry is provided, create reusable listeners
+		// for every server that doesn't have a custom listener provided. (Only
+		// servers with a reusable listener can be restarted).
+		if reg := clusterArgs.ReusableListenerReg; reg != nil && serverArgs.Listener == nil {
+			ln := reg.MustGetOrCreate(t, i)
+			serverArgs.Listener = ln
+			if tc.ReusableListeners == nil {
+				tc.ReusableListeners = map[int]*listenerutil.ReusableListener{}
+			}
+			tc.ReusableListeners[i] = ln
 		}
 
 		if len(serverArgs.StoreSpecs) == 0 {
@@ -1644,7 +1659,11 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 	serverArgs := tc.serverArgs[idx]
 
-	if !tc.clusterArgs.ReusableListeners {
+	if ln := tc.ReusableListeners[idx]; ln != nil {
+		serverArgs.Listener = ln
+	}
+
+	if serverArgs.Listener == nil {
 		if idx == 0 {
 			// If it's the first server, then we need to restart the RPC listener by hand.
 			// Look at NewTestCluster for more details.
@@ -1663,6 +1682,16 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 				}
 			}
 		}
+	} else if ln, ok := serverArgs.Listener.(*listenerutil.ReusableListener); !ok {
+		// Restarting a server without a reusable listener can cause flakes since the
+		// port may be occupied by a different process now. Use a reusable listener
+		// to avoid that problem.
+		return errors.Errorf(
+			"ReusableListeners must be set on ClusterArgs or compatible Listener "+
+				"needs to be set in serverArgs to restart server %d", idx,
+		)
+	} else if err := ln.Reopen(); err != nil {
+		return err
 	}
 
 	for i, specs := range serverArgs.StoreSpecs {
