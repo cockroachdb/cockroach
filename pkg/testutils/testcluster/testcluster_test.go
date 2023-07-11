@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -275,6 +276,8 @@ func TestRestart(t *testing.T) {
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	const numServers int = 3
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -297,8 +300,9 @@ func TestRestart(t *testing.T) {
 	ctx := context.Background()
 	tc := StartTestCluster(t, numServers,
 		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationAuto,
-			ServerArgsPerNode: stickyServerArgs,
+			ReplicationMode:     base.ReplicationAuto,
+			ReusableListenerReg: lisReg,
+			ServerArgsPerNode:   stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
 	require.NoError(t, tc.WaitForFullReplication())

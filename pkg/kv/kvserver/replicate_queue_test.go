@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -2091,6 +2092,8 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	zcfg := zonepb.DefaultZoneConfig()
 	zcfg.NumReplicas = proto.Int32(1)
@@ -2098,7 +2101,8 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 		base.TestClusterArgs{
 			// Disable the replication queue initially, to assert on the lease
 			// statuses pre and post enabling the replicate queue.
-			ReplicationMode: base.ReplicationManual,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
 				Settings:          st,
 				DefaultTestTenant: base.TestTenantDisabled,
