@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -102,60 +101,8 @@ func GetTenantRecordByName(
 	} else if row == nil {
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant %q does not exist", tenantName)
 	}
-	return getTenantInfoFromRow(row)
-}
-
-func getTenantInfoFromRow(row tree.Datums) (*mtinfopb.TenantInfo, error) {
-	info := &mtinfopb.TenantInfo{}
-	info.ID = uint64(tree.MustBeDInt(row[0]))
-
-	// For the benefit of pre-23.1 BACKUP/RESTORE.
-	info.DeprecatedID = info.ID
-
-	infoBytes := []byte(tree.MustBeDBytes(row[1]))
-	if err := protoutil.Unmarshal(infoBytes, &info.ProtoInfo); err != nil {
-		return nil, err
-	}
-
-	// If we are loading the entry for the system tenant, inject all the
-	// capabilities that the system tenant should have. This will allow
-	// us to reduce our dependency on a tenant ID check to retain the
-	// system tenant's access to all services.
-	if roachpb.IsSystemTenantID(info.ID) {
-		tenantcapabilities.EnableAll(&info.ProtoInfo.Capabilities)
-	}
-
-	// Load the name if defined.
-	if row[2] != tree.DNull {
-		info.Name = roachpb.TenantName(tree.MustBeDString(row[2]))
-	}
-
-	// Load the data state column if defined.
-	if row[3] != tree.DNull {
-		info.DataState = mtinfopb.TenantDataState(tree.MustBeDInt(row[3]))
-	} else {
-		// Pre-v23.1 info struct.
-		switch info.ProtoInfo.DeprecatedDataState {
-		case mtinfopb.ProtoInfo_READY:
-			info.DataState = mtinfopb.DataStateReady
-		case mtinfopb.ProtoInfo_ADD:
-			info.DataState = mtinfopb.DataStateAdd
-		case mtinfopb.ProtoInfo_DROP:
-			info.DataState = mtinfopb.DataStateDrop
-		default:
-			return nil, errors.AssertionFailedf("unhandled: %d", info.ProtoInfo.DeprecatedDataState)
-		}
-	}
-
-	// Load the service mode if defined.
-	info.ServiceMode = mtinfopb.ServiceModeNone
-	if row[4] != tree.DNull {
-		info.ServiceMode = mtinfopb.TenantServiceMode(tree.MustBeDInt(row[4]))
-	} else if info.DataState == mtinfopb.DataStateReady {
-		// Records created for CC Serverless pre-v23.1.
-		info.ServiceMode = mtinfopb.ServiceModeExternal
-	}
-	return info, nil
+	_, info, err := mtinfo.GetTenantInfoFromSQLRow(row)
+	return info, err
 }
 
 // GetTenantRecordByID retrieves a tenant in system.tenants.
@@ -176,7 +123,8 @@ func GetTenantRecordByID(
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant \"%d\" does not exist", tenID.ToUint64())
 	}
 
-	return getTenantInfoFromRow(row)
+	_, info, err := mtinfo.GetTenantInfoFromSQLRow(row)
+	return info, err
 }
 
 // LookupTenantID implements the tree.TenantOperator interface.
