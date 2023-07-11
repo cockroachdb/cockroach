@@ -750,10 +750,8 @@ func (s *Store) processRaft(ctx context.Context) {
 				delete(r.mu.proposals, k)
 				prop.finishApplication(
 					context.Background(),
-					proposalResult{
-						Err: kvpb.NewError(kvpb.NewAmbiguousResultErrorf("store is stopping")),
-					},
-				)
+					makeProposalResultErr(
+						kvpb.NewAmbiguousResultErrorf("store is stopping")))
 			}
 			r.mu.Unlock()
 			return true

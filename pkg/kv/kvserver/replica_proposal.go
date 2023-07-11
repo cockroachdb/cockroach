@@ -815,6 +815,25 @@ type proposalResult struct {
 	EndTxns            []result.EndTxnIntents
 }
 
+func makeProposalResult(
+	br *kvpb.BatchResponse, pErr *kvpb.Error, ei []roachpb.Intent, eti []result.EndTxnIntents,
+) proposalResult {
+	return proposalResult{
+		Reply:              br,
+		Err:                pErr,
+		EncounteredIntents: ei,
+		EndTxns:            eti,
+	}
+}
+
+func makeProposalResultPErr(err *kvpb.Error) proposalResult {
+	return proposalResult{Err: err}
+}
+
+func makeProposalResultErr(err error) proposalResult {
+	return proposalResult{Err: kvpb.NewError(err)}
+}
+
 // evaluateProposal generates a Result from the given request by
 // evaluating it, returning both state which is held only on the
 // proposer and that which is to be replicated through Raft. The

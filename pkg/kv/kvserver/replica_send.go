@@ -1297,9 +1297,20 @@ func (ec *endCmds) move() endCmds {
 	return res
 }
 
+// poison marks the Guard held by the endCmds as poisoned, which
+// induces fail-fast behavior for requests waiting for our latches.
+// This method must only be called for commands in the Replica.mu.proposals
+// map and the Replica mutex must be held throughout.
 func (ec *endCmds) poison() {
 	if ec.repl == nil {
 		// Already cleared.
+		//
+		// TODO(tbg): revisit whether this path should be reachable with
+		// useReproposalsV2. I believe it shouldn't, since ProposalData is inserted
+		// into the map exactly once, removed exactly once before being applied, and
+		// only finished (cleared) at the end of application, at which point it cannot
+		// be in the map.
+		_ = useReproposalsV2
 		return
 	}
 	ec.repl.concMgr.PoisonReq(ec.g)
@@ -1317,6 +1328,9 @@ func (ec *endCmds) done(
 ) {
 	if ec.repl == nil {
 		// The endCmds were cleared.
+		//
+		// TODO(tbg): we shouldn't double-clear a proposal under useReproposalsV2. Verify that.
+		_ = useReproposalsV2
 		return
 	}
 	defer ec.move() // clear

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -153,11 +154,13 @@ func (r *Replica) executeWriteBatch(
 		// meant to protect against future correctness anomalies.
 		defer func() {
 			if br != nil && ba.Txn != nil && br.Txn == nil {
-				log.Fatalf(ctx, "assertion failed: transaction updated by "+
-					"timestamp cache, but transaction returned in response; "+
-					"updated timestamp would have been lost (recovered): "+
-					"%s in batch %s", ba.Txn, ba,
-				)
+				pErr = kvpb.NewError(errors.NewAssertionErrorWithWrappedErrf(pErr.GoError(),
+					"assertion failed: transaction updated by "+
+						"timestamp cache, but transaction returned in response; "+
+						"updated timestamp would have been lost (recovered): "+
+						"%s in batch %s", ba.Txn, ba,
+				))
+				logcrash.ReportOrPanic(ctx, &r.store.cfg.Settings.SV, "%v", pErr)
 			}
 		}()
 	}
@@ -171,7 +174,8 @@ func (r *Replica) executeWriteBatch(
 
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
-	// evalAndPropose.
+	// evalAndPropose. If we return with an error from executeWriteBatch, we
+	// also return the guard which the caller reassumes ownership of.
 	ch, abandon, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
