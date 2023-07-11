@@ -15,13 +15,11 @@ genrule(
     cmd = """
     export GOPATH=/nonexist-gopath
       $(location :plpgsql-gen) $(location plpgsql.y) plpgsql ""\
-          $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc) \
-          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) \
+          $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc)
 
     """,
     exec_tools = [
         ":plpgsql-gen",
-        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@org_golang_x_tools//cmd/goyacc",
     ],
     visibility = ["//visibility:public"],

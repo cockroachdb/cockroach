@@ -17,14 +17,11 @@
 package pgreplparser
 
 import (
-  "fmt"
-
   "github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
   "github.com/cockroachdb/cockroach/pkg/sql/pgrepl/pgrepltree"
   "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
   "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-  "github.com/cockroachdb/redact"
 )
 %}
 
