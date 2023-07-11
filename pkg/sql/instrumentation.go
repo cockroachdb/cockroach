@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -139,9 +138,6 @@ type instrumentationHelper struct {
 	containsMutation bool
 
 	traceMetadata execNodeTraceMetadata
-
-	// regions used only on EXPLAIN ANALYZE to be displayed as top-level stat.
-	regions []string
 
 	// planGist is a compressed version of plan that can be converted (lossily)
 	// back into a logical plan or be used to get a plan hash.
@@ -571,6 +567,10 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
 		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
+		if len(queryStats.Regions) > 0 {
+			ob.AddRegionsStats(queryStats.Regions)
+		}
+
 		if !ih.containsMutation && ih.vectorized && grunning.Supported() {
 			// Currently we cannot separate SQL CPU time from local KV CPU time for
 			// mutations, since they do not collect statistics. Additionally, CPU time
@@ -586,10 +586,6 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 			// vectorized plans.
 			ob.AddRUEstimate(queryStats.RUEstimate)
 		}
-	}
-
-	if len(ih.regions) > 0 {
-		ob.AddRegionsStats(ih.regions)
 	}
 
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
@@ -679,22 +675,16 @@ func (m execNodeTraceMetadata) associateNodeWithComponents(
 
 // annotateExplain aggregates the statistics in the trace and annotates
 // explain.Nodes with execution stats.
-// It returns a list of all regions on which any of the statements
-// where executed on.
 func (m execNodeTraceMetadata) annotateExplain(
 	plan *explain.Plan, spans []tracingpb.RecordedSpan, makeDeterministic bool, p *planner,
-) []string {
+) {
 	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
-	var allRegions []string
 
 	// Retrieve which region each node is on.
 	regionsInfo := make(map[int64]string)
-	descriptors, _ := getAllNodeDescriptors(p)
-	for _, descriptor := range descriptors {
-		for _, tier := range descriptor.Locality.Tiers {
-			if tier.Key == "region" {
-				regionsInfo[int64(descriptor.NodeID)] = tier.Value
-			}
+	for componentId := range statsMap {
+		if componentId.Region != "" {
+			regionsInfo[int64(componentId.SQLInstanceID)] = componentId.Region
 		}
 	}
 
@@ -762,7 +752,6 @@ func (m execNodeTraceMetadata) annotateExplain(
 				}
 				sort.Strings(regions)
 				nodeStats.Regions = regions
-				allRegions = util.CombineUnique(allRegions, regions)
 				n.Annotate(exec.ExecutionStatsID, &nodeStats)
 			}
 		}
@@ -779,8 +768,6 @@ func (m execNodeTraceMetadata) annotateExplain(
 	for i := range plan.Checks {
 		walk(plan.Checks[i])
 	}
-
-	return allRegions
 }
 
 // SetIndexRecommendations checks if we should generate a new index recommendation.
