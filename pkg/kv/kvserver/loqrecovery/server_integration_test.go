@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -197,8 +198,7 @@ func TestGetPlanStagingState(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, planStores, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
+	tc, reg, planStores := prepTestCluster(t, 3)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -260,8 +260,7 @@ func TestStageRecoveryPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
+	tc, reg, _ := prepTestCluster(t, 3)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -302,8 +301,7 @@ func TestStageBadVersions(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 1)
-	defer lReg.Close()
+	tc, reg, _ := prepTestCluster(t, 1)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -332,8 +330,7 @@ func TestStageConflictingPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
+	tc, reg, _ := prepTestCluster(t, 3)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -373,8 +370,7 @@ func TestForcePlanUpdate(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
+	tc, reg, _ := prepTestCluster(t, 3)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -416,8 +412,7 @@ func TestNodeDecommissioned(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
+	tc, reg, _ := prepTestCluster(t, 3)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -450,8 +445,7 @@ func TestRejectDecommissionReachableNode(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
+	tc, reg, _ := prepTestCluster(t, 3)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -472,8 +466,7 @@ func TestStageRecoveryPlansToWrongCluster(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
+	tc, reg, _ := prepTestCluster(t, 3)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -505,8 +498,7 @@ func TestRetrieveRangeStatus(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 5)
-	defer lReg.Close()
+	tc, reg, _ := prepTestCluster(t, 5)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -562,8 +554,7 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, _, lReg := prepTestCluster(t, 5)
-	defer lReg.Close()
+	tc, reg, _ := prepTestCluster(t, 5)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -660,8 +651,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, reg, pss, lReg := prepTestCluster(t, 3)
-	defer lReg.Close()
+	tc, reg, pss := prepTestCluster(t, 3)
 	defer reg.CloseAllStickyInMemEngines()
 	defer tc.Stopper().Stop(ctx)
 
@@ -699,14 +689,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 func prepTestCluster(
 	t *testing.T, nodes int,
-) (
-	*testcluster.TestCluster,
-	server.StickyInMemEnginesRegistry,
-	map[int]loqrecovery.PlanStore,
-	// TODO(during PR): no caller uses this now except to close it, so close it
-	// via stopper and don't return it.
-	*listenerutil.ListenerRegistry,
-) {
+) (*testcluster.TestCluster, server.StickyInMemEnginesRegistry, map[int]loqrecovery.PlanStore) {
 	skip.UnderStressRace(t, "cluster frequently fails to start under stress race")
 
 	reg := server.NewStickyInMemEnginesRegistry()
@@ -737,7 +720,8 @@ func prepTestCluster(
 	}
 	tc := testcluster.NewTestCluster(t, nodes, args)
 	tc.Start(t)
-	return tc, reg, prepInMemPlanStores(t, args.ServerArgsPerNode), lReg
+	tc.Stopper().AddCloser(stop.CloserFn(lReg.Close))
+	return tc, reg, prepInMemPlanStores(t, args.ServerArgsPerNode)
 }
 
 func prepInMemPlanStores(
