@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -89,11 +90,14 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
 				StoreSpecs: []base.StoreSpec{
 					{
@@ -195,6 +199,8 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	numIncrements := 0
 	keyA := roachpb.Key("a")
@@ -202,7 +208,8 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
@@ -338,6 +345,8 @@ func TestRestoreReplicas(t *testing.T) {
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	const numServers int = 2
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -360,8 +369,9 @@ func TestRestoreReplicas(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 2,
 		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: stickyServerArgs,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
+			ServerArgsPerNode:   stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
 	store := tc.GetFirstStoreFromServer(t, 0)
@@ -658,6 +668,8 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 			defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+			lisReg := listenerutil.NewListenerRegistry()
+			defer lisReg.Close()
 
 			const numServers int = 3
 			stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -680,8 +692,9 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(t, numServers,
 				base.TestClusterArgs{
-					ReplicationMode:   base.ReplicationManual,
-					ServerArgsPerNode: stickyServerArgs,
+					ReplicationMode:     base.ReplicationManual,
+					ReusableListenerReg: lisReg,
+					ServerArgsPerNode:   stickyServerArgs,
 				})
 			defer tc.Stopper().Stop(ctx)
 			store := tc.GetFirstStoreFromServer(t, 0)
@@ -4340,6 +4353,8 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	const numServers int = 2
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -4362,8 +4377,9 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: stickyServerArgs,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
+			ServerArgsPerNode:   stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
 
@@ -4851,6 +4867,8 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	lisReg := listenerutil.NewListenerRegistry()
+	defer lisReg.Close()
 
 	stopper := stop.NewStopper()
 	ctx := context.Background()
@@ -4912,8 +4930,9 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 
 	tc := testcluster.StartTestCluster(t, numServers,
 		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: stickyServerArgs,
+			ReplicationMode:     base.ReplicationManual,
+			ReusableListenerReg: lisReg,
+			ServerArgsPerNode:   stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
 	// Make a key that's in the user data space.
@@ -5245,6 +5264,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		stickyEngineRegistry server.StickyInMemEnginesRegistry,
 	) {
 		stickyEngineRegistry = server.NewStickyInMemEnginesRegistry()
+		lisReg := listenerutil.NewListenerRegistry()
 		const numServers int = 3
 		stickyServerArgs := make(map[int]base.TestServerArgs)
 		for i := 0; i < numServers; i++ {
@@ -5276,10 +5296,12 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 		tc = testcluster.StartTestCluster(t, numServers,
 			base.TestClusterArgs{
-				ReplicationMode:   base.ReplicationManual,
-				ServerArgsPerNode: stickyServerArgs,
+				ReplicationMode:     base.ReplicationManual,
+				ReusableListenerReg: lisReg,
+				ServerArgsPerNode:   stickyServerArgs,
 			})
 
+		tc.Stopper().AddCloser(stop.CloserFn(lisReg.Close))
 		db = tc.GetFirstStoreFromServer(t, 1).DB()
 
 		// Split off a non-system range so we don't have to account for node liveness
