@@ -1024,6 +1024,14 @@ func (ts *TestServer) StartTenant(
 				return nil, err
 			}
 		}
+		// Mark it for external execution. This is needed before we can spawn a server.
+		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-set-tenant-service-mode", nil, /* txn */
+			"ALTER TENANT [$1] START SERVICE EXTERNAL",
+			params.TenantID.ToUint64(),
+		); err != nil {
+			return nil, err
+		}
 	} else if !params.SkipTenantCheck {
 		requestedID := uint64(0)
 		if params.TenantID.IsSet() {

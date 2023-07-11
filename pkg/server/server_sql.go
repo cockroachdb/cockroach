@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -208,6 +209,9 @@ type SQLServer struct {
 
 	// Tenant migration server for use in tenant tests.
 	migrationServer *TenantMigrationServer
+
+	// serviceMode is the service mode this server was started with.
+	serviceMode mtinfopb.TenantServiceMode
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -256,6 +260,7 @@ type sqlServerOptionalKVArgs struct {
 type sqlServerOptionalTenantArgs struct {
 	tenantConnect      kvtenant.Connector
 	spanLimiterFactory spanLimiterFactory
+	serviceMode        mtinfopb.TenantServiceMode
 
 	promRuleExporter *metric.PrometheusRuleExporter
 }
@@ -1385,6 +1390,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg:                            cfg.BaseConfig,
 		internalDBMemMonitor:           internalDBMonitor,
 		upgradeManager:                 upgradeMgr,
+		serviceMode:                    cfg.serviceMode,
 	}, nil
 }
 
@@ -1400,6 +1406,9 @@ func (s *SQLServer) preStart(
 	// determined.
 	if s.tenantConnect != nil {
 		if err := s.tenantConnect.Start(ctx); err != nil {
+			return err
+		}
+		if err := s.startCheckService(ctx, stopper); err != nil {
 			return err
 		}
 	}
@@ -1685,6 +1694,53 @@ func (s *SQLServer) preStart(
 	}))
 
 	return nil
+}
+
+// startCheckService verifies that the tenant has the right
+// service mode initially, then starts an async checker
+// to stop the server if the service mode changes.
+func (s *SQLServer) startCheckService(ctx context.Context, stopper *stop.Stopper) error {
+	if s.tenantConnect == nil {
+		return errors.AssertionFailedf("programming error: can only check service with a tenant connector")
+	}
+
+	var entry tenantcapabilities.Entry
+	var updateCh <-chan struct{}
+	check := func() error {
+		entry, updateCh = s.tenantConnect.TenantInfo()
+		if expected, actual := s.serviceMode, entry.ServiceMode; expected != actual {
+			return errors.Newf("service check failed: expected service mode %v, record says %v", expected, actual)
+		}
+		// Extra sanity check. This should never happen (we should enforce
+		// a valid data state when the service mode is not NONE) but it's
+		// cheap to check.
+		if expected, actual := mtinfopb.DataStateReady, entry.DataState; expected != actual {
+			return errors.AssertionFailedf("service check failed: expected data state %v, record says %v", expected, actual)
+		}
+		return nil
+	}
+
+	// Do a synchronous check, to prevent starting the SQL service
+	// outright if the service mode is initially incorrect.
+	if err := check(); err != nil {
+		return err
+	}
+
+	return stopper.RunAsyncTask(ctx, "check-tenant-service", func(ctx context.Context) {
+		for {
+			select {
+			case <-stopper.ShouldQuiesce():
+				return
+			case <-ctx.Done():
+				return
+			case <-updateCh:
+				if err := check(); err != nil {
+					s.stopTrigger.signalStop(ctx,
+						MakeShutdownRequest(ShutdownReasonFatalError, err))
+				}
+			}
+		}
+	})
 }
 
 // SQLInstanceID returns the ephemeral ID assigned to each SQL instance. The ID
