@@ -700,6 +700,7 @@ func (b *Builder) buildExistsSubquery(
 				true,  /* calledOnNullInput */
 				false, /* multiColOutput */
 				false, /* generator */
+				false, /* tailCall */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -815,6 +816,7 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
+			false, /* tailCall */
 		), nil
 	}
 
@@ -869,6 +871,7 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
+			false, /* tailCall */
 		), nil
 	}
 
@@ -964,6 +967,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.CalledOnNullInput,
 		udf.Def.MultiColDataSource,
 		udf.Def.SetReturning,
+		udf.TailCall,
 	), nil
 }
 

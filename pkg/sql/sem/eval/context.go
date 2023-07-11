@@ -278,6 +278,11 @@ type Context struct {
 	// JobsProfiler is the interface for builtins to extract job specific
 	// execution details that may have been aggregated during a job's lifetime.
 	JobsProfiler JobsProfiler
+
+	// RoutineSender allows nested routines in tail-call position to defer their
+	// execution until control returns to the parent routine. It is only valid
+	// during local execution. It may be unset.
+	RoutineSender DeferredRoutineSender
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details
