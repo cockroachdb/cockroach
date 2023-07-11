@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+# testing docker push of customized build.
 set -euxo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
