@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
@@ -716,8 +717,10 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
 		s.jobSessionID, s.srcID, s.sinkID, fileID, file.topic, file.schemaID, s.ext)
 	if s.prevFilename != "" && filename < s.prevFilename {
-		return errors.AssertionFailedf("error: detected a filename %s that lexically "+
+		err := errors.AssertionFailedf("error: detected a filename %s that lexically "+
 			"precedes a file emitted before: %s", filename, s.prevFilename)
+		logcrash.ReportOrPanic(ctx, &s.settings.SV, "incorrect filename order: %v", err)
+		return err
 	}
 	s.prevFilename = filename
 	dest := filepath.Join(s.dataFilePartition, filename)
