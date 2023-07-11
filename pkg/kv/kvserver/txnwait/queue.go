@@ -39,7 +39,7 @@ const maxWaitForQueryTxn = 50 * time.Millisecond
 // TxnLivenessHeartbeatMultiplier specifies what multiple the transaction
 // liveness threshold should be of the transaction heartbeat interval.
 var TxnLivenessHeartbeatMultiplier = envutil.EnvOrDefaultInt(
-	"COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER", 5)
+	"COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER", 3)
 
 // TxnLivenessThreshold is the maximum duration between transaction heartbeats
 // before the transaction is considered expired by Queue. It is exposed and
