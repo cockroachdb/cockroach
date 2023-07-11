@@ -514,7 +514,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 		Name:    "kv/gracefuldraining/nodes=3",
 		Owner:   registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(4),
-		Leases:  registry.MetamorphicLeases,
+		Leases:  registry.EpochLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
@@ -524,9 +524,11 @@ func registerKVGracefulDraining(r registry.Registry) {
 
 			// If the test ever fails, the person who investigates the
 			// failure will likely be thankful for this additional logging.
-			startOpts := option.DefaultStartOpts()
+			startOpts := option.DefaultStartOptsNoBackups()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,store_rebalancer=2")
-			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+			c.Start(ctx, t.L(), startOpts,
+				install.MakeClusterSettings(install.ClusterSettingsOption{"sql.stats.automatic_collection.enabled": "false"}),
+				c.Range(1, nodes))
 
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
@@ -580,7 +582,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 					return err
 				}
 				url := "http://" + adminURLs[0] + "/ts/query"
-				getQPSTimeSeries := func(start, end time.Time) ([]tspb.TimeSeriesDatapoint, error) {
+				getQPSTimeSeries := func(start, end time.Time) (timeSeries, error) {
 					request := tspb.TimeSeriesQueryRequest{
 						StartNanos: start.UnixNano(),
 						EndNanos:   end.UnixNano(),
@@ -629,8 +631,8 @@ func registerKVGracefulDraining(r registry.Registry) {
 					dp := datapoints[len(datapoints)-1]
 					if qps := dp.Value; qps < expectedQPS {
 						return errors.Newf(
-							"QPS of %.2f at time %v is below minimum allowable QPS of %.2f; entire timeseries: %+v",
-							qps, timeutil.Unix(0, dp.TimestampNanos), expectedQPS, datapoints)
+							"QPS of %.2f at time %v is below minimum allowable QPS of %.2f; entire timeseries: [%s]",
+							qps, timeutil.Unix(0, dp.TimestampNanos), expectedQPS, datapoints.humanReadable(", "))
 					}
 
 					// The desired performance has been reached by the
@@ -676,7 +678,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 						return nil
 					case <-time.After(1 * time.Minute):
 					}
-					c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(nodes))
+					c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(nodes))
 					m.ResetDeaths()
 				}
 
@@ -705,8 +707,8 @@ func registerKVGracefulDraining(r registry.Registry) {
 				for _, dp := range datapoints {
 					if qps := dp.Value; qps < expectedQPS {
 						t.Fatalf(
-							"QPS of %.2f at time %v is below minimum allowable QPS of %.2f; entire timeseries: %+v",
-							qps, timeutil.Unix(0, dp.TimestampNanos), expectedQPS, datapoints)
+							"QPS of %.2f at time %v is below minimum allowable QPS of %.2f; entire timeseries:\n%s\n",
+							qps, timeutil.Unix(0, dp.TimestampNanos), expectedQPS, datapoints.humanReadable("\n"))
 					}
 				}
 				t.Status("perf is OK!")
@@ -717,6 +719,18 @@ func registerKVGracefulDraining(r registry.Registry) {
 			m.Wait()
 		},
 	})
+}
+
+type timeSeries []tspb.TimeSeriesDatapoint
+
+func (ts timeSeries) humanReadable(sep string) string {
+	var elems []string
+	for _, dp := range ts {
+		// Only use time in timestamp to match test logs for ease of eyeballing.
+		elems = append(elems,
+			fmt.Sprintf("%s = %.2f", timeutil.Unix(0, dp.TimestampNanos).Format("15:04:05"), dp.Value))
+	}
+	return strings.Join(elems, sep)
 }
 
 func registerKVSplits(r registry.Registry) {
