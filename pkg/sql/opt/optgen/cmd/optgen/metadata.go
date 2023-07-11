@@ -222,6 +222,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"CreateTable":          {fullName: "tree.CreateTable", isPointer: true, usePointerIntern: true},
 		"CreateFunction":       {fullName: "tree.CreateFunction", isPointer: true, usePointerIntern: true},
 		"CreateStats":          {fullName: "tree.CreateStats", isPointer: true, usePointerIntern: true},
+		"CreateView":           {fullName: "tree.CreateView", isPointer: true, usePointerIntern: true},
 		"TableName":            {fullName: "tree.TableName", isPointer: true, usePointerIntern: true},
 		"Constraint":           {fullName: "constraint.Constraint", isPointer: true, usePointerIntern: true},
 		"FuncProps":            {fullName: "tree.FunctionProperties", isPointer: true, usePointerIntern: true},

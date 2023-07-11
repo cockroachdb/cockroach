@@ -351,7 +351,7 @@ build
 CREATE VIEW v22 AS SELECT nextval('s')
 ----
 create-view t.public.v22
- ├── SELECT nextval('s':::STRING)
+ ├── SELECT nextval('s')
  ├── columns: nextval:1
  └── dependencies
       └── s
@@ -360,7 +360,7 @@ build
 CREATE VIEW v23 AS SELECT t.x FROM (SELECT currval('s') AS x) AS t
 ----
 create-view t.public.v23
- ├── SELECT t.x FROM (SELECT currval('s':::STRING) AS x) AS t
+ ├── SELECT t.x FROM (SELECT currval('s') AS x) AS t
  ├── columns: x:1
  └── dependencies
       └── s
@@ -369,7 +369,7 @@ build
 CREATE VIEW v24 AS SELECT setval('s', 20, false)
 ----
 create-view t.public.v24
- ├── SELECT setval('s':::STRING, 20:::INT8, false)
+ ├── SELECT setval('s', 20, false)
  ├── columns: setval:1
  └── dependencies
       └── s

@@ -38,14 +38,11 @@ define CreateViewPrivate {
     # Schema is the ID of the catalog schema into which the new table goes.
     Schema SchemaID
     ViewName TableName
+    Syntax CreateView
     Persistence Persistence
     IfNotExists bool
     Replace bool
     Materialized bool
-
-    # ViewQuery contains the query for the view; data sources are always fully
-    # qualified.
-    ViewQuery string
 
     # Columns that correspond to the output of the view query, with the names
     # they will have as part of the view.

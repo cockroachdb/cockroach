@@ -1048,7 +1048,7 @@ func (e *distSQLSpecExecFactory) ConstructCreateView(
 	replace bool,
 	persistence tree.Persistence,
 	materialized bool,
-	viewQuery string,
+	cv *tree.CreateView,
 	columns colinfo.ResultColumns,
 	deps opt.SchemaDeps,
 	typeDeps opt.SchemaTypeDeps,

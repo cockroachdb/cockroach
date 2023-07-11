@@ -715,7 +715,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		tp.Child(t.Syntax.String())
 
 	case *CreateViewExpr:
-		tp.Child(t.ViewQuery)
+		tp.Child(t.Syntax.AsSource.String())
 
 		f.Buffer.Reset()
 		f.Buffer.WriteString("columns:")

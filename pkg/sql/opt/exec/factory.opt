@@ -627,7 +627,7 @@ define CreateView {
     Replace bool
     Persistence tree.Persistence
     Materialized bool
-    ViewQuery string
+    Cv *tree.CreateView
     Columns colinfo.ResultColumns
     deps opt.SchemaDeps
     typeDeps opt.SchemaTypeDeps

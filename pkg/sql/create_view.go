@@ -45,10 +45,8 @@ import (
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
 	// viewName is the fully qualified name of the new view.
-	viewName *tree.TableName
-	// viewQuery contains the view definition, with all table names fully
-	// qualified.
-	viewQuery    string
+	viewName     *tree.TableName
+	cv           *tree.CreateView
 	ifNotExists  bool
 	replace      bool
 	persistence  tree.Persistence
@@ -191,6 +189,7 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	var newDesc *tabledesc.Mutable
 	applyGlobalMultiRegionZoneConfig := false
+	viewQuery := tree.AsStringWithFlags(n.cv.AsSource, tree.FmtParsable)
 
 	var retErr error
 	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
@@ -203,6 +202,7 @@ func (n *createViewNode) startExec(params runParams) error {
 					params.ctx,
 					params.p,
 					n,
+					viewQuery,
 					replacingDesc,
 					backRefMutables,
 				)
@@ -225,7 +225,7 @@ func (n *createViewNode) startExec(params runParams) error {
 				desc, err := makeViewTableDesc(
 					params.ctx,
 					viewName,
-					n.viewQuery,
+					viewQuery,
 					n.dbDesc.GetID(),
 					schema.GetID(),
 					id,
@@ -287,7 +287,7 @@ func (n *createViewNode) startExec(params runParams) error {
 				if err = params.p.createDescriptor(
 					params.ctx,
 					newDesc,
-					fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),
+					fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, viewQuery),
 				); err != nil {
 					return err
 				}
@@ -363,7 +363,7 @@ func (n *createViewNode) startExec(params runParams) error {
 				newDesc.ID,
 				&eventpb.CreateView{
 					ViewName:  n.viewName.FQString(),
-					ViewQuery: n.viewQuery,
+					ViewQuery: viewQuery,
 				})
 		}()
 	})
@@ -584,14 +584,15 @@ func (p *planner) replaceViewDesc(
 	ctx context.Context,
 	sc resolver.SchemaResolver,
 	n *createViewNode,
+	viewQuery string,
 	toReplace *tabledesc.Mutable,
 	backRefMutables map[descpb.ID]*tabledesc.Mutable,
 ) (*tabledesc.Mutable, error) {
 	// Set the query to the new query.
-	toReplace.ViewQuery = n.viewQuery
+	toReplace.ViewQuery = viewQuery
 
 	if sc != nil {
-		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery, false /* multiStmt */)
+		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery, false /* multiStmt */)
 		if err != nil {
 			return nil, err
 		}
@@ -675,7 +676,7 @@ func (p *planner) replaceViewDesc(
 	// Since we are replacing an existing view here, we need to write the new
 	// descriptor into place.
 	if err := p.writeSchemaChange(ctx, toReplace, descpb.InvalidMutationID,
-		fmt.Sprintf("CREATE OR REPLACE VIEW %q AS %q", n.viewName, n.viewQuery),
+		fmt.Sprintf("CREATE OR REPLACE VIEW %q AS %q", n.viewName, viewQuery),
 	); err != nil {
 		return nil, err
 	}

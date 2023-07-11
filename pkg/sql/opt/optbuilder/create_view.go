@@ -106,13 +106,15 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
-			Schema:       schID,
-			ViewName:     &viewName,
+			Schema:   schID,
+			ViewName: &viewName,
+			Syntax:   cv,
+			// TODO(mgartner): Remove the cv fields now that Syntax contains
+			// them.
 			IfNotExists:  cv.IfNotExists,
 			Replace:      cv.Replace,
 			Persistence:  cv.Persistence,
 			Materialized: cv.Materialized,
-			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
 			Columns:      p,
 			Deps:         b.schemaDeps,
 			TypeDeps:     b.schemaTypeDeps,
