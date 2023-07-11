@@ -733,7 +733,7 @@ func prepTestCluster(
 					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
 				},
 			},
-			Listener: lReg.GetOrFail(t, i),
+			Listener: lReg.MustGetOrCreate(t, i),
 		}
 	}
 	tc := testcluster.NewTestCluster(t, nodes, args)
