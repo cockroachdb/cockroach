@@ -186,6 +186,25 @@ func dropColumn(
 ) {
 	_, _, cn := scpb.FindColumnName(colElts)
 	var undroppedSeqBackrefsToCheck catalog.DescriptorIDSet
+	// First validate that the column references here is not a primary key,
+	// we not do this first since any cascaded drops would clean up the primary
+	// key *during* the iteration below.
+	var pkIDs catid.IndexSet
+	tableElts := b.QueryByID(col.TableID).Filter(notAbsentOrTransientTargetFilter)
+	tableElts.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if pk, ok := e.(*scpb.PrimaryIndex); ok {
+			pkIDs.Add(pk.IndexID)
+		}
+	})
+
+	tableElts.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if ic, ok := e.(*scpb.IndexColumn); ok {
+			if ic.Kind == scpb.IndexColumn_KEY && ic.ColumnID == col.ColumnID && pkIDs.Contains(ic.IndexID) {
+				panic(sqlerrors.NewColumnReferencedByPrimaryKeyError(cn.Name))
+			}
+		}
+	})
+	// Next walk through and actually clean up the column references.
 	walkDropColumnDependencies(b, col, func(e scpb.Element) {
 		switch e := e.(type) {
 		case *scpb.Column:
@@ -200,14 +219,7 @@ func dropColumn(
 			}
 			dropColumn(b, tn, tbl, n, e, elts, behavior)
 		case *scpb.PrimaryIndex:
-			tableElts := b.QueryByID(e.TableID).Filter(publicTargetFilter)
-			scpb.ForEachIndexColumn(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
-				if ic.ColumnID == col.ColumnID &&
-					e.IndexID == ic.IndexID &&
-					ic.Kind == scpb.IndexColumn_KEY {
-					panic(sqlerrors.NewColumnReferencedByPrimaryKeyError(cn.Name))
-				}
-			})
+			// Nothing needs to be done.
 		case *scpb.SecondaryIndex:
 			indexElts := b.QueryByID(e.TableID).Filter(hasIndexIDAttrFilter(e.IndexID))
 			_, indexTargetStatus, indexName := scpb.FindIndexName(indexElts)
