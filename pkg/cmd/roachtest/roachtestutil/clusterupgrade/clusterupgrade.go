@@ -81,33 +81,35 @@ func UploadVersion(
 	nodes option.NodeListOption,
 	newVersion string,
 ) (string, error) {
-	binaryName := "./cockroach"
-	if newVersion == MainVersion {
-		if err := c.PutE(ctx, l, t.Cockroach(), binaryName, nodes); err != nil {
-			return "", err
-		}
-	} else if binary, ok := t.VersionsBinaryOverride()[newVersion]; ok {
-		// If an override has been specified for newVersion, use that binary.
-		l.Printf("using binary override for version %s: %s", newVersion, binary)
-		binaryName = "./cockroach-" + newVersion
-		if err := c.PutE(ctx, l, binary, binaryName, nodes); err != nil {
+	dstBinary := BinaryPathForVersion(t, newVersion)
+	srcBinary := t.Cockroach()
+
+	overrideBinary, isOverriden := t.VersionsBinaryOverride()[newVersion]
+	if isOverriden {
+		l.Printf("using binary override for version %s: %s", newVersion, overrideBinary)
+		srcBinary = overrideBinary
+	}
+
+	if newVersion == MainVersion || isOverriden {
+		if err := c.PutE(ctx, l, srcBinary, dstBinary, nodes); err != nil {
 			return "", err
 		}
 	} else {
 		v := "v" + newVersion
-		dir := v
-		binaryName = filepath.Join(dir, "cockroach")
+		dir := filepath.Dir(dstBinary)
+
 		// Check if the cockroach binary already exists.
-		if err := c.RunE(ctx, nodes, "test", "-e", binaryName); err != nil {
-			if err := c.RunE(ctx, nodes, "mkdir", "-p", dir); err != nil {
-				return "", err
-			}
-			if err := c.Stage(ctx, l, "release", v, dir, nodes); err != nil {
-				return "", err
-			}
+		cmd := fmt.Sprintf("test -e %s || mkdir -p %s", dstBinary, dir)
+		if err := c.RunE(ctx, nodes, cmd); err != nil {
+			return "", err
+		}
+
+		if err := c.Stage(ctx, l, "release", v, dir, nodes); err != nil {
+			return "", err
 		}
 	}
-	return BinaryPathFromVersion(newVersion), nil
+
+	return dstBinary, nil
 }
 
 // InstallFixtures copies the previously created fixtures (in
@@ -157,14 +159,19 @@ func StartWithSettings(
 	return c.StartE(ctx, l, startOpts, settings, nodes)
 }
 
-// BinaryPathFromVersion shows where the binary for the given version
-// can be found on roachprod nodes. It's either `./cockroach` or the
-// path to which a released binary is staged.
-func BinaryPathFromVersion(v string) string {
-	if v == "" {
+// BinaryPathForVersion shows where the binary for the given version
+// is expected to be found on roachprod nodes. The file will only
+// actually exist if there was a previous call to `UploadVersion` with
+// the same version parameter.
+func BinaryPathForVersion(t test.Test, v string) string {
+	if v == MainVersion {
 		return "./cockroach"
+	} else if _, ok := t.VersionsBinaryOverride()[v]; ok {
+		// If an override has been specified for `v`, use that binary.
+		return "./cockroach-" + v
+	} else {
+		return filepath.Join("v"+v, "cockroach")
 	}
-	return filepath.Join("v"+v, "cockroach")
 }
 
 // RestartNodesWithNewBinary uploads a given cockroach version to the
