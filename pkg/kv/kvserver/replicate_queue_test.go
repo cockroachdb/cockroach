@@ -2211,10 +2211,11 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// This test is slow under stress and can time out when upreplicating /
+	// This test is slow under stress/race and can time out when upreplicating /
 	// rebalancing to ensure all stores have the same range count initially, due
 	// to slow heartbeats.
 	skip.UnderStress(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 
