@@ -5196,6 +5196,51 @@ Support status: [reserved](#support-status)
 
 
 
+## GetJobProfilerExecutionDetails
+
+`GET /_status/job_profiler_execution_details/{job_id}/{filename}`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| job_id | [int64](#cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest-int64) |  |  | [reserved](#support-status) |
+| filename | [string](#cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| data | [bytes](#cockroach.server.serverpb.GetJobProfilerExecutionDetailResponse-bytes) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`
