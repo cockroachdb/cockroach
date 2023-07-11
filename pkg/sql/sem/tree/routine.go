@@ -111,6 +111,13 @@ type RoutineExpr struct {
 
 	// Generator is true if the function may output a set of rows.
 	Generator bool
+
+	// TailCall is true if the routine is in a tail-call position in a parent
+	// routine. This means that once execution reaches this routine, the parent
+	// routine will return the result of evaluating this routine with no further
+	// changes. For routines in a tail-call position we implement an optimization
+	// to avoid nesting execution. This is necessary for performant PLpgSQL loops.
+	TailCall bool
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
@@ -123,6 +130,7 @@ func NewTypedRoutineExpr(
 	calledOnNullInput bool,
 	multiColOutput bool,
 	generator bool,
+	tailCall bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
 		Args:              args,
@@ -133,6 +141,7 @@ func NewTypedRoutineExpr(
 		CalledOnNullInput: calledOnNullInput,
 		MultiColOutput:    multiColOutput,
 		Generator:         generator,
+		TailCall:          tailCall,
 	}
 }
 
