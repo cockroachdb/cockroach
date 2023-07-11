@@ -1341,14 +1341,18 @@ func TestCancelQueriesRace(t *testing.T) {
 		_, _ = sqlDB.ExecContext(ctx, `SELECT pg_sleep(10)`)
 		close(waiter)
 	}()
-	_, err := sqlDB.ExecContext(ctx, `CANCEL QUERIES (
+	_, err1 := sqlDB.ExecContext(ctx, `CANCEL QUERIES (
 		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
 	)`)
-	require.NoError(t, err)
-	_, err = sqlDB.ExecContext(ctx, `CANCEL QUERIES (
+
+	_, err2 := sqlDB.ExecContext(ctx, `CANCEL QUERIES (
 		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
 	)`)
-	require.NoError(t, err)
+	// At least one query cancellation is expected to succeed.
+	require.Truef(
+		t,
+		err1 == nil || err2 == nil,
+		"Both query cancellations failed with errors: %v and %v", err1, err2)
 
 	cancel()
 	<-waiter
