@@ -43,7 +43,6 @@ const elemName = "somestring"
 
 func TestTenantReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 101622, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	rt := startReporterTest(t, base.TestTenantDisabled)
