@@ -3414,3 +3414,19 @@ t_99764  CREATE TABLE public.t_99764 (
              i INT8 NOT NULL,
              CONSTRAINT t_99764_pkey PRIMARY KEY (i ASC)
          )
+
+# Validate that DROP COLUMN CASCADE generates the proper error if we attempt
+# to drop a key column
+subtest alter_table_drop_cascade_with_key
+
+statement ok
+create table t_drop_cascade_with_key(n int primary key, k int);
+
+statement ok
+alter table t_drop_cascade_with_key add column j int as (n) stored null;
+
+statement ok
+set sql_safe_updates=false
+
+statement error pgcode 42P10 column "n" is referenced by.*
+alter table t_drop_cascade_with_key drop column n cascade;
