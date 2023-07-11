@@ -34,7 +34,7 @@ var (
 	// arrayContentsTypes contains all of the types that are valid to store within
 	// an array.
 	arrayContentsTypes []*types.T
-	collationLocales   = [...]string{"da", "de", "en"}
+	collationLocales   = [...]string{"da_DK", "de_DE", "en_US"}
 )
 
 func init() {
