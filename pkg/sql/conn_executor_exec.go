@@ -1691,7 +1691,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
 			fName: "populate query level stats and regions",
 			f: func() {
-				populateQueryLevelStatsAndRegions(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
+				populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
 				ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
 					ctx, &curPlanner,
 					int(ex.state.mu.autoRetryCounter), ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(), *ppInfo.dispatchToExecutionEngine.queryStats,
@@ -1699,7 +1699,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			},
 		})
 	} else {
-		populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
+		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
 		stmtFingerprintID = ex.recordStatementSummary(
 			ctx, planner,
 			int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats,
@@ -1747,12 +1747,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	return err
 }
 
-// populateQueryLevelStatsAndRegions collects query-level execution statistics
+// populateQueryLevelStats collects query-level execution statistics
 // and populates it in the instrumentationHelper's queryLevelStatsWithErr field.
 // Query-level execution statistics are collected using the statement's trace
-// and the plan's flow metadata. It also populates the regions field and
-// annotates the explainPlan field of the instrumentationHelper.
-func populateQueryLevelStatsAndRegions(
+// and the plan's flow metadata.
+func populateQueryLevelStats(
 	ctx context.Context,
 	p *planner,
 	cfg *ExecutorConfig,
@@ -1794,7 +1793,7 @@ func populateQueryLevelStatsAndRegions(
 		}
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
-		ih.regions = ih.traceMetadata.annotateExplain(
+		ih.traceMetadata.annotateExplain(
 			ih.explainPlan,
 			trace,
 			cfg.TestingKnobs.DeterministicExplain,

@@ -184,3 +184,9 @@ func (flowCtx *FlowCtx) ProcessorComponentID(procID int32) execinfrapb.Component
 func (flowCtx *FlowCtx) StreamComponentID(streamID execinfrapb.StreamID) execinfrapb.ComponentID {
 	return execinfrapb.StreamComponentID(flowCtx.NodeID.SQLInstanceID(), flowCtx.ID, streamID)
 }
+
+// FlowComponentID returns a ComponentID for the given flow.
+func (flowCtx *FlowCtx) FlowComponentID() execinfrapb.ComponentID {
+	region, _ := flowCtx.Cfg.Locality.Find("region")
+	return execinfrapb.FlowComponentID(flowCtx.NodeID.SQLInstanceID(), flowCtx.ID, region)
+}

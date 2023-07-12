@@ -137,7 +137,9 @@ func (s *Container) RecordStatement(
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
 	stats.mu.data.LastExecTimestamp = s.getTimeNow()
 	stats.mu.data.Nodes = util.CombineUnique(stats.mu.data.Nodes, value.Nodes)
-	stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.Regions)
+	if value.ExecStats != nil {
+		stats.mu.data.Regions = util.CombineUnique(stats.mu.data.Regions, value.ExecStats.Regions)
+	}
 	stats.mu.data.PlanGists = util.CombineUnique(stats.mu.data.PlanGists, []string{value.PlanGist})
 	stats.mu.data.IndexRecommendations = value.IndexRecommendations
 	stats.mu.data.Indexes = util.CombineUnique(stats.mu.data.Indexes, value.Indexes)

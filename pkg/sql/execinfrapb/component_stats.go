@@ -50,11 +50,12 @@ func StreamComponentID(
 }
 
 // FlowComponentID returns a ComponentID for the given flow.
-func FlowComponentID(instanceID base.SQLInstanceID, flowID FlowID) ComponentID {
+func FlowComponentID(instanceID base.SQLInstanceID, flowID FlowID, region string) ComponentID {
 	return ComponentID{
 		FlowID:        flowID,
 		Type:          ComponentID_FLOW,
 		SQLInstanceID: instanceID,
+		Region:        region,
 	}
 }
 
