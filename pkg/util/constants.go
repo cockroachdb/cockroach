@@ -66,15 +66,16 @@ const (
 //
 // The given name is used for logging.
 func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValue int) int {
+	ret := defaultValue
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
 		if rng.r.Float64() < metamorphicValueProbability {
-			logMetamorphicValue(name, metamorphicValue)
-			return metamorphicValue
+			ret = metamorphicValue
 		}
+		logMetamorphicValue(name, ret)
 	}
-	return defaultValue
+	return ret
 }
 
 // rng is initialized to a rand.Rand if crdbTestBuild is enabled.
@@ -103,19 +104,19 @@ func init() {
 //
 // The given name is used for logging.
 func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) int {
+	ret := defaultValue
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
 		if rng.r.Float64() < metamorphicValueProbability {
-			ret := min
+			ret = min
 			if max > min {
 				ret = int(rng.r.Int31())%(max-min) + min
 			}
-			logMetamorphicValue(name, ret)
-			return ret
 		}
+		logMetamorphicValue(name, ret)
 	}
-	return defaultValue
+	return ret
 }
 
 // ConstantWithMetamorphicTestBool is like ConstantWithMetamorphicTestValue except
@@ -123,16 +124,17 @@ func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) i
 //
 // The given name is used for logging.
 func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
+	ret := defaultValue
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
-		if rng.r.Float64() < metamorphicBoolProbability {
-			ret := !defaultValue
-			logMetamorphicValue(name, ret)
-			return ret
+		prob := rng.r.Float64()
+		if prob < metamorphicBoolProbability {
+			ret = !defaultValue
 		}
+		logMetamorphicValue(name, ret)
 	}
-	return defaultValue
+	return ret
 }
 
 // ConstantWithMetamorphicTestChoice is like ConstantWithMetamorphicTestValue except
@@ -143,15 +145,15 @@ func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
 func ConstantWithMetamorphicTestChoice(
 	name string, defaultValue interface{}, otherValues ...interface{},
 ) interface{} {
+	ret := defaultValue
 	if metamorphicBuild {
 		values := append([]interface{}{defaultValue}, otherValues...)
 		rng.Lock()
 		defer rng.Unlock()
-		value := values[rng.r.Int63n(int64(len(values)))]
-		logMetamorphicValue(name, value)
-		return value
+		ret = values[rng.r.Int63n(int64(len(values)))]
+		logMetamorphicValue(name, ret)
 	}
-	return defaultValue
+	return ret
 }
 
 func logMetamorphicValue(name string, value interface{}) {
