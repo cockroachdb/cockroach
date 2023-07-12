@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -33,7 +34,9 @@ import (
 func TestAdminAPIDatabaseDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+
+	const numServers = 3
+	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	db := tc.ServerConn(0)
@@ -49,13 +52,22 @@ func TestAdminAPIDatabaseDetails(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// Flush all stores here so that we can read the ApproximateDiskBytes field without waiting for a flush.
+	for i := 0; i < numServers; i++ {
+		s := tc.Server(i)
+		err = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+			return store.TODOEngine().Flush()
+		})
+		require.NoError(t, err)
+	}
+
 	s := tc.Server(0)
 
 	var resp serverpb.DatabaseDetailsResponse
 	require.NoError(t, serverutils.GetJSONProto(s, "/_admin/v1/databases/test", &resp))
 	assert.Nil(t, resp.Stats, "No Stats unless we ask for them explicitly.")
 
-	nodeIDs := []roachpb.NodeID{1, 2, 3}
+	nodeIDs := tc.NodeIDs()
 	testutils.SucceedsSoon(t, func() error {
 		var resp serverpb.DatabaseDetailsResponse
 		require.NoError(t, serverutils.GetJSONProto(s, "/_admin/v1/databases/test?include_stats=true", &resp))
@@ -68,11 +80,8 @@ func TestAdminAPIDatabaseDetails(t *testing.T) {
 		}
 		assert.Equal(t, nodeIDs, resp.Stats.NodeIDs, "NodeIDs")
 
-		// TODO(todd): Find a way to produce a non-zero value here that doesn't require writing a million rows.
-		// Giving the test nodes on-disk stores (StoreSpec{inMemory: false, Path: "..."}) didn't work and was slow.
-		// Having a number would be nice here for completeness, but the real RangeCount above gives us enough
-		// confidence in the implementation in the meantime.
-		assert.Equal(t, uint64(0), resp.Stats.ApproximateDiskBytes, "ApproximateDiskBytes")
+		// We've flushed data so this estimation should be non-zero.
+		assert.Positive(t, resp.Stats.ApproximateDiskBytes, "ApproximateDiskBytes")
 
 		return nil
 	})
