@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -188,6 +189,9 @@ type ioLoadListener struct {
 	adjustTokensResult
 	perWorkTokenEstimator storePerWorkTokenEstimator
 	diskBandwidthLimiter  diskBandwidthLimiter
+
+	l0CompactedBytes *metric.Counter
+	l0TokensProduced *metric.Counter
 }
 
 type ioLoadListenerState struct {
@@ -641,7 +645,7 @@ type adjustTokensAuxComputations struct {
 
 // adjustTokensInner is used for computing tokens based on compaction and
 // flush bottlenecks.
-func (*ioLoadListener) adjustTokensInner(
+func (io *ioLoadListener) adjustTokensInner(
 	ctx context.Context,
 	prev ioLoadListenerState,
 	l0Metrics pebble.LevelMetrics,
@@ -677,7 +681,10 @@ func (*ioLoadListener) adjustTokensInner(
 		// bytes (gauge).
 		intL0CompactedBytes = 0
 	}
+	io.l0CompactedBytes.Inc(intL0CompactedBytes)
+
 	const alpha = 0.5
+
 	// Compaction scheduling can be uneven in prioritizing L0 for compactions,
 	// so smooth out what is being removed by compactions.
 	smoothedIntL0CompactedBytes := int64(alpha*float64(intL0CompactedBytes) + (1-alpha)*float64(prev.smoothedIntL0CompactedBytes))
@@ -958,6 +965,9 @@ func (*ioLoadListener) adjustTokensInner(
 	if totalNumElasticByteTokens > totalNumByteTokens {
 		totalNumElasticByteTokens = totalNumByteTokens
 	}
+
+	io.l0TokensProduced.Inc(totalNumByteTokens)
+
 	// Install the latest cumulative stats.
 	return adjustTokensResult{
 		ioLoadListenerState: ioLoadListenerState{
@@ -1047,6 +1057,9 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 			ib(m/adjustmentInterval))
 		switch res.aux.tokenKind {
 		case compactionTokenKind:
+			// NB: res.smoothedCompactionByteTokens  is the same as
+			// res.ioLoadListenerState.totalNumByteTokens (printed above) when
+			// res.aux.tokenKind == compactionTokenKind.
 			p.Printf(" due to L0 growth")
 		case flushTokenKind:
 			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
