@@ -642,9 +642,20 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		})
 	})
 
+	// Grab the log metrics registry.
+	r := log.LogMetricsRegistry()
+	if r == nil {
+		panic(errors.AssertionFailedf("nil log metrics registry at server startup"))
+	}
+	logRegistry, ok := r.(*metric.Registry)
+	if !ok {
+		panic(errors.AssertionFailedf("unexpected type for LogMetrics registry: %T", r))
+	}
+
 	// We can now add the node registry.
 	s.recorder.AddNode(
 		s.registry,
+		logRegistry,
 		roachpb.NodeDescriptor{
 			NodeID: s.rpcContext.NodeID.Get(),
 		},
