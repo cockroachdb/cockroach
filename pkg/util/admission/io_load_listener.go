@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -108,6 +109,23 @@ var L0MinimumSizePerSubLevel = settings.RegisterIntSetting(
 	"when non-zero, this indicates the minimum size that is needed to count towards one sub-level",
 	5<<20, settings.NonNegativeInt)
 
+// L0CompactionAlpha is the exponential smoothing term used when measuring L0
+// compactions, which in turn is used to generate IO tokens.
+var L0CompactionAlpha = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"admission.l0_compacted_alpha",
+	"exponential smoothing term used when measuring L0 compactions to generate IO tokens",
+	0.5, settings.PositiveFloat)
+
+// L0ReductionFactor is the exponential smoothing term used when measuring L0
+// compactions, which in turn is used to generate IO tokens.
+var L0ReductionFactor = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"admission.l0_reduction_factor",
+	"once overloaded, factor by which we reduce L0 compaction tokens based on observed compactions",
+	2.0,
+	settings.FloatWithMinimum(1.0))
+
 // Experimental observations:
 //   - Sub-level count of ~40 caused a node heartbeat latency p90, p99 of 2.5s,
 //     4s. With a setting that limits sub-level count to 10, before the system
@@ -188,6 +206,9 @@ type ioLoadListener struct {
 	adjustTokensResult
 	perWorkTokenEstimator storePerWorkTokenEstimator
 	diskBandwidthLimiter  diskBandwidthLimiter
+
+	l0CompactedBytes *metric.Counter
+	l0TokensProduced *metric.Counter
 }
 
 type ioLoadListenerState struct {
@@ -641,7 +662,7 @@ type adjustTokensAuxComputations struct {
 
 // adjustTokensInner is used for computing tokens based on compaction and
 // flush bottlenecks.
-func (*ioLoadListener) adjustTokensInner(
+func (io *ioLoadListener) adjustTokensInner(
 	ctx context.Context,
 	prev ioLoadListenerState,
 	l0Metrics pebble.LevelMetrics,
@@ -677,9 +698,11 @@ func (*ioLoadListener) adjustTokensInner(
 		// bytes (gauge).
 		intL0CompactedBytes = 0
 	}
-	const alpha = 0.5
+	io.l0CompactedBytes.Inc(intL0CompactedBytes)
+
 	// Compaction scheduling can be uneven in prioritizing L0 for compactions,
 	// so smooth out what is being removed by compactions.
+	alpha := L0CompactionAlpha.Get(&io.settings.SV)
 	smoothedIntL0CompactedBytes := int64(alpha*float64(intL0CompactedBytes) + (1-alpha)*float64(prev.smoothedIntL0CompactedBytes))
 
 	// Flush tokens:
@@ -868,6 +891,7 @@ func (*ioLoadListener) adjustTokensInner(
 	// threshold.
 	var totalNumByteTokens int64
 	var smoothedCompactionByteTokens float64
+	l0ReductionFactor := L0ReductionFactor.Get(&io.settings.SV)
 
 	score, _ := ioThreshold.Score()
 	// Multiplying score by 2 for ease of calculation.
@@ -909,7 +933,7 @@ func (*ioLoadListener) adjustTokensInner(
 			// Don't admit more byte work than we can remove via compactions.
 			// totalNumByteTokens tracks our goal for admission. Scale down
 			// since we want to get under the thresholds over time.
-			fTotalNumByteTokens = float64(smoothedIntL0CompactedBytes / 2.0)
+			fTotalNumByteTokens = float64(smoothedIntL0CompactedBytes) / l0ReductionFactor
 		} else if score >= 0.5 && score < 1 {
 			// Low load. Score in [0.5, 1). Tokens should be
 			// smoothedIntL0CompactedBytes at 1, and 2 * smoothedIntL0CompactedBytes
@@ -919,8 +943,8 @@ func (*ioLoadListener) adjustTokensInner(
 			// Medium load. Score in [1, 2). We use linear interpolation from
 			// medium load to overload, to slowly give out fewer tokens as we
 			// move towards overload.
-			halfSmoothedBytes := float64(smoothedIntL0CompactedBytes / 2.0)
-			fTotalNumByteTokens = -score*halfSmoothedBytes + 3*halfSmoothedBytes
+			reducedSmoothedBytes := float64(smoothedIntL0CompactedBytes) / l0ReductionFactor
+			fTotalNumByteTokens = -score*reducedSmoothedBytes + 3*reducedSmoothedBytes
 		}
 		smoothedCompactionByteTokens = alpha*fTotalNumByteTokens + (1-alpha)*prev.smoothedCompactionByteTokens
 		if float64(math.MaxInt64) < smoothedCompactionByteTokens {
@@ -958,6 +982,9 @@ func (*ioLoadListener) adjustTokensInner(
 	if totalNumElasticByteTokens > totalNumByteTokens {
 		totalNumElasticByteTokens = totalNumByteTokens
 	}
+
+	io.l0TokensProduced.Inc(totalNumByteTokens)
+
 	// Install the latest cumulative stats.
 	return adjustTokensResult{
 		ioLoadListenerState: ioLoadListenerState{
@@ -1047,7 +1074,7 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 			ib(m/adjustmentInterval))
 		switch res.aux.tokenKind {
 		case compactionTokenKind:
-			p.Printf(" due to L0 growth")
+			p.Printf(" due to L0 growth [≈%s]", ib(int64(res.smoothedCompactionByteTokens)))
 		case flushTokenKind:
 			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
 		}
