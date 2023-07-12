@@ -10,6 +10,8 @@
 
 package cloud
 
+import "github.com/cockroachdb/cockroach/pkg/base"
+
 // ExternalStorageOption is an option passed during the construction
 // of an external storage.
 type ExternalStorageOption func(opts *ExternalStorageOptions)
@@ -18,5 +20,11 @@ type ExternalStorageOption func(opts *ExternalStorageOptions)
 func WithIOAccountingInterceptor(i ReadWriterInterceptor) ExternalStorageOption {
 	return func(opts *ExternalStorageOptions) {
 		opts.ioAccountingInterceptor = i
+	}
+}
+
+func WithAzureStorageTestingKnobs(knobs base.ModuleTestingKnobs) ExternalStorageOption {
+	return func(opts *ExternalStorageOptions) {
+		opts.AzureStorageTestingKnobs = knobs
 	}
 }

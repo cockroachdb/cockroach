@@ -86,5 +86,5 @@ func CheckNoKMSAccess(t *testing.T, kmsURI string, env KMSEnv) {
 		t.Fatalf("expected error when encrypting with kms %s", kmsURI)
 	}
 
-	require.Regexp(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED)", err)
+	require.Regexp(t, "(PermissionDenied|AccessDenied|PERMISSION_DENIED|failed to acquire a token)", err)
 }
