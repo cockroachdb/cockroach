@@ -231,16 +231,18 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 	expected := execstats.QueryLevelStats{
 		KVTime:         cumulativeKVTime,
 		ContentionTime: cumulativeContentionTime,
+		Regions:        []string{},
+		SqlInstanceIds: make(map[base.SQLInstanceID]struct{}),
 	}
 
 	assert.NoError(t, a.ProcessStats())
-	if got := a.GetQueryLevelStats(); !reflect.DeepEqual(got, expected) {
-		t.Errorf("ProcessStats() = %v, want %v", got, expected)
-	}
+	require.Equal(t, a.GetQueryLevelStats(), expected)
 }
 
 func TestQueryLevelStatsAccumulate(t *testing.T) {
 	aEvent := kvpb.ContentionEvent{Duration: 7 * time.Second}
+	aSQLInstanceIds := map[base.SQLInstanceID]struct{}{}
+	aSQLInstanceIds[1] = struct{}{}
 	a := execstats.QueryLevelStats{
 		NetworkBytesSent:                   1,
 		MaxMemUsage:                        2,
@@ -268,8 +270,12 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeyCount:                  21,
 		MvccRangeKeyContainedPoints:        22,
 		MvccRangeKeySkippedPoints:          23,
+		SqlInstanceIds:                     aSQLInstanceIds,
+		Regions:                            []string{"east-usA"},
 	}
 	bEvent := kvpb.ContentionEvent{Duration: 14 * time.Second}
+	bSQLInstanceIds := map[base.SQLInstanceID]struct{}{}
+	bSQLInstanceIds[2] = struct{}{}
 	b := execstats.QueryLevelStats{
 		NetworkBytesSent:                   8,
 		MaxMemUsage:                        9,
@@ -297,7 +303,12 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeyCount:                  28,
 		MvccRangeKeyContainedPoints:        29,
 		MvccRangeKeySkippedPoints:          30,
+		SqlInstanceIds:                     bSQLInstanceIds,
+		Regions:                            []string{"east-usB"},
 	}
+	cSQLInstanceIds := map[base.SQLInstanceID]struct{}{}
+	cSQLInstanceIds[1] = struct{}{}
+	cSQLInstanceIds[2] = struct{}{}
 	expected := execstats.QueryLevelStats{
 		NetworkBytesSent:                   9,
 		MaxMemUsage:                        9,
@@ -325,9 +336,14 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		MvccRangeKeyCount:                  49,
 		MvccRangeKeyContainedPoints:        51,
 		MvccRangeKeySkippedPoints:          53,
+		SqlInstanceIds:                     cSQLInstanceIds,
+		Regions:                            []string{"east-usA", "east-usB"},
 	}
 
 	aCopy := a
+	// Copy will point to the same array.
+	aCopy.SqlInstanceIds = map[base.SQLInstanceID]struct{}{}
+	cSQLInstanceIds[1] = struct{}{}
 	a.Accumulate(b)
 	require.Equal(t, expected, a)
 

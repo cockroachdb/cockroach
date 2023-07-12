@@ -54,6 +54,10 @@ message ComponentID {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "SQLInstanceID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+
+  // The region the component is associated with.
+  // For the initial implementation only ComponentIDs of Flow type might have this set.
+  optional string region = 5 [(gogoproto.nullable) = false];
 }
 
 // ComponentStats contains statistics for an execution component. A component is
