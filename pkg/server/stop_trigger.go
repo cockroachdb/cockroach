@@ -64,7 +64,7 @@ type ShutdownRequest struct {
 // MakeShutdownRequest constructs a ShutdownRequest.
 func MakeShutdownRequest(reason ShutdownReason, err error) ShutdownRequest {
 	if reason == ShutdownReasonDrainRPC && err != nil {
-		panic("unexpected err for ShutdownReasonDrainRPC")
+		panic(errors.NewAssertionErrorWithWrappedErrf(err, "programming error: unexpected err for ShutdownReasonDrainRPC"))
 	}
 	return ShutdownRequest{
 		Reason: reason,
